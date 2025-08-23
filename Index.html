@@ -651,21 +651,66 @@ function onTelegramAuth(user) {
   welcome.innerHTML = `<i class="fas fa-user-circle"></i> Salom! ${user.first_name}`;
   welcome.style.display = "inline";
 
-  // 🔔 Sizga bot orqali xabar yuborish
+  // 🔔 Telegramga xabar yuborish
   const BOT_TOKEN = "7901537646:AAG1i11zK1C2i5D6KLAiJdk2Rw-QP8hN2sQ"; 
   const ADMIN_CHAT_ID = "2049065724"; // Sizning chat_id
 
-  const text = `🟢 Yangi login!\n\n👤 Ismi: ${user.first_name}\n🆔 ID: ${user.id}\n🌐 Username: @${user.username || "yo'q"}`;
+  // Hozirgi vaqt
+  const now = new Date();
+  const time = now.toLocaleString("uz-UZ");
 
-  fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: ADMIN_CHAT_ID,
-      text: text,
-      parse_mode: "HTML"
-    })
-  });
+  // Qurilma/Brauzer ma'lumotini soddalashtirish + emoji
+  function getDeviceInfo() {
+    const ua = navigator.userAgent;
+    let os = "Noma'lum OS";
+    let browser = "Noma'lum Brauzer";
+    let emoji = "💻";
+
+    if (/Windows/i.test(ua)) { os = "Windows"; emoji = "💻"; }
+    else if (/Android/i.test(ua)) { os = "Android"; emoji = "📱"; }
+    else if (/iPhone|iPad|iPod/i.test(ua)) { os = "iOS"; emoji = "🍎"; }
+    else if (/Mac/i.test(ua)) { os = "MacOS"; emoji = "🖥️"; }
+    else if (/Linux/i.test(ua)) { os = "Linux"; emoji = "🐧"; }
+
+    if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = "Chrome";
+    else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = "Safari";
+    else if (/Firefox/i.test(ua)) browser = "Firefox";
+    else if (/Edg/i.test(ua)) browser = "Edge";
+    else if (/YaBrowser/i.test(ua)) browser = "Yandex";
+    else if (/OPR|Opera/i.test(ua)) browser = "Opera";
+
+    return `${emoji} ${os} — ${browser}`;
+  }
+
+  const deviceInfo = getDeviceInfo();
+
+  // IP va joylashuv olish
+  fetch("https://ipwho.is/")
+    .then(res => res.json())
+    .then(data => {
+      const ip = data.ip;
+      const country = data.country || "Noma'lum";
+      const city = data.city || "Noma'lum";
+
+      const text = `🟢 Yangi login!\n\n` +
+                   `👤 Ism: ${user.first_name}\n` +
+                   `🆔 ID: ${user.id}\n` +
+                   `🌐 Username: @${user.username || "yo'q"}\n` +
+                   `📍 IP: ${ip}\n` +
+                   `🌎 Joylashuv: ${country}, ${city}\n` +
+                   `📱 Qurilma: ${deviceInfo}\n` +
+                   `⏰ Vaqt: ${time}`;
+
+      fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT_ID,
+          text: text,
+          parse_mode: "HTML"
+        })
+      });
+    });
 }
 </script>
 
