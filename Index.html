@@ -558,111 +558,6 @@ function stopDrag() {
         e.preventDefault(); // standart kontekst menyuni bloklaydi
     });
 </script>
-<script>
-let loggedInUser = null;
-let pendingLink = null;
-
-// Telegram login chaqiradigan funksiya
-function showTelegramLogin() {
-  const script = document.createElement("script");
-  script.src = "https://telegram.org/js/telegram-widget.js?22";
-  script.setAttribute("data-telegram-login", "xplusykirish_bot"); // bot usernameni qo'yasiz
-  script.setAttribute("data-size", "medium");
-  script.setAttribute("data-userpic", "false");
-  script.setAttribute("data-onauth", "onTelegramAuth(user)");
-  script.setAttribute("data-request-access", "write");
-  document.body.appendChild(script);
-}
-
-// Telegram login bo‘lgandan keyin
-function onTelegramAuth(user) {
-  loggedInUser = user;
-  localStorage.setItem("telegramUser", JSON.stringify(user));
-
-  document.getElementById("loginBtn").style.display = "none";
-  document.getElementById("welcomeMsg").style.display = "inline";
-  document.getElementById("welcomeMsg").innerText = "SALOM, " + user.first_name + "!";
-}
-document.addEventListener("DOMContentLoaded", () => {
-  let loggedInUser = localStorage.getItem("telegramUser");
-  const modal = document.getElementById("loginModal");
-  const modalClose = document.getElementById("modalClose");
-
-  // ❌ tugma bosilsa yopiladi
-  modalClose.addEventListener("click", () => {
-    modal.style.display = "none";
-  });
-
-  // Linklarni ushlash
-  document.querySelectorAll("a").forEach(link => {
-    link.addEventListener("click", (e) => {
-      if (!loggedInUser && !link.hasAttribute("data-public")) {
-        e.preventDefault();
-        modal.style.display = "flex";
-      }
-    });
-  });
-
-  // Modal ichidagi "Kirish" tugmasi
-  document.getElementById("modalLoginBtn").addEventListener("click", () => {
-    document.getElementById("loginBtn").click();
-    modal.style.display = "none";
-  });
-});
-
-</script>
-<div id="loginModal" class="modal">
-  <div class="modal-content">
-    <span id="modalClose" class="modal-close">&times;</span>
-    <h2>Saytimizdan to‘liq foydalanish uchun</h2>
-    <p>Iltimos, avval kirish qiling 👇</p>
-    <!-- Telegram login uchun bo‘sh joy -->
-    <div id="telegramLoginBox" style="margin-top:15px;"></div>
-  </div>
-</div>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  const modal = document.getElementById("loginModal");
-  const modalClose = document.getElementById("modalClose");
-  const modalLoginBtn = document.getElementById("modalLoginBtn");
-  const telegramLoginBox = document.getElementById("telegramLoginBox");
-
-  // ❌ tugma bosilsa modal yopiladi
-  modalClose.addEventListener("click", () => {
-    modal.style.display = "none";
-  });
-
-  // Oddiy "Kirish" tugmasi bosilganda → Telegram login widget qo‘shiladi
-  modalLoginBtn.addEventListener("click", () => {
-    if (!document.getElementById("telegramWidget")) {
-      const script = document.createElement("script");
-      script.id = "telegramWidget";
-      script.src = "https://telegram.org/js/telegram-widget.js?22";
-      script.setAttribute("data-telegram-login", "xplusykirish_bot"); // 🔑 bot username
-      script.setAttribute("data-size", "large");
-      script.setAttribute("data-userpic", "false");
-      script.setAttribute("data-onauth", "onTelegramAuth(user)");
-      script.setAttribute("data-request-access", "write");
-      telegramLoginBox.appendChild(script);
-    }
-  });
-});
-
-// Telegram login natijasini olish
-function onTelegramAuth(user) {
-  localStorage.setItem("telegramUser", JSON.stringify(user));
-  document.getElementById("loginModal").style.display = "none";
-
-  // Salomlashish chiqadi
-  const welcome = document.getElementById("welcomeMsg");
-  if (welcome) {
-    welcome.innerText = "SALOM, " + user.first_name + "!";
-    welcome.style.display = "inline";
-  }
-  document.getElementById("loginBtn").style.display = "none";
-}
-</script>
 <!-- Modal oynasi -->
 <div id="loginModal" class="modal">
   <div class="modal-content">
@@ -671,8 +566,13 @@ function onTelegramAuth(user) {
     <p>Iltimos, avval kirish qiling 👇</p>
 
     <!-- Oddiy tugma -->
-    <button id="modalLoginBtn" class="btn btn-primary">Kirish</button>
-
+    <script async src="https://telegram.org/js/telegram-widget.js?22"
+      data-telegram-login="xplusykirish_bot"  <!-- bu yerga bot usernameni qo‘yasiz -->
+      data-size="large"
+      data-userpic="false"
+      data-onauth="onTelegramAuth(user)"
+      data-request-access="write">
+    </script>
     <!-- Telegram login uchun joy -->
     <div id="telegramLoginBox" style="margin-top:15px;"></div>
   </div>
@@ -725,8 +625,33 @@ function onTelegramAuth(user) {
   }
   document.getElementById("loginBtn").style.display = "none";
 }
-</script>
+document.addEventListener("DOMContentLoaded", () => {
+  const modal = document.getElementById("loginModal");
+  const modalClose = document.getElementById("modalClose");
+  const modalLoginBtn = document.getElementById("modalLoginBtn");
 
+  // ❌ yopish tugmasi
+  modalClose.addEventListener("click", () => {
+    modal.style.display = "none";
+  });
+
+  // Link bosilganda
+  document.querySelectorAll("a").forEach(link => {
+    link.addEventListener("click", (e) => {
+      if (!localStorage.getItem("telegramUser") && !link.hasAttribute("data-public")) {
+        e.preventDefault();
+        modal.style.display = "flex"; // Chrome’da ham ishlaydi
+      }
+    });
+  });
+
+  // Modal ichidagi "Kirish" tugmasi
+  modalLoginBtn.addEventListener("click", () => {
+    document.getElementById("loginBtn").click();
+    modal.style.display = "none";
+  });
+});
+</script>
 
 </body>
 </html>
