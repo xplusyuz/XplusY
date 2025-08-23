@@ -251,31 +251,31 @@ function addLogoBounce(selector) {
 addLogoBounce(".header-logo");
 addLogoBounce(".footer-logo");
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const modal = document.getElementById("loginModal");
-  const modalClose = document.getElementById("modalClose");
-  const modalLoginBtn = document.getElementById("modalLoginBtn");
+    document.addEventListener("DOMContentLoaded", () => {
+      let loggedInUser = localStorage.getItem("telegramUser");
+      const modal = document.getElementById("loginModal");
+      const modalClose = document.getElementById("modalClose");
 
-  // ❌ yopish tugmasi
-  modalClose.addEventListener("click", () => {
-    modal.style.display = "none";
-  });
+      // ❌ tugma bosilganda yopiladi
+      modalClose.addEventListener("click", () => {
+        modal.style.display = "none";
+      });
 
-  // Link bosilganda
-  document.querySelectorAll("a").forEach(link => {
-    link.addEventListener("click", (e) => {
-      if (!localStorage.getItem("telegramUser") && !link.hasAttribute("data-public")) {
-        e.preventDefault();
-        modal.style.display = "flex"; // Chrome’da ham ishlaydi
-      }
+      // Linkni bosganda modal ochiladi
+      document.querySelectorAll("a").forEach(link => {
+        link.addEventListener("click", (e) => {
+          if (!loggedInUser) {
+            e.preventDefault();
+            modal.style.display = "flex";
+          }
+        });
+      });
+
+      // Modal ichidagi Kirish tugmasi
+      document.getElementById("modalLoginBtn").addEventListener("click", () => {
+        document.getElementById("loginBtn").click();
+        modal.style.display = "none";
+      });
     });
-  });
-
-  // Modal ichidagi "Kirish" tugmasi
-  modalLoginBtn.addEventListener("click", () => {
-    document.getElementById("loginBtn").click();
-    modal.style.display = "none";
-  });
-});
-</script>
+  </script>
 loadAds();
