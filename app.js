@@ -250,7 +250,6 @@ function addLogoBounce(selector) {
 // Ikkala logoga qo‘llaymiz
 addLogoBounce(".header-logo");
 addLogoBounce(".footer-logo");
-<script>
     document.addEventListener("DOMContentLoaded", () => {
       let loggedInUser = localStorage.getItem("telegramUser");
       const modal = document.getElementById("loginModal");
@@ -277,5 +276,62 @@ addLogoBounce(".footer-logo");
         modal.style.display = "none";
       });
     });
-  </script>
+ 
+let loggedInUser = null;
+let pendingLink = null;
+
+// Telegram login chaqiradigan funksiya
+function showTelegramLogin() {
+  const script = document.createElement("script");
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", "sinov12345_bot"); // bot usernameni qo'yasiz
+  script.setAttribute("data-size", "medium");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  script.setAttribute("data-request-access", "write");
+  document.body.appendChild(script);
+}
+
+// Telegram login bo‘lgandan keyin
+function onTelegramAuth(user) {
+  loggedInUser = user;
+  localStorage.setItem("telegramUser", JSON.stringify(user));
+
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("welcomeMsg").style.display = "inline";
+  document.getElementById("welcomeMsg").innerText = "SALOM, " + user.first_name + "!";
+
+  // Agar login qilishdan oldin link bosilgan bo‘lsa, o‘sha linkka yo‘naltiramiz
+  if (pendingLink) {
+    window.location.href = pendingLink;
+    pendingLink = null;
+  }
+}
+
+// Sahifa yangilanda login eslatib qolish
+document.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem("telegramUser");
+  if (saved) {
+    loggedInUser = JSON.parse(saved);
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").style.display = "inline";
+    document.getElementById("welcomeMsg").innerText = "SALOM, " + loggedInUser.first_name + "!";
+  }
+
+  // Login tugmasiga bosilganda Telegram login chiqsin
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    showTelegramLogin();
+  });
+
+  // Barcha test tugmalarini tekshiramiz
+  document.querySelectorAll("a.btn-primary").forEach(btn => {
+    btn.addEventListener("click", function(e) {
+      if (!loggedInUser) {
+        e.preventDefault();
+        pendingLink = this.href;
+        alert("❌ Avval kirishingiz kerak!");
+      }
+    });
+  });
+});
 loadAds();
