@@ -625,32 +625,76 @@ function onTelegramAuth(user) {
   }
   document.getElementById("loginBtn").style.display = "none";
 }
-document.addEventListener("DOMContentLoaded", () => {
+<script>
+let loggedInUser = null;
+
+// Telegram login tugadi
+function onTelegramAuth(user) {
+  // foydalanuvchini saqlash
+  loggedInUser = user;
+  localStorage.setItem("telegramUser", JSON.stringify(user));
+
+  // "Kirish" tugmasini yashirish
+  document.getElementById("loginBtn").style.display = "none";
+
+  // Salomlashishni chiqarish
+  const welcome = document.getElementById("welcomeMsg");
+  welcome.innerText = "Salom! " + user.first_name;
+  welcome.style.display = "inline";
+
+  // Modalni yopish
   const modal = document.getElementById("loginModal");
-  const modalClose = document.getElementById("modalClose");
-  const modalLoginBtn = document.getElementById("modalLoginBtn");
+  if (modal) modal.style.display = "none";
+}
 
-  // ❌ yopish tugmasi
-  modalClose.addEventListener("click", () => {
-    modal.style.display = "none";
-  });
+document.addEventListener("DOMContentLoaded", () => {
+  // Avval login bo'lganmi?
+  const savedUser = localStorage.getItem("telegramUser");
+  if (savedUser) {
+    loggedInUser = JSON.parse(savedUser);
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").innerText = "Salom! " + loggedInUser.first_name;
+    document.getElementById("welcomeMsg").style.display = "inline";
+  }
 
-  // Link bosilganda
+  // Barcha linklarni tekshirish
   document.querySelectorAll("a").forEach(link => {
     link.addEventListener("click", (e) => {
-      if (!localStorage.getItem("telegramUser") && !link.hasAttribute("data-public")) {
+      if (!loggedInUser && !link.hasAttribute("data-public")) {
         e.preventDefault();
-        modal.style.display = "flex"; // Chrome’da ham ishlaydi
+        document.getElementById("loginModal").style.display = "flex";
       }
     });
   });
 
+  // Modal yopish
+  document.getElementById("modalClose").addEventListener("click", () => {
+    document.getElementById("loginModal").style.display = "none";
+  });
+
   // Modal ichidagi "Kirish" tugmasi
-  modalLoginBtn.addEventListener("click", () => {
-    document.getElementById("loginBtn").click();
-    modal.style.display = "none";
+  document.getElementById("modalLoginBtn").addEventListener("click", () => {
+    // Telegram login widgetni chiqaramiz
+    showTelegramLogin();
   });
 });
+
+// Telegram login widget yuklash
+function showTelegramLogin() {
+  if (document.getElementById("telegramLoginScript")) return; // qayta qo‘shmaslik uchun
+
+  const script = document.createElement("script");
+  script.id = "telegramLoginScript";
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", "xplusykirish_bot"); // ← o‘zingizning bot username
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  script.setAttribute("data-request-access", "write");
+  document.getElementById("loginModal").querySelector(".modal-content").appendChild(script);
+}
+</script>
+
 </script>
 
 </body>
