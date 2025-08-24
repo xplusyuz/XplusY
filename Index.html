@@ -363,6 +363,109 @@
   <script defer src="app.js"></script>
   <script src="ads.js"></script>
   <script>
+  function getUsers() {
+  const usersJSON = localStorage.getItem('xplusy_users');
+  return usersJSON ? JSON.parse(usersJSON) : [];
+}
+
+function saveUsers(users) {
+  localStorage.setItem('xplusy_users', JSON.stringify(users));
+}
+
+function updateUserBalance(userId, newBalance) {
+  const users = getUsers();
+  const userIndex = users.findIndex(u => u.id === userId);
+  
+  if (userIndex !== -1) {
+    users[userIndex].balans = parseInt(newBalance);
+    saveUsers(users);
+    return true;
+  }
+  
+  return false;
+}
+
+function getUserById(userId) {
+  const users = getUsers();
+  return users.find(u => u.id === userId);
+}
+
+// ================= TELEGRAM AUTH FUNCTION UPDATE =================
+async function onTelegramAuth(user) {
+  loggedInUser = user;
+  localStorage.setItem('telegramUser', JSON.stringify(user));
+
+  let balansValue = 0;
+
+  try {
+    // localStorage dan foydalanuvchini topish yoki yaratish
+    const users = getUsers();
+    let currentUser = users.find(u => u.id === user.id);
+    
+    if (currentUser) {
+      balansValue = currentUser.balans;
+    } else {
+      // Yangi foydalanuvchi qo'shish
+      const newUser = {
+        id: user.id,
+        username: user.username,
+        first_name: user.first_name,
+        balans: 0
+      };
+      
+      users.push(newUser);
+      saveUsers(users);
+      balansValue = 0;
+      
+      // Yangi foydalanuvchi haqida xabar
+      console.log("Yangi foydalanuvchi qo'shildi:", newUser);
+    }
+  } catch (err) {
+    console.error("Balans olishda xatolik:", err);
+    balansValue = 0;
+  }
+
+  // UI yangilash (oldingi kod)
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("welcomeMsg").innerText = `👋 Salom, ${user.first_name}`;
+  document.getElementById("welcomeMsg").style.display = "inline";
+
+  document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
+  document.getElementById("balanceBox").style.display = "inline";
+
+  closeModal(loginModal);
+
+  // Kirish haqida xabar yuborish (oldingi kod o'zgarishsiz)
+  // ... qolgan xabar yuborish kodi
+}
+
+// ================= DOMContentLoaded ICHIDA YANGILASH =================
+document.addEventListener("DOMContentLoaded", async () => {
+  // ... mavjud kodlar
+  
+  // Foydalanuvchi ma'lumotlarini localStorage dan olish
+  const savedUser = localStorage.getItem("telegramUser");
+  if (savedUser) {
+    loggedInUser = JSON.parse(savedUser);
+
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${loggedInUser.first_name}`;
+    document.getElementById("welcomeMsg").style.display = "inline";
+
+    let balansValue = 0;
+
+    try {
+      // localStorage dan balans olish
+      const currentUser = getUserById(loggedInUser.id);
+      balansValue = currentUser ? currentUser.balans : 0;
+    } catch (err) {
+      balansValue = 0;
+    }
+
+    document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
+    document.getElementById("balanceBox").style.display = "inline";
+  }
+  
   document.addEventListener("DOMContentLoaded", () => {
     const themeToggle = document.getElementById("themeToggle");
     const body = document.body;
@@ -395,7 +498,7 @@
     document.getElementById("year").textContent = new Date().getFullYear();
   });
 
-  const apiUrl = "https://script.google.com/macros/s/AKfycbwAYRC2ciqyae6V2tHptKbf5CyN-mKdcJS0jo2UdIR4jlaXgYDE0t8i_gRFctLvU3j0/exec"; // GAS exec linki
+  const apiUrl = "/data/users.json"; 
 
   let loggedInUser = null;
 
@@ -480,36 +583,6 @@
     localStorage.setItem("telegramUser", JSON.stringify(user));
 
     let balansValue = 0;
-
-    try {
-      // Google Sheet orqali balans olish
-      let response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: user.id,
-          username: user.username,
-          first_name: user.first_name
-        })
-      });
-
-      if (response.ok) {
-        let data = await response.json();
-        balansValue = data.balans !== undefined ? data.balans : 0;
-      }
-    } catch (err) {
-      // Xatolik bo'lsa, balans 0
-      balansValue = 0;
-    }
-
-    // UI yangilash
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${user.first_name}`;
-    document.getElementById("welcomeMsg").style.display = "inline";
-
-    document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
-    document.getElementById("balanceBox").style.display = "inline";
-
     // Modalni yopish
     closeModal(loginModal);
 
