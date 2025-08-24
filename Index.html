@@ -567,92 +567,101 @@ function stopDrag() {
     });
 </script>
   <script>
-<script>
-let loggedInUser = null;
-let users = JSON.parse(localStorage.getItem("users")) || [];
+const apiUrl = "https://script.google.com/macros/s/AKfycbxKP89akx45sAlFN0H_4W6k-a-gdxOxEq8uaCKMIgXitoOpk527-k-XCdZN1x1Xe2sg/exec"; // GAS exec linki
 
-// Telegram login callback
-function onTelegramAuth(user) {
+let loggedInUser = null;
+
+async function onTelegramAuth(user) {
   loggedInUser = user;
   localStorage.setItem("telegramUser", JSON.stringify(user));
-  addOrUpdateUser(user);
-  updateHeader();
-  closeLoginModal();
-}
 
-// Foydalanuvchi qo‘shish yoki yangilash
-function addOrUpdateUser(user) {
-  const index = users.findIndex(u => u.id === user.id);
-  if(index > -1){
-    users[index].first_name = user.first_name;
-    users[index].username = user.username;
-  } else {
-    users.push({id:user.id, first_name:user.first_name, username:user.username, balans:0});
+  let balansValue = 0;
+
+  try {
+    // Google Sheet orqali balans olish
+    let response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: user.id,
+        username: user.username,
+        first_name: user.first_name
+      })
+    });
+
+    if (response.ok) {
+      let data = await response.json();
+      balansValue = data.balans !== undefined ? data.balans : 0;
+    }
+  } catch (err) {
+    // Xatolik bo‘lsa, balans 0
+    balansValue = 0;
   }
-  localStorage.setItem("users", JSON.stringify(users));
-}
 
-// Headerni yangilash
-function updateHeader(){
-  if(!loggedInUser) return;
-  const user = users.find(u=>u.id===loggedInUser.id) || {balans:0, first_name:loggedInUser.first_name};
+  // UI yangilash
   document.getElementById("loginBtn").style.display = "none";
-  document.getElementById("welcomeMsg").innerText = `Salom, ${user.first_name} (ID: ${loggedInUser.id})`;
+  document.getElementById("welcomeMsg").innerText =
+    `Salom, ${user.first_name} (ID: ${user.id})`;
   document.getElementById("welcomeMsg").style.display = "inline";
-  document.getElementById("balanceBox").innerText = `💰 ${user.balans || 0} so‘m`;
-  document.getElementById("balanceBox").style.display = "inline";
-}
 
-// Modalni yopish (faqat kirgan foydalanuvchi uchun)
-function closeLoginModal(){
+  document.getElementById("balanceBox").innerText = `💰 ${balansValue} so‘m`;
+  document.getElementById("balanceBox").style.display = "inline";
+
+  // Modalni faqat kirgan foydalanuvchi uchun yopish
   const modal = document.getElementById("loginModal");
-  if(modal){
-    modal.style.display="none";
+  if (modal) {
+    modal.style.display = "none";
     modal.remove();
   }
 }
 
-// DOM yuklanganda
-document.addEventListener("DOMContentLoaded", ()=>{
+document.addEventListener("DOMContentLoaded", async () => {
   const savedUser = localStorage.getItem("telegramUser");
-  if(savedUser){
+  if (savedUser) {
     loggedInUser = JSON.parse(savedUser);
-    updateHeader();
-  }
 
-  // Login tugmasi
-  const loginBtn = document.getElementById("loginBtn");
-  if(loginBtn){
-    loginBtn.addEventListener("click", ()=>{
-      showTelegramLogin();
-      const modal = document.getElementById("loginModal");
-      if(modal) modal.style.display="flex";
-    });
-  }
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").innerText =
+      `Salom, ${loggedInUser.first_name} (ID: ${loggedInUser.id})`;
+    document.getElementById("welcomeMsg").style.display = "inline";
 
-  // Modal yopish tugmasi
-  const modalCloseBtn = document.getElementById("modalClose");
-  if(modalCloseBtn){
-    modalCloseBtn.addEventListener("click", ()=>{ 
-      const modal = document.getElementById("loginModal"); 
-      if(modal) modal.style.display="none"; 
-    });
+    let balansValue = 0;
+
+    try {
+      let response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: loggedInUser.id,
+          username: loggedInUser.username,
+          first_name: loggedInUser.first_name
+        })
+      });
+
+      if (response.ok) {
+        let data = await response.json();
+        balansValue = data.balans !== undefined ? data.balans : 0;
+      }
+    } catch (err) {
+      balansValue = 0;
+    }
+
+    document.getElementById("balanceBox").innerText = `💰 ${balansValue} so‘m`;
+    document.getElementById("balanceBox").style.display = "inline";
   }
 });
-// foydalanuvchi Telegram login orqali kirsa
-async function onTelegramAuth(user) {
-  let users = JSON.parse(localStorage.getItem("users")) || [];
-  const userIndex = users.findIndex(u => u.id == user.id);
-  if(userIndex > -1) {
-    // foydalanuvchi mavjud, balansni saqlab qo'y
-    users[userIndex] = {...users[userIndex], ...user};
-  } else {
-    // yangi foydalanuvchi
-    users.push({...user, balans: 0});
-  }
-  localStorage.setItem("users", JSON.stringify(users));
-  localStorage.setItem("telegramUser", JSON.stringify(user));
-}
+
+// Login tugmasi
+document.getElementById("loginBtn").addEventListener("click", () => {
+  showTelegramLogin();
+  document.getElementById("loginModal").style.display = "flex";
+});
+
+// Modal yopish
+document.getElementById("modalClose").addEventListener("click", () => {
+  document.getElementById("loginModal").style.display = "none";
+});
+
 
 document.addEventListener("DOMContentLoaded", () => {
   const modalCloseBtn = document.getElementById("modalClose");
