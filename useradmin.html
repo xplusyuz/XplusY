@@ -5,18 +5,26 @@
   <title>XplusY – Admin Panel</title>
 </head>
 <body>
-  <h1>Admin panel</h1>
+  <h1>Admin Panel</h1>
+
+  <!-- Login variantlari -->
   <div id="loginArea">
+    <h3>Telegram orqali kirish</h3>
     <script async src="https://telegram.org/js/telegram-widget.js?22"
       data-telegram-login="YOUR_BOT_USERNAME"
       data-size="large"
       data-onauth="onTelegramAuth(user)"
       data-request-access="write">
     </script>
+
+    <h3>yoki Admin token orqali</h3>
+    <input id="tokenInput" placeholder="Admin token">
+    <button onclick="loginWithToken()">Kirish</button>
   </div>
 
+  <!-- Admin panel -->
   <div id="adminArea" style="display:none;">
-    <input id="searchInput" placeholder="Qidirish..." />
+    <input id="searchInput" placeholder="Qidirish...">
     <button id="refreshBtn">Yangilash</button>
     <button id="addUserBtn">➕ Yangi foydalanuvchi</button>
     <table border="1">
@@ -27,21 +35,29 @@
   </div>
 
 <script>
-let adminToken = null;
+let adminHeaders = {};
 
-async function onTelegramAuth(user) {
-  // Payloadni kodlab yuboramiz (Authorization header uchun)
-  adminToken = btoa(JSON.stringify(user));
-  document.getElementById('loginArea').style.display = 'none';
-  document.getElementById('adminArea').style.display = 'block';
+function openAdmin() {
+  document.getElementById("loginArea").style.display = "none";
+  document.getElementById("adminArea").style.display = "block";
   loadUsers();
 }
 
+function loginWithToken() {
+  const token = document.getElementById("tokenInput").value;
+  adminHeaders = { 'X-Admin-Token': token, 'Content-Type':'application/json' };
+  openAdmin();
+}
+
+function onTelegramAuth(user) {
+  console.log("Telegram user:", user);
+  const encoded = btoa(JSON.stringify(user));
+  adminHeaders = { 'Authorization': 'Bearer ' + encoded, 'Content-Type':'application/json' };
+  openAdmin();
+}
+
 async function adminFetch(path='', method='GET', body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + adminToken }
-  };
+  const opts = { method, headers: adminHeaders };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch('/.netlify/functions/admin-users' + path, opts);
   const json = await res.json();
@@ -50,22 +66,26 @@ async function adminFetch(path='', method='GET', body) {
 }
 
 async function loadUsers() {
-  const { users } = await adminFetch();
-  const tbody = document.getElementById('usersList');
-  tbody.innerHTML = '';
-  users.forEach(u => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${u.telegram_id}</td>
-      <td>${u.username || ''}</td>
-      <td>${u.first_name || ''}</td>
-      <td><input id="bal-${u.telegram_id}" type="number" value="${u.balance}"></td>
-      <td>
-        <button onclick="updateBalance(${u.telegram_id})">💾</button>
-        <button onclick="deleteUser(${u.telegram_id})">❌</button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
+  try {
+    const { users } = await adminFetch();
+    const tbody = document.getElementById('usersList');
+    tbody.innerHTML = '';
+    users.forEach(u => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${u.telegram_id}</td>
+        <td>${u.username || ''}</td>
+        <td>${u.first_name || ''}</td>
+        <td><input id="bal-${u.telegram_id}" type="number" value="${u.balance}"></td>
+        <td>
+          <button onclick="updateBalance(${u.telegram_id})">💾</button>
+          <button onclick="deleteUser(${u.telegram_id})">❌</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    document.getElementById('statusBox').innerText = e.message;
+  }
 }
 
 async function updateBalance(tid) {
