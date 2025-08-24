@@ -32,10 +32,13 @@
     <!-- O‘ng taraf: Kirish va theme tugma -->
     <div class="header-right">
       <div class="auth-box">
-        <button id="loginBtn" class="btn btn-primary">Kirish</button>
-        <span id="welcomeMsg" style="display:none; font-weight:600; margin-left:10px;"></span>
-      </div>
-
+        <div class="auth-box">
+  <button id="loginBtn" class="btn btn-primary">Kirish</button>
+  <span id="welcomeMsg" style="display:none; font-weight:600; margin-left:10px;"></span>
+  <span id="balanceBox" style="display:none; margin-left:15px; font-weight:bold; color:#10b981;">
+    💰 0 so‘m
+  </span>
+</div>
       <button id="themeToggle" class="theme-toggle" aria-label="Tungi/Kunduzgi rejim">
         <svg viewBox="0 0 24 24" class="icon">
           <path d="M21.64 13a9 9 0 01-10.63-10.63 1 1 0 00-1.27-1.27A11 11 0 1022.91 14.9a1 1 0 00-1.27-1.27z"/>
@@ -558,21 +561,8 @@ function stopDrag() {
         e.preventDefault(); // standart kontekst menyuni bloklaydi
     });
 </script>
-
-  <div id="loginModal" class="modal" style="display:none;">
-  <div class="modal-content" style="text-align:center; padding:20px; border-radius:12px;">
-    <span id="modalClose" class="modal-close" style="float:right; cursor:pointer;">&times;</span>
-    <h2>Saytimizdan to‘liq foydalanish uchun</h2>
-    <p>Iltimos, avval kirish qiling 👇</p>
-    <!-- Bu tugmani bosganda Telegram widget chiqadi -->
-    <div id="telegramLoginBox"></div>
-  </div>
-</div>
-
   <script>
-  const apiUrl = "https://script.google.com/macros/s/AKfycbzvzLP7aVpALMvrqaXxVLYX_Vn4IBrIU9k-pQwDeLP-TOGp5M4_AdCURJClCtN6jo3P/exec";
-  
- // Google Apps Script API URL
+let loggedInUser = null;
 const apiUrl = "https://script.google.com/macros/s/AKfycbzvzLP7aVpALMvrqaXxVLYX_Vn4IBrIU9k-pQwDeLP-TOGp5M4_AdCURJClCtN6jo3P/exec";
 
 // Telegram login tugagach
@@ -580,7 +570,7 @@ async function onTelegramAuth(user) {
   loggedInUser = user;
   localStorage.setItem("telegramUser", JSON.stringify(user));
 
-  // Balansni olish
+  // Google Sheets’dan balans olish
   let response = await fetch(apiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -590,30 +580,24 @@ async function onTelegramAuth(user) {
       first_name: user.first_name
     })
   });
-
   let data = await response.json();
 
-  // Header’ni yangilash
+  // UI yangilash
   document.getElementById("loginBtn").style.display = "none";
-  const welcome = document.getElementById("welcomeMsg");
-  welcome.innerText = "Salom! " + user.first_name;
-  welcome.style.display = "inline";
-
-  const balanceBox = document.getElementById("balanceBox");
-  balanceBox.innerText = "💰 " + data.balans + " so‘m";
-  balanceBox.style.display = "inline";
-
+  document.getElementById("welcomeMsg").innerText = "Salom, " + user.first_name;
+  document.getElementById("welcomeMsg").style.display = "inline";
+  document.getElementById("balanceBox").innerText = "💰 " + data.balans + " so‘m";
+  document.getElementById("balanceBox").style.display = "inline";
   document.getElementById("loginModal").style.display = "none";
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Avval login qilinganmi?
   const savedUser = localStorage.getItem("telegramUser");
   if (savedUser) {
     loggedInUser = JSON.parse(savedUser);
 
     document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").innerText = "Salom! " + loggedInUser.first_name;
+    document.getElementById("welcomeMsg").innerText = "Salom, " + loggedInUser.first_name;
     document.getElementById("welcomeMsg").style.display = "inline";
 
     // Balansni qaytadan olish
@@ -628,85 +612,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
     let data = await response.json();
 
-    const balanceBox = document.getElementById("balanceBox");
-    balanceBox.innerText = "💰 " + data.balans + " so‘m";
-    balanceBox.style.display = "inline";
+    document.getElementById("balanceBox").innerText = "💰 " + data.balans + " so‘m";
+    document.getElementById("balanceBox").style.display = "inline";
   }
+
+  // Login tugmasi
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    showTelegramLogin();
+    document.getElementById("loginModal").style.display = "flex";
+  });
+
+  // Modal yopish
+  document.getElementById("modalClose").addEventListener("click", () => {
+    document.getElementById("loginModal").style.display = "none";
+  });
 });
- 
-  
-    let loggedInUser = null;
 
-    // Telegram login tugagach
-    function onTelegramAuth(user) {
-      loggedInUser = user;
-      localStorage.setItem("telegramUser", JSON.stringify(user));
+// Telegram login widget qo‘shish
+function showTelegramLogin() {
+  if (document.getElementById("telegramLoginScript")) return;
 
-      document.getElementById("loginBtn").style.display = "none";
-      const welcome = document.getElementById("welcomeMsg");
-      welcome.innerText = "Salom! " + user.first_name;
-      welcome.style.display = "inline";
-
-      document.getElementById("loginModal").style.display = "none";
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-      // Avval login qilinganmi?
-      const savedUser = localStorage.getItem("telegramUser");
-      if (savedUser) {
-        loggedInUser = JSON.parse(savedUser);
-        document.getElementById("loginBtn").style.display = "none";
-        document.getElementById("welcomeMsg").innerText = "Salom! " + loggedInUser.first_name;
-        document.getElementById("welcomeMsg").style.display = "inline";
-      }
-
-      // Barcha tugma va linklarni bloklash
-      document.querySelectorAll("a, button").forEach(el => {
-        el.addEventListener("click", (e) => {
-          if (!loggedInUser && !el.closest(".auth-box")) {
-            e.preventDefault();
-            document.getElementById("loginModal").style.display = "flex";
-          }
-        });
-      });
-
-      // Modal yopish
-      document.getElementById("modalClose").addEventListener("click", () => {
-        document.getElementById("loginModal").style.display = "none";
-      });
-
-      // "Kirish" tugmasi bosilganda modalni ochish
-      document.getElementById("loginBtn").addEventListener("click", () => {
-        showTelegramLogin();
-        document.getElementById("loginModal").style.display = "flex";
-      });
-    });
-
-    // Telegram login widget qo‘shish
-    function showTelegramLogin() {
-      if (document.getElementById("telegramLoginScript")) return;
-
-      const script = document.createElement("script");
-      script.id = "telegramLoginScript";
-      script.src = "https://telegram.org/js/telegram-widget.js?22";
-      script.setAttribute("data-telegram-login", "xplusykirish_bot"); // <-- Bot username
-      script.setAttribute("data-size", "large");
-      script.setAttribute("data-userpic", "false");
-      script.setAttribute("data-onauth", "onTelegramAuth(user)");
-      script.setAttribute("data-request-access", "write");
-      document.getElementById("telegramLoginBox").appendChild(script);
-    }
-	
+  const script = document.createElement("script");
+  script.id = "telegramLoginScript";
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", "xplusykirish_bot"); // ⚠️ Bot username
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  document.getElementById("telegramLoginBox").appendChild(script);
+}
   </script>
-<!-- HTML -->
-<span id="welcomeMsg" class="welcome-badge" style="display:none;">
-  <i class="fas fa-user-circle"></i> Salom! Username
-</span>
-<!-- Welcome badge yoniga balans -->
-<span id="balanceBox" class="balance-badge" style="display:none; margin-left:15px; font-weight:bold;">
-  💰 0 so‘m
-</span>
-
 <!-- Font Awesome uchun -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script>
@@ -782,6 +717,15 @@ function onTelegramAuth(user) {
     });
 }
 </script>
+<!-- Telegram Login Modal -->
+<div id="loginModal" class="modal" style="display:none;">
+  <div class="modal-content" style="text-align:center; padding:20px; border-radius:12px;">
+    <span id="modalClose" style="float:right; cursor:pointer;">&times;</span>
+    <h2>Saytimizdan foydalanish uchun</h2>
+    <p>Iltimos, Telegram orqali kirish qiling 👇</p>
+    <div id="telegramLoginBox"></div>
+  </div>
+</div>
 
 </body>
 </html>
