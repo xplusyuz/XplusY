@@ -575,26 +575,35 @@ async function onTelegramAuth(user) {
   loggedInUser = user;
   localStorage.setItem("telegramUser", JSON.stringify(user));
 
-  // Google Sheets’dan balans olish
-  let response = await fetch(apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: user.id,
-      username: user.username,
-      first_name: user.first_name
-    })
-  });
-  let data = await response.json();
+  let balansText = "💰 0 so‘m"; // default balans
+
+  try {
+    // Google Sheets’dan balans olish
+    let response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: user.id,
+        username: user.username,
+        first_name: user.first_name
+      })
+    });
+    let data = await response.json();
+
+    if (data && data.balans !== undefined) {
+      balansText = "💰 " + data.balans + " so‘m";
+    }
+  } catch (err) {
+    console.log("Balansni olishda xatolik:", err);
+  }
 
   // UI yangilash
   document.getElementById("loginBtn").style.display = "none";
   document.getElementById("welcomeMsg").innerText =
-    `Salom, ${data.first_name} (ID: ${data.id})`;
+    `Salom, ${user.first_name} (ID: ${user.id})`;
   document.getElementById("welcomeMsg").style.display = "inline";
 
-  document.getElementById("balanceBox").innerText =
-    `💰 ${data.balans} so‘m`;
+  document.getElementById("balanceBox").innerText = balansText;
   document.getElementById("balanceBox").style.display = "inline";
 
   // Modalni faqat kirgan foydalanuvchi uchun yopish
@@ -615,20 +624,26 @@ document.addEventListener("DOMContentLoaded", async () => {
       `Salom, ${loggedInUser.first_name} (ID: ${loggedInUser.id})`;
     document.getElementById("welcomeMsg").style.display = "inline";
 
-    // Balansni qaytadan olish
-    let response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: loggedInUser.id,
-        username: loggedInUser.username,
-        first_name: loggedInUser.first_name
-      })
-    });
-    let data = await response.json();
+    let balansText = "💰 0 so‘m"; // default balans
+    try {
+      let response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: loggedInUser.id,
+          username: loggedInUser.username,
+          first_name: loggedInUser.first_name
+        })
+      });
+      let data = await response.json();
+      if (data && data.balans !== undefined) {
+        balansText = "💰 " + data.balans + " so‘m";
+      }
+    } catch (err) {
+      console.log("Balansni olishda xatolik:", err);
+    }
 
-    document.getElementById("balanceBox").innerText =
-      `💰 ${data.balans} so‘m`;
+    document.getElementById("balanceBox").innerText = balansText;
     document.getElementById("balanceBox").style.display = "inline";
   }
 });
@@ -643,6 +658,7 @@ document.getElementById("loginBtn").addEventListener("click", () => {
 document.getElementById("modalClose").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
 });
+
 
 // Telegram login widget qo‘shish
 function showTelegramLogin() {
