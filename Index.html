@@ -567,81 +567,92 @@ function stopDrag() {
     });
 </script>
   <script>
+<script>
 let loggedInUser = null;
 let users = JSON.parse(localStorage.getItem("users")) || [];
 
-// Telegram login simulyatsiyasi
-function showTelegramLogin() {
-  // Bu yerda asl Telegram widget bo'lishi mumkin
-  // Simulyatsiya uchun prompt
-  let username = prompt("Ismingizni kiriting:");
-  if (!username) return;
-
-  let id = Math.floor(Math.random() * 1000000) + Date.now(); // unik ID
-  onTelegramAuth({ id, first_name: username, username });
+// Telegram login callback
+function onTelegramAuth(user) {
+  loggedInUser = user;
+  localStorage.setItem("telegramUser", JSON.stringify(user));
+  addOrUpdateUser(user);
+  updateHeader();
+  closeLoginModal();
 }
 
-// Foydalanuvchini qo'shish yoki yangilash
+// Foydalanuvchi qo‘shish yoki yangilash
 function addOrUpdateUser(user) {
-  let existing = users.find(u => u.id === user.id);
-  if (existing) {
-    existing.first_name = user.first_name;
-    existing.username = user.username;
+  const index = users.findIndex(u => u.id === user.id);
+  if(index > -1){
+    users[index].first_name = user.first_name;
+    users[index].username = user.username;
   } else {
-    user.balans = 0;
-    users.push(user);
+    users.push({id:user.id, first_name:user.first_name, username:user.username, balans:0});
   }
   localStorage.setItem("users", JSON.stringify(users));
 }
 
-// Telegram orqali kirish
-function onTelegramAuth(user) {
-  loggedInUser = user;
-  localStorage.setItem("telegramUser", JSON.stringify(user));
-
-  addOrUpdateUser(user);
-
-  // UI yangilash
+// Headerni yangilash
+function updateHeader(){
+  if(!loggedInUser) return;
+  const user = users.find(u=>u.id===loggedInUser.id) || {balans:0, first_name:loggedInUser.first_name};
   document.getElementById("loginBtn").style.display = "none";
-  document.getElementById("welcomeMsg").innerText = `Salom, ${user.first_name} (ID: ${user.id})`;
+  document.getElementById("welcomeMsg").innerText = `Salom, ${user.first_name} (ID: ${loggedInUser.id})`;
   document.getElementById("welcomeMsg").style.display = "inline";
-
   document.getElementById("balanceBox").innerText = `💰 ${user.balans || 0} so‘m`;
   document.getElementById("balanceBox").style.display = "inline";
+}
 
+// Modalni yopish (faqat kirgan foydalanuvchi uchun)
+function closeLoginModal(){
   const modal = document.getElementById("loginModal");
-  if (modal) {
-    modal.style.display = "none";
+  if(modal){
+    modal.style.display="none";
     modal.remove();
   }
 }
 
-// DOM load
-document.addEventListener("DOMContentLoaded", () => {
+// DOM yuklanganda
+document.addEventListener("DOMContentLoaded", ()=>{
   const savedUser = localStorage.getItem("telegramUser");
-  if (savedUser) {
+  if(savedUser){
     loggedInUser = JSON.parse(savedUser);
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").innerText = `Salom, ${loggedInUser.first_name} (ID: ${loggedInUser.id})`;
-    document.getElementById("welcomeMsg").style.display = "inline";
-
-    document.getElementById("balanceBox").innerText = `💰 ${loggedInUser.balans || 0} so‘m`;
-    document.getElementById("balanceBox").style.display = "inline";
+    updateHeader();
   }
 
   // Login tugmasi
-  document.getElementById("loginBtn").addEventListener("click", () => {
-    document.getElementById("loginModal").style.display = "flex";
-  });
+  const loginBtn = document.getElementById("loginBtn");
+  if(loginBtn){
+    loginBtn.addEventListener("click", ()=>{
+      showTelegramLogin();
+      const modal = document.getElementById("loginModal");
+      if(modal) modal.style.display="flex";
+    });
+  }
 
-  // Telegram login
-  document.getElementById("telegramLoginBtn").addEventListener("click", showTelegramLogin);
-
-  // Modal yopish
-  document.getElementById("modalClose").addEventListener("click", () => {
-    document.getElementById("loginModal").style.display = "none";
-  });
+  // Modal yopish tugmasi
+  const modalCloseBtn = document.getElementById("modalClose");
+  if(modalCloseBtn){
+    modalCloseBtn.addEventListener("click", ()=>{ 
+      const modal = document.getElementById("loginModal"); 
+      if(modal) modal.style.display="none"; 
+    });
+  }
 });
+// foydalanuvchi Telegram login orqali kirsa
+async function onTelegramAuth(user) {
+  let users = JSON.parse(localStorage.getItem("users")) || [];
+  const userIndex = users.findIndex(u => u.id == user.id);
+  if(userIndex > -1) {
+    // foydalanuvchi mavjud, balansni saqlab qo'y
+    users[userIndex] = {...users[userIndex], ...user};
+  } else {
+    // yangi foydalanuvchi
+    users.push({...user, balans: 0});
+  }
+  localStorage.setItem("users", JSON.stringify(users));
+  localStorage.setItem("telegramUser", JSON.stringify(user));
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const modalCloseBtn = document.getElementById("modalClose");
