@@ -392,48 +392,37 @@
   }
 
   // ================= TELEGRAM AUTH FUNCTION =================
-  async function onTelegramAuth(user) {
-    loggedInUser = user;
-    localStorage.setItem('telegramUser', JSON.stringify(user));
+ async function onTelegramAuth(user) {
+  try {
+    const payload = {
+      id: user.id,
+      first_name: user.first_name,
+      username: user.username,
+      auth_date: user.auth_date,
+      hash: user.hash
+    };
 
-    let balansValue = 0;
+    // Netlify function orqali Supabase'ga so‘rov
+    const res = await fetch('/.netlify/functions/telegram-auth', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-    try {
-      // localStorage dan foydalanuvchini topish yoki yaratish
-      const users = getUsers();
-      let currentUser = users.find(u => u.id === user.id);
-      
-      if (currentUser) {
-        balansValue = currentUser.balans;
-      } else {
-        // Yangi foydalanuvchi qo'shish
-        const newUser = {
-          id: user.id,
-          username: user.username,
-          first_name: user.first_name,
-          balans: 0
-        };
-        
-        users.push(newUser);
-        saveUsers(users);
-        balansValue = 0;
-        
-        // Yangi foydalanuvchi haqida xabar
-        console.log("Yangi foydalanuvchi qo'shildi:", newUser);
-      }
-    } catch (err) {
-      console.error("Balans olishda xatolik:", err);
-      balansValue = 0;
-    }
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Auth failed');
+
+    const u = json.user;
 
     // UI yangilash
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${user.first_name}`;
-    document.getElementById("welcomeMsg").style.display = "inline";
-
-    document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
-    document.getElementById("balanceBox").style.display = "inline";
-
+    document.getElementById("loginArea").style.display = "none";
+    document.getElementById("userArea").style.display = "block";
+    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${u.first_name || 'foydalanuvchi'} (@${u.username || ''})`;
+    document.getElementById("balanceBox").innerText = u.balance;
+  } catch (e) {
+    alert("Kirishda xatolik: " + e.message);
+  }
+}
     closeModal(loginModal);
 
     // Kirish haqida xabar yuborish
