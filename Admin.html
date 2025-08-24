@@ -1,72 +1,59 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8">
-  <title>Admin Panel - Balans boshqarish</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 30px; }
-    #panel { display: none; margin-top: 20px; }
-  </style>
+<meta charset="UTF-8">
+<title>Admin - Balans Tahriri</title>
+<style>
+  body { font-family:sans-serif; background:#f5f5f5; padding:20px; }
+  table { width:100%; border-collapse: collapse; margin-top:20px; }
+  th, td { border:1px solid #ccc; padding:10px; text-align:left; }
+  th { background:#10b981; color:white; }
+  input[type=number] { width:80px; }
+  .btn { padding:5px 10px; background:#10b981; color:white; border:none; border-radius:5px; cursor:pointer; }
+</style>
 </head>
 <body>
-  <h2>🔐 Admin Panel</h2>
+<h2>Foydalanuvchilar Balansi</h2>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Ism</th>
+      <th>Username</th>
+      <th>Balans</th>
+      <th>Saqlash</th>
+    </tr>
+  </thead>
+  <tbody id="userTable"></tbody>
+</table>
 
-  <div id="loginBox">
-    <p>Parolni kiriting:</p>
-    <input type="password" id="adminPass">
-    <button onclick="checkPassword()">Kirish</button>
-    <p id="error" style="color:red;"></p>
-  </div>
+<script>
+let users = JSON.parse(localStorage.getItem("users")) || [];
 
-  <div id="panel">
-    <form id="updateForm">
-      <label>Foydalanuvchi ID: </label><br>
-      <input type="text" id="userId" required><br><br>
+function renderTable() {
+  const tbody = document.getElementById("userTable");
+  tbody.innerHTML = "";
+  users.forEach((u, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${u.id}</td>
+      <td>${u.first_name}</td>
+      <td>${u.username || ""}</td>
+      <td><input type="number" value="${u.balans}" id="bal${i}"></td>
+      <td><button class="btn" onclick="saveBalance(${i})">Saqlash</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
-      <label>Yangi balans: </label><br>
-      <input type="number" id="newBalance" required><br><br>
+function saveBalance(index) {
+  const input = document.getElementById(`bal${index}`);
+  users[index].balans = parseInt(input.value) || 0;
+  localStorage.setItem("users", JSON.stringify(users));
+  alert("Balans saqlandi!");
+}
 
-      <button type="submit">Yangilash</button>
-    </form>
-
-    <div id="result"></div>
-  </div>
-
-  <script>
-    const ADMIN_PASSWORD = "your-secret-password"; // **O'zingiz yozing**
-    const apiUrl = "https://script.google.com/macros/s/AKfycbxKP89akx45sAlFN0H_4W6k-a-gdxOxEq8uaCKMIgXitoOpk527-k-XCdZN1x1Xe2sg/exec";
-
-    function checkPassword() {
-      let inputPass = document.getElementById("adminPass").value;
-      if (inputPass === ADMIN_PASSWORD) {
-        document.getElementById("loginBox").style.display = "none";
-        document.getElementById("panel").style.display = "block";
-      } else {
-        document.getElementById("error").innerText = "❌ Noto‘g‘ri parol!";
-      }
-    }
-
-    document.getElementById("updateForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      let userId = document.getElementById("userId").value;
-      let newBalance = document.getElementById("newBalance").value;
-
-      let response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: userId,
-          action: "update_balance",
-          balance: newBalance
-        })
-      });
-
-      let data = await response.json();
-
-      document.getElementById("result").innerHTML =
-        `<p>✅ Balans yangilandi: <b>${data.balans} soʻm</b></p>`;
-    });
-  </script>
+renderTable();
+</script>
 </body>
 </html>
