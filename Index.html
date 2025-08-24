@@ -671,7 +671,6 @@
     observer.observe(body, { attributes: true, attributeFilter: ["class"] });
   });
   </script>
-
   <!-- === Assistive Menu (sayt oxiriga joylashtiring) === -->
   <style>
   :root {
@@ -867,5 +866,57 @@
     observer.observe(body, { attributes: true, attributeFilter: ["class"] });
   });
   </script>
+  <p>💰 Balansingiz: <span id="balanceBox">0</span> so‘m</p>
+<button onclick="refreshBalance()">🔄 Balansni yangilash</button>
+
+<script>
+let currentUser = null;
+
+async function onTelegramAuth(user) {
+  const payload = {
+    id: user.id,
+    first_name: user.first_name,
+    username: user.username,
+    auth_date: user.auth_date,
+    hash: user.hash
+  };
+
+  const res = await fetch('/.netlify/functions/telegram-auth', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'Auth failed');
+
+  currentUser = json.user;
+
+  document.getElementById("loginArea").style.display = "none";
+  document.getElementById("userArea").style.display = "block";
+  document.getElementById("welcomeMsg").innerText = `👋 Salom, ${currentUser.first_name || 'foydalanuvchi'} (@${currentUser.username || ''})`;
+  document.getElementById("balanceBox").innerText = currentUser.balance;
+}
+
+async function refreshBalance() {
+  if (!currentUser) return;
+  // Faqat balansni yangidan olib kelamiz
+  const res = await fetch('/.netlify/functions/admin-users', {
+    method: 'GET',
+    headers: {
+      'X-Admin-Token': 'Math@1999', // ❗️Bu xavfsiz emas, faqat test uchun
+      'Content-Type': 'application/json'
+    }
+  });
+  const json = await res.json();
+  if (json.ok) {
+    const me = json.users.find(u => u.telegram_id === currentUser.telegram_id);
+    if (me) {
+      document.getElementById("balanceBox").innerText = me.balance;
+    }
+  }
+}
+</script>
+
 </body>
 </html>
