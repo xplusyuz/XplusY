@@ -575,10 +575,10 @@ async function onTelegramAuth(user) {
   loggedInUser = user;
   localStorage.setItem("telegramUser", JSON.stringify(user));
 
-  let balansText = "💰 0 so‘m"; // default balans
+  let balansValue = 0;
 
   try {
-    // Google Sheets’dan balans olish
+    // Google Sheet orqali balans olish
     let response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -588,13 +588,14 @@ async function onTelegramAuth(user) {
         first_name: user.first_name
       })
     });
-    let data = await response.json();
 
-    if (data && data.balans !== undefined) {
-      balansText = "💰 " + data.balans + " so‘m";
+    if (response.ok) {
+      let data = await response.json();
+      balansValue = data.balans !== undefined ? data.balans : 0;
     }
   } catch (err) {
-    console.log("Balansni olishda xatolik:", err);
+    // Xatolik bo‘lsa, balans 0
+    balansValue = 0;
   }
 
   // UI yangilash
@@ -603,7 +604,7 @@ async function onTelegramAuth(user) {
     `Salom, ${user.first_name} (ID: ${user.id})`;
   document.getElementById("welcomeMsg").style.display = "inline";
 
-  document.getElementById("balanceBox").innerText = balansText;
+  document.getElementById("balanceBox").innerText = `💰 ${balansValue} so‘m`;
   document.getElementById("balanceBox").style.display = "inline";
 
   // Modalni faqat kirgan foydalanuvchi uchun yopish
@@ -624,7 +625,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       `Salom, ${loggedInUser.first_name} (ID: ${loggedInUser.id})`;
     document.getElementById("welcomeMsg").style.display = "inline";
 
-    let balansText = "💰 0 so‘m"; // default balans
+    let balansValue = 0;
+
     try {
       let response = await fetch(apiUrl, {
         method: "POST",
@@ -635,15 +637,16 @@ document.addEventListener("DOMContentLoaded", async () => {
           first_name: loggedInUser.first_name
         })
       });
-      let data = await response.json();
-      if (data && data.balans !== undefined) {
-        balansText = "💰 " + data.balans + " so‘m";
+
+      if (response.ok) {
+        let data = await response.json();
+        balansValue = data.balans !== undefined ? data.balans : 0;
       }
     } catch (err) {
-      console.log("Balansni olishda xatolik:", err);
+      balansValue = 0;
     }
 
-    document.getElementById("balanceBox").innerText = balansText;
+    document.getElementById("balanceBox").innerText = `💰 ${balansValue} so‘m`;
     document.getElementById("balanceBox").style.display = "inline";
   }
 });
@@ -657,6 +660,17 @@ document.getElementById("loginBtn").addEventListener("click", () => {
 // Modal yopish
 document.getElementById("modalClose").addEventListener("click", () => {
   document.getElementById("loginModal").style.display = "none";
+});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const modalCloseBtn = document.getElementById("modalClose");
+  if (modalCloseBtn) {
+    modalCloseBtn.addEventListener("click", () => {
+      const modal = document.getElementById("loginModal");
+      if (modal) modal.style.display = "none";
+    });
+  }
 });
 
 
