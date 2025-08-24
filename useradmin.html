@@ -57,6 +57,10 @@
     button:hover {
       background-color: #0da271;
     }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
     .search-box {
       margin: 20px 0;
       padding: 10px;
@@ -64,13 +68,52 @@
       border: 1px solid #ddd;
       border-radius: 4px;
     }
+    .status-message {
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .error {
+      background-color: #fee;
+      color: #c33;
+      border: 1px solid #fcc;
+    }
+    .success {
+      background-color: #efe;
+      color: #363;
+      border: 1px solid #cfc;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(16, 185, 129, 0.3);
+      border-radius: 50%;
+      border-top-color: #10b981;
+      animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Foydalanuvchi Balanslari Boshqaruvi</h1>
     
-    <input type="text" id="searchInput" class="search-box" placeholder="Foydalanuvchi qidirish...">
+    <div class="controls">
+      <input type="text" id="searchInput" class="search-box" placeholder="Foydalanuvchi qidirish...">
+      <button id="refreshBtn">Yangilash</button>
+    </div>
+    
+    <div id="statusMessage" class="status-message" style="display: none;"></div>
     
     <table id="usersTable">
       <thead>
@@ -91,18 +134,38 @@
   <script>
     const apiUrl = "https://script.google.com/macros/s/AKfycbzCSofk-4mQub1D4ZzqthGZcQM2YitHt2BMJo20SVaP82ADbC0o8uvdueu-MeA4N-VH/exec";
     
+    // Status xabarini ko'rsatish
+    function showStatus(message, type = 'error') {
+      const statusEl = document.getElementById('statusMessage');
+      statusEl.textContent = message;
+      statusEl.className = `status-message ${type}`;
+      statusEl.style.display = 'block';
+      
+      // Agar xato bo'lsa, 5 soniyadan so'ng yashirish
+      if (type === 'error') {
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 5000);
+      }
+    }
+    
+    // Foydalanuvchilar ro'yxatini yuklash
     async function loadUsers() {
       try {
-        console.log("API so'rov boshlandi...");
-        const response = await fetch(apiUrl);
-        console.log("API javobi:", response);
+        showStatus('Foydalanuvchilar yuklanmoqda... <span class="loading"></span>', 'success');
+        document.getElementById('refreshBtn').disabled = true;
+        
+        // API so'rovini yuborish
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          mode: 'no-cors' // CORS muammosini hal qilish uchun
+        });
         
         if (!response.ok) {
-          throw new Error(`HTTP xatolik! Status: ${response.status}`);
+          throw new Error(`API javob qaytarmadi. Status: ${response.status}`);
         }
         
         const users = await response.json();
-        console.log("API dan qaytgan ma'lumotlar:", users);
         
         const usersList = document.getElementById('usersList');
         usersList.innerHTML = '';
@@ -125,13 +188,55 @@
             
             usersList.appendChild(row);
           });
+          
+          showStatus(`${users.length} ta foydalanuvchi topildi`, 'success');
+          setTimeout(() => {
+            document.getElementById('statusMessage').style.display = 'none';
+          }, 3000);
         } else {
           usersList.innerHTML = '<tr><td colspan="5" style="text-align: center;">Foydalanuvchilar topilmadi</td></tr>';
+          showStatus('Foydalanuvchilar topilmadi', 'error');
         }
       } catch (error) {
         console.error('Xatolik:', error);
-        alert('Foydalanuvchilarni yuklashda xatolik: ' + error.message);
+        showStatus(`Xatolik: ${error.message}. Iltimos, API manzilini tekshiring.`, 'error');
+        
+        // Demo ma'lumotlarni ko'rsatish (faqat test uchun)
+        showDemoData();
+      } finally {
+        document.getElementById('refreshBtn').disabled = false;
       }
+    }
+    
+    // Demo ma'lumotlar (API ishlamaganda)
+    function showDemoData() {
+      const usersList = document.getElementById('usersList');
+      usersList.innerHTML = '';
+      
+      const demoUsers = [
+        {id: 1, username: 'demo_user', first_name: 'Demo Foydalanuvchi', balans: 10000},
+        {id: 2, username: 'test_user', first_name: 'Test Foydalanuvchi', balans: 5000}
+      ];
+      
+      demoUsers.forEach(user => {
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+          <td>${user.id}</td>
+          <td>@${user.username}</td>
+          <td>${user.first_name}</td>
+          <td>
+            <input type="number" id="balance-${user.id}" value="${user.balans}">
+          </td>
+          <td>
+            <button onclick="updateBalance(${user.id})">Yangilash</button>
+          </td>
+        `;
+        
+        usersList.appendChild(row);
+      });
+      
+      showStatus('Demo ma\'lumotlar ko\'rsatilmoqda. API ga ulanishda muammo.', 'error');
     }
     
     // Balansni yangilash
@@ -139,9 +244,14 @@
       const newBalance = document.getElementById(`balance-${userId}`).value;
       
       try {
+        showStatus('Balans yangilanmoqda... <span class="loading"></span>', 'success');
+        
         const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
           body: JSON.stringify({
             action: 'update',
             id: userId,
@@ -150,35 +260,47 @@
         });
         
         if (response.ok) {
-          alert('Balans muvaffaqiyatli yangilandi!');
-          loadUsers(); // Ro'yxatni qayta yuklash
+          showStatus('Balans muvaffaqiyatli yangilandi!', 'success');
+          setTimeout(() => {
+            loadUsers(); // Ro'yxatni qayta yuklash
+          }, 1000);
+        } else {
+          throw new Error('Server javob qaytarmadi');
         }
       } catch (error) {
         console.error('Xatolik:', error);
-        alert('Balansni yangilashda xatolik yuz berdi');
+        showStatus('Balansni yangilashda xatolik yuz berdi. API ga ulanishni tekshiring.', 'error');
       }
     }
     
     // Qidiruv funksiyasi
-    document.getElementById('searchInput').addEventListener('input', function(e) {
-      const searchTerm = e.target.value.toLowerCase();
-      const rows = document.querySelectorAll('#usersList tr');
-      
-      rows.forEach(row => {
-        const id = row.cells[0].textContent.toLowerCase();
-        const username = row.cells[1].textContent.toLowerCase();
-        const name = row.cells[2].textContent.toLowerCase();
+    function setupSearch() {
+      document.getElementById('searchInput').addEventListener('input', function(e) {
+        const searchTerm = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('#usersList tr');
         
-        if (id.includes(searchTerm) || username.includes(searchTerm) || name.includes(searchTerm)) {
-          row.style.display = '';
-        } else {
-          row.style.display = 'none';
-        }
+        rows.forEach(row => {
+          const id = row.cells[0].textContent.toLowerCase();
+          const username = row.cells[1].textContent.toLowerCase();
+          const name = row.cells[2].textContent.toLowerCase();
+          
+          if (id.includes(searchTerm) || username.includes(searchTerm) || name.includes(searchTerm)) {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        });
       });
-    });
+    }
+    
+    // Yangilash tugmasi
+    document.getElementById('refreshBtn').addEventListener('click', loadUsers);
     
     // Sahifa yuklanganda foydalanuvchilarni yuklash
-    document.addEventListener('DOMContentLoaded', loadUsers);
+    document.addEventListener('DOMContentLoaded', function() {
+      loadUsers();
+      setupSearch();
+    });
   </script>
 </body>
 </html>
