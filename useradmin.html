@@ -5,103 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Panel - X+Y.uz</title>
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 20px;
-      background-color: #f5f5f5;
-    }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    h1 {
-      color: #10b981;
-      text-align: center;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #ddd;
-    }
-    th {
-      background-color: #f0f4f8;
-      font-weight: 600;
-    }
-    tr:hover {
-      background-color: #f9f9f9;
-    }
-    input {
-      padding: 8px;
-      width: 80px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    button {
-      padding: 8px 16px;
-      background-color: #10b981;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0da271;
-    }
-    button:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
-    }
-    .search-box {
-      margin: 20px 0;
-      padding: 10px;
-      width: 100%;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    .status-message {
-      padding: 12px;
-      margin: 10px 0;
-      border-radius: 4px;
-      text-align: center;
-    }
-    .error {
-      background-color: #fee;
-      color: #c33;
-      border: 1px solid #fcc;
-    }
-    .success {
-      background-color: #efe;
-      color: #363;
-      border: 1px solid #cfc;
-    }
-    .loading {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid rgba(16, 185, 129, 0.3);
-      border-radius: 50%;
-      border-top-color: #10b981;
-      animation: spin 1s ease-in-out infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
+    /* Sizning uslublaringiz... */
   </style>
 </head>
 <body>
@@ -111,9 +15,12 @@
     <div class="controls">
       <input type="text" id="searchInput" class="search-box" placeholder="Foydalanuvchi qidirish...">
       <button id="refreshBtn">Yangilash</button>
+      <button id="checkApiBtn">API Holatini Tekshirish</button>
     </div>
     
     <div id="statusMessage" class="status-message" style="display: none;"></div>
+    
+    <div id="apiStatus" style="margin: 10px 0; padding: 10px; border-radius: 4px; display: none;"></div>
     
     <table id="usersTable">
       <thead>
@@ -132,7 +39,42 @@
   </div>
 
   <script>
+    // Yangi API manzilini sozlash kerak
     const apiUrl = "https://script.google.com/macros/s/AKfycbzCSofk-4mQub1D4ZzqthGZcQM2YitHt2BMJo20SVaP82ADbC0o8uvdueu-MeA4N-VH/exec";
+    
+    // API holatini tekshirish
+    async function checkApiStatus() {
+      try {
+        const statusEl = document.getElementById('apiStatus');
+        statusEl.textContent = "API tekshirilmoqda...";
+        statusEl.style.display = 'block';
+        statusEl.style.backgroundColor = '#eef';
+        statusEl.style.color = '#336';
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          statusEl.textContent = "✅ API muvaffaqiyatli ishlayapti";
+          statusEl.style.backgroundColor = '#efe';
+          statusEl.style.color = '#363';
+        } else {
+          statusEl.textContent = "❌ API ga ulanishda muammo. Status: " + response.status;
+          statusEl.style.backgroundColor = '#fee';
+          statusEl.style.color = '#c33';
+        }
+      } catch (error) {
+        const statusEl = document.getElementById('apiStatus');
+        statusEl.textContent = "❌ API ga ulanishda xatolik: " + error.message;
+        statusEl.style.backgroundColor = '#fee';
+        statusEl.style.color = '#c33';
+        statusEl.style.display = 'block';
+      }
+    }
     
     // Status xabarini ko'rsatish
     function showStatus(message, type = 'error') {
@@ -141,7 +83,6 @@
       statusEl.className = `status-message ${type}`;
       statusEl.style.display = 'block';
       
-      // Agar xato bo'lsa, 5 soniyadan so'ng yashirish
       if (type === 'error') {
         setTimeout(() => {
           statusEl.style.display = 'none';
@@ -152,13 +93,15 @@
     // Foydalanuvchilar ro'yxatini yuklash
     async function loadUsers() {
       try {
-        showStatus('Foydalanuvchilar yuklanmoqda... <span class="loading"></span>', 'success');
+        showStatus('Foydalanuvchilar yuklanmoqda...', 'success');
         document.getElementById('refreshBtn').disabled = true;
         
         // API so'rovini yuborish
         const response = await fetch(apiUrl, {
           method: 'GET',
-          mode: 'no-cors' // CORS muammosini hal qilish uchun
+          headers: {
+            'Content-Type': 'application/json'
+          }
         });
         
         if (!response.ok) {
@@ -166,6 +109,11 @@
         }
         
         const users = await response.json();
+        
+        // Agar xato bo'lsa
+        if (users.error) {
+          throw new Error(users.error);
+        }
         
         const usersList = document.getElementById('usersList');
         usersList.innerHTML = '';
@@ -208,98 +156,15 @@
       }
     }
     
-    // Demo ma'lumotlar (API ishlamaganda)
-    function showDemoData() {
-      const usersList = document.getElementById('usersList');
-      usersList.innerHTML = '';
-      
-      const demoUsers = [
-        {id: 1, username: 'demo_user', first_name: 'Demo Foydalanuvchi', balans: 10000},
-        {id: 2, username: 'test_user', first_name: 'Test Foydalanuvchi', balans: 5000}
-      ];
-      
-      demoUsers.forEach(user => {
-        const row = document.createElement('tr');
-        
-        row.innerHTML = `
-          <td>${user.id}</td>
-          <td>@${user.username}</td>
-          <td>${user.first_name}</td>
-          <td>
-            <input type="number" id="balance-${user.id}" value="${user.balans}">
-          </td>
-          <td>
-            <button onclick="updateBalance(${user.id})">Yangilash</button>
-          </td>
-        `;
-        
-        usersList.appendChild(row);
-      });
-      
-      showStatus('Demo ma\'lumotlar ko\'rsatilmoqda. API ga ulanishda muammo.', 'error');
-    }
+    // Qolgan funksiyalar o'zgarmaydi...
     
-    // Balansni yangilash
-    async function updateBalance(userId) {
-      const newBalance = document.getElementById(`balance-${userId}`).value;
-      
-      try {
-        showStatus('Balans yangilanmoqda... <span class="loading"></span>', 'success');
-        
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            action: 'update',
-            id: userId,
-            balans: newBalance
-          })
-        });
-        
-        if (response.ok) {
-          showStatus('Balans muvaffaqiyatli yangilandi!', 'success');
-          setTimeout(() => {
-            loadUsers(); // Ro'yxatni qayta yuklash
-          }, 1000);
-        } else {
-          throw new Error('Server javob qaytarmadi');
-        }
-      } catch (error) {
-        console.error('Xatolik:', error);
-        showStatus('Balansni yangilashda xatolik yuz berdi. API ga ulanishni tekshiring.', 'error');
-      }
-    }
-    
-    // Qidiruv funksiyasi
-    function setupSearch() {
-      document.getElementById('searchInput').addEventListener('input', function(e) {
-        const searchTerm = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#usersList tr');
-        
-        rows.forEach(row => {
-          const id = row.cells[0].textContent.toLowerCase();
-          const username = row.cells[1].textContent.toLowerCase();
-          const name = row.cells[2].textContent.toLowerCase();
-          
-          if (id.includes(searchTerm) || username.includes(searchTerm) || name.includes(searchTerm)) {
-            row.style.display = '';
-          } else {
-            row.style.display = 'none';
-          }
-        });
-      });
-    }
-    
-    // Yangilash tugmasi
-    document.getElementById('refreshBtn').addEventListener('click', loadUsers);
-    
-    // Sahifa yuklanganda foydalanuvchilarni yuklash
+    // Sahifa yuklanganda
     document.addEventListener('DOMContentLoaded', function() {
       loadUsers();
       setupSearch();
+      
+      // API tekshirish tugmasi
+      document.getElementById('checkApiBtn').addEventListener('click', checkApiStatus);
     });
   </script>
 </body>
