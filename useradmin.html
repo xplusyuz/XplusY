@@ -5,7 +5,148 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Panel - X+Y.uz</title>
   <style>
-    /* Sizning uslublaringiz... */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    body {
+      background-color: #f5f7f9;
+      color: #333;
+      line-height: 1.6;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+    }
+    
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #ecf0f1;
+    }
+    
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    
+    button {
+      padding: 10px 15px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+    
+    button:hover {
+      background-color: #2980b9;
+    }
+    
+    button:disabled {
+      background-color: #95a5a6;
+      cursor: not-allowed;
+    }
+    
+    #checkApiBtn {
+      background-color: #2ecc71;
+    }
+    
+    #checkApiBtn:hover {
+      background-color: #27ae60;
+    }
+    
+    .status-message {
+      padding: 10px 15px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .status-message.success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status-message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    th, td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+    }
+    
+    tr:hover {
+      background-color: #f5f5f5;
+    }
+    
+    input[type="number"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .api-status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    
+    @media (max-width: 768px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
   </style>
 </head>
 <body>
@@ -20,7 +161,7 @@
     
     <div id="statusMessage" class="status-message" style="display: none;"></div>
     
-    <div id="apiStatus" style="margin: 10px 0; padding: 10px; border-radius: 4px; display: none;"></div>
+    <div id="apiStatus" class="api-status"></div>
     
     <table id="usersTable">
       <thead>
@@ -39,8 +180,8 @@
   </div>
 
   <script>
-    // Yangi API manzilini sozlash kerak
-    const apiUrl = "https://script.google.com/macros/s/AKfycbzCSofk-4mQub1D4ZzqthGZcQM2YitHt2BMJo20SVaP82ADbC0o8uvdueu-MeA4N-VH/exec";
+    // API manzilini sozlash
+    const apiUrl = "https://script.google.com/macros/s/AKfycbwAYRC2ciqyae6V2tHptKbf5CyN-mKdcJS0jo2UdIR4jlaXgYDE0t8i_gRFctLvU3j0/exec";
     
     // API holatini tekshirish
     async function checkApiStatus() {
@@ -88,6 +229,99 @@
           statusEl.style.display = 'none';
         }, 5000);
       }
+    }
+    
+    // Balansni yangilash
+    async function updateBalance(userId) {
+      try {
+        const newBalance = document.getElementById(`balance-${userId}`).value;
+        
+        showStatus('Balans yangilanmoqda...', 'success');
+        
+        // Yangilash so'rovini yuborish
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'update',
+            id: userId,
+            balans: newBalance
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API javob qaytarmadi. Status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showStatus('Balans muvaffaqiyatli yangilandi', 'success');
+          setTimeout(() => {
+            document.getElementById('statusMessage').style.display = 'none';
+          }, 3000);
+        } else {
+          throw new Error(result.error || 'Noma\'lum xatolik');
+        }
+      } catch (error) {
+        console.error('Xatolik:', error);
+        showStatus(`Xatolik: ${error.message}`, 'error');
+      }
+    }
+    
+    // Qidiruv funksiyasi
+    function setupSearch() {
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('input', function() {
+        const searchText = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#usersList tr');
+        
+        rows.forEach(row => {
+          const username = row.cells[1].textContent.toLowerCase();
+          const name = row.cells[2].textContent.toLowerCase();
+          
+          if (username.includes(searchText) || name.includes(searchText)) {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        });
+      });
+    }
+    
+    // Demo ma'lumotlarni ko'rsatish
+    function showDemoData() {
+      const usersList = document.getElementById('usersList');
+      usersList.innerHTML = '';
+      
+      const demoUsers = [
+        {id: 1, username: 'ali_developer', first_name: 'Ali', balans: 15000},
+        {id: 2, username: 'vali_admin', first_name: 'Vali', balans: 25000},
+        {id: 3, username: 'hasan_user', first_name: 'Hasan', balans: 5000},
+        {id: 4, username: 'husan_client', first_name: 'Husan', balans: 30000}
+      ];
+      
+      demoUsers.forEach(user => {
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+          <td>${user.id}</td>
+          <td>@${user.username}</td>
+          <td>${user.first_name}</td>
+          <td>
+            <input type="number" id="balance-${user.id}" value="${user.balans}">
+          </td>
+          <td>
+            <button onclick="updateBalance(${user.id})">Yangilash</button>
+          </td>
+        `;
+        
+        usersList.appendChild(row);
+      });
+      
+      showStatus('Haqiqiy ma\'lumotlarni ko\'rish uchun "Yangilash" tugmasini bosing.', 'success');
     }
     
     // Foydalanuvchilar ro'yxatini yuklash
@@ -156,12 +390,14 @@
       }
     }
     
-    // Qolgan funksiyalar o'zgarmaydi...
-    
     // Sahifa yuklanganda
     document.addEventListener('DOMContentLoaded', function() {
-      loadUsers();
+      // Dastlabki yuklash
+      showDemoData();
       setupSearch();
+      
+      // Yangilash tugmasi
+      document.getElementById('refreshBtn').addEventListener('click', loadUsers);
       
       // API tekshirish tugmasi
       document.getElementById('checkApiBtn').addEventListener('click', checkApiStatus);
