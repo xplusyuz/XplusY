@@ -136,6 +136,27 @@
       display: none;
     }
     
+    .troubleshoot-section {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 5px;
+      padding: 15px;
+      margin-top: 20px;
+    }
+    
+    .troubleshoot-section h3 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+    
+    .troubleshoot-section ol {
+      padding-left: 20px;
+    }
+    
+    .troubleshoot-section li {
+      margin-bottom: 8px;
+    }
+    
     @media (max-width: 768px) {
       .controls {
         flex-direction: column;
@@ -177,6 +198,16 @@
         <!-- Foydalanuvchilar ro'yxati JavaScript orqali to'ldiriladi -->
       </tbody>
     </table>
+    
+    <div class="troubleshoot-section">
+      <h3>API Ulanish Muammolari Hal Qilish</h3>
+      <ol>
+        <li>Google Apps Script ni tekshiring: Script mavjudligiga va to'g'ri sozlanganligiga ishonch hosil qiling</li>
+        <li>Deployment sozlamalari: "Execute as" - "Me", "Who has access" - "Anyone" bo'lishi kerak</li>
+        <li>Google Sheets hujjati: "Foydalanuvchilar" nomli varaq mavjudligiga va ma'lumotlar to'g'ri joylashtirilganligiga ishonch hosil qiling</li>
+        <li>Brauzer konsolini tekshiring (F12 > Console) - qo'shimcha xatoliklar bo'lishi mumkin</li>
+      </ol>
+    </div>
   </div>
 
   <script>
@@ -192,19 +223,20 @@
         statusEl.style.backgroundColor = '#eef';
         statusEl.style.color = '#336';
         
-        const response = await fetch(apiUrl, {
+        // JSONP usuli bilan so'rov yuborish (CORS muammosini hal qilish uchun)
+        const response = await fetch(apiUrl + '?callback=?', {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          mode: 'no-cors'
+        }).catch(e => {
+          throw new Error('API ga ulanish imkoni yo\'q. Ehtimol CORS muammosi.');
         });
         
-        if (response.ok) {
+        if (response && response.ok) {
           statusEl.textContent = "✅ API muvaffaqiyatli ishlayapti";
           statusEl.style.backgroundColor = '#efe';
           statusEl.style.color = '#363';
         } else {
-          statusEl.textContent = "❌ API ga ulanishda muammo. Status: " + response.status;
+          statusEl.textContent = "❌ API ga ulanishda muammo. Status: " + (response ? response.status : 'Noma\'lum');
           statusEl.style.backgroundColor = '#fee';
           statusEl.style.color = '#c33';
         }
@@ -214,6 +246,8 @@
         statusEl.style.backgroundColor = '#fee';
         statusEl.style.color = '#c33';
         statusEl.style.display = 'block';
+        
+        console.error("API xatosi tafsilotlari:", error);
       }
     }
     
@@ -401,6 +435,9 @@
       
       // API tekshirish tugmasi
       document.getElementById('checkApiBtn').addEventListener('click', checkApiStatus);
+      
+      // API holatini avto-tekshirish
+      setTimeout(checkApiStatus, 1000);
     });
   </script>
 </body>
