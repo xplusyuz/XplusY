@@ -237,7 +237,7 @@
           </article>
 
           <!-- yashirinlar -->
-          <article class="card hidden"><h3>Matritsalar</h3><p>Operatsiyalar vizualizatsiyasi.</p><a href="#" class="btn btn-primary">Ochish</a></article>
+          <article class="card hidden"><h3>Matritsalar</h3><p>Operatsiyaras vizualizatsiyasi.</p><a href="#" class="btn btn-primary">Ochish</a></article>
           <article class="card hidden"><h3>Kompleks sonlar</h3><p>Argand tekislikda ko'rsatish.</p><a href="#" class="btn btn-primary">Ochish</a></article>
         </div>
 
@@ -363,227 +363,77 @@
   <script defer src="app.js"></script>
   <script src="ads.js"></script>
   <script>
+  // ================= LOCALSTORAGE USERS FUNCTIONS =================
   function getUsers() {
-  const usersJSON = localStorage.getItem('xplusy_users');
-  return usersJSON ? JSON.parse(usersJSON) : [];
-}
-
-function saveUsers(users) {
-  localStorage.setItem('xplusy_users', JSON.stringify(users));
-}
-
-function updateUserBalance(userId, newBalance) {
-  const users = getUsers();
-  const userIndex = users.findIndex(u => u.id === userId);
-  
-  if (userIndex !== -1) {
-    users[userIndex].balans = parseInt(newBalance);
-    saveUsers(users);
-    return true;
+    const usersJSON = localStorage.getItem('xplusy_users');
+    return usersJSON ? JSON.parse(usersJSON) : [];
   }
-  
-  return false;
-}
 
-function getUserById(userId) {
-  const users = getUsers();
-  return users.find(u => u.id === userId);
-}
+  function saveUsers(users) {
+    localStorage.setItem('xplusy_users', JSON.stringify(users));
+  }
 
-// ================= TELEGRAM AUTH FUNCTION UPDATE =================
-async function onTelegramAuth(user) {
-  loggedInUser = user;
-  localStorage.setItem('telegramUser', JSON.stringify(user));
-
-  let balansValue = 0;
-
-  try {
-    // localStorage dan foydalanuvchini topish yoki yaratish
+  function updateUserBalance(userId, newBalance) {
     const users = getUsers();
-    let currentUser = users.find(u => u.id === user.id);
+    const userIndex = users.findIndex(u => u.id === userId);
     
-    if (currentUser) {
-      balansValue = currentUser.balans;
-    } else {
-      // Yangi foydalanuvchi qo'shish
-      const newUser = {
-        id: user.id,
-        username: user.username,
-        first_name: user.first_name,
-        balans: 0
-      };
-      
-      users.push(newUser);
+    if (userIndex !== -1) {
+      users[userIndex].balans = parseInt(newBalance);
       saveUsers(users);
-      balansValue = 0;
-      
-      // Yangi foydalanuvchi haqida xabar
-      console.log("Yangi foydalanuvchi qo'shildi:", newUser);
+      return true;
     }
-  } catch (err) {
-    console.error("Balans olishda xatolik:", err);
-    balansValue = 0;
+    
+    return false;
   }
 
-  // UI yangilash (oldingi kod)
-  document.getElementById("loginBtn").style.display = "none";
-  document.getElementById("welcomeMsg").innerText = `👋 Salom, ${user.first_name}`;
-  document.getElementById("welcomeMsg").style.display = "inline";
+  function getUserById(userId) {
+    const users = getUsers();
+    return users.find(u => u.id === userId);
+  }
 
-  document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
-  document.getElementById("balanceBox").style.display = "inline";
-
-  closeModal(loginModal);
-
-  // Kirish haqida xabar yuborish (oldingi kod o'zgarishsiz)
-  // ... qolgan xabar yuborish kodi
-}
-
-// ================= DOMContentLoaded ICHIDA YANGILASH =================
-document.addEventListener("DOMContentLoaded", async () => {
-  // ... mavjud kodlar
-  
-  // Foydalanuvchi ma'lumotlarini localStorage dan olish
-  const savedUser = localStorage.getItem("telegramUser");
-  if (savedUser) {
-    loggedInUser = JSON.parse(savedUser);
-
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${loggedInUser.first_name}`;
-    document.getElementById("welcomeMsg").style.display = "inline";
+  // ================= TELEGRAM AUTH FUNCTION =================
+  async function onTelegramAuth(user) {
+    loggedInUser = user;
+    localStorage.setItem('telegramUser', JSON.stringify(user));
 
     let balansValue = 0;
 
     try {
-      // localStorage dan balans olish
-      const currentUser = getUserById(loggedInUser.id);
-      balansValue = currentUser ? currentUser.balans : 0;
+      // localStorage dan foydalanuvchini topish yoki yaratish
+      const users = getUsers();
+      let currentUser = users.find(u => u.id === user.id);
+      
+      if (currentUser) {
+        balansValue = currentUser.balans;
+      } else {
+        // Yangi foydalanuvchi qo'shish
+        const newUser = {
+          id: user.id,
+          username: user.username,
+          first_name: user.first_name,
+          balans: 0
+        };
+        
+        users.push(newUser);
+        saveUsers(users);
+        balansValue = 0;
+        
+        // Yangi foydalanuvchi haqida xabar
+        console.log("Yangi foydalanuvchi qo'shildi:", newUser);
+      }
     } catch (err) {
+      console.error("Balans olishda xatolik:", err);
       balansValue = 0;
     }
 
+    // UI yangilash
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${user.first_name}`;
+    document.getElementById("welcomeMsg").style.display = "inline";
+
     document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
     document.getElementById("balanceBox").style.display = "inline";
-  }
-  
-  document.addEventListener("DOMContentLoaded", () => {
-    const themeToggle = document.getElementById("themeToggle");
-    const body = document.body;
 
-    // Avvalgi tanlovni localStorage dan yuklash
-    if (localStorage.getItem("theme") === "dark") {
-      body.classList.add("dark");
-      themeToggle.textContent = "☀️"; // tun rejimida → quyosh tugma
-    } else {
-      body.classList.add("light");
-      themeToggle.textContent = "🌙"; // kun rejimida → oy tugma
-    }
-
-    // Tugma bosilganda rejimni almashtirish
-    themeToggle.addEventListener("click", () => {
-      if (body.classList.contains("dark")) {
-        body.classList.remove("dark");
-        body.classList.add("light");
-        localStorage.setItem("theme", "light");
-        themeToggle.textContent = "🌙";
-      } else {
-        body.classList.remove("light");
-        body.classList.add("dark");
-        localStorage.setItem("theme", "dark");
-        themeToggle.textContent = "☀️";
-      }
-    });
-
-    // Yilni yangilash
-    document.getElementById("year").textContent = new Date().getFullYear();
-  });
-
-  const apiUrl = "/data/users.json"; 
-
-  let loggedInUser = null;
-
-  // Modal elementlari
-  const loginModal = document.getElementById("loginModal");
-  const logoutModal = document.getElementById("logoutModal");
-  const modalClose = document.getElementById("modalClose");
-  const cancelLogout = document.getElementById("cancelLogout");
-  const confirmLogout = document.getElementById("confirmLogout");
-
-  // Modalni yopish funksiyasi
-  function closeModal(modal) {
-    modal.style.display = "none";
-  }
-
-  // Modalni ochish funksiyasi
-  function openModal(modal) {
-    modal.style.display = "flex";
-  }
-
-  // Modal yopish uchun event listenerlar
-  modalClose.addEventListener("click", () => closeModal(loginModal));
-  cancelLogout.addEventListener("click", () => closeModal(logoutModal));
-
-  // Esc tugmasi bilan modalni yopish
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      closeModal(loginModal);
-      closeModal(logoutModal);
-    }
-  });
-
-  // Modal tashqarisiga bosganda yopish
-  window.addEventListener("click", (e) => {
-    if (e.target === loginModal) closeModal(loginModal);
-    if (e.target === logoutModal) closeModal(logoutModal);
-  });
-
-  // Saytning asosiy qismiga bosilganda kirish modali ochilishi
-  document.querySelector("main").addEventListener("click", (e) => {
-    // Agar foydalanuvchi kirgan bo'lsa yoki header/footer elementlariga bosilgan bo'lsa, modallarni ochma
-    if (loggedInUser || 
-        e.target.closest("header") || 
-        e.target.closest("footer") || 
-        e.target.closest(".modal") ||
-        e.target.closest(".assistive-touch") ||
-        e.target.closest("#mathMenu")) return;
-    
-    // Kirish modali ochilsin
-    openModal(loginModal);
-    showTelegramLogin();
-  });
-
-  // Chiqishni tasdiqlash
-  confirmLogout.addEventListener("click", () => {
-    localStorage.removeItem("telegramUser");
-    loggedInUser = null;
-    
-    document.getElementById("loginBtn").style.display = "block";
-    document.getElementById("welcomeMsg").style.display = "none";
-    document.getElementById("balanceBox").style.display = "none";
-    
-    closeModal(logoutModal);
-  });
-
-  // Telegram login widget qo'shish
-  function showTelegramLogin() {
-    if (document.getElementById("telegramLoginScript")) return;
-
-    const script = document.createElement("script");
-    script.id = "telegramLoginScript";
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", "xplusykirish_bot"); // ⚠️ Bot username
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    document.getElementById("telegramLoginBox").appendChild(script);
-  }
-
-  async function onTelegramAuth(user) {
-    loggedInUser = user;
-    localStorage.setItem("telegramUser", JSON.stringify(user));
-
-    let balansValue = 0;
-    // Modalni yopish
     closeModal(loginModal);
 
     // Kirish haqida xabar yuborish
@@ -646,8 +496,115 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
   }
 
-  // Sahifa yuklanganda foydalanuvchi ma'lumotlarini tekshirish
-  document.addEventListener("DOMContentLoaded", async () => {
+  // ================= MODAL FUNCTIONS =================
+  function closeModal(modal) {
+    modal.style.display = "none";
+  }
+
+  function openModal(modal) {
+    modal.style.display = "flex";
+  }
+
+  // Telegram login widget qo'shish
+  function showTelegramLogin() {
+    if (document.getElementById("telegramLoginScript")) return;
+
+    const script = document.createElement("script");
+    script.id = "telegramLoginScript";
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", "xplusykirish_bot");
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-userpic", "false");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    document.getElementById("telegramLoginBox").appendChild(script);
+  }
+
+  // ================= MAIN INITIALIZATION =================
+  document.addEventListener("DOMContentLoaded", () => {
+    const themeToggle = document.getElementById("themeToggle");
+    const body = document.body;
+    let loggedInUser = null;
+
+    // Avvalgi tanlovni localStorage dan yuklash
+    if (localStorage.getItem("theme") === "dark") {
+      body.classList.add("dark");
+      themeToggle.textContent = "☀️";
+    } else {
+      body.classList.add("light");
+      themeToggle.textContent = "🌙";
+    }
+
+    // Tugma bosilganda rejimni almashtirish
+    themeToggle.addEventListener("click", () => {
+      if (body.classList.contains("dark")) {
+        body.classList.remove("dark");
+        body.classList.add("light");
+        localStorage.setItem("theme", "light");
+        themeToggle.textContent = "🌙";
+      } else {
+        body.classList.remove("light");
+        body.classList.add("dark");
+        localStorage.setItem("theme", "dark");
+        themeToggle.textContent = "☀️";
+      }
+    });
+
+    // Yilni yangilash
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Modal elementlari
+    const loginModal = document.getElementById("loginModal");
+    const logoutModal = document.getElementById("logoutModal");
+    const modalClose = document.getElementById("modalClose");
+    const cancelLogout = document.getElementById("cancelLogout");
+    const confirmLogout = document.getElementById("confirmLogout");
+
+    // Modal yopish uchun event listenerlar
+    modalClose.addEventListener("click", () => closeModal(loginModal));
+    cancelLogout.addEventListener("click", () => closeModal(logoutModal));
+
+    // Esc tugmasi bilan modalni yopish
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        closeModal(loginModal);
+        closeModal(logoutModal);
+      }
+    });
+
+    // Modal tashqarisiga bosganda yopish
+    window.addEventListener("click", (e) => {
+      if (e.target === loginModal) closeModal(loginModal);
+      if (e.target === logoutModal) closeModal(logoutModal);
+    });
+
+    // Saytning asosiy qismiga bosilganda kirish modali ochilishi
+    document.querySelector("main").addEventListener("click", (e) => {
+      // Agar foydalanuvchi kirgan bo'lsa yoki header/footer elementlariga bosilgan bo'lsa, modallarni ochma
+      if (loggedInUser || 
+          e.target.closest("header") || 
+          e.target.closest("footer") || 
+          e.target.closest(".modal") ||
+          e.target.closest(".assistive-touch") ||
+          e.target.closest("#mathMenu")) return;
+      
+      // Kirish modali ochilsin
+      openModal(loginModal);
+      showTelegramLogin();
+    });
+
+    // Chiqishni tasdiqlash
+    confirmLogout.addEventListener("click", () => {
+      localStorage.removeItem("telegramUser");
+      loggedInUser = null;
+      
+      document.getElementById("loginBtn").style.display = "block";
+      document.getElementById("welcomeMsg").style.display = "none";
+      document.getElementById("balanceBox").style.display = "none";
+      
+      closeModal(logoutModal);
+    });
+
+    // Sahifa yuklanganda foydalanuvchi ma'lumotlarini tekshirish
     const savedUser = localStorage.getItem("telegramUser");
     if (savedUser) {
       loggedInUser = JSON.parse(savedUser);
@@ -659,20 +616,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       let balansValue = 0;
 
       try {
-        let response = await fetch(apiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: loggedInUser.id,
-            username: loggedInUser.username,
-            first_name: loggedInUser.first_name
-          })
-        });
-
-        if (response.ok) {
-          let data = await response.json();
-          balansValue = data.balans !== undefined ? data.balans : 0;
-        }
+        // localStorage dan balans olish
+        const currentUser = getUserById(loggedInUser.id);
+        balansValue = currentUser ? currentUser.balans : 0;
       } catch (err) {
         balansValue = 0;
       }
@@ -693,6 +639,47 @@ document.addEventListener("DOMContentLoaded", async () => {
       openModal(loginModal);
       showTelegramLogin();
     });
+
+    // Assistive Menu uchun kod
+    const mathMenuBtn = document.getElementById("mathMenuBtn");
+    const mathMenu = document.getElementById("mathMenu");
+    const closeMenu = document.getElementById("closeMenu");
+    const menuThemeToggle = document.getElementById("menuThemeToggle");
+
+    // Assistive tugma bosilganda menyuni ochish
+    mathMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      mathMenu.style.display = mathMenu.style.display === "flex" ? "none" : "flex";
+    });
+
+    // Yopish tugmasi
+    closeMenu.addEventListener("click", () => {
+      mathMenu.style.display = "none";
+    });
+
+    // Tashqariga bosilganda menyuni yopish
+    document.addEventListener("click", (e) => {
+      if (!mathMenu.contains(e.target) && e.target !== mathMenuBtn) {
+        mathMenu.style.display = "none";
+      }
+    });
+
+    // Menyu ichidagi mavzuni almashtirish tugmasi
+    menuThemeToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      themeToggle.click();
+    });
+
+    // Mavzu o'zgarganda menyu tugmasidagi ikonkani yangilash
+    const observer = new MutationObserver(() => {
+      if (body.classList.contains("dark")) {
+        menuThemeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+      } else {
+        menuThemeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+      }
+    });
+
+    observer.observe(body, { attributes: true, attributeFilter: ["class"] });
   });
   </script>
 
