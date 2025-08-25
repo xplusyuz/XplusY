@@ -203,7 +203,73 @@
   .user-details span.value {
     font-weight: 600;
   }
-  </style>
+
+  /* Profil tahrirlash uchun yangi uslublar */
+  .profile-edit-form {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 8px;
+  }
+  
+  .profile-edit-form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  
+  .profile-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+  }
+  
+  .logout-btn {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  
+  .logout-btn:hover {
+    background: #dc2626;
+  }
+  
+  .save-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  
+  .save-btn:hover {
+    background: #059669;
+  }
+  
+  .edit-btn {
+    background: transparent;
+    border: none;
+    color: #3b82f6;
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 10px;
+  }
+  
+  .edit-btn:hover {
+    text-decoration: underline;
+  }
+</style>
 </head>
 <body>
 <script>
@@ -560,10 +626,23 @@
     <!-- Foydalanuvchi ma'lumotlari (faqat kirilganda ko'rinadi) -->
     <div id="userDetails" class="user-details" style="display:none;">
       <h3>Shaxsiy kabinet</h3>
-      <p>Ism: <span class="value" id="modalUserName"></span></p>
+      <p>Ism: <span class="value" id="modalUserName"></span>
+        <button class="edit-btn" id="editNameBtn"><i class="fas fa-edit"></i></button>
+      </p>
+      <div id="nameEditForm" class="profile-edit-form" style="display:none;">
+        <input type="text" id="nameInput" placeholder="Yangi ism">
+        <div class="profile-actions">
+          <button class="save-btn" id="saveNameBtn">Saqlash</button>
+          <button class="logout-btn" id="cancelEditBtn">Bekor qilish</button>
+        </div>
+      </div>
       <p>Balans: <span class="value" id="modalBalanceAmount"></span> so'm</p>
       <p>Ball: <span class="value" id="modalCreditAmount"></span></p>
       <p>ID: <span class="value" id="modalUserId"></span></p>
+      
+      <div class="profile-actions">
+        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+      </div>
     </div>
     
     <div class="auth-tabs">
@@ -646,399 +725,274 @@
     firebase.auth().signInWithPopup(provider)
       .then((result) => {
         // Kirish muvaffaqiyatli
-        const user = result.user;
-        checkAndCreateUser(user);
+        console.log("Google orqali kirish muvaffaqiyatli:", result.user);
+        updateUserUI(result.user);
       })
       .catch((error) => {
-        console.error("Google kirish xatosi:", error);
-        alert("Google orqali kirishda xatolik: " + error.message);
+        console.error("Google orqali kirishda xatolik:", error);
+        alert("Kirishda xatolik yuz berdi: " + error.message);
       });
   }
 
-  // Telegram orqali autentifikatsiya
+  // Telegram orqali autentifikatsiya (namuna)
   function loginWithTelegram() {
-    // Telegram widgetini yuklash
-    if (document.getElementById("telegramLoginScript")) return;
-
-    const script = document.createElement("script");
-    script.id = "telegramLoginScript";
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.setAttribute("data-telegram-login", "xplusykirish_bot");
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    document.body.appendChild(script);
+    alert("Telegram orqali kirish hozircha ishlamaydi. Iltimos, boshqa usulni tanlang.");
   }
 
-  // Telegram autentifikatsiya callback
- async function onTelegramAuth(userData) {
-            try {
-                // Firebase uchun custom token yaratish yoki ma'lumotlarni saqlash
-                const user = {
-                    uid: 'tg_' + userData.id,
-                    displayName: userData.first_name,
-                    photoURL: null,
-                    email: userData.id + '@telegram.user',
-                    providerData: [{ providerId: 'telegram', uid: userData.id }]
-                };
-                
-                await checkAndCreateUser(user);
-            } catch (error) {
-                console.error("Telegram kirish xatosi:", error);
-                alert("Telegram orqali kirishda xatolik: " + error.message);
-            }
-        }
-        
-        // Email/parol orqali kirish
-        function loginWithEmail() {
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            
-            firebase.auth().signInWithEmailAndPassword(email, password)
-                .then((userCredential) => {
-                    // Kirish muvaffaqiyatli
-                    const user = userCredential.user;
-                    checkAndCreateUser(user);
-                })
-                .catch((error) => {
-                    console.error("Email kirish xatosi:", error);
-                    alert("Email orqali kirishda xatolik: " + error.message);
-                });
-        }
-        
-        // Email/parol orqali ro'yxatdan o'tish
-        function registerWithEmail() {
-            const name = document.getElementById('registerName').value;
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            
-            firebase.auth().createUserWithEmailAndPassword(email, password)
-                .then((userCredential) => {
-                    // Foydalanuvchi yaratildi, profildagi ismni yangilash
-                    const user = userCredential.user;
-                    return user.updateProfile({
-                        displayName: name
-                    }).then(() => {
-                        checkAndCreateUser(user);
-                    });
-                })
-                .catch((error) => {
-                    console.error("Ro'yxatdan o'tish xatosi:", error);
-                    alert("Ro'yxatdan o'tishda xatolik: " + error.message);
-                });
-        }
-        
-        // Foydalanuvchini tekshirish va yaratish
-        async function checkAndCreateUser(firebaseUser) {
-            const usersRef = db.collection('users');
-            
-            // Firebase UID bo'yicha foydalanuvchini qidirish
-            const doc = await usersRef.doc(firebaseUser.uid).get();
-            
-            if (doc.exists) {
-                // Foydalanuvchi mavjud, ma'lumotlarni yangilash
-                updateUIAfterLogin(doc.data());
-            } else {
-                // Yangi foydalanuvchi yaratish
-                const userId = await getNextUserId();
-                
-                const userData = {
-                    id: userId,
-                    first_name: firebaseUser.displayName || '',
-                    username: firebaseUser.email || '',
-                    email: firebaseUser.email || '',
-                    balance: 0,
-                    credit: 0,
-                    created_at: firebase.firestore.FieldValue.serverTimestamp(),
-                    last_login: firebase.firestore.FieldValue.serverTimestamp()
-                };
-                
-                await usersRef.doc(firebaseUser.uid).set(userData);
-                updateUIAfterLogin(userData);
-            }
-        }
-        
-        // Keyingi foydalanuvchi ID sini olish
-        async function getNextUserId() {
-            const counterRef = db.collection('counters').doc('userIds');
-            
-            try {
-                // Atomik ravishda counter ni oshirib yangi ID olish
-                const result = await db.runTransaction(async (transaction) => {
-                    const counterDoc = await transaction.get(counterRef);
-                    
-                    let newId;
-                    if (!counterDoc.exists) {
-                        // Counter hali mavjud emas, yangisini yaratamiz
-                        newId = 100001;
-                        transaction.set(counterRef, { currentId: newId });
-                    } else {
-                        // Counter mavjud, yangi ID olish
-                        newId = counterDoc.data().currentId + 1;
-                        transaction.update(counterRef, { currentId: newId });
-                    }
-                    
-                    return newId;
-                });
-                
-                return result;
-            } catch (error) {
-                console.error("ID yaratishda xatolik:", error);
-                // Xatolik yuz berganda, fallback sifatida vaqtni ishlatamiz
-                return Math.floor(Date.now() / 1000);
-            }
-        }
-        
-        // UI ni yangilash
-        function updateUIAfterLogin(userData) {
-            document.getElementById("userInfo").style.display = "block";
-            document.getElementById("userName").textContent = userData.first_name || userData.username;
-            document.getElementById("userId").textContent = userData.id;
-            document.getElementById("userBalance").textContent = userData.balance || 0;
-            
-            // Modalni yopish
-            closeModal();
-            
-            // LocalStorage ga saqlash
-            localStorage.setItem('currentUser', JSON.stringify(userData));
-        }
-        
-        // Modalni ko'rsatish funksiyalari
-        function showEmailLogin() {
-            document.getElementById("modalTitle").textContent = "Email orqali kirish";
-            document.getElementById("emailLoginForm").style.display = "block";
-            document.getElementById("registerForm").style.display = "none";
-            document.getElementById("authModal").style.display = "block";
-        }
-        
-        function showRegister() {
-            document.getElementById("modalTitle").textContent = "Ro'yxatdan o'tish";
-            document.getElementById("emailLoginForm").style.display = "none";
-            document.getElementById("registerForm").style.display = "block";
-            document.getElementById("authModal").style.display = "block";
-        }
-        
-        function closeModal() {
-            document.getElementById("authModal").style.display = "none";
-            // Inputlarni tozalash
-            document.getElementById("loginEmail").value = "";
-            document.getElementById("loginPassword").value = "";
-            document.getElementById("registerName").value = "";
-            document.getElementById("registerEmail").value = "";
-            document.getElementById("registerPassword").value = "";
-        }
-        
-        // Dastur yuklanganda, avvalgi sessiyani tekshirish
-        window.onload = function() {
-            const savedUser = localStorage.getItem('currentUser');
-            if (savedUser) {
-                updateUIAfterLogin(JSON.parse(savedUser));
-            }
-        };
-
-  // ================= MODAL FUNCTIONS =================
-  function closeModal(modal) {
-    modal.style.display = "none";
-  }
-
-  function openModal(modal) {
-    modal.style.display = "flex";
-  }
-
-  // ================= MAIN INITIALIZATION =================
-  document.addEventListener("DOMContentLoaded", () => {
-    const themeToggle = document.getElementById("themeToggle");
-    const body = document.body;
-    let loggedInUser = null;
-
-    // Avvalgi tanlovni localStorage dan yuklash
-    if (localStorage.getItem("theme") === "dark") {
-      body.classList.add("dark");
-      themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-    } else {
-      body.classList.add("light");
-      themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
-    }
-
-    // Tugma bosilganda rejimni almashtirish
-    themeToggle.addEventListener("click", () => {
-      if (body.classList.contains("dark")) {
-        body.classList.remove("dark");
-        body.classList.add("light");
-        localStorage.setItem("theme", "light");
-        themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
-      } else {
-        body.classList.remove("light");
-        body.classList.add("dark");
-        localStorage.setItem("theme", "dark");
-        themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-      }
-    });
-
-    // Modal oynasini ochish
-    document.getElementById("loginBtn").addEventListener("click", () => {
-      openModal(document.getElementById("authModal"));
-    });
-
-    // Modal oynasini yopish
-    document.querySelector(".close-modal").addEventListener("click", () => {
-      closeModal(document.getElementById("authModal"));
-    });
-
-    // Modal tashqarisiga bosilganda yopish
-    window.addEventListener("click", (event) => {
-      const modal = document.getElementById("authModal");
-      if (event.target === modal) {
-        closeModal(modal);
-      }
-    });
-
-    // Tab o'zgartirish
-    document.querySelectorAll(".tab-btn").forEach(button => {
-      button.addEventListener("click", () => {
-        const tabId = button.getAttribute("data-tab");
-        
-        // Barcha tablarni va tugmalarni yashirish
-        document.querySelectorAll(".tab-content").forEach(tab => {
-          tab.style.display = "none";
-        });
-        document.querySelectorAll(".tab-btn").forEach(btn => {
-          btn.classList.remove("active");
-        });
-        
-        // Faqat tanlangan tabni ko'rsatish
-        document.getElementById(tabId + "Tab").style.display = "block";
-        button.classList.add("active");
+  // Email/parol orqali kirish
+  document.getElementById('emailLoginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const email = this.querySelector('input[type="email"]').value;
+    const password = this.querySelector('input[type="password"]').value;
+    
+    firebase.auth().signInWithEmailAndPassword(email, password)
+      .then((userCredential) => {
+        // Kirish muvaffaqiyatli
+        console.log("Email orqali kirish muvaffaqiyatli:", userCredential.user);
+        updateUserUI(userCredential.user);
+      })
+      .catch((error) => {
+        console.error("Email orqali kirishda xatolik:", error);
+        alert("Kirishda xatolik yuz berdi: " + error.message);
       });
-    });
-
-    // Email orqali kirish
-    document.getElementById("emailLoginForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const email = e.target.querySelector('input[type="email"]').value;
-      const password = e.target.querySelector('input[type="password"]').value;
-      loginWithEmail(email, password);
-    });
-
-    // Email orqali ro'yxatdan o'tish
-    document.getElementById("emailRegisterForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const name = e.target.querySelector('input[type="text"]').value;
-      const email = e.target.querySelector('input[type="email"]').value;
-      const password = e.target.querySelector('input[type="password"]').value;
-      registerWithEmail(name, email, password);
-    });
-
-    // Assistive touch menyu
-    const mathMenuBtn = document.getElementById("mathMenuBtn");
-    const mathMenu = document.getElementById("mathMenu");
-    const closeMenuBtn = document.getElementById("closeMenu");
-    const menuThemeToggle = document.getElementById("menuThemeToggle");
-
-    mathMenuBtn.addEventListener("click", () => {
-      mathMenu.style.display = mathMenu.style.display === "flex" ? "none" : "flex";
-    });
-
-    closeMenuBtn.addEventListener("click", () => {
-      mathMenu.style.display = "none";
-    });
-
-    menuThemeToggle.addEventListener("click", () => {
-      themeToggle.click(); // Asosiy themeToggle ni ishga tushiramiz
-    });
-
-    // Yilni yangilash
-    document.getElementById("year").textContent = new Date().getFullYear();
-
-    // LocalStorage dan foydalanuvchi ma'lumotlarini yuklash
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      loggedInUser = JSON.parse(savedUser);
-      updateUIAfterLogin(loggedInUser);
-    }
   });
-  </script>
-   <script>
-  // ================= YANGI FUNKSIYALAR =================
 
-  // Cheklangan resurslarga kirishni nazorat qilish
-  const restrictedLinks = document.querySelectorAll('a[href="#"], .btn[href="#"]');
-  restrictedLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
-      if (!user) {
-        e.preventDefault();
-        openModal(document.getElementById("authModal"));
-        alert("Iltimos, avval tizimga kiring yoki ro'yxatdan o'ting");
-      }
+  // Ro'yxatdan o'tish funksiyalari
+  function registerWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebase.auth().signInWithPopup(provider)
+      .then((result) => {
+        // Ro'yxatdan o'tish muvaffaqiyatli
+        console.log("Google orqali ro'yxatdan o'tish muvaffaqiyatli:", result.user);
+        updateUserUI(result.user);
+      })
+      .catch((error) => {
+        console.error("Google orqali ro'yxatdan o'tishda xatolik:", error);
+        alert("Ro'yxatdan o'tishda xatolik yuz berdi: " + error.message);
+      });
+  }
+
+  function registerWithTelegram() {
+    alert("Telegram orqali ro'yxatdan o'tish hozircha ishlamaydi. Iltimos, boshqa usulni tanlang.");
+  }
+
+  document.getElementById('emailRegisterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const name = this.querySelector('input[type="text"]').value;
+    const email = this.querySelector('input[type="email"]').value;
+    const password = this.querySelector('input[type="password"]').value;
+    
+    firebase.auth().createUserWithEmailAndPassword(email, password)
+      .then((userCredential) => {
+        // Ro'yxatdan o'tish muvaffaqiyatli
+        console.log("Email orqali ro'yxatdan o'tish muvaffaqiyatli:", userCredential.user);
+        
+        // Foydalanuvchi ma'lumotlarini yangilash
+        return userCredential.user.updateProfile({
+          displayName: name
+        }).then(() => {
+          updateUserUI(userCredential.user);
+        });
+      })
+      .catch((error) => {
+        console.error("Email orqali ro'yxatdan o'tishda xatolik:", error);
+        alert("Ro'yxatdan o'tishda xatolik yuz berdi: " + error.message);
+      });
+  });
+
+  // Foydalanuvchi chiqishi
+  document.getElementById('logoutBtn').addEventListener('click', function() {
+    firebase.auth().signOut().then(() => {
+      console.log("Foydalanuvchi chiqdi");
+      // UI ni yangilash
+      document.getElementById('loginBtn').style.display = 'block';
+      document.getElementById('userInfoBox').style.display = 'none';
+      document.getElementById('userDetails').style.display = 'none';
+      document.getElementById('loginTab').style.display = 'block';
+      document.getElementById('registerTab').style.display = 'none';
+      document.querySelector('.auth-tabs').style.display = 'flex';
+    }).catch((error) => {
+      console.error("Chiqishda xatolik:", error);
     });
   });
 
-  // Balans va kredit ma'lumotlarini yangilash
-  async function refreshUserData() {
-    const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
-    if (!user) return;
-    
-    try {
-      // Bu yerda Firestore'dan yangi ma'lumotlarni olish kerak
-      const userDoc = await db.collection('users').doc(user.id).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        
-        // UI ni yangilash
-        updateUIAfterLogin(userData);
-        
-        // LocalStorage ni yangilash
-        localStorage.setItem('currentUser', JSON.stringify(userData));
-        
-        console.log("Foydalanuvchi ma'lumotlari yangilandi");
-      }
-    } catch (error) {
-      console.error("Ma'lumotlarni yangilashda xatolik:", error);
+  // Foydalanuvchi ma'lumotlarini yangilash
+  function updateUserUI(user) {
+    if (user) {
+      // Foydalanuvchi nomini yangilash
+      const displayName = user.displayName || user.email.split('@')[0];
+      document.getElementById('userName').textContent = displayName;
+      document.getElementById('modalUserName').textContent = displayName;
+      
+      // Foydalanuvchi ID sini to'liq ko'rsatish
+      document.getElementById('userId').textContent = user.uid;
+      document.getElementById('modalUserId').textContent = user.uid;
+      
+      // UI elementlarini yangilash
+      document.getElementById('loginBtn').style.display = 'none';
+      document.getElementById('userInfoBox').style.display = 'flex';
+      document.getElementById('userDetails').style.display = 'block';
+      document.getElementById('loginTab').style.display = 'none';
+      document.getElementById('registerTab').style.display = 'none';
+      document.querySelector('.auth-tabs').style.display = 'none';
+      
+      // Modalni yopish
+      document.getElementById('authModal').style.display = 'none';
+      
+      // Foydalanuvchi ma'lumotlarini Firestore'dan olish
+      getUserData(user.uid);
     }
   }
 
-  // UI ni yangilash (kengaytirilgan versiya)
-  function updateUIAfterLogin(userData) {
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("userInfoBox").style.display = "flex";
+  // Firestore'dan foydalanuvchi ma'lumotlarini olish
+  function getUserData(userId) {
+    const userRef = db.collection('users').doc(userId);
     
-    // Foydalanuvchi ma'lumotlarini to'ldirish
-    document.getElementById("userName").textContent = userData.first_name || userData.username;
-    document.getElementById("balanceAmount").textContent = userData.balance || 0;
-    document.getElementById("creditAmount").textContent = userData.credit || 0;
-    document.getElementById("userId").textContent = userData.id.substring(0, 8) + '...';
-    
-    // Modal ichidagi ma'lumotlarni ham yangilash
-    document.getElementById("modalUserName").textContent = userData.first_name || userData.username;
-    document.getElementById("modalBalanceAmount").textContent = userData.balance || 0;
-    document.getElementById("modalCreditAmount").textContent = userData.credit || 0;
-    document.getElementById("modalUserId").textContent = userData.id;
-    
-    // Agar foydalanuvchi kirgan bo'lsa, modalda ma'lumotlarni ko'rsatish
-    document.getElementById("userDetails").style.display = "block";
-    
-    // LocalStorage ga saqlash
-    localStorage.setItem('currentUser', JSON.stringify(userData));
+    userRef.get().then((doc) => {
+      if (doc.exists) {
+        const userData = doc.data();
+        // Balans va ballarni yangilash
+        document.getElementById('balanceAmount').textContent = userData.balance || 0;
+        document.getElementById('creditAmount').textContent = userData.credits || 0;
+        document.getElementById('modalBalanceAmount').textContent = userData.balance || 0;
+        document.getElementById('modalCreditAmount').textContent = userData.credits || 0;
+      } else {
+        // Yangi foydalanuvchi yaratish
+        createUserData(userId);
+      }
+    }).catch((error) => {
+      console.error("Foydalanuvchi ma'lumotlarini olishda xatolik:", error);
+    });
   }
 
-  // ================= ASOSIY INITIALIZATION =================
-  document.addEventListener("DOMContentLoaded", () => {
-    // ... (mavjud initialization kodi) ...
+  // Yangi foydalanuvchi yaratish
+  function createUserData(userId) {
+    const user = firebase.auth().currentUser;
+    const displayName = user.displayName || user.email.split('@')[0];
     
-    // Yangilash tugmasi uchun hodisalar
-    document.getElementById("refreshBalance").addEventListener("click", refreshUserData);
-    
-    // Foydalanuvchi ma'lumotlari paneliga bosilganda modalni ochish
-    document.getElementById("userInfoBox").addEventListener("click", () => {
-      openModal(document.getElementById("authModal"));
+    db.collection('users').doc(userId).set({
+      name: displayName,
+      email: user.email,
+      balance: 0,
+      credits: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => {
+      console.log("Yangi foydalanuvchi yaratildi");
+      // UI ni yangilash
+      document.getElementById('balanceAmount').textContent = 0;
+      document.getElementById('creditAmount').textContent = 0;
+      document.getElementById('modalBalanceAmount').textContent = 0;
+      document.getElementById('modalCreditAmount').textContent = 0;
+    }).catch((error) => {
+      console.error("Foydalanuvchi yaratishda xatolik:", error);
     });
-    
-    // LocalStorage dan foydalanuvchi ma'lumotlarini yuklash
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      const userData = JSON.parse(savedUser);
-      updateUIAfterLogin(userData);
+  }
+
+  // Ismni tahrirlash
+  document.getElementById('editNameBtn').addEventListener('click', function() {
+    document.getElementById('nameEditForm').style.display = 'block';
+  });
+
+  document.getElementById('cancelEditBtn').addEventListener('click', function() {
+    document.getElementById('nameEditForm').style.display = 'none';
+  });
+
+  document.getElementById('saveNameBtn').addEventListener('click', function() {
+    const newName = document.getElementById('nameInput').value.trim();
+    if (newName) {
+      const user = firebase.auth().currentUser;
+      
+      // Firebase Auth'dagi ismni yangilash
+      user.updateProfile({
+        displayName: newName
+      }).then(() => {
+        // Firestore'dagi ismni yangilash
+        db.collection('users').doc(user.uid).update({
+          name: newName
+        }).then(() => {
+          // UI ni yangilash
+          document.getElementById('userName').textContent = newName;
+          document.getElementById('modalUserName').textContent = newName;
+          document.getElementById('nameEditForm').style.display = 'none';
+          alert("Ism muvaffaqiyatli yangilandi!");
+        }).catch((error) => {
+          console.error("Firestore'dagi ismni yangilashda xatolik:", error);
+        });
+      }).catch((error) => {
+        console.error("Auth'dagi ismni yangilashda xatolik:", error);
+        alert("Ismni yangilashda xatolik: " + error.message);
+      });
+    } else {
+      alert("Iltimos, yangi ism kiriting");
+    }
+  });
+
+  // Balansni yangilash
+  document.getElementById('refreshBalance').addEventListener('click', function() {
+    const user = firebase.auth().currentUser;
+    if (user) {
+      getUserData(user.uid);
+      this.classList.add('rotating');
+      setTimeout(() => {
+        this.classList.remove('rotating');
+      }, 1000);
+    }
+  });
+
+  // Foydalanuvchi nomiga bosganda modalni ochish
+  document.getElementById('welcomeMsg').addEventListener('click', function() {
+    document.getElementById('authModal').style.display = 'flex';
+  });
+
+  // Auth holatini kuzatish
+  firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+      // Foydalanuvchi kirgan
+      updateUserUI(user);
+    } else {
+      // Foydalanuvchi chiqib ketgan
+      document.getElementById('loginBtn').style.display = 'block';
+      document.getElementById('userInfoBox').style.display = 'none';
+    }
+  });
+
+  // Modalni ochish
+  document.getElementById('loginBtn').addEventListener('click', function() {
+    document.getElementById('authModal').style.display = 'flex';
+  });
+
+  // Modalni yopish
+  document.querySelector('.close-modal').addEventListener('click', function() {
+    document.getElementById('authModal').style.display = 'none';
+  });
+
+  // Tab'larni boshqarish
+  document.querySelectorAll('.tab-btn').forEach(button => {
+    button.addEventListener('click', function() {
+      const tab = this.getAttribute('data-tab');
+      
+      // Barcha tab'larni yashirish
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.style.display = 'none';
+      });
+      
+      // Faqat tanlangan tab'ni ko'rsatish
+      document.getElementById(tab + 'Tab').style.display = 'block';
+      
+      // Barcha tab tugmalaridan active klassini olib tashlash
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Faqat bosilgan tugmaga active klassini qo'shish
+      this.classList.add('active');
+    });
+  });
+
+  // Tashqariga bosganda modal yopilishi
+  window.addEventListener('click', function(event) {
+    if (event.target == document.getElementById('authModal')) {
+      document.getElementById('authModal').style.display = 'none';
     }
   });
   </script>
