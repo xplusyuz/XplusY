@@ -671,107 +671,170 @@
   }
 
   // Telegram autentifikatsiya callback
-  async function onTelegramAuth(userData) {
-    try {
-      // Firebase uchun custom token yaratish yoki ma'lumotlarni saqlash
-      const user = {
-        uid: 'tg_' + userData.id,
-        displayName: userData.first_name,
-        photoURL: null,
-        email: userData.id + '@telegram.user',
-        providerData: [{ providerId: 'telegram', uid: userData.id }]
-      };
-      
-      checkAndCreateUser(user);
-    } catch (error) {
-      console.error("Telegram kirish xatosi:", error);
-      alert("Telegram orqali kirishda xatolik: " + error.message);
-    }
-  }
-
-  // Email/parol orqali kirish
-  function loginWithEmail(email, password) {
-    firebase.auth().signInWithEmailAndPassword(email, password)
-      .then((userCredential) => {
-        // Kirish muvaffaqiyatli
-        const user = userCredential.user;
-        checkAndCreateUser(user);
-      })
-      .catch((error) => {
-        console.error("Email kirish xatosi:", error);
-        alert("Email orqali kirishda xatolik: " + error.message);
-      });
-  }
-
-  // Email/parol orqali ro'yxatdan o'tish
-  function registerWithEmail(name, email, password) {
-    firebase.auth().createUserWithEmailAndPassword(email, password)
-      .then((userCredential) => {
-        // Foydalanuvchi yaratildi, profildagi ismni yangilash
-        const user = userCredential.user;
-        return user.updateProfile({
-          displayName: name
-        }).then(() => {
-          checkAndCreateUser(user);
-        });
-      })
-      .catch((error) => {
-        console.error("Ro'yxatdan o'tish xatosi:", error);
-        alert("Ro'yxatdan o'tishda xatolik: " + error.message);
-      });
-  }
-
-  // Foydalanuvchini tekshirish va yaratish
-  function checkAndCreateUser(firebaseUser) {
-    const usersRef = db.collection('users');
-    
-    // Firebase UID bo'yicha foydalanuvchini qidirish
-    usersRef.doc(firebaseUser.uid).get()
-      .then((doc) => {
-        if (doc.exists) {
-          // Foydalanuvchi mavjud, ma'lumotlarni yangilash
-          updateUIAfterLogin(doc.data());
-        } else {
-          // Yangi foydalanuvchi yaratish
-          const userData = {
-            id: firebaseUser.uid,
-            first_name: firebaseUser.displayName || '',
-            username: firebaseUser.email || '',
-            email: firebaseUser.email || '',
-            balance: 0,
-            credit: 0,
-            created_at: firebase.firestore.FieldValue.serverTimestamp(),
-            last_login: firebase.firestore.FieldValue.serverTimestamp()
-          };
-          
-          usersRef.doc(firebaseUser.uid).set(userData)
-            .then(() => {
-              updateUIAfterLogin(userData);
-            })
-            .catch((error) => {
-              console.error("Foydalanuvchi yaratish xatosi:", error);
-            });
+ async function onTelegramAuth(userData) {
+            try {
+                // Firebase uchun custom token yaratish yoki ma'lumotlarni saqlash
+                const user = {
+                    uid: 'tg_' + userData.id,
+                    displayName: userData.first_name,
+                    photoURL: null,
+                    email: userData.id + '@telegram.user',
+                    providerData: [{ providerId: 'telegram', uid: userData.id }]
+                };
+                
+                await checkAndCreateUser(user);
+            } catch (error) {
+                console.error("Telegram kirish xatosi:", error);
+                alert("Telegram orqali kirishda xatolik: " + error.message);
+            }
         }
-      })
-      .catch((error) => {
-        console.error("Foydalanuvchini tekshirish xatosi:", error);
-      });
-  }
-
-  // UI ni yangilash
-  function updateUIAfterLogin(userData) {
-    document.getElementById("loginBtn").style.display = "none";
-    document.getElementById("welcomeMsg").textContent = `👋 Salom, ${userData.first_name || userData.username}!`;
-    document.getElementById("welcomeMsg").style.display = "inline";
-    document.getElementById("balanceBox").textContent = `💰 ${userData.balance || 0} so'm`;
-    document.getElementById("balanceBox").style.display = "inline";
-    
-    // Modalni yopish
-    closeModal(document.getElementById("authModal"));
-    
-    // LocalStorage ga saqlash
-    localStorage.setItem('currentUser', JSON.stringify(userData));
-  }
+        
+        // Email/parol orqali kirish
+        function loginWithEmail() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            firebase.auth().signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Kirish muvaffaqiyatli
+                    const user = userCredential.user;
+                    checkAndCreateUser(user);
+                })
+                .catch((error) => {
+                    console.error("Email kirish xatosi:", error);
+                    alert("Email orqali kirishda xatolik: " + error.message);
+                });
+        }
+        
+        // Email/parol orqali ro'yxatdan o'tish
+        function registerWithEmail() {
+            const name = document.getElementById('registerName').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            
+            firebase.auth().createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Foydalanuvchi yaratildi, profildagi ismni yangilash
+                    const user = userCredential.user;
+                    return user.updateProfile({
+                        displayName: name
+                    }).then(() => {
+                        checkAndCreateUser(user);
+                    });
+                })
+                .catch((error) => {
+                    console.error("Ro'yxatdan o'tish xatosi:", error);
+                    alert("Ro'yxatdan o'tishda xatolik: " + error.message);
+                });
+        }
+        
+        // Foydalanuvchini tekshirish va yaratish
+        async function checkAndCreateUser(firebaseUser) {
+            const usersRef = db.collection('users');
+            
+            // Firebase UID bo'yicha foydalanuvchini qidirish
+            const doc = await usersRef.doc(firebaseUser.uid).get();
+            
+            if (doc.exists) {
+                // Foydalanuvchi mavjud, ma'lumotlarni yangilash
+                updateUIAfterLogin(doc.data());
+            } else {
+                // Yangi foydalanuvchi yaratish
+                const userId = await getNextUserId();
+                
+                const userData = {
+                    id: userId,
+                    first_name: firebaseUser.displayName || '',
+                    username: firebaseUser.email || '',
+                    email: firebaseUser.email || '',
+                    balance: 0,
+                    credit: 0,
+                    created_at: firebase.firestore.FieldValue.serverTimestamp(),
+                    last_login: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                await usersRef.doc(firebaseUser.uid).set(userData);
+                updateUIAfterLogin(userData);
+            }
+        }
+        
+        // Keyingi foydalanuvchi ID sini olish
+        async function getNextUserId() {
+            const counterRef = db.collection('counters').doc('userIds');
+            
+            try {
+                // Atomik ravishda counter ni oshirib yangi ID olish
+                const result = await db.runTransaction(async (transaction) => {
+                    const counterDoc = await transaction.get(counterRef);
+                    
+                    let newId;
+                    if (!counterDoc.exists) {
+                        // Counter hali mavjud emas, yangisini yaratamiz
+                        newId = 100001;
+                        transaction.set(counterRef, { currentId: newId });
+                    } else {
+                        // Counter mavjud, yangi ID olish
+                        newId = counterDoc.data().currentId + 1;
+                        transaction.update(counterRef, { currentId: newId });
+                    }
+                    
+                    return newId;
+                });
+                
+                return result;
+            } catch (error) {
+                console.error("ID yaratishda xatolik:", error);
+                // Xatolik yuz berganda, fallback sifatida vaqtni ishlatamiz
+                return Math.floor(Date.now() / 1000);
+            }
+        }
+        
+        // UI ni yangilash
+        function updateUIAfterLogin(userData) {
+            document.getElementById("userInfo").style.display = "block";
+            document.getElementById("userName").textContent = userData.first_name || userData.username;
+            document.getElementById("userId").textContent = userData.id;
+            document.getElementById("userBalance").textContent = userData.balance || 0;
+            
+            // Modalni yopish
+            closeModal();
+            
+            // LocalStorage ga saqlash
+            localStorage.setItem('currentUser', JSON.stringify(userData));
+        }
+        
+        // Modalni ko'rsatish funksiyalari
+        function showEmailLogin() {
+            document.getElementById("modalTitle").textContent = "Email orqali kirish";
+            document.getElementById("emailLoginForm").style.display = "block";
+            document.getElementById("registerForm").style.display = "none";
+            document.getElementById("authModal").style.display = "block";
+        }
+        
+        function showRegister() {
+            document.getElementById("modalTitle").textContent = "Ro'yxatdan o'tish";
+            document.getElementById("emailLoginForm").style.display = "none";
+            document.getElementById("registerForm").style.display = "block";
+            document.getElementById("authModal").style.display = "block";
+        }
+        
+        function closeModal() {
+            document.getElementById("authModal").style.display = "none";
+            // Inputlarni tozalash
+            document.getElementById("loginEmail").value = "";
+            document.getElementById("loginPassword").value = "";
+            document.getElementById("registerName").value = "";
+            document.getElementById("registerEmail").value = "";
+            document.getElementById("registerPassword").value = "";
+        }
+        
+        // Dastur yuklanganda, avvalgi sessiyani tekshirish
+        window.onload = function() {
+            const savedUser = localStorage.getItem('currentUser');
+            if (savedUser) {
+                updateUIAfterLogin(JSON.parse(savedUser));
+            }
+        };
 
   // ================= MODAL FUNCTIONS =================
   function closeModal(modal) {
