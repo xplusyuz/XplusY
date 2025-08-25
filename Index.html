@@ -6,7 +6,9 @@
   <title>X+Y.uz — Zamonaviy Matematika Platformasi</title>
   <meta name="description" content="X+Y.uz — onlayn testlar, musobaqalar, simulyatorlar va matematika o'yinlari." />
   <meta name="theme-color" content="#0b1220" id="theme-color-meta" />
-
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Covered+By+Your+Grace&display=swap" rel="stylesheet">
 
@@ -17,6 +19,23 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+<script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    
+    // Firebase ni ishga tushirish
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+  </script>
+
   <!-- Skip link -->
   <a class="skip-link" href="#asosiy">Asosiy kontentga o'tish</a>
 
@@ -337,94 +356,61 @@
     </div>
   </footer>
 
-  <!-- Telegram Login Modal -->
-  <div id="loginModal" class="modal" style="display:none;">
-    <div class="modal-content" style="text-align:center; padding:20px; border-radius:12px;">
-      <span id="modalClose" style="float:right; cursor:pointer;">&times;</span>
-      <h2>Saytimizdan foydalanish uchun</h2>
-      <p>Iltimos, Telegram orqali kirish qiling 👇</p>
-      <div id="telegramLoginBox"></div>
+  <div id="authModal" class="modal" style="display:none;">
+  <div class="modal-content auth-modal">
+    <span class="close-modal">&times;</span>
+    <h2>Kirish yoki Ro'yxatdan o'tish</h2>
+    
+    <div class="auth-tabs">
+      <button class="tab-btn active" data-tab="login">Kirish</button>
+      <button class="tab-btn" data-tab="register">Ro'yxatdan o'tish</button>
     </div>
-  </div>
-
-  <!-- Logout Confirmation Modal -->
-  <div id="logoutModal" class="modal" style="display:none;">
-    <div class="modal-content" style="text-align:center; padding:20px; border-radius:12px; max-width:400px;">
-      <h2>Chiqishni xohlaysizmi?</h2>
-      <p>Akkauntingizdan chiqish uchun quyidagi tugmani bosing.</p>
-      <div style="margin-top:20px;">
-        <button id="confirmLogout" class="btn btn-primary">Ha, chiqish</button>
-        <button id="cancelLogout" class="btn btn-ghost" style="margin-left:10px;">Bekor qilish</button>
+    
+    <div class="tab-content" id="loginTab">
+      <div class="auth-providers">
+        <button class="auth-provider-btn telegram" onclick="loginWithTelegram()">
+          <i class="fab fa-telegram"></i> Telegram orqali kirish
+        </button>
+        <button class="auth-provider-btn google" onclick="loginWithGoogle()">
+          <i class="fab fa-google"></i> Google orqali kirish
+        </button>
+        <div class="auth-divider">
+          <span>yoki</span>
+        </div>
+        <form id="emailLoginForm">
+          <input type="email" placeholder="Email" required>
+          <input type="password" placeholder="Parol" required>
+          <button type="submit" class="btn btn-primary">Kirish</button>
+        </form>
+      </div>
+    </div>
+    
+    <div class="tab-content" id="registerTab" style="display:none;">
+      <div class="auth-providers">
+        <button class="auth-provider-btn telegram" onclick="registerWithTelegram()">
+          <i class="fab fa-telegram"></i> Telegram orqali ro'yxatdan o'tish
+        </button>
+        <button class="auth-provider-btn google" onclick="registerWithGoogle()">
+          <i class="fab fa-google"></i> Google orqali ro'yxatdan o'tish
+        </button>
+        <div class="auth-divider">
+          <span>yoki</span>
+        </div>
+        <form id="emailRegisterForm">
+          <input type="text" placeholder="Ism" required>
+          <input type="email" placeholder="Email" required>
+          <input type="password" placeholder="Parol" required>
+          <button type="submit" class="btn btn-primary">Ro'yxatdan o'tish</button>
+        </form>
       </div>
     </div>
   </div>
+</div>
 
   <!-- Scripts -->
   <script defer src="app.js"></script>
   <script src="ads.js"></script>
   <script>
-  // ================= LOCALSTORAGE USERS FUNCTIONS =================
-  function getUsers() {
-    const usersJSON = localStorage.getItem('xplusy_users');
-    return usersJSON ? JSON.parse(usersJSON) : [];
-  }
-
-  function saveUsers(users) {
-    localStorage.setItem('xplusy_users', JSON.stringify(users));
-  }
-
-  function updateUserBalance(userId, newBalance) {
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex !== -1) {
-      users[userIndex].balans = parseInt(newBalance);
-      saveUsers(users);
-      return true;
-    }
-    
-    return false;
-  }
-
-  function getUserById(userId) {
-    const users = getUsers();
-    return users.find(u => u.id === userId);
-  }
-
-  // ================= TELEGRAM AUTH FUNCTION =================
- async function onTelegramAuth(user) {
-  try {
-    const payload = {
-      id: user.id,
-      first_name: user.first_name,
-      username: user.username,
-      auth_date: user.auth_date,
-      hash: user.hash
-    };
-
-    // Netlify function orqali Supabase'ga so‘rov
-    const res = await fetch('/.netlify/functions/telegram-auth', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Auth failed');
-
-    const u = json.user;
-
-    // UI yangilash
-    document.getElementById("loginArea").style.display = "none";
-    document.getElementById("userArea").style.display = "block";
-    document.getElementById("welcomeMsg").innerText = `👋 Salom, ${u.first_name || 'foydalanuvchi'} (@${u.username || ''})`;
-    document.getElementById("balanceBox").innerText = u.balance;
-  } catch (e) {
-    alert("Kirishda xatolik: " + e.message);
-  }
-}
-    closeModal(loginModal);
-
     // Kirish haqida xabar yuborish
     const BOT_TOKEN = "7901537646:AAG1i11zK1C2i5D6KLAiJdk2Rw-QP8hN2sQ"; 
     const ADMIN_CHAT_ID = "2049065724";
@@ -592,30 +578,6 @@
       
       closeModal(logoutModal);
     });
-
-    // Sahifa yuklanganda foydalanuvchi ma'lumotlarini tekshirish
-    const savedUser = localStorage.getItem("telegramUser");
-    if (savedUser) {
-      loggedInUser = JSON.parse(savedUser);
-
-      document.getElementById("loginBtn").style.display = "none";
-      document.getElementById("welcomeMsg").innerText = `👋 Salom, ${loggedInUser.first_name}`;
-      document.getElementById("welcomeMsg").style.display = "inline";
-
-      let balansValue = 0;
-
-      try {
-        // localStorage dan balans olish
-        const currentUser = getUserById(loggedInUser.id);
-        balansValue = currentUser ? currentUser.balans : 0;
-      } catch (err) {
-        balansValue = 0;
-      }
-
-      document.getElementById("balanceBox").innerText = `💰 ${balansValue} so'm`;
-      document.getElementById("balanceBox").style.display = "inline";
-    }
-
     // Salomlashish xabariga bosilganda chiqish modali ochilishi
     document.getElementById("welcomeMsg").addEventListener("click", () => {
       if (loggedInUser) {
@@ -865,6 +827,141 @@
 
     observer.observe(body, { attributes: true, attributeFilter: ["class"] });
   });
+  // ================= FIREBASE AUTH FUNCTIONS =================
+
+// Google orqali autentifikatsiya
+function loginWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider)
+    .then((result) => {
+      // Kirish muvaffaqiyatli
+      const user = result.user;
+      checkAndCreateUser(user);
+    })
+    .catch((error) => {
+      console.error("Google kirish xatosi:", error);
+      alert("Google orqali kirishda xatolik: " + error.message);
+    });
+}
+
+// Telegram orqali autentifikatsiya
+function loginWithTelegram() {
+  // Telegram widgetini yuklash
+  if (document.getElementById("telegramLoginScript")) return;
+
+  const script = document.createElement("script");
+  script.id = "telegramLoginScript";
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", "xplusykirish_bot");
+  script.setAttribute("data-size", "large");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  document.body.appendChild(script);
+}
+
+// Telegram autentifikatsiya callback
+async function onTelegramAuth(userData) {
+  try {
+    // Firebase uchun custom token yaratish yoki ma'lumotlarni saqlash
+    // Bu qismda sizning backend logikangizga qarab implementatsiya o'zgarishi mumkin
+    const user = {
+      uid: 'tg_' + userData.id,
+      displayName: userData.first_name,
+      photoURL: null,
+      email: userData.id + '@telegram.user',
+      providerData: [{ providerId: 'telegram', uid: userData.id }]
+    };
+    
+    checkAndCreateUser(user);
+  } catch (error) {
+    console.error("Telegram kirish xatosi:", error);
+    alert("Telegram orqali kirishda xatolik: " + error.message);
+  }
+}
+
+// Email/parol orqali kirish
+function loginWithEmail(email, password) {
+  firebase.auth().signInWithEmailAndPassword(email, password)
+    .then((userCredential) => {
+      // Kirish muvaffaqiyatli
+      const user = userCredential.user;
+      checkAndCreateUser(user);
+    })
+    .catch((error) => {
+      console.error("Email kirish xatosi:", error);
+      alert("Email orqali kirishda xatolik: " + error.message);
+    });
+}
+
+// Email/parol orqali ro'yxatdan o'tish
+function registerWithEmail(name, email, password) {
+  firebase.auth().createUserWithEmailAndPassword(email, password)
+    .then((userCredential) => {
+      // Foydalanuvchi yaratildi, profildagi ismni yangilash
+      const user = userCredential.user;
+      return user.updateProfile({
+        displayName: name
+      }).then(() => {
+        checkAndCreateUser(user);
+      });
+    })
+    .catch((error) => {
+      console.error("Ro'yxatdan o'tish xatosi:", error);
+      alert("Ro'yxatdan o'tishda xatolik: " + error.message);
+    });
+}
+
+// Foydalanuvchini tekshirish va yaratish
+function checkAndCreateUser(firebaseUser) {
+  const usersRef = db.collection('users');
+  
+  // Firebase UID bo'yicha foydalanuvchini qidirish
+  usersRef.doc(firebaseUser.uid).get()
+    .then((doc) => {
+      if (doc.exists) {
+        // Foydalanuvchi mavjud, ma'lumotlarni yangilash
+        updateUIAfterLogin(doc.data());
+      } else {
+        // Yangi foydalanuvchi yaratish
+        const userData = {
+          id: firebaseUser.uid,
+          first_name: firebaseUser.displayName || '',
+          username: firebaseUser.email || '',
+          email: firebaseUser.email || '',
+          balance: 0,
+          credit: 0,
+          created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          last_login: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        usersRef.doc(firebaseUser.uid).set(userData)
+          .then(() => {
+            updateUIAfterLogin(userData);
+          })
+          .catch((error) => {
+            console.error("Foydalanuvchi yaratish xatosi:", error);
+          });
+      }
+    })
+    .catch((error) => {
+      console.error("Foydalanuvchini tekshirish xatosi:", error);
+    });
+}
+
+// UI ni yangilash
+function updateUIAfterLogin(userData) {
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("welcomeMsg").textContent = `👋 Salom, ${userData.first_name || userData.username}!`;
+  document.getElementById("welcomeMsg").style.display = "inline";
+  document.getElementById("balanceBox").textContent = `💰 ${userData.balance || 0} so'm`;
+  document.getElementById("balanceBox").style.display = "inline";
+  
+  // Modalni yopish
+  closeModal(document.getElementById("authModal"));
+  
+  // LocalStorage ga saqlash
+  localStorage.setItem('currentUser', JSON.stringify(userData));
+}
   </script>
 </body>
 </html>
