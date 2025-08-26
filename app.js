@@ -2,215 +2,337 @@
 const root = document.documentElement;
 const themeMeta = document.getElementById('theme-color-meta');
 
-function applyTheme(mode) {
-  if (mode === 'light') {
+function applyTheme(mode){ // 'dark' | 'light'
+  if(mode === 'light'){
     root.classList.add('light');
     themeMeta.setAttribute('content', '#f7f9fc');
-    localStorage.setItem('theme', 'light');
+    localStorage.setItem('theme','light');
   } else {
     root.classList.remove('light');
     themeMeta.setAttribute('content', '#0b1220');
-    localStorage.setItem('theme', 'dark');
+    localStorage.setItem('theme','dark');
   }
 }
 
-(function initTheme() {
+(function initTheme(){
   const saved = localStorage.getItem('theme');
-  if (saved) applyTheme(saved);
-  else applyTheme('dark');
+  if(saved){ applyTheme(saved); }
+  else {
+    // default: dark
+    applyTheme('dark');
+  }
 })();
 
-document.getElementById('themeToggle')?.addEventListener('click', () => {
+document.getElementById('themeToggle').addEventListener('click',()=>{
   const isLight = root.classList.contains('light');
   applyTheme(isLight ? 'dark' : 'light');
 });
 
+/* Header: mobile menu */
+const menuBtn = document.querySelector('.menu-toggle');
+const menu = document.getElementById('site-menu');
+menuBtn.addEventListener('click', ()=>{
+  const open = menu.classList.toggle('open');
+  menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
 /* Footer year */
-const yearElement = document.getElementById('year');
-if (yearElement) yearElement.textContent = new Date().getFullYear();
+document.getElementById('year').textContent = new Date().getFullYear();
 
 /* Ko'proq tugmalari */
-document.querySelectorAll('[data-more]').forEach(btn => {
+document.querySelectorAll('[data-more]').forEach(btn=>{
   const gridSel = btn.getAttribute('data-more');
   const grid = document.querySelector(gridSel);
-  if (grid) {
-    let expanded = false;
-    btn.addEventListener('click', () => {
-      expanded = !expanded;
-      grid.dataset.expanded = expanded ? 'true' : 'false';
-      btn.textContent = expanded ? "Kamroq" : "Ko'proq";
-    });
-  }
+  let expanded = false;
+  btn.addEventListener('click', ()=>{
+    expanded = !expanded;
+    grid.dataset.expanded = expanded ? 'true' : 'false';
+    btn.textContent = expanded ? "Kamroq" : "Ko'proq";
+  });
 });
 
-/* Carousel functionality */
+async function loadAds(){
+  try {
+    const res = await fetch('ads.html', {cache: 'no-store'});
+    const html = await res.text();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+
+    // ads.html ichidagi .ad-item elementlarini olamiz
+    const items = tmp.querySelectorAll('.ad-item');
+    if(!items.length){
+      track.innerHTML = `<div class="slide"><div class="muted" style="padding:1.5rem">ads.html topildi, lekin .ad-item topilmadi.</div></div>`;
+      return;
+    }
+
+    // Slaydlarni qo'shish
+    items.forEach((ad, idx)=>{
+      const slide = document.createElement('div');
+      slide.className = 'slide';
+      // cheklangan kenglikda kontent yaxshi ko'rinsin:
+      const frame = document.createElement('div');
+      frame.style.width = '100%';
+      frame.style.height = '100%';
+      frame.style.display = 'grid';
+      frame.style.placeItems = 'center';
+      frame.appendChild(ad.cloneNode(true));
+      slide.appendChild(frame);
+      track.appendChild(slide);
+
+      const dot = document.createElement('button');
+      dot.setAttribute('role','tab');
+      dot.setAttribute('aria-label', `Slayd ${idx+1}`);
+      dot.addEventListener('click', ()=>goTo(idx));
+      dotsWrap.appendChild(dot);
+    });
+
+    slides = Array.from(track.children);
+    updateUI();
+    auto();
+  } catch (e){
+    track.innerHTML = `<div class="slide"><div class="muted" style="padding:1.5rem">Bannerlarni yuklashda xatolik: ${e.message}</div></div>`;
+  }
+}
+
+function updateUI(){
+  const offset = -current * 100;
+  track.style.transform = `translateX(${offset}%)`;
+  Array.from(dotsWrap.children).forEach((d,i)=>{
+    d.setAttribute('aria-selected', i===current ? 'true':'false');
+  });
+}
+
+function prev(){ current = (current - 1 + slides.length) % slides.length; updateUI(); resetAuto(); }
+function next(){ current = (current + 1) % slides.length; updateUI(); resetAuto(); }
+function goTo(i){ current = i % slides.length; updateUI(); resetAuto(); }
+
+function auto(){
+  clearInterval(timer);
+  timer = setInterval(next, INTERVAL);
+}
+function resetAuto(){ auto(); }
+
+prevBtn.addEventListener('click', prev);
+nextBtn.addEventListener('click', next);
+
+/* accessibility: focus bilan to'xtatish */
+track.addEventListener('focusin', ()=> clearInterval(timer));
+track.addEventListener('focusout', ()=> auto());
 const track = document.getElementById("carouselTrack");
+const slides = Array.from(track.children);
 const prevBtn = document.querySelector(".carousel-btn.prev");
 const nextBtn = document.querySelector(".carousel-btn.next");
-let currentIndex = 0;
-let slides = [];
-let timer = null;
-const INTERVAL = 4000;
 
-if (track) slides = Array.from(track.children);
+let currentIndex = 0;
 
 function updateCarousel() {
-  if (slides.length > 0) {
-    const slideWidth = slides[0].getBoundingClientRect().width;
-    track.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
-  }
+  const slideWidth = slides[0].getBoundingClientRect().width;
+  track.style.transform = `translateX(-${currentIndex * slideWidth}px)`;
 }
 
-function auto() {
-  clearInterval(timer);
-  timer = setInterval(() => {
-    currentIndex = (currentIndex + 1) % slides.length;
-    updateCarousel();
-  }, INTERVAL);
-}
-
-function resetAuto() { auto(); }
-
-if (prevBtn && nextBtn && slides.length > 0) {
-  prevBtn.addEventListener("click", () => {
-    currentIndex = (currentIndex - 1 + slides.length) % slides.length;
-    updateCarousel();
-    resetAuto();
-  });
-  nextBtn.addEventListener("click", () => {
-    currentIndex = (currentIndex + 1) % slides.length;
-    updateCarousel();
-    resetAuto();
-  });
-}
-
-if (slides.length > 0) {
+// oldingi banner
+prevBtn.addEventListener("click", () => {
+  currentIndex = (currentIndex - 1 + slides.length) % slides.length;
   updateCarousel();
-  auto();
-}
+});
 
-/* Firebase Authentication */
-const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.firebasestorage.app",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
+// keyingi banner
+nextBtn.addEventListener("click", () => {
+  currentIndex = (currentIndex + 1) % slides.length;
+  updateCarousel();
+});
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
+// avtomatik aylanish (har 3 soniyada)
+setInterval(() => {
+  currentIndex = (currentIndex + 1) % slides.length;
+  updateCarousel();
+}, 4000);
 
-// Google login
-function loginWithGoogle() {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithPopup(provider).catch(err => alert(err.message));
-}
+updateCarousel();
+// Faqat PC’da ishlasin
+if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  function add3DEffect(selector) {
+    const elements = document.querySelectorAll(selector);
 
-// Email login
-const emailLoginForm = document.getElementById('emailLoginForm');
-if (emailLoginForm) {
-  emailLoginForm.addEventListener('submit', e => {
-    e.preventDefault();
-    const email = e.target.querySelector('input[type="email"]').value;
-    const password = e.target.querySelector('input[type="password"]').value;
-    auth.signInWithEmailAndPassword(email, password).catch(err => alert(err.message));
-  });
-}
+    elements.forEach(el => {
+      el.addEventListener("mousemove", e => {
+        const rect = el.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * 8;
+        const rotateY = ((x - centerX) / centerX) * -8;
 
-// Email register
-const emailRegisterForm = document.getElementById('emailRegisterForm');
-if (emailRegisterForm) {
-  emailRegisterForm.addEventListener('submit', e => {
-    e.preventDefault();
-    const name = e.target.querySelector('input[type="text"]').value;
-    const email = e.target.querySelector('input[type="email"]').value;
-    const password = e.target.querySelector('input[type="password"]').value;
-    auth.createUserWithEmailAndPassword(email, password)
-      .then(userCredential => userCredential.user.updateProfile({ displayName: name }));
-  });
-}
+        el.style.transform =
+          `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
+      });
 
-// Logout
-const logoutBtn = document.getElementById('logoutBtn');
-if (logoutBtn) logoutBtn.addEventListener('click', () => auth.signOut());
-
-// Update UI
-auth.onAuthStateChanged(user => {
-  const loginBtn = document.getElementById('loginBtn');
-  const userInfoBox = document.getElementById('userInfoBox');
-  const userDetails = document.getElementById('userDetails');
-  if (user) {
-    const name = user.displayName || user.email.split('@')[0];
-    document.getElementById('userName').textContent = name;
-    document.getElementById('modalUserName').textContent = name;
-    document.getElementById('userId').textContent = user.uid;
-    document.getElementById('modalUserId').textContent = user.uid;
-    loginBtn.style.display = 'none';
-    userInfoBox.style.display = 'flex';
-    userDetails.style.display = 'block';
-    document.getElementById('authModal').style.display = 'none';
-  } else {
-    loginBtn.style.display = 'block';
-    userInfoBox.style.display = 'none';
-    userDetails.style.display = 'none';
+      el.addEventListener("mouseleave", () => {
+        el.style.transform =
+          "perspective(800px) rotateX(0deg) rotateY(0deg) scale(1)";
+      });
+    });
   }
-});
 
-/* Modal management */
-const modal = document.getElementById('authModal');
-const loginBtn = document.getElementById('loginBtn');
-const closeModal = document.querySelector('.close-modal');
-
-if (loginBtn) loginBtn.addEventListener('click', () => modal.style.display = 'flex');
-if (closeModal) closeModal.addEventListener('click', () => modal.style.display = 'none');
-window.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
-
-// Tab switching
-document.querySelectorAll('.tab-btn').forEach(button => {
-  button.addEventListener('click', function () {
-    const tab = this.getAttribute('data-tab');
-    document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-    document.getElementById(tab + 'Tab').style.display = 'block';
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    this.classList.add('active');
-  });
-});
-
-/* Assistive touch menu */
-const assistiveTouch = document.querySelector('.assistive-touch');
-const mathMenu = document.querySelector('.math-assistive-menu');
-if (assistiveTouch && mathMenu) {
-  assistiveTouch.addEventListener('click', () => {
-    const isVisible = mathMenu.style.display === 'flex';
-    mathMenu.style.display = isVisible ? 'none' : 'flex';
-  });
+  add3DEffect(".card");
+  add3DEffect(".btn");
 }
-document.addEventListener('click', e => {
-  if (mathMenu && mathMenu.style.display === 'flex' && !mathMenu.contains(e.target) && !assistiveTouch.contains(e.target)) {
-    mathMenu.style.display = 'none';
+// Footer logo 3D effekt
+if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  const footerLogo = document.querySelector(".footer-logo");
+
+  if (footerLogo) {
+    footerLogo.addEventListener("mousemove", e => {
+      const rect = footerLogo.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const rotateX = ((y - centerY) / centerY) * 10;
+      const rotateY = ((x - centerX) / centerX) * -10;
+
+      footerLogo.style.transform =
+        `perspective(600px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.1)`;
+    });
+
+    footerLogo.addEventListener("mouseleave", () => {
+      footerLogo.style.transform =
+        "perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)";
+    });
   }
-});
-
-/* Logo bounce */
-const logo = document.querySelector('.xy-logo');
-if (logo) {
-  logo.addEventListener('click', () => {
-    logo.classList.remove('logo-bounce');
-    void logo.offsetWidth;
-    logo.classList.add('logo-bounce');
-  });
 }
+// Header va Footer logolar uchun 3D effekt
+function addLogo3DEffect(selector) {
+  if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    const logo = document.querySelector(selector);
 
-/* Require-login links */
-document.querySelectorAll('.require-login').forEach(link => {
-  link.addEventListener('click', e => {
-    if (!auth.currentUser) {
-      e.preventDefault();
-      modal.style.display = 'flex';
+    if (logo) {
+      logo.addEventListener("mousemove", e => {
+        const rect = logo.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const rotateX = ((y - centerY) / centerY) * 10;
+        const rotateY = ((x - centerX) / centerX) * -10;
+
+        logo.style.transform =
+          `perspective(600px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.1)`;
+      });
+
+      logo.addEventListener("mouseleave", () => {
+        logo.style.transform =
+          "perspective(600px) rotateX(0deg) rotateY(0deg) scale(1)";
+      });
     }
+  }
+}
+
+// Ikkala logoga qo‘llaymiz
+addLogo3DEffect(".header-logo");
+addLogo3DEffect(".footer-logo");
+// Bounce animatsiya qo‘shish
+function addLogoBounce(selector) {
+  const logo = document.querySelector(selector);
+  if (logo) {
+    logo.addEventListener("click", () => {
+      logo.classList.add("logo-bounce");
+
+      // animatsiya tugagach klassni olib tashlaymiz
+      logo.addEventListener("animationend", () => {
+        logo.classList.remove("logo-bounce");
+      }, { once: true });
+    });
+  }
+}
+
+// Ikkala logoga qo‘llaymiz
+addLogoBounce(".header-logo");
+addLogoBounce(".footer-logo");
+    document.addEventListener("DOMContentLoaded", () => {
+      let loggedInUser = localStorage.getItem("telegramUser");
+      const modal = document.getElementById("loginModal");
+      const modalClose = document.getElementById("modalClose");
+
+      // ❌ tugma bosilganda yopiladi
+      modalClose.addEventListener("click", () => {
+        modal.style.display = "none";
+      });
+
+      // Linkni bosganda modal ochiladi
+      document.querySelectorAll("a").forEach(link => {
+        link.addEventListener("click", (e) => {
+          if (!loggedInUser) {
+            e.preventDefault();
+            modal.style.display = "flex";
+          }
+        });
+      });
+
+      // Modal ichidagi Kirish tugmasi
+      document.getElementById("modalLoginBtn").addEventListener("click", () => {
+        document.getElementById("loginBtn").click();
+        modal.style.display = "none";
+      });
+    });
+ 
+let loggedInUser = null;
+let pendingLink = null;
+
+// Telegram login chaqiradigan funksiya
+function showTelegramLogin() {
+  const script = document.createElement("script");
+  script.src = "https://telegram.org/js/telegram-widget.js?22";
+  script.setAttribute("data-telegram-login", "sinov12345_bot"); // bot usernameni qo'yasiz
+  script.setAttribute("data-size", "medium");
+  script.setAttribute("data-userpic", "false");
+  script.setAttribute("data-onauth", "onTelegramAuth(user)");
+  script.setAttribute("data-request-access", "write");
+  document.body.appendChild(script);
+}
+
+// Telegram login bo‘lgandan keyin
+function onTelegramAuth(user) {
+  loggedInUser = user;
+  localStorage.setItem("telegramUser", JSON.stringify(user));
+
+  document.getElementById("loginBtn").style.display = "none";
+  document.getElementById("welcomeMsg").style.display = "inline";
+  document.getElementById("welcomeMsg").innerText = "SALOM, " + user.first_name + "!";
+
+  // Agar login qilishdan oldin link bosilgan bo‘lsa, o‘sha linkka yo‘naltiramiz
+  if (pendingLink) {
+    window.location.href = pendingLink;
+    pendingLink = null;
+  }
+}
+
+// Sahifa yangilanda login eslatib qolish
+document.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem("telegramUser");
+  if (saved) {
+    loggedInUser = JSON.parse(saved);
+    document.getElementById("loginBtn").style.display = "none";
+    document.getElementById("welcomeMsg").style.display = "inline";
+    document.getElementById("welcomeMsg").innerText = "SALOM, " + loggedInUser.first_name + "!";
+  }
+
+  // Login tugmasiga bosilganda Telegram login chiqsin
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    showTelegramLogin();
+  });
+
+  // Barcha test tugmalarini tekshiramiz
+  document.querySelectorAll("a.btn-primary").forEach(btn => {
+    btn.addEventListener("click", function(e) {
+      if (!loggedInUser) {
+        e.preventDefault();
+        pendingLink = this.href;
+        alert("❌ Avval kirishingiz kerak!");
+      }
+    });
   });
 });
+
+loadAds();
