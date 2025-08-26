@@ -270,6 +270,149 @@
     text-decoration: underline;
   }
 </style>
+ <style>
+    /* Modal yopish tugmasi uchun yangi uslub */
+    .close-modal {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px; /* O'n burchakli shakl */
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 22px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      z-index: 1001;
+    }
+
+    .close-modal:hover {
+      background: #e5e7eb;
+      transform: rotate(90deg);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    body.dark .close-modal {
+      background: #1f2937;
+      color: #d1d5db;
+    }
+
+    body.dark .close-modal:hover {
+      background: #374151;
+    }
+
+    /* Modalni ochiq saqlash uchun qo'shimcha uslub */
+    .modal:not(.force-open) {
+      display: none;
+    }
+
+    .modal.force-open {
+      display: flex !important;
+    }
+
+    /* Blur effekti kirish qilmagan foydalanuvchilar uchun */
+    body.auth-required main {
+      filter: blur(8px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    body.auth-required header,
+    body.auth-required footer {
+      filter: blur(4px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* Kirish talab qilinadigan elementlar */
+    .require-login {
+      position: relative;
+    }
+
+    .require-login::before {
+      content: "🔒";
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      font-size: 14px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+    }
+  </style>
+  <style>
+  /* Modal header uchun yangi uslub */
+  .modal-header {
+    background: linear-gradient(135deg, #10b981, #0284c7);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 12px 12px 0 0;
+    margin: -12px -12px 20px -12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  
+  /* Balans qo'shish tugmasi */
+  .add-balance-btn {
+    background: transparent;
+    border: none;
+    color: #10b981;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 8px;
+    padding: 4px;
+    border-radius: 50%;
+    transition: all 0.3s;
+  }
+  
+  .add-balance-btn:hover {
+    color: #059669;
+    transform: scale(1.2);
+    background: rgba(16, 185, 129, 0.1);
+  }
+  
+  /* Balans va ball ko'rsatkichlari uchun yangi uslub */
+  .balance-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,0,0,0.03);
+    padding: 12px 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+  }
+  
+  .balance-label {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .balance-actions {
+    display: flex;
+    gap: 8px;
+  }
+</style>
 </head>
 <body>
 <script>
@@ -618,17 +761,24 @@
     </div>
   </footer>
 
-  <div id="authModal" class="modal" style="display:none;">
+ <div id="authModal" class="modal" style="display:none;">
   <div class="modal-content auth-modal">
     <span class="close-modal">&times;</span>
-    <h2>Kirish yoki Ro'yxatdan o'tish</h2>
+    
+    <!-- Yangi modal sarlavhasi -->
+    <div class="modal-header">
+      <h2><i class="fas fa-user-circle"></i> Foydalanuvchi oynasi</h2>
+    </div>
     
     <!-- Foydalanuvchi ma'lumotlari (faqat kirilganda ko'rinadi) -->
     <div id="userDetails" class="user-details" style="display:none;">
       <h3>Shaxsiy kabinet</h3>
+      
+      <!-- Ism qatori -->
       <p>Ism: <span class="value" id="modalUserName"></span>
         <button class="edit-btn" id="editNameBtn"><i class="fas fa-edit"></i></button>
       </p>
+      
       <div id="nameEditForm" class="profile-edit-form" style="display:none;">
         <input type="text" id="nameInput" placeholder="Yangi ism">
         <div class="profile-actions">
@@ -636,15 +786,39 @@
           <button class="logout-btn" id="cancelEditBtn">Bekor qilish</button>
         </div>
       </div>
-      <p>Balans: <span class="value" id="modalBalanceAmount"></span> so'm</p>
-      <p>Ball: <span class="value" id="modalCreditAmount"></span></p>
+      
+      <!-- Yangilangan balans ko'rsatkichi -->
+      <div class="balance-display">
+        <div class="balance-label">
+          <i class="fas fa-wallet"></i> Balans:
+        </div>
+        <div class="balance-value">
+          <span id="modalBalanceAmount">0</span> so'm
+        </div>
+        <div class="balance-actions">
+          <button class="add-balance-btn" id="addBalanceBtn" title="Balans to'ldirish">
+            <i class="fas fa-plus-circle"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Ball ko'rsatkichi -->
+      <div class="balance-display">
+        <div class="balance-label">
+          <i class="fas fa-star"></i> Ball:
+        </div>
+        <div class="balance-value">
+          <span id="modalCreditAmount">0</span>
+        </div>
+      </div>
+      
+      <!-- ID ko'rsatkichi -->
       <p>ID: <span class="value" id="modalUserId"></span></p>
       
       <div class="profile-actions">
         <button class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
-    </div>
-    
+    </div>      
     <div class="auth-tabs">
       <button class="tab-btn active" data-tab="login">Kirish</button>
       <button class="tab-btn" data-tab="register">Ro'yxatdan o'tish</button>
@@ -1007,5 +1181,172 @@
     }
   });
   </script>
+  <script>
+// ================= THEME TOGGLE FUNCTIONALITY =================
+function initializeTheme() {
+  const themeToggleBtn = document.getElementById('themeToggle');
+  const menuThemeToggleBtn = document.getElementById('menuThemeToggle');
+  const body = document.body;
+  
+  // LocalStorage'dan saqlangan temani olish
+  const savedTheme = localStorage.getItem('theme');
+  
+  // Agar saqlangan tema bo'lsa, uni qo'llash
+  if (savedTheme) {
+    body.className = savedTheme;
+    updateThemeIcon(savedTheme);
+  }
+  
+  // Tema tugmasi bosilganda
+  function toggleTheme() {
+    if (body.classList.contains('dark')) {
+      body.classList.remove('dark');
+      body.classList.add('light');
+      localStorage.setItem('theme', 'light');
+      updateThemeIcon('light');
+    } else {
+      body.classList.remove('light');
+      body.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      updateThemeIcon('dark');
+    }
+  }
+  
+  // Tema ikonkasini yangilash
+  function updateThemeIcon(theme) {
+    const icon = theme === 'dark' ? 
+      '<path d="M12 18c-3.309 0-6-2.691-6-6s2.691-6 6-6 6 2.691 6 6-2.691 6-6 6zm0-10c-2.206 0-4 1.794-4 4s1.794 4 4 4 4-1.794 4-4-1.794-4-4-4z"/>' : 
+      '<path d="M21.64 13a9 9 0 01-10.63-10.63 1 1 0 00-1.27-1.27A11 11 0 1022.91 14.9a1 1 0 00-1.27-1.27z"/>';
+    
+    // Asosiy tema tugmasi
+    themeToggleBtn.querySelector('svg').innerHTML = icon;
+    
+    // Menyu ichidagi tema tugmasi
+    const menuIcon = theme === 'dark' ? 'fa-sun' : 'fa-moon';
+    menuThemeToggleBtn.innerHTML = `<i class="fas ${menuIcon}"></i>`;
+  }
+  
+  // Tugmalarga hodisa qo'shish
+  themeToggleBtn.addEventListener('click', toggleTheme);
+  menuThemeToggleBtn.addEventListener('click', toggleTheme);
+}
+
+// ================= ASSISTIVE MENU FUNCTIONALITY =================
+function initializeAssistiveMenu() {
+  const mathMenuBtn = document.getElementById('mathMenuBtn');
+  const mathMenu = document.getElementById('mathMenu');
+  const closeMenuBtn = document.getElementById('closeMenu');
+  
+  // Menyuni ochish
+  mathMenuBtn.addEventListener('click', function() {
+    mathMenu.style.display = 'flex';
+  });
+  
+  // Menyuni yopish
+  closeMenuBtn.addEventListener('click', function() {
+    mathMenu.style.display = 'none';
+  });
+  
+  // Tashqariga bosilganda menyuni yopish
+  document.addEventListener('click', function(event) {
+    if (!mathMenu.contains(event.target) && event.target !== mathMenuBtn) {
+      mathMenu.style.display = 'none';
+    }
+  });
+}
+
+// ================= DOCUMENT READY =================
+document.addEventListener('DOMContentLoaded', function() {
+  initializeTheme();
+  initializeAssistiveMenu();
+  
+  // Yilni yangilash
+  document.getElementById('year').textContent = new Date().getFullYear();
+});
+</script>
+<script>
+    // ================= AUTH REQUIREMENT FUNCTIONALITY =================
+    let authRequired = true; // Kirish talab qilinadimi?
+
+    // Foydalanuvchi kirish qilganligini tekshirish
+    function checkAuthState() {
+      const user = firebase.auth().currentUser;
+      
+      if (!user && authRequired) {
+        // Agar foydalanuvchi kirish qilmagan bo'lsa
+        document.body.classList.add('auth-required');
+        document.getElementById('authModal').classList.add('force-open');
+      } else {
+        // Agar foydalanuvchi kirish qilgan bo'lsa
+        document.body.classList.remove('auth-required');
+        document.getElementById('authModal').classList.remove('force-open');
+      }
+    }
+
+    // Auth holatini kuzatish
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        // Foydalanuvchi kirgan
+        updateUserUI(user);
+        checkAuthState();
+      } else {
+        // Foydalanuvchi chiqib ketgan
+        document.getElementById('loginBtn').style.display = 'block';
+        document.getElementById('userInfoBox').style.display = 'none';
+        checkAuthState();
+      }
+    });
+
+    // Sayt yuklanganda auth holatini tekshirish
+    document.addEventListener('DOMContentLoaded', function() {
+      checkAuthState();
+      
+      // Kirish talab qilinadigan elementlarga hodisa qo'shish
+      document.querySelectorAll('.require-login').forEach(element => {
+        element.addEventListener('click', function(e) {
+          if (!firebase.auth().currentUser) {
+            e.preventDefault();
+            document.getElementById('authModal').classList.add('force-open');
+            alert("Iltimos, avval tizimga kiring!");
+          }
+        });
+      });
+    });
+
+    // Modalni yopish funksiyasini yangilash
+    document.querySelector('.close-modal').addEventListener('click', function() {
+      // Faqat kirish qilgan foydalanuvchilar modalni yopishi mumkin
+      if (firebase.auth().currentUser) {
+        document.getElementById('authModal').classList.remove('force-open');
+      } else {
+        // Kirish qilmagan foydalanuvchi modalni yopolmasligi kerak
+        alert("Iltimos, saytdan foydalanish uchun tizimga kiring!");
+      }
+    });
+
+    // Tashqariga bosganda modal yopilishi (faqat kirish qilganlar uchun)
+    window.addEventListener('click', function(event) {
+      if (event.target == document.getElementById('authModal')) {
+        if (firebase.auth().currentUser) {
+          document.getElementById('authModal').classList.remove('force-open');
+        } else {
+          alert("Iltimos, saytdan foydalanish uchun tizimga kiring!");
+        }
+      }
+    });
+  </script>
+  <script>
+  // Balans qo'shish tugmasi uchun funksiya
+  document.getElementById('addBalanceBtn').addEventListener('click', function() {
+    // Yangi oyna ochish yoki balansplus.html ga yo'naltirish
+    window.open('balansplus.html', '_blank');
+    // Yoki: window.location.href = 'balansplus.html';
+  });
+  
+  // Headerdagi balans uchun ham xuddi shunday funksiya
+  document.querySelector('.user-balance').addEventListener('click', function() {
+    window.open('balansplus.html', '_blank');
+  });
+</script>
 </body>
 </html>
