@@ -924,7 +924,7 @@
       </div>
     </div>
   </div>
-
+<script defer src="app.js"></script>
   <script>
     // DOM elementlari
     const assistiveTouch = document.getElementById('assistiveTouch');
@@ -1211,6 +1211,130 @@
     registerModal.addEventListener('click', function(e) {
       e.stopPropagation();
     });
-  </script>
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    // Foydalanuvchi kirdi
+    loginBtn.style.display = 'none';
+    userInfoBox.style.display = 'flex';
+    
+    // Firebasedan foydalanuvchi ma'lumotlarini olish yoki yangi yaratish
+    const userRef = db.collection('users').doc(user.uid);
+    
+    userRef.get().then((doc) => {
+      if (doc.exists) {
+        // Foydalanuvchi allaqachon mavjud
+        const userData = doc.data();
+        updateUIWithUserData(user, userData);
+      } else {
+        // Yangi foydalanuvchi - tartibli ID yaratish
+        db.collection('users').orderBy('userId', 'desc').limit(1).get()
+          .then((querySnapshot) => {
+            let newUserId = 100001; // Boshlang'ich qiymat
+            
+            if (!querySnapshot.empty) {
+              // Oxirgi foydalanuvchi ID sini olish
+              const lastUserId = querySnapshot.docs[0].data().userId;
+              newUserId = lastUserId + 1;
+            }
+            
+            // Yangi foydalanuvchi ma'lumotlarini yaratish
+            const userData = {
+              name: user.displayName || "Foydalanuvchi",
+              email: user.email,
+              balance: 0,
+              credits: 0,
+              userId: newUserId,
+              createdAt: new Date()
+            };
+            
+            // Firestore'ga yozish
+            return userRef.set(userData);
+          })
+          .then(() => {
+            // UI ni yangilash
+            return userRef.get();
+          })
+          .then((doc) => {
+            if (doc.exists) {
+              updateUIWithUserData(user, doc.data());
+            }
+          })
+          .catch((error) => {
+            console.error("Xatolik yangi foydalanuvchi yaratishda:", error);
+          });
+      }
+    });
+  } else {
+    // Foydalanuvchi chiqdi
+    loginBtn.style.display = 'block';
+    userInfoBox.style.display = 'none';
+  }
+});
+
+// UI ni yangilash funksiyasi
+function updateUIWithUserData(user, userData) {
+  userName.textContent = userData.name;
+  balanceAmount.textContent = userData.balance || 0;
+  creditAmount.textContent = userData.credits || 0;
+  userId.textContent = userData.userId; // Endi tartibli ID ko'rsatiladi
+  
+  // Profil modaliga ham ma'lumotlarni yuklash
+  profileName.textContent = userData.name;
+  profileEmail.textContent = user.email;
+  profileId.textContent = userData.userId; // Tartibli ID
+  profileBalance.textContent = userData.balance || 0;
+  profileCredits.textContent = userData.credits || 0;
+}
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null;
+    }
+    
+    // Yangi foydalanuvchi ID sini topish uchun so'rovlarga ruxsat
+    match /users/{document} {
+      allow read: if request.auth != null;
+    }
+  }
+}
+emailRegisterForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = document.getElementById('registerName').value;
+  const email = document.getElementById('registerEmail').value;
+  const password = document.getElementById('registerPassword').value;
+  
+  auth.createUserWithEmailAndPassword(email, password)
+    .then((userCredential) => {
+      // Tartibli ID ni topish
+      return db.collection('users').orderBy('userId', 'desc').limit(1).get()
+        .then((querySnapshot) => {
+          let newUserId = 100001;
+          
+          if (!querySnapshot.empty) {
+            const lastUserId = querySnapshot.docs[0].data().userId;
+            newUserId = lastUserId + 1;
+          }
+          
+          // Foydalanuvchi ma'lumotlarini saqlash
+          return db.collection('users').doc(userCredential.user.uid).set({
+            name: name,
+            email: email,
+            balance: 0,
+            credits: 0,
+            userId: newUserId,
+            createdAt: new Date()
+          });
+        });
+    })
+    .then(() => {
+      closeModal(registerModal);
+    })
+    .catch((error) => {
+      alert('Xatolik: ' + error.message);
+    });
+}); 
+ </script>
 </body>
 </html>
