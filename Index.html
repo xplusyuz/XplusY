@@ -924,9 +924,8 @@
       </div>
     </div>
   </div>
-
-  <script>
-    // DOM elementlari
+<script>
+   // DOM elementlari
     const assistiveTouch = document.getElementById('assistiveTouch');
     const assistiveMenu = document.getElementById('assistiveMenu');
     const closeMenuBtn = document.getElementById('closeMenu');
@@ -1053,7 +1052,16 @@
         profileName.textContent = newName;
         userName.textContent = newName;
         nameEditForm.style.display = 'none';
-        // Bu yerda Firebaseda yangi ismni saqlash logikasi qo'shishingiz mumkin
+        
+        // Firebaseda yangi ismni saqlash
+        const user = auth.currentUser;
+        if (user) {
+          db.collection('users').doc(user.uid).update({
+            name: newName
+          }).catch((error) => {
+            console.error("Ismni yangilashda xatolik:", error);
+          });
+        }
       }
     });
     
@@ -1068,9 +1076,20 @@
     
     // Balansni yangilash
     refreshBalance.addEventListener('click', () => {
-      // Bu yerda Firebasedan yangi balans ma'lumotlarini olish logikasi qo'shishingiz mumkin
-      balanceAmount.textContent = (Math.random() * 100).toFixed(0);
-      creditAmount.textContent = (Math.random() * 50).toFixed(0);
+      const user = auth.currentUser;
+      if (user) {
+        db.collection('users').doc(user.uid).get()
+          .then((doc) => {
+            if (doc.exists) {
+              const userData = doc.data();
+              balanceAmount.textContent = userData.balance || 0;
+              creditAmount.textContent = userData.credits || 0;
+            }
+          })
+          .catch((error) => {
+            console.error("Balansni yangilashda xatolik:", error);
+          });
+      }
     });
     
     // Email orqali kirish
@@ -1097,14 +1116,26 @@
       
       auth.createUserWithEmailAndPassword(email, password)
         .then((userCredential) => {
-          // Foydalanuvchi ma'lumotlarini saqlash
-          return db.collection('users').doc(userCredential.user.uid).set({
-            name: name,
-            email: email,
-            balance: 0,
-            credits: 0,
-            createdAt: new Date()
-          });
+          // Tartibli ID ni topish
+          return db.collection('users').orderBy('userId', 'desc').limit(1).get()
+            .then((querySnapshot) => {
+              let newUserId = 100001;
+              
+              if (!querySnapshot.empty) {
+                const lastUserId = querySnapshot.docs[0].data().userId;
+                newUserId = lastUserId + 1;
+              }
+              
+              // Foydalanuvchi ma'lumotlarini saqlash
+              return db.collection('users').doc(userCredential.user.uid).set({
+                name: name,
+                email: email,
+                balance: 0,
+                credits: 0,
+                userId: newUserId,
+                createdAt: new Date()
+              });
+            });
         })
         .then(() => {
           closeModal(registerModal);
@@ -1126,9 +1157,35 @@
         });
     });
     
-    // Telegram orqali kirish (bu faqat namunadir, haqiqiy integratsiya qilish uchun Telegram bot API dan foydalanish kerak)
+    // Telegram orqali kirish - OAuth integratsiyasi
     telegramLoginBtn.addEventListener('click', () => {
-      alert('Telegram orqali kirish tez orada ishga tushadi!');
+      // Telegram bot orqali autentifikatsiya
+      const botName = '@xplusykirish_bot'; // O'z bot nomingizni qo'ying
+      const redirectUrl = window.location.origin;
+      
+      window.open(`https://oauth.telegram.org/auth?bot_id=${botName}&origin=${encodeURIComponent(redirectUrl)}&embed=1&request_access=write`, 
+                 'Telegram Login', 'width=600,height=400');
+    });
+    
+    // Telegram dan ma'lumotlarni qayta ishlash
+    window.addEventListener('message', (event) => {
+      if (event.origin === 'https://oauth.telegram.org') {
+        const userData = event.data;
+        
+        if (userData && userData.id) {
+          // Telegramdan kelgan ma'lumotlar bilan Firebaseda auth qilish
+          const credential = firebase.auth.TelegramAuthProvider.credential(userData);
+          
+          auth.signInWithCredential(credential)
+            .then((userCredential) => {
+              closeModal(authModal);
+            })
+            .catch((error) => {
+              console.error('Telegram auth xatosi:', error);
+              alert('Telegram orqali kirishda xatolik yuz berdi');
+            });
+        }
+      }
     });
     
     // Auth holatini kuzatish
@@ -1138,30 +1195,74 @@
         loginBtn.style.display = 'none';
         userInfoBox.style.display = 'flex';
         
-        // Firebasedan foydalanuvchi ma'lumotlarini olish
-        db.collection('users').doc(user.uid).get()
-          .then((doc) => {
-            if (doc.exists) {
-              const userData = doc.data();
-              userName.textContent = userData.name;
-              balanceAmount.textContent = userData.balance || 0;
-              creditAmount.textContent = userData.credits || 0;
-              userId.textContent = user.uid.substring(0, 8);
-              
-              // Profil modaliga ham ma'lumotlarni yuklash
-              profileName.textContent = userData.name;
-              profileEmail.textContent = user.email;
-              profileId.textContent = user.uid;
-              profileBalance.textContent = userData.balance || 0;
-              profileCredits.textContent = userData.credits || 0;
-            }
-          });
+        // Firebasedan foydalanuvchi ma'lumotlarini olish yoki yangi yaratish
+        const userRef = db.collection('users').doc(user.uid);
+        
+        userRef.get().then((doc) => {
+          if (doc.exists) {
+            // Foydalanuvchi allaqachon mavjud
+            const userData = doc.data();
+            updateUIWithUserData(user, userData);
+          } else {
+            // Yangi foydalanuvchi - tartibli ID yaratish
+            db.collection('users').orderBy('userId', 'desc').limit(1).get()
+              .then((querySnapshot) => {
+                let newUserId = 100001; // Boshlang'ich qiymat
+                
+                if (!querySnapshot.empty) {
+                  // Oxirgi foydalanuvchi ID sini olish
+                  const lastUserId = querySnapshot.docs[0].data().userId;
+                  newUserId = lastUserId + 1;
+                }
+                
+                // Yangi foydalanuvchi ma'lumotlarini yaratish
+                const userData = {
+                  name: user.displayName || "Foydalanuvchi",
+                  email: user.email || "",
+                  balance: 0,
+                  credits: 0,
+                  userId: newUserId,
+                  createdAt: new Date()
+                };
+                
+                // Firestore'ga yozish
+                return userRef.set(userData);
+              })
+              .then(() => {
+                // UI ni yangilash
+                return userRef.get();
+              })
+              .then((doc) => {
+                if (doc.exists) {
+                  updateUIWithUserData(user, doc.data());
+                }
+              })
+              .catch((error) => {
+                console.error("Xatolik yangi foydalanuvchi yaratishda:", error);
+              });
+          }
+        });
       } else {
         // Foydalanuvchi chiqdi
         loginBtn.style.display = 'block';
         userInfoBox.style.display = 'none';
       }
     });
+
+    // UI ni yangilash funksiyasi
+    function updateUIWithUserData(user, userData) {
+      userName.textContent = userData.name;
+      balanceAmount.textContent = userData.balance || 0;
+      creditAmount.textContent = userData.credits || 0;
+      userId.textContent = userData.userId; // Endi tartibli ID ko'rsatiladi
+      
+      // Profil modaliga ham ma'lumotlarni yuklash
+      profileName.textContent = userData.name;
+      profileEmail.textContent = user.email || "";
+      profileId.textContent = userData.userId; // Tartibli ID
+      profileBalance.textContent = userData.balance || 0;
+      profileCredits.textContent = userData.credits || 0;
+    }
     
     // Sahifa navigatsiyasi
     function navigateToPage(page) {
@@ -1190,352 +1291,31 @@
     }
     
     // Foydalanuvchi sahifaga bossa modal oynani ochish
-   // Himoyalangan linklarga class="protected-link" qo'yasiz
-document.querySelectorAll('.protected-link').forEach(link => {
-  link.addEventListener('click', function(e) {
-    if (!auth.currentUser) {
-      e.preventDefault(); // sahifaga o'tishni bloklaydi
-      showLoginModal();   // login oynasini ochadi
-    }
-  });
-});
+    document.querySelectorAll('.require-login').forEach(link => {
+      link.addEventListener('click', function(e) {
+        if (!auth.currentUser) {
+          e.preventDefault();
+          showLoginModal();
+        }
+      });
+    });
     
     // Modal o'ziga bosganda yopilmasligi uchun
     authModal.addEventListener('click', function(e) {
-      e.stopPropagation();
+      if (e.target === authModal) {
+        closeModal(authModal);
+      }
     });
     
     userProfileModal.addEventListener('click', function(e) {
-      e.stopPropagation();
+      if (e.target === userProfileModal) {
+        closeModal(userProfileModal);
+      }
     });
     
     registerModal.addEventListener('click', function(e) {
-      e.stopPropagation();
-    }); 
- </script>
- <script>
- auth.onAuthStateChanged((user) => {
-  if (user) {
-    // Foydalanuvchi kirdi
-    loginBtn.style.display = 'none';
-    userInfoBox.style.display = 'flex';
-    
-    // Firebasedan foydalanuvchi ma'lumotlarini olish yoki yangi yaratish
-    const userRef = db.collection('users').doc(user.uid);
-    
-    userRef.get().then((doc) => {
-      if (doc.exists) {
-        // Foydalanuvchi allaqachon mavjud
-        const userData = doc.data();
-        updateUIWithUserData(user, userData);
-      } else {
-        // Yangi foydalanuvchi - tartibli ID yaratish
-        db.collection('users').orderBy('userId', 'desc').limit(1).get()
-          .then((querySnapshot) => {
-            let newUserId = 100001; // Boshlang'ich qiymat
-            
-            if (!querySnapshot.empty) {
-              // Oxirgi foydalanuvchi ID sini olish
-              const lastUserId = querySnapshot.docs[0].data().userId;
-              newUserId = lastUserId + 1;
-            }
-            
-            // Yangi foydalanuvchi ma'lumotlarini yaratish
-            const userData = {
-              name: user.displayName || "Foydalanuvchi",
-              email: user.email,
-              balance: 0,
-              credits: 0,
-              userId: newUserId,
-              createdAt: new Date()
-            };
-            
-            // Firestore'ga yozish
-            return userRef.set(userData);
-          })
-          .then(() => {
-            // UI ni yangilash
-            return userRef.get();
-          })
-          .then((doc) => {
-            if (doc.exists) {
-              updateUIWithUserData(user, doc.data());
-            }
-          })
-          .catch((error) => {
-            console.error("Xatolik yangi foydalanuvchi yaratishda:", error);
-          });
-      }
-    });
-  } else {
-    // Foydalanuvchi chiqdi
-    loginBtn.style.display = 'block';
-    userInfoBox.style.display = 'none';
-  }
-});
-
-// UI ni yangilash funksiyasi
-function updateUIWithUserData(user, userData) {
-  userName.textContent = userData.name;
-  balanceAmount.textContent = userData.balance || 0;
-  creditAmount.textContent = userData.credits || 0;
-  userId.textContent = userData.userId; // Endi tartibli ID ko'rsatiladi
-  
-  // Profil modaliga ham ma'lumotlarni yuklash
-  profileName.textContent = userData.name;
-  profileEmail.textContent = user.email;
-  profileId.textContent = userData.userId; // Tartibli ID
-  profileBalance.textContent = userData.balance || 0;
-  profileCredits.textContent = userData.credits || 0;
-}
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-  }
-}
-   
-    // Yangi foydalanuvchi ID sini topish uchun so'rovlarga ruxsat
-    match /users/{document} {
-      allow read: if request.auth != null;
-    }
-  }
-}
-emailRegisterForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const name = document.getElementById('registerName').value;
-  const email = document.getElementById('registerEmail').value;
-  const password = document.getElementById('registerPassword').value;
-  
-  auth.createUserWithEmailAndPassword(email, password)
-    .then((userCredential) => {
-      // Tartibli ID ni topish
-      return db.collection('users').orderBy('userId', 'desc').limit(1).get()
-        .then((querySnapshot) => {
-          let newUserId = 100001;
-          
-          if (!querySnapshot.empty) {
-            const lastUserId = querySnapshot.docs[0].data().userId;
-            newUserId = lastUserId + 1;
-          }
-          
-          // Foydalanuvchi ma'lumotlarini saqlash
-          return db.collection('users').doc(userCredential.user.uid).set({
-            name: name,
-            email: email,
-            balance: 0,
-            credits: 0,
-            userId: newUserId,
-            createdAt: new Date()
-          });
-        });
-    })
-    .then(() => {
-      closeModal(registerModal);
-    })
-    .catch((error) => {
-      alert('Xatolik: ' + error.message);
-    });
-});
- </script>
- <script>
-    // DOM elementlari
-    const alertsContainer = document.getElementById('alertsContainer');
-    
-    // Xabar ko'rsatish funksiyasi
-    function showAlert(message, type = 'error') {
-      const alertDiv = document.createElement('div');
-      alertDiv.className = `alert alert-${type}`;
-      alertDiv.innerHTML = `
-        <span>${message}</span>
-        <button class="alert-close">&times;</button>
-      `;
-      
-      alertsContainer.appendChild(alertDiv);
-      
-      // Yopish tugmasi
-      alertDiv.querySelector('.alert-close').addEventListener('click', () => {
-        alertDiv.remove();
-      });
-      
-      // 5 soniyadan keyin avtomatik yopish
-      setTimeout(() => {
-        if (alertDiv.parentNode) {
-          alertDiv.remove();
-        }
-      }, 5000);
-    }
-    
-    // Firestore qoidalarini tekshirish
-    function checkFirestoreRules() {
-      // Bu funksiya Firestore qoidalarini tekshiradi
-      // Haqiqiy loyihada Firestore Admin API orqali tekshirish mumkin
-      // Hozircha foydalanuvchiga yo'riqnoma ko'rsatamiz
-      
-      const rulesHelp = `
-        Firestore qoidalaringiz quyidagicha bo'lishi kerak:
-        
-        rules_version = '2';
-        service cloud.firestore {
-          match /databases/{database}/documents {
-            // Foydalanuvchilar faqat o'z hujjatlariga kirishi mumkin
-            match /users/{userId} {
-              allow read, write: if request.auth != null && request.auth.uid == userId;
-            }
-            
-            // Yangi foydalanuvchi ID sini topish uchun so'rovlarga ruxsat
-            match /users/{document} {
-              allow read: if request.auth != null;
-            }
-          }
-        }
-      `;
-      
-      console.log("Firestore qoidalari tekshirilsin:", rulesHelp);
-      showAlert("Firestore qoidalarini tekshiring. Konsolda ko'rsatma ko'ring.", "error");
-    }
-    
-    // Yangi foydalanuvchi yaratish funksiyasi
-    async function createUserInFirestore(user, name) {
-      try {
-        // Avval oxirgi foydalanuvchi ID sini topish
-        const querySnapshot = await db.collection('users')
-          .orderBy('userId', 'desc')
-          .limit(1)
-          .get();
-        
-        let newUserId = 100001;
-        
-        if (!querySnapshot.empty) {
-          const lastUserId = querySnapshot.docs[0].data().userId;
-          newUserId = lastUserId + 1;
-        }
-        
-        // Foydalanuvchi ma'lumotlarini saqlash
-        await db.collection('users').doc(user.uid).set({
-          name: name,
-          email: user.email,
-          balance: 0,
-          credits: 0,
-          userId: newUserId,
-          createdAt: new Date(),
-          lastLogin: new Date()
-        });
-        
-        return true;
-      } catch (error) {
-        console.error("Firestorega yozishda xatolik:", error);
-        
-        // Xatolik turi bo'yicha tahlil
-        if (error.code === 'permission-denied') {
-          checkFirestoreRules();
-        } else {
-          showAlert(`Ma'lumotlar bazasiga yozishda xatolik: ${error.message}`, "error");
-        }
-        
-        return false;
-      }
-    }
-    
-    // Email orqali ro'yxatdan o'tish (yangilangan)
-    emailRegisterForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('registerName').value;
-      const email = document.getElementById('registerEmail').value;
-      const password = document.getElementById('registerPassword').value;
-      
-      try {
-        // Foydalanuvchini yaratish
-        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-        const user = userCredential.user;
-        
-        // Firestore'ga ma'lumotlarni yozish
-        const success = await createUserInFirestore(user, name);
-        
-        if (success) {
-          showAlert("Hisob muvaffaqiyatli yaratildi!", "success");
-          closeModal(registerModal);
-        }
-      } catch (error) {
-        console.error("Ro'yxatdan o'tishda xatolik:", error);
-        showAlert(`Ro'yxatdan o'tishda xatolik: ${error.message}`, "error");
-      }
-    });
-    
-    // Google orqali kirish (yangilangan)
-    googleLoginBtn.addEventListener('click', async () => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      
-      try {
-        const result = await auth.signInWithPopup(provider);
-        const user = result.user;
-        
-        // Firestore'da foydalanuvchi mavjudligini tekshirish
-        const userDoc = await db.collection('users').doc(user.uid).get();
-        
-        if (!userDoc.exists) {
-          // Yangi foydalanuvchini yaratish
-          const success = await createUserInFirestore(user, user.displayName);
-          
-          if (success) {
-            showAlert("Google hisobingiz bilan kirish muvaffaqiyatli!", "success");
-          }
-        } else {
-          // Mavjud foydalanuvchi, yangilanishlar kiritish
-          await db.collection('users').doc(user.uid).update({
-            lastLogin: new Date()
-          });
-        }
-        
-        closeModal(authModal);
-      } catch (error) {
-        console.error("Google orqali kirishda xatolik:", error);
-        showAlert(`Google orqali kirishda xatolik: ${error.message}`, "error");
-      }
-    });
-    
-    // Auth holatini kuzatish (yangilangan)
-    auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        // Foydalanuvchi kirdi
-        loginBtn.style.display = 'none';
-        userInfoBox.style.display = 'flex';
-        
-        try {
-          // Firebasedan foydalanuvchi ma'lumotlarini olish
-          const doc = await db.collection('users').doc(user.uid).get();
-          
-          if (doc.exists) {
-            const userData = doc.data();
-            updateUIWithUserData(user, userData);
-            
-            // Oxirgi kirish vaqtini yangilash
-            await db.collection('users').doc(user.uid).update({
-              lastLogin: new Date()
-            });
-          } else {
-            // Foydalanuvchi Firestore'da mavjud emas, yangi yaratish
-            const displayName = user.displayName || "Foydalanuvchi";
-            const success = await createUserInFirestore(user, displayName);
-            
-            if (success) {
-              // Yangi yaratilgan ma'lumotlarni olish
-              const newDoc = await db.collection('users').doc(user.uid).get();
-              if (newDoc.exists) {
-                updateUIWithUserData(user, newDoc.data());
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Foydalanuvchi ma'lumotlarini olishda xatolik:", error);
-          showAlert(`Profil ma'lumotlarini yuklashda xatolik: ${error.message}`, "error");
-        }
-      } else {
-        // Foydalanuvchi chiqdi
-        loginBtn.style.display = 'block';
-        userInfoBox.style.display = 'none';
+      if (e.target === registerModal) {
+        closeModal(registerModal);
       }
     });
   </script>
