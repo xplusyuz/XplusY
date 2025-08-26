@@ -1340,5 +1340,204 @@ emailRegisterForm.addEventListener('submit', (e) => {
     });
 });
  </script>
+ <script>
+    // DOM elementlari
+    const alertsContainer = document.getElementById('alertsContainer');
+    
+    // Xabar ko'rsatish funksiyasi
+    function showAlert(message, type = 'error') {
+      const alertDiv = document.createElement('div');
+      alertDiv.className = `alert alert-${type}`;
+      alertDiv.innerHTML = `
+        <span>${message}</span>
+        <button class="alert-close">&times;</button>
+      `;
+      
+      alertsContainer.appendChild(alertDiv);
+      
+      // Yopish tugmasi
+      alertDiv.querySelector('.alert-close').addEventListener('click', () => {
+        alertDiv.remove();
+      });
+      
+      // 5 soniyadan keyin avtomatik yopish
+      setTimeout(() => {
+        if (alertDiv.parentNode) {
+          alertDiv.remove();
+        }
+      }, 5000);
+    }
+    
+    // Firestore qoidalarini tekshirish
+    function checkFirestoreRules() {
+      // Bu funksiya Firestore qoidalarini tekshiradi
+      // Haqiqiy loyihada Firestore Admin API orqali tekshirish mumkin
+      // Hozircha foydalanuvchiga yo'riqnoma ko'rsatamiz
+      
+      const rulesHelp = `
+        Firestore qoidalaringiz quyidagicha bo'lishi kerak:
+        
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            // Foydalanuvchilar faqat o'z hujjatlariga kirishi mumkin
+            match /users/{userId} {
+              allow read, write: if request.auth != null && request.auth.uid == userId;
+            }
+            
+            // Yangi foydalanuvchi ID sini topish uchun so'rovlarga ruxsat
+            match /users/{document} {
+              allow read: if request.auth != null;
+            }
+          }
+        }
+      `;
+      
+      console.log("Firestore qoidalari tekshirilsin:", rulesHelp);
+      showAlert("Firestore qoidalarini tekshiring. Konsolda ko'rsatma ko'ring.", "error");
+    }
+    
+    // Yangi foydalanuvchi yaratish funksiyasi
+    async function createUserInFirestore(user, name) {
+      try {
+        // Avval oxirgi foydalanuvchi ID sini topish
+        const querySnapshot = await db.collection('users')
+          .orderBy('userId', 'desc')
+          .limit(1)
+          .get();
+        
+        let newUserId = 100001;
+        
+        if (!querySnapshot.empty) {
+          const lastUserId = querySnapshot.docs[0].data().userId;
+          newUserId = lastUserId + 1;
+        }
+        
+        // Foydalanuvchi ma'lumotlarini saqlash
+        await db.collection('users').doc(user.uid).set({
+          name: name,
+          email: user.email,
+          balance: 0,
+          credits: 0,
+          userId: newUserId,
+          createdAt: new Date(),
+          lastLogin: new Date()
+        });
+        
+        return true;
+      } catch (error) {
+        console.error("Firestorega yozishda xatolik:", error);
+        
+        // Xatolik turi bo'yicha tahlil
+        if (error.code === 'permission-denied') {
+          checkFirestoreRules();
+        } else {
+          showAlert(`Ma'lumotlar bazasiga yozishda xatolik: ${error.message}`, "error");
+        }
+        
+        return false;
+      }
+    }
+    
+    // Email orqali ro'yxatdan o'tish (yangilangan)
+    emailRegisterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('registerName').value;
+      const email = document.getElementById('registerEmail').value;
+      const password = document.getElementById('registerPassword').value;
+      
+      try {
+        // Foydalanuvchini yaratish
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+        
+        // Firestore'ga ma'lumotlarni yozish
+        const success = await createUserInFirestore(user, name);
+        
+        if (success) {
+          showAlert("Hisob muvaffaqiyatli yaratildi!", "success");
+          closeModal(registerModal);
+        }
+      } catch (error) {
+        console.error("Ro'yxatdan o'tishda xatolik:", error);
+        showAlert(`Ro'yxatdan o'tishda xatolik: ${error.message}`, "error");
+      }
+    });
+    
+    // Google orqali kirish (yangilangan)
+    googleLoginBtn.addEventListener('click', async () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      
+      try {
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+        
+        // Firestore'da foydalanuvchi mavjudligini tekshirish
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+          // Yangi foydalanuvchini yaratish
+          const success = await createUserInFirestore(user, user.displayName);
+          
+          if (success) {
+            showAlert("Google hisobingiz bilan kirish muvaffaqiyatli!", "success");
+          }
+        } else {
+          // Mavjud foydalanuvchi, yangilanishlar kiritish
+          await db.collection('users').doc(user.uid).update({
+            lastLogin: new Date()
+          });
+        }
+        
+        closeModal(authModal);
+      } catch (error) {
+        console.error("Google orqali kirishda xatolik:", error);
+        showAlert(`Google orqali kirishda xatolik: ${error.message}`, "error");
+      }
+    });
+    
+    // Auth holatini kuzatish (yangilangan)
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        // Foydalanuvchi kirdi
+        loginBtn.style.display = 'none';
+        userInfoBox.style.display = 'flex';
+        
+        try {
+          // Firebasedan foydalanuvchi ma'lumotlarini olish
+          const doc = await db.collection('users').doc(user.uid).get();
+          
+          if (doc.exists) {
+            const userData = doc.data();
+            updateUIWithUserData(user, userData);
+            
+            // Oxirgi kirish vaqtini yangilash
+            await db.collection('users').doc(user.uid).update({
+              lastLogin: new Date()
+            });
+          } else {
+            // Foydalanuvchi Firestore'da mavjud emas, yangi yaratish
+            const displayName = user.displayName || "Foydalanuvchi";
+            const success = await createUserInFirestore(user, displayName);
+            
+            if (success) {
+              // Yangi yaratilgan ma'lumotlarni olish
+              const newDoc = await db.collection('users').doc(user.uid).get();
+              if (newDoc.exists) {
+                updateUIWithUserData(user, newDoc.data());
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Foydalanuvchi ma'lumotlarini olishda xatolik:", error);
+          showAlert(`Profil ma'lumotlarini yuklashda xatolik: ${error.message}`, "error");
+        }
+      } else {
+        // Foydalanuvchi chiqdi
+        loginBtn.style.display = 'block';
+        userInfoBox.style.display = 'none';
+      }
+    });
+  </script>
 </body>
 </html>
