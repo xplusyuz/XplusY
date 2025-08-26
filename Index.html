@@ -1157,37 +1157,6 @@
         });
     });
     
-    // Telegram orqali kirish - OAuth integratsiyasi
-    telegramLoginBtn.addEventListener('click', () => {
-      // Telegram bot orqali autentifikatsiya
-      const botName = '@xplusykirish_bot'; // O'z bot nomingizni qo'ying
-      const redirectUrl = window.location.origin;
-      
-      window.open(`https://oauth.telegram.org/auth?bot_id=${botName}&origin=${encodeURIComponent(redirectUrl)}&embed=1&request_access=write`, 
-                 'Telegram Login', 'width=600,height=400');
-    });
-    
-    // Telegram dan ma'lumotlarni qayta ishlash
-    window.addEventListener('message', (event) => {
-      if (event.origin === 'https://oauth.telegram.org') {
-        const userData = event.data;
-        
-        if (userData && userData.id) {
-          // Telegramdan kelgan ma'lumotlar bilan Firebaseda auth qilish
-          const credential = firebase.auth.TelegramAuthProvider.credential(userData);
-          
-          auth.signInWithCredential(credential)
-            .then((userCredential) => {
-              closeModal(authModal);
-            })
-            .catch((error) => {
-              console.error('Telegram auth xatosi:', error);
-              alert('Telegram orqali kirishda xatolik yuz berdi');
-            });
-        }
-      }
-    });
-    
     // Auth holatini kuzatish
     auth.onAuthStateChanged((user) => {
       if (user) {
@@ -1318,34 +1287,38 @@
         closeModal(registerModal);
       }
     });
-	
-	
-	
-	
-	auth.onAuthStateChanged(async (user) => {
-  if (user) {
-    const userRef = db.collection("users").doc(user.uid);
-    const snap = await userRef.get();
-
-    if (!snap.exists) {
-      await userRef.set({
-        uid: user.uid,
-        name: user.displayName || user.providerData[0]?.displayName || "Telegram user",
-        email: user.email || null,
-        phone: user.phoneNumber || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        balance: 0,
-        credits: 0,
-      });
-      console.log("✅ Yangi user Firestore’ga qo‘shildi");
-    } else {
-      console.log("ℹ️ User allaqachon mavjud:", snap.data());
-    }
-  } else {
-    console.log("❌ Hali login qilinmagan");
-  }
-});
-
   </script>
+  <script async src="https://telegram.org/js/telegram-widget.js?22"
+        data-telegram-login="xplusykirish_bot"   <!-- Bot username -->
+        data-size="large"
+        data-request-access="write"
+        data-userpic="true"
+        data-onauth="onTelegramAuth(user)">
+</script>
+
+<script>
+async function onTelegramAuth(user) {
+  try {
+    // Telegram user ma’lumotlarini backendga yuborish
+    const res = await fetch("/.netlify/functions/auth-telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(user),
+    });
+
+    const data = await res.json();
+
+    if (data.token) {
+      // Firebase orqali login
+      const userCredential = await firebase.auth().signInWithCustomToken(data.token);
+      console.log("✅ Telegram orqali login bo‘ldi:", userCredential.user);
+    } else {
+      console.error("❌ Auth xatosi:", data.error);
+    }
+  } catch (err) {
+    console.error("⚠️ Telegram login error:", err);
+  }
+}
+</script>
 </body>
 </html>
