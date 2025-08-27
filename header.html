@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XplusY.uz - Matematika va Fizika</title>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js';
+        import { getDatabase, ref, get } from 'https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js';
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+            authDomain: "xplusy-760fa.firebaseapp.com",
+            projectId: "xplusy-760fa",
+            storageBucket: "xplusy-760fa.firebasestorage.app",
+            messagingSenderId: "992512966017",
+            appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+            measurementId: "G-459PLJ7P7L"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+        
+        // Dark/Light mode toggle
+        function toggleDarkMode() {
+            const body = document.body;
+            body.classList.toggle('dark-mode');
+            const isDarkMode = body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDarkMode);
+            updateDarkModeButtonIcon(isDarkMode);
+        }
+        
+        function updateDarkModeButtonIcon(isDarkMode) {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            if (darkModeToggle) {
+                darkModeToggle.innerHTML = isDarkMode ? '☀️' : '🌙';
+            }
+        }
+        
+        // Check saved dark mode preference
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+            if (savedDarkMode) {
+                document.body.classList.add('dark-mode');
+            }
+            updateDarkModeButtonIcon(savedDarkMode);
+            
+            // Auth state observer
+            onAuthStateChanged(auth, (user) => {
+                const authSection = document.getElementById('authSection');
+                const userSection = document.getElementById('userSection');
+                
+                if (user) {
+                    authSection.style.display = 'none';
+                    userSection.style.display = 'flex';
+                    document.getElementById('userName').textContent = user.displayName || 'Foydalanuvchi';
+                    loadUserData(user.uid);
+                } else {
+                    authSection.style.display = 'flex';
+                    userSection.style.display = 'none';
+                }
+            });
+        });
+        
+        // Load user data only when refresh button is clicked
+        async function loadUserData(uid) {
+            const refreshBtn = document.getElementById('refreshBalance');
+            refreshBtn.addEventListener('click', async function() {
+                try {
+                    const userRef = ref(database, 'users/' + uid);
+                    const snapshot = await get(userRef);
+                    
+                    if (snapshot.exists()) {
+                        const userData = snapshot.val();
+                        document.getElementById('userBalance').textContent = userData.balance || 0;
+                        document.getElementById('userPoints').textContent = userData.points || 0;
+                        document.getElementById('userId').textContent = userData.userId || '100001';
+                        
+                        // Update avatar if available
+                        if (userData.photoURL) {
+                            document.getElementById('userAvatar').src = userData.photoURL;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Xatolik yuz berdi:', error);
+                }
+            });
+        }
+    </script>
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3a0ca3;
+            --accent-color: #7209b7;
+            --text-color: #333;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .dark-mode {
+            --text-color: #f8f9fa;
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --border-color: #333;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .header {
+            background-color: var(--card-bg);
+            box-shadow: var(--shadow);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-family: 'Caveat', cursive;
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .logo img {
+            height: 40px;
+            margin-right: 10px;
+        }
+        
+        .nav-menu {
+            display: flex;
+            list-style: none;
+        }
+        
+        .nav-menu li {
+            margin: 0 15px;
+        }
+        
+        .nav-menu a {
+            text-decoration: none;
+            color: var(--text-color);
+            font-weight: 500;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        .nav-menu a:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .user-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .auth-buttons button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .login-btn {
+            background-color: transparent;
+            border: 2px solid var(--primary-color) !important;
+            color: var(--primary-color);
+            margin-right: 10px;
+        }
+        
+        .register-btn {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--primary-color);
+        }
+        
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .user-stats {
+            display: flex;
+            gap: 15px;
+            background: var(--accent-color);
+            padding: 8px 15px;
+            border-radius: 20px;
+            color: white;
+            font-size: 0.9rem;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .refresh-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .add-balance {
+            background: white;
+            color: var(--accent-color);
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .dark-mode-toggle {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            margin-left: 15px;
+        }
+        
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+            
+            .nav-menu {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                background-color: var(--card-bg);
+                flex-direction: column;
+                padding: 1rem;
+                box-shadow: var(--shadow);
+            }
+            
+            .nav-menu.active {
+                display: flex;
+            }
+            
+            .nav-menu li {
+                margin: 10px 0;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
+            .user-profile {
+                flex-direction: column;
+                align-items: flex-end;
+            }
+            
+            .user-info {
+                align-items: flex-end;
+            }
+            
+            .user-stats {
+                flex-direction: column;
+                gap: 5px;
+                align-items: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <span>X+Y</span>
+            <span>XplusY.uz</span>
+        </div>
+        
+        <button class="mobile-menu-btn">☰</button>
+        
+        <ul class="nav-menu">
+            <li><a href="index.html">Bosh Sahifa</a></li>
+            <li><a href="matematika.html">Matematika</a></li>
+            <li><a href="fizika.html">Fizika</a></li>
+            <li><a href="forum.html">Forum</a></li>
+            <li><a href="bog'lanish.html">Bog'lanish</a></li>
+        </ul>
+        
+        <div class="user-actions">
+            <div id="authSection" class="auth-buttons">
+                <button class="login-btn" onclick="location.href='login.html'">Kirish</button>
+                <button class="register-btn" onclick="location.href='register.html'">Ro'yxatdan o'tish</button>
+            </div>
+            
+            <div id="userSection" class="user-profile" style="display: none;">
+                <img id="userAvatar" class="user-avatar" src="default-avatar.png" alt="Avatar">
+                <div class="user-info">
+                    <span id="userName">Foydalanuvchi</span>
+                    <div class="user-stats">
+                        <div class="stat-item">
+                            <span>ID:</span>
+                            <span id="userId">100001</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Balans:</span>
+                            <span id="userBalance">0</span>
+                            <a href="balance.html" class="add-balance">+</a>
+                        </div>
+                        <div class="stat-item">
+                            <span>Ball:</span>
+                            <span id="userPoints">0</span>
+                            <button class="refresh-btn" id="refreshBalance">🔄</button>
+                        </div>
+                    </div>
+                </div>
+                <a href="profile.html" class="profile-link">Profil</a>
+            </div>
+            
+            <button class="dark-mode-toggle" id="darkModeToggle">🌙</button>
+        </div>
+    </header>
+
+    <script>
+        // Dark mode toggle functionality
+        document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+        
+        // Mobile menu toggle
+        document.querySelector('.mobile-menu-btn').addEventListener('click', function() {
+            document.querySelector('.nav-menu').classList.toggle('active');
+        });
+    </script>
+</body>
+</html>
