@@ -22,6 +22,156 @@
     <section class="card">
       <div class="h-banner-carousel" id="adsCarousel" aria-label="Reklama karuseli"></div>
     </section>
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Online Musobaqalar Banner</title>
+  <style>
+    body {font-family: sans-serif; background:#0b0f17; color:#fff; margin:0; padding:20px;}
+    .comp-grid {display:grid; gap:16px; grid-template-columns: repeat(2, 1fr);}
+    @media (min-width:1024px){.comp-grid{grid-template-columns: repeat(4, 1fr);}}
+    .comp-card {
+      display:grid; grid-template-rows:auto 1fr auto auto; gap:12px;
+      height:auto; padding:16px; border-radius:16px;
+      border:1px solid rgba(134,239,172,.22);
+      background: radial-gradient(360px 220px at 18% 12%, rgba(34,197,94,.22), transparent 60%),
+                  radial-gradient(360px 220px at 80% 90%, rgba(20,184,166,.18), transparent 55%),
+                  #111827;
+      box-shadow:0 10px 30px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.03);
+    }
+    .comp-head {display:flex; justify-content:space-between; align-items:center;}
+    .tag-online {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:6px 10px; border-radius:999px;
+      border:1px solid rgba(134,239,172,.35);
+      background:linear-gradient(180deg,rgba(34,197,94,.30),rgba(20,184,166,.18));
+      font-weight:800; font-size:13px;
+    }
+    .tag-online .dot {
+      width:8px; height:8px; border-radius:50%;
+      background:#86efac; box-shadow:0 0 0 0 rgba(134,239,172,.8);
+      animation:onlinePulse 1.6s infinite ease-out;
+    }
+    @keyframes onlinePulse {
+      0%{box-shadow:0 0 0 0 rgba(134,239,172,.8);}
+      70%{box-shadow:0 0 0 10px rgba(134,239,172,0);}
+      100%{box-shadow:0 0 0 0 rgba(134,239,172,0);}
+    }
+    .comp-title{margin:0; font-weight:800; font-size:20px;}
+    .comp-meta{color:#a7f3d0; font-size:13px;}
+    .comp-body{font-size:14px; color:#eee;}
+    .comp-purchase{display:flex; justify-content:space-between; align-items:center;}
+    .price{font-weight:800;}
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:8px 12px; border-radius:8px; cursor:pointer; text-decoration:none;
+      font-weight:700; border:0;
+    }
+    .btn-primary{background:#22c55e; color:#fff;}
+    .btn-primary:hover{background:#16a34a;}
+    .btn-ghost{background:rgba(255,255,255,.08); color:#fff;}
+    .timer{
+      display:none; padding:10px; border-radius:12px;
+      border:1px solid rgba(134,239,172,.22);
+      background:rgba(134,239,172,.08); font-weight:800; text-align:center;
+    }
+    .comp-actions{display:flex; gap:10px;}
+    .comp-actions .btn{flex:1;}
+    .start-btn{display:none;}
+    .comp-card.locked .timer{display:block;}
+    .comp-card.ready .start-btn{display:inline-flex;}
+  </style>
+</head>
+<body>
+
+<div class="comp-grid" id="compGrid">
+  <!-- Kartalar JS orqali qo‘shiladi -->
+</div>
+
+<script>
+const COMPETITIONS = [
+  { id:'alg7',  name:'Algebra Sprint',     grade:'7-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'geo8',  name:'Geometriya Liga',    grade:'8-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'num6',  name:'Raqamlar Marafoni',  grade:'6-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'fun9',  name:'Funksiya Hunter',    grade:'9-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'lim10', name:'Limit Challenge',    grade:'10-sinf', prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'der11', name:'Hosila Sprint',      grade:'11-sinf', prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'eq7',   name:'Tenglamalar Kubogi', grade:'7-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+  { id:'com8',  name:'Kombinatorika Open', grade:'8-sinf',  prize:'Asosiy sovrin', price:20000, durationSec:30 },
+];
+
+const grid = document.getElementById('compGrid');
+let userBalance = 100000; // test uchun boshlang'ich balans
+
+function msToMMSS(ms){
+  if(ms<0) ms=0;
+  const s=Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0')+":"+String(s%60).padStart(2,'0');
+}
+
+function renderCard(c){
+  const el=document.createElement('div');
+  el.className='comp-card';
+  el.id='comp-'+c.id;
+  el.innerHTML=`
+    <div class="comp-head">
+      <span class="tag-online"><span class="dot"></span> ONLINE</span>
+      <div class="comp-meta">${c.grade} · ${c.prize}</div>
+    </div>
+    <div class="comp-body">
+      <h3 class="comp-title">${c.name}</h3>
+      <p class="small">10 daqiqa tezkor tur, reyting va ball qo‘shiladi.</p>
+    </div>
+    <div class="comp-purchase">
+      <span class="price">${c.price.toLocaleString()} so‘m</span>
+      <button class="btn btn-primary buy-btn" data-id="${c.id}">Sotib olish</button>
+    </div>
+    <div class="timer" id="tm-${c.id}">00:00</div>
+    <div class="comp-actions">
+      <a class="btn start-btn" id="st-${c.id}" href="#">Boshlash</a>
+      <a class="btn btn-ghost details-btn" href="#">Batafsil</a>
+    </div>
+  `;
+  grid.appendChild(el);
+}
+
+function buy(c){
+  if(userBalance < c.price){ alert("Balans yetarli emas!"); return; }
+  userBalance -= c.price;
+  const el=document.getElementById('comp-'+c.id);
+  const tEl=document.getElementById('tm-'+c.id);
+  const sBtn=document.getElementById('st-'+c.id);
+  el.classList.add('locked');
+  el.querySelector('.buy-btn').style.display='none';
+  const unlockAt=Date.now()+c.durationSec*1000;
+  const int=setInterval(()=>{
+    const left=unlockAt-Date.now();
+    if(left<=0){
+      clearInterval(int);
+      el.classList.remove('locked');
+      el.classList.add('ready');
+      tEl.style.display='none';
+      sBtn.style.display='inline-flex';
+    } else {
+      tEl.textContent=msToMMSS(left);
+    }
+  },1000);
+}
+
+grid.addEventListener('click',e=>{
+  const btn=e.target.closest('.buy-btn');
+  if(!btn) return;
+  const id=btn.dataset.id;
+  const c=COMPETITIONS.find(x=>x.id===id);
+  buy(c);
+});
+
+COMPETITIONS.forEach(renderCard);
+</script>
+</body>
+</html>
 
     <section class="card" style="margin-top:16px;">
       <h2 style="margin:8px 0 16px;">Tanlov bannerlari</h2>
