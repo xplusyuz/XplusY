@@ -59,55 +59,53 @@
   <script type="module" src="/assets/js/main.js"></script>
 
   <!-- Bannerlarni bog'lash: ads1..3 -> carousel, banner1..4 -> grid -->
-  <script type="module">
-    import { initCarousel } from '/assets/js/ui.js';
-    import { attachHeaderFooter } from '/assets/js/include.js';
-    import { initTheme } from '/assets/js/theme.js';
-    import { requireAuthForPage } from '/assets/js/auth.js';
+<script type="module">
+  import { initCarousel } from './assets/js/ui.js';       // ./ bilan
+  import { attachHeaderFooter } from './assets/js/include.js';
+  import { initTheme } from './assets/js/theme.js';
+  import { requireAuthForPage } from './assets/js/auth.js';
 
-    // Header/Footer, tema, guard (agar main.js oldin ishga tushgan bo‘lsa ham, bu idempotent)
-    await attachHeaderFooter();
-    initTheme();
-    // index sahifada kirilmaganlar foydalanolmaydi:
-    requireAuthForPage({ redirectIfLoggedOut: '/register.html' });
+  await attachHeaderFooter();
+  initTheme();
+  requireAuthForPage({ redirectIfLoggedOut: 'register.html' });
 
-    // --- Helper: fragment fetch va joylash ---
-    async function loadFragment(url) {
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(url + ' yuklanmadi');
-      return await res.text();
-    }
+  function resolve(relPath){
+    const base = location.pathname.endsWith('/') ? location.pathname
+      : location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
+    return new URL(relPath, location.origin + base).toString();
+  }
 
-    // --- Carousel slidelarini yuklash (ads1..3.html) ---
-    const adsContainer = document.getElementById('adsCarousel');
-    const adsFiles = ['/ads/ads1.html','/ads/ads2.html','/ads/ads3.html'];
-    for (let i=0; i<adsFiles.length; i++){
-      try{
-        const html = await loadFragment(adsFiles[i]);
-        const slide = document.createElement('div');
-        slide.className = 'h-slide' + (i===0 ? ' active' : '');
-        slide.innerHTML = html;      // ichida #adsX o‘z scoped style bilan
-        adsContainer.appendChild(slide);
-      }catch(e){ console.error(e); }
-    }
+  // --- Carousel: ads1..3.html (relative paths!)
+  const adsContainer = document.getElementById('adsCarousel');
+  const adsFiles = ['ads/ads1.html','ads/ads2.html','ads/ads3.html'];
+  for (let i=0; i<adsFiles.length; i++){
+    try{
+      const res = await fetch(resolve(adsFiles[i]), { cache: 'no-store' });
+      if (!res.ok) throw new Error(adsFiles[i] + ' topilmadi');
+      const html = await res.text();
+      const slide = document.createElement('div');
+      slide.className = 'h-slide' + (i===0 ? ' active' : '');
+      slide.innerHTML = html;
+      adsContainer.appendChild(slide);
+    }catch(e){ console.error(e); }
+  }
+  initCarousel();
 
-    // Carouselni ishga tushirish (slidelar qo‘shilgandan keyin)
-    initCarousel();
+  // --- Vertikal grid: banner1..4.html
+  const grid = document.getElementById('verticalGrid');
+  const vFiles = ['banner/banner1.html','banner/banner2.html','banner/banner3.html','banner/banner4.html'];
+  for (const f of vFiles){
+    try{
+      const res = await fetch(resolve(f), { cache: 'no-store' });
+      if (!res.ok) throw new Error(f + ' topilmadi');
+      const html = await res.text();
+      const holder = document.createElement('div');
+      holder.innerHTML = html;
+      const first = holder.firstElementChild;
+      if (first) grid.appendChild(first);
+    }catch(e){ console.error(e); }
+  }
+</script>
 
-    // --- Vertikal gridga 4 ta banner (banner1..4.html) ---
-    const grid = document.getElementById('verticalGrid');
-    const vFiles = ['/banner/banner1.html','/banner/banner2.html','/banner/banner3.html','/banner/banner4.html'];
-    for (const f of vFiles){
-      try{
-        const html = await loadFragment(f);
-        const holder = document.createElement('div');
-        // holder ichida to‘g‘ridan-to‘g‘ri <a id="bnX"> bo‘ladi
-        holder.innerHTML = html;
-        // halokatning oldini olish uchun: faqat birinchi yuqori darajadagi elementni qo‘shamiz
-        const first = holder.firstElementChild;
-        if (first) grid.appendChild(first);
-      }catch(e){ console.error(e); }
-    }
-  </script>
 </body>
 </html>
