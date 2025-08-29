@@ -7,40 +7,43 @@
   <link rel="stylesheet" href="/assets/css/style.css"/>
 </head>
 <body data-page="index">
+  <!-- Header (partials/header.html fetch orqali ulanadi) -->
   <div id="km-header"></div>
 
   <main class="container">
+    <!-- Hero -->
     <section class="hero">
       <h1>KiberMath — <span class="gradient">zamonaviy</span> matematika platformasi</h1>
-      <p>Onlayn testlar, musobaqalar, simulyatorlar va o'yinlar — barchasi bir joyda. Foydalanuvchi ID, balans va ball tizimi bilan.</p>
+      <p>Onlayn testlar, musobaqalar, simulyatorlar va o‘yinlar — barchasi bir joyda. Foydalanuvchi ID, balans va ball tizimi bilan.</p>
       <div class="hero-cta">
         <a href="/namuna.html" class="btn btn-primary">Boshlash</a>
         <a href="/profile.html" class="btn btn-ghost">Profil</a>
       </div>
     </section>
 
-    <div class="row">
-      <section class="card">
-        <div class="banner-carousel">
-          <img src="/ads/banner/sample-horizontal-1.svg" alt="Banner 1" class="active"/>
-          <img src="/ads/banner/sample-horizontal-1.svg" alt="Banner 2"/>
-          <img src="/ads/banner/sample-horizontal-1.svg" alt="Banner 3"/>
-        </div>
-      </section>
+    <!-- Gorizontal HTML carousel (400px) — SLIDElar fetch bilan yuklanadi -->
+    <section class="card">
+      <div class="h-banner-carousel" id="adsCarousel" aria-label="Reklama karuseli">
+        <!-- JS bu yerga .h-slide bloklarini qo‘shadi; har bir .h-slide ichida adsX.html bo‘ladi -->
+      </div>
+    </section>
 
-      <aside class="card">
-        <div class="banner-vertical">
-          <img src="/banner/sample-vertical-1.svg" alt="Vertical banner"/>
-        </div>
-      </aside>
-    </div>
+    <!-- Pastda 4 ta vertikal HTML banner (600px) — fetch bilan yuklanadi -->
+    <section class="card" style="margin-top:16px;">
+      <h2 style="margin:8px 0 16px;">Tanlov bannerlari</h2>
+      <div class="banner-grid-vertical" id="verticalGrid">
+        <!-- JS bu yerga banner1..4.html ni ketma-ket joylaydi -->
+      </div>
+    </section>
 
-    <section class="card" style="margin-top: 16px;">
+    <!-- Motivatsiya -->
+    <section class="card" style="margin-top:16px;">
       <h2 style="margin-top:0">Motivatsion shior</h2>
-      <p class="muted">“Har kuni 1 qadam — 365 kunda yangi cho'qqi.”</p>
+      <p class="muted">“Har kuni 1 qadam — 365 kunda yangi cho‘qqi.”</p>
     </section>
   </main>
 
+  <!-- Footer (partials/footer.html fetch orqali ulanadi) -->
   <div id="km-footer"></div>
 
   <!-- Assistive floating menu -->
@@ -51,7 +54,60 @@
     <a class="btn" href="/namuna.html">Namuna</a>
   </div>
 
+  <!-- Firebase & asosiy bootstrap -->
   <script type="module" src="/assets/js/firebase.js"></script>
   <script type="module" src="/assets/js/main.js"></script>
+
+  <!-- Bannerlarni bog'lash: ads1..3 -> carousel, banner1..4 -> grid -->
+  <script type="module">
+    import { initCarousel } from '/assets/js/ui.js';
+    import { attachHeaderFooter } from '/assets/js/include.js';
+    import { initTheme } from '/assets/js/theme.js';
+    import { requireAuthForPage } from '/assets/js/auth.js';
+
+    // Header/Footer, tema, guard (agar main.js oldin ishga tushgan bo‘lsa ham, bu idempotent)
+    await attachHeaderFooter();
+    initTheme();
+    // index sahifada kirilmaganlar foydalanolmaydi:
+    requireAuthForPage({ redirectIfLoggedOut: '/register.html' });
+
+    // --- Helper: fragment fetch va joylash ---
+    async function loadFragment(url) {
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(url + ' yuklanmadi');
+      return await res.text();
+    }
+
+    // --- Carousel slidelarini yuklash (ads1..3.html) ---
+    const adsContainer = document.getElementById('adsCarousel');
+    const adsFiles = ['/ads/ads1.html','/ads/ads2.html','/ads/ads3.html'];
+    for (let i=0; i<adsFiles.length; i++){
+      try{
+        const html = await loadFragment(adsFiles[i]);
+        const slide = document.createElement('div');
+        slide.className = 'h-slide' + (i===0 ? ' active' : '');
+        slide.innerHTML = html;      // ichida #adsX o‘z scoped style bilan
+        adsContainer.appendChild(slide);
+      }catch(e){ console.error(e); }
+    }
+
+    // Carouselni ishga tushirish (slidelar qo‘shilgandan keyin)
+    initCarousel();
+
+    // --- Vertikal gridga 4 ta banner (banner1..4.html) ---
+    const grid = document.getElementById('verticalGrid');
+    const vFiles = ['/banner/banner1.html','/banner/banner2.html','/banner/banner3.html','/banner/banner4.html'];
+    for (const f of vFiles){
+      try{
+        const html = await loadFragment(f);
+        const holder = document.createElement('div');
+        // holder ichida to‘g‘ridan-to‘g‘ri <a id="bnX"> bo‘ladi
+        holder.innerHTML = html;
+        // halokatning oldini olish uchun: faqat birinchi yuqori darajadagi elementni qo‘shamiz
+        const first = holder.firstElementChild;
+        if (first) grid.appendChild(first);
+      }catch(e){ console.error(e); }
+    }
+  </script>
 </body>
 </html>
