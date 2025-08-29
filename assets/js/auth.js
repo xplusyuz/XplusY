@@ -9,11 +9,13 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 // Foydalanuvchi hujjati borligini ta’minlash + ketma-ket ID (100001...)
-export async function ensureUserDoc(user){
+export async function ensureUserDoc(user, extra = {}) {
   const uref = doc(db, 'users', user.uid);
   const snap = await getDoc(uref);
-  if (snap.exists()) return snap.data();
-
+  if (snap.exists()) {
+    if (Object.keys(extra).length) await setDoc(uref, extra, { merge: true });
+    return { ...snap.data(), ...extra };
+  }
   const counterRef = doc(db, 'meta', 'counters');
   let data;
   await runTransaction(db, async (tx)=>{
@@ -22,16 +24,16 @@ export async function ensureUserDoc(user){
     const next = lastId + 1;
     tx.set(counterRef, { lastUserId: next }, { merge: true });
     tx.set(uref, {
-      id: next,
-      balance: 0,
-      points: 0,
+      id: next, balance: 0, points: 0,
       first_name: user.displayName || '',
       email: user.email || '',
+      phone_number: extra.phone || '',
       created_at: serverTimestamp(),
       last_login: serverTimestamp(),
-      photo_url: user.photoURL || ''
+      photo_url: user.photoURL || '',
+      ...extra
     }, { merge: true });
-    data = { id: next, balance:0, points:0, email: user.email||'', first_name: user.displayName||'', photo_url: user.photoURL||'' };
+    data = { id: next, balance:0, points:0, email: user.email||'', first_name:user.displayName||'', phone_number:extra.phone||'' };
   });
   return data;
 }
@@ -121,4 +123,10 @@ export function watchHeaderAuth(){
       if (links) links.style.display='block';
     }
   });
+}
+export async function emailRegister({ name, email, password, phone }) {
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  if (name) await updateProfile(cred.user, { displayName: name });
+  await ensureUserDoc(cred.user, { phone: phone || '' });
+  return cred.user;
 }
