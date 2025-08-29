@@ -1,21 +1,14 @@
 
 import { attachHeaderFooter } from './include.js';
 import { initTheme } from './theme.js';
-import { initCarousel, initAssistive } from './ui.js';
-import { watchHeaderAuth, requireAuthForPage } from './auth.js';
+import { initAssistive, initCarousel } from './ui.js';
+import { requireAuthForPage } from './auth.js';
 
-// Boot
-(async function boot(){
+(async ()=>{
   await attachHeaderFooter();
   initTheme();
   initAssistive();
-
   const page = document.body.dataset.page || '';
-  if (page !== 'register') {
-    requireAuthForPage({ redirectIfLoggedOut: '/register.html' });
-  } else {
-    watchHeaderAuth();
-  }
-
-  if (page === 'index') initCarousel();
+  if (page !== 'register'){ requireAuthForPage({ redirectIfLoggedOut:'register.html' }); }
+  if (page === 'index'){ initCarousel(); }
 })();

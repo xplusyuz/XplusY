@@ -1,11 +1,10 @@
 
-// Theme toggle
-export function initTheme() {
+export function initTheme(){
   const saved = localStorage.getItem('theme');
-  if (saved === 'light') document.body.classList.add('light');
+  if (saved==='light') document.body.classList.add('light');
   const btn = document.getElementById('themeToggle');
-  if (btn) btn.addEventListener('click', () => {
+  if (btn) btn.addEventListener('click', ()=>{
     document.body.classList.toggle('light');
-    localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+    localStorage.setItem('theme', document.body.classList.contains('light') ? 'light':'dark');
   });
 }
