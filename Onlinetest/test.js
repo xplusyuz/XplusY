@@ -131,47 +131,48 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
 }
 
 // Firestorega ball qo‘shish
+import { doc, runTransaction, serverTimestamp, increment } 
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
 async function savePoints(pts){
   try{
-    const user=auth.currentUser; if(!user) return;
-    const userRef=doc(db,'users',user.uid);
-    const batch=writeBatch(db);
-    batch.set(userRef, { points: increment(Number(pts)||0) }, { merge:true });
-    const attRef=doc(db,'attempts', `${user.uid}_${PRODUCT_ID}_${Date.now()}`);
-    const payload = {
-      uid: user.uid,
-      productId: PRODUCT_ID,
-      points: Number(pts)||0,
-      ts: serverTimestamp(),
-      totals: calcScore(),
-    };
-    batch.set(attRef, payload, { merge:true });
-    await batch.commit();
-  }catch(e){ console.warn('Ball saqlanmadi:', e?.message||e); }
-}
+    const user = auth.currentUser;
+    if(!user) return false;
 
-// Paywall (sodda)
-const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
-const payCardHTML = (price, loggedIn)=>`<div class="card">
-  <h2>Testga kirish</h2>
-  <div class="row">Narx: <strong>${fmtUZS(price||20000)}</strong></div>
-  <div class="row muted">To'lov balansdan yechiladi. Xariddan so'ng 3–2–1 va test boshlanadi.</div>
-  <div class="row">
-    ${loggedIn?`<button id='buyBtn' class='btn primary'>Sotib olish</button>`:`<a class='btn' href='/kirish.html'>Kirish</a>`}
-    <a class='btn' href='/balance.html'>Balans</a>
-  </div>
-</div>`;
-const countdownHTML = n=>`<div class='card'><div class='big'>${n}</div><div class='muted'>Boshlanishiga...</div></div>`;
+    const userRef = doc(db,'users',user.uid);
+    const attRefId = `${user.uid}_${PRODUCT_ID}_${Date.now()}`;
 
-async function fetchPrice(){
-  try{ const snap=await getDoc(doc(db,'products',PRODUCT_ID)); return Number(snap.data()?.price||20000); }
-  catch{ return 20000; }
-}
-async function hasAccess(uid){
-  try{ const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`)); return snap.exists(); }
-  catch{ return false; }
-}
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(userRef);
+      if(!snap.exists()){
+        // user hujjati bo‘lmasa — yaratib qo‘yamiz (0 dan)
+        tx.set(userRef, { points: 0, balance: 0, created_at: serverTimestamp() }, { merge:true });
+      }
+      // +3/-0.75 yig‘indisini qo‘shamiz
+      tx.update(userRef, { points: increment(Number(pts) || 0) });
 
+      // urinish logi
+      const attRef = doc(db,'attempts', attRefId);
+      tx.set(attRef, {
+        uid: user.uid,
+        productId: PRODUCT_ID,
+        points: Number(pts) || 0,
+        ts: serverTimestamp()
+      }, { merge:true });
+    });
+
+    // Ixtiyoriy: header metrikani yangilash (agar auth.js ulagan bo‘lsangiz)
+    try{
+      const mod = await import('../auth.js');   // yo‘lni moslang
+      if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
+    }catch{}
+
+    return true;
+  }catch(e){
+    console.warn('Ball saqlash xatosi:', e?.message||e);
+    return false;
+  }
+}
 async function buyAccess(){
   try{
     const user=auth.currentUser; if(!user){ location.href='/kirish.html'; return; }
