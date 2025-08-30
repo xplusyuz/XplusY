@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Online Test 1 – Pullik kirish (yakuniy)</title>
+  <style>
+    :root{ --bg:#0b1220; --panel:#0f172a; --muted:#94a3b8; --text:#e5e7eb; --accent:#22c55e; --danger:#ef4444; }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
+
+    /* App shell */
+    .topbar{position:sticky;top:0;background:#0b1220cc;backdrop-filter:saturate(1.1) blur(6px);border-bottom:1px solid #1f2937;z-index:5}
+    .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px}
+    .brand{font-weight:700;letter-spacing:.2px}
+    .pill{padding:6px 10px;border:1px solid #273043;border-radius:999px;font-size:13px;color:var(--muted)}
+    #timer{font-weight:800}
+
+    .container{max-width:1200px;margin:0 auto;padding:16px}
+
+    /* PAGE DIM (modal paytida fon dim, modal tiniq) */
+    #app.dimmed{opacity:.25;filter:saturate(.9)}
+
+    /* Layout 30% / 70% */
+    .test-layout{display:grid;grid-template-columns:30% 70%;gap:16px;align-items:start}
+    @media (max-width:900px){.test-layout{grid-template-columns:1fr}}
+    .panel{background:var(--panel);border:1px solid #1f2937;border-radius:16px;padding:14px}
+
+    /* Left: index grid (5 per row) */
+    .q-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .q-btn{display:inline-flex;align-items:center;justify-content:center;height:38px;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#cbd5e1;cursor:pointer;font-weight:700}
+    .q-btn:hover{filter:brightness(1.1)}
+    .q-btn.active{outline:2px solid var(--accent)}
+    .q-btn.answered{background:#1a2a18;border-color:#234323;color:#bde3b8}
+
+    /* Right: Question view */
+    .q-stem{font-size:18px;line-height:1.5}
+    .options{display:grid;gap:10px;margin-top:14px}
+    .opt{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #273043;border-radius:12px;background:#0c1524;cursor:pointer}
+    .opt input{margin-top:4px}
+
+    .controls{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #273043;background:#0b1220;color:#e5e7eb;cursor:pointer}
+    .btn.primary{background:var(--accent);border-color:#16a34a;color:#0a0a0a;font-weight:800}
+    .btn.danger{background:var(--danger);border-color:#b91c1c}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+
+    /* Modal */
+    .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:9999}
+    .card{background:#0b1220;border:1px solid #273043;border-radius:18px;padding:18px;width:min(560px,92vw);box-shadow:0 10px 30px rgba(0,0,0,.4)}
+    .card h2{margin:0 0 10px;font-size:20px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .muted{color:var(--muted);font-size:13px}
+    .big{font-size:64px;font-weight:900;text-align:center;line-height:1}
+
+    /* Hidden bank */
+    #qBank{display:none}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">Online Test 1</div>
+      <div class="pill">Vaqt: <span id="timer">--:--</span></div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="app" class="dimmed">
+      <div class="test-layout">
+        <aside class="panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div style="font-weight:700">Savollar</div>
+            <div class="muted">Har qatorda 5 ta</div>
+          </div>
+          <div id="qGrid" class="q-grid"></div>
+        </aside>
+        <main class="panel">
+          <div id="qView">
+            <div class="q-stem" id="qStem">Boshlashga tayyor.</div>
+            <div class="options" id="qOpts"></div>
+            <div class="controls">
+              <button id="prevBtn" class="btn">← Oldingi</button>
+              <button id="nextBtn" class="btn">Keyingi →</button>
+              <button id="submitBtn" class="btn danger">Yakunlash</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay container (modal) -->
+  <div id="overlay" class="overlay" hidden></div>
+
+  <!-- SAVOLLAR – HTML ICHIDA -->
+  <section id="qBank">
+    <!-- 1 -->
+    <div class="question" data-id="1">
+      <div class="stem">$2^2 + 3^2$ qiymatini toping.</div>
+      <label class="opt"><input type="radio" name="q1"> 13</label>
+      <label class="opt"><input type="radio" name="q1"> 11</label>
+      <label class="opt"><input type="radio" name="q1"> 12</label>
+      <label class="opt"><input type="radio" name="q1"> 10</label>
+      <input type="hidden" class="answer" value="0" />
+    </div>
+    <!-- 2 -->
+    <div class="question" data-id="2">
+      <div class="stem">$\sqrt{81}$ qiymatini toping.</div>
+      <label class="opt"><input type="radio" name="q2"> 8</label>
+      <label class="opt"><input type="radio" name="q2"> 9</label>
+      <label class="opt"><input type="radio" name="q2"> 7</label>
+      <label class="opt"><input type="radio" name="q2"> 6</label>
+      <input type="hidden" class="answer" value="1" />
+    </div>
+    <!-- 3 -->
+    <div class="question" data-id="3">
+      <div class="stem">$\dfrac{1}{2}+\dfrac{1}{3}$ ni soddalashtiring.</div>
+      <label class="opt"><input type="radio" name="q3"> $\dfrac{5}{6}$</label>
+      <label class="opt"><input type="radio" name="q3"> $\dfrac{2}{5}$</label>
+      <label class="opt"><input type="radio" name="q3"> $\dfrac{1}{5}$</label>
+      <label class="opt"><input type="radio" name="q3"> $\dfrac{3}{5}$</label>
+      <input type="hidden" class="answer" value="0" />
+    </div>
+    <!-- 4 -->
+    <div class="question" data-id="4">
+      <div class="stem">Agar $x=3$ bo'lsa, $x^2+2x$ ?</div>
+      <label class="opt"><input type="radio" name="q4"> 15</label>
+      <label class="opt"><input type="radio" name="q4"> 12</label>
+      <label class="opt"><input type="radio" name="q4"> 18</label>
+      <label class="opt"><input type="radio" name="q4"> 9</label>
+      <input type="hidden" class="answer" value="0" />
+    </div>
+    <!-- 5 -->
+    <div class="question" data-id="5">
+      <div class="stem">$\log_{10} 100$ ?</div>
+      <label class="opt"><input type="radio" name="q5"> 1</label>
+      <label class="opt"><input type="radio" name="q5"> 2</label>
+      <label class="opt"><input type="radio" name="q5"> 10</label>
+      <label class="opt"><input type="radio" name="q5"> 0</label>
+      <input type="hidden" class="answer" value="1" />
+    </div>
+    <!-- O'zingiz shu formatda 30 taga yetkazing -->
+  </section>
+
+  <!-- MathJax -->
+  <script>
+    window.MathJax = { tex:{ inlineMath:[["$","$"],["\\(","\\)"]], displayMath:[["$$","$$"],["\\[","\\]"]] }, svg:{ fontCache:'global' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+
+  <!-- Firebase + Test logika (MODULAR) -->
+  <script type="module">
+    import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
+
+    // === Mahsulot ===
+    const PRODUCT_ID = 'onlinetest1-access';
+    const PRICE_UZS  = 20000;
+    const REGION     = 'europe-west1';
+
+    // === Siz bergan Firebase config ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    let app; try{ app=getApp(); }catch{ app=initializeApp(firebaseConfig); }
+
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const functions = getFunctions(app, REGION);
+
+    // === UI refs ===
+    const $ = s=>document.querySelector(s);
+    const overlay = $('#overlay');
+    const appRoot = $('#app');
+    const timerEl = $('#timer');
+    const qGrid = $('#qGrid');
+    const qStem = $('#qStem');
+    const qOpts = $('#qOpts');
+    const prevBtn = $('#prevBtn');
+    const nextBtn = $('#nextBtn');
+    const submitBtn = $('#submitBtn');
+
+    const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
+
+    // === Savollarni HTML dan o'qiymiz ===
+    const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node,idx)=>{
+      const stem = node.querySelector('.stem')?.innerHTML || '';
+      const opts = Array.from(node.querySelectorAll('.opt')).map(l=>l.innerHTML);
+      const answer = Number(node.querySelector('.answer')?.value||0);
+      return { id: idx+1, stem, opts, answer };
+    });
+
+    // === Davlat ===
+    let current=0;
+    let selected = new Array(BANK.length).fill(null);
+    let totalSeconds = BANK.length * 120; // 2 daqiqadan
+    let timerInt=null;
+
+    function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; }
+    function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; }
+
+    function renderIndex(){
+      qGrid.innerHTML='';
+      BANK.forEach((q,i)=>{
+        const b=document.createElement('button');
+        b.className='q-btn'+(i===current?' active':'')+(selected[i]!=null?' answered':'');
+        b.textContent=q.id; b.addEventListener('click',()=>go(i));
+        qGrid.appendChild(b);
+      });
+    }
+
+    async function typeset(){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([qStem,qOpts]); }catch(e){} } }
+
+    async function renderQuestion(){
+      const q = BANK[current];
+      qStem.innerHTML = `<div class="muted">Savol ${current+1}/${BANK.length}</div><div style="margin-top:6px">${q.stem}</div>`;
+      qOpts.innerHTML='';
+      q.opts.forEach((inner,idx)=>{
+        const wrap=document.createElement('label');
+        wrap.className='opt';
+        // inner label ichida input bor, biz faqat matnini ko'rsatamiz
+        wrap.innerHTML = `<input type="radio" name="q_${current}" ${selected[current]===idx?'checked':''}> <div>${inner.replace(/^<input[^>]*>/,'')}</div>`;
+        wrap.querySelector('input').addEventListener('change',()=>{ selected[current]=idx; renderIndex(); });
+        qOpts.appendChild(wrap);
+      });
+      await typeset();
+      prevBtn.disabled=current===0; nextBtn.disabled=current===BANK.length-1;
+    }
+
+    function go(i){ current=i; renderIndex(); renderQuestion(); }
+    function next(){ if(current<BANK.length-1) go(current+1); }
+    function prev(){ if(current>0) go(current-1); }
+
+    function startTimer(){ updateTimer(); timerInt=setInterval(()=>{ totalSeconds--; updateTimer(); if(totalSeconds<=0){ clearInterval(timerInt); submit(); } },1000); }
+    function updateTimer(){ const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); const s=String(totalSeconds%60).padStart(2,'0'); timerEl.textContent=`${m}:${s}`; }
+
+    function score(){ let c=0; BANK.forEach((q,i)=>{ if(selected[i]===q.answer) c++; }); return {correct:c,total:BANK.length}; }
+
+    function submit(){ prevBtn.disabled=nextBtn.disabled=submitBtn.disabled=true; const {correct,total}=score(); showOverlay(`<div class='card'><h2>Natija</h2><div class='row'>To'g'ri: <strong>${correct}</strong> / ${total}</div><div class='row'><button class='btn' onclick=\"location.href='index.html'\">Bosh sahifa</button></div></div>`); }
+
+    prevBtn.addEventListener('click',prev); nextBtn.addEventListener('click',next); submitBtn.addEventListener('click',()=>{ if(confirm('Yakunlaymizmi?')) submit(); });
+
+    // === Paywall ===
+    function payCardHTML(loggedIn){
+      return `<div class="card"><h2>Testga kirish</h2><div class="row">Narx: <strong>${fmtUZS(PRICE_UZS)}</strong></div><div class="row muted">To'lov balansdan yechiladi. Xariddan so'ng 3-2-1 va test boshlanadi.</div><div class="row">${loggedIn?`<button id='buyBtn' class='btn primary'>Sotib olish</button>`:`<a class='btn' href='/kirish.html'>Kirish</a>`}<a class='btn' href='/balance.html'>Balans</a></div></div>`;
+    }
+    function countdownHTML(n){ return `<div class='card'><div class='big'>${n}</div><div class='muted' style='text-align:center;margin-top:8px'>Boshlanishiga...</div></div>`; }
+
+    async function hasAccess(uid){ try{ const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`)); if(!snap.exists()) return false; const d=snap.data(); if(!d.expiresAt) return true; return d.expiresAt.toDate()>new Date(); }catch{ return false; } }
+
+    async function startSequence(){ showOverlay(countdownHTML(3)); await new Promise(r=>setTimeout(r,1000)); showOverlay(countdownHTML(2)); await new Promise(r=>setTimeout(r,1000)); showOverlay(countdownHTML(1)); await new Promise(r=>setTimeout(r,1000)); hideOverlay(); appRoot.classList.remove('dimmed'); go(0); startTimer(); }
+
+    async function tryEnter(user){ if(!user){ appRoot.classList.add('dimmed'); showOverlay(payCardHTML(false)); return; } if(await hasAccess(user.uid)){ await startSequence(); } else { appRoot.classList.add('dimmed'); showOverlay(payCardHTML(true)); const buyBtn=document.getElementById('buyBtn'); buyBtn?.addEventListener('click', async ()=>{ try{ buyBtn.disabled=true; buyBtn.textContent="To'lanmoqda..."; const callable=httpsCallable(functions,'purchaseContent'); const res=await callable({ productId:PRODUCT_ID, price:PRICE_UZS, title:'Online Test 1 kirish' }); if(res?.data?.ok){ await startSequence(); } else { alert(res?.data?.error || "To'lov amalga oshmadi"); } }catch(e){ alert(e.message||'Xatolik'); } finally{ buyBtn.disabled=false; buyBtn.textContent='Sotib olish'; } }); } }
+
+    onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
+
+    // Boshlang'ich render (grid bo'sh bo'lsa ham)
+    renderIndex();
+  </script>
+</body>
+</html>
