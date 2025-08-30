@@ -181,7 +181,6 @@
 
   const $ = s => document.querySelector(s);
   const overlay = $('#overlay');
-  const appRoot = $('#app');
   const timerEl = $('#timer');
   const qGrid   = $('#qGrid');
   const qStem   = $('#qStem');
@@ -203,14 +202,18 @@
   let selected = new Array(BANK.length).fill(null);
   let totalSeconds = BANK.length * 120;
   let timerInt = null;
+  let startedTest = false;
 
-  // *** YANGI: fallback nazorati ***
-  let bootResolved = false;     // boot tryEnter chaqirildi / to'xtadi
-  let bootTO = null;            // fallback timeout id
-  let startedTest = false;      // test boshlandi (3-2-1dan keyin)
-
-  function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; }
-  function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; }
+  function showOverlay(html){
+    overlay.innerHTML = html;
+    overlay.hidden = false;
+    overlay.style.display = 'flex';
+  }
+  function hideOverlay(){
+    overlay.hidden = true;
+    overlay.innerHTML = '';
+    overlay.style.display = 'none';
+  }
 
   function renderIndex(){
     qGrid.innerHTML = '';
@@ -283,14 +286,12 @@
       </div>
     </div>`;
   }
-  function countdownHTML(n){ return `<div class='card'><div class='big'>${n}</div><div class='muted' style='text-align:center;margin-top:8px'>Boshlanishiga...</div></div>`; }
+  function countdownHTML(n){ return `<div class='card'><div class='big'>${n}</div><div class='muted'>Boshlanishiga...</div></div>`; }
 
   async function hasAccess(uid){
     try{
       const snap = await getDoc(doc(db,'purchases', `${uid}_${PRODUCT_ID}`));
-      if(!snap.exists()) return false;
-      const d = snap.data();
-      return !d.expiresAt || d.expiresAt.toDate() > new Date();
+      return snap.exists();
     }catch{ return false; }
   }
 
@@ -307,7 +308,6 @@
       const prodSnap = await getDoc(doc(db,'products', PRODUCT_ID));
       if(!prodSnap.exists()){ alert('Mahsulot topilmadi'); return; }
       const price = Number(prodSnap.data().price||0);
-      if(!Number.isFinite(price) || price<=0){ alert("Narx noto'g'ri"); return; }
       if(currentBalance < price){ alert('Balans yetarli emas'); return; }
 
       const batch = writeBatch(db);
@@ -316,66 +316,40 @@
       batch.set(purRef, { uid: user.uid, productId: PRODUCT_ID, price, ts: serverTimestamp() }, { merge: true });
       await batch.commit();
 
-      // *** fallbackni o'chiramiz ***
-      bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
-
       await startAfterPurchase();
-    }catch(e){
-      alert(e.message || 'Xatolik');
-    }
+    }catch(e){ alert(e.message||'Xatolik'); }
   }
 
   async function startAfterPurchase(){ await startSequence(); }
   async function startSequence(){
-    // *** test boshlandi — fallback endi ishlamasin ***
-    startedTest = true; bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
-
+    startedTest = true;
     showOverlay(countdownHTML(3)); await new Promise(r=>setTimeout(r,1000));
     showOverlay(countdownHTML(2)); await new Promise(r=>setTimeout(r,1000));
     showOverlay(countdownHTML(1)); await new Promise(r=>setTimeout(r,1000));
-    hideOverlay(); appRoot.classList.remove('dimmed'); go(0); startTimer();
+    hideOverlay();
+    go(0); startTimer();
   }
 
   async function tryEnter(user){
-    // *** callback keldi — fallbackni to'xtatamiz ***
-    bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
-    if (startedTest) return;
-
+    if(startedTest) return;
     if(!user){
-      appRoot.classList.add('dimmed');
       showOverlay(payCardHTML(false));
       return;
     }
     if(await hasAccess(user.uid)){
       await startSequence();
     }else{
-      appRoot.classList.add('dimmed');
       showOverlay(payCardHTML(true));
-      const buyBtn = document.getElementById('buyBtn');
-      buyBtn?.addEventListener('click', buyAccess);
+      document.getElementById('buyBtn')?.addEventListener('click', buyAccess);
     }
   }
 
-  // --- Boot: modal darhol chiqsin; 2.5s ichida auth javobi bo'lmasa ham paycard ko'rsatiladi
+  // Boot
   (function boot(){
-    try{ appRoot.classList.add('dimmed'); }catch{}
-    showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
+    showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2></div>`);
     onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
-    bootTO = setTimeout(()=>{ if(!bootResolved && !startedTest){ tryEnter(auth.currentUser || null); } }, 2500);
+    setTimeout(()=>{ if(!startedTest){ tryEnter(auth.currentUser || null); } }, 2500);
   })();
-
-  // Diagnostika: xatolarni modalda ko'rsatish (test boshlangan bo'lsa bezovta qilmaymiz)
-  window.addEventListener('error', (e)=>{
-    if (startedTest) return;
-    showOverlay(`<div class='card'><h2>Xatolik</h2><div class='muted'>${e.message||'Noma’lum xato'}</div></div>`);
-  });
-  window.addEventListener('unhandledrejection', (e)=>{
-    if (startedTest) return;
-    const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'Noma’lum xato';
-    showOverlay(`<div class='card'><h2>Xatolik</h2><div class='muted'>${msg}</div></div>`);
-  });
-
-  renderIndex();
 </script>
 </body>
 </html>
