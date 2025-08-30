@@ -153,8 +153,7 @@
   <script type="module">
     import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
     import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
+    import { getFirestore, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     // === Mahsulot ===
     const PRODUCT_ID = 'onlinetest1-access';
@@ -175,7 +174,7 @@
 
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const functions = getFunctions(app, REGION);
+    // functions kerak emas (serverless rules-based xarid)
 
     // === UI refs ===
     const $ = s=>document.querySelector(s);
@@ -257,9 +256,32 @@
 
     async function hasAccess(uid){ try{ const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`)); if(!snap.exists()) return false; const d=snap.data(); if(!d.expiresAt) return true; return d.expiresAt.toDate()>new Date(); }catch{ return false; } }
 
+// === Functions-free xarid: Firestore Rules orqali balansdan yechish ===
+async function buyAccess(){
+  const user = auth.currentUser;
+  if(!user){ location.href = '/kirish.html'; return; }
+  const userRef = doc(db,'users',user.uid);
+  const uSnap = await getDoc(userRef);
+  if(!uSnap.exists()){ alert('Profil topilmadi'); return; }
+  const currentBalance = Number(uSnap.data().balance||0);
+  const prodSnap = await getDoc(doc(db,'products',PRODUCT_ID));
+  if(!prodSnap.exists()){ alert('Mahsulot topilmadi'); return; }
+  const price = Number(prodSnap.data().price||0);
+  if(!Number.isFinite(price) || price<=0){ alert('Narx noto\'g\'ri'); return; }
+  if(currentBalance < price){ alert('Balans yetarli emas'); return; }
+  const batch = writeBatch(db);
+  batch.update(userRef, { balance: currentBalance - price, lastPurchase: { productId: PRODUCT_ID } });
+  const purRef = doc(db,'purchases', `${user.uid}_${PRODUCT_ID}`);
+  batch.set(purRef, { uid: user.uid, productId: PRODUCT_ID, price, ts: serverTimestamp() }, { merge: true });
+  await batch.commit();
+  await startAfterPurchase();
+}
+
+async function startAfterPurchase(){ await startSequence(); }
+
     async function startSequence(){ showOverlay(countdownHTML(3)); await new Promise(r=>setTimeout(r,1000)); showOverlay(countdownHTML(2)); await new Promise(r=>setTimeout(r,1000)); showOverlay(countdownHTML(1)); await new Promise(r=>setTimeout(r,1000)); hideOverlay(); appRoot.classList.remove('dimmed'); go(0); startTimer(); }
 
-    async function tryEnter(user){ if(!user){ appRoot.classList.add('dimmed'); showOverlay(payCardHTML(false)); return; } if(await hasAccess(user.uid)){ await startSequence(); } else { appRoot.classList.add('dimmed'); showOverlay(payCardHTML(true)); const buyBtn=document.getElementById('buyBtn'); buyBtn?.addEventListener('click', async ()=>{ try{ buyBtn.disabled=true; buyBtn.textContent="To'lanmoqda..."; const callable=httpsCallable(functions,'purchaseContent'); const res=await callable({ productId:PRODUCT_ID, price:PRICE_UZS, title:'Online Test 1 kirish' }); if(res?.data?.ok){ await startSequence(); } else { alert(res?.data?.error || "To'lov amalga oshmadi"); } }catch(e){ alert(e.message||'Xatolik'); } finally{ buyBtn.disabled=false; buyBtn.textContent='Sotib olish'; } }); } }
+    async function tryEnter(user){ if(!user){ appRoot.classList.add('dimmed'); showOverlay(payCardHTML(false)); return; } if(await hasAccess(user.uid)){ await startSequence(); } else { appRoot.classList.add('dimmed'); showOverlay(payCardHTML(true)); const buyBtn=document.getElementById('buyBtn'); buyBtn?.addEventListener('click', buyAccess); const res=await callable({ productId:PRODUCT_ID, price:PRICE_UZS, title:'Online Test 1 kirish' }); if(res?.data?.ok){ await startSequence(); } else { alert(res?.data?.error || "To'lov amalga oshmadi"); } }catch(e){ alert(e.message||'Xatolik'); } finally{ buyBtn.disabled=false; buyBtn.textContent='Sotib olish'; } }); } }
 
     onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
 
