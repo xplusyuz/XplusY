@@ -158,16 +158,14 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
 
   <!-- Firebase + Test logika (MODULAR) -->
-  <script type="module">
+<script type="module">
   import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, doc, getDoc, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-  // === Mahsulot ===
   const PRODUCT_ID = 'onlinetest1-access';
-  const PRICE_UZS  = 20000; // faqat ko'rsatish uchun
+  const PRICE_UZS  = 20000;
 
-  // === Firebase config (sizniki) ===
   const firebaseConfig = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
     authDomain: "xplusy-760fa.firebaseapp.com",
@@ -181,7 +179,6 @@
   const auth = getAuth(app);
   const db   = getFirestore(app);
 
-  // === UI refs ===
   const $ = s => document.querySelector(s);
   const overlay = $('#overlay');
   const appRoot = $('#app');
@@ -195,7 +192,6 @@
 
   const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
 
-  // === Savollarni HTML dan o'qiymiz ===
   const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node, idx) => {
     const stem   = node.querySelector('.stem')?.innerHTML || '';
     const opts   = Array.from(node.querySelectorAll('.opt')).map(l => l.innerHTML);
@@ -203,11 +199,15 @@
     return { id: idx+1, stem, opts, answer };
   });
 
-  // === State ===
   let current = 0;
   let selected = new Array(BANK.length).fill(null);
-  let totalSeconds = BANK.length * 120; // har savolga 2 daqiqa
+  let totalSeconds = BANK.length * 120;
   let timerInt = null;
+
+  // *** YANGI: fallback nazorati ***
+  let bootResolved = false;     // boot tryEnter chaqirildi / to'xtadi
+  let bootTO = null;            // fallback timeout id
+  let startedTest = false;      // test boshlandi (3-2-1dan keyin)
 
   function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; }
   function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; }
@@ -272,7 +272,6 @@
   nextBtn.addEventListener('click', next);
   submitBtn.addEventListener('click', () => { if(confirm('Yakunlaymizmi?')) submit(); });
 
-  // === Paywall ===
   function payCardHTML(loggedIn){
     return `<div class="card">
       <h2>Testga kirish</h2>
@@ -295,7 +294,6 @@
     }catch{ return false; }
   }
 
-  // === Functions-free xarid: Firestore Rules orqali balansdan yechish ===
   async function buyAccess(){
     try{
       const user = auth.currentUser;
@@ -318,6 +316,9 @@
       batch.set(purRef, { uid: user.uid, productId: PRODUCT_ID, price, ts: serverTimestamp() }, { merge: true });
       await batch.commit();
 
+      // *** fallbackni o'chiramiz ***
+      bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
+
       await startAfterPurchase();
     }catch(e){
       alert(e.message || 'Xatolik');
@@ -326,6 +327,9 @@
 
   async function startAfterPurchase(){ await startSequence(); }
   async function startSequence(){
+    // *** test boshlandi — fallback endi ishlamasin ***
+    startedTest = true; bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
+
     showOverlay(countdownHTML(3)); await new Promise(r=>setTimeout(r,1000));
     showOverlay(countdownHTML(2)); await new Promise(r=>setTimeout(r,1000));
     showOverlay(countdownHTML(1)); await new Promise(r=>setTimeout(r,1000));
@@ -333,6 +337,10 @@
   }
 
   async function tryEnter(user){
+    // *** callback keldi — fallbackni to'xtatamiz ***
+    bootResolved = true; if (bootTO) { clearTimeout(bootTO); bootTO=null; }
+    if (startedTest) return;
+
     if(!user){
       appRoot.classList.add('dimmed');
       showOverlay(payCardHTML(false));
@@ -352,21 +360,21 @@
   (function boot(){
     try{ appRoot.classList.add('dimmed'); }catch{}
     showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
-    let resolved = false;
-    onAuthStateChanged(auth, (user)=>{ resolved = true; tryEnter(user); });
-    setTimeout(()=>{ if(!resolved){ tryEnter(auth.currentUser || null); } }, 2500);
+    onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
+    bootTO = setTimeout(()=>{ if(!bootResolved && !startedTest){ tryEnter(auth.currentUser || null); } }, 2500);
   })();
 
-  // Diagnostika: xatolarni modalda ko'rsatish
+  // Diagnostika: xatolarni modalda ko'rsatish (test boshlangan bo'lsa bezovta qilmaymiz)
   window.addEventListener('error', (e)=>{
+    if (startedTest) return;
     showOverlay(`<div class='card'><h2>Xatolik</h2><div class='muted'>${e.message||'Noma’lum xato'}</div></div>`);
   });
   window.addEventListener('unhandledrejection', (e)=>{
+    if (startedTest) return;
     const msg = (e.reason && (e.reason.message || e.reason.toString())) || 'Noma’lum xato';
     showOverlay(`<div class='card'><h2>Xatolik</h2><div class='muted'>${msg}</div></div>`);
   });
 
-  // Boshlang'ich render
   renderIndex();
 </script>
 </body>
