@@ -2,10 +2,8 @@ import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, getDoc, writeBatch, serverTimestamp, increment } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-// === Mahsulot (paywall) ===
 const PRODUCT_ID = 'onlinetest1-access';
 
-// === Firebase config (sizning configingiz) ===
 const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -19,7 +17,6 @@ let app; try { app = getApp(); } catch { app = initializeApp(firebaseConfig); }
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// === UI refs ===
 const $ = s => document.querySelector(s);
 const overlay = $('#overlay');
 const appRoot = document.getElementById('app');
@@ -31,7 +28,6 @@ const prevBtn = $('#prevBtn');
 const nextBtn = $('#nextBtn');
 const submitBtn = $('#submitBtn');
 
-// === Savollar banki (HTML ichidan) ===
 const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node, idx) => {
   const stem   = node.querySelector('.stem')?.innerHTML || '';
   const opts   = Array.from(node.querySelectorAll('.opt')).map(l => l.innerHTML);
@@ -39,14 +35,12 @@ const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node
   return { id: idx+1, stem, opts, answer };
 });
 
-// === Holat ===
 let current=0;
 let selected = new Array(BANK.length).fill(null);
-let totalSeconds = BANK.length * 120; // har savolga 2 daqiqa
+let totalSeconds = BANK.length * 120;
 let timerInt=null;
 let startedTest=false;
 
-// === UI yordamchilar ===
 function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; overlay.style.display = 'flex'; }
 function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; overlay.style.display = 'none'; }
 function lockApp(){ if(appRoot) appRoot.hidden = true; }
@@ -93,7 +87,6 @@ function calcScore(){
   });
   const total=BANK.length;
   const percent = total ? Math.round((correct/total)*100) : 0;
-  // Ball: to‘g‘ri +3, noto‘g‘ri -0.75, javobsiz 0
   const points = (correct*3) + (incorrect*(-0.75));
   return {correct, incorrect, unanswered, total, percent, points, detail};
 }
@@ -137,7 +130,7 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
   </div>`;
 }
 
-// === Firestorega ball qo‘shish ===
+// Firestorega ball qo‘shish
 async function savePoints(pts){
   try{
     const user=auth.currentUser; if(!user) return;
@@ -150,14 +143,14 @@ async function savePoints(pts){
       productId: PRODUCT_ID,
       points: Number(pts)||0,
       ts: serverTimestamp(),
-      totals: calcScore(), // snapshot
+      totals: calcScore(),
     };
     batch.set(attRef, payload, { merge:true });
     await batch.commit();
   }catch(e){ console.warn('Ball saqlanmadi:', e?.message||e); }
 }
 
-// === Paywall ===
+// Paywall (sodda)
 const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
 const payCardHTML = (price, loggedIn)=>`<div class="card">
   <h2>Testga kirish</h2>
@@ -216,12 +209,10 @@ async function tryEnter(user){
   else{ lockApp(); showOverlay(payCardHTML(price,true)); document.getElementById('buyBtn')?.addEventListener('click', buyAccess); }
 }
 
-// === Tugmalar ===
 prevBtn.addEventListener('click',prev);
 nextBtn.addEventListener('click',next);
 submitBtn.addEventListener('click',()=>{ if(confirm('Yakunlaymizmi?')) submit(); });
 
-// === Boot ===
 (function boot(){
   lockApp();
   showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
