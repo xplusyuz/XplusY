@@ -283,10 +283,24 @@ async function startAfterPurchase(){ await startSequence(); }
 
     async function tryEnter(user){ if(!user){ appRoot.classList.add('dimmed'); showOverlay(payCardHTML(false)); return; } if(await hasAccess(user.uid)){ await startSequence(); } else { appRoot.classList.add('dimmed'); showOverlay(payCardHTML(true)); const buyBtn=document.getElementById('buyBtn'); buyBtn?.addEventListener('click', buyAccess); const res=await callable({ productId:PRODUCT_ID, price:PRICE_UZS, title:'Online Test 1 kirish' }); if(res?.data?.ok){ await startSequence(); } else { alert(res?.data?.error || "To'lov amalga oshmadi"); } }catch(e){ alert(e.message||'Xatolik'); } finally{ buyBtn.disabled=false; buyBtn.textContent='Sotib olish'; } }); } }
 
-    onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
+    // --- Boot: modalni darhol ko'rsatamiz va auth tayyor bo'lgach almashtiramiz
+(function boot(){
+  try{ appRoot.classList.add('dimmed'); }catch{}
+  showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
+  let resolved = false;
+  onAuthStateChanged(auth, (user)=>{ resolved = true; tryEnter(user); });
+  // Agar 1.5 soniyada callback kelmasa ham, mavjud holat bilan urinib ko'ramiz
+  setTimeout(()=>{ if(!resolved){ tryEnter(auth.currentUser||null); } }, 1500);
+})();
 
-    // Boshlang'ich render (grid bo'sh bo'lsa ham)
-    renderIndex();
+// Global xatolarni ekranga chiqarish (diagnostika uchun)
+window.addEventListener('error', (e)=>{
+  if(!overlay.hidden) return; // allaqachon modal bo'lsa, o'zgartirmaymiz
+  showOverlay(`<div class='card'><h2>Xatolik</h2><div class='muted'>${e.message||'Noma’lum xato'}</div></div>`);
+});
+
+// Boshlang'ich render (grid bo'sh bo'lsa ham)
+renderIndex();
   </script>
 </body>
 </html>
