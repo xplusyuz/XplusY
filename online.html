@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Online Test 1 – Pullik kirish</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:#0b1220;color:#e5e7eb;}
+    .topbar{position:sticky;top:0;background:#111827;border-bottom:1px solid #1f2937;padding:10px 16px;font-weight:700;}
+    #timer{font-weight:800}
+    .container{max-width:1200px;margin:20px auto;padding:16px;}
+    .test-layout{display:grid;grid-template-columns:30% 70%;gap:16px}
+    @media(max-width:900px){.test-layout{grid-template-columns:1fr}}
+    .panel{background:#1e293b;padding:14px;border-radius:12px}
+    .q-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+    .q-btn{height:38px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#cbd5e1;cursor:pointer;font-weight:700}
+    .q-btn.active{outline:2px solid #22c55e;}
+    .q-stem{font-size:18px;line-height:1.5;margin-bottom:14px}
+    .options{display:grid;gap:10px}
+    .opt{padding:10px;border:1px solid #273043;border-radius:8px;background:#0c1524;cursor:pointer}
+    .controls{margin-top:16px;display:flex;gap:8px}
+    .btn{padding:10px 14px;border-radius:8px;border:1px solid #273043;background:#0b1220;color:#e5e7eb;cursor:pointer}
+    .btn.primary{background:#22c55e;color:#0a0a0a;font-weight:700}
+    .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);z-index:9999}
+    .card{background:#111827;border-radius:12px;padding:20px;text-align:center;width:min(480px,92vw)}
+    .big{font-size:64px;font-weight:900;}
+    #app.dimmed{opacity:.25;filter:saturate(.9)}
+  </style>
+</head>
+<body>
+  <div class="topbar">Online Test 1 — Vaqt: <span id="timer">--:--</span></div>
+
+  <div class="container">
+    <div id="app" class="dimmed">
+      <div class="test-layout">
+        <aside class="panel">
+          <h3>Savollar</h3>
+          <div id="qGrid" class="q-grid"></div>
+        </aside>
+        <main class="panel">
+          <div class="q-stem" id="qStem">Boshlashga tayyor.</div>
+          <div class="options" id="qOpts"></div>
+          <div class="controls">
+            <button id="prevBtn" class="btn">← Oldingi</button>
+            <button id="nextBtn" class="btn">Keyingi →</button>
+            <button id="submitBtn" class="btn primary">Yakunlash</button>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay" hidden></div>
+
+  <script type="module">
+    import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    let app; try{ app=getApp(); }catch{ app=initializeApp(firebaseConfig); }
+    const auth=getAuth(app);
+    const db=getFirestore(app);
+    const functions=getFunctions(app,'europe-west1');
+
+    const PRODUCT_ID='onlinetest1-access';
+    const PRICE_UZS=20000;
+
+    const QUESTIONS=[
+      {stem:"$2^2+3^2$ qiymati?", options:["13","12","11","15"], correct:0},
+      {stem:"$5^2+1^2$ qiymati?", options:["25","26","30","28"], correct:1},
+      {stem:"$7^2+4^2$ qiymati?", options:["65","49","60","53"], correct:0},
+      {stem:"$10^2+2^2$ qiymati?", options:["102","104","106","100"], correct:1},
+      {stem:"$3^2+6^2$ qiymati?", options:["45","36","48","42"], correct:0}
+    ];
+    const qGrid=document.getElementById('qGrid');
+    const qStem=document.getElementById('qStem');
+    const qOpts=document.getElementById('qOpts');
+    const overlay=document.getElementById('overlay');
+    const timerEl=document.getElementById('timer');
+    const appRoot=document.getElementById('app');
+
+    let current=0,selected=new Array(QUESTIONS.length).fill(null);
+    let totalSeconds=QUESTIONS.length*120;
+    let timerInt=null;
+
+    function renderIndex(){qGrid.innerHTML='';QUESTIONS.forEach((q,i)=>{let b=document.createElement('button');b.className='q-btn'+(i===current?' active':'')+(selected[i]!=null?' answered':'');b.textContent=i+1;b.onclick=()=>go(i);qGrid.appendChild(b);});}
+    function renderQ(){
+      const q=QUESTIONS[current];
+      qStem.innerHTML=`<div>${q.stem}</div>`;
+      qOpts.innerHTML='';
+      q.options.forEach((o,i)=>{
+        const l=document.createElement('label');
+        l.className='opt';
+        l.innerHTML=`<input type=radio name=q${current}> ${o}`;
+        l.querySelector('input').checked=(selected[current]===i);
+        l.onclick=()=>{ selected[current]=i; renderIndex(); };
+        qOpts.appendChild(l);
+      });
+      if(window.MathJax&&window.MathJax.typesetPromise){ MathJax.typesetPromise([qStem,qOpts]); }
+    }
+    function go(i){current=i;renderIndex();renderQ();}
+    function startTimer(){if(timerInt)clearInterval(timerInt);updateTimer();timerInt=setInterval(()=>{totalSeconds--;updateTimer();if(totalSeconds<=0){clearInterval(timerInt);submit();}},1000);}
+    function updateTimer(){let m=String(Math.floor(totalSeconds/60)).padStart(2,'0');let s=String(totalSeconds%60).padStart(2,'0');timerEl.textContent=`${m}:${s}`;}
+    function submit(){let correct=0;QUESTIONS.forEach((q,i)=>{if(selected[i]===q.correct)correct++;});showOverlay(`<div class=card><h2>Natija</h2><p>${correct}/${QUESTIONS.length} to'g'ri</p></div>`);}
+    document.getElementById('prevBtn').onclick=()=>{if(current>0)go(current-1)};
+    document.getElementById('nextBtn').onclick=()=>{if(current<QUESTIONS.length-1)go(current+1)};
+    document.getElementById('submitBtn').onclick=()=>submit();
+
+    function showOverlay(html){overlay.innerHTML=html;overlay.hidden=false;}
+    function hideOverlay(){overlay.hidden=true;overlay.innerHTML='';}
+
+    function payCardHTML(loggedIn){return `<div class=\"card\"><h2>Testga kirish</h2><p>${PRICE_UZS} so'm</p><div>${loggedIn?`<button id=buy class=btn primary>Sotib olish</button>`:`<a class=btn href='/kirish.html'>Kirish</a>`} <a class=btn href='/balance.html'>Balans</a></div></div>`;}
+    function countdownHTML(n){return `<div class=card><div class=big>${n}</div></div>`;}
+
+    async function hasAccess(uid){try{const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`));if(!snap.exists())return false;const d=snap.data();return !d.expiresAt||d.expiresAt.toDate()>new Date();}catch{return false;}}
+
+    async function startSequence(){showOverlay(countdownHTML(3));await new Promise(r=>setTimeout(r,1000));showOverlay(countdownHTML(2));await new Promise(r=>setTimeout(r,1000));showOverlay(countdownHTML(1));await new Promise(r=>setTimeout(r,1000));hideOverlay();appRoot.classList.remove('dimmed');go(0);startTimer();}
+
+    async function tryEnter(user){appRoot.classList.add('dimmed');if(!user){showOverlay(payCardHTML(false));return;}if(await hasAccess(user.uid)){await startSequence();return;}showOverlay(payCardHTML(true));const buy=document.getElementById('buy');buy?.addEventListener('click',async()=>{try{buy.disabled=true;buy.textContent="To'lanmoqda...";const callable=httpsCallable(functions,'purchaseContent');const res=await callable({productId:PRODUCT_ID,price:PRICE_UZS,title:'Online Test 1 kirish'});if(res?.data?.ok){await startSequence();}else alert(res?.data?.error||"To'lov amalga oshmadi");}catch(e){alert(e.message||'Xatolik');}finally{buy.disabled=false;buy.textContent='Sotib olish';}});}
+
+    onAuthStateChanged(auth,(user)=>{tryEnter(user);});
+
+    renderIndex();
+  </script>
+  <script type="module">
+    window.MathJax = { tex:{ inlineMath:[["$","$"],["\\(","\\)"],], displayMath:[["$$","$$"],["\\[","\\]"]] }, svg:{ fontCache:'global' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+</body>
+</html>
