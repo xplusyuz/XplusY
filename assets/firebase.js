@@ -20,40 +20,16 @@ export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Allocate numericId sequentially (100001..). Requires meta/counters.nextUserId initialized in Firestore.
-
 export const ensureUserDoc = async (user) => {
   const userRef = doc(db, "users", user.uid);
   await runTransaction(db, async (tx) => {
     const uSnap = await tx.get(userRef);
-    if(uSnap.exists() && uSnap.data()?.numericId){ return; }
-
+    if(uSnap.exists() && uSnap.data().numericId){ return; }
     const ctrRef = doc(db, "meta", "counters");
     const ctrSnap = await tx.get(ctrRef);
-
-    const START = 100001;
-    let next = START;
-
-    if(ctrSnap.exists()){
-      const d = ctrSnap.data() || {};
-      if(Number.isInteger(d.nextUserId)){
-        // Prefer nextUserId if provided
-        next = d.nextUserId;
-        tx.set(ctrRef, { lastUserId: next, nextUserId: next + 1 }, { merge: true });
-      }else if(Number.isInteger(d.lastUserId)){
-        // Fallback: lastUserId present -> allocate lastUserId + 1
-        next = d.lastUserId + 1;
-        tx.set(ctrRef, { lastUserId: next }, { merge: true });
-      }else{
-        // No valid counters -> init
-        next = START;
-        tx.set(ctrRef, { lastUserId: next, nextUserId: next + 1 }, { merge: true });
-      }
-    }else{
-      // Create counters doc
-      next = START;
-      tx.set(ctrRef, { lastUserId: next, nextUserId: next + 1 }, { merge: true });
-    }
-
+    const start = 100001;
+    let next = start;
+    if(ctrSnap.exists() && Number.isInteger(ctrSnap.data().nextUserId)){ next = ctrSnap.data().nextUserId; }
     if(!uSnap.exists()){
       tx.set(userRef, {
         uid: user.uid,
@@ -63,10 +39,10 @@ export const ensureUserDoc = async (user) => {
     }else{
       tx.update(userRef, { numericId: next });
     }
+    tx.set(ctrRef, { nextUserId: next + 1 }, { merge: true });
   });
   return userRef;
 };
-
 
 export {
   onAuthStateChanged, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword,
