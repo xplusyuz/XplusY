@@ -42,7 +42,6 @@ function getTitleByPoints(points){
 
 async function fillUserPanel(user){
   const nameEl = qs("[data-username]");
-  const idEl   = qs("[data-userid]");
   const balEl  = qsa("[data-balance]");
   const ptsEl  = qsa("[data-points]");
   const anonEls= qsa("[data-anon]");

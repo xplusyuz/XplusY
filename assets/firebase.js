@@ -20,29 +20,24 @@ export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Allocate numericId sequentially (100001..). Requires meta/counters.nextUserId initialized in Firestore.
+
+
 export const ensureUserDoc = async (user) => {
   const userRef = doc(db, "users", user.uid);
-  await runTransaction(db, async (tx) => {
-    const uSnap = await tx.get(userRef);
-    if(uSnap.exists() && uSnap.data().numericId){ return; }
-    const ctrRef = doc(db, "meta", "counters");
-    const ctrSnap = await tx.get(ctrRef);
-    const start = 100001;
-    let next = start;
-    if(ctrSnap.exists() && Number.isInteger(ctrSnap.data().nextUserId)){ next = ctrSnap.data().nextUserId; }
-    if(!uSnap.exists()){
-      tx.set(userRef, {
-        uid: user.uid,
-        displayName: user.displayName || (user.email ? user.email.split("@")[0] : "User"),
-        balance: 0, points: 0, numericId: next, createdAt: serverTimestamp()
-      });
-    }else{
-      tx.update(userRef, { numericId: next });
-    }
-    tx.set(ctrRef, { nextUserId: next + 1 }, { merge: true });
-  });
+  const snap = await getDoc(userRef);
+  if(!snap.exists()){
+    await setDoc(userRef, {
+      uid: user.uid,
+      displayName: user.displayName || (user.email ? user.email.split("@")[0] : "User"),
+      balance: 0,
+      points: 0,
+      createdAt: serverTimestamp()
+    });
+  }
   return userRef;
 };
+
+
 
 export {
   onAuthStateChanged, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword,
