@@ -174,55 +174,51 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
   </div>`;
 }
 
-async function savePoints(pts){
-  try{
-    const user = auth.currentUser; 
-    if(!user) return false;
+async function submit(){
+  // UI blok
+  prevBtn.disabled = nextBtn.disabled = submitBtn.disabled = true;
+  clearInterval(timerInt);
 
-    const userRef = doc(db,'users',user.uid);
-    const add = Number(pts) || 0;
+  const res = calcScore();
 
-    // Faqat users/{uid} dagi points ni oshiramiz,
-    // va oxirgi urinish haqida ixcham metama'lumot qoldiramiz.
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(userRef);
-      if(!snap.exists()){
-        tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true });
-      }
-      tx.set(userRef, {
-        points: increment(add),
-        lastAttempt: {
-          productId: PRODUCT_ID,
-          delta: add,
-          updated_at: serverTimestamp()
-        }
-      }, { merge:true });
+  // Telegramga YUBORISH — har holda
+  try {
+    const user = auth.currentUser;
+    const name = (user?.displayName) || (user?.email) || 'Noma’lum';
+    const uid  = (user?.uid) || 'guest';
+    const initialTotal = BANK.length * 120;
+    const elapsedSec   = initialTotal - totalSeconds;
+
+    await sendResultToTelegram({
+      name,
+      uid,
+      correct: res.correct,
+      total: res.total,
+      productId: PRODUCT_ID,
+      elapsedSec,
+      points: res.points
     });
-
-    // (ixtiyoriy) header-ni yangilashga urinish
-    try{
-      const mod = await import('../auth.js');
-      if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
-    }catch(_){}
-
-    return true;
-  }catch(e){
-    console.warn('Ball saqlanmadi:', e?.message || e);
-    return false;
+  } catch (e) {
+    console.warn('Telegramga yuborishda xatolik:', e?.message || e);
   }
+
+  // Ballni saqlash — alohida blok
+  try {
+    await savePoints(res.points);
+  } catch (e) {
+    console.warn('Ball saqlashda xatolik:', e?.message || e);
+  }
+
+  // Natija oynasi
+  showOverlay(renderResult(res));
 }
+
 /* ---------------------------
    TELEGRAM INTEGRATSIYASI
    Eslatma: tokenni clientda saqlash xavfli; ishlab chiqarishda server-orqali proxylang.
 ----------------------------*/
-const TELEGRAM_BOT_TOKEN = '7983510816:AAEmMhyAMrxcYC7GudLqEnccQ5Y7i7SJlEU';
-const TELEGRAM_CHAT_ID   = '2049065724';
-
-function formatMMSS(totalSec) { totalSec = Math.max(0, Math.floor(totalSec||0)); const m = String(Math.floor(totalSec / 60)).padStart(2, '0'); const s = String(totalSec % 60).padStart(2, '0'); return `${m}:${s}`; }
-
 async function sendResultToTelegram({ name, uid, correct, total, productId, elapsedSec, points }) {
-  try {
-    const text =
+  const text =
 `✅ Online Test natijasi
 👤 Ism: ${name}
 🆔 ID: ${lastUserId}
@@ -230,11 +226,22 @@ async function sendResultToTelegram({ name, uid, correct, total, productId, elap
 📊 To'g'ri: ${correct}/${total}
 ⭐ Ball: ${Number(points||0).toFixed(2)}
 ⏱ Sarflangan vaqt: ${formatMMSS(elapsedSec)}`;
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-    const body = { chat_id: TELEGRAM_CHAT_ID, text, disable_web_page_preview: true };
-    await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
-  } catch (e) { console.warn('Telegramga yuborilmadi:', e?.message || e); }
+
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  const body = { chat_id: TELEGRAM_CHAT_ID, text, disable_web_page_preview: true };
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(()=> '');
+    throw new Error(`Telegram HTTP ${resp.status}: ${txt}`);
+  }
 }
+
 
 /* ---------------------------
    YAKUNLASH / SUBMIT QISMI
