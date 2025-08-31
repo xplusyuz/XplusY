@@ -280,3 +280,80 @@ submitBtn.addEventListener('click',()=>{ if(confirm('Yakunlaymizmi?')) submit();
   onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
   setTimeout(()=>{ if(!startedTest){ tryEnter(auth.currentUser||null); } }, 2500);
 })();
+// Progress bar funksiyasi
+function updateProgressBar() {
+  const answeredCount = selected.filter(ans => ans !== null).length;
+  const progress = (answeredCount / BANK.length) * 100;
+  
+  let progressBar = document.querySelector('.progress-bar');
+  if (!progressBar) {
+    progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    progressBar.innerHTML = '<div class="progress-fill"></div>';
+    document.querySelector('.panel-head').after(progressBar);
+  }
+  
+  document.querySelector('.progress-fill').style.width = `${progress}%`;
+}
+
+// renderIndex funksiyasiga progress bar chaqiruvi qo'shamiz
+function renderIndex(){
+  qGrid.innerHTML='';
+  BANK.forEach((q,i)=>{
+    const b=document.createElement('button');
+    b.className='q-btn'+(i===current?' active':'')+(selected[i]!=null?' answered':'');
+    b.textContent=q.id;
+    b.addEventListener('click',()=>go(i));
+    qGrid.appendChild(b);
+  });
+  
+  updateProgressBar(); // Progress bar yangilash
+}
+
+// Timer uchun vizual yaxshilash
+function updateTimer(){
+  const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); 
+  const s=String(totalSeconds%60).padStart(2,'0'); 
+  timerEl.textContent=`${m}:${s}`;
+  
+  // 5 minut qolganda rangni o'zgartiramiz
+  if (totalSeconds <= 300) {
+    timerEl.parentElement.style.background = 'rgba(239, 68, 68, 0.2)';
+    timerEl.parentElement.style.borderColor = '#ef4444';
+    timerEl.style.color = '#ef4444';
+    
+    // Har 30 soniyada pulsatsiya effekti
+    if (totalSeconds % 30 === 0) {
+      timerEl.parentElement.classList.add('pulse');
+      setTimeout(() => {
+        timerEl.parentElement.classList.remove('pulse');
+      }, 1000);
+    }
+  }
+}
+
+// Rasm yuklash animatsiyasi
+async function attachQuestionImage(qid){
+  qMedia.innerHTML = '<div class="loading" style="height: 180px; border-radius: 8px;"></div>';
+  qMedia.style.display = 'block';
+  
+  try{
+    const jpg = await loadImage(`img/${qid}.jpg`);
+    qMedia.innerHTML = '';
+    qMedia.appendChild(jpg);
+    qMedia.setAttribute('aria-hidden','false');
+    return;
+  }catch{}
+  
+  try{
+    const png = await loadImage(`img/${qid}.png`);
+    qMedia.innerHTML = '';
+    qMedia.appendChild(png);
+    qMedia.setAttribute('aria-hidden','false');
+    return;
+  }catch{
+    qMedia.innerHTML=''; 
+    qMedia.style.display='none'; 
+    qMedia.setAttribute('aria-hidden','true');
+  }
+}
