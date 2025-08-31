@@ -49,7 +49,7 @@ function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; overlay.s
 function lockApp(){ if(appRoot) appRoot.hidden = true; }
 function unlockApp(){ if(appRoot) appRoot.hidden = false; }
 
-// Progress bar funksiyasi
+// Progress bar
 function updateProgressBar() {
   const answeredCount = selected.filter(ans => ans !== null).length;
   const progress = (answeredCount / BANK.length) * 100;
@@ -173,14 +173,6 @@ function calcScore(){
   return {correct, incorrect, unanswered, total, percent, points, detail};
 }
 
-async function submit(){
-  prevBtn.disabled=nextBtn.disabled=submitBtn.disabled=true;
-  clearInterval(timerInt);
-  const res = calcScore();
-  await savePoints(res.points);
-  showOverlay(renderResult(res));
-}
-
 function letter(i){ return String.fromCharCode(65+i); }
 function renderResult({correct,incorrect,unanswered,total,percent,points,detail}){
   const list = detail.map(d=>{
@@ -190,7 +182,7 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
       <span class="badge ${badge}">${d.id}</span>
       <div>
         <div><strong>Javob:</strong> ${letter(d.answer)} | <strong>Siz:</strong> ${chosen}</div>
-        ${d.ok? '<span class="small">✅ To\'g\'ri</span>' : (d.sel==null? '<span class="small">—</span>' : '<span class="small">❌ Noto\'g\'ri</span>')}
+        ${d.ok? '<span class="small">✅ To\\'g\\'ri</span>' : (d.sel==null? '<span class="small">—</span>' : '<span class="small">❌ Noto\\'g\\'ri</span>')}
       </div>
     </div>`;
   }).join('');
@@ -245,6 +237,79 @@ async function savePoints(pts){
   }
 }
 
+/* ---------------------------
+   TELEGRAM INTEGRATSIYASI
+----------------------------*/
+// Diqqat: ishlab chiqarishda tokenni server tomonda saqlash tavsiya etiladi.
+const TELEGRAM_BOT_TOKEN = '7983510816:AAEmMhyAMrxcYC7GudLqEnccQ5Y7i7SJlEU';
+const TELEGRAM_CHAT_ID   = '2049065724';
+
+function formatMMSS(totalSec) {
+  totalSec = Math.max(0, Math.floor(totalSec||0));
+  const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+async function sendResultToTelegram({ name, uid, correct, total, productId, elapsedSec, points }) {
+  try {
+    const text =
+`✅ Online Test natijasi
+👤 Ism: ${name}
+🆔 ID: ${uid}
+📦 Product ID: ${productId}
+📊 To'g'ri: ${correct}/${total}
+⭐ Ball: ${Number(points||0).toFixed(2)}
+⏱ Sarflangan vaqt: ${formatMMSS(elapsedSec)}`;
+
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const body = {
+      chat_id: TELEGRAM_CHAT_ID,
+      text,
+      disable_web_page_preview: true
+    };
+    await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+  } catch (e) {
+    console.warn('Telegramga yuborilmadi:', e?.message || e);
+  }
+}
+
+/* ---------------------------
+   YAKUNLASH / SUBMIT QISMI
+----------------------------*/
+async function submit(){
+  prevBtn.disabled=nextBtn.disabled=submitBtn.disabled=true;
+  clearInterval(timerInt);
+  const res = calcScore(); // {correct, incorrect, unanswered, total, percent, points}
+  await savePoints(res.points);
+
+  // Telegramga yuborish
+  try {
+    const user = auth.currentUser;
+    const name = (user?.displayName) || (user?.email) || 'Noma’lum';
+    const uid  = (user?.uid) || 'guest';
+    const initialTotal = BANK.length * 120;
+    const elapsedSec   = initialTotal - totalSeconds;
+
+    await sendResultToTelegram({
+      name,
+      uid,
+      correct: res.correct,
+      total: res.total,
+      productId: PRODUCT_ID,
+      elapsedSec,
+      points: res.points
+    });
+  } catch (e) {
+    console.warn('Natijani Telegramga yuborishda xatolik:', e?.message || e);
+  }
+
+  showOverlay(renderResult(res));
+}
+
+/* ---------------------------
+   Kirish / To‘lov / Start
+----------------------------*/
 const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
 const payCardHTML = (price, loggedIn)=>`<div class="card">
   <h2>Testga kirish</h2>
@@ -316,5 +381,5 @@ function boot(){
   setTimeout(()=>{ if(!startedTest){ tryEnter(auth.currentUser||null); } }, 2500);
 }
 
-// Dasturni ishga tushirish
+// Start
 boot();
