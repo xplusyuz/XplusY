@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reyting — XplusY.uz</title>
+  <link rel="stylesheet" href="./assets/css/style.css"/>
+  <style>
+    .rating-container {
+      margin: 30px 0;
+    }
+    
+    .rating-filters {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .rating-filters select, .rating-filters input {
+      max-width: 200px;
+    }
+    
+    .rating-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    
+    .rating-table th, .rating-table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(134,239,172,.1);
+    }
+    
+    .rating-table th {
+      background: rgba(134,239,172,.1);
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    
+    .rating-table th:hover {
+      background: rgba(134,239,172,.15);
+    }
+    
+    .rating-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .rating-table tr:hover {
+      background: rgba(134,239,172,.05);
+    }
+    
+    .rank-1 { color: gold; font-weight: bold; }
+    .rank-2 { color: silver; font-weight: bold; }
+    .rank-3 { color: #cd7f32; font-weight: bold; }
+    
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 25px;
+    }
+    
+    .pagination button {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(134,239,172,.2);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+    }
+    
+    .pagination button.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    
+    .badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    
+    .badge-grandmaster { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; }
+    .badge-champion { background: linear-gradient(135deg, #C0C0C0, #A9A9A9); color: black; }
+    .badge-master { background: linear-gradient(135deg, #CD7F32, #8C6B46); color: white; }
+    .badge-expert { background: linear-gradient(135deg, #4C7EF3, #2B5FD1); color: white; }
+    .badge-specialist { background: linear-gradient(135deg, #22C55E, #16A34A); color: white; }
+    .badge-contributor { background: linear-gradient(135deg, #84CC16, #65A30D); color: white; }
+    .badge-member { background: linear-gradient(135deg, #9CA3AF, #6B7280); color: white; }
+  </style>
+</head>
+<body data-page="reyting">
+  <div id="km-header"></div>
+  
+  <main class="container">
+    <section class="hero">
+      <h1>O'quvchilar <span class="grad">reytingi</span></h1>
+      <p>Eng yaxshi 100 ta o'quvchi. Har oy yangi g'oliblar aniqlanadi va maxsus mukofotlar bilan taqdirlanadi.</p>
+    </section>
+    
+    <section class="card rating-container">
+      <div class="rating-filters">
+        <select id="filterCategory">
+          <option value="all">Barchasi</option>
+          <option value="week">Haftalik</option>
+          <option value="month">Oylik</option>
+          <option value="alltime">Hammasi</option>
+        </select>
+        
+        <input type="text" id="searchUser" placeholder="Ism yoki ID qidirish">
+      </div>
+      
+      <table class="rating-table">
+        <thead>
+          <tr>
+            <th data-sort="rank">O‘rin ↗</th>
+            <th data-sort="name">Ism</th>
+            <th data-sort="id">ID</th>
+            <th data-sort="score">Ball</th>
+            <th data-sort="badge">Daraja</th>
+          </tr>
+        </thead>
+        <tbody id="fullRatingTable">
+          <!-- JavaScript orqali to'ldiriladi -->
+        </tbody>
+      </table>
+      
+      <div class="pagination" id="pagination">
+        <!-- JavaScript orqali yaratiladi -->
+      </div>
+    </section>
+  </main>
+  
+  <div id="km-footer"></div>
+  
+  <script type="module" src="./assets/js/firebase.js"></script>
+  <script type="module" src="./assets/js/main.js"></script>
+  
+  <script type="module">
+    // Namuna ma'lumotlar (keyinroq Firebase bilan almashtiriladi)
+    const sampleUsers = [
+      // Top 10 (oldingi ma'lumotlar)
+      { rank: 1, name: "Azizbek Ismoilov", id: "XP12345", score: 9850, badge: "grandmaster" },
+      { rank: 2, name: "Nigora Xasanova", id: "XP12346", score: 8720, badge: "champion" },
+      { rank: 3, name: "Javohir Abdullayev", id: "XP12347", score: 8450, badge: "master" },
+      { rank: 4, name: "Dilnoza Yusupova", id: "XP12348", score: 8120, badge: "expert" },
+      { rank: 5, name: "Sardor To'xtayev", id: "XP12349", score: 7980, badge: "expert" },
+      { rank: 6, name: "Oydin Rajabova", id: "XP12350", score: 7650, badge: "specialist" },
+      { rank: 7, name: "Behruz Karimov", id: "XP12351", score: 7320, badge: "specialist" },
+      { rank: 8, name: "Farangiz Norboyeva", id: "XP12352", score: 6980, badge: "contributor" },
+      { rank: 9, name: "Shoxrux Iskandarov", id: "XP12353", score: 6540, badge: "contributor" },
+      { rank: 10, name: "Zuhra Xamidova", id: "XP12354", score: 6210, badge: "member" },
+      
+      // Qolgan 90 ta foydalanuvchi
+      // Qisqalik uchun faqat bir nechtasini ko'rsatamiz
+      { rank: 11, name: "Akmal Jo'rayev", id: "XP12355", score: 5980, badge: "member" },
+      { rank: 12, name: "Dilobar Qodirova", id: "XP12356", score: 5870, badge: "member" },
+      { rank: 13, name: "Elyor Nosirov", id: "XP12357", score: 5760, badge: "member" },
+      { rank: 14, name: "Fotima Toshpo'latova", id: "XP12358", score: 5620, badge: "member" },
+      { rank: 15, name: "G'ayrat Usmonov", id: "XP12359", score: 5510, badge: "member" },
+      // ... va hokazo 100 gacha
+    ];
+    
+    // Badge uchun ko'rinish matnini olish
+    function getBadgeDisplayName(badge) {
+      const badges = {
+        'grandmaster': 'Grandmaster',
+        'champion': 'Champion',
+        'master': 'Master',
+        'expert': 'Expert',
+        'specialist': 'Specialist',
+        'contributor': 'Contributor',
+        'member': 'Member'
+      };
+      return badges[badge] || badge;
+    }
+    
+    // Jadvalni to'ldirish
+    function populateFullRatingTable(users) {
+      const tableBody = document.getElementById('fullRatingTable');
+      tableBody.innerHTML = '';
+      
+      users.forEach(user => {
+        const row = document.createElement('tr');
+        
+        // O'rin uchun maxsus format
+        let rankClass = '';
+        if (user.rank === 1) rankClass = 'rank-1';
+        else if (user.rank === 2) rankClass = 'rank-2';
+        else if (user.rank === 3) rankClass = 'rank-3';
+        
+        row.innerHTML = `
+          <td class="${rankClass}">${user.rank}</td>
+          <td>${user.name}</td>
+          <td>${user.id}</td>
+          <td>${user.score.toLocaleString()}</td>
+          <td><span class="badge badge-${user.badge}">${getBadgeDisplayName(user.badge)}</span></td>
+        `;
+        
+        tableBody.appendChild(row);
+      });
+    }
+    
+    // Pagination yaratish
+    function createPagination(currentPage, totalPages) {
+      const pagination = document.getElementById('pagination');
+      pagination.innerHTML = '';
+      
+      // Oldingi sahifa tugmasi
+      if (currentPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.textContent = '←';
+        prevBtn.addEventListener('click', () => loadPage(currentPage - 1));
+        pagination.appendChild(prevBtn);
+      }
+      
+      // Sahifa raqamlari
+      const startPage = Math.max(1, currentPage - 2);
+      const endPage = Math.min(totalPages, startPage + 4);
+      
+      for (let i = startPage; i <= endPage; i++) {
+        const pageBtn = document.createElement('button');
+        pageBtn.textContent = i;
+        if (i === currentPage) {
+          pageBtn.classList.add('active');
+        }
+        pageBtn.addEventListener('click', () => loadPage(i));
+        pagination.appendChild(pageBtn);
+      }
+      
+      // Keyingi sahifa tugmasi
+      if (currentPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.textContent = '→';
+        nextBtn.addEventListener('click', () => loadPage(currentPage + 1));
+        pagination.appendChild(nextBtn);
+      }
+    }
+    
+    // Sahifa yuklash
+    function loadPage(page) {
+      // Bu yerda haqiqiy ma'lumotlarni yuklash logikasi bo'ladi
+      // Hozircha faqat namuna ma'lumotlarni ko'rsatamiz
+      const itemsPerPage = 20;
+      const startIndex = (page - 1) * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, sampleUsers.length);
+      const pageUsers = sampleUsers.slice(startIndex, endIndex);
+      
+      populateFullRatingTable(pageUsers);
+      createPagination(page, Math.ceil(sampleUsers.length / itemsPerPage));
+    }
+    
+    // Dastlabki yuklash
+    loadPage(1);
+    
+    // Saralash funksiyasi
+    document.querySelectorAll('.rating-table th[data-sort]').forEach(header => {
+      header.addEventListener('click', () => {
+        const sortBy = header.getAttribute('data-sort');
+        // Saralash logikasi
+        console.log(`Saralash: ${sortBy}`);
+        // Keyingi qismda Firebase bilan ishlaganda to'ldiramiz
+      });
+    });
+  </script>
+</body>
+</html>
