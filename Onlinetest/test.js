@@ -1,9 +1,8 @@
 import { initializeApp, getApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import {
-  getFirestore, doc, getDoc, writeBatch, serverTimestamp, increment, runTransaction
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, doc, getDoc, writeBatch, serverTimestamp, increment, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
+// Mahsulot identifikatori (Firestore: products/${PRODUCT_ID})
 const PRODUCT_ID = 'onlinetest1-access';
 
 const firebaseConfig = {
@@ -19,6 +18,7 @@ let app; try { app = getApp(); } catch { app = initializeApp(firebaseConfig); }
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// DOM qisqartmalar
 const $ = s => document.querySelector(s);
 const overlay = $('#overlay');
 const appRoot = document.getElementById('app');
@@ -31,6 +31,7 @@ const prevBtn = $('#prevBtn');
 const nextBtn = $('#nextBtn');
 const submitBtn = $('#submitBtn');
 
+// Savollar bankini HTML dan olish
 const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node, idx) => {
   const stem   = node.querySelector('.stem')?.innerHTML || '';
   const opts   = Array.from(node.querySelectorAll('.opt')).map(l => l.innerHTML);
@@ -40,7 +41,7 @@ const BANK = Array.from(document.querySelectorAll('#qBank .question')).map((node
 
 let current=0;
 let selected = new Array(BANK.length).fill(null);
-let totalSeconds = BANK.length * 120;
+let totalSeconds = BANK.length * 120; // har savolga 2 daqiqa
 let timerInt=null;
 let startedTest=false;
 
@@ -53,7 +54,6 @@ function unlockApp(){ if(appRoot) appRoot.hidden = false; }
 function updateProgressBar() {
   const answeredCount = selected.filter(ans => ans !== null).length;
   const progress = (answeredCount / BANK.length) * 100;
-  
   let progressBar = document.querySelector('.progress-bar');
   if (!progressBar) {
     progressBar = document.createElement('div');
@@ -61,7 +61,6 @@ function updateProgressBar() {
     progressBar.innerHTML = '<div class="progress-fill"></div>';
     document.querySelector('.panel-head').after(progressBar);
   }
-  
   document.querySelector('.progress-fill').style.width = `${progress}%`;
 }
 
@@ -74,7 +73,6 @@ function renderIndex(){
     b.addEventListener('click',()=>go(i));
     qGrid.appendChild(b);
   });
-  
   updateProgressBar();
 }
 
@@ -93,33 +91,14 @@ function loadImage(url){
 async function attachQuestionImage(qid){
   qMedia.innerHTML = '<div class="loading" style="height: 180px; border-radius: 8px;"></div>';
   qMedia.style.display = 'block';
-  
-  try{
-    const jpg = await loadImage(`img/${qid}.jpg`);
-    qMedia.innerHTML = '';
-    qMedia.appendChild(jpg);
-    qMedia.setAttribute('aria-hidden','false');
-    return;
-  }catch{}
-  
-  try{
-    const png = await loadImage(`img/${qid}.png`);
-    qMedia.innerHTML = '';
-    qMedia.appendChild(png);
-    qMedia.setAttribute('aria-hidden','false');
-    return;
-  }catch{
-    qMedia.innerHTML=''; 
-    qMedia.style.display='none'; 
-    qMedia.setAttribute('aria-hidden','true');
-  }
+  try{ const jpg = await loadImage(`img/${qid}.jpg`); qMedia.innerHTML = ''; qMedia.appendChild(jpg); qMedia.setAttribute('aria-hidden','false'); return; }catch{}
+  try{ const png = await loadImage(`img/${qid}.png`); qMedia.innerHTML = ''; qMedia.appendChild(png); qMedia.setAttribute('aria-hidden','false'); return; }catch{ qMedia.innerHTML=''; qMedia.style.display='none'; qMedia.setAttribute('aria-hidden','true'); }
 }
 
 async function renderQuestion(){
   const q=BANK[current];
   attachQuestionImage(q.id);
   qStem.innerHTML=`<div class="muted">Savol ${current+1}/${BANK.length}</div><div style="margin-top:6px">${q.stem}</div>`;
-
   qOpts.innerHTML='';
   q.opts.forEach((inner,idx)=>{
     const wrap=document.createElement('label');
@@ -128,7 +107,6 @@ async function renderQuestion(){
     wrap.querySelector('input').addEventListener('change',()=>{ selected[current]=idx; renderIndex(); });
     qOpts.appendChild(wrap);
   });
-
   await typeset();
   prevBtn.disabled=current===0;
   nextBtn.disabled=current===BANK.length-1;
@@ -139,23 +117,15 @@ const next=()=>{ if(current<BANK.length-1) go(current+1); };
 const prev=()=>{ if(current>0) go(current-1); };
 
 function startTimer(){ updateTimer(); timerInt=setInterval(()=>{ totalSeconds--; updateTimer(); if(totalSeconds<=0){ clearInterval(timerInt); submit(); } },1000); }
-
 function updateTimer(){
-  const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); 
-  const s=String(totalSeconds%60).padStart(2,'0'); 
+  const m=String(Math.floor(totalSeconds/60)).padStart(2,'0');
+  const s=String(totalSeconds%60).padStart(2,'0');
   timerEl.textContent=`${m}:${s}`;
-  
   if (totalSeconds <= 300) {
     timerEl.parentElement.style.background = 'rgba(239, 68, 68, 0.2)';
     timerEl.parentElement.style.borderColor = '#ef4444';
     timerEl.style.color = '#ef4444';
-    
-    if (totalSeconds % 30 === 0) {
-      timerEl.parentElement.classList.add('pulse');
-      setTimeout(() => {
-        timerEl.parentElement.classList.remove('pulse');
-      }, 1000);
-    }
+    if (totalSeconds % 30 === 0) { timerEl.parentElement.classList.add('pulse'); setTimeout(() => { timerEl.parentElement.classList.remove('pulse'); }, 1000); }
   }
 }
 
@@ -182,7 +152,7 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
       <span class="badge ${badge}">${d.id}</span>
       <div>
         <div><strong>Javob:</strong> ${letter(d.answer)} | <strong>Siz:</strong> ${chosen}</div>
-        ${d.ok? '<span class="small">✅ To\\'g\\'ri</span>' : (d.sel==null? '<span class="small">—</span>' : '<span class="small">❌ Noto\\'g\\'ri</span>')}
+        ${d.ok? '<span class="small">✅ To\'g\'ri</span>' : (d.sel==null? '<span class="small">—</span>' : '<span class="small">❌ Noto\'g\'ri</span>')}
       </div>
     </div>`;
   }).join('');
@@ -213,43 +183,24 @@ async function savePoints(pts){
 
     await runTransaction(db, async (tx)=>{
       const s = await tx.get(userRef);
-      if(!s.exists()){
-        tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true });
-      }
+      if(!s.exists()){ tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true }); }
       tx.set(userRef, { points: increment(add) }, { merge:true });
-      tx.set(attRef, {
-        uid: user.uid,
-        productId: PRODUCT_ID,
-        points: add,
-        ts: serverTimestamp()
-      }, { merge:true });
+      tx.set(attRef, { uid: user.uid, productId: PRODUCT_ID, points: add, ts: serverTimestamp() }, { merge:true });
     });
 
-    try{
-      const mod = await import('../auth.js');
-      if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
-    }catch(_){ }
-
+    try{ const mod = await import('../auth.js'); if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid); }catch(_){ }
     return true;
-  }catch(e){
-    console.warn('Ball saqlanmadi:', e?.message||e);
-    return false;
-  }
+  }catch(e){ console.warn('Ball saqlanmadi:', e?.message||e); return false; }
 }
 
 /* ---------------------------
    TELEGRAM INTEGRATSIYASI
+   Eslatma: tokenni clientda saqlash xavfli; ishlab chiqarishda server-orqali proxylang.
 ----------------------------*/
-// Diqqat: ishlab chiqarishda tokenni server tomonda saqlash tavsiya etiladi.
 const TELEGRAM_BOT_TOKEN = '7983510816:AAEmMhyAMrxcYC7GudLqEnccQ5Y7i7SJlEU';
 const TELEGRAM_CHAT_ID   = '2049065724';
 
-function formatMMSS(totalSec) {
-  totalSec = Math.max(0, Math.floor(totalSec||0));
-  const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-  const s = String(totalSec % 60).padStart(2, '0');
-  return `${m}:${s}`;
-}
+function formatMMSS(totalSec) { totalSec = Math.max(0, Math.floor(totalSec||0)); const m = String(Math.floor(totalSec / 60)).padStart(2, '0'); const s = String(totalSec % 60).padStart(2, '0'); return `${m}:${s}`; }
 
 async function sendResultToTelegram({ name, uid, correct, total, productId, elapsedSec, points }) {
   try {
@@ -261,17 +212,10 @@ async function sendResultToTelegram({ name, uid, correct, total, productId, elap
 📊 To'g'ri: ${correct}/${total}
 ⭐ Ball: ${Number(points||0).toFixed(2)}
 ⏱ Sarflangan vaqt: ${formatMMSS(elapsedSec)}`;
-
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-    const body = {
-      chat_id: TELEGRAM_CHAT_ID,
-      text,
-      disable_web_page_preview: true
-    };
+    const body = { chat_id: TELEGRAM_CHAT_ID, text, disable_web_page_preview: true };
     await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(body) });
-  } catch (e) {
-    console.warn('Telegramga yuborilmadi:', e?.message || e);
-  }
+  } catch (e) { console.warn('Telegramga yuborilmadi:', e?.message || e); }
 }
 
 /* ---------------------------
@@ -280,30 +224,16 @@ async function sendResultToTelegram({ name, uid, correct, total, productId, elap
 async function submit(){
   prevBtn.disabled=nextBtn.disabled=submitBtn.disabled=true;
   clearInterval(timerInt);
-  const res = calcScore(); // {correct, incorrect, unanswered, total, percent, points}
+  const res = calcScore();
   await savePoints(res.points);
-
-  // Telegramga yuborish
   try {
     const user = auth.currentUser;
     const name = (user?.displayName) || (user?.email) || 'Noma’lum';
     const uid  = (user?.uid) || 'guest';
     const initialTotal = BANK.length * 120;
     const elapsedSec   = initialTotal - totalSeconds;
-
-    await sendResultToTelegram({
-      name,
-      uid,
-      correct: res.correct,
-      total: res.total,
-      productId: PRODUCT_ID,
-      elapsedSec,
-      points: res.points
-    });
-  } catch (e) {
-    console.warn('Natijani Telegramga yuborishda xatolik:', e?.message || e);
-  }
-
+    await sendResultToTelegram({ name, uid, correct: res.correct, total: res.total, productId: PRODUCT_ID, elapsedSec, points: res.points });
+  } catch (e) { console.warn('Natijani Telegramga yuborishda xatolik:', e?.message || e); }
   showOverlay(renderResult(res));
 }
 
@@ -322,14 +252,8 @@ const payCardHTML = (price, loggedIn)=>`<div class="card">
 </div>`;
 const countdownHTML = n=>`<div class='card'><div class='big'>${n}</div><div class='muted'>Boshlanishiga...</div></div>`;
 
-async function fetchPrice(){
-  try{ const snap=await getDoc(doc(db,'products',PRODUCT_ID)); return Number(snap.data()?.price||20000); }
-  catch{ return 20000; }
-}
-async function hasAccess(uid){
-  try{ const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`)); return snap.exists(); }
-  catch{ return false; }
-}
+async function fetchPrice(){ try{ const snap=await getDoc(doc(db,'products',PRODUCT_ID)); return Number(snap.data()?.price||20000); } catch{ return 20000; } }
+async function hasAccess(uid){ try{ const snap=await getDoc(doc(db,'purchases',`${uid}_${PRODUCT_ID}`)); return snap.exists(); } catch{ return false; } }
 
 async function buyAccess(){
   try{
@@ -339,13 +263,11 @@ async function buyAccess(){
     const currentBalance=Number(uSnap.data().balance||0);
     const price=await fetchPrice();
     if(currentBalance<price){ alert('Balans yetarli emas'); return; }
-
     const batch=writeBatch(db);
     batch.update(userRef,{ balance: currentBalance-price, lastPurchase:{productId:PRODUCT_ID} });
     const purRef=doc(db,'purchases',`${user.uid}_${PRODUCT_ID}`);
     batch.set(purRef,{ uid:user.uid, productId:PRODUCT_ID, price, ts:serverTimestamp() },{merge:true});
     await batch.commit();
-
     await startSequence();
   }catch(e){ alert(e.message||'Xatolik'); }
 }
@@ -368,18 +290,16 @@ async function tryEnter(user){
   else{ lockApp(); showOverlay(payCardHTML(price,true)); document.getElementById('buyBtn')?.addEventListener('click', buyAccess); }
 }
 
-// Event listenerlar
+// Eventlar
 prevBtn.addEventListener('click',prev);
 nextBtn.addEventListener('click',next);
 submitBtn.addEventListener('click',()=>{ if(confirm('Yakunlaymizmi?')) submit(); });
 
-// Dasturni ishga tushirish
+// Boot
 function boot(){
   lockApp();
   showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
   onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
   setTimeout(()=>{ if(!startedTest){ tryEnter(auth.currentUser||null); } }, 2500);
 }
-
-// Start
 boot();
