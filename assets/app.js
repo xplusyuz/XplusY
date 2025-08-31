@@ -1,4 +1,4 @@
-import { auth, db, googleProvider, onAuthStateChanged, signOut, doc, getDoc, onSnapshot, collection, query, orderBy, limit, getDocs } from './firebase.js';
+import { auth, db, googleProvider, onAuthStateChanged, signOut, doc, getDoc, onSnapshot, collection, query, orderBy, limit, getDocs, ensureUserDoc } from './firebase.js';
 
 // Inject header/footer
 async function loadPartial(id, url){
@@ -134,5 +134,5 @@ function wirePanel(){
 // Boot
 loadPartial("site-header", "components/header.html");
 loadPartial("site-footer", "components/footer.html");
-onAuthStateChanged(auth, (u)=> fillUserPanel(u));
+onAuthStateChanged(auth, async (u)=> { if(u){ try{ await ensureUserDoc(u); }catch(e){ console.warn('ensureUserDoc failed', e); } fillUserPanel(u); } else { fillUserPanel(null); } });
 window.addEventListener("DOMContentLoaded", ()=>{ runCarousel(); wirePanel(); });
