@@ -1,9 +1,9 @@
 // Firebase init (CDN ESM)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, increment, runTransaction, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// TODO: Replace with your Firebase project config (safe to keep public keys in client)
+// Provided Firebase config
 export const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -19,23 +19,33 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Helpers
+// Allocate numericId sequentially (100001..). Requires meta/counters.nextUserId initialized in Firestore.
 export const ensureUserDoc = async (user) => {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if(!snap.exists()){
-    await setDoc(ref, {
-      uid: user.uid,
-      displayName: user.displayName || (user.email ? user.email.split("@")[0] : "User"),
-      balance: 0,
-      points: 0,
-      createdAt: serverTimestamp()
-    });
-  }
-  return ref;
+  const userRef = doc(db, "users", user.uid);
+  await runTransaction(db, async (tx) => {
+    const uSnap = await tx.get(userRef);
+    if(uSnap.exists() && uSnap.data().numericId){ return; }
+    const ctrRef = doc(db, "meta", "counters");
+    const ctrSnap = await tx.get(ctrRef);
+    const start = 100001;
+    let next = start;
+    if(ctrSnap.exists() && Number.isInteger(ctrSnap.data().nextUserId)){ next = ctrSnap.data().nextUserId; }
+    if(!uSnap.exists()){
+      tx.set(userRef, {
+        uid: user.uid,
+        displayName: user.displayName || (user.email ? user.email.split("@")[0] : "User"),
+        balance: 0, points: 0, numericId: next, createdAt: serverTimestamp()
+      });
+    }else{
+      tx.update(userRef, { numericId: next });
+    }
+    tx.set(ctrRef, { nextUserId: next + 1 }, { merge: true });
+  });
+  return userRef;
 };
 
 export {
   onAuthStateChanged, signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, updateProfile, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, increment
+  signOut, updateProfile, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp, increment,
+  collection, query, orderBy, limit, getDocs
 };
