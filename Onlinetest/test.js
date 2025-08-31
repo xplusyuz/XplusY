@@ -26,6 +26,7 @@ const timerEl = $('#timer');
 const qGrid   = $('#qGrid');
 const qStem   = $('#qStem');
 const qOpts   = $('#qOpts');
+const qMedia  = $('#qMedia');       // Rasm konteyneri
 const prevBtn = $('#prevBtn');
 const nextBtn = $('#nextBtn');
 const submitBtn = $('#submitBtn');
@@ -53,14 +54,54 @@ function renderIndex(){
   BANK.forEach((q,i)=>{
     const b=document.createElement('button');
     b.className='q-btn'+(i===current?' active':'')+(selected[i]!=null?' answered':'');
-    b.textContent=q.id; b.addEventListener('click',()=>go(i));
+    b.textContent=q.id;
+    b.addEventListener('click',()=>go(i));
     qGrid.appendChild(b);
   });
 }
+
 async function typeset(){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([qStem,qOpts]); }catch(e){} } }
+
+/* ---------- Rasmni avtomatik yuklash: img/{id}.jpg yoki .png ---------- */
+function loadImage(url){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=> resolve(img);
+    img.onerror = reject;
+    img.src = url;
+    img.alt = 'Savol rasmi';
+  });
+}
+async function attachQuestionImage(qid){
+  // Avval .jpg, keyin .png sinab ko‘ramiz
+  try{
+    const jpg = await loadImage(`img/${qid}.jpg`);
+    qMedia.innerHTML = ''; qMedia.appendChild(jpg);
+    qMedia.style.display='block'; qMedia.setAttribute('aria-hidden','false');
+    return;
+  }catch{}
+  try{
+    const png = await loadImage(`img/${qid}.png`);
+    qMedia.innerHTML = ''; qMedia.appendChild(png);
+    qMedia.style.display='block'; qMedia.setAttribute('aria-hidden','false');
+    return;
+  }catch{
+    // Rasm yo‘q — yashiramiz
+    qMedia.innerHTML=''; qMedia.style.display='none'; qMedia.setAttribute('aria-hidden','true');
+  }
+}
+/* --------------------------------------------------------------------- */
+
 async function renderQuestion(){
   const q=BANK[current];
+
+  // Rasm (mavjud bo‘lsa) ko‘rsatish
+  attachQuestionImage(q.id);
+
+  // Matn
   qStem.innerHTML=`<div class="muted">Savol ${current+1}/${BANK.length}</div><div style="margin-top:6px">${q.stem}</div>`;
+
+  // Variantlar
   qOpts.innerHTML='';
   q.opts.forEach((inner,idx)=>{
     const wrap=document.createElement('label');
@@ -69,8 +110,10 @@ async function renderQuestion(){
     wrap.querySelector('input').addEventListener('change',()=>{ selected[current]=idx; renderIndex(); });
     qOpts.appendChild(wrap);
   });
+
   await typeset();
-  prevBtn.disabled=current===0; nextBtn.disabled=current===BANK.length-1;
+  prevBtn.disabled=current===0;
+  nextBtn.disabled=current===BANK.length-1;
 }
 const go=i=>{ current=i; renderIndex(); renderQuestion(); };
 const next=()=>{ if(current<BANK.length-1) go(current+1); };
@@ -134,9 +177,6 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
 
 /* ===========================
    Firestorega BALL qo‘shish
-   — doc bo‘lmasa yaratadi
-   — points ni atomar increment qiladi
-   — attempts ga log yozadi
 =========================== */
 async function savePoints(pts){
   try{
@@ -148,27 +188,21 @@ async function savePoints(pts){
     await runTransaction(db, async (tx)=>{
       const s = await tx.get(userRef);
       if(!s.exists()){
-        // minimal create (id berish auth.js ichida bo‘ladi)
         tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true });
       }
-      // increment
       tx.set(userRef, { points: increment(add) }, { merge:true });
-
-      // attempt log
       tx.set(attRef, {
         uid: user.uid,
         productId: PRODUCT_ID,
         points: add,
         ts: serverTimestamp()
-        // istasangiz: totals: calcScore()
       }, { merge:true });
     });
 
-    // Header metrikani yangilashga urinish (agar sizda auth.js bo‘lsa)
     try{
-      const mod = await import('../auth.js'); // yo‘l loyihangizga qarab o‘zgartirilishi mumkin
+      const mod = await import('../auth.js');
       if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
-    }catch(_){ /* yo‘l topilmasa jim */ }
+    }catch(_){ /* optional */ }
 
     return true;
   }catch(e){
