@@ -26,7 +26,7 @@ const timerEl = $('#timer');
 const qGrid   = $('#qGrid');
 const qStem   = $('#qStem');
 const qOpts   = $('#qOpts');
-const qMedia  = $('#qMedia');       // Rasm konteyneri
+const qMedia  = $('#qMedia');
 const prevBtn = $('#prevBtn');
 const nextBtn = $('#nextBtn');
 const submitBtn = $('#submitBtn');
@@ -49,6 +49,22 @@ function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; overlay.s
 function lockApp(){ if(appRoot) appRoot.hidden = true; }
 function unlockApp(){ if(appRoot) appRoot.hidden = false; }
 
+// Progress bar funksiyasi
+function updateProgressBar() {
+  const answeredCount = selected.filter(ans => ans !== null).length;
+  const progress = (answeredCount / BANK.length) * 100;
+  
+  let progressBar = document.querySelector('.progress-bar');
+  if (!progressBar) {
+    progressBar = document.createElement('div');
+    progressBar.className = 'progress-bar';
+    progressBar.innerHTML = '<div class="progress-fill"></div>';
+    document.querySelector('.panel-head').after(progressBar);
+  }
+  
+  document.querySelector('.progress-fill').style.width = `${progress}%`;
+}
+
 function renderIndex(){
   qGrid.innerHTML='';
   BANK.forEach((q,i)=>{
@@ -58,11 +74,12 @@ function renderIndex(){
     b.addEventListener('click',()=>go(i));
     qGrid.appendChild(b);
   });
+  
+  updateProgressBar();
 }
 
 async function typeset(){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([qStem,qOpts]); }catch(e){} } }
 
-/* ---------- Rasmni avtomatik yuklash: img/{id}.jpg yoki .png ---------- */
 function loadImage(url){
   return new Promise((resolve,reject)=>{
     const img = new Image();
@@ -72,36 +89,37 @@ function loadImage(url){
     img.alt = 'Savol rasmi';
   });
 }
+
 async function attachQuestionImage(qid){
-  // Avval .jpg, keyin .png sinab ko‘ramiz
+  qMedia.innerHTML = '<div class="loading" style="height: 180px; border-radius: 8px;"></div>';
+  qMedia.style.display = 'block';
+  
   try{
     const jpg = await loadImage(`img/${qid}.jpg`);
-    qMedia.innerHTML = ''; qMedia.appendChild(jpg);
-    qMedia.style.display='block'; qMedia.setAttribute('aria-hidden','false');
+    qMedia.innerHTML = '';
+    qMedia.appendChild(jpg);
+    qMedia.setAttribute('aria-hidden','false');
     return;
   }catch{}
+  
   try{
     const png = await loadImage(`img/${qid}.png`);
-    qMedia.innerHTML = ''; qMedia.appendChild(png);
-    qMedia.style.display='block'; qMedia.setAttribute('aria-hidden','false');
+    qMedia.innerHTML = '';
+    qMedia.appendChild(png);
+    qMedia.setAttribute('aria-hidden','false');
     return;
   }catch{
-    // Rasm yo‘q — yashiramiz
-    qMedia.innerHTML=''; qMedia.style.display='none'; qMedia.setAttribute('aria-hidden','true');
+    qMedia.innerHTML=''; 
+    qMedia.style.display='none'; 
+    qMedia.setAttribute('aria-hidden','true');
   }
 }
-/* --------------------------------------------------------------------- */
 
 async function renderQuestion(){
   const q=BANK[current];
-
-  // Rasm (mavjud bo‘lsa) ko‘rsatish
   attachQuestionImage(q.id);
-
-  // Matn
   qStem.innerHTML=`<div class="muted">Savol ${current+1}/${BANK.length}</div><div style="margin-top:6px">${q.stem}</div>`;
 
-  // Variantlar
   qOpts.innerHTML='';
   q.opts.forEach((inner,idx)=>{
     const wrap=document.createElement('label');
@@ -115,12 +133,31 @@ async function renderQuestion(){
   prevBtn.disabled=current===0;
   nextBtn.disabled=current===BANK.length-1;
 }
+
 const go=i=>{ current=i; renderIndex(); renderQuestion(); };
 const next=()=>{ if(current<BANK.length-1) go(current+1); };
 const prev=()=>{ if(current>0) go(current-1); };
 
 function startTimer(){ updateTimer(); timerInt=setInterval(()=>{ totalSeconds--; updateTimer(); if(totalSeconds<=0){ clearInterval(timerInt); submit(); } },1000); }
-function updateTimer(){ const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); const s=String(totalSeconds%60).padStart(2,'0'); timerEl.textContent=`${m}:${s}`; }
+
+function updateTimer(){
+  const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); 
+  const s=String(totalSeconds%60).padStart(2,'0'); 
+  timerEl.textContent=`${m}:${s}`;
+  
+  if (totalSeconds <= 300) {
+    timerEl.parentElement.style.background = 'rgba(239, 68, 68, 0.2)';
+    timerEl.parentElement.style.borderColor = '#ef4444';
+    timerEl.style.color = '#ef4444';
+    
+    if (totalSeconds % 30 === 0) {
+      timerEl.parentElement.classList.add('pulse');
+      setTimeout(() => {
+        timerEl.parentElement.classList.remove('pulse');
+      }, 1000);
+    }
+  }
+}
 
 function calcScore(){
   let correct=0, incorrect=0, unanswered=0;
@@ -175,9 +212,6 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
   </div>`;
 }
 
-/* ===========================
-   Firestorega BALL qo‘shish
-=========================== */
 async function savePoints(pts){
   try{
     const user = auth.currentUser; if(!user) return false;
@@ -202,7 +236,7 @@ async function savePoints(pts){
     try{
       const mod = await import('../auth.js');
       if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
-    }catch(_){ /* optional */ }
+    }catch(_){ }
 
     return true;
   }catch(e){
@@ -211,7 +245,6 @@ async function savePoints(pts){
   }
 }
 
-// Paywall (sodda)
 const fmtUZS = n => new Intl.NumberFormat('uz-UZ').format(Number(n||0)) + " so'm";
 const payCardHTML = (price, loggedIn)=>`<div class="card">
   <h2>Testga kirish</h2>
@@ -270,90 +303,18 @@ async function tryEnter(user){
   else{ lockApp(); showOverlay(payCardHTML(price,true)); document.getElementById('buyBtn')?.addEventListener('click', buyAccess); }
 }
 
+// Event listenerlar
 prevBtn.addEventListener('click',prev);
 nextBtn.addEventListener('click',next);
 submitBtn.addEventListener('click',()=>{ if(confirm('Yakunlaymizmi?')) submit(); });
 
-(function boot(){
+// Dasturni ishga tushirish
+function boot(){
   lockApp();
   showOverlay(`<div class='card'><h2>Tekshirilmoqda…</h2><div class='muted'>Hisob holati yuklanmoqda</div></div>`);
   onAuthStateChanged(auth, (user)=>{ tryEnter(user); });
   setTimeout(()=>{ if(!startedTest){ tryEnter(auth.currentUser||null); } }, 2500);
-})();
-// Progress bar funksiyasi
-function updateProgressBar() {
-  const answeredCount = selected.filter(ans => ans !== null).length;
-  const progress = (answeredCount / BANK.length) * 100;
-  
-  let progressBar = document.querySelector('.progress-bar');
-  if (!progressBar) {
-    progressBar = document.createElement('div');
-    progressBar.className = 'progress-bar';
-    progressBar.innerHTML = '<div class="progress-fill"></div>';
-    document.querySelector('.panel-head').after(progressBar);
-  }
-  
-  document.querySelector('.progress-fill').style.width = `${progress}%`;
 }
 
-// renderIndex funksiyasiga progress bar chaqiruvi qo'shamiz
-function renderIndex(){
-  qGrid.innerHTML='';
-  BANK.forEach((q,i)=>{
-    const b=document.createElement('button');
-    b.className='q-btn'+(i===current?' active':'')+(selected[i]!=null?' answered':'');
-    b.textContent=q.id;
-    b.addEventListener('click',()=>go(i));
-    qGrid.appendChild(b);
-  });
-  
-  updateProgressBar(); // Progress bar yangilash
-}
-
-// Timer uchun vizual yaxshilash
-function updateTimer(){
-  const m=String(Math.floor(totalSeconds/60)).padStart(2,'0'); 
-  const s=String(totalSeconds%60).padStart(2,'0'); 
-  timerEl.textContent=`${m}:${s}`;
-  
-  // 5 minut qolganda rangni o'zgartiramiz
-  if (totalSeconds <= 300) {
-    timerEl.parentElement.style.background = 'rgba(239, 68, 68, 0.2)';
-    timerEl.parentElement.style.borderColor = '#ef4444';
-    timerEl.style.color = '#ef4444';
-    
-    // Har 30 soniyada pulsatsiya effekti
-    if (totalSeconds % 30 === 0) {
-      timerEl.parentElement.classList.add('pulse');
-      setTimeout(() => {
-        timerEl.parentElement.classList.remove('pulse');
-      }, 1000);
-    }
-  }
-}
-
-// Rasm yuklash animatsiyasi
-async function attachQuestionImage(qid){
-  qMedia.innerHTML = '<div class="loading" style="height: 180px; border-radius: 8px;"></div>';
-  qMedia.style.display = 'block';
-  
-  try{
-    const jpg = await loadImage(`img/${qid}.jpg`);
-    qMedia.innerHTML = '';
-    qMedia.appendChild(jpg);
-    qMedia.setAttribute('aria-hidden','false');
-    return;
-  }catch{}
-  
-  try{
-    const png = await loadImage(`img/${qid}.png`);
-    qMedia.innerHTML = '';
-    qMedia.appendChild(png);
-    qMedia.setAttribute('aria-hidden','false');
-    return;
-  }catch{
-    qMedia.innerHTML=''; 
-    qMedia.style.display='none'; 
-    qMedia.setAttribute('aria-hidden','true');
-  }
-}
+// Dasturni ishga tushirish
+boot();
