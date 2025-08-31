@@ -5,7 +5,14 @@ function qs(s, r=document){ return r.querySelector(s) }
 function qsa(s, r=document){ return Array.from(r.querySelectorAll(s)) }
 
 // Quick counters
-async function loadCounters(){ /* disabled temporarily to avoid collection read perms */ }
+async function loadCounters(){
+  try{
+    const usersQ = query(collection(db, "users"));
+    const usersCnt = await getCountFromServer(usersQ);
+    const users = usersCnt.data().count || 0;
+    const elUsers = qs("[data-kpi-users]");
+    if(elUsers) elUsers.textContent = users.toLocaleString("uz-UZ");
+  }catch(e){ console.warn("Counters:", e) }
 }
 
 // Top-5 preview
@@ -81,7 +88,7 @@ function wireSearch(){
 
 // Boot
 window.addEventListener("DOMContentLoaded", ()=>{
-  // loadCounters(); // disabled until rules allow aggregate reads
+  loadCounters();
   loadTopPreview();
   wireSearch();
   tickCountdown();
