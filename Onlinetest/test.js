@@ -176,23 +176,41 @@ function renderResult({correct,incorrect,unanswered,total,percent,points,detail}
 
 async function savePoints(pts){
   try{
-    const user = auth.currentUser; if(!user) return false;
-    const userRef = doc(db,'users',user.uid);
-    const attRef  = doc(db,'attempts', `${user.uid}_${PRODUCT_ID}_${Date.now()}`);
-    const add = Number(pts)||0;
+    const user = auth.currentUser; 
+    if(!user) return false;
 
-    await runTransaction(db, async (tx)=>{
-      const s = await tx.get(userRef);
-      if(!s.exists()){ tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true }); }
-      tx.set(userRef, { points: increment(add) }, { merge:true });
-      tx.set(attRef, { uid: user.uid, productId: PRODUCT_ID, points: add, ts: serverTimestamp() }, { merge:true });
+    const userRef = doc(db,'users',user.uid);
+    const add = Number(pts) || 0;
+
+    // Faqat users/{uid} dagi points ni oshiramiz,
+    // va oxirgi urinish haqida ixcham metama'lumot qoldiramiz.
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(userRef);
+      if(!snap.exists()){
+        tx.set(userRef, { points: 0, created_at: serverTimestamp() }, { merge:true });
+      }
+      tx.set(userRef, {
+        points: increment(add),
+        lastAttempt: {
+          productId: PRODUCT_ID,
+          delta: add,
+          updated_at: serverTimestamp()
+        }
+      }, { merge:true });
     });
 
-    try{ const mod = await import('../auth.js'); if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid); }catch(_){ }
-    return true;
-  }catch(e){ console.warn('Ball saqlanmadi:', e?.message||e); return false; }
-}
+    // (ixtiyoriy) header-ni yangilashga urinish
+    try{
+      const mod = await import('../auth.js');
+      if (mod.updateHeaderFor) mod.updateHeaderFor(user.uid);
+    }catch(_){}
 
+    return true;
+  }catch(e){
+    console.warn('Ball saqlanmadi:', e?.message || e);
+    return false;
+  }
+}
 /* ---------------------------
    TELEGRAM INTEGRATSIYASI
    Eslatma: tokenni clientda saqlash xavfli; ishlab chiqarishda server-orqali proxylang.
@@ -207,7 +225,7 @@ async function sendResultToTelegram({ name, uid, correct, total, productId, elap
     const text =
 `✅ Online Test natijasi
 👤 Ism: ${name}
-🆔 ID: ${uid}
+🆔 ID: ${lastUserId}
 📦 Product ID: ${productId}
 📊 To'g'ri: ${correct}/${total}
 ⭐ Ball: ${Number(points||0).toFixed(2)}
