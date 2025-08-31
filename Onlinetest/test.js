@@ -207,7 +207,7 @@ async function sendResultToTelegram({ name, uid, correct, total, productId, elap
     const text =
 `✅ Online Test natijasi
 👤 Ism: ${name}
-🆔 ID: ${uid}
+🆔 ID: ${lastUserId}
 📦 Product ID: ${productId}
 📊 To'g'ri: ${correct}/${total}
 ⭐ Ball: ${Number(points||0).toFixed(2)}
