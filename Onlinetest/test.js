@@ -19,6 +19,9 @@ let app; try { app = getApp(); } catch { app = initializeApp(firebaseConfig); }
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// Demo rejim: URL oxiriga ?demo qo'shsangiz, pullik kirish chetlab o'tiladi
+const DEV_DEMO = new URLSearchParams(location.search).has('demo');
+
 const $ = s => document.querySelector(s);
 const overlay = $('#overlay');
 const appRoot = document.getElementById('app');
@@ -56,13 +59,15 @@ function updateProgressBar() {
   
   let progressBar = document.querySelector('.progress-bar');
   if (!progressBar) {
+    const head = document.querySelector('.panel-head');
+    if (!head) return; // DOM hali tayyor emas
     progressBar = document.createElement('div');
     progressBar.className = 'progress-bar';
     progressBar.innerHTML = '<div class="progress-fill"></div>';
-    document.querySelector('.panel-head').after(progressBar);
+    head.after(progressBar);
   }
-  
-  document.querySelector('.progress-fill').style.width = `${progress}%`;
+  const pf = document.querySelector('.progress-fill');
+  if (pf) pf.style.width = `${progress}%`;
 }
 
 function renderIndex(){
@@ -361,6 +366,8 @@ async function startSequence(){
 }
 
 async function tryEnter(user){
+  // Demo rejimi: ?demo bo'lsa, darhol testni boshlaymiz
+  if (DEV_DEMO) { await startSequence(); return; }
   if(startedTest) return;
   const price = await fetchPrice();
   if(!user){ lockApp(); showOverlay(payCardHTML(price,false)); return; }
