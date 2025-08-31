@@ -1,1 +1,0 @@
-Bu to'liq ishchi xplusy.uz loyihasining test, simulyator, admin panel, firebase.js bilan versiyasidir.
