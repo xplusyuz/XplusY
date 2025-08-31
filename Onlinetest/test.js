@@ -19,19 +19,8 @@ let app; try { app = getApp(); } catch { app = initializeApp(firebaseConfig); }
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// Demo rejim: URL oxiriga ?demo qo'shsangiz, pullik kirish chetlab o'tiladi
-const DEV_DEMO = new URLSearchParams(location.search).has('demo');
-
 const $ = s => document.querySelector(s);
-let overlay = $('#overlay');
-if (!overlay) {
-  overlay = document.createElement('div');
-  overlay.id = 'overlay';
-  overlay.className = 'overlay';
-  overlay.setAttribute('role','dialog');
-  overlay.setAttribute('aria-modal','true');
-  document.body.appendChild(overlay);
-}
+const overlay = $('#overlay');
 const appRoot = document.getElementById('app');
 const timerEl = $('#timer');
 const qGrid   = $('#qGrid');
@@ -55,8 +44,8 @@ let totalSeconds = BANK.length * 120;
 let timerInt=null;
 let startedTest=false;
 
-function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; overlay.style.display = 'flex'; overlay.classList.add('open'); }
-function hideOverlay(){ overlay.classList.remove('open'); overlay.hidden = true; overlay.innerHTML = ''; overlay.style.display = 'none'; }
+function showOverlay(html){ overlay.innerHTML = html; overlay.hidden = false; overlay.style.display = 'flex'; }
+function hideOverlay(){ overlay.hidden = true; overlay.innerHTML = ''; overlay.style.display = 'none'; }
 function lockApp(){ if(appRoot) appRoot.hidden = true; }
 function unlockApp(){ if(appRoot) appRoot.hidden = false; }
 
@@ -67,15 +56,13 @@ function updateProgressBar() {
   
   let progressBar = document.querySelector('.progress-bar');
   if (!progressBar) {
-    const head = document.querySelector('.panel-head');
-    if (!head) return; // DOM hali tayyor emas
     progressBar = document.createElement('div');
     progressBar.className = 'progress-bar';
     progressBar.innerHTML = '<div class="progress-fill"></div>';
-    head.after(progressBar);
+    document.querySelector('.panel-head').after(progressBar);
   }
-  const pf = document.querySelector('.progress-fill');
-  if (pf) pf.style.width = `${progress}%`;
+  
+  document.querySelector('.progress-fill').style.width = `${progress}%`;
 }
 
 function renderIndex(){
@@ -374,8 +361,6 @@ async function startSequence(){
 }
 
 async function tryEnter(user){
-  // Demo rejimi: ?demo bo'lsa, darhol testni boshlaymiz
-  if (DEV_DEMO) { await startSequence(); return; }
   if(startedTest) return;
   const price = await fetchPrice();
   if(!user){ lockApp(); showOverlay(payCardHTML(price,false)); return; }
@@ -397,109 +382,4 @@ function boot(){
 }
 
 // Start
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', boot);
-} else {
-  boot();
-}
-
-
-// === Generic Modal: accessible + focus trap ===
-(function(){
-  let lastActive = null;
-  let keydownHandler = null;
-  let overlayClickHandler = null;
-  let closeBtnHandler = null;
-
-  function ensureOverlay() {
-    let overlay = document.getElementById('overlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'overlay';
-      overlay.className = 'overlay';
-      document.body.appendChild(overlay);
-    }
-    if (!overlay.querySelector('.modal')) {
-      overlay.innerHTML = [
-        '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">',
-        '  <div class="modal-header">',
-        '    <h3 id="modal-title"></h3>',
-        '    <button class="modal-close" aria-label="Yopish" type="button">&times;</button>',
-        '  </div>',
-        '  <div class="modal-body"></div>',
-        '  <div class="modal-footer"></div>',
-        '</div>'
-      ].join('');
-    }
-    return overlay;
-  }
-
-  function getFocusable(container) {
-    return Array.from(container.querySelectorAll('a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'))
-      .filter(el => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden'));
-  }
-
-  function trapFocus(e, container) {
-    if (e.key !== 'Tab') return;
-    const f = getFocusable(container);
-    if (!f.length) return;
-    const first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
-    else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
-  }
-
-  function openModal({ title = '', body = '', footer = '' } = {}) {
-    const overlay = ensureOverlay();
-    const modal   = overlay.querySelector('.modal');
-    overlay.classList.remove('closing');
-    overlay.classList.add('open');
-    document.body.classList.add('modal-open');
-
-    modal.querySelector('#modal-title').textContent = title;
-    const bodyEl = modal.querySelector('.modal-body');
-    const footerEl = modal.querySelector('.modal-footer');
-    bodyEl.innerHTML = body;
-    footerEl.innerHTML = footer;
-
-    lastActive = document.activeElement;
-
-    // Events
-    keydownHandler = (e) => {
-      if (e.key === 'Escape') { closeModal(); }
-      trapFocus(e, modal);
-    };
-    overlayClickHandler = (e) => { if (e.target === overlay) closeModal(); };
-    closeBtnHandler = () => closeModal();
-
-    document.addEventListener('keydown', keydownHandler);
-    overlay.addEventListener('click', overlayClickHandler);
-    modal.querySelector('.modal-close').addEventListener('click', closeBtnHandler);
-
-    // Focus first focusable, or the close button
-    (getFocusable(modal)[0] || modal.querySelector('.modal-close')).focus();
-  }
-
-  function closeModal() {
-    const overlay = document.getElementById('overlay');
-    if (!overlay) return;
-    overlay.classList.add('closing');
-    overlay.classList.remove('open');
-    document.body.classList.remove('modal-open');
-
-    // Cleanup events
-    document.removeEventListener('keydown', keydownHandler);
-    overlay.removeEventListener('click', overlayClickHandler);
-    const closeBtn = overlay.querySelector('.modal-close');
-    if (closeBtn) closeBtn.removeEventListener('click', closeBtnHandler);
-
-    // Return focus
-    if (lastActive && typeof lastActive.focus === 'function') {
-      setTimeout(() => lastActive.focus(), 0);
-    }
-    // Remove closing state after animation
-    setTimeout(() => overlay.classList.remove('closing'), 180);
-  }
-
-  // Expose helpers
-  window.modal = { open: openModal, close: closeModal };
-})();
+boot();
