@@ -5,12 +5,13 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimesta
 
 // TODO: Replace with your Firebase project config (safe to keep public keys in client)
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
 };
 
 export const app = initializeApp(firebaseConfig);
