@@ -97,3 +97,44 @@
     </div>
   </div>
 </aside>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const panel = document.getElementById('touchPanel');
+  const panelBody = panel?.querySelector('.panel-body');
+  if (!panelBody) return;
+
+  // 1) Panel ichidagi eski user-pill[data-authed] ni olib tashlaymiz (dublikat bo‘lmasin)
+  const existingPanelPill = panelBody.querySelector('.user-pill[data-authed]');
+  if (existingPanelPill) existingPanelPill.remove();
+
+  // 2) Headerdan user-pill[data-authed] ni klonlab panelga qo‘yish
+  const headerPill = document.querySelector('.nav .user-pill[data-authed]');
+  if (headerPill) {
+    const clone = headerPill.cloneNode(true); // Eslatma: event listenerlar ko‘chmaydi
+    panelBody.insertBefore(clone, panelBody.firstChild);
+  }
+
+  // 3) Panel sarlavhasidagi Unvon chipini headerdagi data-title bilan sinxronlash
+  const srcTitle = document.querySelector('.nav [data-title]');     // headerdagi Unvon
+  const chip = panel.querySelector('.panel-header .chip[data-title]'); // panel sarlavhasidagi chip
+  const copyTitle = () => {
+    if (srcTitle && chip) chip.textContent = srcTitle.textContent || '—';
+  };
+  copyTitle();
+  if (srcTitle) {
+    const mo = new MutationObserver(copyTitle);
+    mo.observe(srcTitle, { childList: true, characterData: true, subtree: true });
+  }
+
+  // 4) Logout tugmasi klonlanganida eski listenerlar kelmaydi — delegatsiya orqali ushlab olamiz
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-logout]');
+    if (!btn) return;
+    // Agar oldin window.logout() kabi funksiya bo'lsa, shu yerda chaqiriladi:
+    if (typeof window.logout === 'function') {
+      window.logout();
+    }
+  });
+});
+</script>
+
