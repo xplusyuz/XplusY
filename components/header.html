@@ -99,41 +99,96 @@
 </aside>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const panel = document.getElementById('touchPanel');
-  const panelBody = panel?.querySelector('.panel-body');
-  if (!panelBody) return;
+(function(){
+  function waitFor(sel, timeout=10000){
+    return new Promise((resolve, reject)=>{
+      const el = document.querySelector(sel);
+      if (el) return resolve(el);
+      const obs = new MutationObserver(()=>{
+        const e = document.querySelector(sel);
+        if (e){ obs.disconnect(); resolve(e); }
+      });
+      obs.observe(document.documentElement, {childList:true, subtree:true});
+      setTimeout(()=>{ obs.disconnect(); reject(new Error("timeout waiting for "+sel)); }, timeout);
+    });
+  }
 
-  // 1) Panel ichidagi eski user-pill[data-authed] ni olib tashlash (dublikat bo'lmasin)
-  const existingPanelPill = panelBody.querySelector('.user-pill[data-authed]');
-  if (existingPanelPill) existingPanelPill.remove();
+  function cloneIntoPanel(headerPill){
+    const panel = document.getElementById('touchPanel');
+    const panelBody = panel?.querySelector('.panel-body');
+    if (!panelBody) return;
 
-  // 2) Headerdan user-pill[data-authed] ni klonlab panelga qo'yish
-  const headerPill = document.querySelector('.nav .user-pill[data-authed]');
-  if (headerPill) {
-    const clone = headerPill.cloneNode(true); // event listenerlar ko'chmaydi
+    // remove old clone if any
+    const existing = panelBody.querySelector('.user-pill[data-authed]');
+    if (existing) existing.remove();
+
+    // clone and insert
+    const clone = headerPill.cloneNode(true);
+    // ensure visible (header markup has inline style="display:none")
+    clone.style.display = getComputedStyle(headerPill).display !== 'none' ? 'block' : 'none';
     panelBody.insertBefore(clone, panelBody.firstChild);
-  }
 
-  // 3) Panel sarlavhasidagi Unvon chipini headerdagi data-title bilan sinxronlash
-  const srcTitle = document.querySelector('.nav [data-title]');     // headerdagi Unvon
-  const chip = panel.querySelector('.panel-header .chip[data-title]'); // panel sarlavhasidagi chip
-  const copyTitle = () => {
-    if (srcTitle && chip) chip.textContent = srcTitle.textContent || '—';
-  };
-  copyTitle();
-  if (srcTitle) {
-    const mo = new MutationObserver(copyTitle);
-    mo.observe(srcTitle, { childList: true, characterData: true, subtree: true });
-  }
+    // sync the "Unvon" chip in panel header
+    const srcTitle = headerPill.querySelector('[data-title]') || document.querySelector('.nav [data-title]');
+    const chip = panel.querySelector('.panel-header .chip[data-title]');
+    const copyTitle = () => {
+      if (srcTitle && chip) chip.textContent = (srcTitle.textContent || '—').trim();
+    };
+    copyTitle();
 
-  // 4) Logout tugmasi: delegatsiya orqali ushlaymiz
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-logout]');
-    if (!btn) return;
-    if (typeof window.logout === 'function') {
-      window.logout();
+    if (srcTitle){
+      const moChip = new MutationObserver(copyTitle);
+      moChip.observe(srcTitle, { childList:true, characterData:true, subtree:true });
     }
+  }
+
+  function mirrorChanges(headerPill){
+    const panel = document.getElementById('touchPanel');
+    const panelBody = panel?.querySelector('.panel-body');
+    if (!panelBody) return;
+    const target = () => panelBody.querySelector('.user-pill[data-authed]');
+
+    // When header data changes, copy text to clone
+    const copyAll = () => {
+      const clone = target();
+      if (!clone) return;
+      ['username','userid','balance','points','title'].forEach(key=>{
+        const src = headerPill.querySelector('[data-'+key+']');
+        const dst = clone.querySelector('[data-'+key+']');
+        if (src && dst) dst.textContent = src.textContent;
+      });
+      // mirror visibility (anon/authed)
+      const visible = getComputedStyle(headerPill).display !== 'none';
+      clone.style.display = visible ? 'block' : 'none';
+    };
+    copyAll();
+
+    const mo = new MutationObserver(copyAll);
+    mo.observe(headerPill, { attributes:true, attributeFilter:['style','class','hidden'], childList:true, characterData:true, subtree:true });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    waitFor('.nav .user-pill[data-authed]').then(headerPill => {
+      cloneIntoPanel(headerPill);
+      mirrorChanges(headerPill);
+    }).catch(()=>{
+      // Even if we timed out, try once if element exists later
+      const tryLater = () => {
+        const hp = document.querySelector('.nav .user-pill[data-authed]');
+        if (!hp) return;
+        cloneIntoPanel(hp);
+        mirrorChanges(hp);
+        document.removeEventListener('click', tryLater);
+      };
+      document.addEventListener('click', tryLater);
+    });
+
+    // Logout handling via delegation (works for header and clone)
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-logout]');
+      if (!btn) return;
+      if (typeof window.logout === 'function') window.logout();
+    });
   });
-});
+})();
 </script>
