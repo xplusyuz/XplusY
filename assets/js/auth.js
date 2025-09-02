@@ -7,9 +7,8 @@ import {
   doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp
 } from "./firebase.js";
 
-// --- UI helpers ---
-const $ = (sel, root=document) => root.querySelector(sel);
-const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+const $ = (s, r=document)=>r.querySelector(s);
+const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
 export let currentUser = null;
 export let currentUserProfile = null;
@@ -29,21 +28,16 @@ async function ensureUserProfile(user){
   const uref = doc(db, "users", user.uid);
   const snap = await getDoc(uref);
 
-  // Create counters doc if needed via transaction when creating first user doc
   if(!snap.exists()){
     await runTransaction(db, async (tx) => {
       const metaRef = doc(db, "meta", "counters");
       const metaSnap = await tx.get(metaRef);
-      let lastUserId = 100000; // start before the first id
-      if(metaSnap.exists()){
-        lastUserId = metaSnap.data().lastUserId || 100000;
-      }
-      const newId = lastUserId + 1;
-      tx.set(metaRef, { lastUserId: newId }, { merge: true });
-
-      const profile = {
+      let last = metaSnap.exists() ? (metaSnap.data().lastUserId || 100000) : 100000;
+      const next = last + 1;
+      tx.set(metaRef, { lastUserId: next }, { merge: true });
+      tx.set(uref, {
         uid: user.uid,
-        idNumber: newId,
+        idNumber: next,
         displayName: user.displayName || user.email?.split("@")[0] || "Foydalanuvchi",
         photoURL: user.photoURL || "",
         balance: 0,
@@ -51,17 +45,17 @@ async function ensureUserProfile(user){
         title: "Newbie",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      };
-      tx.set(uref, profile, { merge: true });
+      }, { merge: true });
     });
   }
 
-  // Update derived fields just in case
-  await updateDoc(uref, {
-    title: titleFromPoints((await getDoc(uref)).data().points || 0),
-    updatedAt: serverTimestamp(),
-  });
-
+  // derive
+  const after = await getDoc(uref);
+  const data = after.data() || {};
+  const title = titleFromPoints(data.points || 0);
+  if(data.title !== title){
+    await updateDoc(uref, { title, updatedAt: serverTimestamp() });
+  }
   return (await getDoc(uref)).data();
 }
 
@@ -74,13 +68,9 @@ function updateHeaderUI(){
   if(currentUser && currentUserProfile){
     elGuest?.classList.add("hidden");
     elUser?.classList.remove("hidden");
-
-    // Fill header user chips
     $("#chip-id .val")?.replaceChildren(document.createTextNode(String(currentUserProfile.idNumber || "")));
     $("#chip-balance .val")?.replaceChildren(document.createTextNode(String(currentUserProfile.balance ?? 0)));
     $("#chip-title .val")?.replaceChildren(document.createTextNode(currentUserProfile.title || ""));
-
-    // Menu hello
     if(elHello) elHello.textContent = "Salom! " + (currentUserProfile.displayName || "Foydalanuvchi");
     if(elHelloDetails) elHelloDetails.textContent = `Ball: ${currentUserProfile.points || 0} • Unvon: ${currentUserProfile.title}`;
   }else{
@@ -91,17 +81,9 @@ function updateHeaderUI(){
   }
 }
 
-export async function requireAuthIfNeeded(){
-  const requiresAuth = document.body.dataset.requireAuth === "1";
-  if(requiresAuth && !currentUser){
-    openModal("#loginModal");
-  }
-}
-
 export function openModal(sel){ $(sel)?.classList.add("show"); }
 export function closeModal(sel){ $(sel)?.classList.remove("show"); }
 
-// --- Auth flows ---
 export async function signInWithGoogle(){
   try{
     if(/Mobi|Android/i.test(navigator.userAgent)){
@@ -109,53 +91,40 @@ export async function signInWithGoogle(){
     }else{
       await signInWithPopup(auth, provider);
     }
-  }catch(e){
-    console.error(e);
-    alert("Google orqali kirishda xatolik: " + (e.message || e));
-  }
+  }catch(e){ alert("Google orqali kirishda xatolik: " + (e.message || e)); }
 }
-
-export async function emailPasswordLogin(email, password){
-  await signInWithEmailAndPassword(auth, email, password);
-}
-
+export async function emailPasswordLogin(email, password){ await signInWithEmailAndPassword(auth, email, password); }
 export async function emailPasswordRegister(name, email, password){
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  if(name){
-    await updateProfile(cred.user, { displayName: name });
-  }
+  if(name){ await updateProfile(cred.user, { displayName: name }); }
 }
+export async function doSignOut(){ await signOut(auth); }
 
-export async function doSignOut(){
-  await signOut(auth);
-}
-
-// Listen auth state
 onAuthStateChanged(auth, async (user) => {
   currentUser = user || null;
-  if(user){
-    currentUserProfile = await ensureUserProfile(user);
-  }else{
-    currentUserProfile = null;
-  }
+  currentUserProfile = user ? await ensureUserProfile(user) : null;
   updateHeaderUI();
-  requireAuthIfNeeded();
+  const requiresAuth = document.body.dataset.requireAuth === "1";
+  if(requiresAuth && !currentUser){ openModal("#loginModal"); }
 });
 
-// Bind login/register forms if present
+// Event bindings (use event delegation; header is injected later)
 document.addEventListener("click", (e) => {
   const t = e.target;
   if(!(t instanceof HTMLElement)) return;
-  if(t.matches("[data-open]")){
-    const target = t.getAttribute("data-open");
+  if(t.closest("[data-open]")){
+    const target = t.closest("[data-open]").getAttribute("data-open");
     if(target) openModal(target);
   }
-  if(t.matches("[data-close]")){
-    const target = t.getAttribute("data-close");
+  if(t.closest("[data-close]")){
+    const target = t.closest("[data-close]").getAttribute("data-close");
     if(target) closeModal(target);
   }
-  if(t.matches("#googleSignInBtn")){
+  if(t.closest("#googleSignInBtn")){
     signInWithGoogle();
+  }
+  if(t.closest("#signOutBtn")){
+    doSignOut();
   }
 });
 
@@ -164,25 +133,16 @@ document.addEventListener("submit", async (e) => {
   if(!(form instanceof HTMLFormElement)) return;
   if(form.matches("#loginForm")){
     e.preventDefault();
-    const email = form.email.value.trim();
-    const password = form.password.value;
     try{
-      await emailPasswordLogin(email, password);
+      await emailPasswordLogin(form.email.value.trim(), form.password.value);
       closeModal("#loginModal");
-    }catch(err){
-      alert("Kirishda xatolik: " + (err.message || err));
-    }
+    }catch(err){ alert("Kirishda xatolik: " + (err.message || err)); }
   }
   if(form.matches("#registerForm")){
     e.preventDefault();
-    const name = form.name.value.trim();
-    const email = form.email.value.trim();
-    const password = form.password.value;
     try{
-      await emailPasswordRegister(name, email, password);
+      await emailPasswordRegister(form.name.value.trim(), form.email.value.trim(), form.password.value);
       closeModal("#registerModal");
-    }catch(err){
-      alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err));
-    }
+    }catch(err){ alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err)); }
   }
 });

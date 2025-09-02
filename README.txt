@@ -1,23 +1,20 @@
 
-# ExamHouse.uz Starter
+ExamHouse.uz — v2
+-----------------
+• **ID ko'rinmayapdi** muammosi hal: skriptlar endi **sahifalarning o'zida** yuklanadi (header ichidagi script ishlamasligi muammosi yo'q).
+• **SVG logo** va **favicon** qo'shildi.
+• Har bir menyu bo'limi uchun alohida sahifalar tayyor.
+• Google kirish va Email/Parol modallari oq matnli.
 
-- Dark + to'q yashil tema
-- Panel menyu (har bir sahifada ishlaydi): header, menu, footer `components/*.html` dan dinamik yuklanadi
-- Firebase Auth (Email/Parol + Google), Firestore profil va ID (100001, 100002 ...)
-- Kirish/ro'yxatdan o'tish modallaridagi matnlar oq rangda
+Ishga tushirish:
+1) Statik hostingga qo'ying (Netlify/Vercel yoki `npx serve`).
+2) Firebase Auth ➜ Authorized domains ga domeningizni qo'shing.
+3) Firestore Rules: `firestore.rules` faylini qo'ying.
+4) (Ixtiyoriy) `meta/counters` hujjatiga `lastUserId: 100000` qo'ying.
 
-## Ishga tushirish (Netlify/Vercel/static server)
-1) Loyihani statik serverda servis qiling (masalan `npx serve` yoki Netlify).
-2) Firebase Console ➜ Firestore ➜ `meta/counters` hujjatini yarating (ixtiyoriy), agar bo'lmasa kod 100000 dan boshlab yaratadi.
-3) Firestore Rules: `firestore.rules` faylini konsolga qo'ying.
-4) `pages/profil.html` va `pages/balans.html` sahifalari kirishni talab qiladi (auth modal ochiladi).
-
-## Tuzilma
-- `components/header.html` — brend, kirish/ro'yxatdan o'tish, Google tugmasi.
-- `components/menu.html` — panel menyu (Salom!, name + ball + unvon, bo'limlar).
-- `components/footer.html` — pastki qism.
-- `assets/js/firebase.js` — Firebase init.
-- `assets/js/auth.js` — Auth logika, ID va profil.
-- `assets/js/app.js` — Layout yuklash, menyu toggle, active link.
-- `assets/css/style.css` — Tema va UI.
-
+Fayllar:
+- /assets/svg/examhouse-logo.svg — brend logotip
+- /assets/favicon.svg — favicon
+- /components/header.html, /components/menu.html, /components/footer.html
+- /assets/js/firebase.js, /assets/js/auth.js, /assets/js/app.js
+- /pages/* — barcha bo'lim sahifalari

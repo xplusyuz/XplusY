@@ -24,16 +24,11 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const provider = new GoogleAuthProvider();
-
-// Persist sessions
 setPersistence(auth, browserLocalPersistence);
+getRedirectResult(auth).catch(()=>{});
 
-// Handle redirect result (Android/iOS browsers fallback)
-getRedirectResult(auth).catch(console.error);
-
-// Expose helpers
 export {
-  GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged,
-  signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile,
+  GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile,
   doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp
 };
