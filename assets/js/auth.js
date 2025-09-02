@@ -1,143 +1,79 @@
-// Auth flow: login, register, logout + sequential numericId issuance
+// Auth flow: email login/registr + Google + logout + numericId
 const { auth, db } = window.EXH;
 
-// Elements are created after partial injection
 document.addEventListener("click", (e)=>{
   const t = e.target;
-  if(t && t.id === "login-submit"){
-    e.preventDefault(); doLogin();
-  } else if(t && t.id === "register-submit"){
-    e.preventDefault(); doRegister();
-  } else if(t && t.id === "btn-logout"){
-    e.preventDefault(); doLogout();
-  }
+  if(t && t.id === "login-submit"){ e.preventDefault(); doLogin(); }
+  else if(t && t.id === "register-submit"){ e.preventDefault(); doRegister(); }
+  else if(t && t.id === "btn-logout"){ e.preventDefault(); doLogout(); }
 });
 
 async function doLogin(){
   const email = document.getElementById("login-email").value.trim();
   const pass = document.getElementById("login-pass").value;
-  try{
-    await auth.signInWithEmailAndPassword(email, pass);
+  try{ await auth.signInWithEmailAndPassword(email, pass);
     document.getElementById("login-modal").close();
-  }catch(err){
-    alert(err.message);
-  }
+  }catch(err){ alert(err.message); }
 }
-
 async function doRegister(){
   const name = document.getElementById("reg-name").value.trim();
   const email = document.getElementById("reg-email").value.trim();
   const pass = document.getElementById("reg-pass").value;
   try{
     const cred = await auth.createUserWithEmailAndPassword(email, pass);
-    const uid = cred.user.uid;
-    const userRef = db.collection("users").doc(uid);
-    // Assign sequential numericId using a transaction on meta/counters.lastUserId
-    // NOTE: Requires appropriate security rules!
-    let assignedId = null;
-    await db.runTransaction(async (tx)=>{
-      const counterRef = db.collection("meta").doc("counters");
-      const snap = await tx.get(counterRef);
-      let last = 100000;
-      if(snap.exists && typeof snap.data().lastUserId === "number"){
-        last = snap.data().lastUserId;
-      }
-      assignedId = last + 1;
-      tx.set(counterRef, { lastUserId: assignedId }, { merge:true });
-    });
-    await userRef.set({
-      name,
-      email,
-      numericId: assignedId,
-      balance: 0,
-      points: 0,
-      title: "Yangi a’zo",
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    await ensureUserDoc(cred, { nameOverride: name });
     document.getElementById("register-modal").close();
-  }catch(err){
-    alert(err.message);
-  }
+  }catch(err){ alert(err.message); }
 }
+async function doLogout(){ try{ await auth.signOut(); }catch(err){ alert(err.message); }}
 
-async function doLogout(){
-  try{
-    await auth.signOut();
-  }catch(err){
-    alert(err.message);
-  }
-}
-
-// Expose for other modules
-window.EXH_AUTH = { doLogin, doRegister, doLogout };
-
-
-
-
-// ---- Google (Gmail) sign-in (robust) ----
+// Google sign-in: robust with redirect fallback + delegation
 document.addEventListener("click", (e)=>{
-  const t = e.target;
-  if(t && (t.id === "login-google" || t.id === "register-google")){
-    e.preventDefault(); doGoogle();
-  }
+  const btn = e.target && (e.target.closest("#login-google") || e.target.closest("#register-google"));
+  if(btn){ e.preventDefault(); doGoogle(); }
 });
-
 async function doGoogle(){
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    try {
+    try{
       const cred = await auth.signInWithPopup(provider);
       await ensureUserDoc(cred);
-    } catch (popupErr) {
-      // Fallback for browsers that block popups (iOS/Safari)
+    }catch(popupErr){
       await auth.signInWithRedirect(provider);
-      return; // flow continues after redirect
+      return;
     }
-    // Close modals on success
-    const lm = document.getElementById("login-modal"); lm && lm.close();
-    const rm = document.getElementById("register-modal"); rm && rm.close();
-  }catch(err){
-    alert(err && err.message ? err.message : String(err));
-  }
+    document.getElementById("login-modal")?.close();
+    document.getElementById("register-modal")?.close();
+  }catch(err){ alert(err?.message || String(err)); }
 }
-
-// After redirect result handler (when returning from Google)
-auth.getRedirectResult().then(async (result)=>{
-  if(result && result.user){
-    await ensureUserDoc(result);
-    const lm = document.getElementById("login-modal"); lm && lm.close();
-    const rm = document.getElementById("register-modal"); rm && rm.close();
+auth.getRedirectResult().then(async (res)=>{
+  if(res && res.user){
+    await ensureUserDoc(res);
+    document.getElementById("login-modal")?.close();
+    document.getElementById("register-modal")?.close();
   }
 }).catch(err=>console.warn('Redirect auth error:', err?.message||err));
 
-async function ensureUserDoc(cred){
+async function ensureUserDoc(cred, opts={}){
   const user = (cred && cred.user) ? cred.user : auth.currentUser;
   if(!user) return;
   const uid = user.uid;
   const userRef = db.collection("users").doc(uid);
   const snap = await userRef.get();
   if(!snap.exists){
-    // first time: assign numericId via counter
     let assignedId = null;
     await db.runTransaction(async (tx)=>{
       const counterRef = db.collection("meta").doc("counters");
       const csnap = await tx.get(counterRef);
       let last = 100000;
-      if(csnap.exists && typeof csnap.data().lastUserId === "number"){
-        last = csnap.data().lastUserId;
-      }
+      if(csnap.exists && typeof csnap.data().lastUserId === "number"){ last = csnap.data().lastUserId; }
       assignedId = last + 1;
       tx.set(counterRef, { lastUserId: assignedId }, { merge:true });
     });
     await userRef.set({
-      name: user.displayName || user.email,
-      email: user.email,
-      numericId: assignedId,
-      balance: 0,
-      points: 0,
-      title: "Yangi a’zo",
+      name: opts.nameOverride || user.displayName || user.email,
+      email: user.email, numericId: assignedId, balance: 0, points: 0, title: "Yangi a’zo",
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge:true });
