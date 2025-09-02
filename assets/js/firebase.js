@@ -1,6 +1,4 @@
-// Firebase init — fill with your real config
-// 1) Firebase Console -> Web app -> SDK snippet (Compat)
-// 2) Replace the EXAMHOUSE_*** placeholders below
+// Firebase init — REAL CONFIG
 const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -11,10 +9,16 @@ const firebaseConfig = {
   measurementId: "G-459PLJ7P7L"
 };
 
-// Initialize
+// Initialize (Compat)
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+try {
+  // Analytics (if cookie consent & browser supports)
+  firebase.analytics();
+} catch (e) {
+  console.warn('Analytics unavailable:', e?.message||e);
+}
 
 // Helpers exported globally
 window.EXH = { auth, db };

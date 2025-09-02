@@ -89,3 +89,5 @@ function wireBalanceDemo(){
 }
 
 document.addEventListener("DOMContentLoaded", includePartials);
+
+window.wireHeader = wireHeader;
