@@ -1,7 +1,39 @@
-// Firebase init
-const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.appspot.com", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-try{ firebase.analytics(); }catch(e){ console.warn('Analytics unavailable:', e?.message||e); }
-window.EXH = { auth, db };
+
+// assets/js/firebase.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  setPersistence, browserLocalPersistence, onAuthStateChanged, signOut, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+export const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const provider = new GoogleAuthProvider();
+
+// Persist sessions
+setPersistence(auth, browserLocalPersistence);
+
+// Handle redirect result (Android/iOS browsers fallback)
+getRedirectResult(auth).catch(console.error);
+
+// Expose helpers
+export {
+  GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged,
+  signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile,
+  doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp
+};
