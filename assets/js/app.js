@@ -88,6 +88,38 @@ function wireBalanceDemo(){
   }));
 }
 
-document.addEventListener("DOMContentLoaded", includePartials);
+document.addEventListener("DOMContentLoaded", ()=>{ includePartials(); ensureAuthGate(); });
+
 
 window.wireHeader = wireHeader;
+// ---- Auth gate (require login to use the site) ----
+function ensureAuthGate(){
+  const required = document.body.dataset.requireAuth !== "false";
+  if(!required) return;
+  const gate = document.createElement("div");
+  gate.className = "auth-gate"; gate.style.display = "none";
+  gate.innerHTML = `<div class="box">
+    <h3>Kirish talab qilinadi</h3>
+    <p class="muted">Platformadan foydalanish uchun hisobingizga kiring yoki ro‘yxatdan o‘ting.</p>
+    <div class="row">
+      <button class="btn ghost" id="gate-login">Kirish</button>
+      <button class="btn" id="gate-register">Registr</button>
+    </div>
+  </div>`;
+  document.body.appendChild(gate);
+
+  function show(){ gate.style.display = "grid"; }
+  function hide(){ gate.style.display = "none"; }
+
+  document.addEventListener("click",(e)=>{
+    if(e.target && e.target.id === "gate-login"){ e.preventDefault();
+      const m = document.getElementById("login-modal"); m && m.showModal();
+    } else if(e.target && e.target.id === "gate-register"){ e.preventDefault();
+      const m = document.getElementById("register-modal"); m && m.showModal();
+    }
+  });
+
+  EXH.auth.onAuthStateChanged((u)=>{
+    if(u) hide(); else show();
+  });
+}

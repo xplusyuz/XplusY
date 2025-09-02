@@ -8,7 +8,7 @@ async function includePartialsCategory(){
   if(window.wireHeader) wireHeader(); else {
     const s = document.createElement("script"); s.src = "assets/js/app.js"; document.body.appendChild(s);
   }
-  renderAfterAuth();
+  renderAfterAuth(); if(window.ensureAuthGate) ensureAuthGate();
   renderCategory();
 }
 
