@@ -1,12 +1,14 @@
 import { refreshHeaderUI } from "./auth.js";
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
-async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML = await res.text(); }
+
+async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML=await res.text(); }
 
 async function initLayout(){
   await loadFragment($("#header-slot"), "/components/header.html");
   await loadFragment($("#menu-slot"), "/components/menu.html");
   await loadFragment($("#footer-slot"), "/components/footer.html");
 
+  // Drawer controls
   const drawer=document.querySelector(".drawer");
   const backdrop=document.querySelector(".drawer .backdrop");
   const openBtn=document.querySelector("#menuOpenBtn");
@@ -15,8 +17,13 @@ async function initLayout(){
   closeBtn?.addEventListener("click", ()=>drawer?.classList.remove("open"));
   backdrop?.addEventListener("click", ()=>drawer?.classList.remove("open"));
 
+  // Active link
   const here = location.pathname.replace(/\/index\.html$/,"/");
   $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="/" && here.includes(href))) a.classList.add("active"); });
+
+  // Banners (only on pages with #ads-slot)
+  const slot = $("#ads-slot");
+  if(slot){ await loadFragment(slot, "/components/banners.html"); }
 
   refreshHeaderUI();
 }
