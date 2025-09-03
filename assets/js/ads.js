@@ -46,7 +46,7 @@ function cardHTML(t){
     </div>
   </article>`;
 }
-export function renderAdsGrid(){
+function renderAdsGrid(){
   const el = $("#ads-grid");
   if(!el) return;
   el.innerHTML = `<div class="ads-grid">${TESTS.map(cardHTML).join("")}</div>`;
