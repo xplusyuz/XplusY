@@ -1,17 +1,6 @@
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML=await res.text(); }
-async function hydrateFetchers(root=document){
-  const nodes=$$('[data-fetch]', root);
-  await Promise.all(nodes.map(async n=>{
-    const u=n.getAttribute('data-fetch');
-    try{
-      const res=await fetch(u,{cache:'no-store'});
-      const html=await res.text();
-      n.previousElementSibling?.remove(); // remove loader
-      n.innerHTML=html;
-    }catch(e){
-      n.innerHTML='<div class="banner-loading">Banner yuklanmadi</div>';
-    }
+async function hydrateFetchers(){}
   }));
 }
 async function initLayout(){
@@ -27,6 +16,4 @@ async function initLayout(){
   backdrop?.addEventListener("click", ()=>drawer?.classList.remove("open"));
   const here = location.pathname.replace(/\\index\.html$/,"/");
   $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="/" && here.includes(href))) a.classList.add("active"); });
-  const slot = $("#ads-slot"); if(slot){ await loadFragment(slot, "components/banners.html"); await hydrateFetchers(slot); }
-}
-document.addEventListener("DOMContentLoaded", initLayout);
+    // ads grid rendered by ads.js
