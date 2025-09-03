@@ -38,13 +38,13 @@ async function ensureUserProfile(user){
 function updateHeaderUI(){
   const elGuest=$("#guest-actions"); const elUser=$("#user-actions");
   const elHello=$("#menu-hello"); const elHelloDetails=$("#menu-hello-details");
-  if(window.currentUser && window.currentUserProfile){
+  if(currentUser && currentUserProfile){
     elGuest?.classList.add("hidden"); elUser?.classList.remove("hidden");
-    $("#val-id")?.replaceChildren(document.createTextNode(String(window.currentUserProfile.numericId||"")));
-    $("#val-balance")?.replaceChildren(document.createTextNode(String(window.currentUserProfile.balance ?? 0)));
-    $("#val-title")?.replaceChildren(document.createTextNode(window.currentUserProfile.title || ""));
-    if(elHello) elHello.textContent = "Salom! " + (window.currentUserProfile.displayName || "Foydalanuvchi");
-    if(elHelloDetails) elHelloDetails.textContent = `Ball: ${window.currentUserProfile.points || 0} • Unvon: ${window.currentUserProfile.title}`;
+    $("#val-id")?.replaceChildren(document.createTextNode(String(currentUserProfile.numericId||"")));
+    $("#val-balance")?.replaceChildren(document.createTextNode(String(currentUserProfile.balance ?? 0)));
+    $("#val-title")?.replaceChildren(document.createTextNode(currentUserProfile.title || ""));
+    if(elHello) elHello.textContent = "Salom! " + (currentUserProfile.displayName || "Foydalanuvchi");
+    if(elHelloDetails) elHelloDetails.textContent = `Ball: ${currentUserProfile.points || 0} • Unvon: ${currentUserProfile.title}`;
   }else{
     elGuest?.classList.remove("hidden"); elUser?.classList.add("hidden");
     if(elHello) elHello.textContent = "Salom! Mehmon";
@@ -63,11 +63,11 @@ export async function emailPasswordLogin(email, password){ await signInWithEmail
 export async function emailPasswordRegister(name, email, password){ const cred = await createUserWithEmailAndPassword(auth, email, password); if(name){ await updateProfile(cred.user, { displayName:name }); } }
 export async function doSignOut(){ await signOut(auth); }
 onAuthStateChanged(auth, async (user)=>{
-  window.currentUser = user || null;
-  window.currentUserProfile = user ? await ensureUserProfile(user) : null;
+  currentUser = user || null;
+  currentUserProfile = user ? await ensureUserProfile(user) : null;
   updateHeaderUI();
   const requiresAuth = document.body.dataset.requireAuth === "1";
-  if(requiresAuth && !window.currentUser){ document.querySelector("#loginModal")?.classList.add("show"); }
+  if(requiresAuth && !currentUser){ document.querySelector("#loginModal")?.classList.add("show"); }
 });
 document.addEventListener("click",(e)=>{
   const t=e.target; if(!(t instanceof HTMLElement)) return;
