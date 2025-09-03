@@ -13,11 +13,10 @@ function fmtDate(d){
 function hms(ms){
   if(ms<=0) return "00:00:00";
   const s = Math.floor(ms/1000);
-  const days = Math.floor(s/86400);
-  const hh = String(Math.floor((s%86400)/3600)).padStart(2,'0');
+  const hh = String(Math.floor(s/3600)).padStart(2,'0');
   const mm = String(Math.floor((s%3600)/60)).padStart(2,'0');
   const ss = String(s%60).padStart(2,'0');
-  return (days>0? (days+"d "):"") + `${hh}:${mm}:${ss}`;
+  return `${hh}:${mm}:${ss}`;
 }
 function cardHTML(t){
   const id = t.id;
@@ -54,43 +53,21 @@ function renderAdsGrid(){
 }
 function startTicker(){
   const tick = ()=>{
-    const now = (window.__serverOffsetMs ? Date.now() + window.__serverOffsetMs : Date.now());
+    const now = Date.now();
     $$(".ad-card").forEach(card=>{
       const start = Number(card.getAttribute("data-start"));
       const open = Number(card.getAttribute("data-open"));
       const timer = $('[data-role="timer"]', card);
       const startBtn = $('[data-role="start"]', card);
       if(!timer || !startBtn) return;
-
-      card.classList.remove("open","soon","ended");
-
       if(now < open){
         // hali ochilmagan — openAtgacha sanaymiz
-        const left = open - now;
-        timer.textContent = "⏳ " + hms(left);
+        timer.textContent = "⏳ " + hms(open - now);
         startBtn.classList.add("hidden");
-        if(left <= 5*60*1000) card.classList.add("soon");
       }else{
         timer.textContent = "✅ Boshlash ochiq";
         startBtn.classList.remove("hidden");
-        startBtn.classList.add("pulse");
-        card.classList.add("open");
       }
-
-      // tugash vaqti: start + 2 soat (demo)
-      const end = start + 2*60*60*1000;
-      if(now > end){
-        timer.textContent = "🏁 Yakunlandi";
-        startBtn.textContent = "Natijalar";
-        startBtn.classList.remove("pulse");
-        card.classList.add("ended");
-      }
-    });
-  };
-  tick();
-  window.__adsTicker && clearInterval(window.__adsTicker);
-  window.__adsTicker = setInterval(tick, 1000);
-}
       // agar voqea allaqachon bitgan bo'lsa (start + 2 soat deb faraz qilamiz), yakunlangan deb ko'rsatsak bo'ladi
       const end = start + 2*60*60*1000;
       if(now > end){
@@ -104,19 +81,3 @@ function startTicker(){
   window.__adsTicker = setInterval(tick, 1000);
 }
 document.addEventListener("DOMContentLoaded", renderAdsGrid);
-
-
-// Try to reduce client clock drift using 'Date' response header
-async function syncServerTime(){
-  try{
-    const r = await fetch(location.href, { method: 'HEAD', cache: 'no-store' });
-    const srv = r.headers.get('Date');
-    if(srv){
-      const serverNow = new Date(srv).getTime();
-      const offset = serverNow - Date.now();
-      // use only if plausible (within +/- 5 minutes)
-      if(Math.abs(offset) < 5*60*1000){ window.__serverOffsetMs = offset; }
-    }
-  }catch{}
-}
-syncServerTime();
