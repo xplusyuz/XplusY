@@ -1,9 +1,7 @@
 import { auth, db, provider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp } from "./firebase.js";
 const $=(s,r=document)=>r.querySelector(s);
-
 export let currentUser=null; export let currentUserProfile=null;
 function titleFromPoints(n){ n=n||0; return n>=1e4?"Legend":n>=5e3?"Diamond":n>=2e3?"Platinum":n>=1e3?"Gold":n>=500?"Silver":n>=100?"Bronze":"Newbie"; }
-
 async function ensureUserProfile(user){
   const uref = doc(db, "users", user.uid);
   const snap = await getDoc(uref);
@@ -37,18 +35,16 @@ async function ensureUserProfile(user){
   }
   return (await getDoc(uref)).data();
 }
-
 function updateHeaderUI(){
   const elGuest=$("#guest-actions"); const elUser=$("#user-actions");
   const elHello=$("#menu-hello"); const elHelloDetails=$("#menu-hello-details");
-
-  if(currentUser && currentUserProfile){
+  if(window.currentUser && window.currentUserProfile){
     elGuest?.classList.add("hidden"); elUser?.classList.remove("hidden");
-    $("#val-id")?.replaceChildren(document.createTextNode(String(currentUserProfile.numericId||"")));
-    $("#val-balance")?.replaceChildren(document.createTextNode(String(currentUserProfile.balance ?? 0)));
-    $("#val-title")?.replaceChildren(document.createTextNode(currentUserProfile.title || ""));
-    if(elHello) elHello.textContent = "Salom! " + (currentUserProfile.displayName || "Foydalanuvchi");
-    if(elHelloDetails) elHelloDetails.textContent = `Ball: ${currentUserProfile.points || 0} • Unvon: ${currentUserProfile.title}`;
+    $("#val-id")?.replaceChildren(document.createTextNode(String(window.currentUserProfile.numericId||"")));
+    $("#val-balance")?.replaceChildren(document.createTextNode(String(window.currentUserProfile.balance ?? 0)));
+    $("#val-title")?.replaceChildren(document.createTextNode(window.currentUserProfile.title || ""));
+    if(elHello) elHello.textContent = "Salom! " + (window.currentUserProfile.displayName || "Foydalanuvchi");
+    if(elHelloDetails) elHelloDetails.textContent = `Ball: ${window.currentUserProfile.points || 0} • Unvon: ${window.currentUserProfile.title}`;
   }else{
     elGuest?.classList.remove("hidden"); elUser?.classList.add("hidden");
     if(elHello) elHello.textContent = "Salom! Mehmon";
@@ -56,7 +52,6 @@ function updateHeaderUI(){
   }
 }
 export function refreshHeaderUI(){ updateHeaderUI(); }
-
 export async function signInWithGoogle(){
   try{
     const isMobile = /Mobi|Android/i.test(navigator.userAgent);
@@ -67,15 +62,13 @@ export async function signInWithGoogle(){
 export async function emailPasswordLogin(email, password){ await signInWithEmailAndPassword(auth, email, password); }
 export async function emailPasswordRegister(name, email, password){ const cred = await createUserWithEmailAndPassword(auth, email, password); if(name){ await updateProfile(cred.user, { displayName:name }); } }
 export async function doSignOut(){ await signOut(auth); }
-
 onAuthStateChanged(auth, async (user)=>{
-  currentUser = user || null;
-  currentUserProfile = user ? await ensureUserProfile(user) : null;
+  window.currentUser = user || null;
+  window.currentUserProfile = user ? await ensureUserProfile(user) : null;
   updateHeaderUI();
   const requiresAuth = document.body.dataset.requireAuth === "1";
-  if(requiresAuth && !currentUser){ document.querySelector("#loginModal")?.classList.add("show"); }
+  if(requiresAuth && !window.currentUser){ document.querySelector("#loginModal")?.classList.add("show"); }
 });
-
 document.addEventListener("click",(e)=>{
   const t=e.target; if(!(t instanceof HTMLElement)) return;
   if(t.closest("[data-open]")){ const id=t.closest("[data-open]").getAttribute("data-open"); document.querySelector(id)?.classList.add("show"); }
