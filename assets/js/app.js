@@ -1,6 +1,6 @@
 import { refreshHeaderUI } from "./auth.js";
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
-async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML = await res.text(); }
+async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML=await res.text(); }
 
 async function initLayout(){
   await loadFragment($("#header-slot"), "/components/header.html");
