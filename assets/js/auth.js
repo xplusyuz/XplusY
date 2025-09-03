@@ -1,4 +1,4 @@
-import { auth, db, provider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp } from "./firebase.js";
+import { auth, db, provider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "./firebase.js";
 const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 function titleFromPoints(n){ n=n||0; return n>=1e4?"Legend":n>=5e3?"Diamond":n>=2e3?"Platinum":n>=1e3?"Gold":n>=500?"Silver":n>=100?"Bronze":"Newbie"; }
 async function ensureUserProfile(user){
@@ -52,10 +52,22 @@ function updateHeaderUI(user, profile){
     setTextAll('#menu-hello-details', "Kirish orqali imkoniyatlarni oching");
   }
 }
-export async function signInWithGoogle(){ try{ const { signInWithPopup, signInWithRedirect, GoogleAuthProvider } = await import("./firebase.js"); const isMobile=/Mobi|Android/i.test(navigator.userAgent); const provider=new GoogleAuthProvider(); if(isMobile) await signInWithRedirect(auth, provider); else await signInWithPopup(auth, provider); }catch(e){ alert("Google orqali kirishda xatolik: " + (e.message||e)); } }
-export async function emailPasswordLogin(email, password){ const { signInWithEmailAndPassword } = await import("./firebase.js"); await signInWithEmailAndPassword(auth, email, password); }
-export async function emailPasswordRegister(name, email, password){ const { createUserWithEmailAndPassword, updateProfile } = await import("./firebase.js"); const cred=await createUserWithEmailAndPassword(auth, email, password); if(name){ await updateProfile(cred.user, { displayName:name }); } }
-export async function doSignOut(){ const { signOut } = await import("./firebase.js"); await signOut(auth); }
+export async function signInWithGoogle(){
+  try{
+    const isMobile=/Mobi|Android/i.test(navigator.userAgent);
+    const prov=new GoogleAuthProvider();
+    if(isMobile) await signInWithRedirect(auth, prov);
+    else await signInWithPopup(auth, prov);
+  }catch(e){ alert("Google orqali kirishda xatolik: " + (e.message||e)); }
+}
+export async function emailPasswordLogin(email, password){
+  await signInWithEmailAndPassword(auth, email, password);
+}
+export async function emailPasswordRegister(name, email, password){
+  const cred=await createUserWithEmailAndPassword(auth, email, password);
+  if(name){ await updateProfile(cred.user, { displayName:name }); }
+}
+export async function doSignOut(){ await signOut(auth); }
 onAuthStateChanged(auth, async (user)=>{
   const profile = user ? await ensureUserProfile(user) : null;
   updateHeaderUI(user, profile);
@@ -71,6 +83,6 @@ document.addEventListener("click",(e)=>{
 });
 document.addEventListener("submit", async (e)=>{
   const f=e.target; if(!(f instanceof HTMLFormElement)) return;
-  if(f.matches("#loginForm")){ e.preventDefault(); try{ const { emailPasswordLogin } = await import("./auth.js"); await emailPasswordLogin(f.email.value.trim(), f.password.value); document.querySelector("#loginModal")?.classList.remove("show"); }catch(err){ alert("Kirishda xatolik: " + (err.message||err)); } }
-  if(f.matches("#registerForm")){ e.preventDefault(); try{ const { emailPasswordRegister } = await import("./auth.js"); await emailPasswordRegister(f.name.value.trim(), f.email.value.trim(), f.password.value); document.querySelector("#registerModal")?.classList.remove("show"); }catch(err){ alert("Ro'yxatdan o'tishda xatolik: " + (err.message||err)); } }
+  if(f.matches("#loginForm")){ e.preventDefault(); try{ await emailPasswordLogin(f.email.value.trim(), f.password.value); document.querySelector("#loginModal")?.classList.remove("show"); }catch(err){ alert("Kirishda xatolik: " + (err.message||err)); } }
+  if(f.matches("#registerForm")){ e.preventDefault(); try{ await emailPasswordRegister(f.name.value.trim(), f.email.value.trim(), f.password.value); document.querySelector("#registerModal")?.classList.remove("show"); }catch(err){ alert("Ro'yxatdan o'tishda xatolik: " + (err.message||err)); } }
 });
