@@ -60,9 +60,7 @@ export async function signInWithGoogle(){
     else await signInWithPopup(auth, prov);
   }catch(e){ alert("Google orqali kirishda xatolik: " + (e.message||e)); }
 }
-export async function emailPasswordLogin(email, password){
-  await signInWithEmailAndPassword(auth, email, password);
-}
+export async function emailPasswordLogin(email, password){ await signInWithEmailAndPassword(auth, email, password); }
 export async function emailPasswordRegister(name, email, password){
   const cred=await createUserWithEmailAndPassword(auth, email, password);
   if(name){ await updateProfile(cred.user, { displayName:name }); }

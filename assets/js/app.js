@@ -1,6 +1,19 @@
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML=await res.text(); }
-async function hydrateFetchers(root=document){ const nodes=$$('[data-fetch]', root); await Promise.all(nodes.map(async n=>{ const u=n.getAttribute('data-fetch'); try{ const res=await fetch(u,{cache:'no-store'}); const html=await res.text(); n.previousElementSibling?.remove(); n.innerHTML=html; }catch(e){ n.innerHTML='<div class="banner-loading">Banner yuklanmadi</div>'; } })); }
+async function hydrateFetchers(root=document){
+  const nodes=$$('[data-fetch]', root);
+  await Promise.all(nodes.map(async n=>{
+    const u=n.getAttribute('data-fetch');
+    try{
+      const res=await fetch(u,{cache:'no-store'});
+      const html=await res.text();
+      n.previousElementSibling?.remove(); // remove loader
+      n.innerHTML=html;
+    }catch(e){
+      n.innerHTML='<div class="banner-loading">Banner yuklanmadi</div>';
+    }
+  }));
+}
 async function initLayout(){
   await loadFragment($("#header-slot"), "components/header.html");
   await loadFragment($("#menu-slot"),   "components/menu.html");
