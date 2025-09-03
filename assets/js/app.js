@@ -58,4 +58,20 @@ async function initLayout(){
   const here = location.pathname.replace(/\\index\\.html$/,"/");
   $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="/" && here.includes(href))) a.classList.add("active"); });
 }
+
+  // Ensure ads grid exists and render cards
+  if(!document.querySelector("#ads-grid")){
+    const mainContainer = document.querySelector("main .container") || document.querySelector(".container");
+    if(mainContainer){
+      const sec = document.createElement("section");
+      sec.id = "ads-grid";
+      sec.className = "mt-2";
+      mainContainer.appendChild(sec);
+    }
+  }
+  try{
+    const mod = await import("./ads.js");
+    if(mod && typeof mod.renderAdsGrid === "function"){ mod.renderAdsGrid(); }
+  }catch(e){ console.warn("ads.js yuklanmadi:", e); }
+
 document.addEventListener("DOMContentLoaded", initLayout);
