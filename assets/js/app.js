@@ -1,4 +1,3 @@
-import { refreshHeaderUI } from "./auth.js";
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 async function loadFragment(el,url){ const res=await fetch(url,{cache:"no-store"}); el.innerHTML=await res.text(); }
 async function initLayout(){
@@ -15,6 +14,5 @@ async function initLayout(){
   const here = location.pathname.replace(/\/index\.html$/,"/");
   $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="/" && here.includes(href))) a.classList.add("active"); });
   const slot = $("#ads-slot"); if(slot){ await loadFragment(slot, "components/banners.html"); }
-  refreshHeaderUI();
 }
 document.addEventListener("DOMContentLoaded", initLayout);
