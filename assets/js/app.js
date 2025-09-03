@@ -11,7 +11,7 @@ function initMenu(){
   backdrop?.addEventListener("click", ()=>drawer?.classList.remove("open"));
 
   const here = location.pathname.replace(/\\index\\.html$/,"/");
-  $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="/" && here.includes(href))) a.classList.add("active"); });
+  $$(".menu a").forEach(a=>{ const href=a.getAttribute("href"); if(!href) return; if(href===here || (href!=="./" && here.includes(href))) a.classList.add("active"); });
 }
 
 async function ensureAds(){
