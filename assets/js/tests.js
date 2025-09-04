@@ -1,11 +1,11 @@
 
-// assets/js/tests.js — testlar ro‘yxati (soddalashtirilgan)
+// assets/js/tests.js — demo testlar (siz o'zgartirasiz)
 export const TESTS = [
   {
     id: "dtm-fall-7-8",
     title: "DTM Kuzgi Maxsus",
     grades: ["7-sinf","8-sinf"],
-    startAt: "2025-10-04T20:00:00+05:00",
+    startAt: "2025-10-04T20:00:00+05:00", // Asia/Tashkent
     detailUrl: "/pages/dtm.html",
     startUrl: "/pages/dtm.html#start",
     tags: ["Matematika","Ona tili"],
@@ -40,5 +40,25 @@ export const TESTS = [
     startUrl: "/pages/sat.html#start",
     tags: ["Reading","Math"],
     prize: "G'oliblarga sertifikat"
+  },
+  {
+    id: "att-teachers",
+    title: "Attestatsiya — O'qituvchilar",
+    grades: ["O'qituvchilar"],
+    startAt: "2025-10-07T10:00:00+05:00",
+    detailUrl: "/pages/attestatsiya.html",
+    startUrl: "/pages/attestatsiya.html#start",
+    tags: ["Pedagogika","Metodika"],
+    prize: "Pul mukofoti"
+  },
+  {
+    id: "bsb-spring",
+    title: "BSB Boshlang'ich",
+    grades: ["1-sinf","2-sinf","3-sinf","4-sinf"],
+    startAt: "2025-10-02T16:00:00+05:00",
+    detailUrl: "/pages/bsb.html",
+    startUrl: "/pages/bsb.html#start",
+    tags: ["O'qish","Yozuv"],
+    prize: "Sovg'alar"
   }
 ];
