@@ -1,9 +1,6 @@
-import { auth, db, provider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp } from "./firebase.js";
-const $=(s,r=document)=>r.querySelector(s);
-
-export let currentUser=null; export let currentUserProfile=null;
+import { auth, db, provider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, doc, getDoc, setDoc, updateDoc, runTransaction, serverTimestamp, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "./firebase.js";
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
 function titleFromPoints(n){ n=n||0; return n>=1e4?"Legend":n>=5e3?"Diamond":n>=2e3?"Platinum":n>=1e3?"Gold":n>=500?"Silver":n>=100?"Bronze":"Newbie"; }
-
 async function ensureUserProfile(user){
   const uref = doc(db, "users", user.uid);
   const snap = await getDoc(uref);
@@ -37,51 +34,50 @@ async function ensureUserProfile(user){
   }
   return (await getDoc(uref)).data();
 }
-
-function updateHeaderUI(){
-  const elGuest=$("#guest-actions"); const elUser=$("#user-actions");
-  const elHello=$("#menu-hello"); const elHelloDetails=$("#menu-hello-details");
-
-  if(currentUser && currentUserProfile){
-    elGuest?.classList.add("hidden"); elUser?.classList.remove("hidden");
-    $("#val-id")?.replaceChildren(document.createTextNode(String(currentUserProfile.numericId||"")));
-    $("#val-balance")?.replaceChildren(document.createTextNode(String(currentUserProfile.balance ?? 0)));
-    $("#val-title")?.replaceChildren(document.createTextNode(currentUserProfile.title || ""));
-    if(elHello) elHello.textContent = "Salom! " + (currentUserProfile.displayName || "Foydalanuvchi");
-    if(elHelloDetails) elHelloDetails.textContent = `Ball: ${currentUserProfile.points || 0} • Unvon: ${currentUserProfile.title}`;
+function setTextAll(sel, text){ $$(sel).forEach(el=>{ el.textContent = text }) }
+function toggleAll(sel, show){ $$(sel).forEach(el=> el.classList[show?'remove':'add']('hidden')) }
+function updateHeaderUI(user, profile){
+  const logged = !!user && !!profile;
+  toggleAll('.guest-actions', !logged);
+  toggleAll('.user-actions', logged);
+  if(logged){
+    setTextAll('[data-val="id"]', String(profile.numericId || ""));
+    setTextAll('[data-val="balance"]', String(profile.balance ?? 0));
+    setTextAll('[data-val="title"]', profile.title || "");
+    setTextAll('[data-val="hello-name"]', profile.displayName || "Foydalanuvchi");
+    setTextAll('#menu-hello', "Salom! " + (profile.displayName || "Foydalanuvchi"));
+    setTextAll('#menu-hello-details', `Ball: ${profile.points || 0} • Unvon: ${profile.title}`);
   }else{
-    elGuest?.classList.remove("hidden"); elUser?.classList.add("hidden");
-    if(elHello) elHello.textContent = "Salom! Mehmon";
-    if(elHelloDetails) elHelloDetails.textContent = "Kirish orqali imkoniyatlarni oching";
+    setTextAll('#menu-hello', "Salom! Mehmon");
+    setTextAll('#menu-hello-details', "Kirish orqali imkoniyatlarni oching");
   }
 }
-export function refreshHeaderUI(){ updateHeaderUI(); }
-
 export async function signInWithGoogle(){
   try{
-    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-    if(isMobile){ const { signInWithRedirect } = await import("./firebase.js"); await signInWithRedirect(auth, provider); }
-    else { const { signInWithPopup } = await import("./firebase.js"); await signInWithPopup(auth, provider); }
+    const isMobile=/Mobi|Android/i.test(navigator.userAgent);
+    const prov=new GoogleAuthProvider();
+    if(isMobile) await signInWithRedirect(auth, prov);
+    else await signInWithPopup(auth, prov);
   }catch(e){ alert("Google orqali kirishda xatolik: " + (e.message||e)); }
 }
 export async function emailPasswordLogin(email, password){ await signInWithEmailAndPassword(auth, email, password); }
-export async function emailPasswordRegister(name, email, password){ const cred = await createUserWithEmailAndPassword(auth, email, password); if(name){ await updateProfile(cred.user, { displayName:name }); } }
+export async function emailPasswordRegister(name, email, password){
+  const cred=await createUserWithEmailAndPassword(auth, email, password);
+  if(name){ await updateProfile(cred.user, { displayName:name }); }
+}
 export async function doSignOut(){ await signOut(auth); }
-
 onAuthStateChanged(auth, async (user)=>{
-  currentUser = user || null;
-  currentUserProfile = user ? await ensureUserProfile(user) : null;
-  updateHeaderUI();
+  const profile = user ? await ensureUserProfile(user) : null;
+  updateHeaderUI(user, profile);
   const requiresAuth = document.body.dataset.requireAuth === "1";
-  if(requiresAuth && !currentUser){ document.querySelector("#loginModal")?.classList.add("show"); }
+  if(requiresAuth && !user){ document.querySelector("#loginModal")?.classList.add("show"); }
 });
-
 document.addEventListener("click",(e)=>{
   const t=e.target; if(!(t instanceof HTMLElement)) return;
   if(t.closest("[data-open]")){ const id=t.closest("[data-open]").getAttribute("data-open"); document.querySelector(id)?.classList.add("show"); }
   if(t.closest("[data-close]")){ const id=t.closest("[data-close]").getAttribute("data-close"); document.querySelector(id)?.classList.remove("show"); }
-  if(t.closest("#googleSignInBtn")){ signInWithGoogle(); }
-  if(t.closest("#signOutBtn")){ doSignOut(); }
+  if(t.closest("#googleSignInBtn")){ import("./auth.js").then(m=>m.signInWithGoogle()); }
+  if(t.closest("#signOutBtn")){ import("./auth.js").then(m=>m.doSignOut()); }
 });
 document.addEventListener("submit", async (e)=>{
   const f=e.target; if(!(f instanceof HTMLFormElement)) return;
