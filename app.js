@@ -1,4 +1,4 @@
-// Theme + simple 3D tilt
+// Theme
 (function(){
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') document.documentElement.classList.add('light');
@@ -6,17 +6,6 @@
     const t = e.target.closest('#themeToggle'); if(!t) return;
     document.documentElement.classList.toggle('light');
     localStorage.setItem('theme', document.documentElement.classList.contains('light') ? 'light':'dark');
-  });
-  // lightweight tilt
-  document.addEventListener('pointermove', (e)=>{
-    document.querySelectorAll('.tilt3d').forEach(el=>{
-      const r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
-      const dx=(e.clientX-cx)/r.width, dy=(e.clientY-cy)/r.height;
-      el.style.transform=`rotateX(${dy*-10}deg) rotateY(${dx*10}deg)`;
-    });
-  });
-  document.addEventListener('pointerleave', ()=>{
-    document.querySelectorAll('.tilt3d').forEach(el=>el.style.transform='');
   });
 })();
 
@@ -27,6 +16,7 @@ const topbar = document.getElementById('topbar');
 const authScreen = document.getElementById('auth');
 const profileViewModal = document.getElementById('profileViewModal');
 const topUpModal = document.getElementById('topUpModal');
+const ratingsModal = document.getElementById('ratingsModal');
 
 const wbId = document.getElementById('wbId');
 const wbBalance = document.getElementById('wbBalance');
@@ -34,6 +24,7 @@ const wbGems = document.getElementById('wbGems');
 const userLine = document.getElementById('userLine');
 let currentProfile = null;
 let unsubUser = null;
+let currentRank = null;
 
 async function loadPage(page){
   const res = await fetch(`./pages/${page}.html`, { cache: 'no-store' });
@@ -43,28 +34,13 @@ async function loadPage(page){
 }
 
 function bindSettings(){
-  const address = document.getElementById('address');
-  const phone = document.getElementById('phone');
-  const saveBtn = document.getElementById('saveEditable');
   const openProfile = document.getElementById('openProfile');
   const openTopUpBtn = document.getElementById('openTopUpBtn');
-
-  if (saveBtn) saveBtn.addEventListener('click', async ()=>{
-    try{
-      await db.collection('users').doc(auth.currentUser.uid).update({
-        address: address.value.trim(),
-        phone: phone.value.trim(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      currentProfile.address = address.value.trim();
-      currentProfile.phone = phone.value.trim();
-      updateHeader(currentProfile);
-      alert('Yangilandi');
-    }catch(e){ alert('Saqlashda xatolik: '+e.message);}
-  });
+  const openRatingsBtn = document.getElementById('openRatingsBtn');
 
   if (openProfile) openProfile.addEventListener('click', openProfileView);
   if (openTopUpBtn) openTopUpBtn.addEventListener('click', ()=>openTopUp());
+  if (openRatingsBtn) openRatingsBtn.addEventListener('click', ()=>openRatings());
 }
 
 function fillProfileView(p){
@@ -75,12 +51,13 @@ function fillProfileView(p){
     ['Familiya', p.lastName||''],
     ['Otasining ismi', p.middleName||''],
     ['Tug‘ilgan sana', p.dob||''],
-    ['Manzil', p.address||''],
-    ['Telefon', p.phone||''],
     ['Balans (so‘m)', (p.balance||0).toLocaleString('uz-UZ')],
     ['Olmos', (p.gems||0).toLocaleString('uz-UZ')],
   ];
   body.innerHTML = rows.map(([k,v])=>`<div class="item"><b>${k}</b><div>${v}</div></div>`).join('');
+  // preload edits
+  document.getElementById('edit_address').value = p.address||'';
+  document.getElementById('edit_phone').value = p.phone||'';
 }
 
 function openProfileView(){
@@ -88,6 +65,17 @@ function openProfileView(){
   fillProfileView(currentProfile);
   profileViewModal.showModal();
   document.getElementById('closeProfileView').onclick = ()=> profileViewModal.close();
+  document.getElementById('saveProfileEdit').onclick = async ()=>{
+    try{
+      const address = document.getElementById('edit_address').value.trim();
+      const phone = document.getElementById('edit_phone').value.trim();
+      await db.collection('users').doc(auth.currentUser.uid).update({
+        address, phone, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      alert('Profil yangilandi');
+      profileViewModal.close();
+    }catch(e){ alert('Saqlashda xatolik: '+e.message); }
+  };
 }
 
 function openTopUp(){
@@ -107,6 +95,57 @@ function openTopUp(){
   };
 }
 
+function computeBadge(rank){
+  if (rank==null) return null;
+  if (rank>=1 && rank<=10) return {cls:'t10', label:'Top 10'};
+  if (rank<=30) return {cls:'t30', label:'Top 30'};
+  if (rank<=60) return {cls:'t60', label:'Top 60'};
+  if (rank<=100) return {cls:'t100', label:'Top 100'};
+  return null;
+}
+
+function renderUserBadge(){
+  const badge = computeBadge(currentRank);
+  const old = userLine.querySelector('.badge');
+  if (old) old.remove();
+  if (badge){
+    const el = document.createElement('span');
+    el.className = 'badge '+badge.cls;
+    el.textContent = badge.label;
+    userLine.appendChild(el);
+  }
+}
+
+async function openRatings(){
+  try{
+    const qs = await db.collection('users').orderBy('gems','desc').limit(100).get();
+    const rows = [];
+    let rank = 0;
+    qs.forEach(doc=>{
+      const d = doc.data(); rank += 1;
+      const badge = computeBadge(rank);
+      rows.push({rank, name:[d.firstName,d.lastName].filter(Boolean).join(' ')||'Foydalanuvchi', gems:d.gems||0, id:d.numericId||'—', badge});
+      if (doc.id === auth.currentUser.uid) currentRank = rank;
+    });
+    const body = document.getElementById('ratingsBody');
+    body.innerHTML = rows.map(r=>`<div class="rank-row">
+      <div class="rank-left">
+        <span class="rank-num">${r.rank}</span>
+        <div>
+          <div><b>${r.name}</b> • #${r.id}</div>
+          <div>💎 ${r.gems.toLocaleString('uz-UZ')}</div>
+        </div>
+      </div>
+      <div>${r.badge?`<span class="badge ${r.badge.cls}">${r.badge.label}</span>`:''}</div>
+    </div>`).join('');
+    ratingsModal.showModal();
+    document.getElementById('closeRatings').onclick = ()=> ratingsModal.close();
+    renderUserBadge();
+  }catch(e){
+    alert('Reytingni yuklashda xatolik: '+e.message);
+  }
+}
+
 function updateWallet(p){
   wbId.textContent = p.numericId ?? '—';
   wbBalance.textContent = (p.balance ?? 0).toLocaleString('uz-UZ');
@@ -116,9 +155,9 @@ function updateHeader(p){
   const name = [p.firstName, p.lastName].filter(Boolean).join(' ');
   userLine.innerHTML = `Salom, <b>${name || 'Foydalanuvchi'}</b>`;
   updateWallet(p);
+  renderUserBadge();
 }
 
-// Client-side numeric ID
 async function allocateNumericIdClient(){
   const metaRef = db.collection('meta').doc('counters');
   let newId = null;
@@ -164,7 +203,6 @@ auth.onAuthStateChanged(async (user)=>{
   authScreen.classList.add('hidden');
   [content, tabbar, walletbar, topbar].forEach(el=>el.classList.remove('hidden'));
 
-  // Real-time user doc
   const userRef = db.collection('users').doc(user.uid);
   if (unsubUser) unsubUser();
   unsubUser = userRef.onSnapshot(async (snap)=>{
@@ -173,7 +211,6 @@ auth.onAuthStateChanged(async (user)=>{
     updateHeader(currentProfile);
   });
 
-  // If not complete, force fill modal
   const firstSnap = await userRef.get();
   let data = firstSnap.exists ? firstSnap.data() : null;
   if (!hasAllRequired(data)){
