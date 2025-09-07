@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
+  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
 
@@ -230,6 +230,10 @@ async function renderLive(){
       </div>
       <div class="lb" id="lb-body"><div class="small muted">Yuklanmoqda...</div></div>
     </div>
+    <div class="card p-4 mt-2" id="live-lb-overall">
+      <div class="livebar"><div>🌐 Umumiy TOP (so'nggi yangilanganlar ichidan)</div></div>
+      <div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div>
+    </div>
     <div id="live-cards" class="cards">` + events.map(ev=>{
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
@@ -266,6 +270,18 @@ async function renderLive(){
   }
   if(current) bindLb(current);
   select.addEventListener('change', (e)=>{ const v=e.target.value; const found = source.find((x,i)=> (x.id||('csv-'+i))===v ); if(found){ current=found; bindLb(current); } });
+  async function renderOverallLb(){
+    const body=document.getElementById('lb2-body'); if(!body) return; try{
+      const qref = query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(500));
+      const snap = await getDocs(qref);
+      const best = new Map();
+      snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); });
+      const arr=[...best.values()].sort((a,b)=> b.score-a.score).slice(0,100);
+      if(arr.length===0){ body.innerHTML = `<div class="small muted">Hali natijalar yo'q</div>`; return; }
+      body.innerHTML = arr.map((d,i)=>`<div class='lb-row'><div class='left'><div class='rk'>${i+1}</div><div class='name'>${d.name}</div></div><div class='score'>${d.score}</div></div>`).join('');
+    }catch(e){ body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
+  }
+  renderOverallLb();
 }
 
 /* Live Modal (with real-time leaderboard) */
@@ -372,7 +388,7 @@ async function openLiveModal(ev){
   dlg.showModal();
 }
 
-/* Test Player (Math) — explanations + seeded randomization + anti-cheat */
+/* Test Player (Math) — explanations + seeded randomization + anti-cheat + lock + per-question timer */
 async function renderTestPlayer(slug){
   const tests = await preferFirestore('content/tests','./content/tests.csv');
   const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
@@ -394,7 +410,6 @@ async function renderTestPlayer(slug){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
   }
 
-  // seed
   const uid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : 'anon';
   const paramSeed = parseInt(getParam('seed')||'0',10)||0;
   const ssKey = `tp-seed:${uid}:${slug}`;
@@ -412,20 +427,21 @@ async function renderTestPlayer(slug){
   let durationSec = parseInt(t.durationSec||'0',10)||0;
   if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
 
-  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
+  const qPer = Math.max(20, Math.min(180, Math.floor(durationSec / rows.length)));
+  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), locked: new Array(rows.length).fill(false), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, qRemaining: qPer, qPer, reveal:false, strikes:0 };
 
-  // Anti-cheat
-  function visHandler(){ if(document.hidden){ showToast('Diqqat: test davomida sahifani tark etmang.'); } }
+  function visHandler(){ if(document.hidden){ state.strikes++; let penalty = (state.strikes===1?10:(state.strikes===2?30:60)); state.remaining = Math.max(0, state.remaining - penalty); state.qRemaining = Math.max(0, state.qRemaining - Math.ceil(penalty/2)); showToast(`Diqqat: fokusdan chiqish uchun -${penalty}s jarima`); if(state.remaining<=0) finish(); } }
   document.addEventListener('visibilitychange', visHandler);
 
   function render(){
     const q = rows[state.idx];
     const prog = Math.round((state.idx)/rows.length*100);
     const picked = state.picks[state.idx];
+    const locked = state.locked[state.idx];
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="head">
         <div><strong>${state.title}</strong> — ${rows.length} savol</div>
-        <div class="timer" id="tp-timer">00:00</div>
+        <div class="row" style="gap:.75rem"><div class="qtimer" id="tp-qtimer">00:00</div><div class="timer" id="tp-timer">00:00</div></div>
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
@@ -434,7 +450,8 @@ async function renderTestPlayer(slug){
           ${q.opts.map((op,i)=>{
             const isSel = (picked===i);
             const mark = (state.reveal ? (op.isCorrect ? 'correct' : (isSel ? 'wrong' : '')) : (isSel ? 'selected' : ''));
-            return `<div class="opt ${mark}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
+            const dis = locked ? 'disabled' : '';
+            return `<div class="opt ${mark} ${dis}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
           }).join('')}
         </div>
         <div class="ctrl">
@@ -447,39 +464,59 @@ async function renderTestPlayer(slug){
         </div>
         ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
       </div>
-      <div class="small muted">Izoh: savol va variantlar tartibi seed bo'yicha aralashtirilgan (seed=${seed}).</div>
+      <div class="small muted">Seed=${seed}. Ogohlantirishlar: ${state.strikes} ta.</div>
     </div>`;
 
-    pageRoot.querySelectorAll('.opt').forEach(el=>{ el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; render(); }); });
-    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    if(!locked){
+      pageRoot.querySelectorAll('.opt').forEach(el=>{
+        el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; state.locked[state.idx]=true; render(); });
+      });
+    }
+    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; state.qRemaining = state.qPer; render(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
     updateTimerText();
   }
 
   let iv=null;
-  function startTimer(){ iv = setInterval(()=>{ state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); } const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; } updateTimerText(); }, 1000); }
+  function startTimer(){
+    iv = setInterval(()=>{
+      state.remaining--; state.qRemaining--;
+      if(state.qRemaining<=0){
+        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; } else { state.remaining = Math.max(0,state.remaining); finish(); return; }
+      }
+      if(state.remaining<=0){ state.remaining=0; finish(); return; }
+      const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
+      updateTimerText();
+    }, 1000);
+  }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
-  function updateTimerText(){ const m = Math.floor(state.remaining/60), s=state.remaining%60; const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function fmt(n){ const m=Math.floor(n/60), s=n%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function updateTimerText(){ const t1 = document.getElementById('tp-timer'); if(t1) t1.textContent = fmt(state.remaining); const t2 = document.getElementById('tp-qtimer'); if(t2) t2.textContent = fmt(state.qRemaining); }
 
   async function finish(){
     stopTimer();
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
-    rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && chosen.isCorrect) good++; else bad++; });
+    rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && q.opts[pick].isCorrect) good++; else bad++; });
     const percent = Math.round(good/rows.length*100);
     try{
-      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), { productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent, startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks, seed });
+      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
+        productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
+        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, qPer: state.qPer, strikes: state.strikes, seed, picks: state.picks
+      });
     }catch(_){}
 
-    // write to live scoreboard if ?event=<id>
     const evId = getParam('event');
     if(evId){
       try{
         const uref = doc(db,'users',auth.currentUser.uid);
         const us = await getDoc(uref); const ud = us.data()||{};
-        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), { uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'), score: percent, updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), {
+          uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'),
+          score: percent, updatedAt: serverTimestamp(), strikes: state.strikes
+        }, { merge: true });
       }catch(_){}
     }
 
@@ -488,6 +525,7 @@ async function renderTestPlayer(slug){
         <h3>Natijalar — ${state.title}</h3>
         <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
         <p><b>${percent}%</b> umumiy natija</p>
+        <p class="small muted">Jarimalar (fokus): ${state.strikes} marta • Q-saniya: ${state.qPer}s</p>
         <div class="row gap-2 mt-2">
           <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
           <button class="btn" id="tp-again-new">Qayta yechish (yangi tartib)</button>
