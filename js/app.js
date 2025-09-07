@@ -69,7 +69,33 @@ btnEmailSignup.addEventListener('click', async () => {
     await createUserWithEmailAndPassword(auth, email, pass);
   } catch (e) { showErr(e); }
 });
-function showErr(e){ authErr.textContent = e.message; authErr.classList.remove('hidden'); }
+
+let __lastAuthError = null;
+function showErr(e){
+  const msg = (e && (e.message || e.code)) ? (e.code ? `${e.code}: ${e.message}` : e.message) : 'Noma\'lum xato';
+  const box = document.getElementById('auth-error');
+  if (box){ box.textContent = msg; box.classList.remove('hidden'); }
+  console.error('AUTH ERROR →', e);
+  __lastAuthError = msg;
+}
+
+// Preflight diagnostics
+function preflight(){
+  try{
+    const cfg = (firebaseConfig || {});
+    const problems = [];
+    if (!cfg.apiKey) problems.push('apiKey yo\'q');
+    if (!cfg.projectId) problems.push('projectId yo\'q');
+    if (!cfg.authDomain) problems.push('authDomain yo\'q');
+    const host = location.hostname;
+    // Visual hint if domain likely missing in Firebase Authorized domains
+    if (!['localhost','127.0.0.1'].includes(host) && !cfg.authDomain.includes(host.split('.').slice(-2).join('.'))){
+      console.warn('Ehtimol Authorized domains ga hosting domenini qo\'shish kerak:', host);
+    }
+  }catch(e){ console.warn('Preflight failed', e); }
+}
+preflight();
+
 
 
 
@@ -360,59 +386,6 @@ async function renderSim(){
   <div class="cards">${items.map(card2).join('')}</div>`;
 }
 
-function renderSettings(){
-  pageRoot.innerHTML = `
-    <div class="card p-4">
-      <h3>Hamyon</h3>
-      <div class="row gap-2 mt-2">
-        <button class="btn" id="topup-10">➕ 10 000 so'm</button>
-        <button class="btn" id="topup-50">➕ 50 000 so'm</button>
-        <button class="btn" id="topup-100">➕ 100 000 so'm</button>
-      </div>
-      <p class="muted mt-2">Demo to'ldirish (keyin Payme/Click/Xazna qo'shamiz).</p>
-    </div>
-    <div class="card p-4 mt-3">
-      <h3>Qo'shimcha</h3>
-      <div class="row gap-2 mt-2">
-        <button class="btn quiet" id="btn-open-leaderboard">Top-100 Reyting</button>
-        <button class="btn quiet" id="btn-logout">Chiqish</button>
-      </div>
-      <div id="teacher-slot" class="mt-3"></div>
-      <div id="admin-slot" class="mt-3"></div>
-    </div>`;
-
-  document.getElementById('topup-10').addEventListener('click', ()=>doTopUp(10000));
-  document.getElementById('topup-50').addEventListener('click', ()=>doTopUp(50000));
-  document.getElementById('topup-100').addEventListener('click', ()=>doTopUp(100000));
-  document.getElementById('btn-logout').addEventListener('click', ()=>signOut(auth));
-  document.getElementById('btn-open-leaderboard').addEventListener('click', ()=>renderLeaderboard());
-
-  if (auth.currentUser){
-    const uref = doc(db, 'users', auth.currentUser.uid);
-    getDoc(uref).then(snap=>{
-      const d = snap.data()||{};
-      // Teacher panel
-      if (d.isTeacher === true){
-        const slot = document.getElementById('teacher-slot');
-        slot.innerHTML = \`
-          <div class="card p-4">
-            <h3>O'qituvchi paneli</h3>
-            <div class="grid two mt-2">
-              <input id="ti-name" class="input" placeholder="Nom (masalan: Algebra 2)" />
-              <input id="ti-tag" class="input" placeholder="Teg (ASOSIY/TEST/...)" />
-              <input id="ti-meta" class="input" placeholder="Meta (narx/dars soni)" />
-              <input id="ti-price" class="input" type="number" placeholder="Narx (so'm)" />
-            </div>
-            <div class="row end mt-3">
-              <button class="btn" id="ti-save">Saqlash</button>
-            </div>
-          </div>\`;
-        document.getElementById('ti-save').addEventListener('click', async ()=>{
-          const name = document.getElementById('ti-name').value.trim();
-          const tag = document.getElementById('ti-tag').value.trim();
-          const meta = document.getElementById('ti-meta').value.trim();
-          const price = parseInt((document.getElementById('ti-price').value||'0'),10)||0;
-          if (!name){ alert('Nom kiriting'); return; }
           const pref = doc(db, 'users', auth.currentUser.uid);
           await addDoc(collection(pref, 'teacher_items'), { name, tag, meta, price, createdAt: serverTimestamp() });
           alert('Saqlandi');
@@ -464,4 +437,57 @@ function renderSettings(){
       }
     });
   }
+}
+
+function renderSettings(){
+  pageRoot.innerHTML = `
+    <div class="card p-4">
+      <h3>Hamyon</h3>
+      <div class="row gap-2 mt-2">
+        <button class="btn" id="topup-10">➕ 10 000 so'm</button>
+        <button class="btn" id="topup-50">➕ 50 000 so'm</button>
+        <button class="btn" id="topup-100">➕ 100 000 so'm</button>
+      </div>
+      <p class="muted mt-2">Demo to'ldirish (keyin Payme/Click/Xazna qo'shamiz).</p>
+    </div>
+    <div class="card p-4 mt-3">
+      <h3>Qo'shimcha</h3>
+      <div class="row gap-2 mt-2">
+        <button class="btn quiet" id="btn-open-leaderboard">Top-100 Reyting</button>
+        <button class="btn quiet" id="btn-logout">Chiqish</button>
+      </div>
+      <div id="teacher-slot" class="mt-3"></div>
+      <div id="admin-slot" class="mt-3"></div>
+    </div>
+    <div class="card p-4 mt-3">
+      <h3>Debug</h3>
+      <div id="dbg-auth"></div>
+      <div id="dbg-last-error" class="mt-2 muted"></div>
+    </div>`;
+
+  document.getElementById('topup-10').addEventListener('click', ()=>doTopUp(10000));
+  document.getElementById('topup-50').addEventListener('click', ()=>doTopUp(50000));
+  document.getElementById('topup-100').addEventListener('click', ()=>doTopUp(100000));
+  document.getElementById('btn-logout').addEventListener('click', ()=>signOut(auth));
+  document.getElementById('btn-open-leaderboard').addEventListener('click', ()=>renderLeaderboard());
+
+  if (auth.currentUser){
+    const uref = doc(db, 'users', auth.currentUser.uid);
+    getDoc(uref).then(snap=>{
+      const d = snap.data()||{};
+      if (d.isTeacher === true){
+        const slot = document.getElementById('teacher-slot');
+        slot.innerHTML = '<div class="muted">O\'qituvchi paneli yoqilgan</div>';
+      }
+      if (d.isAdmin === true){
+        const aslot = document.getElementById('admin-slot');
+        aslot.innerHTML = '<div class="muted">Admin paneli yoqilgan</div>';
+      }
+    });
+  }
+
+  const dbgAuth = document.getElementById('dbg-auth');
+  const dbgErr = document.getElementById('dbg-last-error');
+  dbgAuth.textContent = auth.currentUser ? ('User: ' + (auth.currentUser.email||auth.currentUser.uid)) : 'User: (not signed in)';
+  dbgErr.textContent = __lastAuthError ? ('Last error: ' + __lastAuthError) : 'Last error: (none)';
 }
