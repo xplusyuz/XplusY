@@ -1,74 +1,106 @@
-
-// Tests page: CSV → Sections + Filters → Cards
-// CSV columns: Img url, Title, Meta, tugma nomi, tugma linki, bo'lim, filter1, filter2
+// Testlar: CSV → grouped cards with bo'lim + filters (no "Hammasi", no test solving)
 const host = document.querySelector('#testsSections');
-const source = host?.dataset?.csv || './tests.csv';
+const csvPath = host?.dataset?.csv || './tests.csv';
 
 (async function init(){
-  const text = await fetchCSV(source);
+  const text = await fetchCSV(csvPath);
   if(!text){ host.innerHTML = `<div class="card">tests.csv topilmadi.</div>`; return; }
   const rows = parseCSV(text);
   const data = normalize(rows);
   if(!data.length){ host.innerHTML = `<div class="card">CSV bo‘sh.</div>`; return; }
-  buildFilters(data);
+  setupUI(data);
   render(data);
-  wiring(data);
 })();
 
-function wiring(data){
-  document.querySelector('#fSec')?.addEventListener('change', ()=> render(data));
-  document.querySelector('#f1')?.addEventListener('change', ()=> render(data));
-  document.querySelector('#f2')?.addEventListener('change', ()=> render(data));
-  document.querySelector('#fReset')?.addEventListener('click', ()=>{
-    document.querySelector('#fSec').value='';
-    document.querySelector('#f1').value='';
-    document.querySelector('#f2').value='';
+function setupUI(data){
+  const sSec = document.querySelector('#fSec');
+  const sF1 = document.querySelector('#f1');
+  const sF2 = document.querySelector('#f2');
+  const fieldF1 = document.querySelector('#fieldF1');
+  const fieldF2 = document.querySelector('#fieldF2');
+
+  // Bo'limlar: "Hammasi" yo‘q, birinchi qiymat auto-select
+  const sections = uniq(data.map(x => (x.section||'').trim()).filter(Boolean));
+  sSec.innerHTML = sections.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  if (sections.length) sSec.value = sections[0];
+
+  // Tanlangan bo‘limga bog‘liq filterlar
+  function rebuildFilters(){
+    const curSec = sSec.value;
+    const pool = data.filter(x => x.section === curSec);
+    const f1vals = uniq(pool.map(x => (x.filter1||'').trim()).filter(Boolean));
+    const f2vals = uniq(pool.map(x => (x.filter2||'').trim()).filter(Boolean));
+
+    if (f1vals.length){
+      sF1.innerHTML = f1vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+      sF1.value = f1vals[0];
+      fieldF1.style.display = '';
+    } else {
+      sF1.innerHTML = '';
+      fieldF1.style.display = 'none';
+    }
+
+    if (f2vals.length){
+      sF2.innerHTML = f2vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+      sF2.value = f2vals[0];
+      fieldF2.style.display = '';
+    } else {
+      sF2.innerHTML = '';
+      fieldF2.style.display = 'none';
+    }
+  }
+
+  rebuildFilters();
+
+  sSec.addEventListener('change', ()=>{
+    rebuildFilters();
     render(data);
   });
+  sF1.addEventListener('change', ()=> render(data));
+  sF2.addEventListener('change', ()=> render(data));
 }
 
 function render(data){
-  const selS = document.querySelector('#fSec')?.value || '';
-  const sel1 = document.querySelector('#f1')?.value || '';
-  const sel2 = document.querySelector('#f2')?.value || '';
+  const sSec = document.querySelector('#fSec');
+  const sF1 = document.querySelector('#f1');
+  const sF2 = document.querySelector('#f2');
+  const hasF1 = sF1 && sF1.options.length>0;
+  const hasF2 = sF2 && sF2.options.length>0;
+  const curSec = sSec?.value || '';
+
   const filtered = data.filter(r=>{
-    const okS = !selS || r.section === selS;
-    const ok1 = !sel1 || r.filter1 === sel1 || r.filter2 === sel1;
-    const ok2 = !sel2 || r.filter1 === sel2 || r.filter2 === sel2;
-    return okS && ok1 && ok2;
+    if (r.section !== curSec) return false;
+    if (hasF1 && r.filter1 !== sF1.value && r.filter2 !== sF1.value) return false;
+    if (hasF2 && r.filter1 !== sF2.value && r.filter2 !== sF2.value) return false;
+    return true;
   });
+
   renderSections(filtered);
 }
 
 function renderSections(items){
   host.innerHTML = '';
   const bySec = new Map();
-  for(const it of items){
+  for (const it of items){
     const key = it.section || 'Boshqa';
     if(!bySec.has(key)) bySec.set(key, []);
     bySec.get(key).push(it);
   }
-  for(const [sec, list] of bySec.entries()){
+  for (const [sec, list] of bySec.entries()){
     const wrap = document.createElement('section');
     wrap.className = 'card';
-    wrap.innerHTML = `<h2 style="margin:.2rem 0 8px">${esc(sec)}</h2><div class="grid cards"></div>`;
+    wrap.innerHTML = `<h2>${esc(sec)}</h2><div class="grid cards"></div>`;
     const grid = wrap.querySelector('.grid');
-    list.forEach(r=> grid.appendChild(card(r)));
+    list.forEach(r => grid.appendChild(card(r)));
     host.appendChild(wrap);
   }
 }
 
 function card(r){
   const div = document.createElement('div'); div.className = 'card';
-  let action = '';
-  if(/^start:/.test(r.href||'')){
-    const startVal = r.href.split(':')[1];
-    action = `<button class="btn primary" data-start="${esc(startVal)}">${esc(r.btn)}</button>`;
-  }else{
-    action = `<a class="btn primary" href="${r.href||'#'}">${esc(r.btn)}</a>`;
-  }
+  const action = (r.href) ? `<a class="btn primary" href="${r.href}">${esc(r.btn || 'Ochish')}</a>` : '';
   div.innerHTML = `
-    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy" style="width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);margin-bottom:8px;aspect-ratio:16/9;object-fit:cover">` : ''}
+    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">` : ''}
     ${r.title ? `<h3 style="margin:.2rem 0">${esc(r.title)}</h3>` : ''}
     ${r.meta ? `<p class="sub">${esc(r.meta)}</p>` : ''}
     ${action}
@@ -76,25 +108,11 @@ function card(r){
   return div;
 }
 
-function buildFilters(data){
-  const uniques = (prop)=>{
-    const s = new Set(data.map(x=>(x[prop]||'').trim()).filter(Boolean));
-    return Array.from(s).sort((a,b)=>a.localeCompare(b));
-  };
-  const sec = uniques('section'), f1 = uniques('filter1'), f2 = uniques('filter2');
-  const fill = (sel, arr)=>{
-    const el = document.querySelector(sel); if(!el) return;
-    el.innerHTML = '<option value="">Hammasi</option>' + arr.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  };
-  fill('#fSec', sec); fill('#f1', f1); fill('#f2', f2);
-}
-
-/* CSV helpers */
+/* Helpers (CSV) */
+function uniq(arr){ return Array.from(new Set(arr)); }
 async function fetchCSV(path){
-  const tries=[path,'./tests.csv','/tests.csv'];
-  for(const p of tries){
-    try{ const r=await fetch(p,{cache:'no-cache'}); if(r.ok) return await r.text(); }catch(_){}
-  }
+  const tries=[path,'./tests.csv'];
+  for(const p of tries){ try{ const r=await fetch(p,{cache:'no-cache'}); if(r.ok) return await r.text(); }catch(_){ } }
   return null;
 }
 function detectDelim(line){
@@ -127,10 +145,10 @@ function normalize(rows){
     const r=rows[i]; if(r.length<8) continue;
     const [img,title,meta,btn,href,section,f1,f2] = r;
     out.push({
-      img: img||'', title: title||'', meta: meta||'',
-      btn: btn||'Boshlash', href: href||'#',
-      section: section||'Boshqa',
-      filter1: f1||'', filter2: f2||''
+      img:img||'', title:title||'', meta:meta||'',
+      btn:btn||'Ochish', href:href||'#',
+      section:section||'Boshqa',
+      filter1:f1||'', filter2:f2||''
     });
   }
   return out;
