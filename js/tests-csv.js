@@ -3,11 +3,17 @@
 const host = document.querySelector('#testsSections');
 const csvPath = host?.dataset?.csv || './tests.csv';
 
+// Pagination state
+let PAGE_SIZE = 12;
+let visibleCount = PAGE_SIZE;
+const state = { section: '', f1: '', f2: '', plan: '' };
+
 (async function init(){
   const text = await fetchCSV(csvPath);
   if(!text){ host.innerHTML = `<div class="card">tests.csv topilmadi.</div>`; return; }
   const rows = parseCSV(text);
   const data = normalize(rows);
+  window.__testsData = data;
   if(!data.length){ host.innerHTML = `<div class="card">CSV bo‘sh.</div>`; return; }
   setupUI(data);
   render(data);
@@ -37,7 +43,7 @@ function setupUI(data){
       fieldF1.style.display = 'none'; fieldF2.style.display = 'none';
       return;
     }
-    const pool = data.filter(x => x.section === curSec);
+    const pool = (curSec === '*') ? data : data.filter(x => x.section === curSec);
     const f1vals = uniq(pool.map(x => (x.filter1||'').trim()).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
     const f2vals = uniq(pool.map(x => (x.filter2||'').trim()).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
     if (f1vals.length){
@@ -58,41 +64,116 @@ function setupUI(data){
 
   rebuildFilters();
 
-  sSec.addEventListener('change', ()=>{ rebuildFilters(); render(data); });
-  sF1.addEventListener('change', ()=> render(data));
-  sF2.addEventListener('change', ()=> render(data));
+  sSec.addEventListener('change', ()=>{
+  rebuildFilters();
+  state.section = sSec.value || '';
+  state.f1 = (document.querySelector('#f1')?.value || '');
+  state.f2 = (document.querySelector('#f2')?.value || '');
+  state.plan = (document.querySelector('#fPlan')?.value || '');
+  visibleCount = PAGE_SIZE;
+  renderData(data);
+});
+sF1.addEventListener('change', ()=>{
+  state.f1 = (sF1?.value || '');
+  visibleCount = PAGE_SIZE;
+  renderData(data);
+});
+sF2.addEventListener('change', ()=>{
+  state.f2 = (sF2?.value || '');
+  visibleCount = PAGE_SIZE;
+  renderData(data);
+});
 }
 
 function render(data){
-  const sSec = document.querySelector('#fSec');
-  const sF1 = document.querySelector('#f1');
-  const sF2 = document.querySelector('#f2');
-  const curSec = sSec?.value || '';
-  const v1 = sF1?.value || '';
-  const v2 = sF2?.value || '';
+  // kept for backward compatibility; redirect to renderData
+  renderData(data);
+}
 
-  // If no section selected (Ixtiyoriy) -> do NOT render all; show placeholder
+function renderData(data){
+  const curSec = state.section || (document.querySelector('#fSec')?.value || '');
+  const v1 = state.f1 || (document.querySelector('#f1')?.value || '');
+  const v2 = state.f2 || (document.querySelector('#f2')?.value || '');
+  const vPlan = (state.plan || (document.querySelector('#fPlan')?.value || '')).toUpperCase();
+
   if (!curSec){
-    host.innerHTML = `<section class="card"><div class="sub">Bo‘limni tanlang — shu bo‘limdagi testlar kartalari ko‘rinadi.</div></section>`;
+    host.innerHTML = `<section class="card"><div class="sub">Bo‘limni tanlang — yoki "Hammasi"ni bosing.</div></section>`;
     return;
   }
 
-  const filtered = data.filter(r=>{
-    if (r.section !== curSec) return false;
+  const pool = (curSec === '*') ? data : data.filter(r => r.section === curSec);
+
+  const filtered = pool.filter(r=>{
     if (v1 && r.filter1 !== v1 && r.filter2 !== v1) return false;
     if (v2 && r.filter1 !== v2 && r.filter2 !== v2) return false;
+    if (vPlan && r.plan !== vPlan) return false;
     return true;
   });
 
-  renderSections(filtered, curSec);
+  const visible = filtered.slice(0, visibleCount);
+
+  if (curSec === '*'){
+    renderFlatWithLoadMore(visible, filtered.length);
+  } else {
+    renderSectionWithLoadMore(curSec, visible, filtered.length);
+  }
 }
+
 
 
 function renderSections(items, curSec){
-  host.innerHTML = '';
-  // Only render the selected section
-  host.appendChild(sectionBlock(curSec, items));
+  // Deprecated by pagination-aware renderSectionWithLoadMore
+  renderSectionWithLoadMore(curSec, items, items.length);
 }
+
+function renderFlatWithLoadMore(items, totalCount){
+  host.innerHTML = '';
+  const wrap = document.createElement('section');
+  wrap.className = 'card';
+  wrap.innerHTML = `<div class="grid cards"></div>`;
+  const grid = wrap.querySelector('.grid');
+  items.forEach(r => grid.appendChild(card(r)));
+  host.appendChild(wrap);
+
+  if (visibleCount < totalCount){
+    const moreWrap = document.createElement('div');
+    moreWrap.style.display = 'flex';
+    moreWrap.style.justifyContent = 'center';
+    moreWrap.style.margin = '12px 0 4px';
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = `Yana ko‘rsatish (${visibleCount} / ${totalCount})`;
+    btn.addEventListener('click', ()=>{
+      visibleCount += PAGE_SIZE;
+      renderData(window.__testsData || []);
+    });
+    moreWrap.appendChild(btn);
+    host.appendChild(moreWrap);
+  }
+}
+
+function renderSectionWithLoadMore(curSec, items, totalCount){
+  host.innerHTML = '';
+  const wrap = sectionBlock(curSec, items);
+  host.appendChild(wrap);
+
+  if (visibleCount < totalCount){
+    const moreWrap = document.createElement('div');
+    moreWrap.style.display = 'flex';
+    moreWrap.style.justifyContent = 'center';
+    moreWrap.style.margin = '12px 0 4px';
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = `Yana ko‘rsatish (${visibleCount} / ${totalCount})`;
+    btn.addEventListener('click', ()=>{
+      visibleCount += PAGE_SIZE;
+      renderData(window.__testsData || []);
+    });
+    moreWrap.appendChild(btn);
+    host.appendChild(moreWrap);
+  }
+}
+
 
 
 function sectionBlock(sec, list){
@@ -107,7 +188,8 @@ function sectionBlock(sec, list){
 function card(r){
   const div = document.createElement('div'); div.className = 'card';
   const action = (r.href) ? `<a class="btn primary" href="${r.href}">${esc(r.btn || 'Ochish')}</a>` : '';
-  div.innerHTML = `
+  const planBadge = r.plan ? `<span class="pill-plan ${r.plan==='PRO'?'pill-pro':'pill-free'}">${r.plan}</span>` : '';
+  div.innerHTML = `${planBadge}` + `
     ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy" style="width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);margin-bottom:8px;aspect-ratio:16/9;object-fit:cover">` : ''}
     ${r.title ? `<h3 style="margin:.2rem 0">${esc(r.title)}</h3>` : ''}
     ${r.meta ? `<p class="sub">${esc(r.meta)}</p>` : ''}
@@ -147,15 +229,16 @@ function normalize(rows){
   if(!rows.length) return [];
   const hdr=rows[0].map(s=>s.toLowerCase());
   const hasHdr = hdr[0]?.includes('img') && hdr[1]?.includes('title');
-  const start = hasHdr ? 1 : 0;
-  const out=[];
-  for(let i=start;i<rows.length;i++){
-    const r=rows[i]; if(r.length<8) continue;
-    const [img,title,meta,btn,href,section,f1,f2] = r;
-    out.push({
+const start = hasHdr ? 1 : 0;
+const out=[];
+for(let i=start;i<rows.length;i++){
+  const r=rows[i]; if(r.length<8) continue;
+  const [img,title,meta,btn,href,section,f1,f2,planRaw] = r;
+  const plan = String(planRaw||'FREE').trim().toUpperCase();
+  out.push({
       img:img||'', title:title||'', meta:meta||'',
       btn:btn||'Ochish', href:href||'#',
-      section:section||'Boshqa',
+      section:section||'Boshqa', plan: (plan==='PRO'?'PRO':'FREE'),
       filter1:f1||'', filter2:f2||''
     });
   }
