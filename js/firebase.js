@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, runTransaction, serverTimestamp,
-  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, deleteDoc, onSnapshot
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, deleteDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const firebaseConfig = {
@@ -31,7 +31,7 @@ export {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot
 };
 
 // Helpers
