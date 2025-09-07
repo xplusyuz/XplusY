@@ -137,7 +137,7 @@ qs('#adm_table').addEventListener('click', async (e)=>{
   const row = e.target.closest('.adm-row'); const uid = row.getAttribute('data-uid');
   const ref = doc(db,'users', uid);
   try{
-    await updateDoc(ref, {
+    await updateDoc(ref, { numericId: (Number(row.querySelector('.a_numericId').value) || null),
       numericId: Number(row.querySelector('.a_numericId').value) || null,
       firstName: row.querySelector('.a_firstName').value.trim(),
       lastName: row.querySelector('.a_lastName').value.trim(),
@@ -169,9 +169,31 @@ async function adminSearch(){
 function renderAdminTable(snap){
   const table = qs('#adm_table'); table.innerHTML='';
   const head = document.createElement('div');
-  head.className='card'; head.innerHTML='<b>ID</b> | Ism | Fam | Tel | Viloyat | Balans | Olmos | DOB | Amal';
+  head.className='card';
+  head.innerHTML='<b>ID</b> | Ism | Fam | Tel | Viloyat | Balans | Olmos | DOB | Amal';
   table.appendChild(head);
-  if(snap.empty){ const d=document.createElement('div'); d.className='hint'; d.textContent='Hech narsa topilmadi'; table.appendChild(d); return; }
+
+  if(snap.empty){
+    const d=document.createElement('div'); d.className='hint'; d.textContent='Hech narsa topilmadi';
+    table.appendChild(d); return;
+  }
+
+  snap.forEach(d=>{
+    const u=d.data();
+    const row=document.createElement('div'); row.className='card'; row.setAttribute('data-uid', d.id);
+    row.innerHTML = `
+      <input class="a_numericId" type="number" value="${u.numericId ?? ''}" />
+      <input class="a_firstName" type="text" value="${u.firstName ?? ''}" />
+      <input class="a_lastName" type="text" value="${u.lastName ?? ''}" />
+      <input class="a_phone" type="text" value="${u.phone ?? ''}" />
+      <input class="a_region" type="text" value="${u.region ?? ''}" />
+      <input class="a_balance" type="number" value="${u.balance ?? 0}" />
+      <input class="a_gems" type="number" value="${u.gems ?? 0}" />
+      <input class="a_dob" type="date" value="${u.dob ?? ''}" />
+      <button class="btn primary a_save">Saqlash</button>`;
+    table.appendChild(row);
+  });
+}
   snap.forEach(d=>{
     const u=d.data(); const row=document.createElement('div'); row.className='card'; row.setAttribute('data-uid', d.id);
     row.innerHTML = `

@@ -21,12 +21,36 @@ export const ADMIN_NUMERIC_IDS = [1000001, 1000002];
 
 // Inject header/footer
 export async function mountChrome(){
-  const header = document.querySelector('header.mc-header');
-  const footer = document.querySelector('footer.mc-footer');
-  if(header){
-    const h = await fetch('/header.html').then(r=>r.text()).catch(()=>null);
-    if(h) header.innerHTML = h;
+  async function tryFetch(cands){
+    for(const p of cands){
+      try{
+        const r = await fetch(p, {cache:'no-cache'});
+        if(r.ok) return await r.text();
+      }catch(_){}
+    }
+    return null;
   }
+  const headerHost = document.querySelector('header.mc-header');
+  const footerHost = document.querySelector('footer.mc-footer');
+
+  // build candidate paths relative to current location
+  const path = location.pathname;
+  const dir = path.endsWith('/') ? path : path.substring(0, path.lastIndexOf('/')) + '/';
+  const upOne = dir.replace(/[^/]+\/$/, '');
+  const upTwo = upOne.replace(/[^/]+\/$/, '');
+
+  const headerCands = ['/header.html', dir+'header.html', './header.html', upOne+'header.html', upTwo+'header.html'];
+  const footerCands = ['/footer.html', dir+'footer.html', './footer.html', upOne+'footer.html', upTwo+'footer.html'];
+
+  if(headerHost){
+    const h = await tryFetch(headerCands);
+    headerHost.innerHTML = h ?? `<div class="mc-left"><div class="brand"><img src="/assets/logo.svg" alt=""/><span>MathCenter</span></div></div>`;
+  }
+  if(footerHost){
+    const f = await tryFetch(footerCands);
+    footerHost.innerHTML = f ?? `<div class="container"><div class="sub">© MathCenter v3</div></div>`;
+  }
+}
   if(footer){
     const f = await fetch('/footer.html').then(r=>r.text()).catch(()=>null);
     if(f) footer.innerHTML = f;
