@@ -4,15 +4,9 @@ service cloud.firestore {
 
     // USERS
     match /users/{uid} {
-      // Query + read for signed-in users (for ordered lists)
       allow read: if request.auth != null;
-
-      // Create own doc on first sign-in (and update later)
       allow create: if request.auth != null && request.auth.uid == uid;
-
-      // Update: owner only. UI cheklaydi (faqat phone/address), istasak diff bilan yanada toraytiramiz.
       allow update: if request.auth != null && request.auth.uid == uid;
-
       allow delete: if false;
 
       match /purchases/{pid} {
@@ -27,7 +21,7 @@ service cloud.firestore {
       }
     }
 
-    // PUBLIC CONTENT (read all; CRUD only for admins)
+    // PUBLIC CONTENT (admin CRUD)
     match /content_home/{docId} {
       allow read: if true;
       allow create, update, delete: if request.auth != null &&
@@ -55,7 +49,6 @@ service cloud.firestore {
       allow create, update, delete: if request.auth != null &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
 
-      // Server-side "join lock": only allow create BEFORE startAt
       match /entries/{uid} {
         allow create: if request.auth != null && request.auth.uid == uid &&
           exists(/databases/$(database)/documents/live_events/$(liveId)) &&

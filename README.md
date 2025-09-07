@@ -1,23 +1,24 @@
-# MathCenter.uz — Full v3 (Robust Auth + Full App)
+# MathCenter.uz — v3 Cards PLUS
 
-**Noldan moslangan** build:
-- Popup→Redirect Google kirish, redirect natijasini sahifa yuklanganda yakunlaydi.
-- Email/Parol login & sign up, tugma holatlari va xatolar ko‘rinadi.
-- Profil modali (birinchi kirishda majburiy). Keyin faqat **telefon** va **manzil** UI orqali tahrir.
-- Uy: barcha foydalanuvchilar **💎 kamayish** tartibida **ro‘yxat** (rank) ko‘rinishida.
-- Live: **Oldindan qo‘shilish** (entry yechimi), **startda lock**, kirganlar uchun **Kirish**.
-- Admin CRUD: `content_*` va `live_events` uchun eng sodda qo‘shish/tahrirlash/o‘chirish.
-- Hamyon: demo top-up; pullik test—xarid → `purchases`.
-- Firestore **rules** moslangan (admin CRUD, live join lock, users read).
-- CSV fallback (Firestore bo‘sh bo‘lsa, `content/*.csv`dan o‘qiydi).
+To'liq tayyor build:
+- Google + Email autentifikatsiya (popup→redirect), redirect auto-complete, localPersistence
+- Profil modal (birinchi kirishda majburiy)
+- Mobil UI, pastki menyu
+- **Universal Cards** (.ucard) — premium gradient/glass + inline SVG, barcha sahifalarga mos
+- Home: Reklama kartalari (rasm bilan)
+- Courses/Tests/Sim: universal kartalar + mos CTA'lar
+- Live: universal karta + **tafsilot modal** (countdown, participants, pre-join, startda lock, kirish)
+- Admin CRUD (content va live), Hamyon & xaridlar
+- Firestore rules — admin CRUD va Live join lock
 
-## Tez start
-1) Firebase → Authentication → **Sign-in method**: Google va Email/Password → **Enable**.  
-   Settings → **Authorized domains**: hosting domeningizni qo‘shing.  
-2) Firestore → **Rules**: shu loyihadagi `firestore.rules` → **Publish**.  
-3) Static hosting (Netlify/Vercel) yoki lokal server (`npx serve`). `file://` orqali ochmang.  
-4) Admin bo‘lish uchun `users/{uid}` hujjatingizda `isAdmin: true` qo‘yib, CRUD’ni sinang.
+## Sozlash
+1) Firebase → Authentication → Sign-in method: Google va Email/Password → **Enable**.
+   Authentication → Settings → **Authorized domains**ga deploy domeningizni qo'shing.
+2) Firestore → **Rules**: shu repodagi `firestore.rules` ni **Publish** qiling.
+3) Lokal server (`npx serve` yoki `python -m http.server`) yoki Netlify/Vercel. `file://` ishlamaydi.
 
-## Eslatma
-- Live join lock qayta ishlashi uchun admin panelda `startAt/endAt` **Timestamp** sifatida saqlanadi (panel buni avtomatik qiladi).
-- Agar login muammosi bo‘lsa, auth xato kodi **qizil blok**da chiqadi — shu kodni yuborsangiz, qo‘shimcha tuzatish kiritaman.
+## Admin
+- `users/{uid}` da `isAdmin: true` qo'ying — Settings → Admin panel orqali CRUD ishlaydi.
+
+## Live
+- Admin paneldan `live_events` hujjatiga `startAt/endAt` (Timestamp) qo'ying. UI va Rules join lockni nazorat qiladi.

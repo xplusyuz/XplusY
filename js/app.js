@@ -23,35 +23,26 @@ function addDiag(msg){ if(diag){ diag.textContent += (diag.textContent? '\n' : '
 function showErr(e){ const msg=(e && (e.message||e.code))? (e.code? `${e.code}: ${e.message}`: e.message) : 'Noma\'lum xato'; if(authErr){authErr.textContent=msg; authErr.classList.remove('hidden');} console.error(e); window.__lastAuthError=msg; }
 function clearErr(){ if(authErr){authErr.textContent=''; authErr.classList.add('hidden');} }
 
-// Warn if file://
 if(location.protocol==='file:'){ showErr('Bu sahifa file:// rejimida — autentifikatsiya ishlamaydi. HTTP(S) orqali xizmatdan foydalaning.'); }
 
-/* Redirect completion */
-(async ()=>{
-  try{ const res=await getRedirectResult(auth); if(res && res.user){ addDiag('Redirect yakunlandi: '+(res.user.email||res.user.uid)); } }
-  catch(e){ showErr(e); }
-})();
+(async ()=>{ try{ const res=await getRedirectResult(auth); if(res && res.user){ addDiag('Redirect yakunlandi: '+(res.user.email||res.user.uid)); } } catch(e){ showErr(e); } })();
 
-/* Auth handlers */
-window.__mcGoogle=async function(){
+/* Auth */
+btnGoogle.addEventListener('click', async ()=>{
   btnGoogle.disabled=true; btnGoogle.textContent='Kutib turing...';
-  try{ await signInWithPopup(auth, googleProvider); }
-  catch(e){
+  try{ await signInWithPopup(auth, googleProvider); } catch(e){
     addDiag('Popup xatosi: '+(e.code||e.message));
-    try{ await signInWithRedirect(auth, googleProvider); }
-    catch(e2){ showErr(e2); }
+    try{ await signInWithRedirect(auth, googleProvider); } catch(e2){ showErr(e2); }
   } finally { btnGoogle.disabled=false; btnGoogle.textContent='Google bilan davom etish'; }
-};
+});
 formEmail.addEventListener('submit', async (e)=>{
   e.preventDefault(); btnLogin.disabled=true; btnLogin.textContent='Kirilmoqda...'; clearErr();
-  try{ await signInWithEmailAndPassword(auth, formEmail.email.value, formEmail.password.value); }
-  catch(e){ showErr(e); }
+  try{ await signInWithEmailAndPassword(auth, formEmail.email.value, formEmail.password.value); } catch(e){ showErr(e); }
   finally{ btnLogin.disabled=false; btnLogin.textContent='Kirish'; }
 });
 btnSignup.addEventListener('click', async ()=>{
   btnSignup.disabled=true; btnSignup.textContent='Yaratilmoqda...'; clearErr();
-  try{ await createUserWithEmailAndPassword(auth, formEmail.email.value, formEmail.password.value); }
-  catch(e){ showErr(e); }
+  try{ await createUserWithEmailAndPassword(auth, formEmail.email.value, formEmail.password.value); } catch(e){ showErr(e); }
   finally{ btnSignup.disabled=false; btnSignup.textContent="Ro'yxatdan o'tish"; }
 });
 
@@ -70,7 +61,7 @@ function val(sel){ const el=document.querySelector(sel); return (el && el.value|
 nav.addEventListener('click',(e)=>{ const btn=e.target.closest('button[data-page]'); if(!btn) return; document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderPage(btn.dataset.page); });
 function renderPage(page){ if(page==='home') return renderHome(); if(page==='courses') return renderCourses(); if(page==='tests') return renderTests(); if(page==='live') return renderLive(); if(page==='sim') return renderSim(); if(page==='settings') return renderSettings(); renderHome(); }
 
-/* Badges live update */
+/* Badges */
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
 /* CSV helpers + Firestore prefer */
@@ -90,51 +81,248 @@ async function renderUsersList(append=false){
   __usersLoaded += batch.length; if(more){ more.disabled=(batch.length===0); more.textContent=(batch.length===0)?'Yana yo\'q':'Ko\'proq yuklash'; }
 }
 
+/* === Universal Card Builder === */
+const UC_PALETTE = {
+  ad:     { icon:'📣', variant:'ad',     label:'Reklama' },
+  course: { icon:'🎓', variant:'course', label:'Kurs' },
+  test:   { icon:'📝', variant:'test',   label:'Test' },
+  sim:    { icon:'🎮', variant:'sim',    label:'Sim' },
+  live:   { icon:'🔥', variant:'live',   label:'Live' },
+  default:{ icon:'📦', variant:'test',   label:'Kontent' }
+};
+function svgBgInline(){
+  return `<div class="ucard-bg"><svg viewBox='0 0 400 240' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'>
+    <defs>
+      <linearGradient id='g1' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0%'  stop-color='var(--uc-a)' stop-opacity='.6'/>
+        <stop offset='100%' stop-color='var(--uc-b)' stop-opacity='.15'/>
+      </linearGradient>
+      <linearGradient id='g2' x1='1' y1='0' x2='0' y2='1'>
+        <stop offset='0%'  stop-color='var(--uc-b)' stop-opacity='.6'/>
+        <stop offset='100%' stop-color='var(--uc-c)' stop-opacity='.15'/>
+      </linearGradient>
+    </defs>
+    <rect width='400' height='240' fill='url(#g1)'/>
+    <circle cx='330' cy='40' r='80' fill='url(#g2)' opacity='.35'/>
+    <circle cx='40' cy='200' r='100' fill='url(#g2)' opacity='.25'/>
+    <path d='M0,160 C80,120 140,140 220,110 C300,80 360,100 400,80 L400,240 L0,240 Z' fill='url(#g1)' opacity='.35'/>
+  </svg></div><div class='glow'></div>`;
+}
+function cardUniversal(opts={}, ctx={}){
+  const t = (opts.type && UC_PALETTE[opts.type]) ? UC_PALETTE[opts.type] : UC_PALETTE.default;
+  const title = opts.title || opts.name || '—';
+  const tag = opts.tag || t.label;
+  const meta = opts.meta || '';
+  const image = opts.image || '';
+  const price = (opts.price!=null) ? parseInt(opts.price||'0',10)||0 : (parseInt(opts.entryPrice||'0',10)||0);
+  const priceLabel = price>0 ? `${price.toLocaleString()} so'm` : 'Bepul';
+  const pid = opts.productId || (title.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
+  const safe = JSON.stringify({ ...opts, productId: pid, type: t.variant }).replace(/"/g,'&quot;');
+  return `<div class="ucard premium" data-variant="${t.variant}" data-card='${safe}'>
+    ${svgBgInline()}
+    <div class="media">${image ? `<img loading="lazy" src="${image}" alt="${title}">` : `<div class="skel block" aria-hidden="true"></div>`}
+      <span class="badge">${tag}</span>
+      <span class="typechip">${t.icon} ${t.label}</span>
+    </div>
+    <div class="body">
+      <div class="title">${title}</div>
+      <div class="meta">${meta}</div>
+      <div class="row cta-row">
+        <div class="price">${price>0? '💵 ' + priceLabel : ''}</div>
+        <div class="row" style="gap:.4rem">
+          ${ctx.page==='tests' || t.variant==='test' ? `<button class="btn btn-sm act-start">Boshlash</button>`:''}
+          ${ctx.page==='tests' || t.variant==='test' ? (price>0? `<button class="btn btn-sm quiet act-buy">Sotib olish</button>`:'') : ''}
+          ${ctx.page==='courses' && price>0 ? `<button class="btn btn-sm quiet act-buy">Sotib olish</button>`:''}
+          ${ctx.page==='home' ? `<button class="btn btn-sm act-open">Ko'rish</button>`:''}
+          ${ctx.page==='sim' ? `<button class="btn btn-sm act-open">Ochish</button>`:''}
+          ${ctx.page==='live' ? `<button class="btn btn-sm act-live">Batafsil</button>`:''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function bindUniversalCards(container, ctx={}){
+  container.querySelectorAll('.ucard[data-card]').forEach(el=>{
+    const data = JSON.parse(el.dataset.card.replace(/&quot;/g,'"'));
+    const price = (data.price!=null) ? parseInt(data.price||'0',10)||0 : (parseInt(data.entryPrice||'0',10)||0);
+    const pid = data.productId;
+    const startBtn = el.querySelector('.act-start');
+    const buyBtn = el.querySelector('.act-buy');
+    const openBtn = el.querySelector('.act-open');
+    const liveBtn = el.querySelector('.act-live');
+
+    if (buyBtn){
+      buyBtn.addEventListener('click', async ()=>{
+        try{ await spend(price, {productId: pid, name: data.title||data.name||'Kontent'}); alert('Xarid muvaffaqiyatli!'); }
+        catch(e){ showErr(e); }
+      });
+    }
+    if (startBtn){
+      startBtn.addEventListener('click', async ()=>{
+        try{
+          const allowed = await hasAccess({price, productId: pid});
+          if(!allowed && price>0){ alert('Bu kontent pullik. Avval sotib oling.'); return; }
+          alert('✅ Kirish ruxsat. (UI ochiladi)');
+        }catch(e){ showErr(e); }
+      });
+    }
+    if (openBtn){
+      openBtn.addEventListener('click', ()=> alert('🔗 Reklama/yo\'naltirish amalga oshadi.'));
+    }
+    if (liveBtn){
+      liveBtn.addEventListener('click', ()=> openLiveModal(data));
+    }
+  });
+}
+
 /* Pages */
 async function renderHome(){
-  const news=await preferFirestore('content_home','./content/home.csv');
-  pageRoot.innerHTML=`
-    <h3 class="section-title">Yangiliklar</h3>
-    <div class="cards">${news.map(card).join('')}</div>
+  const ads = await preferFirestore('content_home','./content/home.csv');
+  pageRoot.innerHTML = `<h3 class="section-title">Reklamalar</h3>
+    <div id="home-cards" class="cards">` + ads.map(it=> cardUniversal({ ...it, type:'ad', title:it.title, image:it.image||'' }, {page:'home'})).join('') + `</div>
     <h3 class="section-title" style="margin-top:.75rem">Foydalanuvchilar (olmos kamayish tartibida)</h3>
     <div id="users-list" class="list"></div>
     <div class="row end mt-2"><button id="users-loadmore" class="btn quiet">Ko'proq yuklash</button></div>`;
+  bindUniversalCards(document.getElementById('home-cards'), {page:'home'});
   document.getElementById('users-loadmore').addEventListener('click', ()=>renderUsersList(true));
   await renderUsersList(false);
 }
-function card(item){ return `<div class="card p-4"><div class="row gap-2"><div class="badge ${item.badge||item.tag||'upcoming'}">${item.tag||'NEW'}</div><div class="name">${item.name||item.title}</div></div><div class="muted mt-2 small">${item.meta||''}</div></div>`; }
-async function renderCourses(){ const items=await preferFirestore('content_courses','./content/courses.csv'); pageRoot.innerHTML=`<h3 class="section-title">Kurslar</h3><div class="cards">${items.map(card).join('')}</div>`; }
-async function renderTests(){ const items=await preferFirestore('content_tests','./content/tests.csv'); pageRoot.innerHTML=`<h3 class="section-title">Testlar</h3>
-  <div class="cards">`+items.map(it=>{ const title=it.name||it.title; const price=parseInt(it.price||'0',10)||0; const pid=it.productId||(title||'').toLowerCase().replace(/[^a-z0-9]+/g,'-'); const safe=JSON.stringify({name:title,tag:it.tag||'TEST',meta:it.meta||'',price,productId:pid}).replace(/"/g,'&quot;'); return `<div class="card p-4" data-product='${safe}'><div class="row gap-2"><div class="badge">${it.tag||'TEST'}</div><div class="name">${title}</div></div><div class="muted mt-2 small">${it.meta||''}</div><div class="row gap-2 mt-2">${price>0?`<button class="btn buy">Sotib olish — ${price.toLocaleString()} so'm</button>`:`<span class="muted">Bepul</span>`}<button class="btn quiet start">Boshlash</button></div></div>`; }).join('')+`</div>`;
-  document.querySelectorAll('.card[data-product]').forEach(cardEl=>{ const it=JSON.parse(cardEl.dataset.product.replace(/&quot;/g,'"')); const price=parseInt(it.price||'0',10)||0; const buyBtn=cardEl.querySelector('.buy'); if(buyBtn){ buyBtn.addEventListener('click', async ()=>{ try{ await spend(price,it); alert('Xarid muvaffaqiyatli! 💎 bonus berildi.'); }catch(e){ showErr(e);} }); } cardEl.querySelector('.start').addEventListener('click', async ()=>{ try{ const allowed=await hasAccess(it); if(!allowed){ alert('Bu test pullik. Avval sotib oling.'); return; } alert('✅ Kirish ruxsat. (Test UI bu yerda)'); }catch(e){ showErr(e);} }); });
+async function renderCourses(){
+  const items = await preferFirestore('content_courses','./content/courses.csv');
+  pageRoot.innerHTML = `<h3 class="section-title">Kurslar</h3>
+    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, price: it.price||0 }, {page:'courses'})).join('') + `</div>`;
+  bindUniversalCards(document.getElementById('courses-cards'), {page:'courses'});
 }
-async function renderSim(){ const items=await preferFirestore('content_sim','./content/sim.csv'); pageRoot.innerHTML=`<h3 class="section-title">Simulyator</h3><div class="cards">${items.map(card).join('')}</div>`; }
+async function renderTests(){
+  const items = await preferFirestore('content_tests','./content/tests.csv');
+  pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
+    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId }, {page:'tests'})).join('') + `</div>`;
+  bindUniversalCards(document.getElementById('tests-cards'), {page:'tests'});
+}
+async function renderSim(){
+  const items = await preferFirestore('content_sim','./content/sim.csv');
+  pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
+    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title }, {page:'sim'})).join('') + `</div>`;
+  bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
+}
 
-/* LIVE */
+/* LIVE + modal */
 async function renderLive(){
   let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=[]; }
   if(events.length===0){ events=await loadCSV('./content/live.csv'); }
   const toMs=(v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
   const statusOf=(ev,now)=>{ const s=toMs(ev.startAt), e=toMs(ev.endAt); if(s && e && now>=s && now<=e) return 'live'; if(s && now<s) return 'upcoming'; return 'finished'; };
   const now=Date.now(); events.sort((a,b)=>{ const r={live:0,upcoming:1,finished:2}; const sa=statusOf(a,now), sb=statusOf(b,now); if(r[sa]!==r[sb]) return r[sa]-r[sb]; return (toMs(a.startAt)||0)-(toMs(b.startAt)||0); });
-  pageRoot.innerHTML = `<h3 class="section-title">Live turnirlar</h3><div class="cards">` + events.map(ev=>{
-    const s=statusOf(ev,now); const badge=s==='live'?'live':(s==='upcoming'?'upcoming':'finished'); const when=ev.startAt? new Date(toMs(ev.startAt)).toLocaleString():'—'; const prize=ev.prize||'—'; const entry=parseInt(ev.entryPrice||'0',10)||0;
-    return `<div class="card p-4 live-card" data-event='${JSON.stringify({...ev,__status:badge}).replace(/"/g,'&quot;')}'>
-      <div class="row gap-2"><div class="badge ${badge}">${s.toUpperCase()}</div><div class="name">${ev.title||ev.name||'Live test'}</div></div>
-      <div class="muted mt-2 small">🎁 Sovrin: ${prize} • 💵 Kirish: ${entry>0? entry.toLocaleString()+' so\'m':'Bepul'} • ⏱ ${when}</div>
-      <div class="row gap-2 mt-2 btn-row"></div>
-    </div>`;
-  }).join('') + `</div>`;
-  document.querySelectorAll('.card.live-card').forEach(async (card)=>{
-    const ev=JSON.parse(card.dataset.event.replace(/&quot;/g,'"')); const sMs=(ev.startAt&&ev.startAt.toMillis)?ev.startAt.toMillis():(ev.startAt?Date.parse(ev.startAt):0); const eMs=(ev.endAt&&ev.endAt.toMillis)?ev.endAt.toMillis():(ev.endAt?Date.parse(ev.endAt):0);
-    const btnRow=card.querySelector('.btn-row'); let hasEntry=false; try{ if(ev.id){ const r=await getDoc(doc(db,'live_events',ev.id,'entries',auth.currentUser.uid)); hasEntry=r.exists(); } }catch(_){}
-    function draw(){ const now=Date.now(); if(sMs && now < sMs){ const entry=parseInt(ev.entryPrice||'0',10)||0; btnRow.innerHTML = `<button class="btn prejoin">${hasEntry? 'Ro\'yxatga olingan ✅' : (entry>0? 'Oldindan qo\'shilish — '+entry.toLocaleString()+' so\'m' : 'Oldindan qo\'shilish')}</button><button class="btn quiet countdown">Taymer…</button>`; const pre=card.querySelector('.prejoin'); pre.disabled=hasEntry; pre.addEventListener('click', async ()=>{ try{ if(entry>0) await spend(entry,{productId:'live:'+(ev.id||ev.title), name: ev.title||'Live test'}); if(ev.id){ await setDoc(doc(db,'live_events',ev.id,'entries',auth.currentUser.uid), {at: serverTimestamp(), paid: entry>0? entry:0}, {merge:true}); } await addDoc(collection(db,'users',auth.currentUser.uid,'live_entries'), {eventRef: ev.id||ev.title, at: serverTimestamp(), paid: entry>0? entry:0}); hasEntry=true; draw(); }catch(e){ showErr(e);} }); const c=card.querySelector('.countdown'); if(c){ const tick=()=>{ const d=Math.max(0, sMs-Date.now()); const h=Math.floor(d/3_600_000), m=Math.floor((d%3_600_000)/60_000), s=Math.floor((d%60_000)/1000); c.textContent=d>0?`Boshlanishiga: ${h} soat ${m} daqiqa ${s} soniya`:'Boshlanmoqda…'; if(d<=0){ draw(); } }; tick(); setInterval(tick,1000);} } else if (sMs && eMs && now>=sMs && now<=eMs){ btnRow.innerHTML = hasEntry? `<button class="btn enter">Kirish</button>`:`<button class="btn quiet" disabled>Join yopiq</button>`; if(hasEntry){ card.querySelector('.enter').addEventListener('click', ()=> alert('🎯 Live boshlandi! (Test UI bu yerda)')); } } else { btnRow.innerHTML = `<button class="btn quiet" disabled>Yakunlangan</button>`; } } draw(); });
+
+  pageRoot.innerHTML = `<h3 class="section-title">Live turnirlar</h3>
+    <div id="live-cards" class="cards">` + events.map(ev=>{
+      const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
+      const entry = parseInt(ev.entryPrice||'0',10)||0;
+      return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry }, {page:'live'});
+    }).join('') + `</div>`;
+
+  document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
+    const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
+    const btnStart = card.querySelector('.act-live');
+    if (btnStart) btnStart.addEventListener('click', ()=> openLiveModal(data));
+  });
+}
+
+/* Live Details Modal */
+async function openLiveModal(ev){
+  const dlg = document.getElementById('live-modal');
+  const title = document.getElementById('lm-title');
+  const meta = document.getElementById('lm-meta');
+  const prize = document.getElementById('lm-prize');
+  const entry = document.getElementById('lm-entry');
+  const when = document.getElementById('lm-when');
+  const statusEl = document.getElementById('lm-status');
+  const ctaPre = document.getElementById('lm-prejoin');
+  const ctaEnter = document.getElementById('lm-enter');
+  const err = document.getElementById('lm-error');
+  const lmCount = document.getElementById('lm-count');
+  const lmBal = document.getElementById('lm-balance');
+  const lmCd = document.getElementById('lm-countdown');
+
+  err.classList.add('hidden'); err.textContent='';
+
+  const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
+  const sMs = ev.startAt ? toMs(ev.startAt) : 0;
+  const eMs = ev.endAt ? toMs(ev.endAt) : 0;
+  function status(now){ if(sMs && eMs && now>=sMs && now<=eMs) return 'LIVE'; if(sMs && now<sMs) return 'UPCOMING'; return 'FINISHED'; }
+
+  title.textContent = ev.title || ev.name || 'Live';
+  meta.textContent = ev.meta || '';
+  prize.textContent = ev.prize || '—';
+  entry.textContent = `${parseInt(ev.entryPrice||'0',10)||0} so'm`;
+  when.textContent = sMs ? (new Date(sMs)).toLocaleString() : '—';
+  statusEl.textContent = status(Date.now());
+
+  // Load participant count & user balance
+  let joined=false, count='—', balance='—';
+  try{
+    const uref = doc(db,'users',auth.currentUser.uid);
+    const us = await getDoc(uref); const ud = us.data()||{}; balance = (ud.balance??0).toLocaleString('uz-UZ') + " so'm";
+    if(ev.id){
+      const entCol = collection(db,'live_events', ev.id, 'entries');
+      const snap = await getDocs(entCol); count = snap.size;
+      const me = await getDoc(doc(db,'live_events',ev.id,'entries',auth.currentUser.uid)); joined = me.exists();
+    }
+  }catch(_){}
+  lmCount.textContent = count; lmBal.textContent = balance;
+
+  function drawActions(){
+    const now = Date.now();
+    statusEl.textContent = status(now);
+    if(sMs && now < sMs){
+      ctaPre.disabled = joined;
+      ctaPre.textContent = joined ? "Ro'yxatga olingan ✅" : ( (parseInt(ev.entryPrice||'0',10)||0)>0 ? `Oldindan qo'shilish — ${(parseInt(ev.entryPrice||'0',10)||0).toLocaleString()} so'm` : "Oldindan qo'shilish" );
+      ctaEnter.disabled = true; ctaEnter.textContent = "Kirish (LIVE boshlanmagan)";
+    } else if (sMs && eMs && now>=sMs && now<=eMs){
+      ctaPre.disabled = true; ctaPre.textContent = "Join yopiq";
+      ctaEnter.disabled = !joined; ctaEnter.textContent = joined ? "Kirish" : "Kirish (join kerak)";
+    } else {
+      ctaPre.disabled = true; ctaPre.textContent = "Yakunlangan";
+      ctaEnter.disabled = true; ctaEnter.textContent = "Yakunlangan";
+    }
+  }
+  drawActions();
+
+  function tick(){
+    if(!sMs){ lmCd.textContent='—'; return; }
+    const d = Math.max(0, sMs - Date.now());
+    const h=Math.floor(d/3_600_000), m=Math.floor((d%3_600_000)/60_000), s=Math.floor((d%60_000)/1000);
+    lmCd.textContent = (d>0) ? `Boshlanishiga: ${h} soat ${m} daqiqa ${s} soniya` : 'Boshlanmoqda…';
+    if(d<=0) drawActions();
+  }
+  tick(); const iv = setInterval(tick, 1000);
+
+  const closeBtn = document.getElementById('lm-close');
+  function close(){ clearInterval(iv); dlg.close(); }
+  closeBtn.onclick = close;
+
+  ctaPre.onclick = async ()=>{
+    try{
+      const price = parseInt(ev.entryPrice||'0',10)||0;
+      if(price>0) await spend(price, {productId:'live:'+(ev.id||ev.title), name: ev.title||'Live test'});
+      if(ev.id){ await setDoc(doc(db,'live_events',ev.id,'entries',auth.currentUser.uid), {at: serverTimestamp(), paid: price>0? price:0}, {merge:true}); }
+      await addDoc(collection(db,'users',auth.currentUser.uid,'live_entries'), {eventRef: ev.id||ev.title, at: serverTimestamp(), paid: (parseInt(ev.entryPrice||'0',10)||0)});
+      joined = true; drawActions();
+    }catch(e){ err.textContent = e.message||e.code; err.classList.remove('hidden'); }
+  };
+  ctaEnter.onclick = ()=>{ if(!ctaEnter.disabled) alert('🎯 Live boshlandi! (Test UI bu yerda)'); };
+
+  dlg.showModal();
 }
 
 /* Settings + Admin CRUD + Wallet */
 function renderSettings(){
   pageRoot.innerHTML=`<div class="cards">
-    <div class="card p-4"><h3>Hamyon</h3><div class="row gap-2 mt-2"><button class="btn" id="topup-10">➕ 10 000 so'm</button><button class="btn" id="topup-50">➕ 50 000 so'm</button><button class="btn" id="topup-100">➕ 100 000 so'm</button></div><p class="muted mt-1 small">Demo to'ldirish (keyin Payme/Click).</p></div>
+    <div class="card p-4"><h3>Hamyon</h3><div class="row gap-2 mt-2">
+      <button class="btn" id="topup-10">➕ 10 000 so'm</button>
+      <button class="btn" id="topup-50">➕ 50 000 so'm</button>
+      <button class="btn" id="topup-100">➕ 100 000 so'm</button></div>
+      <p class="muted mt-1 small">Demo to'ldirish (keyin Payme/Click).</p></div>
     <div class="card p-4" id="admin-card"><h3>Admin panel — Karta CRUD</h3>
       <div class="row gap-2 mt-2">
         <select id="ap-coll" class="input"><option value="content_home">Home</option><option value="content_courses">Courses</option><option value="content_tests">Tests</option><option value="content_sim">Sim</option><option value="live_events">Live</option></select>
@@ -184,7 +372,6 @@ onAuthStateChanged(auth, async (user)=>{
     try{
       const data=await ensureNumericIdAndProfile(user);
       gate.classList.remove('visible');
-      // Update badges from user doc
       const uref=doc(db,'users',auth.currentUser.uid);
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
