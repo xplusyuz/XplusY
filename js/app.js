@@ -69,6 +69,33 @@ btnEmailSignup.addEventListener('click', async () => {
 });
 function showErr(e){ authErr.textContent = e.message; authErr.classList.remove('hidden'); }
 
+import { signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+window.__mcGoogle = async function(){
+  const btn = document.getElementById('btn-google');
+  if (btn) { btn.disabled = true; btn.textContent = 'Kutib turing...'; }
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch (e) {
+    try {
+      await signInWithRedirect(auth, googleProvider);
+      await getRedirectResult(auth);
+    } catch (e2) {
+      const err = document.getElementById('auth-error');
+      if (err){ err.textContent = e2.message || e.message; err.classList.remove('hidden'); }
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Google bilan davom etish'; }
+  }
+};
+
+// Bind (redundant safety)
+document.addEventListener('DOMContentLoaded', ()=>{
+  const g = document.getElementById('btn-google');
+  if (g) g.addEventListener('click', ()=> window.__mcGoogle());
+});
+
+
 // Profile modal
 const pModal = document.getElementById('profile-modal');
 const btnSaveProfile = document.getElementById('btn-save-profile');
