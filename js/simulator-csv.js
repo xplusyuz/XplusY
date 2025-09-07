@@ -7,6 +7,7 @@ let visibleCount = PAGE_SIZE;
 const state = { section: '*' };
 
 (async function init(){
+  injectSimStyles(); // <-- spacing CSS
   const text = await fetchCSV(csvPath);
   if(!text){ host.innerHTML = `<section class="card"><div class="sub">simulator.csv topilmadi.</div></section>`; return; }
   const rows = parseCSV(text);
@@ -67,13 +68,25 @@ function card(r){
   const action = (r.href) ? `<a class="btn primary" href="${r.href}">O‘ynash</a>` : `<button class="btn" disabled>Link yo‘q</button>`;
   div.innerHTML = `
     ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">` : ''}
-    ${r.title ? `<h3 style="margin:.2rem 0">${esc(r.title)}</h3>` : ''}
+    ${r.title ? `<h3 class="sim-title">${esc(r.title)}</h3>` : ''}  <!-- inline style o'rniga class -->
     ${action}
   `;
   return div;
 }
 
 /* Helpers */
+function injectSimStyles(){
+  if (document.getElementById('sim-card-style')) return;
+  const css = `
+    /* Sarlavha va tugma oralig'i */
+    #simGrid .sim-title { margin: .2rem 0 12px; }
+    #simGrid .btn { margin-top: 6px; }
+  `;
+  const st = document.createElement('style');
+  st.id = 'sim-card-style';
+  st.textContent = css;
+  document.head.appendChild(st);
+}
 function uniq(arr){ return Array.from(new Set(arr)); }
 async function fetchCSV(path){
   const tries=[path,'./simulator.csv','/simulator.csv'];
