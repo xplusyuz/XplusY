@@ -29,7 +29,8 @@ function setupUI(data){
   // Build sections with "Ixtiyoriy" first (empty value)
   const sections = uniq(data.map(x => (x.section||'').trim()).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
   sSec.innerHTML = `<option value="">Ixtiyoriy</option>` + sections.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  sSec.value = ""; // default: Ixtiyoriy (no specific section)
+  sSec.value = "*"; // default: Hammasi
+  state.section = '*'; visibleCount = PAGE_SIZE; (no specific section)
 
   // Initially hide filters until a section is chosen
   fieldF1.style.display = 'none';
@@ -96,10 +97,7 @@ function renderData(data){
   const v2 = state.f2 || (document.querySelector('#f2')?.value || '');
   const vPlan = (state.plan || (document.querySelector('#fPlan')?.value || '')).toUpperCase();
 
-  if (!curSec){
-    host.innerHTML = `<section class="card"><div class="sub">Bo‘limni tanlang — yoki "Hammasi"ni bosing.</div></section>`;
-    return;
-  }
+  // curSec always set (Hammasi or a section)
 
   const pool = (curSec === '*') ? data : data.filter(r => r.section === curSec);
 
