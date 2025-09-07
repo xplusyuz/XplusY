@@ -40,11 +40,11 @@
     return parser.parseFromString(text, 'text/html');
   }
 
-  function collectPageScripts(doc){
-    // Return descriptors for page-specific module scripts (external + inline),
-    // excluding common.js and router.js.
+  
+  function collectPageScripts(container){
     const out = [];
-    doc.querySelectorAll('script[type="module"]').forEach(s=>{
+    if(!container) return out;
+    container.querySelectorAll('script[type="module"]').forEach(s=>{
       const src = s.getAttribute('src');
       if(src){
         const normalized = src.replace(location.origin,'');
@@ -52,14 +52,18 @@
         if(/router\.js(\?|$)/.test(normalized)) return;
         out.push({ kind:'external', src });
       }else{
-        // inline module script
-        const code = s.textContent || '';
-        if(!code.trim()) return;
+        const code = (s.textContent || '').trim();
+        if(!code) return;
+        if(/from\s+['"]\.\/js\/common\.js['"]/.test(code)) return;
+        if(/import\(['"]\.\/js\/common\.js['"]\)/.test(code)) return;
+        if(/\battachAuthUI\s*\(/.test(code)) return;
+        if(/\binitUX\s*\(/.test(code)) return;
         out.push({ kind:'inline', code });
       }
     });
     return out;
   }
+
 
   function removeOldPageScripts(){
     document.querySelectorAll('script[data-spa]').forEach(s=> s.remove());
@@ -96,7 +100,7 @@
       if(newTitle) document.title = newTitle.textContent;
 
       // Run page-level scripts
-      const scripts = collectPageScripts(doc);
+      const scripts = collectPageScripts(newMain);
       runPageScripts(scripts);
 
       // Mark active nav + scroll top
