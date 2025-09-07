@@ -3,7 +3,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-const __g = (globalThis.__mcGuards ||= { auth:false, ux:false });
 export const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -62,7 +61,6 @@ async function ensureUserDoc(uid, profile){
 }
 
 export function attachAuthUI({ requireSignIn = true } = {}){
-  if(__g.auth) return; __g.auth = true;
   const idEl = ()=> document.querySelector('#hdrId');
   const balEl = ()=> document.querySelector('#hdrBal');
   const gemEl = ()=> document.querySelector('#hdrGem');
@@ -120,6 +118,5 @@ document.addEventListener('click', async (e)=>{
 
 /* Init per page */
 export function initUX(){
-  if(__g.ux) return; __g.ux = true;
   initTheme();
   }
