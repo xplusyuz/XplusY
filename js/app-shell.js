@@ -19,6 +19,20 @@
       }
     }));
     document.dispatchEvent(new CustomEvent('appshell:ready'));
+    // Initialize shared auth/theme once components are in DOM
+    (async () => {
+      try {
+        const mod = await import('./common.js');
+        if (mod && typeof mod.attachAuthUI === 'function') {
+          mod.attachAuthUI({ requireSignIn: true });
+        }
+        if (mod && typeof mod.initUX === 'function') {
+          mod.initUX();
+        }
+      } catch (e) {
+        console.warn('common.js init failed:', e);
+      }
+    })();
   }
 
   if(document.readyState === 'loading'){
