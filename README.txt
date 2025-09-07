@@ -1,14 +1,15 @@
-Excel CSV → Grid & Table (bitta fayl)
-=========================================
-1) `home.csv` ni oching va SIZ KO'RSATGANIDEK (har ustun alohida katak) to'ldiring:
-   Img url, Title, Meta, tugma nomi, tugma linki
+MathCenter — Home grid: CSV bilan boshqariladi
+-------------------------------------------------
+Fayllar:
+- index.html — grid + "Jadval ko‘rinishi"
+- js/home-grid.js — CSV parsing va render
+- home.csv — bo‘sh (faqat sarlavha); to‘ldirishingiz uchun
+- home.sample.csv — namunaviy 4 qator
 
-2) Sahifada avtomatik ravishda:
-   - Grid kartalar yaratiladi
-   - "Jadval ko'rinishi" tugmasi bilan CSV tahriri jadval sifatida ko'rinadi
+CSV ustunlari (har biri alohida katak):
+Img url, Title, Meta, tugma nomi, tugma linki
 
-Maslahatlar:
-- Agar matnda vergul bo'lsa, uni "qo'shtirnoq" ichiga oling:
-  Masalan: "Pre-join, start lock, jonli reyting"
+Maslahat: matn ichida vergul bo‘lsa, qo‘shtirnoqqa oling:
+"Pre-join, start lock, jonli reyting"
 
-Sinash uchun `home.sample.csv` ham bor.
+2025-09-07
