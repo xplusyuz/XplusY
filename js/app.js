@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
+  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
 
@@ -237,24 +237,24 @@ async function renderHome(){
 async function renderCourses(){
   const items = await preferFirestore('content_courses','./content/courses.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Kurslar</h3>
-    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`;
+    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
   bindUniversalCards(document.getElementById('courses-cards'), {page:'courses'});
 }
 async function renderTests(){
   const items = await preferFirestore('content/tests','./content/tests.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
-    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`;
+    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
   bindUniversalCards(document.getElementById('tests-cards'), {page:'tests'});
 }
 async function renderSim(){
   const items = await preferFirestore('content/sim','./content/sim.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
-    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`;
+    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
   bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
 }
 
 /* LIVE + modal */
-async function renderLive(){
+async async function renderLive(){
   let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=[]; }
   if(events.length===0){ events=await loadCSV('./content/live.csv'); }
   const toMs=(v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
@@ -266,7 +266,7 @@ async function renderLive(){
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
       return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry, startLink: ev.startLink||'', modalText: ev.modalText||'' }, {page:'live'});
-    }).join('') + `</div>`;
+    }).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
 
   document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
     const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
@@ -413,7 +413,7 @@ async function openLiveModal(ev){
   dlg.showModal();
 }
 
-/* Test Player (Math) — explanations + randomization */
+/* Test Player (Math) — explanations + seeded randomization + anti-cheat + lock + per-question timer */
 async function renderTestPlayer(slug){
   const tests = await preferFirestore('content/tests','./content/tests.csv');
   const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
@@ -425,68 +425,84 @@ async function renderTestPlayer(slug){
     if(!ok){
       if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
         await spend(price, {productId: t.productId||slug, name: t.name||t.title||'Test'});
-      } else { toggleAuthGate(true); navigate('/tests'); return; }
+      } else { navigate('/tests'); return; }
     }
   }
 
-  let qCsv = `./content/tests_data/${slug}.csv`; if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
+  let qCsv = `./content/tests_data/${slug}.csv`;
+  if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
   const rawRows = await loadCSV(qCsv);
   if(!rawRows || rawRows.length===0){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
   }
 
-  // Normalize questions and add randomized options
+  const uid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : 'anon';
+  const paramSeed = parseInt(getParam('seed')||'0',10)||0;
+  const ssKey = `tp-seed:${uid}:${slug}`;
+  let seed = paramSeed || parseInt(sessionStorage.getItem(ssKey)||'0',10) || (Math.floor(Math.random()*2**31));
+  sessionStorage.setItem(ssKey, String(seed));
+  const rnd = seededRandom ? seededRandom(seed) : null;
+
   const makeQ = (r)=>{
     const opts=[]; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k,label:k.toUpperCase(),text:r[k],isCorrect:(String(r.ans||'').trim().toLowerCase()===k)}); });
-    if(typeof seededShuffle==='function') seededShuffle(opts, rnd);
+    if(rnd && typeof seededShuffle==='function') seededShuffle(opts, rnd); else if(typeof shuffle==='function') shuffle(opts);
     return { text: r.text || r.q || '—', ex: r.ex || '', img: r.img || r.image || '', opts };
   };
   let rows = rawRows.map(makeQ);
-  shuffle(rows); // randomize question order
+  if(rnd && typeof seededShuffle==='function') seededShuffle(rows, rnd); else if(typeof shuffle==='function') shuffle(rows);
 
   let durationSec = parseInt(t.durationSec||'0',10)||0;
   if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
 
-  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
+  const qPer = Math.max(20, Math.min(180, Math.floor(durationSec / rows.length)));
+  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), locked: new Array(rows.length).fill(false), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, qRemaining: qPer, qPer, reveal:false, strikes:0 };
+
+  function visHandler(){ if(document.hidden){ state.strikes++; let penalty = (state.strikes===1?10:(state.strikes===2?30:60)); state.remaining = Math.max(0, state.remaining - penalty); state.qRemaining = Math.max(0, state.qRemaining - Math.ceil(penalty/2)); showToast(`Diqqat: fokusdan chiqish uchun -${penalty}s jarima`); if(state.remaining<=0) finish(); } }
+  document.addEventListener('visibilitychange', visHandler);
 
   function render(){
     const q = rows[state.idx];
     const prog = Math.round((state.idx)/rows.length*100);
+    const picked = state.picks[state.idx];
+    const locked = state.locked[state.idx];
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="head">
         <div><strong>${state.title}</strong> — ${rows.length} savol</div>
-        <div class="timer" id="tp-timer">00:00</div>
+        <div class="row" style="gap:.75rem"><div class="qtimer" id="tp-qtimer">00:00</div><div class="timer" id="tp-timer">00:00</div></div>
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
-        <div class="qtext">#${state.idx+1}. ${q.text}</div>${ q.img ? `<img class=\"qimg\" src=\"${q.img}\" alt=\"img\">` : `` }
+        <div class="qtext">#${state.idx+1}. ${q.text}</div>
+        ${q.img ? `<img class="qimg" src="${q.img}" alt="img">` : ``}
         <div class="opts">
           ${q.opts.map((op,i)=>{
-            const picked = state.picks[state.idx];
-            const isSel = (picked===i) ? 'selected' : '';
-            return `<div class="opt ${isSel}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
+            const isSel = (picked===i);
+            const mark = (state.reveal ? (op.isCorrect ? 'correct' : (isSel ? 'wrong' : '')) : (isSel ? 'selected' : ''));
+            const dis = locked ? 'disabled' : '';
+            return `<div class="opt ${mark} ${dis}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
           }).join('')}
         </div>
         <div class="ctrl">
           <button class="btn quiet" id="tp-prev" ${state.idx===0?'disabled':''}>Ortga</button>
           <div class="row gap-2">
-            <button class="btn solbtn" id="tp-sol">Yechimni ko'rish</button>
+            <button class="btn solbtn" id="tp-sol">${state.reveal?'Yechimni yashirish':'Yechimni ko\'rish'}</button>
             <button class="btn quiet" id="tp-skip">O'tkazib yuborish</button>
             <button class="btn" id="tp-next">${state.idx===rows.length-1?'Yakunlash':'Keyingi'}</button>
           </div>
         </div>
         ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
       </div>
-      <div class="small muted">Izoh: faqat matematika savollari. Variantlar aralashtirilgan.</div>
+      <div class="small muted">Seed=${seed}. Ogohlantirishlar: ${state.strikes} ta.</div>
     </div>`;
 
-    // interactions
-    pageRoot.querySelectorAll('.opt').forEach(el=>{
-      el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=false; render(); });
-    });
-    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { toggleAuthGate(true); finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { toggleAuthGate(true); finish(); } });
+    if(!locked){
+      pageRoot.querySelectorAll('.opt').forEach(el=>{
+        el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; state.locked[state.idx]=true; render(); });
+      });
+    }
+    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; state.qRemaining = state.qPer; render(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
     updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
   }
@@ -494,66 +510,80 @@ async function renderTestPlayer(slug){
   let iv=null;
   function startTimer(){
     iv = setInterval(()=>{
-      state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); }
+      state.remaining--; state.qRemaining--;
+      if(state.qRemaining<=0){
+        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; } else { state.remaining = Math.max(0,state.remaining); finish(); return; }
+      }
+      if(state.remaining<=0){ state.remaining=0; finish(); return; }
       const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
       updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
     }, 1000);
   }
-  function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } }
-  function updateTimerText(){
-    const m = Math.floor(state.remaining/60), s=state.remaining%60;
-    const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  }
+  function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
+  function fmt(n){ const m=Math.floor(n/60), s=n%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function updateTimerText(){ const t1 = document.getElementById('tp-timer'); if(t1) t1.textContent = fmt(state.remaining); const t2 = document.getElementById('tp-qtimer'); if(t2) t2.textContent = fmt(state.qRemaining); }
 
   async function finish(){
     stopTimer();
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
-    rows.forEach((q,i)=>{
-      const pick = state.picks[i];
-      if(pick==null){ empty++; return; }
-      const chosen = q.opts[pick];
-      if(chosen && chosen.isCorrect) good++; else bad++;
-    });
-    const percent = Math.round(good/rows.length*100);
+    rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && chosen.isCorrect) good++; else bad++; });
+    const rawPercent = Math.round(good/rows.length*100);
+    const extraPenalty = Math.min(20, Math.max(0, (state.strikes-1)) * 2);
+    const percent = Math.max(0, rawPercent - extraPenalty);
     try{
       await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
         productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
-        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks
+        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, strikes: state.strikes, qPer: state.qPer, seed, picks: state.picks, rawPercent, extraPenalty
       });
     }catch(_){}
-    // Results + review
+
+    // Gems award by difficulty
+    const difficulty = (t.difficulty || 'easy').toLowerCase();
+    const coef = (difficulty==='easy')? {win:1, lose:-0.25} : (difficulty==='medium')? {win:2, lose:-0.5} : {win:3, lose:-0.75};
+    const gemsDelta = Math.max(0, (good * coef.win) + (bad * coef.lose));
+    try{
+      await runTransaction(db, async (tx)=>{
+        const uref=doc(db,'users',auth.currentUser.uid);
+        const us=await tx.get(uref);
+        const cur = (us.data().gems||0);
+        tx.update(uref, { gems: Math.round((cur + gemsDelta)*100)/100, updatedAt: serverTimestamp() });
+        await addDoc(collection(db,'users',auth.currentUser.uid,'gems_logs'), {delta:gemsDelta, difficulty, good, bad, at: serverTimestamp(), ref: (t.productId||slug)});
+      });
+    }catch(_){}
+
+    const evId = getParam('event');
+    if(evId){
+      try{
+        const uref = doc(db,'users',auth.currentUser.uid);
+        const us = await getDoc(uref); const ud = us.data()||{};
+        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), {
+          uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'),
+          score: percent, updatedAt: serverTimestamp(), strikes: state.strikes
+        }, { merge: true });
+      }catch(_){}
+    }
+
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="rez">
         <h3>Natijalar — ${state.title}</h3>
         <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
-        <p><b>${percent}%</b> umumiy natija</p>
+        <p><b>${percent}%</b> umumiy natija <span class='small muted'>(jarima: -${extraPenalty}%)</span></p>
+        <p>💎 Qo'shilgan olmos: <b>${gemsDelta.toFixed(2)}</b></p>
         <div class="row gap-2 mt-2">
-          <button class="btn" id="tp-again">Qayta yechish (yangi tartib)</button>
+          <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
+          <button class="btn" id="tp-again-new">Qayta yechish (yangi tartib)</button>
           <button class="btn quiet" id="tp-exit">Testlarga qaytish</button>
         </div>
       </div>
-      <div class="mt-2 card p-4">
-        <h4>Review</h4>
-        ${rows.map((q,qi)=>{
-          const pick = state.picks[qi];
-          const ok = (pick!=null && q.opts[pick] && q.opts[pick].isCorrect);
-          const correct = q.opts.find(op=>op.isCorrect);
-          return `<div class="mt-2">
-            <div><b>#${qi+1}.</b> ${q.text} — ${ ok ? '<span class="good">to\'g\'ri</span>' : (pick==null? '<span class="muted">bo\'sh</span>' : '<span class="bad">noto\'g\'ri</span>') }</div>
-            <div class="small muted">To'g'ri javob: ${(correct? correct.label : '?')}.</div>
-            ${ q.ex ? `<div class="sol"><div class="st">Yechim</div><div>${q.ex}</div></div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
     </div>`;
-    document.getElementById('tp-again').addEventListener('click', ()=>{ renderTestPlayer(slug); });
+    document.getElementById('tp-again-same').addEventListener('click', ()=>{ sessionStorage.setItem(ssKey, String(seed)); renderTestPlayer(slug); });
+    document.getElementById('tp-again-new').addEventListener('click', ()=>{ const newSeed = Math.floor(Math.random()*2**31); sessionStorage.setItem(ssKey, String(newSeed)); renderTestPlayer(slug); });
     document.getElementById('tp-exit').addEventListener('click', ()=> navigate('/tests'));
   }
 
   render(); startTimer();
 }
-
 /* Settings + Admin CRUD + Wallet */
 function renderSettings(){
   pageRoot.innerHTML=`<div class="cards">
@@ -624,3 +654,15 @@ onAuthStateChanged(auth, async (user)=>{
     gate.classList.add('visible');
   }
 });
+
+async function renderLiveOverall(){
+  const body=document.getElementById('lb2-body'); if(!body) return;
+  try{
+    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(500)));
+    const best = new Map();
+    snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); });
+    const arr=[...best.values()].sort((a,b)=> b.score-a.score).slice(0,100);
+    body.innerHTML = arr.length? arr.map((d,i)=>`<div class='lb-row'><div class='left'><div class='rk'>${i+1}</div><div class='name'>${d.name}</div></div><div class='score'>${d.score}</div></div>`).join('') : `<div class='small muted'>Hali natijalar yo'q</div>`;
+  }catch(e){ body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
+}
+document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(renderLiveOverall, 0); });
