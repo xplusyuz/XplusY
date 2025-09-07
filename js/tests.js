@@ -1,5 +1,5 @@
 
-import { attachAuthUI, initUX, db } from "./js/common.js";
+import { attachAuthUI, initUX, db } from "./common.js";
 import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 attachAuthUI({ requireSignIn: true });
