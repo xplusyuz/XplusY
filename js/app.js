@@ -66,7 +66,7 @@ function navigate(path){
     if (loc.origin === location.origin){
       history.pushState({path: loc.pathname}, '', loc.pathname);
       route();
-    } else {
+    }   else { toggleAuthGate(true);
       location.href = path;
     }
   }catch(_){ location.href = path; }
@@ -159,13 +159,13 @@ function bindUniversalCards(container, ctx={}){
           if(!allowed && price>0){
             if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
               await spend(price, {productId: pid, name: data.title||data.name||'Kontent'});
-            } else { return; }
+            }   else { toggleAuthGate(true); return; }
           }
-          if(data.link){ navigate(data.link); } else { alert('Link belgilanmagan'); }
+          if(data.link){ navigate(data.link); }   else { toggleAuthGate(true); alert('Link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
-    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } }); }
+    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); }   else { toggleAuthGate(true); alert("Link topilmadi"); } }); }
     if (liveBtn){ liveBtn.addEventListener('click', ()=>{ openLiveModal(data); }); }
     if (liveStartBtn){
       liveStartBtn.addEventListener('click', async ()=>{
@@ -175,7 +175,7 @@ function bindUniversalCards(container, ctx={}){
           if(!(sMs && eMs && now>=sMs && now<=eMs)){ alert('LIVE hali boshlanmagan yoki yakunlangan'); return; }
           let joined=false; try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
           if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
-          if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
+          if(data.startLink){ navigate(data.startLink); }   else { toggleAuthGate(true); alert('Start link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
@@ -266,7 +266,7 @@ async function renderLive(){
           lbBody.innerHTML = rows;
         });
       }catch(_){ lbBody.innerHTML = `<div class="small muted">Reytingni o'qib bo'lmadi</div>`; }
-    } else { lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
+    }   else { toggleAuthGate(true); lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
   }
   if(current) bindLb(current);
   select.addEventListener('change', (e)=>{ const v=e.target.value; const found = source.find((x,i)=> (x.id||('csv-'+i))===v ); if(found){ current=found; bindLb(current); } });
@@ -341,7 +341,7 @@ async function openLiveModal(ev){
     } else if (sMs && eMs && now>=sMs && now<=eMs){
       ctaPre.disabled = true; ctaPre.textContent = "Join yopiq";
       ctaEnter.disabled = !joined; ctaEnter.textContent = joined ? "Kirish" : "Kirish (join kerak)";
-    } else {
+    }   else { toggleAuthGate(true);
       ctaPre.disabled = true; ctaPre.textContent = "Yakunlangan";
       ctaEnter.disabled = true; ctaEnter.textContent = "Yakunlangan";
     }
@@ -400,7 +400,7 @@ async function renderTestPlayer(slug){
     if(!ok){
       if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
         await spend(price, {productId: t.productId||slug, name: t.name||t.title||'Test'});
-      } else { navigate('/tests'); return; }
+      }   else { toggleAuthGate(true); navigate('/tests'); return; }
     }
   }
 
@@ -420,7 +420,7 @@ async function renderTestPlayer(slug){
   const makeQ = (r)=>{
     const opts = []; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
     seededShuffle(opts, rnd);
-    return { text: r.text || r.q || '—', ex: r.ex || '', opts };
+    return { text: r.text || r.q || '—', ex: r.ex || '', img: r.img || r.image || '', opts };
   };
   let rows = rawRows.map(makeQ); seededShuffle(rows, rnd);
 
@@ -445,7 +445,7 @@ async function renderTestPlayer(slug){
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
-        <div class="qtext">#${state.idx+1}. ${q.text}</div>
+        <div class="qtext">#${state.idx+1}. ${q.text}</div>${ q.img ? `<img class=\"qimg\" src=\"${q.img}\" alt=\"img\">` : `` }
         <div class="opts">
           ${q.opts.map((op,i)=>{
             const isSel = (picked===i);
@@ -473,10 +473,10 @@ async function renderTestPlayer(slug){
       });
     }
     pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; state.qRemaining = state.qPer; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); }   else { toggleAuthGate(true); finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); }   else { toggleAuthGate(true); finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
-    updateTimerText();
+    updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
   }
 
   let iv=null;
@@ -484,11 +484,11 @@ async function renderTestPlayer(slug){
     iv = setInterval(()=>{
       state.remaining--; state.qRemaining--;
       if(state.qRemaining<=0){
-        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; } else { state.remaining = Math.max(0,state.remaining); finish(); return; }
+        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; }   else { toggleAuthGate(true); state.remaining = Math.max(0,state.remaining); finish(); return; }
       }
       if(state.remaining<=0){ state.remaining=0; finish(); return; }
       const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
-      updateTimerText();
+      updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
     }, 1000);
   }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
@@ -597,7 +597,7 @@ function renderSettings(){
   const dbgAuth=document.getElementById('dbg-auth'); const dbgErr=document.getElementById('dbg-last-error');
   dbgAuth.textContent=auth.currentUser?('User: '+(auth.currentUser.email||auth.currentUser.uid)):'User: (not signed in)';
   dbgErr.textContent=window.__lastAuthError?('Last error: '+window.__lastAuthError):'Last error: (none)';
-  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
+  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); }   else { toggleAuthGate(true); document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
 }
 function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); const listEl=document.getElementById('ap-list');
   async function refresh(){ listEl.innerHTML='<div class="muted p-4">Yuklanmoqda...</div>'; const snap=await getDocs(collection(db,collSel.value)); const items=[]; snap.forEach(d=>items.push({id:d.id, ...d.data()})); if(items.length===0){ listEl.innerHTML='<div class="muted p-4">Hali karta yo\'q.</div>'; return; } listEl.innerHTML=items.map(it=>{ const live = (collSel.value==='live_events'); return `<div class="card p-4" data-id="${it.id}"><div class="row gap-2 mt-1"><input class="input ap-name" value="${(it.name||it.title||'').replace(/"/g,'&quot;')}" placeholder="Name/Title"/><input class="input ap-tag" value="${(it.tag||'').replace(/"/g,'&quot;')}" placeholder="Tag"/><input class="input ap-meta" value="${(it.meta||'').replace(/"/g,'&quot;')}" placeholder="Meta"/></div><div class="row gap-2 mt-1"><input class="input ap-price" type="number" value="${it.price||0}" placeholder="Price (tests)"/><input class="input ap-productId" value="${it.productId||''}" placeholder="Product ID (tests)"/></div>${live?`<div class='row gap-2 mt-1'><input class='input ap-entry' type='number' value='${it.entryPrice||0}' placeholder='Entry (Live)'/><input class='input ap-prize' value='${it.prize||''}' placeholder='Prize (Live)'/><input class='input ap-startAt' type='datetime-local' value='${(it.startAt && it.startAt.toDate? it.startAt.toDate().toISOString().slice(0,16) : (it.startAt||'')).toString().replace('Z','')}'/><input class='input ap-endAt' type='datetime-local' value='${(it.endAt && it.endAt.toDate? it.endAt.toDate().toISOString().slice(0,16) : (it.endAt||'')).toString().replace('Z','')}'/></div>`:''}<div class="row end mt-2"><button class="btn quiet ap-delete">O'chirish</button><button class="btn ap-save">Saqlash</button></div></div>`; }).join('');
@@ -624,6 +624,7 @@ async function hasAccess(product){ const price=parseInt(product.price||'0',10)||
 
 /* Auth state */
 onAuthStateChanged(auth, async (user)=>{
+  toggleAuthGate(!user);
   if(user){
     try{
       const data=await ensureNumericIdAndProfile(user);
@@ -636,5 +637,5 @@ onAuthStateChanged(auth, async (user)=>{
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  } else { gate.classList.add('visible'); }
+  }   else { toggleAuthGate(true); gate.classList.add('visible'); }
 });
