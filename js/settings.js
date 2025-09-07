@@ -1,8 +1,8 @@
-import { mountChrome, attachAuthUI, db, ADMIN_NUMERIC_IDS } from '/js/common.js';
+import { mountChrome, attachAuthUI, db, ADMIN_NUMERIC_IDS, initUXChrome } from '/js/common.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-await mountChrome();
+await mountChrome(); await initUXChrome();
 attachAuthUI({ requireSignIn: true });
 
 const qs = (s, el=document)=> el.querySelector(s);
@@ -138,6 +138,7 @@ qs('#adm_table').addEventListener('click', async (e)=>{
   const ref = doc(db,'users', uid);
   try{
     await updateDoc(ref, {
+      numericId: Number(row.querySelector('.a_numericId').value) || null,
       firstName: row.querySelector('.a_firstName').value.trim(),
       lastName: row.querySelector('.a_lastName').value.trim(),
       phone: row.querySelector('.a_phone').value.trim(),
@@ -174,7 +175,7 @@ function renderAdminTable(snap){
   snap.forEach(d=>{
     const u=d.data(); const row=document.createElement('div'); row.className='card'; row.setAttribute('data-uid', d.id);
     row.innerHTML = `
-      <input class="a_numericId" type="text" value="${u.numericId ?? ''}" readonly />
+      <input class="a_numericId" type="text" value="${u.numericId ?? ""}" />
       <input class="a_firstName" type="text" value="${u.firstName ?? ''}" />
       <input class="a_lastName" type="text" value="${u.lastName ?? ''}" />
       <input class="a_phone" type="text" value="${u.phone ?? ''}" />

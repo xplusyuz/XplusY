@@ -124,3 +124,55 @@ export function attachAuthUI({ requireSignIn = true } = {}){
     }
   });
 }
+
+// Theme handling
+function getStoredTheme(){
+  return localStorage.getItem('mc_theme');
+}
+function applyTheme(mode){
+  const b = document.body;
+  b.classList.remove('theme-light');
+  if(mode==='light'){ b.classList.add('theme-light'); }
+  localStorage.setItem('mc_theme', mode);
+  const tBtn = document.querySelector('#btnTheme');
+  const tBtn2 = document.querySelector('#btnThemeDrawer');
+  const icon = (mode==='light') ? '☀️' : '🌙';
+  if(tBtn) tBtn.textContent = icon;
+  if(tBtn2) tBtn2.textContent = icon + ' Kun/Tun';
+}
+function initTheme(){
+  let mode = getStoredTheme();
+  if(!mode){
+    // prefer OS
+    mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  applyTheme(mode);
+}
+
+// Drawer handling
+function openDrawer(){
+  const d = document.querySelector('#drawer');
+  const bg = document.querySelector('#drawerBackdrop');
+  if(!d || !bg) return;
+  d.classList.remove('hidden'); bg.classList.remove('hidden');
+  setTimeout(()=> d.classList.add('open'),0);
+}
+function closeDrawer(){
+  const d = document.querySelector('#drawer');
+  const bg = document.querySelector('#drawerBackdrop');
+  if(!d || !bg) return;
+  d.classList.remove('open');
+  setTimeout(()=>{ d.classList.add('hidden'); bg.classList.add('hidden'); }, 200);
+}
+
+export async function initUXChrome(){
+  // Theme init
+  initTheme();
+  document.addEventListener('click', (e)=>{
+    if(e.target.id==='btnTheme') applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
+    if(e.target.id==='btnThemeDrawer') applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
+    if(e.target.id==='btnMenu') openDrawer();
+    if(e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop') closeDrawer();
+  });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+}
