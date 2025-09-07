@@ -1,27 +1,22 @@
-# MathCenter.uz — v3 (Live + Test Player)
+# MathCenter.uz — v3 (Tests + Live Realtime)
 
-## Yangi funksiyalar
-- **Test Player:**
-  - Variant tanlanganda **yechim avtomatik** ochiladi (tugma bilan yopib/ochish ham mumkin).
-  - **Seeded randomizatsiya** (savol/variantlar): sessiya davomida tartib saqlanadi.
-  - Yakunda **“shu tartib”** va **“yangi tartib”** bilan qayta yechish.
-  - Minimal **anti-cheat**: tabdan chiqsa ogohlantiradi.
-  - Agar URL `?event=<id>` bo‘lsa, natija **live scores** ga yoziladi (score = foiz).
+- Universal `ucard` kartalar (reklama/kurs/test/sim/live)
+- Live kartalarda **real-time ishtirokchilar** (👥 badge) + **countdown**
+- Test Player (math): savollar (CSV), taymer, natijalar, Firestore'ga saqlash
+- Router (`/test/:slug`) — CSV'dagi `link`lar bilan ishlaydi
+- Admin CRUD, Hamyon (demo), Purchase → access
 
-- **Live:**
-  - Kartalarda **real-time ishtirokchilar** va **countdown**.
-  - Modal ichida **real-time leaderboard**.
-  - Live sahifaning yuqorisida **global leaderboard** (dropdown orqali event tanlash).
-
-## CSV formatlari
-- `content/home.csv`: `title, tag, meta, image, link`
-- `content/courses.csv`: `name, tag, meta, link`
-- `content/tests.csv`: `name, tag, meta, price, productId, link, durationSec`
-- `content/sim.csv`: `name, tag, meta, link`
-- `content/live.csv`: `title, tag, meta, entryPrice, prize, startAt, endAt, startLink, modalText`
-- Savollar: `content/tests_data/<productId>.csv` — `id, text, a, b, c, d, ans, ex`
-
-## Ishga tushirish
-1) Firebase Authentication: Google + Email/Password — **Enable**; Authorized domainsga deploy domeningizni qo‘shing.
+## Sozlash
+1) Firebase Authentication: Google + Email/Password — **Enable**; Authorized domainsga deploy domeningizni qo'shing.
 2) Firestore: `firestore.rules`'ni **Publish** qiling.
-3) Statik server orqali HTTP(S)da ishga tushiring. `file://`da auth ishlamaydi.
+3) Statik serverda ishga tushiring (HTTP).
+
+## CSV
+- `content/home.csv`: title, tag, meta, image, link
+- `content/courses.csv`: name, tag, meta, link (Kurslarda faqat **Kirish**)
+- `content/tests.csv`: name, tag, meta, price, productId, link, durationSec (Testlarda **faqat Boshlash**, narx tekshiradi)
+- `content/sim.csv`: name, tag, meta, link (Simda **Ochish**)
+- `content/live.csv`: title, tag, meta, entryPrice, prize, startAt, endAt, startLink, modalText (Live kartada taymer, badge, modal)
+
+## Savollar CSV
+`content/tests_data/<productId>.csv` → ustunlar: `id,text,a,b,c,d,ans` (faqat matematika)

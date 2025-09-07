@@ -57,9 +57,12 @@ btnSaveProfile.addEventListener('click', async (e)=>{
 });
 function val(sel){ const el=document.querySelector(sel); return (el && el.value||'').trim(); }
 
-/* Nav + Router */
+/* Nav */
 nav.addEventListener('click',(e)=>{ const btn=e.target.closest('button[data-page]'); if(!btn) return; document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderPage(btn.dataset.page); });
+
 function renderPage(page){ if(page==='home') return renderHome(); if(page==='courses') return renderCourses(); if(page==='tests') return renderTests(); if(page==='live') return renderLive(); if(page==='sim') return renderSim(); if(page==='settings') return renderSettings(); renderHome(); }
+
+/* Mini Router */
 function navigate(path){
   try{
     const loc = new URL(path, location.origin);
@@ -69,7 +72,9 @@ function navigate(path){
     } else {
       location.href = path;
     }
-  }catch(_){ location.href = path; }
+  }catch(_){
+    location.href = path;
+  }
 }
 window.addEventListener('popstate', ()=> route());
 function route(){
@@ -89,33 +94,62 @@ function route(){
 /* Badges */
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
-/* CSV + helpers */
+/* CSV helpers + Firestore prefer */
 async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
-function withTimeout(promise, ms){ return Promise.race([promise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('TIMEOUT')), ms))]); }
-async function preferFirestore(coll,csv){
-  try{
-    const fs = await withTimeout(loadFromFirestore(coll), 2500);
-    if(Array.isArray(fs) && fs.length>0) return fs;
-  }catch(e){
-    console.warn('preferFirestore timeout/fallback:', (e&&e.message)||e);
-  }
-  try{
-    return await loadCSV(csv);
-  }catch(e){
-    console.error('CSV load failed:', e);
-    return [];
-  }
+async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
+
+/* Users list pagination */
+let __usersPageCursor=null, __usersLoaded=0;
+async function fetchUsersPage(limitSize=50){ const baseQ=query(collection(db,'users'), orderBy('gems','desc'), limit(limitSize)); const qref=__usersPageCursor? query(baseQ,startAfter(__usersPageCursor)) : baseQ; const snap=await getDocs(qref); const rows=[]; snap.forEach(d=>rows.push({id:d.id, ...d.data()})); __usersPageCursor=snap.docs.length? snap.docs[snap.docs.length-1] : __usersPageCursor; return rows; }
+async function renderUsersList(append=false){
+  const listId='users-list'; const moreId='users-loadmore';
+  const list=document.getElementById(listId); const more=document.getElementById(moreId);
+  if(!append){ if(list) list.innerHTML=''; __usersPageCursor=null; __usersLoaded=0; }
+  let batch=[]; try{ batch=await fetchUsersPage(50);}catch(e){ if(list) list.innerHTML=`<div class="error">${e.message||'Ruxsat/tarmoq xatosi'}</div>`; return; }
+  if(!list) return;
+  const rows=batch.map((u,i)=>{ const rank=__usersLoaded+i+1; const name=(u.firstName&&u.lastName)?(u.firstName+' '+u.lastName):(u.displayName||'—'); const id=u.numericId||'—'; const gems=u.gems||0; return `<div class="list-item"><div class="left"><div class="rank">${rank}</div><div class="id">ID ${id}</div><div class="name">${name}</div></div><div class="gems">💎 ${gems}</div></div>`; }).join('');
+  list.insertAdjacentHTML('beforeend', rows || '<div class="muted">Foydalanuvchilar topilmadi.</div>');
+  __usersLoaded += batch.length; if(more){ more.disabled=(batch.length===0); more.textContent=(batch.length===0)?'Yana yo\'q':'Ko\'proq yuklash'; }
 }
 
-/* === Universal Card Builder (unchanged UI) === */
-const UC_PALETTE = { ad:{icon:'📣',variant:'ad',label:'Reklama'}, course:{icon:'🎓',variant:'course',label:'Kurs'}, test:{icon:'📝',variant:'test',label:'Test'}, sim:{icon:'🎮',variant:'sim',label:'Sim'}, live:{icon:'🔥',variant:'live',label:'Live'}, default:{icon:'📦',variant:'test',label:'Kontent'} };
-function svgBgInline(){ return `<div class="ucard-bg"><svg viewBox='0 0 400 240' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'><defs><linearGradient id='g1' x1='0' y1='0' x2='1' y2='1'><stop offset='0%'  stop-color='var(--uc-a)' stop-opacity='.6'/><stop offset='100%' stop-color='var(--uc-b)' stop-opacity='.15'/></linearGradient><linearGradient id='g2' x1='1' y1='0' x2='0' y2='1'><stop offset='0%'  stop-color='var(--uc-b)' stop-opacity='.6'/><stop offset='100%' stop-color='var(--uc-c)' stop-opacity='.15'/></linearGradient></defs><rect width='400' height='240' fill='url(#g1)'/><circle cx='330' cy='40' r='80' fill='url(#g2)' opacity='.35'/><circle cx='40' cy='200' r='100' fill='url(#g2)' opacity='.25'/><path d='M0,160 C80,120 140,140 220,110 C300,80 360,100 400,80 L400,240 L0,240 Z' fill='url(#g1)' opacity='.35'/></svg></div><div class='glow'></div>`; }
+/* === Universal Card Builder === */
+const UC_PALETTE = {
+  ad:     { icon:'📣', variant:'ad',     label:'Reklama' },
+  course: { icon:'🎓', variant:'course', label:'Kurs' },
+  test:   { icon:'📝', variant:'test',   label:'Test' },
+  sim:    { icon:'🎮', variant:'sim',    label:'Sim' },
+  live:   { icon:'🔥', variant:'live',   label:'Live' },
+  default:{ icon:'📦', variant:'test',   label:'Kontent' }
+};
+function svgBgInline(){
+  return `<div class="ucard-bg"><svg viewBox='0 0 400 240' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'>
+    <defs>
+      <linearGradient id='g1' x1='0' y1='0' x2='1' y2='1'>
+        <stop offset='0%'  stop-color='var(--uc-a)' stop-opacity='.6'/>
+        <stop offset='100%' stop-color='var(--uc-b)' stop-opacity='.15'/>
+      </linearGradient>
+      <linearGradient id='g2' x1='1' y1='0' x2='0' y2='1'>
+        <stop offset='0%'  stop-color='var(--uc-b)' stop-opacity='.6'/>
+        <stop offset='100%' stop-color='var(--uc-c)' stop-opacity='.15'/>
+      </linearGradient>
+    </defs>
+    <rect width='400' height='240' fill='url(#g1)'/>
+    <circle cx='330' cy='40' r='80' fill='url(#g2)' opacity='.35'/>
+    <circle cx='40' cy='200' r='100' fill='url(#g2)' opacity='.25'/>
+    <path d='M0,160 C80,120 140,140 220,110 C300,80 360,100 400,80 L400,240 L0,240 Z' fill='url(#g1)' opacity='.35'/>
+  </svg></div><div class='glow'></div>`;
+}
 function cardUniversal(opts={}, ctx={}){
   const t = (opts.type && UC_PALETTE[opts.type]) ? UC_PALETTE[opts.type] : UC_PALETTE.default;
-  const title = opts.title || opts.name || '—'; const tag = opts.tag || t.label; const meta = opts.meta || ''; const image = opts.image || '';
+  const title = opts.title || opts.name || '—';
+  const tag = opts.tag || t.label;
+  const meta = opts.meta || '';
+  const image = opts.image || '';
   const price = (opts.price!=null) ? parseInt(opts.price||'0',10)||0 : (parseInt(opts.entryPrice||'0',10)||0);
-  const priceLabel = price>0 ? `${price.toLocaleString()} so'm` : 'Bepul'; const pid = opts.productId || (title.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
+  const priceLabel = price>0 ? `${price.toLocaleString()} so'm` : 'Bepul';
+  const pid = opts.productId || (title.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
   const safe = JSON.stringify({ ...opts, productId: pid, type: t.variant }).replace(/"/g,'&quot;');
   return `<div class="ucard premium" data-variant="${t.variant}" data-card='${safe}'>
     ${svgBgInline()}
@@ -145,7 +179,10 @@ function bindUniversalCards(container, ctx={}){
     const data = JSON.parse(el.dataset.card.replace(/&quot;/g,'"'));
     const price = (data.price!=null) ? parseInt(data.price||'0',10)||0 : (parseInt(data.entryPrice||'0',10)||0);
     const pid = data.productId;
-    const startBtn = el.querySelector('.act-start'); const openBtn = el.querySelector('.act-open'); const liveBtn = el.querySelector('.act-live'); const liveStartBtn = el.querySelector('.act-live-start');
+    const startBtn = el.querySelector('.act-start');
+    const openBtn = el.querySelector('.act-open');
+    const liveBtn = el.querySelector('.act-live');
+    const liveStartBtn = el.querySelector('.act-live-start');
 
     if (startBtn){
       startBtn.addEventListener('click', async ()=>{
@@ -160,15 +197,22 @@ function bindUniversalCards(container, ctx={}){
         }catch(e){ showErr(e); }
       });
     }
-    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } }); }
-    if (liveBtn){ liveBtn.addEventListener('click', ()=>{ openLiveModal(data); }); }
+    if (openBtn){
+      openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } });
+    }
+    if (liveBtn){
+      liveBtn.addEventListener('click', ()=>{ openLiveModal(data); });
+    }
     if (liveStartBtn){
       liveStartBtn.addEventListener('click', async ()=>{
         try{
           const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
-          const sMs = data.startAt ? toMs(data.startAt) : 0; const eMs = data.endAt ? toMs(data.endAt) : 0; const now = Date.now();
+          const sMs = data.startAt ? toMs(data.startAt) : 0;
+          const eMs = data.endAt ? toMs(data.endAt) : 0;
+          const now = Date.now();
           if(!(sMs && eMs && now>=sMs && now<=eMs)){ alert('LIVE hali boshlanmagan yoki yakunlangan'); return; }
-          let joined=false; try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
+          let joined=false;
+          try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
           if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
           if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
         }catch(e){ showErr(e); }
@@ -208,62 +252,64 @@ async function renderSim(){
   bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
 }
 
-/* LIVE page: cards + GLOBAL leaderboard */
+/* LIVE + modal */
 async function renderLive(){
-  let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=await loadCSV('./content/live.csv'); }
+  let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=[]; }
+  if(events.length===0){ events=await loadCSV('./content/live.csv'); }
   const toMs=(v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
   const statusOf=(ev,now)=>{ const s=toMs(ev.startAt), e=toMs(ev.endAt); if(s && e && now>=s && now<=e) return 'live'; if(s && now<s) return 'upcoming'; return 'finished'; };
   const now=Date.now(); events.sort((a,b)=>{ const r={live:0,upcoming:1,finished:2}; const sa=statusOf(a,now), sb=statusOf(b,now); if(r[sa]!==r[sb]) return r[sa]-r[sb]; return (toMs(a.startAt)||0)-(toMs(b.startAt)||0); });
 
   pageRoot.innerHTML = `<h3 class="section-title">Live turnirlar</h3>
-    <div class="card p-4" id="live-lb">
-      <div class="livebar">
-        <div>🏆 Global Reyting:</div>
-        <select id="lb-select"></select>
-        <div class="pill">⏱ <span id="lb-status">—</span></div>
-        <div class="pill">👥 <span id="lb-count">—</span></div>
-      </div>
-      <div class="lb" id="lb-body"><div class="small muted">Yuklanmoqda...</div></div>
-    </div>
     <div id="live-cards" class="cards">` + events.map(ev=>{
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
       return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry, startLink: ev.startLink||'', modalText: ev.modalText||'' }, {page:'live'});
     }).join('') + `</div>`;
 
-  bindUniversalCards(document.getElementById('live-cards'), {page:'live'});
+  document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
+    const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
+    const btnStart = card.querySelector('.act-live');
+    const btnGo = card.querySelector('.act-live-start');
+    if (btnStart) btnStart.addEventListener('click', ()=> openLiveModal(data));
 
-  // Setup global leaderboard on top
-  let lbUnsub = null;
-  const select = document.getElementById('lb-select');
-  const lbStatus = document.getElementById('lb-status');
-  const lbCount = document.getElementById('lb-count');
-  const lbBody = document.getElementById('lb-body');
-  const active = events.filter(ev=>{ const s=toMs(ev.startAt), e=toMs(ev.endAt); return s && e && Date.now()>=s && Date.now()<=e; });
-  const source = active.length? active : events;
-  select.innerHTML = source.map((ev,i)=>`<option value="${ev.id||('csv-'+i)}">${ev.title||ev.name||('Event '+(i+1))}</option>`).join('');
-  let current = source[0];
-  function bindLb(ev){
-    if(lbUnsub){ lbUnsub(); lbUnsub=null; }
-    lbStatus.textContent = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
-    if(ev.id){
-      try{ const entCol = collection(db,'live_events',ev.id,'entries'); onSnapshot(entCol, (snap)=>{ lbCount.textContent = snap.size; }); }catch(_){ lbCount.textContent='—'; }
+    // countdown
+    const pill = card.querySelector('[data-countdown]');
+    if(pill){
+      const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
+      const sMs = data.startAt ? toMs(data.startAt) : 0;
+      const eMs = data.endAt ? toMs(data.endAt) : 0;
+      function tick(){
+        if(!sMs){ pill.textContent='—'; return; }
+        const now = Date.now();
+        if(sMs && now < sMs){
+          const d = Math.max(0, sMs - now);
+          const h=Math.floor(d/3_600_000), m=Math.floor((d%3_600_000)/60_000), s=Math.floor((d%60_000)/1000);
+          pill.textContent = `Start: ${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+          if(btnGo) btnGo.disabled = true;
+        } else if (sMs && eMs && now>=sMs && now<=eMs){
+          pill.textContent = "LIVE";
+          if(btnGo) btnGo.disabled = false;
+        } else {
+          pill.textContent = "Yakunlangan";
+          if(btnGo) btnGo.disabled = true;
+        }
+      }
+      tick(); setInterval(tick, 1000);
+    }
+
+    // participants realtime
+    const badge = card.querySelector('[data-live-count]');
+    if(badge && data.id){
       try{
-        const scQ = query(collection(db,'live_events', ev.id, 'scores'), orderBy('score','desc'), limit(50));
-        lbUnsub = onSnapshot(scQ, (snap)=>{
-          if(snap.empty){ lbBody.innerHTML = `<div class="small muted">Hali natijalar yo'q</div>`; return; }
-          let rows=''; let rank=0;
-          snap.forEach(docSnap=>{ const d=docSnap.data()||{}; rank++; const name=d.name||d.displayName||'—'; const score=d.score||0; rows += `<div class="lb-row"><div class="left"><div class="rk">${rank}</div><div class="name">${name}</div></div><div class="score">${score}</div></div>`; });
-          lbBody.innerHTML = rows;
-        });
-      }catch(_){ lbBody.innerHTML = `<div class="small muted">Reytingni o'qib bo'lmadi</div>`; }
-    } else { lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
-  }
-  if(current) bindLb(current);
-  select.addEventListener('change', (e)=>{ const v=e.target.value; const found = source.find((x,i)=> (x.id||('csv-'+i))===v ); if(found){ current=found; bindLb(current); } });
+        const entCol = collection(db,'live_events',data.id,'entries');
+        onSnapshot(entCol, (snap)=>{ badge.textContent = snap.size; });
+      }catch(_){ /* ignore */ }
+    }
+  });
 }
 
-/* Live Modal (with real-time leaderboard) */
+/* Live Details Modal */
 let lmLbUnsub = null;
 async function openLiveModal(ev){
   const dlg = document.getElementById('live-modal');
@@ -351,7 +397,7 @@ async function openLiveModal(ev){
   };
   ctaEnter.onclick = ()=>{ if(!ctaEnter.disabled && ev.startLink){ navigate(ev.startLink); } };
 
-  // realtime leaderboard in modal
+  // realtime leaderboard
   if(ev.id && lmLb){
     try{
       const scQ = query(collection(db,'live_events', ev.id, 'scores'), orderBy('score','desc'), limit(50));
@@ -363,11 +409,10 @@ async function openLiveModal(ev){
       });
     }catch(e){ lmLb.innerHTML = `<div class="small muted">Reytingni o'qishda xatolik</div>`; }
   }
-
   dlg.showModal();
 }
 
-/* Test Player (Math) — explanations + seeded randomization + anti-cheat */
+/* Test Player (Math) — explanations + randomization */
 async function renderTestPlayer(slug){
   const tests = await preferFirestore('content/tests','./content/tests.csv');
   const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
@@ -389,34 +434,24 @@ async function renderTestPlayer(slug){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
   }
 
-  // seed
-  const uid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : 'anon';
-  const paramSeed = parseInt(getParam('seed')||'0',10)||0;
-  const ssKey = `tp-seed:${uid}:${slug}`;
-  let seed = paramSeed || parseInt(sessionStorage.getItem(ssKey)||'0',10) || (Math.floor(Math.random()*2**31));
-  sessionStorage.setItem(ssKey, String(seed));
-  const rnd = seededRandom(seed);
-
+  // Normalize questions and add randomized options
   const makeQ = (r)=>{
-    const opts = []; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
-    seededShuffle(opts, rnd);
+    const opts = [];
+    ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
+    shuffle(opts);
     return { text: r.text || r.q || '—', ex: r.ex || '', opts };
   };
-  let rows = rawRows.map(makeQ); seededShuffle(rows, rnd);
+  let rows = rawRows.map(makeQ);
+  shuffle(rows); // randomize question order
 
   let durationSec = parseInt(t.durationSec||'0',10)||0;
   if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
 
   const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
 
-  // Anti-cheat
-  function visHandler(){ if(document.hidden){ showToast('Diqqat: test davomida sahifani tark etmang.'); } }
-  document.addEventListener('visibilitychange', visHandler);
-
   function render(){
     const q = rows[state.idx];
     const prog = Math.round((state.idx)/rows.length*100);
-    const picked = state.picks[state.idx];
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="head">
         <div><strong>${state.title}</strong> — ${rows.length} savol</div>
@@ -427,25 +462,28 @@ async function renderTestPlayer(slug){
         <div class="qtext">#${state.idx+1}. ${q.text}</div>
         <div class="opts">
           ${q.opts.map((op,i)=>{
-            const isSel = (picked===i);
-            const mark = (state.reveal ? (op.isCorrect ? 'correct' : (isSel ? 'wrong' : '')) : (isSel ? 'selected' : ''));
-            return `<div class="opt ${mark}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
+            const picked = state.picks[state.idx];
+            const isSel = (picked===i) ? 'selected' : '';
+            return `<div class="opt ${isSel}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
           }).join('')}
         </div>
         <div class="ctrl">
           <button class="btn quiet" id="tp-prev" ${state.idx===0?'disabled':''}>Ortga</button>
           <div class="row gap-2">
-            <button class="btn solbtn" id="tp-sol">${state.reveal?'Yechimni yashirish':'Yechimni ko\'rish'}</button>
+            <button class="btn solbtn" id="tp-sol">Yechimni ko'rish</button>
             <button class="btn quiet" id="tp-skip">O'tkazib yuborish</button>
             <button class="btn" id="tp-next">${state.idx===rows.length-1?'Yakunlash':'Keyingi'}</button>
           </div>
         </div>
         ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
       </div>
-      <div class="small muted">Izoh: savol va variantlar tartibi seed bo'yicha aralashtirilgan (seed=${seed}).</div>
+      <div class="small muted">Izoh: faqat matematika savollari. Variantlar aralashtirilgan.</div>
     </div>`;
 
-    pageRoot.querySelectorAll('.opt').forEach(el=>{ el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; render(); }); });
+    // interactions
+    pageRoot.querySelectorAll('.opt').forEach(el=>{
+      el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=false; render(); });
+    });
     pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
     pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
@@ -454,38 +492,44 @@ async function renderTestPlayer(slug){
   }
 
   let iv=null;
-  function startTimer(){ iv = setInterval(()=>{ state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); } const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; } updateTimerText(); }, 1000); }
-  function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
-  function updateTimerText(){ const m = Math.floor(state.remaining/60), s=state.remaining%60; const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function startTimer(){
+    iv = setInterval(()=>{
+      state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); }
+      const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
+      updateTimerText();
+    }, 1000);
+  }
+  function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } }
+  function updateTimerText(){
+    const m = Math.floor(state.remaining/60), s=state.remaining%60;
+    const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
 
   async function finish(){
     stopTimer();
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
-    rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && chosen.isCorrect) good++; else bad++; });
+    rows.forEach((q,i)=>{
+      const pick = state.picks[i];
+      if(pick==null){ empty++; return; }
+      const chosen = q.opts[pick];
+      if(chosen && chosen.isCorrect) good++; else bad++;
+    });
     const percent = Math.round(good/rows.length*100);
     try{
-      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), { productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent, startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks, seed });
+      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
+        productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
+        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks
+      });
     }catch(_){}
-
-    // write to live scoreboard if ?event=<id>
-    const evId = getParam('event');
-    if(evId){
-      try{
-        const uref = doc(db,'users',auth.currentUser.uid);
-        const us = await getDoc(uref); const ud = us.data()||{};
-        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), { uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'), score: percent, updatedAt: serverTimestamp() }, { merge: true });
-      }catch(_){}
-    }
-
+    // Results + review
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="rez">
         <h3>Natijalar — ${state.title}</h3>
         <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
         <p><b>${percent}%</b> umumiy natija</p>
         <div class="row gap-2 mt-2">
-          <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
-          <button class="btn" id="tp-again-new">Qayta yechish (yangi tartib)</button>
+          <button class="btn" id="tp-again">Qayta yechish (yangi tartib)</button>
           <button class="btn quiet" id="tp-exit">Testlarga qaytish</button>
         </div>
       </div>
@@ -503,15 +547,14 @@ async function renderTestPlayer(slug){
         }).join('')}
       </div>
     </div>`;
-    document.getElementById('tp-again-same').addEventListener('click', ()=>{ sessionStorage.setItem(ssKey, String(seed)); renderTestPlayer(slug); });
-    document.getElementById('tp-again-new').addEventListener('click', ()=>{ const newSeed = Math.floor(Math.random()*2**31); sessionStorage.setItem(ssKey, String(newSeed)); renderTestPlayer(slug); });
+    document.getElementById('tp-again').addEventListener('click', ()=>{ renderTestPlayer(slug); });
     document.getElementById('tp-exit').addEventListener('click', ()=> navigate('/tests'));
   }
 
   render(); startTimer();
 }
 
-/* Settings + Admin CRUD + Wallet (same as before) */
+/* Settings + Admin CRUD + Wallet */
 function renderSettings(){
   pageRoot.innerHTML=`<div class="cards">
     <div class="card p-4"><h3>Hamyon</h3><div class="row gap-2 mt-2">
@@ -556,7 +599,7 @@ function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); cons
 }
 function gv(root, sel){ const el=root.querySelector(sel); return el? el.value.trim() : ''; }
 
-/* Wallet */
+/* Wallet helpers */
 async function doTopUp(amount){ try{ await topUp(amount); alert(amount.toLocaleString('uz-UZ')+' so\'m qo\'shildi'); }catch(e){ showErr(e);} }
 async function topUp(amount){ if(amount<=0) throw new Error('Miqdor noto\'g\'ri'); await runTransaction(db, async (tx)=>{ const uref=doc(db,'users',auth.currentUser.uid); const snap=await tx.get(uref); const bal=(snap.data().balance||0)+amount; tx.update(uref,{balance:bal,updatedAt:serverTimestamp()}); }); }
 async function spend(amount, product){ if(amount<0) throw new Error('Miqdor noto\'g\ri'); await runTransaction(db, async (tx)=>{ const uref=doc(db,'users',auth.currentUser.uid); const usnap=await tx.get(uref); const bal=usnap.data().balance||0; if(bal<amount) throw new Error('Balans yetarli emas'); const newBal=bal-amount; const gems=(usnap.data().gems||0)+Math.floor(amount/1000); tx.update(uref,{balance:newBal,gems,updatedAt:serverTimestamp()}); await addDoc(collection(db,'users',auth.currentUser.uid,'purchases'), {productId:product.productId,name:product.name,price:amount,at:serverTimestamp()}); }); }
@@ -576,5 +619,7 @@ onAuthStateChanged(auth, async (user)=>{
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  } else { gate.classList.add('visible'); }
+  } else {
+    gate.classList.add('visible');
+  }
 });
