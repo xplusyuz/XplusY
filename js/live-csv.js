@@ -1,187 +1,174 @@
-
-// Online musobaqalar — CSV grid + real-time button states per time window.
-// CSV columns (with header row):
-// Img url, Title, Sana, Boshlash vaqti, Tugash vaqti, Bosh sovrin, Tugma linki, Natija linki, Test narxi
-
-const grid = document.querySelector('#liveGrid');
-const source = grid?.dataset?.csv || './live.csv';
-
-// Single interval to update all countdowns
-let TICK = null;
-const cards = new Map(); // id -> {el, start, end, startHref, resultHref}
+// Live — CSV → grid (responsive cards + timer)
+const host = document.querySelector('#liveGrid');
+const path = host?.dataset?.csv || './csv/live.csv';
+let timers = [];
 
 (async function init(){
-  const text = await fetchCSV(source);
-  if(!text){ grid.innerHTML = `<div class="card">live.csv topilmadi.</div>`; return; }
+  const text = await fetchCSV(path);
+  if(!text){ host.innerHTML = '<div class="card">live.csv topilmadi.</div>'; return; }
   const rows = parseCSV(text);
   const data = normalize(rows);
-  if(!data.length){ grid.innerHTML = `<div class="card">CSV bo‘sh.</div>`; return; }
-  render(data);
+  host.innerHTML = '';
+  data.forEach(r => host.appendChild(card(r)));
   startTick();
 })();
 
-function render(items){
-  grid.innerHTML = '';
-  items.forEach((it, idx)=>{
-    const id = `match_${idx}`;
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = cardHTML(id, it);
-    grid.appendChild(card);
+function card(r){
+  const el = document.createElement('div'); el.className = 'card live-card';
 
-    const state = {
-      el: card,
-      start: it.start,
-      end: it.end,
-      startHref: it.startHref,
-      resultHref: it.resultHref
-    };
-    cards.set(id, state);
+  const dateStr = fmtDate(r.date);
+  const timesStr = `${r.startTime} — ${r.endTime}`;
 
-    // Attach actions
-    const startBtn = card.querySelector(`[data-act="start"][data-id="${id}"]`);
-    const resBtn = card.querySelector(`[data-act="result"][data-id="${id}"]`);
-    startBtn?.addEventListener('click', (e)=>{
-      e.preventDefault();
-      if(!state.startHref){
-        alert('Boshlash linki biriktirilmagan.');
-        return;
-      }
-      window.location.href = state.startHref;
-    });
-    resBtn?.addEventListener('click', (e)=>{
-      e.preventDefault();
-      if(state.resultHref){
-        window.location.href = state.resultHref;
-      }else{
-        alert('Natijalar hali chiqmadi, iltimos kuting.');
-      }
-    });
-  });
-  // initial paint
-  tickAll();
-}
-
-function cardHTML(id, it){
-  const price = it.price ? `<span class="pill">💵 ${esc(it.price)}</span>` : '';
-  const prize = it.prize ? `<span class="pill">🏆 ${esc(it.prize)}</span>` : '';
-  const metaTop = [esc(it.dateStr), `${esc(it.startStr)} → ${esc(it.endStr)}`].filter(Boolean).join(' • ');
-
-  // Action area renders by time; we print a placeholder container updated in tick()
-  return `
-    ${it.img ? `<img src="${esc(it.img)}" alt="${esc(it.title)}" loading="lazy" style="width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);margin-bottom:8px;aspect-ratio:16/9;object-fit:cover">` : ''}
-    <h3 style="margin:.3rem 0">${esc(it.title)}</h3>
-    <div class="sub">${metaTop}</div>
-    <div style="margin:6px 0">${prize} ${price}</div>
-    <div id="act_${id}" class="actrow" style="margin-top:8px"></div>
+  const tags = `
+    ${r.prize ? `<span class="tag prize">🏆 ${esc(r.prize)}</span>` : ''}
+    ${r.price ? `<span class="tag price">💳 ${esc(r.price)}</span>` : ''}
   `;
-}
 
-function startTick(){
-  clearInterval(TICK);
-  TICK = setInterval(tickAll, 1000);
-}
-function tickAll(){
-  const now = new Date();
-  for(const [id, st] of cards){
-    const holder = st.el.querySelector(`#act_${id}`);
-    if(!holder) continue;
-    if(now < st.start){
-      const left = fmtDHMS(st.start - now);
-      holder.innerHTML = `<div class="pill">⏳ Startgacha: ${left}</div>`;
-    }else if(now >= st.start && now < st.end){
-      holder.innerHTML = `<a href="${st.startHref||'#'}" data-id="${id}" data-act="start" class="btn primary">Boshlash</a>`;
-    }else{
-      holder.innerHTML = `<a href="${st.resultHref||'#'}" data-id="${id}" data-act="result" class="btn">Natijani bilish</a>`;
+  // CTA blok: holatga qarab o‘zgaradi
+  const cta = document.createElement('div'); cta.className = 'lc-cta';
+  const btn = document.createElement(r.link ? 'a' : 'button');
+  btn.className = 'btn primary';
+  if (r.link) btn.href = r.link;
+
+  // Timer element
+  const pill = document.createElement('span');
+  pill.className = 'pill timer';
+  pill.innerHTML = '⏳ Yopilmoqda...'; // init text
+
+  // holatni hisoblaymiz (millis)
+  const tStart = toTs(r.date, r.startTime);
+  const tEnd   = toTs(r.date, r.endTime);
+  updateCTA();
+
+  cta.appendChild(btn);
+  cta.appendChild(pill);
+
+  el.innerHTML = `
+    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">` : ''}
+    <div class="lc-body">
+      <h3 class="lc-title">${esc(r.title)}</h3>
+      <div class="lc-meta">
+        <span class="kv">📅 ${dateStr}</span>
+        <span class="kv">🕒 ${timesStr}</span>
+      </div>
+      <div class="lc-tags">${tags}</div>
+    </div>
+  `;
+  el.querySelector('.lc-body').appendChild(cta);
+
+  // timer ro'yxatiga qo'shamiz
+  timers.push(()=> tick(pill, btn, r, tStart, tEnd));
+  return el;
+
+  function updateCTA(){
+    const now = Date.now();
+    if (now < tStart){
+      btn.textContent = 'Boshlanmadi';
+      btn.disabled = true;
+      if (btn.tagName === 'A') btn.removeAttribute('href');
+    } else if (now >= tStart && now <= tEnd){
+      btn.textContent = 'Boshlash';
+      btn.disabled = !r.link;
+      if (!r.link) btn.classList.remove('primary');
+      if (btn.tagName === 'A' && r.link) btn.href = r.link;
+    } else {
+      // tugagan
+      if (r.result && r.result.trim()){
+        if (btn.tagName !== 'A'){ const a = document.createElement('a'); a.className = btn.className; a.textContent = 'Natijani bilish'; a.href = r.result; btn.replaceWith(a); btn = a; }
+        else { btn.textContent = 'Natijani bilish'; btn.href = r.result; }
+        btn.disabled = false;
+      } else {
+        btn.textContent = 'Natijalar hali chiqmadi';
+        btn.disabled = true; if (btn.tagName === 'A') btn.removeAttribute('href');
+      }
     }
   }
 }
 
-/* Helpers */
-function fmtDHMS(ms){
-  if(ms<0) ms=0;
-  let s = Math.floor(ms/1000);
-  const d = Math.floor(s/86400); s%=86400;
-  const h = Math.floor(s/3600); s%=3600;
-  const m = Math.floor(s/60); s%=60;
-  const parts = [];
-  if(d>0) parts.push(String(d).padStart(2,'0'));
-  parts.push(String(h).padStart(2,'0'));
-  parts.push(String(m).padStart(2,'0'));
-  parts.push(String(s).padStart(2,'0'));
-  return parts.join(':');
-}
-
-async function fetchCSV(path){
-  const tries=[path,'./live.csv','/live.csv'];
-  for(const p of tries){
-    try{ const r = await fetch(p,{cache:'no-cache'}); if(r.ok) return await r.text(); }catch(_){}
+function tick(pill, btn, r, tStart, tEnd){
+  const now = Date.now();
+  if (now < tStart){
+    pill.textContent = `⏳ Startgacha: ${fmtDur(tStart - now)}`;
+    btn.disabled = true;
+    btn.textContent = 'Boshlanmadi';
+  } else if (now >= tStart && now <= tEnd){
+    pill.textContent = `⏳ Tugashgacha: ${fmtDur(tEnd - now)}`;
+    btn.disabled = false;
+    if (btn.tagName === 'A') btn.href = r.link || '#';
+    btn.textContent = 'Boshlash';
+  } else {
+    // yakun
+    if (r.result && r.result.trim()){
+      pill.textContent = '✅ Yakunlandi';
+      if (btn.tagName === 'A'){ btn.textContent = 'Natijani bilish'; btn.href = r.result; btn.disabled = false; }
+      else { btn.textContent = 'Natijani bilish'; btn.disabled = true; }
+    } else {
+      pill.textContent = '⏳ Natijalar tayyorlanmoqda';
+      btn.textContent = 'Natijalar hali chiqmadi'; btn.disabled = true;
+    }
   }
-  return null;
 }
 
-function detectDelim(line){
-  const cand=['|',',',';','\t']; const counts=cand.map(d=>(line.split(d).length-1));
-  const max=Math.max(...counts); return max>0? cand[counts.indexOf(max)] : ',';
+function startTick(){
+  // har 1s da barcha pill/btn larni yangilaymiz
+  setInterval(()=>{ timers.forEach(fn => fn()); }, 1000);
 }
 
+/* ====== CSV helpers ====== */
+async function fetchCSV(p){ try{ const r=await fetch(p,{cache:'no-cache'}); if(r.ok) return await r.text(); }catch{} return null; }
+function detectDelim(line){ const cand=['|',',',';','\t']; const cnt=cand.map(d=>line.split(d).length-1); const m=Math.max(...cnt); return m>0?cand[cnt.indexOf(m)]:',';}
 function parseCSV(text){
-  const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-  let first=''; for(const ln of lines){ const t=ln.trim(); if(t){ first=ln; break; } }
-  const delim=detectDelim(first || "Img url,Title,Sana,Boshlash vaqti,Tugash vaqti,Bosh sovrin,Tugma linki,Natija linki,Test narxi");
-  const rows=[]; let row=[], field='', q=false;
-  function push(){ let v=field; if(v.startsWith('"')&&v.endsWith('"')) v=v.slice(1,-1).replace(/""/g,'"'); row.push(v.trim()); field=''; }
+  const L=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  let first=''; for(const ln of L){ const t=ln.trim(); if(t){ first=ln; break; } }
+  const d=detectDelim(first || 'Img url,Title,Sana,Boshlash vaqti,Tugash vaqti,Bosh sovrin,Tugma linki,Natija linki,Test narxi');
+  const rows=[]; let row=[],f='',q=false;
+  const push=()=>{ let v=f; if(v.startsWith('"')&&v.endsWith('"')) v=v.slice(1,-1).replace(/""/g,'"'); row.push(v.trim()); f=''; };
   for(let i=0;i<text.length;i++){
     const ch=text[i], nx=text[i+1];
-    if(ch=='"'){ if(q&&nx=='"'){ field+='"'; i++; } else { q=!q; } continue; }
+    if(ch=='"'){ if(q&&nx=='"'){f+='"'; i++;} else q=!q; continue; }
     if(ch=='\n'&&!q){ push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row); row=[]; continue; }
-    if(ch==delim&&!q){ push(); continue; }
-    field+=ch;
+    if(ch==d&&!q){ push(); continue; }
+    f+=ch;
   }
   push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row);
   return rows;
 }
-
 function normalize(rows){
   if(!rows.length) return [];
-  const hdr = rows[0].map(s=>s.toLowerCase());
+  const hdr=rows[0].map(s=>s.toLowerCase());
   const hasHdr = hdr[0]?.includes('img') && hdr[1]?.includes('title');
   const start = hasHdr ? 1 : 0;
   const out=[];
   for(let i=start;i<rows.length;i++){
-    const r = rows[i];
-    if(r.length<9) continue;
-    const [img,title,dateStr,startStr,endStr,prize,startHref,resultHref,price] = r;
-    const startDt = parseLocalDateTime(dateStr, startStr);
-    const endDt   = parseLocalDateTime(dateStr, endStr);
+    const r=rows[i];
+    const [img,title,date,startTime,endTime,prize,href,result,price] = r;
     out.push({
-      img: img||'', title: title||'—',
-      dateStr: dateStr||'', startStr: startStr||'', endStr: endStr||'',
-      prize: prize||'', startHref: startHref||'', resultHref: resultHref||'',
-      price: price||'', start: startDt, end: endDt
+      img:img||'', title:title||'', date:(date||'').trim(),
+      startTime:(startTime||'').trim(), endTime:(endTime||'').trim(),
+      prize:prize||'', link:href||'', result:result||'', price:price||''
     });
   }
   return out;
 }
 
-// Parse "Sana" + time in local TZ (supports YYYY-MM-DD or DD.MM.YYYY; time HH:MM[:SS])
-function parseLocalDateTime(dateStr, timeStr){
-  const d = (dateStr||'').trim();
-  const t = (timeStr||'00:00').trim();
-  let y,m,day;
-  if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
-    const [Y,M,D]=d.split('-').map(Number); y=Y; m=M-1; day=D;
-  }else if(/^\d{2}\.\d{2}\.\d{4}$/.test(d)){
-    const [D,M,Y]=d.split('.').map(Number); y=Y; m=M-1; day=D;
-  }else{
-    // fallback: today
-    const now = new Date(); y=now.getFullYear(); m=now.getMonth(); day=now.getDate();
-  }
-  let hh=0, mm=0, ss=0;
-  const mt = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if(mt){ hh=Number(mt[1]); mm=Number(mt[2]); ss=Number(mt[3]||0); }
-  return new Date(y, m, day, hh, mm, ss);
+/* ====== time helpers ====== */
+function toTs(dateStr, timeStr){
+  // date: YYYY-MM-DD, time: HH:MM[:SS]  (mahalliy vaqt)
+  if(!dateStr) return 0;
+  const [Y,M,D] = dateStr.split('-').map(n=>parseInt(n,10));
+  let [hh='00',mm='00',ss='00'] = (timeStr||'00:00').split(':');
+  const d = new Date(Y, (M-1), D, parseInt(hh,10)||0, parseInt(mm,10)||0, parseInt(ss,10)||0);
+  return d.getTime();
 }
-
-function esc(s){ return String(s||'').replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-
+function fmtDate(s){
+  if(!s) return '—';
+  const [Y,M,D]=s.split('-'); return `${Y}-${M}-${D}`;
+}
+function fmtDur(ms){
+  if(ms<0) ms=0; let s=Math.floor(ms/1000);
+  const h=Math.floor(s/3600); s%=3600;
+  const m=Math.floor(s/60); s%=60;
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+const pad=n=>String(n).padStart(2,'0');
+function esc(s){ return String(s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
