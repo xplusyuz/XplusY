@@ -71,33 +71,29 @@ function render(data){
   const v1 = sF1?.value || '';
   const v2 = sF2?.value || '';
 
+  // If no section selected (Ixtiyoriy) -> do NOT render all; show placeholder
+  if (!curSec){
+    host.innerHTML = `<section class="card"><div class="sub">Bo‘limni tanlang — shu bo‘limdagi testlar kartalari ko‘rinadi.</div></section>`;
+    return;
+  }
+
   const filtered = data.filter(r=>{
-    const okSec = !curSec || r.section === curSec;
-    const ok1 = !v1 || (r.filter1 === v1 || r.filter2 === v1);
-    const ok2 = !v2 || (r.filter1 === v2 || r.filter2 === v2);
-    return okSec && ok1 && ok2;
+    if (r.section !== curSec) return false;
+    if (v1 && r.filter1 !== v1 && r.filter2 !== v1) return false;
+    if (v2 && r.filter1 !== v2 && r.filter2 !== v2) return false;
+    return true;
   });
 
   renderSections(filtered, curSec);
 }
 
+
 function renderSections(items, curSec){
   host.innerHTML = '';
-  if(!curSec){
-    // Ixtiyoriy (no section) => show all sections grouped
-    const by = new Map();
-    for(const it of items){
-      const key = it.section || 'Boshqa';
-      if(!by.has(key)) by.set(key, []);
-      by.get(key).push(it);
-    }
-    for(const [sec, list] of Array.from(by.entries()).sort((a,b)=>a[0].localeCompare(b[0]))){
-      host.appendChild(sectionBlock(sec, list));
-    }
-  }else{
-    host.appendChild(sectionBlock(curSec, items));
-  }
+  // Only render the selected section
+  host.appendChild(sectionBlock(curSec, items));
 }
+
 
 function sectionBlock(sec, list){
   const wrap = document.createElement('section');
