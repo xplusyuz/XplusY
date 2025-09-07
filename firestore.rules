@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow list: if request.auth != null &&
+        request.query.limit <= 100 &&
+        request.query.orderBy.size() == 1 &&
+        request.query.orderBy[0].field.fieldPath == 'gems' &&
+        request.query.orderBy[0].direction == 'DESC';
+
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid;
+
+      allow update: if request.auth != null && request.auth.uid == uid
+        && (
+          (!resource.data.profileComplete && request.resource.data.profileComplete == true
+            && request.resource.data.firstName is string
+            && request.resource.data.lastName is string
+            && request.resource.data.middleName is string
+            && request.resource.data.birthDate is string
+            && request.resource.data.address is string
+            && request.resource.data.phone is string
+          )
+          ||
+          (resource.data.profileComplete == true
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['phone','address','updatedAt','balance','gems'])
+            && (
+              request.resource.data.balance == resource.data.balance
+              || (request.resource.data.balance is number
+                  && (request.resource.data.balance - resource.data.balance) <= 1000000
+                  && (request.resource.data.balance - resource.data.balance) >= -1000000)
+            )
+            && (
+              request.resource.data.gems == resource.data.gems
+              || (request.resource.data.gems is number
+                  && (request.resource.data.gems - resource.data.gems) <= 100000
+                  && (request.resource.data.gems - resource.data.gems) >= -100000)
+            )
+          )
+        );
+      allow delete: if false;
+
+      match /users/{uid}/purchases/{pid} {
+        allow create: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow update, delete: if false;
+      }
+      match /users/{uid}/teacher_items/{itemId} {
+        allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    match /counters/{name} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && name == "users"
+        && request.resource.data.lastAssigned is number
+        && (resource == null || request.resource.data.lastAssigned == resource.data.lastAssigned + 1);
+      allow delete: if false;
+    }
+  }
+}
