@@ -150,13 +150,6 @@ function initTheme(){
 }
 
 // Drawer handling
-function openDrawer(){
-  const d = document.querySelector('#drawer');
-  const bg = document.querySelector('#drawerBackdrop');
-  if(!d || !bg) return;
-  d.classList.remove('hidden'); bg.classList.remove('hidden');
-  setTimeout(()=> d.classList.add('open'),0);
-}
 function closeDrawer(){
   const d = document.querySelector('#drawer');
   const bg = document.querySelector('#drawerBackdrop');
@@ -173,6 +166,50 @@ export async function initUXChrome(){
     if(e.target.id==='btnThemeDrawer') applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
     if(e.target.id==='btnMenu') openDrawer();
     if(e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop') closeDrawer();
+  });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+}
+
+function ensureDrawer(){
+  if(document.querySelector('#drawer') && document.querySelector('#drawerBackdrop')) return;
+  const bg = document.createElement('div'); bg.id='drawerBackdrop'; bg.className='drawer-backdrop hidden';
+  const d = document.createElement('aside'); d.id='drawer'; d.className='drawer hidden'; d.setAttribute('aria-hidden','true');
+  d.innerHTML = `<div class="drawer-head">
+      <div class="brand"><img src="/assets/logo.svg" alt=""/><b>MathCenter</b></div>
+      <button id="btnDrawerClose" class="icon-btn" aria-label="Yopish">&times;</button>
+    </div>
+    <nav class="drawer-nav">
+      <a href="/index.html">🏠 Bosh sahifa</a>
+      <a href="/tests.html">📝 Testlar</a>
+      <a href="/live.html">🎮 Live</a>
+      <a href="/leaderboard.html">🏅 Reyting</a>
+      <a href="/settings.html">⚙️ Sozlamalar</a>
+    </nav>
+    <div class="drawer-foot"><button id="btnThemeDrawer" class="btn ghost">🌙 Kun/Tun</button></div>`;
+  document.body.appendChild(bg); document.body.appendChild(d);
+}
+
+function openDrawer(){
+  ensureDrawer();
+  const d=document.querySelector('#drawer'), bg=document.querySelector('#drawerBackdrop');
+  if(!d||!bg) return;
+  d.classList.remove('hidden'); bg.classList.remove('hidden');
+  document.body.classList.add('drawer-open');
+  requestAnimationFrame(()=> d.classList.add('open'));
+}
+function closeDrawer(){
+  const d=document.querySelector('#drawer'), bg=document.querySelector('#drawerBackdrop');
+  if(!d||!bg) return;
+  d.classList.remove('open');
+  document.body.classList.remove('drawer-open');
+  setTimeout(()=>{ d.classList.add('hidden'); bg.classList.add('hidden'); }, 200);
+}
+
+export async function initUXChrome(){
+  ensureDrawer();
+  document.addEventListener('click', (e)=>{
+    if(e.target && e.target.id==='btnMenu') openDrawer();
+    if(e.target && (e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop')) closeDrawer();
   });
   document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
 }
