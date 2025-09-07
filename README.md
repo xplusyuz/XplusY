@@ -1,10 +1,8 @@
-# MathCenter.uz — v2 (Purchases, Leaderboard, Teacher Panel)
-- **Xarid oqimi**: Test kartasidan narx ko'rinadi → "Sotib olish" → balansdan yechiladi, har 1 000 so'm uchun **1 olmos** bonus.
-- **Top-100 Reyting**: 💎 bo'yicha tartiblangan (Settings yoki Uy sahifasidan).
-- **O'qituvchi paneli**: `users/{uid}.isTeacher = true` bo'lsa, o'z itemlarini yaratishi mumkin (`/users/{uid}/teacher_items`).
+# MathCenter.uz — v3 (Access Gate + Admin Panel)
+**Yangi**:
+- (2) **Xarid qilingan kontentga kirish tekshiruvi**: `Boshlash` tugmasi bepul bo'lmasa — avval `users/{uid}/purchases` ichida ayni `productId` mavjudligini tekshiradi.
+- (3) **Admin Panel**: `users/{uid}.isAdmin = true` bo'lsa, Sozlamalarda kontentni Firestore'da boshqarish (collections: `content_home`, `content_courses`, `content_tests`, `content_sim`). Renderer birinchi bo'lib Firestore'dan o'qiydi, bo'sh bo'lsa CSVga qaytadi.
 
-## Ishga tushirish
-1) Statik hostingga qo'ying. 2) `firestore.rules`ni Firebase'ga joylab, Publish qiling.
-3) `isTeacher` bayrog'ini console orqali qo'shing (kerak bo'lsa).
+**Rules** yangilandi: `content_*` kolleksiyalarida CRUD faqat `isAdmin=true` foydalanuvchiga ruxsat.
 
 *Yaratilgan sana:* 2025-09-07
