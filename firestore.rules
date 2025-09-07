@@ -1,74 +1,49 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function isAdmin() {
+      return isSignedIn() && (userDoc(request.auth.uid).data.numericId in [1000001, 1000002]);
+    }
 
-    // USERS
+    // Users
     match /users/{uid} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && request.auth.uid == uid;
-      allow update: if request.auth != null && request.auth.uid == uid;
-      allow delete: if false;
+      allow read: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      // user can update only profile fields (no balance/gems/numericId), admin can update all
+      allow update: if isSignedIn() && request.auth.uid == uid &&
+        !('balance' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('gems' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('numericId' in request.resource.data.diff(resource.data).affectedKeys());
+      allow write: if isAdmin();
+    }
 
-      match /purchases/{pid} {
-        allow create: if request.auth != null && request.auth.uid == uid;
-        allow read: if request.auth != null && request.auth.uid == uid;
-        allow update, delete: if false;
+    // User subcollections: results, promoRedemptions
+    match /users/{uid}/{sub=**} {
+      allow read: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow create, update: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Promo codes
+    match /promoCodes/{code} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Live rooms
+    match /liveRooms/{roomId} {
+      allow read: if isSignedIn();
+      // creating room/start/end only by admin
+      allow create, update, delete: if isAdmin();
+      // Participants subcollection
+      match /participants/{uid} {
+        allow read: if isSignedIn();
+        // user can create/update only their own participant doc
+        allow create, update: if isSignedIn() && request.auth.uid == uid;
+        allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
       }
-      match /live_entries/{eid} {
-        allow create: if request.auth != null && request.auth.uid == uid;
-        allow read: if request.auth != null && request.auth.uid == uid;
-        allow update, delete: if false;
-      }
-      match /test_runs/{rid} {
-        allow create: if request.auth != null && request.auth.uid == uid;
-        allow read: if request.auth != null && request.auth.uid == uid;
-        allow update, delete: if false;
-      }
-    }
-
-    // PUBLIC CONTENT (admin CRUD)
-    match /content_home/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    match /content_courses/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    match /content_tests/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-    match /content_sim/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-    }
-
-    // LIVE events
-    match /live_events/{liveId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
-
-      match /entries/{uid} {
-        allow create: if request.auth != null && request.auth.uid == uid &&
-          exists(/databases/$(database)/documents/live_events/$(liveId)) &&
-          get(/databases/$(database)/documents/live_events/$(liveId)).data.startAt > request.time;
-        allow read: if request.auth != null && (request.auth.uid == uid ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
-        allow update, delete: if false;
-      }
-    }
-
-    // COUNTERS
-    match /counters/{name} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && name == "users";
-      allow delete: if false;
     }
   }
 }
