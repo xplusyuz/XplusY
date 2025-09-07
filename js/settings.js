@@ -2,7 +2,7 @@ import { mountChrome, attachAuthUI, db, ADMIN_NUMERIC_IDS, initUXChrome } from '
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-await mountChrome(); await initUXChrome();
+await mountChrome(); await initUXChrome(); await initUXChrome();
 attachAuthUI({ requireSignIn: true });
 
 const qs = (s, el=document)=> el.querySelector(s);
@@ -137,16 +137,7 @@ qs('#adm_table').addEventListener('click', async (e)=>{
   const row = e.target.closest('.adm-row'); const uid = row.getAttribute('data-uid');
   const ref = doc(db,'users', uid);
   try{
-    await updateDoc(ref, {
-      numericId: Number(row.querySelector('.a_numericId').value) || null,
-      firstName: row.querySelector('.a_firstName').value.trim(),
-      lastName: row.querySelector('.a_lastName').value.trim(),
-      phone: row.querySelector('.a_phone').value.trim(),
-      region: row.querySelector('.a_region').value.trim(),
-      balance: Number(row.querySelector('.a_balance').value),
-      gems: Number(row.querySelector('.a_gems').value),
-      dob: row.querySelector('.a_dob').value
-    });
+    await updateDoc(ref, { numericId: (Number(row.querySelector('.a_numericId')?.value) || null), firstName: row.querySelector('.a_firstName').value.trim(), lastName: row.querySelector('.a_lastName').value.trim(), phone: row.querySelector('.a_phone').value.trim(), region: row.querySelector('.a_region').value.trim(), balance: Number(row.querySelector('.a_balance').value), gems: Number(row.querySelector('.a_gems').value), dob: row.querySelector('.a_dob').value });
     alert('Saqlandi ✅');
   }catch(e){ alert('Xato: '+e.message); }
 });
@@ -172,6 +163,21 @@ function renderAdminTable(snap){
   head.className='card'; head.innerHTML='<b>ID</b> | Ism | Fam | Tel | Viloyat | Balans | Olmos | DOB | Amal';
   table.appendChild(head);
   if(snap.empty){ const d=document.createElement('div'); d.className='hint'; d.textContent='Hech narsa topilmadi'; table.appendChild(d); return; }
+  snap.forEach(d=>{
+    const u=d.data(); const row=document.createElement('div'); row.className='card'; row.setAttribute('data-uid', d.id);
+    row.innerHTML = `
+      <input class="a_numericId" type="number" value="${u.numericId ?? ''}" />
+      <input class="a_firstName" type="text" value="${u.firstName ?? ''}" />
+      <input class="a_lastName" type="text" value="${u.lastName ?? ''}" />
+      <input class="a_phone" type="text" value="${u.phone ?? ''}" />
+      <input class="a_region" type="text" value="${u.region ?? ''}" />
+      <input class="a_balance" type="number" value="${u.balance ?? 0}" />
+      <input class="a_gems" type="number" value="${u.gems ?? 0}" />
+      <input class="a_dob" type="date" value="${u.dob ?? ''}" />
+      <button class="btn primary a_save">Saqla</button>`;
+    table.appendChild(row);
+  });
+}
   snap.forEach(d=>{
     const u=d.data(); const row=document.createElement('div'); row.className='card'; row.setAttribute('data-uid', d.id);
     row.innerHTML = `
