@@ -114,20 +114,19 @@ async function loadCSV(path){
  try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
-async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
-
-/* Users list pagination */
-let __usersPageCursor=null, __usersLoaded=0;
-async function fetchUsersPage(limitSize=50){ const baseQ=query(collection(db,'users'), orderBy('gems','desc'), limit(limitSize)); const qref=__usersPageCursor? query(baseQ,startAfter(__usersPageCursor)) : baseQ; const snap=await getDocs(qref); const rows=[]; snap.forEach(d=>rows.push({id:d.id, ...d.data()})); __usersPageCursor=snap.docs.length? snap.docs[snap.docs.length-1] : __usersPageCursor; return rows; }
-async function renderUsersList(append=false){
-  const listId='users-list'; const moreId='users-loadmore';
-  const list=document.getElementById(listId); const more=document.getElementById(moreId);
-  if(!append){ if(list) list.innerHTML=''; __usersPageCursor=null; __usersLoaded=0; }
-  let batch=[]; try{ batch=await fetchUsersPage(50);}catch(e){ if(list) list.innerHTML=`<div class="error">${e.message||'Ruxsat/tarmoq xatosi'}</div>`; return; }
-  if(!list) return;
-  const rows=batch.map((u,i)=>{ const rank=__usersLoaded+i+1; const name=(u.firstName&&u.lastName)?(u.firstName+' '+u.lastName):(u.displayName||'—'); const id=u.numericId||'—'; const gems=u.gems||0; return `<div class="list-item"><div class="left"><div class="rank">${rank}</div><div class="id">ID ${id}</div><div class="name">${name}</div></div><div class="gems">💎 ${gems}</div></div>`; }).join('');
-  list.insertAdjacentHTML('beforeend', rows || '<div class="muted">Foydalanuvchilar topilmadi.</div>');
-  __usersLoaded += batch.length; if(more){ more.disabled=(batch.length===0); more.textContent=(batch.length===0)?'Yana yo\'q':'Ko\'proq yuklash'; }
+function withTimeout(promise, ms){ return Promise.race([promise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('TIMEOUT')), ms))]); }
+async function preferFirestore(coll,csv){
+  const [coll, csvPath] = arguments;
+  try{
+    const ref = collection(db, coll);
+    const snap = await withTimeout(getDocs(ref), 2500);
+    const arr = snap.docs.map(d=> ({id:d.id, ...d.data()}) );
+    if(arr && arr.length) return arr;
+  }catch(e){ console.warn('preferFirestore fallback:', e && e.message || e); }
+  try{
+    const rows = await loadCSV(csvPath);
+    return rows || [];
+  }catch(e){ console.error('CSV fallback failed:', e); return []; }
 }
 
 /* === Universal Card Builder === */
@@ -677,7 +676,7 @@ onAuthStateChanged(auth, async (user)=>{
 async function renderLiveOverall(){
   const body=document.getElementById('lb2-body'); if(!body) return;
   try{
-    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(200)));
+    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(150)));
     const best = new Map();
     snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); });
     const arr=[...best.values()].sort((a,b)=> b.score-a.score).slice(0,100);
@@ -685,3 +684,12 @@ async function renderLiveOverall(){
   }catch(e){ body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
 }
 
+
+function setUserBadge(d){
+  try{
+    const el = document.getElementById('badge-uid') || document.querySelector('[data-badge-uid]') || document.querySelector('.top .uid,.uid-badge,.id-badge');
+    if(!el) return;
+    const id = d && (d.userId || d.numericId || d.uid);
+    el.textContent = id ? ('ID'+id) : 'ID: —';
+  }catch(_){}
+}
