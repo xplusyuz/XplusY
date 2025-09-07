@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
 
@@ -57,24 +57,19 @@ btnSaveProfile.addEventListener('click', async (e)=>{
 });
 function val(sel){ const el=document.querySelector(sel); return (el && el.value||'').trim(); }
 
-/* Nav */
+/* Nav + Router */
 nav.addEventListener('click',(e)=>{ const btn=e.target.closest('button[data-page]'); if(!btn) return; document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderPage(btn.dataset.page); });
-
 function renderPage(page){ if(page==='home') return renderHome(); if(page==='courses') return renderCourses(); if(page==='tests') return renderTests(); if(page==='live') return renderLive(); if(page==='sim') return renderSim(); if(page==='settings') return renderSettings(); renderHome(); }
-
-/* Mini Router */
 function navigate(path){
   try{
     const loc = new URL(path, location.origin);
     if (loc.origin === location.origin){
       history.pushState({path: loc.pathname}, '', loc.pathname);
       route();
-    } else { toggleAuthGate(true);
+    } else {
       location.href = path;
     }
-  }catch(_){
-    location.href = path;
-  }
+  }catch(_){ location.href = path; }
 }
 window.addEventListener('popstate', ()=> route());
 function route(){
@@ -94,77 +89,33 @@ function route(){
 /* Badges */
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
-/* CSV helpers + Firestore prefer */
-function resolveCsvAlias(p){ try{ const m=(window.CONTENT_SOURCES||{}); if(p.endsWith('content/tests.csv')||p.includes('content/tests.csv')) return m.testsCsv || p; return p; }catch(_){ return p; }}
-const CSV_CACHE_TTL_MS = 5*60*1000;
-async function loadCSV(path){
-  path = resolveCsvAlias(path);
-  try{
-    const key = 'csv:'+path;
-    const cached = sessionStorage.getItem(key);
-    if(cached){
-      const obj = JSON.parse(cached);
-      if(Date.now() - obj.t < CSV_CACHE_TTL_MS){
-        return parseCSV(obj.v);
-      } else {
-        sessionStorage.removeItem(key);
-      }
-    }
-  }catch(_){}
- try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
-function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+/* CSV + helpers */
+async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 function withTimeout(promise, ms){ return Promise.race([promise, new Promise((_,rej)=>setTimeout(()=>rej(new Error('TIMEOUT')), ms))]); }
 async function preferFirestore(coll,csv){
-  const [coll, csvPath] = arguments;
   try{
-    const ref = collection(db, coll);
-    const snap = await withTimeout(getDocs(ref), 2500);
-    const arr = snap.docs.map(d=> ({id:d.id, ...d.data()}) );
-    if(arr && arr.length) return arr;
-  }catch(e){ console.warn('preferFirestore fallback:', e && e.message || e); }
+    const fs = await withTimeout(loadFromFirestore(coll), 2500);
+    if(Array.isArray(fs) && fs.length>0) return fs;
+  }catch(e){
+    console.warn('preferFirestore timeout/fallback:', (e&&e.message)||e);
+  }
   try{
-    const rows = await loadCSV(csvPath);
-    return rows || [];
-  }catch(e){ console.error('CSV fallback failed:', e); return []; }
+    return await loadCSV(csv);
+  }catch(e){
+    console.error('CSV load failed:', e);
+    return [];
+  }
 }
 
-/* === Universal Card Builder === */
-const UC_PALETTE = {
-  ad:     { icon:'📣', variant:'ad',     label:'Reklama' },
-  course: { icon:'🎓', variant:'course', label:'Kurs' },
-  test:   { icon:'📝', variant:'test',   label:'Test' },
-  sim:    { icon:'🎮', variant:'sim',    label:'Sim' },
-  live:   { icon:'🔥', variant:'live',   label:'Live' },
-  default:{ icon:'📦', variant:'test',   label:'Kontent' }
-};
-function svgBgInline(){
-  return `<div class="ucard-bg"><svg viewBox='0 0 400 240' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'>
-    <defs>
-      <linearGradient id='g1' x1='0' y1='0' x2='1' y2='1'>
-        <stop offset='0%'  stop-color='var(--uc-a)' stop-opacity='.6'/>
-        <stop offset='100%' stop-color='var(--uc-b)' stop-opacity='.15'/>
-      </linearGradient>
-      <linearGradient id='g2' x1='1' y1='0' x2='0' y2='1'>
-        <stop offset='0%'  stop-color='var(--uc-b)' stop-opacity='.6'/>
-        <stop offset='100%' stop-color='var(--uc-c)' stop-opacity='.15'/>
-      </linearGradient>
-    </defs>
-    <rect width='400' height='240' fill='url(#g1)'/>
-    <circle cx='330' cy='40' r='80' fill='url(#g2)' opacity='.35'/>
-    <circle cx='40' cy='200' r='100' fill='url(#g2)' opacity='.25'/>
-    <path d='M0,160 C80,120 140,140 220,110 C300,80 360,100 400,80 L400,240 L0,240 Z' fill='url(#g1)' opacity='.35'/>
-  </svg></div><div class='glow'></div>`;
-}
+/* === Universal Card Builder (unchanged UI) === */
+const UC_PALETTE = { ad:{icon:'📣',variant:'ad',label:'Reklama'}, course:{icon:'🎓',variant:'course',label:'Kurs'}, test:{icon:'📝',variant:'test',label:'Test'}, sim:{icon:'🎮',variant:'sim',label:'Sim'}, live:{icon:'🔥',variant:'live',label:'Live'}, default:{icon:'📦',variant:'test',label:'Kontent'} };
+function svgBgInline(){ return `<div class="ucard-bg"><svg viewBox='0 0 400 240' xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none'><defs><linearGradient id='g1' x1='0' y1='0' x2='1' y2='1'><stop offset='0%'  stop-color='var(--uc-a)' stop-opacity='.6'/><stop offset='100%' stop-color='var(--uc-b)' stop-opacity='.15'/></linearGradient><linearGradient id='g2' x1='1' y1='0' x2='0' y2='1'><stop offset='0%'  stop-color='var(--uc-b)' stop-opacity='.6'/><stop offset='100%' stop-color='var(--uc-c)' stop-opacity='.15'/></linearGradient></defs><rect width='400' height='240' fill='url(#g1)'/><circle cx='330' cy='40' r='80' fill='url(#g2)' opacity='.35'/><circle cx='40' cy='200' r='100' fill='url(#g2)' opacity='.25'/><path d='M0,160 C80,120 140,140 220,110 C300,80 360,100 400,80 L400,240 L0,240 Z' fill='url(#g1)' opacity='.35'/></svg></div><div class='glow'></div>`; }
 function cardUniversal(opts={}, ctx={}){
   const t = (opts.type && UC_PALETTE[opts.type]) ? UC_PALETTE[opts.type] : UC_PALETTE.default;
-  const title = opts.title || opts.name || '—';
-  const tag = opts.tag || t.label;
-  const meta = opts.meta || '';
-  const image = opts.image || '';
+  const title = opts.title || opts.name || '—'; const tag = opts.tag || t.label; const meta = opts.meta || ''; const image = opts.image || '';
   const price = (opts.price!=null) ? parseInt(opts.price||'0',10)||0 : (parseInt(opts.entryPrice||'0',10)||0);
-  const priceLabel = price>0 ? `${price.toLocaleString()} so'm` : 'Bepul';
-  const pid = opts.productId || (title.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
+  const priceLabel = price>0 ? `${price.toLocaleString()} so'm` : 'Bepul'; const pid = opts.productId || (title.toLowerCase().replace(/[^a-z0-9]+/g,'-'));
   const safe = JSON.stringify({ ...opts, productId: pid, type: t.variant }).replace(/"/g,'&quot;');
   return `<div class="ucard premium" data-variant="${t.variant}" data-card='${safe}'>
     ${svgBgInline()}
@@ -194,10 +145,7 @@ function bindUniversalCards(container, ctx={}){
     const data = JSON.parse(el.dataset.card.replace(/&quot;/g,'"'));
     const price = (data.price!=null) ? parseInt(data.price||'0',10)||0 : (parseInt(data.entryPrice||'0',10)||0);
     const pid = data.productId;
-    const startBtn = el.querySelector('.act-start');
-    const openBtn = el.querySelector('.act-open');
-    const liveBtn = el.querySelector('.act-live');
-    const liveStartBtn = el.querySelector('.act-live-start');
+    const startBtn = el.querySelector('.act-start'); const openBtn = el.querySelector('.act-open'); const liveBtn = el.querySelector('.act-live'); const liveStartBtn = el.querySelector('.act-live-start');
 
     if (startBtn){
       startBtn.addEventListener('click', async ()=>{
@@ -206,30 +154,23 @@ function bindUniversalCards(container, ctx={}){
           if(!allowed && price>0){
             if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
               await spend(price, {productId: pid, name: data.title||data.name||'Kontent'});
-            } else { toggleAuthGate(true); return; }
+            } else { return; }
           }
-          if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert('Link belgilanmagan'); }
+          if(data.link){ navigate(data.link); } else { alert('Link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
-    if (openBtn){
-      openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert("Link topilmadi"); } });
-    }
-    if (liveBtn){
-      liveBtn.addEventListener('click', ()=>{ openLiveModal(data); });
-    }
+    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } }); }
+    if (liveBtn){ liveBtn.addEventListener('click', ()=>{ openLiveModal(data); }); }
     if (liveStartBtn){
       liveStartBtn.addEventListener('click', async ()=>{
         try{
           const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
-          const sMs = data.startAt ? toMs(data.startAt) : 0;
-          const eMs = data.endAt ? toMs(data.endAt) : 0;
-          const now = Date.now();
+          const sMs = data.startAt ? toMs(data.startAt) : 0; const eMs = data.endAt ? toMs(data.endAt) : 0; const now = Date.now();
           if(!(sMs && eMs && now>=sMs && now<=eMs)){ alert('LIVE hali boshlanmagan yoki yakunlangan'); return; }
-          let joined=false;
-          try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
+          let joined=false; try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
           if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
-          if(data.startLink){ navigate(data.startLink); } else { toggleAuthGate(true); alert('Start link belgilanmagan'); }
+          if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
@@ -251,84 +192,78 @@ async function renderHome(){
 async function renderCourses(){
   const items = await preferFirestore('content_courses','./content/courses.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Kurslar</h3>
-    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
-  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
+    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('courses-cards'), {page:'courses'});
 }
 async function renderTests(){
   const items = await preferFirestore('content/tests','./content/tests.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
-    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
-  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
+    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('tests-cards'), {page:'tests'});
 }
 async function renderSim(){
   const items = await preferFirestore('content/sim','./content/sim.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
-    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
-  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
+    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
 }
 
-/* LIVE + modal */
-async async function renderLive(){
-  let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=[]; }
-  if(events.length===0){ events=await loadCSV('./content/live.csv'); }
+/* LIVE page: cards + GLOBAL leaderboard */
+async function renderLive(){
+  let events=[]; try{ const snap=await getDocs(collection(db,'live_events')); snap.forEach(d=>events.push({id:d.id, ...d.data()})); }catch(e){ events=await loadCSV('./content/live.csv'); }
   const toMs=(v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
   const statusOf=(ev,now)=>{ const s=toMs(ev.startAt), e=toMs(ev.endAt); if(s && e && now>=s && now<=e) return 'live'; if(s && now<s) return 'upcoming'; return 'finished'; };
   const now=Date.now(); events.sort((a,b)=>{ const r={live:0,upcoming:1,finished:2}; const sa=statusOf(a,now), sb=statusOf(b,now); if(r[sa]!==r[sb]) return r[sa]-r[sb]; return (toMs(a.startAt)||0)-(toMs(b.startAt)||0); });
 
   pageRoot.innerHTML = `<h3 class="section-title">Live turnirlar</h3>
+    <div class="card p-4" id="live-lb">
+      <div class="livebar">
+        <div>🏆 Global Reyting:</div>
+        <select id="lb-select"></select>
+        <div class="pill">⏱ <span id="lb-status">—</span></div>
+        <div class="pill">👥 <span id="lb-count">—</span></div>
+      </div>
+      <div class="lb" id="lb-body"><div class="small muted">Yuklanmoqda...</div></div>
+    </div>
     <div id="live-cards" class="cards">` + events.map(ev=>{
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
       return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry, startLink: ev.startLink||'', modalText: ev.modalText||'' }, {page:'live'});
-    }).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
-  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
+    }).join('') + `</div>`;
 
-  document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
-    const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
-    const btnStart = card.querySelector('.act-live');
-    const btnGo = card.querySelector('.act-live-start');
-    if (btnStart) btnStart.addEventListener('click', ()=> openLiveModal(data));
+  bindUniversalCards(document.getElementById('live-cards'), {page:'live'});
 
-    // countdown
-    const pill = card.querySelector('[data-countdown]');
-    if(pill){
-      const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
-      const sMs = data.startAt ? toMs(data.startAt) : 0;
-      const eMs = data.endAt ? toMs(data.endAt) : 0;
-      function tick(){
-        if(!sMs){ pill.textContent='—'; return; }
-        const now = Date.now();
-        if(sMs && now < sMs){
-          const d = Math.max(0, sMs - now);
-          const h=Math.floor(d/3_600_000), m=Math.floor((d%3_600_000)/60_000), s=Math.floor((d%60_000)/1000);
-          pill.textContent = `Start: ${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-          if(btnGo) btnGo.disabled = true;
-        } else if (sMs && eMs && now>=sMs && now<=eMs){
-          pill.textContent = "LIVE";
-          if(btnGo) btnGo.disabled = false;
-        } else { toggleAuthGate(true);
-          pill.textContent = "Yakunlangan";
-          if(btnGo) btnGo.disabled = true;
-        }
-      }
-      tick(); setInterval(tick, 1000);
-    }
-
-    // participants realtime
-    const badge = card.querySelector('[data-live-count]');
-    if(badge && data.id){
+  // Setup global leaderboard on top
+  let lbUnsub = null;
+  const select = document.getElementById('lb-select');
+  const lbStatus = document.getElementById('lb-status');
+  const lbCount = document.getElementById('lb-count');
+  const lbBody = document.getElementById('lb-body');
+  const active = events.filter(ev=>{ const s=toMs(ev.startAt), e=toMs(ev.endAt); return s && e && Date.now()>=s && Date.now()<=e; });
+  const source = active.length? active : events;
+  select.innerHTML = source.map((ev,i)=>`<option value="${ev.id||('csv-'+i)}">${ev.title||ev.name||('Event '+(i+1))}</option>`).join('');
+  let current = source[0];
+  function bindLb(ev){
+    if(lbUnsub){ lbUnsub(); lbUnsub=null; }
+    lbStatus.textContent = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
+    if(ev.id){
+      try{ const entCol = collection(db,'live_events',ev.id,'entries'); onSnapshot(entCol, (snap)=>{ lbCount.textContent = snap.size; }); }catch(_){ lbCount.textContent='—'; }
       try{
-        const entCol = collection(db,'live_events',data.id,'entries');
-        onSnapshot(entCol, (snap)=>{ badge.textContent = snap.size; });
-      }catch(_){ /* ignore */ }
-    }
-  });
+        const scQ = query(collection(db,'live_events', ev.id, 'scores'), orderBy('score','desc'), limit(50));
+        lbUnsub = onSnapshot(scQ, (snap)=>{
+          if(snap.empty){ lbBody.innerHTML = `<div class="small muted">Hali natijalar yo'q</div>`; return; }
+          let rows=''; let rank=0;
+          snap.forEach(docSnap=>{ const d=docSnap.data()||{}; rank++; const name=d.name||d.displayName||'—'; const score=d.score||0; rows += `<div class="lb-row"><div class="left"><div class="rk">${rank}</div><div class="name">${name}</div></div><div class="score">${score}</div></div>`; });
+          lbBody.innerHTML = rows;
+        });
+      }catch(_){ lbBody.innerHTML = `<div class="small muted">Reytingni o'qib bo'lmadi</div>`; }
+    } else { lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
+  }
+  if(current) bindLb(current);
+  select.addEventListener('change', (e)=>{ const v=e.target.value; const found = source.find((x,i)=> (x.id||('csv-'+i))===v ); if(found){ current=found; bindLb(current); } });
 }
 
-/* Live Details Modal */
+/* Live Modal (with real-time leaderboard) */
 let lmLbUnsub = null;
 async function openLiveModal(ev){
   const dlg = document.getElementById('live-modal');
@@ -385,7 +320,7 @@ async function openLiveModal(ev){
     } else if (sMs && eMs && now>=sMs && now<=eMs){
       ctaPre.disabled = true; ctaPre.textContent = "Join yopiq";
       ctaEnter.disabled = !joined; ctaEnter.textContent = joined ? "Kirish" : "Kirish (join kerak)";
-    } else { toggleAuthGate(true);
+    } else {
       ctaPre.disabled = true; ctaPre.textContent = "Yakunlangan";
       ctaEnter.disabled = true; ctaEnter.textContent = "Yakunlangan";
     }
@@ -416,7 +351,7 @@ async function openLiveModal(ev){
   };
   ctaEnter.onclick = ()=>{ if(!ctaEnter.disabled && ev.startLink){ navigate(ev.startLink); } };
 
-  // realtime leaderboard
+  // realtime leaderboard in modal
   if(ev.id && lmLb){
     try{
       const scQ = query(collection(db,'live_events', ev.id, 'scores'), orderBy('score','desc'), limit(50));
@@ -428,10 +363,11 @@ async function openLiveModal(ev){
       });
     }catch(e){ lmLb.innerHTML = `<div class="small muted">Reytingni o'qishda xatolik</div>`; }
   }
+
   dlg.showModal();
 }
 
-/* Test Player (Math) — explanations + seeded randomization + anti-cheat + lock + per-question timer */
+/* Test Player (Math) — explanations + seeded randomization + anti-cheat */
 async function renderTestPlayer(slug){
   const tests = await preferFirestore('content/tests','./content/tests.csv');
   const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
@@ -447,57 +383,53 @@ async function renderTestPlayer(slug){
     }
   }
 
-  let qCsv = `./content/tests_data/${slug}.csv`;
-  if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
+  const qCsv = `./content/tests_data/${slug}.csv`;
   const rawRows = await loadCSV(qCsv);
   if(!rawRows || rawRows.length===0){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
   }
 
+  // seed
   const uid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : 'anon';
   const paramSeed = parseInt(getParam('seed')||'0',10)||0;
   const ssKey = `tp-seed:${uid}:${slug}`;
   let seed = paramSeed || parseInt(sessionStorage.getItem(ssKey)||'0',10) || (Math.floor(Math.random()*2**31));
   sessionStorage.setItem(ssKey, String(seed));
-  const rnd = seededRandom ? seededRandom(seed) : null;
+  const rnd = seededRandom(seed);
 
   const makeQ = (r)=>{
-    const opts=[]; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k,label:k.toUpperCase(),text:r[k],isCorrect:(String(r.ans||'').trim().toLowerCase()===k)}); });
-    if(rnd && typeof seededShuffle==='function') seededShuffle(opts, rnd); else if(typeof shuffle==='function') shuffle(opts);
-    return { text: r.text || r.q || '—', ex: r.ex || '', img: r.img || r.image || '', opts };
+    const opts = []; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
+    seededShuffle(opts, rnd);
+    return { text: r.text || r.q || '—', ex: r.ex || '', opts };
   };
-  let rows = rawRows.map(makeQ);
-  if(rnd && typeof seededShuffle==='function') seededShuffle(rows, rnd); else if(typeof shuffle==='function') shuffle(rows);
+  let rows = rawRows.map(makeQ); seededShuffle(rows, rnd);
 
   let durationSec = parseInt(t.durationSec||'0',10)||0;
   if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
 
-  const qPer = Math.max(20, Math.min(180, Math.floor(durationSec / rows.length)));
-  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), locked: new Array(rows.length).fill(false), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, qRemaining: qPer, qPer, reveal:false, strikes:0 };
+  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
 
-  function visHandler(){ if(document.hidden){ state.strikes++; let penalty = (state.strikes===1?10:(state.strikes===2?30:60)); state.remaining = Math.max(0, state.remaining - penalty); state.qRemaining = Math.max(0, state.qRemaining - Math.ceil(penalty/2)); showToast(`Diqqat: fokusdan chiqish uchun -${penalty}s jarima`); if(state.remaining<=0) finish(); } }
+  // Anti-cheat
+  function visHandler(){ if(document.hidden){ showToast('Diqqat: test davomida sahifani tark etmang.'); } }
   document.addEventListener('visibilitychange', visHandler);
 
   function render(){
     const q = rows[state.idx];
     const prog = Math.round((state.idx)/rows.length*100);
     const picked = state.picks[state.idx];
-    const locked = state.locked[state.idx];
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="head">
         <div><strong>${state.title}</strong> — ${rows.length} savol</div>
-        <div class="row" style="gap:.75rem"><div class="qtimer" id="tp-qtimer">00:00</div><div class="timer" id="tp-timer">00:00</div></div>
+        <div class="timer" id="tp-timer">00:00</div>
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
         <div class="qtext">#${state.idx+1}. ${q.text}</div>
-        ${q.img ? `<img class="qimg" src="${q.img}" alt="img" loading="lazy">` : ``}
         <div class="opts">
           ${q.opts.map((op,i)=>{
             const isSel = (picked===i);
             const mark = (state.reveal ? (op.isCorrect ? 'correct' : (isSel ? 'wrong' : '')) : (isSel ? 'selected' : ''));
-            const dis = locked ? 'disabled' : '';
-            return `<div class="opt ${mark} ${dis}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
+            return `<div class="opt ${mark}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
           }).join('')}
         </div>
         <div class="ctrl">
@@ -510,75 +442,39 @@ async function renderTestPlayer(slug){
         </div>
         ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
       </div>
-      <div class="small muted">Seed=${seed}. Ogohlantirishlar: ${state.strikes} ta.</div>
+      <div class="small muted">Izoh: savol va variantlar tartibi seed bo'yicha aralashtirilgan (seed=${seed}).</div>
     </div>`;
 
-    if(!locked){
-      pageRoot.querySelectorAll('.opt').forEach(el=>{
-        el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; state.locked[state.idx]=true; render(); });
-      });
-    }
-    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; state.qRemaining = state.qPer; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
+    pageRoot.querySelectorAll('.opt').forEach(el=>{ el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; render(); }); });
+    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
-    updateTimerText(); setTimeout(()=>{ if(window.requestMathTypeset) window.requestMathTypeset(); }, 50);
+    updateTimerText();
   }
 
   let iv=null;
-  function startTimer(){
-    iv = setInterval(()=>{
-      state.remaining--; state.qRemaining--;
-      if(state.qRemaining<=0){
-        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; } else { state.remaining = Math.max(0,state.remaining); finish(); return; }
-      }
-      if(state.remaining<=0){ state.remaining=0; finish(); return; }
-      const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
-      updateTimerText();
-    }, 1000);
-  }
+  function startTimer(){ iv = setInterval(()=>{ state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); } const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; } updateTimerText(); }, 1000); }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
-  function fmt(n){ const m=Math.floor(n/60), s=n%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
-  function updateTimerText(){ const t1 = document.getElementById('tp-timer'); if(t1) t1.textContent = fmt(state.remaining); const t2 = document.getElementById('tp-qtimer'); if(t2) t2.textContent = fmt(state.qRemaining); }
+  function updateTimerText(){ const m = Math.floor(state.remaining/60), s=state.remaining%60; const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
 
   async function finish(){
     stopTimer();
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
     rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && chosen.isCorrect) good++; else bad++; });
-    const rawPercent = Math.round(good/rows.length*100);
-    const extraPenalty = Math.min(20, Math.max(0, (state.strikes-1)) * 2);
-    const percent = Math.max(0, rawPercent - extraPenalty);
+    const percent = Math.round(good/rows.length*100);
     try{
-      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
-        productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
-        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, strikes: state.strikes, qPer: state.qPer, seed, picks: state.picks, rawPercent, extraPenalty
-      });
+      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), { productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent, startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks, seed });
     }catch(_){}
 
-    // Gems award by difficulty
-    const difficulty = (t.difficulty || 'easy').toLowerCase();
-    const coef = (difficulty==='easy')? {win:1, lose:-0.25} : (difficulty==='medium')? {win:2, lose:-0.5} : {win:3, lose:-0.75};
-    const gemsDelta = Math.max(0, (good * coef.win) + (bad * coef.lose));
-    try{
-      await runTransaction(db, async (tx)=>{
-        const uref=doc(db,'users',auth.currentUser.uid);
-        const us=await tx.get(uref);
-        const cur = (us.data().gems||0);
-        tx.update(uref, { gems: Math.round((cur + gemsDelta)*100)/100, updatedAt: serverTimestamp() });
-        await addDoc(collection(db,'users',auth.currentUser.uid,'gems_logs'), {delta:gemsDelta, difficulty, good, bad, at: serverTimestamp(), ref: (t.productId||slug)});
-      });
-    }catch(_){}
-
+    // write to live scoreboard if ?event=<id>
     const evId = getParam('event');
     if(evId){
       try{
         const uref = doc(db,'users',auth.currentUser.uid);
         const us = await getDoc(uref); const ud = us.data()||{};
-        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), {
-          uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'),
-          score: percent, updatedAt: serverTimestamp(), strikes: state.strikes
-        }, { merge: true });
+        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), { uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'), score: percent, updatedAt: serverTimestamp() }, { merge: true });
       }catch(_){}
     }
 
@@ -586,13 +482,25 @@ async function renderTestPlayer(slug){
       <div class="rez">
         <h3>Natijalar — ${state.title}</h3>
         <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
-        <p><b>${percent}%</b> umumiy natija <span class='small muted'>(jarima: -${extraPenalty}%)</span></p>
-        <p>💎 Qo'shilgan olmos: <b>${gemsDelta.toFixed(2)}</b></p>
+        <p><b>${percent}%</b> umumiy natija</p>
         <div class="row gap-2 mt-2">
           <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
           <button class="btn" id="tp-again-new">Qayta yechish (yangi tartib)</button>
           <button class="btn quiet" id="tp-exit">Testlarga qaytish</button>
         </div>
+      </div>
+      <div class="mt-2 card p-4">
+        <h4>Review</h4>
+        ${rows.map((q,qi)=>{
+          const pick = state.picks[qi];
+          const ok = (pick!=null && q.opts[pick] && q.opts[pick].isCorrect);
+          const correct = q.opts.find(op=>op.isCorrect);
+          return `<div class="mt-2">
+            <div><b>#${qi+1}.</b> ${q.text} — ${ ok ? '<span class="good">to\'g\'ri</span>' : (pick==null? '<span class="muted">bo\'sh</span>' : '<span class="bad">noto\'g\'ri</span>') }</div>
+            <div class="small muted">To'g'ri javob: ${(correct? correct.label : '?')}.</div>
+            ${ q.ex ? `<div class="sol"><div class="st">Yechim</div><div>${q.ex}</div></div>` : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
     document.getElementById('tp-again-same').addEventListener('click', ()=>{ sessionStorage.setItem(ssKey, String(seed)); renderTestPlayer(slug); });
@@ -602,7 +510,8 @@ async function renderTestPlayer(slug){
 
   render(); startTimer();
 }
-/* Settings + Admin CRUD + Wallet */
+
+/* Settings + Admin CRUD + Wallet (same as before) */
 function renderSettings(){
   pageRoot.innerHTML=`<div class="cards">
     <div class="card p-4"><h3>Hamyon</h3><div class="row gap-2 mt-2">
@@ -628,7 +537,7 @@ function renderSettings(){
   const dbgAuth=document.getElementById('dbg-auth'); const dbgErr=document.getElementById('dbg-last-error');
   dbgAuth.textContent=auth.currentUser?('User: '+(auth.currentUser.email||auth.currentUser.uid)):'User: (not signed in)';
   dbgErr.textContent=window.__lastAuthError?('Last error: '+window.__lastAuthError):'Last error: (none)';
-  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { toggleAuthGate(true); document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
+  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
 }
 function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); const listEl=document.getElementById('ap-list');
   async function refresh(){ listEl.innerHTML='<div class="muted p-4">Yuklanmoqda...</div>'; const snap=await getDocs(collection(db,collSel.value)); const items=[]; snap.forEach(d=>items.push({id:d.id, ...d.data()})); if(items.length===0){ listEl.innerHTML='<div class="muted p-4">Hali karta yo\'q.</div>'; return; } listEl.innerHTML=items.map(it=>{ const live = (collSel.value==='live_events'); return `<div class="card p-4" data-id="${it.id}"><div class="row gap-2 mt-1"><input class="input ap-name" value="${(it.name||it.title||'').replace(/"/g,'&quot;')}" placeholder="Name/Title"/><input class="input ap-tag" value="${(it.tag||'').replace(/"/g,'&quot;')}" placeholder="Tag"/><input class="input ap-meta" value="${(it.meta||'').replace(/"/g,'&quot;')}" placeholder="Meta"/></div><div class="row gap-2 mt-1"><input class="input ap-price" type="number" value="${it.price||0}" placeholder="Price (tests)"/><input class="input ap-productId" value="${it.productId||''}" placeholder="Product ID (tests)"/></div>${live?`<div class='row gap-2 mt-1'><input class='input ap-entry' type='number' value='${it.entryPrice||0}' placeholder='Entry (Live)'/><input class='input ap-prize' value='${it.prize||''}' placeholder='Prize (Live)'/><input class='input ap-startAt' type='datetime-local' value='${(it.startAt && it.startAt.toDate? it.startAt.toDate().toISOString().slice(0,16) : (it.startAt||'')).toString().replace('Z','')}'/><input class='input ap-endAt' type='datetime-local' value='${(it.endAt && it.endAt.toDate? it.endAt.toDate().toISOString().slice(0,16) : (it.endAt||'')).toString().replace('Z','')}'/></div>`:''}<div class="row end mt-2"><button class="btn quiet ap-delete">O'chirish</button><button class="btn ap-save">Saqlash</button></div></div>`; }).join('');
@@ -647,7 +556,7 @@ function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); cons
 }
 function gv(root, sel){ const el=root.querySelector(sel); return el? el.value.trim() : ''; }
 
-/* Wallet helpers */
+/* Wallet */
 async function doTopUp(amount){ try{ await topUp(amount); alert(amount.toLocaleString('uz-UZ')+' so\'m qo\'shildi'); }catch(e){ showErr(e);} }
 async function topUp(amount){ if(amount<=0) throw new Error('Miqdor noto\'g\'ri'); await runTransaction(db, async (tx)=>{ const uref=doc(db,'users',auth.currentUser.uid); const snap=await tx.get(uref); const bal=(snap.data().balance||0)+amount; tx.update(uref,{balance:bal,updatedAt:serverTimestamp()}); }); }
 async function spend(amount, product){ if(amount<0) throw new Error('Miqdor noto\'g\ri'); await runTransaction(db, async (tx)=>{ const uref=doc(db,'users',auth.currentUser.uid); const usnap=await tx.get(uref); const bal=usnap.data().balance||0; if(bal<amount) throw new Error('Balans yetarli emas'); const newBal=bal-amount; const gems=(usnap.data().gems||0)+Math.floor(amount/1000); tx.update(uref,{balance:newBal,gems,updatedAt:serverTimestamp()}); await addDoc(collection(db,'users',auth.currentUser.uid,'purchases'), {productId:product.productId,name:product.name,price:amount,at:serverTimestamp()}); }); }
@@ -655,8 +564,7 @@ async function hasAccess(product){ const price=parseInt(product.price||'0',10)||
 
 /* Auth state */
 onAuthStateChanged(auth, async (user)=>{
-  toggleAuthGate(!user);
-  if(user){ try{ await ensureUserId(user.uid); }catch(_){ }
+  if(user){
     try{
       const data=await ensureNumericIdAndProfile(user);
       gate.classList.remove('visible');
@@ -664,32 +572,9 @@ onAuthStateChanged(auth, async (user)=>{
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
       document.getElementById('badge-balance').textContent = `💵 ${d.balance ?? 0}`;
-      document.getElementById('badge-gems').textContent = `💎 ${(d.gems ?? 0).toLocaleString('uz-UZ',{maximumFractionDigits:2})}`;
+      document.getElementById('badge-gems').textContent = `💎 ${d.gems ?? 0}`;
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  } else { toggleAuthGate(true);
-    gate.classList.add('visible');
-  }
+  } else { gate.classList.add('visible'); }
 });
-
-async function renderLiveOverall(){
-  const body=document.getElementById('lb2-body'); if(!body) return;
-  try{
-    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(150)));
-    const best = new Map();
-    snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); });
-    const arr=[...best.values()].sort((a,b)=> b.score-a.score).slice(0,100);
-    body.innerHTML = arr.length? arr.map((d,i)=>`<div class='lb-row'><div class='left'><div class='rk'>${i+1}</div><div class='name'>${d.name}</div></div><div class='score'>${d.score}</div></div>`).join('') : `<div class='small muted'>Hali natijalar yo'q</div>`;
-  }catch(e){ body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
-}
-
-
-function setUserBadge(d){
-  try{
-    const el = document.getElementById('badge-uid') || document.querySelector('[data-badge-uid]') || document.querySelector('.top .uid,.uid-badge,.id-badge');
-    if(!el) return;
-    const id = d && (d.userId || d.numericId || d.uid);
-    el.textContent = id ? ('ID'+id) : 'ID: —';
-  }catch(_){}
-}
