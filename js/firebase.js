@@ -1,11 +1,9 @@
-// Firebase init (clean)
+// Firebase init
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -33,17 +31,10 @@ export async function ensureNumericIdAndProfile(user) {
       if (cSnap.exists()) nextId = (cSnap.data().lastAssigned || 1000000) + 1;
       tx.set(countersRef, { lastAssigned: nextId, updatedAt: serverTimestamp() }, { merge: true });
       tx.set(userRef, {
-        uid: user.uid,
-        email: user.email || "",
-        displayName: user.displayName || "",
-        numericId: nextId,
-        balance: 0,
-        gems: 0,
-        profileComplete: false,
-        firstName: "", lastName: "", middleName: "",
-        birthDate: "", address: "", phone: "",
-        isTeacher: false, isAdmin: false,
-        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        uid: user.uid, email: user.email || "", displayName: user.displayName || "",
+        numericId: nextId, balance: 0, gems: 0, profileComplete: false,
+        firstName: "", lastName: "", middleName: "", birthDate: "", address: "", phone: "",
+        isTeacher: false, isAdmin: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       }, { merge: true });
     }
   });
@@ -55,6 +46,4 @@ export async function updateProfileLocked(uid, data) {
   await updateDoc(userRef, { ...data, updatedAt: serverTimestamp() });
 }
 
-export {
-  signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut
-};
+export { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut };

@@ -2,9 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // USERS
     match /users/{uid} {
-      // Leaderboard query (gems desc, limit <=100)
+      // Allow paged listing for users ordered by gems desc (client paginates)
       allow list: if request.auth != null &&
         request.query.limit <= 100 &&
         request.query.orderBy.size() == 1 &&
@@ -16,28 +15,31 @@ service cloud.firestore {
 
       allow update: if request.auth != null && request.auth.uid == uid
         && (
-          (!resource.data.profileComplete && request.resource.data.profileComplete == true
-            && request.resource.data.firstName is string
-            && request.resource.data.lastName is string
-            && request.resource.data.middleName is string
-            && request.resource.data.birthDate is string
-            && request.resource.data.address is string
-            && request.resource.data.phone is string
+          (resource.data.profileComplete == false &&
+            request.resource.data.profileComplete == true &&
+            request.resource.data.diff(resource.data).changedKeys()
+              .hasOnly(['firstName','lastName','middleName','birthDate','address','phone','profileComplete','updatedAt']) &&
+            request.resource.data.firstName is string && request.resource.data.firstName.size() > 0 &&
+            request.resource.data.lastName  is string && request.resource.data.lastName.size()  > 0 &&
+            request.resource.data.middleName is string && request.resource.data.middleName.size() > 0 &&
+            request.resource.data.birthDate is string && request.resource.data.birthDate.size() > 0 &&
+            request.resource.data.address   is string && request.resource.data.address.size()   > 0 &&
+            request.resource.data.phone     is string && request.resource.data.phone.size()     > 0
           )
           ||
-          (resource.data.profileComplete == true
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['phone','address','updatedAt','balance','gems'])
-            && (
-              request.resource.data.balance == resource.data.balance
-              || (request.resource.data.balance is number
-                  && (request.resource.data.balance - resource.data.balance) <= 1000000
-                  && (request.resource.data.balance - resource.data.balance) >= -1000000)
-            )
-            && (
-              request.resource.data.gems == resource.data.gems
-              || (request.resource.data.gems is number
-                  && (request.resource.data.gems - resource.data.gems) <= 100000
-                  && (request.resource.data.gems - resource.data.gems) >= -100000)
+          (resource.data.profileComplete == true &&
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(['phone','address','updatedAt','balance','gems']) &&
+            (
+              request.resource.data.balance == resource.data.balance ||
+              (request.resource.data.balance is number &&
+               (request.resource.data.balance - resource.data.balance) <= 1000000 &&
+               (request.resource.data.balance - resource.data.balance) >= -1000000)
+            ) &&
+            (
+              request.resource.data.gems == resource.data.gems ||
+              (request.resource.data.gems is number &&
+               (request.resource.data.gems - resource.data.gems) <= 100000 &&
+               (request.resource.data.gems - resource.data.gems) >= -100000)
             )
           )
         );
@@ -45,7 +47,7 @@ service cloud.firestore {
 
       match /users/{uid}/purchases/{pid} {
         allow create: if request.auth != null && request.auth.uid == uid;
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read:   if request.auth != null && request.auth.uid == uid;
         allow update, delete: if false;
       }
       match /users/{uid}/teacher_items/{itemId} {
@@ -53,7 +55,6 @@ service cloud.firestore {
       }
     }
 
-    // Admin-managed content (public read)
     match /content_home/{docId} {
       allow read: if true;
       allow create, update, delete: if request.auth != null &&
@@ -75,7 +76,6 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // Numeric ID counter
     match /counters/{name} {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null
