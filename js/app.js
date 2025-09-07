@@ -96,7 +96,22 @@ const badgeId=document.getElementById('badge-id'); const badgeBal=document.getEl
 
 /* CSV helpers + Firestore prefer */
 function resolveCsvAlias(p){ try{ const m=(window.CONTENT_SOURCES||{}); if(p.endsWith('content/tests.csv')||p.includes('content/tests.csv')) return m.testsCsv || p; return p; }catch(_){ return p; }}
-async function loadCSV(path){ path = resolveCsvAlias(path); try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+const CSV_CACHE_TTL_MS = 5*60*1000;
+async function loadCSV(path){
+  path = resolveCsvAlias(path);
+  try{
+    const key = 'csv:'+path;
+    const cached = sessionStorage.getItem(key);
+    if(cached){
+      const obj = JSON.parse(cached);
+      if(Date.now() - obj.t < CSV_CACHE_TTL_MS){
+        return parseCSV(obj.v);
+      } else {
+        sessionStorage.removeItem(key);
+      }
+    }
+  }catch(_){}
+ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
@@ -237,19 +252,22 @@ async function renderHome(){
 async function renderCourses(){
   const items = await preferFirestore('content_courses','./content/courses.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Kurslar</h3>
-    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
   bindUniversalCards(document.getElementById('courses-cards'), {page:'courses'});
 }
 async function renderTests(){
   const items = await preferFirestore('content/tests','./content/tests.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
-    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
   bindUniversalCards(document.getElementById('tests-cards'), {page:'tests'});
 }
 async function renderSim(){
   const items = await preferFirestore('content/sim','./content/sim.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
-    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
   bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
 }
 
@@ -266,7 +284,8 @@ async async function renderLive(){
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
       return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry, startLink: ev.startLink||'', modalText: ev.modalText||'' }, {page:'live'});
-    }).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class="card p-4 mt-2" id="live-lb-overall"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+    }).join('') + `</div>`; pageRoot.insertAdjacentHTML('beforeend', `<div class=\"card p-4 mt-2\" id=\"live-lb-overall\"><div class="livebar"><div>🌐 Umumiy TOP</div></div><div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div></div>`);
+  /* CALL_OVERALL_LB */ try{ await renderLiveOverall(); }catch(_){}
 
   document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
     const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
@@ -473,7 +492,7 @@ async function renderTestPlayer(slug){
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
         <div class="qtext">#${state.idx+1}. ${q.text}</div>
-        ${q.img ? `<img class="qimg" src="${q.img}" alt="img">` : ``}
+        ${q.img ? `<img class="qimg" src="${q.img}" alt="img" loading="lazy">` : ``}
         <div class="opts">
           ${q.opts.map((op,i)=>{
             const isSel = (picked===i);
@@ -504,7 +523,7 @@ async function renderTestPlayer(slug){
     pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
-    updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
+    updateTimerText(); setTimeout(()=>{ if(window.requestMathTypeset) window.requestMathTypeset(); }, 50);
   }
 
   let iv=null;
@@ -516,7 +535,7 @@ async function renderTestPlayer(slug){
       }
       if(state.remaining<=0){ state.remaining=0; finish(); return; }
       const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
-      updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
+      updateTimerText();
     }, 1000);
   }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
@@ -638,7 +657,7 @@ async function hasAccess(product){ const price=parseInt(product.price||'0',10)||
 /* Auth state */
 onAuthStateChanged(auth, async (user)=>{
   toggleAuthGate(!user);
-  if(user){
+  if(user){ try{ await ensureUserId(user.uid); }catch(_){ }
     try{
       const data=await ensureNumericIdAndProfile(user);
       gate.classList.remove('visible');
@@ -658,11 +677,11 @@ onAuthStateChanged(auth, async (user)=>{
 async function renderLiveOverall(){
   const body=document.getElementById('lb2-body'); if(!body) return;
   try{
-    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(500)));
+    const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(200)));
     const best = new Map();
     snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); });
     const arr=[...best.values()].sort((a,b)=> b.score-a.score).slice(0,100);
     body.innerHTML = arr.length? arr.map((d,i)=>`<div class='lb-row'><div class='left'><div class='rk'>${i+1}</div><div class='name'>${d.name}</div></div><div class='score'>${d.score}</div></div>`).join('') : `<div class='small muted'>Hali natijalar yo'q</div>`;
   }catch(e){ body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
 }
-document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(renderLiveOverall, 0); });
+
