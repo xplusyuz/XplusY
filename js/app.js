@@ -90,7 +90,8 @@ function route(){
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
 /* CSV + helpers */
-async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+function resolveCsvAlias(p){ try{ const m=(window.CONTENT_SOURCES||{}); if(p.endsWith('content/tests.csv')||p.includes('content/tests.csv')) return m.testsCsv || p; return p; }catch(_){ return p; }}
+async function loadCSV(path){ path = resolveCsvAlias(path); try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
 function getParam(name){ try{ const u=new URL(location.href); return u.searchParams.get(name); }catch(_){ return null; } }
@@ -404,7 +405,7 @@ async function renderTestPlayer(slug){
     }
   }
 
-  const qCsv = `./content/tests_data/${slug}.csv`;
+  let qCsv = `./content/tests_data/${slug}.csv`; if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
   const rawRows = await loadCSV(qCsv);
   if(!rawRows || rawRows.length===0){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
@@ -628,7 +629,7 @@ onAuthStateChanged(auth, async (user)=>{
   if(user){
     try{
       const data=await ensureNumericIdAndProfile(user);
-      gate.classList.remove('visible');
+      
       const uref=doc(db,'users',auth.currentUser.uid);
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
@@ -637,5 +638,5 @@ onAuthStateChanged(auth, async (user)=>{
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  }   else { toggleAuthGate(true); gate.classList.add('visible'); }
+  }   else { toggleAuthGate(true); }
 });
