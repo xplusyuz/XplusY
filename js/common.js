@@ -43,22 +43,7 @@ export function initTheme(){
 }
 
 /* Bottom bar */
-export function ensureBottomBar(){
-  if(document.querySelector('#bottomBar')) return;
-  const bar=document.createElement('nav');
-  bar.id='bottomBar'; bar.className='bottom-bar';
-  bar.innerHTML = `
-    <a href="./index.html" data-path="/index.html"><span>🏠</span><i>Bosh</i></a>
-    <a href="./tests.html" data-path="/tests.html"><span>📝</span><i>Testlar</i></a>
-    <a href="./live.html" class="big" data-path="/live.html"><span>🎮</span><i>Live</i></a>
-    <a href="./leaderboard.html" data-path="/leaderboard.html"><span>🏅</span><i>Reyting</i></a>
-    <a href="./settings.html" data-path="/settings.html"><span>⚙️</span><i>Sozlamalar</i></a>`;
-  document.body.appendChild(bar);
-  const p = location.pathname.replace(/\\/g,'/');
-  document.querySelectorAll('#bottomBar a').forEach(a=>{
-    if(p.endsWith(a.getAttribute('data-path'))) a.classList.add('active');
-  });
-}
+export function ensureBottomBar(){}
 
 /* Auth + header pills */
 async function ensureUserDoc(uid, profile){
@@ -118,20 +103,20 @@ export function attachAuthUI({ requireSignIn = true } = {}){
     document.dispatchEvent(new CustomEvent('mc:user-ready', { detail: window.__mcUser }));
   });
 
-  document.addEventListener('click', async (e)=>{
-    if(e.target && e.target.id==='btnSignIn'){
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider).catch(e=> alert('Kirish xatosi: '+e.message));
-    }
-    if(e.target && e.target.id==='btnSignOut'){
-      await signOut(auth).catch(e=> alert('Chiqishda xato: '+e.message));
-      location.reload();
-    }
-  });
+  
+document.addEventListener('click', async (e)=>{
+  if(e.target && (e.target.id==='btnSignIn' || e.target.matches('[data-action="signin"]'))){
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider).catch(err=> alert('Kirish xatosi: '+err.message));
+  }
+  if(e.target && (e.target.id==='btnSignOut' || e.target.matches('[data-action="signout"]'))){
+    await signOut(auth).catch(err=> alert('Chiqishda xato: '+err.message));
+    location.reload();
+  }
+});
 }
 
 /* Init per page */
 export function initUX(){
   initTheme();
-  ensureBottomBar();
-}
+  }
