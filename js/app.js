@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, collectionGroup, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
 
@@ -66,7 +66,7 @@ function navigate(path){
     if (loc.origin === location.origin){
       history.pushState({path: loc.pathname}, '', loc.pathname);
       route();
-    } else { toggleAuthGate(true);
+    } else {
       location.href = path;
     }
   }catch(_){ location.href = path; }
@@ -90,8 +90,7 @@ function route(){
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
 /* CSV + helpers */
-function resolveCsvAlias(p){ try{ const m=(window.CONTENT_SOURCES||{}); if(p.endsWith('content/tests.csv')||p.includes('content/tests.csv')) return m.testsCsv || p; return p; }catch(_){ return p; }}
-async function loadCSV(path){ path = resolveCsvAlias(path); try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
 function getParam(name){ try{ const u=new URL(location.href); return u.searchParams.get(name); }catch(_){ return null; } }
@@ -160,13 +159,13 @@ function bindUniversalCards(container, ctx={}){
           if(!allowed && price>0){
             if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
               await spend(price, {productId: pid, name: data.title||data.name||'Kontent'});
-            } else { toggleAuthGate(true); return; }
+            } else { return; }
           }
-          if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert('Link belgilanmagan'); }
+          if(data.link){ navigate(data.link); } else { alert('Link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
-    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert("Link topilmadi"); } }); }
+    if (openBtn){ openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } }); }
     if (liveBtn){ liveBtn.addEventListener('click', ()=>{ openLiveModal(data); }); }
     if (liveStartBtn){
       liveStartBtn.addEventListener('click', async ()=>{
@@ -176,7 +175,7 @@ function bindUniversalCards(container, ctx={}){
           if(!(sMs && eMs && now>=sMs && now<=eMs)){ alert('LIVE hali boshlanmagan yoki yakunlangan'); return; }
           let joined=false; try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
           if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
-          if(data.startLink){ navigate(data.startLink); } else { toggleAuthGate(true); alert('Start link belgilanmagan'); }
+          if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
@@ -231,10 +230,6 @@ async function renderLive(){
       </div>
       <div class="lb" id="lb-body"><div class="small muted">Yuklanmoqda...</div></div>
     </div>
-    <div class="card p-4 mt-2" id="live-lb-overall">
-      <div class="livebar"><div>🌐 Umumiy TOP (so\'nggi yangilanganlar ichidan)</div></div>
-      <div class="lb" id="lb2-body"><div class="small muted">Yuklanmoqda...</div></div>
-    </div>
     <div id="live-cards" class="cards">` + events.map(ev=>{
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
@@ -267,13 +262,10 @@ async function renderLive(){
           lbBody.innerHTML = rows;
         });
       }catch(_){ lbBody.innerHTML = `<div class="small muted">Reytingni o'qib bo'lmadi</div>`; }
-    } else { toggleAuthGate(true); lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
+    } else { lbBody.innerHTML = `<div class="small muted">Reyting faqat Firestore’dagi live eventlar uchun</div>`; lbCount.textContent='—'; }
   }
   if(current) bindLb(current);
   select.addEventListener('change', (e)=>{ const v=e.target.value; const found = source.find((x,i)=> (x.id||('csv-'+i))===v ); if(found){ current=found; bindLb(current); } });
-  async function renderOverallLb(){ try{ const body=document.getElementById('lb2-body'); if(!body) return; const snap = await getDocs(query(collectionGroup(db,'scores'), orderBy('updatedAt','desc'), limit(500))); const best=new Map(); snap.forEach(d=>{ const x=d.data()||{}; const id=x.uid||d.id; const prev=best.get(id); const cand={uid:id, name:x.name||'—', score:x.score||0}; if(!prev || cand.score>prev.score) best.set(id,cand); }); const arr=[...best.values()].sort((a,b)=>b.score-a.score).slice(0,100); body.innerHTML = arr.length? arr.map((d,i)=>`<div class='lb-row'><div class='left'><div class='rk'>${i+1}</div><div class='name'>${d.name}</div></div><div class='score'>${d.score}</div></div>`).join('') : `<div class='small muted'>Hali natijalar yo'q</div>`; }catch(e){ const body=document.getElementById('lb2-body'); if(body) body.innerHTML = `<div class='small muted'>Umumiy reytingni o'qib bo'lmadi</div>`; }
-  }
-  renderOverallLb();
 }
 
 /* Live Modal (with real-time leaderboard) */
@@ -333,7 +325,7 @@ async function openLiveModal(ev){
     } else if (sMs && eMs && now>=sMs && now<=eMs){
       ctaPre.disabled = true; ctaPre.textContent = "Join yopiq";
       ctaEnter.disabled = !joined; ctaEnter.textContent = joined ? "Kirish" : "Kirish (join kerak)";
-    } else { toggleAuthGate(true);
+    } else {
       ctaPre.disabled = true; ctaPre.textContent = "Yakunlangan";
       ctaEnter.disabled = true; ctaEnter.textContent = "Yakunlangan";
     }
@@ -380,7 +372,7 @@ async function openLiveModal(ev){
   dlg.showModal();
 }
 
-/* Test Player (Math) — explanations + seeded randomization + anti-cheat + lock + per-question timer */
+/* Test Player (Math) — explanations + seeded randomization + anti-cheat */
 async function renderTestPlayer(slug){
   const tests = await preferFirestore('content/tests','./content/tests.csv');
   const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
@@ -396,13 +388,13 @@ async function renderTestPlayer(slug){
     }
   }
 
-  let qCsv = `./content/tests_data/${slug}.csv`;
-  if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
+  const qCsv = `./content/tests_data/${slug}.csv`;
   const rawRows = await loadCSV(qCsv);
   if(!rawRows || rawRows.length===0){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
   }
 
+  // seed
   const uid = (auth.currentUser && auth.currentUser.uid) ? auth.currentUser.uid : 'anon';
   const paramSeed = parseInt(getParam('seed')||'0',10)||0;
   const ssKey = `tp-seed:${uid}:${slug}`;
@@ -411,136 +403,109 @@ async function renderTestPlayer(slug){
   const rnd = seededRandom(seed);
 
   const makeQ = (r)=>{
-    const opts=[]; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k,label:k.toUpperCase(),text:r[k],isCorrect:(String(r.ans||'').trim().toLowerCase()===k)}); });
+    const opts = []; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
     seededShuffle(opts, rnd);
-    return { text: r.text || r.q || '—', ex: r.ex || '', img: r.img || r.image || '', opts };
+    return { text: r.text || r.q || '—', ex: r.ex || '', opts };
   };
   let rows = rawRows.map(makeQ); seededShuffle(rows, rnd);
 
   let durationSec = parseInt(t.durationSec||'0',10)||0;
   if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
 
-  const qPer = Math.max(20, Math.min(180, Math.floor(durationSec / rows.length)));
-  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), locked: new Array(rows.length).fill(false), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, qRemaining: qPer, qPer, reveal:false, strikes:0 };
+  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
 
-  function visHandler(){ if(document.hidden){ state.strikes++; let penalty = (state.strikes===1?10:(state.strikes===2?30:60)); state.remaining = Math.max(0, state.remaining - penalty); state.qRemaining = Math.max(0, state.qRemaining - Math.ceil(penalty/2)); showToast(`Diqqat: fokusdan chiqish uchun -${penalty}s jarima`); if(state.remaining<=0) finish(); } }
+  // Anti-cheat
+  function visHandler(){ if(document.hidden){ showToast('Diqqat: test davomida sahifani tark etmang.'); } }
   document.addEventListener('visibilitychange', visHandler);
 
   function render(){
     const q = rows[state.idx];
     const prog = Math.round((state.idx)/rows.length*100);
     const picked = state.picks[state.idx];
-    const locked = state.locked[state.idx];
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="head">
         <div><strong>${state.title}</strong> — ${rows.length} savol</div>
-        <div class="row" style="gap:.75rem"><div class="qtimer" id="tp-qtimer">00:00</div><div class="timer" id="tp-timer">00:00</div></div>
+        <div class="timer" id="tp-timer">00:00</div>
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
         <div class="qtext">#${state.idx+1}. ${q.text}</div>
-        ${ '${' } q.img ? `<img class="qimg" src="${ '${' }q.img}" alt="img">` : `` }
         <div class="opts">
-          ${ '${' }q.opts.map((op,i)=>{
+          ${q.opts.map((op,i)=>{
             const isSel = (picked===i);
             const mark = (state.reveal ? (op.isCorrect ? 'correct' : (isSel ? 'wrong' : '')) : (isSel ? 'selected' : ''));
-            const dis = locked ? 'disabled' : '';
-            return `<div class="opt ${ '${' }mark} ${ '${' }dis}" data-idx="${ '${' }i}"><b>${ '${' }op.label}.</b> ${ '${' }op.text}</div>`;
+            return `<div class="opt ${mark}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
           }).join('')}
         </div>
         <div class="ctrl">
-          <button class="btn quiet" id="tp-prev" ${ '${' }state.idx===0?'disabled':''}>Ortga</button>
+          <button class="btn quiet" id="tp-prev" ${state.idx===0?'disabled':''}>Ortga</button>
           <div class="row gap-2">
-            <button class="btn solbtn" id="tp-sol">${ '${' }state.reveal?'Yechimni yashirish':'Yechimni ko\'rish'}</button>
+            <button class="btn solbtn" id="tp-sol">${state.reveal?'Yechimni yashirish':'Yechimni ko\'rish'}</button>
             <button class="btn quiet" id="tp-skip">O'tkazib yuborish</button>
-            <button class="btn" id="tp-next">${ '${' }state.idx===rows.length-1?'Yakunlash':'Keyingi'}</button>
+            <button class="btn" id="tp-next">${state.idx===rows.length-1?'Yakunlash':'Keyingi'}</button>
           </div>
         </div>
-        ${ '${' } (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${ '${' }q.ex}</div></div>` : ``}
+        ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
       </div>
-      <div class="small muted">Seed=${ '${' }seed}. Ogohlantirishlar: ${ '${' }state.strikes} ta.</div>
+      <div class="small muted">Izoh: savol va variantlar tartibi seed bo'yicha aralashtirilgan (seed=${seed}).</div>
     </div>`;
 
-    if(!locked){
-      pageRoot.querySelectorAll('.opt').forEach(el=>{
-        el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; state.locked[state.idx]=true; render(); });
-      });
-    }
-    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; state.qRemaining = state.qPer; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; render(); } else { finish(); } });
+    pageRoot.querySelectorAll('.opt').forEach(el=>{ el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=true; render(); }); });
+    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
-    updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
+    updateTimerText();
   }
 
   let iv=null;
-  function startTimer(){
-    iv = setInterval(()=>{
-      state.remaining--; state.qRemaining--;
-      if(state.qRemaining<=0){
-        if(state.idx<rows.length-1){ state.idx++; state.reveal=false; state.qRemaining = state.qPer; } else { state.remaining = Math.max(0,state.remaining); finish(); return; }
-      }
-      if(state.remaining<=0){ state.remaining=0; finish(); return; }
-      const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
-      updateTimerText();
-    }, 1000);
-  }
+  function startTimer(){ iv = setInterval(()=>{ state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); } const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; } updateTimerText(); }, 1000); }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } document.removeEventListener('visibilitychange', visHandler); }
-  function fmt(n){ const m=Math.floor(n/60), s=n%60; return `${ '${' }String(m).padStart(2,'0')}:${ '${' }String(s).padStart(2,'0')}`; }
-  function updateTimerText(){ const t1 = document.getElementById('tp-timer'); if(t1) t1.textContent = fmt(state.remaining); const t2 = document.getElementById('tp-qtimer'); if(t2) t2.textContent = fmt(state.qRemaining); }
+  function updateTimerText(){ const m = Math.floor(state.remaining/60), s=state.remaining%60; const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
 
   async function finish(){
     stopTimer();
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
     rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && chosen.isCorrect) good++; else bad++; });
-    const rawPercent = Math.round(good/rows.length*100);
-    const extraPenalty = Math.min(20, Math.max(0, (state.strikes-1)) * 2);
-    const percent = Math.max(0, rawPercent - extraPenalty);
+    const percent = Math.round(good/rows.length*100);
     try{
-      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
-        productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
-        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, qPer: state.qPer, strikes: state.strikes, seed, picks: state.picks, rawPercent, extraPenalty
-      });
+      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), { productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent, startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks, seed });
     }catch(_){}
 
-    // Gems award by difficulty
-    const difficulty = (t.difficulty || 'easy').toLowerCase();
-    const coef = (difficulty==='easy')? {win:1, lose:-0.25} : (difficulty==='medium')? {win:2, lose:-0.5} : {win:3, lose:-0.75};
-    const gemsDelta = Math.max(0, (good * coef.win) + (bad * coef.lose));
-    try{
-      await runTransaction(db, async (tx)=>{
-        const uref=doc(db,'users',auth.currentUser.uid);
-        const us=await tx.get(uref);
-        const cur = (us.data().gems||0);
-        tx.update(uref, { gems: Math.round((cur + gemsDelta)*100)/100, updatedAt: serverTimestamp() });
-        await addDoc(collection(db,'users',auth.currentUser.uid,'gems_logs'), {delta:gemsDelta, difficulty, good, bad, at: serverTimestamp(), ref: (t.productId||slug)});
-      });
-    }catch(_){}
-
+    // write to live scoreboard if ?event=<id>
     const evId = getParam('event');
     if(evId){
       try{
         const uref = doc(db,'users',auth.currentUser.uid);
         const us = await getDoc(uref); const ud = us.data()||{};
-        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), {
-          uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'),
-          score: percent, updatedAt: serverTimestamp(), strikes: state.strikes
-        }, { merge: true });
+        await setDoc(doc(db,'live_events',evId,'scores',auth.currentUser.uid), { uid: auth.currentUser.uid, name: (ud.firstName&&ud.lastName)? (ud.firstName+' '+ud.lastName) : (ud.displayName||ud.email||'—'), score: percent, updatedAt: serverTimestamp() }, { merge: true });
       }catch(_){}
     }
 
     pageRoot.innerHTML = `<div class="tplayer">
       <div class="rez">
-        <h3>Natijalar — ${ '${' }state.title}</h3>
-        <p><span class="good">To'g'ri: ${ '${' }good}</span> • <span class="bad">Noto'g'ri: ${ '${' }bad}</span> • Bo'sh: ${ '${' }empty}</p>
-        <p><b>${ '${' }percent}%</b> umumiy natija <span class='small muted'>(jarima: -${ '${' }extraPenalty}%)</span></p>
-        <p>💎 Qo'shilgan olmos: <b>${ '${' }gemsDelta.toFixed(2)}</b></p>
+        <h3>Natijalar — ${state.title}</h3>
+        <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
+        <p><b>${percent}%</b> umumiy natija</p>
         <div class="row gap-2 mt-2">
           <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
           <button class="btn" id="tp-again-new">Qayta yechish (yangi tartib)</button>
           <button class="btn quiet" id="tp-exit">Testlarga qaytish</button>
         </div>
+      </div>
+      <div class="mt-2 card p-4">
+        <h4>Review</h4>
+        ${rows.map((q,qi)=>{
+          const pick = state.picks[qi];
+          const ok = (pick!=null && q.opts[pick] && q.opts[pick].isCorrect);
+          const correct = q.opts.find(op=>op.isCorrect);
+          return `<div class="mt-2">
+            <div><b>#${qi+1}.</b> ${q.text} — ${ ok ? '<span class="good">to\'g\'ri</span>' : (pick==null? '<span class="muted">bo\'sh</span>' : '<span class="bad">noto\'g\'ri</span>') }</div>
+            <div class="small muted">To'g'ri javob: ${(correct? correct.label : '?')}.</div>
+            ${ q.ex ? `<div class="sol"><div class="st">Yechim</div><div>${q.ex}</div></div>` : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
     document.getElementById('tp-again-same').addEventListener('click', ()=>{ sessionStorage.setItem(ssKey, String(seed)); renderTestPlayer(slug); });
@@ -577,7 +542,7 @@ function renderSettings(){
   const dbgAuth=document.getElementById('dbg-auth'); const dbgErr=document.getElementById('dbg-last-error');
   dbgAuth.textContent=auth.currentUser?('User: '+(auth.currentUser.email||auth.currentUser.uid)):'User: (not signed in)';
   dbgErr.textContent=window.__lastAuthError?('Last error: '+window.__lastAuthError):'Last error: (none)';
-  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { toggleAuthGate(true); document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
+  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
 }
 function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); const listEl=document.getElementById('ap-list');
   async function refresh(){ listEl.innerHTML='<div class="muted p-4">Yuklanmoqda...</div>'; const snap=await getDocs(collection(db,collSel.value)); const items=[]; snap.forEach(d=>items.push({id:d.id, ...d.data()})); if(items.length===0){ listEl.innerHTML='<div class="muted p-4">Hali karta yo\'q.</div>'; return; } listEl.innerHTML=items.map(it=>{ const live = (collSel.value==='live_events'); return `<div class="card p-4" data-id="${it.id}"><div class="row gap-2 mt-1"><input class="input ap-name" value="${(it.name||it.title||'').replace(/"/g,'&quot;')}" placeholder="Name/Title"/><input class="input ap-tag" value="${(it.tag||'').replace(/"/g,'&quot;')}" placeholder="Tag"/><input class="input ap-meta" value="${(it.meta||'').replace(/"/g,'&quot;')}" placeholder="Meta"/></div><div class="row gap-2 mt-1"><input class="input ap-price" type="number" value="${it.price||0}" placeholder="Price (tests)"/><input class="input ap-productId" value="${it.productId||''}" placeholder="Product ID (tests)"/></div>${live?`<div class='row gap-2 mt-1'><input class='input ap-entry' type='number' value='${it.entryPrice||0}' placeholder='Entry (Live)'/><input class='input ap-prize' value='${it.prize||''}' placeholder='Prize (Live)'/><input class='input ap-startAt' type='datetime-local' value='${(it.startAt && it.startAt.toDate? it.startAt.toDate().toISOString().slice(0,16) : (it.startAt||'')).toString().replace('Z','')}'/><input class='input ap-endAt' type='datetime-local' value='${(it.endAt && it.endAt.toDate? it.endAt.toDate().toISOString().slice(0,16) : (it.endAt||'')).toString().replace('Z','')}'/></div>`:''}<div class="row end mt-2"><button class="btn quiet ap-delete">O'chirish</button><button class="btn ap-save">Saqlash</button></div></div>`; }).join('');
@@ -604,7 +569,6 @@ async function hasAccess(product){ const price=parseInt(product.price||'0',10)||
 
 /* Auth state */
 onAuthStateChanged(auth, async (user)=>{
-  toggleAuthGate(!user);
   if(user){
     try{
       const data=await ensureNumericIdAndProfile(user);
@@ -613,9 +577,9 @@ onAuthStateChanged(auth, async (user)=>{
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
       document.getElementById('badge-balance').textContent = `💵 ${d.balance ?? 0}`;
-      document.getElementById('badge-gems').textContent = `💎 ${(d.gems ?? 0).toLocaleString('uz-UZ',{maximumFractionDigits:2})}`;
+      document.getElementById('badge-gems').textContent = `💎 ${d.gems ?? 0}`;
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  } else { toggleAuthGate(true); gate.classList.add('visible'); }
+  } else { gate.classList.add('visible'); }
 });
