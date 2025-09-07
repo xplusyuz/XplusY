@@ -23,25 +23,17 @@ export const ADMIN_NUMERIC_IDS = [1000001, 1000002];
 export async function mountChrome(){
   async function tryFetch(cands){
     for(const p of cands){
-      try{
-        const r = await fetch(p, {cache:'no-cache'});
-        if(r.ok) return await r.text();
-      }catch(_){}
-    }
-    return null;
+      try{ const r = await fetch(p, {cache:'no-cache'}); if(r.ok) return await r.text(); }catch(_){}
+    } return null;
   }
   const headerHost = document.querySelector('header.mc-header');
   const footerHost = document.querySelector('footer.mc-footer');
-
-  // build candidate paths relative to current location
   const path = location.pathname;
   const dir = path.endsWith('/') ? path : path.substring(0, path.lastIndexOf('/')) + '/';
   const upOne = dir.replace(/[^/]+\/$/, '');
   const upTwo = upOne.replace(/[^/]+\/$/, '');
-
   const headerCands = ['/header.html', dir+'header.html', './header.html', upOne+'header.html', upTwo+'header.html'];
   const footerCands = ['/footer.html', dir+'footer.html', './footer.html', upOne+'footer.html', upTwo+'footer.html'];
-
   if(headerHost){
     const h = await tryFetch(headerCands);
     headerHost.innerHTML = h ?? `<div class="mc-left">
@@ -219,47 +211,6 @@ export async function initUXChrome(){
   document.addEventListener('click', (e)=>{
     if(e.target.id==='btnTheme') applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
     if(e.target.id==='btnThemeDrawer') applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
-    if(e.target.id==='btnMenu') openDrawer();
-    if(e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop') closeDrawer();
-  });
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
-}
-
-// Create drawer/backdrop at BODY level so it overlays header/body/footer
-function ensureDrawer(){
-  if(document.querySelector('#drawer') && document.querySelector('#drawerBackdrop')) return;
-  const backdrop = document.createElement('div');
-  backdrop.id='drawerBackdrop'; backdrop.className='drawer-backdrop hidden';
-  const aside = document.createElement('aside');
-  aside.id='drawer'; aside.className='drawer hidden'; aside.setAttribute('aria-hidden','true');
-  aside.innerHTML = \`
-    <div class="drawer-head">
-      <div class="brand"><img src="/assets/logo.svg" alt=""/> <b>MathCenter</b></div>
-      <button id="btnDrawerClose" class="icon-btn" aria-label="Yopish">&times;</button>
-    </div>
-    <nav class="drawer-nav">
-      <a href="/index.html">🏠 Bosh sahifa</a>
-      <a href="/tests.html">📝 Testlar</a>
-      <a href="/live.html">🎮 Live</a>
-      <a href="/leaderboard.html">🏅 Reyting</a>
-      <a href="/settings.html">⚙️ Sozlamalar</a>
-    </nav>
-    <div class="drawer-foot">
-      <button id="btnThemeDrawer" class="btn ghost">🌙 Kun/Tun</button>
-    </div>\`;
-  document.body.appendChild(backdrop);
-  document.body.appendChild(aside);
-}
-
-export async function initUXChrome(){
-  ensureDrawer();
-  // Theme init
-  initTheme();
-  // Events
-  document.addEventListener('click', (e)=>{
-    if(e.target.id==='btnTheme' || e.target.id==='btnThemeDrawer'){
-      applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
-    }
     if(e.target.id==='btnMenu') openDrawer();
     if(e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop') closeDrawer();
   });
