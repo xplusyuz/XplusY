@@ -1,8 +1,8 @@
-// Testlar CSV tizimi (sections + filters + FREE/PRO + pagination)
+
+// Testlar CSV tizimi: Bo'lim (Hammasi/*), Reja (FREE/PRO), Filter1/2, sahifalash (12), plan badges.
 const host = document.querySelector('#testsSections');
 const csvPath = host?.dataset?.csv || './tests.csv';
 
-// Pagination state
 let PAGE_SIZE = 12;
 let visibleCount = PAGE_SIZE;
 const state = { section: '*', f1: '', f2: '', plan: '' };
@@ -26,7 +26,7 @@ function setupUI(data){
   const fieldF1 = document.querySelector('#fieldF1');
   const fieldF2 = document.querySelector('#fieldF2');
 
-  // Sections: Hammasi + list
+  // Sections: Hammasi + list (default Hammasi)
   const sections = uniq(data.map(x => (x.section||'').trim()).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
   sSec.innerHTML = `<option value="*">Hammasi</option>` + sections.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
   sSec.value = '*'; state.section='*'; visibleCount = PAGE_SIZE;
@@ -35,7 +35,6 @@ function setupUI(data){
   sPlan.innerHTML = `<option value="">Hammasi</option><option value="FREE">FREE</option><option value="PRO">PRO</option>`;
   sPlan.value = ''; state.plan = '';
 
-  // Filters depend on section (Hammasi => from all data)
   function rebuildFilters(){
     const curSec = sSec.value;
     const pool = (curSec === '*') ? data : data.filter(x => x.section === curSec);
@@ -115,7 +114,6 @@ function renderFlatWithLoadMore(items, totalCount){
   const grid = wrap.querySelector('.grid');
   items.forEach(r => grid.appendChild(card(r)));
   host.appendChild(wrap);
-
   appendLoadMore(totalCount);
 }
 
@@ -123,14 +121,14 @@ function renderSectionWithLoadMore(curSec, items, totalCount){
   host.innerHTML = '';
   const wrap = sectionBlock(curSec, items);
   host.appendChild(wrap);
-
   appendLoadMore(totalCount);
 }
 
 function appendLoadMore(totalCount){
   if (visibleCount < totalCount){
     const moreWrap = document.createElement('div');
-    moreWrap.className = 'center';
+    moreWrap.style.display = 'flex';
+    moreWrap.style.justifyContent = 'center';
     moreWrap.style.margin = '12px 0 4px';
     const btn = document.createElement('button');
     btn.className = 'btn';
@@ -158,7 +156,7 @@ function card(r){
   const planBadge = r.plan ? `<span class="pill-plan ${r.plan==='PRO'?'pill-pro':'pill-free'}">${r.plan}</span>` : '';
   const action = (r.href) ? `<a class="btn primary" href="${r.href}">${esc(r.btn || 'Ochish')}</a>` : '';
   div.innerHTML = `${planBadge}` + `
-    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">` : ''}
+    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy" style="width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.08);margin-bottom:8px;aspect-ratio:16/9;object-fit:cover">` : ''}
     ${r.title ? `<h3 style="margin:.2rem 0">${esc(r.title)}</h3>` : ''}
     ${r.meta ? `<p class="sub">${esc(r.meta)}</p>` : ''}
     ${action}
