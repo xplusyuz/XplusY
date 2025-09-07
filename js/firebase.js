@@ -1,7 +1,7 @@
-// Firebase init
+// Firebase init (clean)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction
@@ -30,9 +30,7 @@ export async function ensureNumericIdAndProfile(user) {
     if (!uSnap.exists()) {
       const cSnap = await tx.get(countersRef);
       let nextId = 1000001;
-      if (cSnap.exists()) {
-        nextId = (cSnap.data().lastAssigned || 1000000) + 1;
-      }
+      if (cSnap.exists()) nextId = (cSnap.data().lastAssigned || 1000000) + 1;
       tx.set(countersRef, { lastAssigned: nextId, updatedAt: serverTimestamp() }, { merge: true });
       tx.set(userRef, {
         uid: user.uid,
@@ -42,15 +40,10 @@ export async function ensureNumericIdAndProfile(user) {
         balance: 0,
         gems: 0,
         profileComplete: false,
-        firstName: "",
-        lastName: "",
-        middleName: "",
-        birthDate: "",
-        address: "",
-        phone: "",
-        isTeacher: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        firstName: "", lastName: "", middleName: "",
+        birthDate: "", address: "", phone: "",
+        isTeacher: false, isAdmin: false,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       }, { merge: true });
     }
   });
@@ -63,5 +56,5 @@ export async function updateProfileLocked(uid, data) {
 }
 
 export {
-  signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut
+  signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut
 };
