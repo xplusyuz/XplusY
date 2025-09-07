@@ -2,59 +2,32 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // USERS
     match /users/{uid} {
-      // Allow paged listing for users ordered by gems desc (client paginates)
-      allow list: if request.auth != null &&
-        request.query.limit <= 100 &&
-        request.query.orderBy.size() == 1 &&
-        request.query.orderBy[0].field.fieldPath == 'gems' &&
-        request.query.orderBy[0].direction == 'DESC';
+      // Query + read for signed-in users (for ordered lists)
+      allow read: if request.auth != null;
 
-      allow get: if request.auth != null && request.auth.uid == uid;
+      // Create own doc on first sign-in (and update later)
       allow create: if request.auth != null && request.auth.uid == uid;
 
-      allow update: if request.auth != null && request.auth.uid == uid
-        && (
-          (resource.data.profileComplete == false &&
-            request.resource.data.profileComplete == true &&
-            request.resource.data.diff(resource.data).changedKeys()
-              .hasOnly(['firstName','lastName','middleName','birthDate','address','phone','profileComplete','updatedAt']) &&
-            request.resource.data.firstName is string && request.resource.data.firstName.size() > 0 &&
-            request.resource.data.lastName  is string && request.resource.data.lastName.size()  > 0 &&
-            request.resource.data.middleName is string && request.resource.data.middleName.size() > 0 &&
-            request.resource.data.birthDate is string && request.resource.data.birthDate.size() > 0 &&
-            request.resource.data.address   is string && request.resource.data.address.size()   > 0 &&
-            request.resource.data.phone     is string && request.resource.data.phone.size()     > 0
-          )
-          ||
-          (resource.data.profileComplete == true &&
-            request.resource.data.diff(resource.data).changedKeys().hasOnly(['phone','address','updatedAt','balance','gems']) &&
-            (
-              request.resource.data.balance == resource.data.balance ||
-              (request.resource.data.balance is number &&
-               (request.resource.data.balance - resource.data.balance) <= 1000000 &&
-               (request.resource.data.balance - resource.data.balance) >= -1000000)
-            ) &&
-            (
-              request.resource.data.gems == resource.data.gems ||
-              (request.resource.data.gems is number &&
-               (request.resource.data.gems - resource.data.gems) <= 100000 &&
-               (request.resource.data.gems - resource.data.gems) >= -100000)
-            )
-          )
-        );
+      // Update: owner only. UI cheklaydi (faqat phone/address), istasak diff bilan yanada toraytiramiz.
+      allow update: if request.auth != null && request.auth.uid == uid;
+
       allow delete: if false;
 
-      match /users/{uid}/purchases/{pid} {
+      match /purchases/{pid} {
         allow create: if request.auth != null && request.auth.uid == uid;
-        allow read:   if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
         allow update, delete: if false;
       }
-      match /users/{uid}/teacher_items/{itemId} {
-        allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+      match /live_entries/{eid} {
+        allow create: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow update, delete: if false;
       }
     }
 
+    // PUBLIC CONTENT (read all; CRUD only for admins)
     match /content_home/{docId} {
       allow read: if true;
       allow create, update, delete: if request.auth != null &&
@@ -76,25 +49,28 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    match /counters/{name} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
-        && name == "users"
-        && request.resource.data.lastAssigned is number
-        && (resource == null || request.resource.data.lastAssigned == resource.data.lastAssigned + 1);
-      allow delete: if false;
-    }
-  }
-}
-
-    // LIVE EVENTS (read for all signed-in, admin CRUD)
+    // LIVE events
     match /live_events/{liveId} {
       allow read: if request.auth != null;
       allow create, update, delete: if request.auth != null &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+
+      // Server-side "join lock": only allow create BEFORE startAt
       match /entries/{uid} {
-        allow create: if request.auth != null && request.auth.uid == uid;
-        allow read: if request.auth != null && (request.auth.uid == uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
+        allow create: if request.auth != null && request.auth.uid == uid &&
+          exists(/databases/$(database)/documents/live_events/$(liveId)) &&
+          get(/databases/$(database)/documents/live_events/$(liveId)).data.startAt > request.time;
+        allow read: if request.auth != null && (request.auth.uid == uid ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true);
         allow update, delete: if false;
       }
     }
+
+    // COUNTERS
+    match /counters/{name} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && name == "users";
+      allow delete: if false;
+    }
+  }
+}

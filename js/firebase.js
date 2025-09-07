@@ -1,9 +1,14 @@
-// Firebase init
+// Firebase init + robust Auth
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut
+  getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence,
+  onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, runTransaction, serverTimestamp,
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -17,10 +22,20 @@ export const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+await setPersistence(auth, browserLocalPersistence);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
-export async function ensureNumericIdAndProfile(user) {
+export {
+  onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
+  doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp
+};
+
+// Helpers
+export async function ensureNumericIdAndProfile(user){
   const userRef = doc(db, "users", user.uid);
   const countersRef = doc(db, "counters", "users");
   await runTransaction(db, async (tx) => {
@@ -32,7 +47,8 @@ export async function ensureNumericIdAndProfile(user) {
       tx.set(countersRef, { lastAssigned: nextId, updatedAt: serverTimestamp() }, { merge: true });
       tx.set(userRef, {
         uid: user.uid, email: user.email || "", displayName: user.displayName || "",
-        numericId: nextId, balance: 0, gems: 0, profileComplete: false,
+        numericId: nextId, balance: 0, gems: 0,
+        profileComplete: false,
         firstName: "", lastName: "", middleName: "", birthDate: "", address: "", phone: "",
         isTeacher: false, isAdmin: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
       }, { merge: true });
@@ -41,9 +57,7 @@ export async function ensureNumericIdAndProfile(user) {
   return (await getDoc(userRef)).data();
 }
 
-export async function updateProfileLocked(uid, data) {
+export async function updateProfileLocked(uid, data){
   const userRef = doc(db, "users", uid);
   await updateDoc(userRef, { ...data, updatedAt: serverTimestamp() });
 }
-
-export { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut };
