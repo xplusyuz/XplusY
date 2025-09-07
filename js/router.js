@@ -152,6 +152,9 @@
 
   
   function init(){
+    document.addEventListener('appshell:ready', () => {
+      try { highlightNav(location.pathname); } catch {}
+    });
     if(!sessionStorage.getItem('spa:initialized')){
       sessionStorage.setItem('spa:initialized','1');
       // Ensure the current URL content is synced from partials immediately
