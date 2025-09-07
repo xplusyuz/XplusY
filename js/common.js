@@ -176,3 +176,44 @@ export async function initUXChrome(){
   });
   document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
 }
+
+// Create drawer/backdrop at BODY level so it overlays header/body/footer
+function ensureDrawer(){
+  if(document.querySelector('#drawer') && document.querySelector('#drawerBackdrop')) return;
+  const backdrop = document.createElement('div');
+  backdrop.id='drawerBackdrop'; backdrop.className='drawer-backdrop hidden';
+  const aside = document.createElement('aside');
+  aside.id='drawer'; aside.className='drawer hidden'; aside.setAttribute('aria-hidden','true');
+  aside.innerHTML = \`
+    <div class="drawer-head">
+      <div class="brand"><img src="/assets/logo.svg" alt=""/> <b>MathCenter</b></div>
+      <button id="btnDrawerClose" class="icon-btn" aria-label="Yopish">&times;</button>
+    </div>
+    <nav class="drawer-nav">
+      <a href="/index.html">🏠 Bosh sahifa</a>
+      <a href="/tests.html">📝 Testlar</a>
+      <a href="/live.html">🎮 Live</a>
+      <a href="/leaderboard.html">🏅 Reyting</a>
+      <a href="/settings.html">⚙️ Sozlamalar</a>
+    </nav>
+    <div class="drawer-foot">
+      <button id="btnThemeDrawer" class="btn ghost">🌙 Kun/Tun</button>
+    </div>\`;
+  document.body.appendChild(backdrop);
+  document.body.appendChild(aside);
+}
+
+export async function initUXChrome(){
+  ensureDrawer();
+  // Theme init
+  initTheme();
+  // Events
+  document.addEventListener('click', (e)=>{
+    if(e.target.id==='btnTheme' || e.target.id==='btnThemeDrawer'){
+      applyTheme( document.body.classList.contains('theme-light') ? 'dark' : 'light' );
+    }
+    if(e.target.id==='btnMenu') openDrawer();
+    if(e.target.id==='btnDrawerClose' || e.target.id==='drawerBackdrop') closeDrawer();
+  });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+}
