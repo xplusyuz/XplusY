@@ -23,11 +23,69 @@ function renderPage(page){ if(page==='home') return renderHome(); if(page==='cou
 // Auth
 const gate=document.getElementById('auth-gate'); const emailForm=document.getElementById('email-form'); const btnEmailSignup=document.getElementById('btn-email-signup'); const authErr=document.getElementById('auth-error');
 function showErr(e){ const msg=(e&&(e.message||e.code))?(e.code?`${e.code}: ${e.message}`:e.message):'Noma\'lum xato'; if(authErr){authErr.textContent=msg;authErr.classList.remove('hidden');} console.error('AUTH ERROR →',e); window.__lastAuthError=msg; }
-window.__mcGoogle = async function(){ const btn=document.getElementById('btn-google'); if(btn){btn.disabled=true;btn.textContent='Kutib turing...';} try{ await signInWithPopup(auth, googleProvider); }catch(e){ try{ await signInWithRedirect(auth, googleProvider); await getRedirectResult(auth);}catch(e2){ showErr(e2||e);} } finally{ if(btn){btn.disabled=false;btn.textContent='Google bilan davom etish';} } };
-emailForm.addEventListener('submit', async (e)=>{ e.preventDefault(); try{ await signInWithEmailAndPassword(auth, emailForm.email.value, emailForm.password.value);}catch(e){showErr(e);} });
-btnEmailSignup.addEventListener('click', async ()=>{ try{ await createUserWithEmailAndPassword(auth, emailForm.email.value, emailForm.password.value);}catch(e){showErr(e);} });
+window.__mcGoogle = async function(){
+  const btn=document.getElementById('btn-google');
+  if(btn){ btn.disabled=true; btn.textContent='Kutib turing...'; }
+  try{
+    console.log('Google sign-in: popup try');
+    await signInWithPopup(auth, googleProvider);
+  }catch(e){
+    console.warn('Popup failed, switching to redirect', e && e.code);
+    try{
+      await signInWithRedirect(auth, googleProvider);
+      // getRedirectResult handled on load
+    }catch(e2){
+      console.error('Redirect failed', e2);
+      const box=document.getElementById('auth-error');
+      if(box){ box.textContent = (e2.code||'')+' '+(e2.message||''); box.classList.remove('hidden'); }
+    }
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='Google bilan davom etish'; }
+  }
+};
+emailForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const loginBtn = document.getElementById('btn-email-login');
+  if(loginBtn){ loginBtn.disabled = true; loginBtn.textContent = 'Kirilmoqda...'; }
+  try{
+    await signInWithEmailAndPassword(auth, emailForm.email.value, emailForm.password.value);
+  }catch(e){
+    console.error('Email login error', e);
+    const box=document.getElementById('auth-error');
+    if(box){ box.textContent = (e.code||'')+' '+(e.message||''); box.classList.remove('hidden'); }
+  }finally{
+    if(loginBtn){ loginBtn.disabled = false; loginBtn.textContent = 'Kirish'; }
+  }
+});
+btnEmailSignup.addEventListener('click', async ()=>{
+  const regBtn = document.getElementById('btn-email-signup');
+  if(regBtn){ regBtn.disabled = true; regBtn.textContent = 'Yaratilmoqda...'; }
+  try{
+    await createUserWithEmailAndPassword(auth, emailForm.email.value, emailForm.password.value);
+  }catch(e){
+    console.error('Email signup error', e);
+    const box=document.getElementById('auth-error');
+    if(box){ box.textContent = (e.code||'')+' '+(e.message||''); box.classList.remove('hidden'); }
+  }finally{
+    if(regBtn){ regBtn.disabled = false; regBtn.textContent = 'Ro\'yxatdan o\'tish'; }
+  }
+});
 
 // Profile modal
+
+/* REDIRECT COMPLETION */
+(async () => {
+  try {
+    const res = await getRedirectResult(auth);
+    if (res && res.user) {
+      console.log('Google redirect completed for', res.user.uid);
+    }
+  } catch (e) {
+    console.error('Redirect completion error', e);
+    const authErr = document.getElementById('auth-error');
+    if (authErr){ authErr.textContent = (e.code || '') + ' ' + (e.message || ''); authErr.classList.remove('hidden'); }
+  }
+})();
 const pModal=document.getElementById('profile-modal'); const btnSaveProfile=document.getElementById('btn-save-profile'); const pErr=document.getElementById('profile-error');
 btnSaveProfile.addEventListener('click', async (e)=>{ e.preventDefault(); try{ const data={ firstName:document.getElementById('p-firstName').value.trim(), lastName:document.getElementById('p-lastName').value.trim(), middleName:document.getElementById('p-middleName').value.trim(), birthDate:document.getElementById('p-birthDate').value, address:document.getElementById('p-address').value.trim(), phone:document.getElementById('p-phone').value.trim(), profileComplete:true }; if(Object.values(data).some(v=>!v)){ throw new Error('Barcha maydonlarni to\'ldiring.'); } await updateProfileLocked(auth.currentUser.uid, data); pModal.close(); }catch(e){ if(pErr){pErr.textContent=e.message; pErr.classList.remove('hidden');} }});
 
