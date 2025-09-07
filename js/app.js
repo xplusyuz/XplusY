@@ -500,14 +500,31 @@ async function renderTestPlayer(slug){
     state.endAt = Date.now();
     let good=0, bad=0, empty=0;
     rows.forEach((q,i)=>{ const pick = state.picks[i]; if(pick==null){ empty++; return; } const chosen = q.opts[pick]; if(chosen && q.opts[pick].isCorrect) good++; else bad++; });
-    const percent = Math.round(good/rows.length*100);
+    const rawPercent = Math.round(good/rows.length*100);
+    // Extra score penalty for multiple focus exits (from 2nd strike onwards): -2% per extra strike, capped at 20%
+    const extraPenalty = Math.min(20, Math.max(0, (state.strikes-1)) * 2);
+    const percent = Math.max(0, rawPercent - extraPenalty);
     try{
       await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
         productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
-        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, qPer: state.qPer, strikes: state.strikes, seed, picks: state.picks
+        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, qPer: state.qPer, strikes: state.strikes, seed, picks: state.picks, rawPercent, extraPenalty
       });
     }catch(_){}
 
+    /* GEM AWARD BLOCK */
+    // Read difficulty from tests.csv
+    const difficulty = (t.difficulty || 'easy').toLowerCase();
+    const coef = (difficulty==='easy')? {win:1, lose:-0.25} : (difficulty==='medium')? {win:2, lose:-0.5} : {win:3, lose:-0.75};
+    const gemsDelta = Math.max(0, (good * coef.win) + (bad * coef.lose)); // wrong may reduce; never go below 0
+    try{
+      await runTransaction(db, async (tx)=>{
+        const uref=doc(db,'users',auth.currentUser.uid);
+        const us=await tx.get(uref);
+        const cur = (us.data().gems||0);
+        tx.update(uref, { gems: Math.round((cur + gemsDelta)*100)/100, updatedAt: serverTimestamp() });
+        await addDoc(collection(db,'users',auth.currentUser.uid,'gems_logs'), {delta:gemsDelta, difficulty, good, bad, at: serverTimestamp(), ref: (t.productId||slug)});
+      });
+    }catch(_){}
     const evId = getParam('event');
     if(evId){
       try{
@@ -524,7 +541,7 @@ async function renderTestPlayer(slug){
       <div class="rez">
         <h3>Natijalar — ${state.title}</h3>
         <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
-        <p><b>${percent}%</b> umumiy natija</p>
+        <p><b>${percent}%</b> umumiy natija <span class='small muted'>(jarima: -${extraPenalty}%)</span></p><p>💎 Qo'shilgan olmos: <b>${gemsDelta.toFixed(2)}</b></p>
         <p class="small muted">Jarimalar (fokus): ${state.strikes} marta • Q-saniya: ${state.qPer}s</p>
         <div class="row gap-2 mt-2">
           <button class="btn" id="tp-again-same">Qayta yechish (shu tartib)</button>
@@ -615,7 +632,7 @@ onAuthStateChanged(auth, async (user)=>{
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
       document.getElementById('badge-balance').textContent = `💵 ${d.balance ?? 0}`;
-      document.getElementById('badge-gems').textContent = `💎 ${d.gems ?? 0}`;
+      document.getElementById('badge-gems').textContent = `💎 ${(d.gems ?? 0).toLocaleString('uz-UZ', {maximumFractionDigits:2})}`;
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
