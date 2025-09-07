@@ -69,7 +69,7 @@ function navigate(path){
     if (loc.origin === location.origin){
       history.pushState({path: loc.pathname}, '', loc.pathname);
       route();
-    } else {
+    } else { toggleAuthGate(true);
       location.href = path;
     }
   }catch(_){
@@ -95,7 +95,8 @@ function route(){
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
 /* CSV helpers + Firestore prefer */
-async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+function resolveCsvAlias(p){ try{ const m=(window.CONTENT_SOURCES||{}); if(p.endsWith('content/tests.csv')||p.includes('content/tests.csv')) return m.testsCsv || p; return p; }catch(_){ return p; }}
+async function loadCSV(path){ path = resolveCsvAlias(path); try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
@@ -191,14 +192,14 @@ function bindUniversalCards(container, ctx={}){
           if(!allowed && price>0){
             if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
               await spend(price, {productId: pid, name: data.title||data.name||'Kontent'});
-            } else { return; }
+            } else { toggleAuthGate(true); return; }
           }
-          if(data.link){ navigate(data.link); } else { alert('Link belgilanmagan'); }
+          if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert('Link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
     if (openBtn){
-      openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } });
+      openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { toggleAuthGate(true); alert("Link topilmadi"); } });
     }
     if (liveBtn){
       liveBtn.addEventListener('click', ()=>{ openLiveModal(data); });
@@ -214,7 +215,7 @@ function bindUniversalCards(container, ctx={}){
           let joined=false;
           try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
           if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
-          if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
+          if(data.startLink){ navigate(data.startLink); } else { toggleAuthGate(true); alert('Start link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
@@ -290,7 +291,7 @@ async function renderLive(){
         } else if (sMs && eMs && now>=sMs && now<=eMs){
           pill.textContent = "LIVE";
           if(btnGo) btnGo.disabled = false;
-        } else {
+        } else { toggleAuthGate(true);
           pill.textContent = "Yakunlangan";
           if(btnGo) btnGo.disabled = true;
         }
@@ -366,7 +367,7 @@ async function openLiveModal(ev){
     } else if (sMs && eMs && now>=sMs && now<=eMs){
       ctaPre.disabled = true; ctaPre.textContent = "Join yopiq";
       ctaEnter.disabled = !joined; ctaEnter.textContent = joined ? "Kirish" : "Kirish (join kerak)";
-    } else {
+    } else { toggleAuthGate(true);
       ctaPre.disabled = true; ctaPre.textContent = "Yakunlangan";
       ctaEnter.disabled = true; ctaEnter.textContent = "Yakunlangan";
     }
@@ -424,11 +425,11 @@ async function renderTestPlayer(slug){
     if(!ok){
       if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
         await spend(price, {productId: t.productId||slug, name: t.name||t.title||'Test'});
-      } else { navigate('/tests'); return; }
+      } else { toggleAuthGate(true); navigate('/tests'); return; }
     }
   }
 
-  const qCsv = `./content/tests_data/${slug}.csv`;
+  let qCsv = `./content/tests_data/${slug}.csv`; if(t.gsheet){ qCsv = t.gsheet; } else if(window.CONTENT_SOURCES && window.CONTENT_SOURCES.testsDataBase){ qCsv = window.CONTENT_SOURCES.testsDataBase.replace(/\/$/,'') + '/' + slug + '.csv'; }
   const rawRows = await loadCSV(qCsv);
   if(!rawRows || rawRows.length===0){
     pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
@@ -436,10 +437,9 @@ async function renderTestPlayer(slug){
 
   // Normalize questions and add randomized options
   const makeQ = (r)=>{
-    const opts = [];
-    ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
-    shuffle(opts);
-    return { text: r.text || r.q || '—', ex: r.ex || '', opts };
+    const opts=[]; ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k,label:k.toUpperCase(),text:r[k],isCorrect:(String(r.ans||'').trim().toLowerCase()===k)}); });
+    if(typeof seededShuffle==='function') seededShuffle(opts, rnd);
+    return { text: r.text || r.q || '—', ex: r.ex || '', img: r.img || r.image || '', opts };
   };
   let rows = rawRows.map(makeQ);
   shuffle(rows); // randomize question order
@@ -459,7 +459,7 @@ async function renderTestPlayer(slug){
       </div>
       <div class="prog"><span style="width:${prog}%"></span></div>
       <div class="qcard">
-        <div class="qtext">#${state.idx+1}. ${q.text}</div>
+        <div class="qtext">#${state.idx+1}. ${q.text}</div>${ q.img ? `<img class=\"qimg\" src=\"${q.img}\" alt=\"img\">` : `` }
         <div class="opts">
           ${q.opts.map((op,i)=>{
             const picked = state.picks[state.idx];
@@ -485,10 +485,10 @@ async function renderTestPlayer(slug){
       el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=false; render(); });
     });
     pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
-    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
-    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { toggleAuthGate(true); finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { toggleAuthGate(true); finish(); } });
     pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
-    updateTimerText();
+    updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
   }
 
   let iv=null;
@@ -496,7 +496,7 @@ async function renderTestPlayer(slug){
     iv = setInterval(()=>{
       state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); }
       const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
-      updateTimerText();
+      updateTimerText(); if(window.requestMathTypeset) window.requestMathTypeset();
     }, 1000);
   }
   function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } }
@@ -580,7 +580,7 @@ function renderSettings(){
   const dbgAuth=document.getElementById('dbg-auth'); const dbgErr=document.getElementById('dbg-last-error');
   dbgAuth.textContent=auth.currentUser?('User: '+(auth.currentUser.email||auth.currentUser.uid)):'User: (not signed in)';
   dbgErr.textContent=window.__lastAuthError?('Last error: '+window.__lastAuthError):'Last error: (none)';
-  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
+  if(auth.currentUser){ getDoc(doc(db,'users',auth.currentUser.uid)).then(snap=>{ const d=snap.data()||{}; if(d.isAdmin===true){ bindAdminCrud(); } else { toggleAuthGate(true); document.getElementById('admin-card').innerHTML='<h3>Admin panel</h3><p class="muted small">isAdmin=true bo\'lgan foydalanuvchilar uchun.</p>'; } }); }
 }
 function bindAdminCrud(){ const collSel=document.getElementById('ap-coll'); const listEl=document.getElementById('ap-list');
   async function refresh(){ listEl.innerHTML='<div class="muted p-4">Yuklanmoqda...</div>'; const snap=await getDocs(collection(db,collSel.value)); const items=[]; snap.forEach(d=>items.push({id:d.id, ...d.data()})); if(items.length===0){ listEl.innerHTML='<div class="muted p-4">Hali karta yo\'q.</div>'; return; } listEl.innerHTML=items.map(it=>{ const live = (collSel.value==='live_events'); return `<div class="card p-4" data-id="${it.id}"><div class="row gap-2 mt-1"><input class="input ap-name" value="${(it.name||it.title||'').replace(/"/g,'&quot;')}" placeholder="Name/Title"/><input class="input ap-tag" value="${(it.tag||'').replace(/"/g,'&quot;')}" placeholder="Tag"/><input class="input ap-meta" value="${(it.meta||'').replace(/"/g,'&quot;')}" placeholder="Meta"/></div><div class="row gap-2 mt-1"><input class="input ap-price" type="number" value="${it.price||0}" placeholder="Price (tests)"/><input class="input ap-productId" value="${it.productId||''}" placeholder="Product ID (tests)"/></div>${live?`<div class='row gap-2 mt-1'><input class='input ap-entry' type='number' value='${it.entryPrice||0}' placeholder='Entry (Live)'/><input class='input ap-prize' value='${it.prize||''}' placeholder='Prize (Live)'/><input class='input ap-startAt' type='datetime-local' value='${(it.startAt && it.startAt.toDate? it.startAt.toDate().toISOString().slice(0,16) : (it.startAt||'')).toString().replace('Z','')}'/><input class='input ap-endAt' type='datetime-local' value='${(it.endAt && it.endAt.toDate? it.endAt.toDate().toISOString().slice(0,16) : (it.endAt||'')).toString().replace('Z','')}'/></div>`:''}<div class="row end mt-2"><button class="btn quiet ap-delete">O'chirish</button><button class="btn ap-save">Saqlash</button></div></div>`; }).join('');
@@ -607,6 +607,7 @@ async function hasAccess(product){ const price=parseInt(product.price||'0',10)||
 
 /* Auth state */
 onAuthStateChanged(auth, async (user)=>{
+  toggleAuthGate(!user);
   if(user){
     try{
       const data=await ensureNumericIdAndProfile(user);
@@ -615,11 +616,11 @@ onAuthStateChanged(auth, async (user)=>{
       const snap=await getDoc(uref); const d=snap.data()||{};
       document.getElementById('badge-id').textContent = `ID: ${d.numericId || '—'}`;
       document.getElementById('badge-balance').textContent = `💵 ${d.balance ?? 0}`;
-      document.getElementById('badge-gems').textContent = `💎 ${d.gems ?? 0}`;
+      document.getElementById('badge-gems').textContent = `💎 ${(d.gems ?? 0).toLocaleString('uz-UZ',{maximumFractionDigits:2})}`;
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
       route();
     }catch(e){ showErr(e); }
-  } else {
+  } else { toggleAuthGate(true);
     gate.classList.add('visible');
   }
 });
