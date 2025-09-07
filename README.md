@@ -1,24 +1,22 @@
-# MathCenter.uz — v3 Cards PLUS
+# MathCenter.uz — v3 (Tests + Live Realtime)
 
-To'liq tayyor build:
-- Google + Email autentifikatsiya (popup→redirect), redirect auto-complete, localPersistence
-- Profil modal (birinchi kirishda majburiy)
-- Mobil UI, pastki menyu
-- **Universal Cards** (.ucard) — premium gradient/glass + inline SVG, barcha sahifalarga mos
-- Home: Reklama kartalari (rasm bilan)
-- Courses/Tests/Sim: universal kartalar + mos CTA'lar
-- Live: universal karta + **tafsilot modal** (countdown, participants, pre-join, startda lock, kirish)
-- Admin CRUD (content va live), Hamyon & xaridlar
-- Firestore rules — admin CRUD va Live join lock
+- Universal `ucard` kartalar (reklama/kurs/test/sim/live)
+- Live kartalarda **real-time ishtirokchilar** (👥 badge) + **countdown**
+- Test Player (math): savollar (CSV), taymer, natijalar, Firestore'ga saqlash
+- Router (`/test/:slug`) — CSV'dagi `link`lar bilan ishlaydi
+- Admin CRUD, Hamyon (demo), Purchase → access
 
 ## Sozlash
-1) Firebase → Authentication → Sign-in method: Google va Email/Password → **Enable**.
-   Authentication → Settings → **Authorized domains**ga deploy domeningizni qo'shing.
-2) Firestore → **Rules**: shu repodagi `firestore.rules` ni **Publish** qiling.
-3) Lokal server (`npx serve` yoki `python -m http.server`) yoki Netlify/Vercel. `file://` ishlamaydi.
+1) Firebase Authentication: Google + Email/Password — **Enable**; Authorized domainsga deploy domeningizni qo'shing.
+2) Firestore: `firestore.rules`'ni **Publish** qiling.
+3) Statik serverda ishga tushiring (HTTP).
 
-## Admin
-- `users/{uid}` da `isAdmin: true` qo'ying — Settings → Admin panel orqali CRUD ishlaydi.
+## CSV
+- `content/home.csv`: title, tag, meta, image, link
+- `content/courses.csv`: name, tag, meta, link (Kurslarda faqat **Kirish**)
+- `content/tests.csv`: name, tag, meta, price, productId, link, durationSec (Testlarda **faqat Boshlash**, narx tekshiradi)
+- `content/sim.csv`: name, tag, meta, link (Simda **Ochish**)
+- `content/live.csv`: title, tag, meta, entryPrice, prize, startAt, endAt, startLink, modalText (Live kartada taymer, badge, modal)
 
-## Live
-- Admin paneldan `live_events` hujjatiga `startAt/endAt` (Timestamp) qo'ying. UI va Rules join lockni nazorat qiladi.
+## Savollar CSV
+`content/tests_data/<productId>.csv` → ustunlar: `id,text,a,b,c,d,ans` (faqat matematika)

@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   doc, getDoc, setDoc, updateDoc, addDoc, deleteDoc, runTransaction, serverTimestamp,
-  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp,
+  collection, getDocs, query, orderBy, limit, where, startAfter, Timestamp, onSnapshot,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
 
@@ -59,13 +59,44 @@ function val(sel){ const el=document.querySelector(sel); return (el && el.value|
 
 /* Nav */
 nav.addEventListener('click',(e)=>{ const btn=e.target.closest('button[data-page]'); if(!btn) return; document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderPage(btn.dataset.page); });
+
 function renderPage(page){ if(page==='home') return renderHome(); if(page==='courses') return renderCourses(); if(page==='tests') return renderTests(); if(page==='live') return renderLive(); if(page==='sim') return renderSim(); if(page==='settings') return renderSettings(); renderHome(); }
+
+/* Mini Router */
+function navigate(path){
+  try{
+    const loc = new URL(path, location.origin);
+    if (loc.origin === location.origin){
+      history.pushState({path: loc.pathname}, '', loc.pathname);
+      route();
+    } else {
+      location.href = path;
+    }
+  }catch(_){
+    location.href = path;
+  }
+}
+window.addEventListener('popstate', ()=> route());
+function route(){
+  const p = location.pathname;
+  if (p.startsWith('/test/')){
+    const slug = p.split('/').pop();
+    renderTestPlayer(slug);
+    document.querySelectorAll('.bnav button').forEach(b=>b.classList.remove('active'));
+    const tb = document.querySelector('.bnav button[data-page="tests"]'); if(tb) tb.classList.add('active');
+    return;
+  }
+  const map = { '/': 'home', '/home': 'home', '/courses': 'courses', '/tests': 'tests', '/sim': 'sim', '/live': 'live', '/settings': 'settings' };
+  if (map[p]){ renderPage(map[p]); return; }
+  renderHome();
+}
 
 /* Badges */
 const badgeId=document.getElementById('badge-id'); const badgeBal=document.getElementById('badge-balance'); const badgeGem=document.getElementById('badge-gems');
 
 /* CSV helpers + Firestore prefer */
 async function loadCSV(path){ try{ const res=await fetch(path); if(!res.ok) return []; const text=await res.text(); const lines=text.trim().split(/\r?\n/); const headers=lines[0].split(','); return lines.slice(1).map(l=>{ const cells=l.split(','); const o={}; headers.forEach((h,i)=>o[h.trim()]=(cells[i]||'').trim()); return o; }); }catch(e){ return []; }}
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 async function loadFromFirestore(coll){ try{ const snap=await getDocs(collection(db,coll)); const arr=[]; snap.forEach(d=>arr.push({id:d.id, ...d.data()})); return arr;}catch(e){ return []; }}
 async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll); return (Array.isArray(fs)&&fs.length>0)? fs : await loadCSV(csv); }
 
@@ -73,9 +104,11 @@ async function preferFirestore(coll,csv){ const fs=await loadFromFirestore(coll)
 let __usersPageCursor=null, __usersLoaded=0;
 async function fetchUsersPage(limitSize=50){ const baseQ=query(collection(db,'users'), orderBy('gems','desc'), limit(limitSize)); const qref=__usersPageCursor? query(baseQ,startAfter(__usersPageCursor)) : baseQ; const snap=await getDocs(qref); const rows=[]; snap.forEach(d=>rows.push({id:d.id, ...d.data()})); __usersPageCursor=snap.docs.length? snap.docs[snap.docs.length-1] : __usersPageCursor; return rows; }
 async function renderUsersList(append=false){
-  const list=document.getElementById('users-list'); const more=document.getElementById('users-loadmore');
-  if(!append){ list.innerHTML=''; __usersPageCursor=null; __usersLoaded=0; }
-  let batch=[]; try{ batch=await fetchUsersPage(50);}catch(e){ list.innerHTML=`<div class="error">${e.message||'Ruxsat/tarmoq xatosi'}</div>`; return; }
+  const listId='users-list'; const moreId='users-loadmore';
+  const list=document.getElementById(listId); const more=document.getElementById(moreId);
+  if(!append){ if(list) list.innerHTML=''; __usersPageCursor=null; __usersLoaded=0; }
+  let batch=[]; try{ batch=await fetchUsersPage(50);}catch(e){ if(list) list.innerHTML=`<div class="error">${e.message||'Ruxsat/tarmoq xatosi'}</div>`; return; }
+  if(!list) return;
   const rows=batch.map((u,i)=>{ const rank=__usersLoaded+i+1; const name=(u.firstName&&u.lastName)?(u.firstName+' '+u.lastName):(u.displayName||'—'); const id=u.numericId||'—'; const gems=u.gems||0; return `<div class="list-item"><div class="left"><div class="rank">${rank}</div><div class="id">ID ${id}</div><div class="name">${name}</div></div><div class="gems">💎 ${gems}</div></div>`; }).join('');
   list.insertAdjacentHTML('beforeend', rows || '<div class="muted">Foydalanuvchilar topilmadi.</div>');
   __usersLoaded += batch.length; if(more){ more.disabled=(batch.length===0); more.textContent=(batch.length===0)?'Yana yo\'q':'Ko\'proq yuklash'; }
@@ -123,19 +156,19 @@ function cardUniversal(opts={}, ctx={}){
     <div class="media">${image ? `<img loading="lazy" src="${image}" alt="${title}">` : `<div class="skel block" aria-hidden="true"></div>`}
       <span class="badge">${tag}</span>
       <span class="typechip">${t.icon} ${t.label}</span>
+      ${ctx.page==='live' ? `<span class="ucountdown" data-countdown></span><span class="badge alt">👥 <span data-live-count>—</span></span>` : ``}
     </div>
     <div class="body">
       <div class="title">${title}</div>
       <div class="meta">${meta}</div>
       <div class="row cta-row">
-        <div class="price">${price>0? '💵 ' + priceLabel : ''}</div>
+        <div class="price">${(t.variant==='test' || t.variant==='live') && price>0 ? '💵 ' + priceLabel : ''}</div>
         <div class="row" style="gap:.4rem">
           ${ctx.page==='tests' || t.variant==='test' ? `<button class="btn btn-sm act-start">Boshlash</button>`:''}
-          ${ctx.page==='tests' || t.variant==='test' ? (price>0? `<button class="btn btn-sm quiet act-buy">Sotib olish</button>`:'') : ''}
-          ${ctx.page==='courses' && price>0 ? `<button class="btn btn-sm quiet act-buy">Sotib olish</button>`:''}
+          ${ctx.page==='courses' ? `<button class="btn btn-sm act-open">Kirish</button>`:''}
           ${ctx.page==='home' ? `<button class="btn btn-sm act-open">Ko'rish</button>`:''}
           ${ctx.page==='sim' ? `<button class="btn btn-sm act-open">Ochish</button>`:''}
-          ${ctx.page==='live' ? `<button class="btn btn-sm act-live">Batafsil</button>`:''}
+          ${ctx.page==='live' ? `<button class="btn btn-sm act-live-start">Boshlash</button><button class="btn btn-sm quiet act-live">Batafsil</button>`:''}
         </div>
       </div>
     </div>
@@ -147,30 +180,43 @@ function bindUniversalCards(container, ctx={}){
     const price = (data.price!=null) ? parseInt(data.price||'0',10)||0 : (parseInt(data.entryPrice||'0',10)||0);
     const pid = data.productId;
     const startBtn = el.querySelector('.act-start');
-    const buyBtn = el.querySelector('.act-buy');
     const openBtn = el.querySelector('.act-open');
     const liveBtn = el.querySelector('.act-live');
+    const liveStartBtn = el.querySelector('.act-live-start');
 
-    if (buyBtn){
-      buyBtn.addEventListener('click', async ()=>{
-        try{ await spend(price, {productId: pid, name: data.title||data.name||'Kontent'}); alert('Xarid muvaffaqiyatli!'); }
-        catch(e){ showErr(e); }
-      });
-    }
     if (startBtn){
       startBtn.addEventListener('click', async ()=>{
         try{
           const allowed = await hasAccess({price, productId: pid});
-          if(!allowed && price>0){ alert('Bu kontent pullik. Avval sotib oling.'); return; }
-          alert('✅ Kirish ruxsat. (UI ochiladi)');
+          if(!allowed && price>0){
+            if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
+              await spend(price, {productId: pid, name: data.title||data.name||'Kontent'});
+            } else { return; }
+          }
+          if(data.link){ navigate(data.link); } else { alert('Link belgilanmagan'); }
         }catch(e){ showErr(e); }
       });
     }
     if (openBtn){
-      openBtn.addEventListener('click', ()=> alert('🔗 Reklama/yo\'naltirish amalga oshadi.'));
+      openBtn.addEventListener('click', ()=>{ if(data.link){ navigate(data.link); } else { alert("Link topilmadi"); } });
     }
     if (liveBtn){
-      liveBtn.addEventListener('click', ()=> openLiveModal(data));
+      liveBtn.addEventListener('click', ()=>{ openLiveModal(data); });
+    }
+    if (liveStartBtn){
+      liveStartBtn.addEventListener('click', async ()=>{
+        try{
+          const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
+          const sMs = data.startAt ? toMs(data.startAt) : 0;
+          const eMs = data.endAt ? toMs(data.endAt) : 0;
+          const now = Date.now();
+          if(!(sMs && eMs && now>=sMs && now<=eMs)){ alert('LIVE hali boshlanmagan yoki yakunlangan'); return; }
+          let joined=false;
+          try{ if(data.id){ const me=await getDoc(doc(db,'live_events',data.id,'entries',auth.currentUser.uid)); joined=me.exists(); } }catch(_){}
+          if(!joined){ alert("Siz ro'yxatdan o'tmagansiz (pre-join talab). Batafsil orqali ro'yxatdan o'ting."); return; }
+          if(data.startLink){ navigate(data.startLink); } else { alert('Start link belgilanmagan'); }
+        }catch(e){ showErr(e); }
+      });
     }
   });
 }
@@ -179,7 +225,7 @@ function bindUniversalCards(container, ctx={}){
 async function renderHome(){
   const ads = await preferFirestore('content_home','./content/home.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Reklamalar</h3>
-    <div id="home-cards" class="cards">` + ads.map(it=> cardUniversal({ ...it, type:'ad', title:it.title, image:it.image||'' }, {page:'home'})).join('') + `</div>
+    <div id="home-cards" class="cards">` + ads.map(it=> cardUniversal({ ...it, type:'ad', title:it.title, image:it.image||'', link: it.link||'' }, {page:'home'})).join('') + `</div>
     <h3 class="section-title" style="margin-top:.75rem">Foydalanuvchilar (olmos kamayish tartibida)</h3>
     <div id="users-list" class="list"></div>
     <div class="row end mt-2"><button id="users-loadmore" class="btn quiet">Ko'proq yuklash</button></div>`;
@@ -190,19 +236,19 @@ async function renderHome(){
 async function renderCourses(){
   const items = await preferFirestore('content_courses','./content/courses.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Kurslar</h3>
-    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, price: it.price||0 }, {page:'courses'})).join('') + `</div>`;
+    <div id="courses-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'course', title:it.name||it.title, link: it.link||'' }, {page:'courses'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('courses-cards'), {page:'courses'});
 }
 async function renderTests(){
-  const items = await preferFirestore('content_tests','./content/tests.csv');
+  const items = await preferFirestore('content/tests','./content/tests.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
-    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId }, {page:'tests'})).join('') + `</div>`;
+    <div id="tests-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'test', title:it.name||it.title, price: it.price||0, productId: it.productId, link: it.link||'' }, {page:'tests'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('tests-cards'), {page:'tests'});
 }
 async function renderSim(){
-  const items = await preferFirestore('content_sim','./content/sim.csv');
+  const items = await preferFirestore('content/sim','./content/sim.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
-    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title }, {page:'sim'})).join('') + `</div>`;
+    <div id="sim-cards" class="cards">` + items.map(it=> cardUniversal({ ...it, type:'sim', title:it.name||it.title, link: it.link||'' }, {page:'sim'})).join('') + `</div>`;
   bindUniversalCards(document.getElementById('sim-cards'), {page:'sim'});
 }
 
@@ -218,17 +264,53 @@ async function renderLive(){
     <div id="live-cards" class="cards">` + events.map(ev=>{
       const when = ev.startAt ? new Date(toMs(ev.startAt)).toLocaleString() : '—';
       const entry = parseInt(ev.entryPrice||'0',10)||0;
-      return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry }, {page:'live'});
+      return cardUniversal({ ...ev, type:'live', title: ev.title||ev.name||'Live test', meta:`🎁 ${ev.prize||'—'} • ⏱ ${when}`, price: entry, startLink: ev.startLink||'', modalText: ev.modalText||'' }, {page:'live'});
     }).join('') + `</div>`;
 
   document.querySelectorAll('#live-cards .ucard').forEach(async (card)=>{
     const data = JSON.parse(card.dataset.card.replace(/&quot;/g,'"'));
     const btnStart = card.querySelector('.act-live');
+    const btnGo = card.querySelector('.act-live-start');
     if (btnStart) btnStart.addEventListener('click', ()=> openLiveModal(data));
+
+    // countdown
+    const pill = card.querySelector('[data-countdown]');
+    if(pill){
+      const toMs = (v)=> (v && v.toMillis) ? v.toMillis() : (typeof v==='number'? v : (v && Date.parse(v) ? Date.parse(v) : 0));
+      const sMs = data.startAt ? toMs(data.startAt) : 0;
+      const eMs = data.endAt ? toMs(data.endAt) : 0;
+      function tick(){
+        if(!sMs){ pill.textContent='—'; return; }
+        const now = Date.now();
+        if(sMs && now < sMs){
+          const d = Math.max(0, sMs - now);
+          const h=Math.floor(d/3_600_000), m=Math.floor((d%3_600_000)/60_000), s=Math.floor((d%60_000)/1000);
+          pill.textContent = `Start: ${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+          if(btnGo) btnGo.disabled = true;
+        } else if (sMs && eMs && now>=sMs && now<=eMs){
+          pill.textContent = "LIVE";
+          if(btnGo) btnGo.disabled = false;
+        } else {
+          pill.textContent = "Yakunlangan";
+          if(btnGo) btnGo.disabled = true;
+        }
+      }
+      tick(); setInterval(tick, 1000);
+    }
+
+    // participants realtime
+    const badge = card.querySelector('[data-live-count]');
+    if(badge && data.id){
+      try{
+        const entCol = collection(db,'live_events',data.id,'entries');
+        onSnapshot(entCol, (snap)=>{ badge.textContent = snap.size; });
+      }catch(_){ /* ignore */ }
+    }
   });
 }
 
 /* Live Details Modal */
+let lmLbUnsub = null;
 async function openLiveModal(ev){
   const dlg = document.getElementById('live-modal');
   const title = document.getElementById('lm-title');
@@ -243,6 +325,8 @@ async function openLiveModal(ev){
   const lmCount = document.getElementById('lm-count');
   const lmBal = document.getElementById('lm-balance');
   const lmCd = document.getElementById('lm-countdown');
+  const lmText = document.getElementById('lm-text');
+  const lmLb = document.getElementById('lm-lb');
 
   err.classList.add('hidden'); err.textContent='';
 
@@ -257,6 +341,7 @@ async function openLiveModal(ev){
   entry.textContent = `${parseInt(ev.entryPrice||'0',10)||0} so'm`;
   when.textContent = sMs ? (new Date(sMs)).toLocaleString() : '—';
   statusEl.textContent = status(Date.now());
+  lmText.textContent = ev.modalText || '—';
 
   // Load participant count & user balance
   let joined=false, count='—', balance='—';
@@ -298,7 +383,7 @@ async function openLiveModal(ev){
   tick(); const iv = setInterval(tick, 1000);
 
   const closeBtn = document.getElementById('lm-close');
-  function close(){ clearInterval(iv); dlg.close(); }
+  function close(){ clearInterval(iv); if(lmLbUnsub){ lmLbUnsub(); lmLbUnsub=null; } dlg.close(); }
   closeBtn.onclick = close;
 
   ctaPre.onclick = async ()=>{
@@ -310,9 +395,163 @@ async function openLiveModal(ev){
       joined = true; drawActions();
     }catch(e){ err.textContent = e.message||e.code; err.classList.remove('hidden'); }
   };
-  ctaEnter.onclick = ()=>{ if(!ctaEnter.disabled) alert('🎯 Live boshlandi! (Test UI bu yerda)'); };
+  ctaEnter.onclick = ()=>{ if(!ctaEnter.disabled && ev.startLink){ navigate(ev.startLink); } };
 
+  // realtime leaderboard
+  if(ev.id && lmLb){
+    try{
+      const scQ = query(collection(db,'live_events', ev.id, 'scores'), orderBy('score','desc'), limit(50));
+      lmLbUnsub = onSnapshot(scQ, (snap)=>{
+        if(snap.empty){ lmLb.innerHTML = `<div class="small muted">🏆 Reyting: hali natijalar yo'q</div>`; return; }
+        let rows=''; let rank=0;
+        snap.forEach(docSnap=>{ const d=docSnap.data()||{}; rank++; const name=d.name||d.displayName||'—'; const score=d.score||0; rows += `<div class="lb-row"><div class="left"><div class="rk">${rank}</div><div class="name">${name}</div></div><div class="score">${score}</div></div>`; });
+        lmLb.innerHTML = `<div class="small muted">🏆 Reyting (real-time):</div>` + rows;
+      });
+    }catch(e){ lmLb.innerHTML = `<div class="small muted">Reytingni o'qishda xatolik</div>`; }
+  }
   dlg.showModal();
+}
+
+/* Test Player (Math) — explanations + randomization */
+async function renderTestPlayer(slug){
+  const tests = await preferFirestore('content/tests','./content/tests.csv');
+  const t = tests.find(it => (it.productId && it.productId===slug) || (it.link && it.link.endsWith('/'+slug)));
+  if(!t){ pageRoot.innerHTML = `<div class="p-4 card">Test topilmadi.</div>`; return; }
+
+  const price = parseInt(t.price||'0',10)||0;
+  if(price>0){
+    const ok = await hasAccess({price, productId: t.productId||slug});
+    if(!ok){
+      if(confirm(`Bu test pullik (${price.toLocaleString()} so'm). Xarid qilasizmi?`)){
+        await spend(price, {productId: t.productId||slug, name: t.name||t.title||'Test'});
+      } else { navigate('/tests'); return; }
+    }
+  }
+
+  const qCsv = `./content/tests_data/${slug}.csv`;
+  const rawRows = await loadCSV(qCsv);
+  if(!rawRows || rawRows.length===0){
+    pageRoot.innerHTML = `<div class="p-4 card">Bu test uchun savollar yo'q.</div>`; return;
+  }
+
+  // Normalize questions and add randomized options
+  const makeQ = (r)=>{
+    const opts = [];
+    ['a','b','c','d'].forEach(k=>{ if(r[k]) opts.push({key:k, label:k.toUpperCase(), text:r[k], isCorrect: (String(r.ans||'').trim().toLowerCase()===k)}); });
+    shuffle(opts);
+    return { text: r.text || r.q || '—', ex: r.ex || '', opts };
+  };
+  let rows = rawRows.map(makeQ);
+  shuffle(rows); // randomize question order
+
+  let durationSec = parseInt(t.durationSec||'0',10)||0;
+  if(!durationSec) durationSec = Math.max(300, Math.min(5400, rows.length*45));
+
+  const state = { slug, title: t.name||t.title||slug, idx: 0, picks: new Array(rows.length).fill(null), startAt: Date.now(), endAt: null, durationSec, remaining: durationSec, reveal:false };
+
+  function render(){
+    const q = rows[state.idx];
+    const prog = Math.round((state.idx)/rows.length*100);
+    pageRoot.innerHTML = `<div class="tplayer">
+      <div class="head">
+        <div><strong>${state.title}</strong> — ${rows.length} savol</div>
+        <div class="timer" id="tp-timer">00:00</div>
+      </div>
+      <div class="prog"><span style="width:${prog}%"></span></div>
+      <div class="qcard">
+        <div class="qtext">#${state.idx+1}. ${q.text}</div>
+        <div class="opts">
+          ${q.opts.map((op,i)=>{
+            const picked = state.picks[state.idx];
+            const isSel = (picked===i) ? 'selected' : '';
+            return `<div class="opt ${isSel}" data-idx="${i}"><b>${op.label}.</b> ${op.text}</div>`;
+          }).join('')}
+        </div>
+        <div class="ctrl">
+          <button class="btn quiet" id="tp-prev" ${state.idx===0?'disabled':''}>Ortga</button>
+          <div class="row gap-2">
+            <button class="btn solbtn" id="tp-sol">Yechimni ko'rish</button>
+            <button class="btn quiet" id="tp-skip">O'tkazib yuborish</button>
+            <button class="btn" id="tp-next">${state.idx===rows.length-1?'Yakunlash':'Keyingi'}</button>
+          </div>
+        </div>
+        ${ (state.reveal && q.ex) ? `<div class="sol"><div class="st">Yechim / Izoh</div><div>${q.ex}</div></div>` : ``}
+      </div>
+      <div class="small muted">Izoh: faqat matematika savollari. Variantlar aralashtirilgan.</div>
+    </div>`;
+
+    // interactions
+    pageRoot.querySelectorAll('.opt').forEach(el=>{
+      el.addEventListener('click', ()=>{ const i=parseInt(el.dataset.idx,10); state.picks[state.idx]=i; state.reveal=false; render(); });
+    });
+    pageRoot.querySelector('#tp-prev').addEventListener('click', ()=>{ if(state.idx>0){ state.idx--; state.reveal=false; render(); } });
+    pageRoot.querySelector('#tp-skip').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-next').addEventListener('click', ()=>{ if(state.idx<rows.length-1){ state.idx++; state.reveal=false; render(); } else { finish(); } });
+    pageRoot.querySelector('#tp-sol').addEventListener('click', ()=>{ state.reveal = !state.reveal; render(); });
+    updateTimerText();
+  }
+
+  let iv=null;
+  function startTimer(){
+    iv = setInterval(()=>{
+      state.remaining--; if(state.remaining<=0){ state.remaining=0; finish(); }
+      const bar = pageRoot.querySelector('.prog>span'); if(bar){ const prog = Math.round((state.idx)/rows.length*100); bar.style.width = prog+'%'; }
+      updateTimerText();
+    }, 1000);
+  }
+  function stopTimer(){ if(iv){ clearInterval(iv); iv=null; } }
+  function updateTimerText(){
+    const m = Math.floor(state.remaining/60), s=state.remaining%60;
+    const el = document.getElementById('tp-timer'); if(el) el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  async function finish(){
+    stopTimer();
+    state.endAt = Date.now();
+    let good=0, bad=0, empty=0;
+    rows.forEach((q,i)=>{
+      const pick = state.picks[i];
+      if(pick==null){ empty++; return; }
+      const chosen = q.opts[pick];
+      if(chosen && chosen.isCorrect) good++; else bad++;
+    });
+    const percent = Math.round(good/rows.length*100);
+    try{
+      await addDoc(collection(db,'users',auth.currentUser.uid,'test_runs'), {
+        productId: t.productId||slug, title: state.title, total: rows.length, good, bad, empty, percent,
+        startedAt: new Date(state.startAt), finishedAt: new Date(state.endAt), durationSec: state.durationSec, picks: state.picks
+      });
+    }catch(_){}
+    // Results + review
+    pageRoot.innerHTML = `<div class="tplayer">
+      <div class="rez">
+        <h3>Natijalar — ${state.title}</h3>
+        <p><span class="good">To'g'ri: ${good}</span> • <span class="bad">Noto'g'ri: ${bad}</span> • Bo'sh: ${empty}</p>
+        <p><b>${percent}%</b> umumiy natija</p>
+        <div class="row gap-2 mt-2">
+          <button class="btn" id="tp-again">Qayta yechish (yangi tartib)</button>
+          <button class="btn quiet" id="tp-exit">Testlarga qaytish</button>
+        </div>
+      </div>
+      <div class="mt-2 card p-4">
+        <h4>Review</h4>
+        ${rows.map((q,qi)=>{
+          const pick = state.picks[qi];
+          const ok = (pick!=null && q.opts[pick] && q.opts[pick].isCorrect);
+          const correct = q.opts.find(op=>op.isCorrect);
+          return `<div class="mt-2">
+            <div><b>#${qi+1}.</b> ${q.text} — ${ ok ? '<span class="good">to\'g\'ri</span>' : (pick==null? '<span class="muted">bo\'sh</span>' : '<span class="bad">noto\'g\'ri</span>') }</div>
+            <div class="small muted">To'g'ri javob: ${(correct? correct.label : '?')}.</div>
+            ${ q.ex ? `<div class="sol"><div class="st">Yechim</div><div>${q.ex}</div></div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+    document.getElementById('tp-again').addEventListener('click', ()=>{ renderTestPlayer(slug); });
+    document.getElementById('tp-exit').addEventListener('click', ()=> navigate('/tests'));
+  }
+
+  render(); startTimer();
 }
 
 /* Settings + Admin CRUD + Wallet */
@@ -378,7 +617,7 @@ onAuthStateChanged(auth, async (user)=>{
       document.getElementById('badge-balance').textContent = `💵 ${d.balance ?? 0}`;
       document.getElementById('badge-gems').textContent = `💎 ${d.gems ?? 0}`;
       if(!d.profileComplete) document.getElementById('profile-modal').showModal();
-      renderPage('home');
+      route();
     }catch(e){ showErr(e); }
   } else {
     gate.classList.add('visible');
