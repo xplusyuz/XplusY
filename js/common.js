@@ -44,11 +44,35 @@ export async function mountChrome(){
 
   if(headerHost){
     const h = await tryFetch(headerCands);
-    headerHost.innerHTML = h ?? `<div class="mc-left"><div class="brand"><img src="/assets/logo.svg" alt=""/><span>MathCenter</span></div></div>`;
+    headerHost.innerHTML = h ?? `<div class="mc-left">
+      <button id="btnMenu" class="icon-btn" aria-label="Menyuni ochish">☰</button>
+      <div class="brand">
+        <img src="/assets/logo.svg" alt="MathCenter" />
+        <span>MathCenter</span>
+      </div>
+    </div>
+    <nav class="nav desktop-nav">
+      <a href="/index.html">🏠 Bosh sahifa</a>
+      <a href="/tests.html">📝 Testlar</a>
+      <a href="/live.html">🎮 Live</a>
+      <a href="/leaderboard.html">🏅 Reyting</a>
+      <a href="/settings.html">⚙️ Sozlamalar</a>
+    </nav>
+    <div class="mc-right">
+      <button id="btnTheme" class="icon-btn" title="Kun/Tun">🌙</button>
+      <span id="hdrId" class="pill">ID: —</span>
+      <span id="hdrBal" class="pill">💵 0</span>
+      <span id="hdrGem" class="pill">💎 0</span>
+      <button id="btnSignIn" class="btn primary">Kirish</button>
+      <button id="btnSignOut" class="btn ghost hidden">Chiqish</button>
+    </div>`;
   }
   if(footerHost){
     const f = await tryFetch(footerCands);
-    footerHost.innerHTML = f ?? `<div class="container"><div class="sub">© MathCenter v3</div></div>`;
+    footerHost.innerHTML = f ?? `<div class="container" style="padding:24px 16px">
+      <div class="sub">© MathCenter v3 — tests + live + real-time</div>
+      <div class="sub">Dizayn: mobil-first, yashil tema.</div>
+    </div>`;
   }
 }
   if(footer){
