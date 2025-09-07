@@ -1,0 +1,50 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function isAdmin() {
+      return isSignedIn() && (
+        userDoc(request.auth.uid).data.numericId in [1000001, 1000002] ||
+        userDoc(request.auth.uid).data.numericId in ["1000001", "1000002"]
+      );
+    }
+
+    // Users
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      // user can update only profile fields (no balance/gems/numericId), admin can update all
+      allow update: if (isSignedIn() && request.auth.uid == uid &&
+        !('balance' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('gems' in request.resource.data.diff(resource.data).affectedKeys()) &&
+        !('numericId' in request.resource.data.diff(resource.data).affectedKeys())) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // User subcollections
+    match /users/{uid}/{sub=**} {
+      allow read: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow create, update: if isSignedIn() && request.auth.uid == uid || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Promo codes
+    match /promoCodes/{code} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Live rooms
+    match /liveRooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+      match /participants/{uid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && request.auth.uid == uid;
+        allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      }
+    }
+  }
+}
