@@ -118,17 +118,18 @@ export function attachAuthUI({ requireSignIn = true } = {}){
     document.dispatchEvent(new CustomEvent('mc:user-ready', { detail: window.__mcUser }));
   });
 
-  document.addEventListener('click', async (e)=>{
-    if(e.target && e.target.id==='btnSignIn'){
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider).catch(e=> alert('Kirish xatosi: '+e.message));
-    }
-    if(e.target && e.target.id==='btnSignOut'){
-      await signOut(auth).catch(e=> alert('Chiqishda xato: '+e.message));
-      location.reload();
-    }
-  });
-}
+  // common.js dagi click listener ichiga shu ko‘rinishda yozing
+document.addEventListener('click', async (e)=>{
+  if(e.target && (e.target.id==='btnSignIn' || e.target.matches('[data-action="signin"]'))){
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider).catch(e=> alert('Kirish xatosi: '+e.message));
+  }
+  if(e.target && (e.target.id==='btnSignOut' || e.target.matches('[data-action="signout"]'))){
+    await signOut(auth).catch(e=> alert('Chiqishda xato: '+e.message));
+    location.reload();
+  }
+});
+
 
 /* Init per page */
 export function initUX(){
