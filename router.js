@@ -2,6 +2,14 @@
 // js/router.js — Minimal SPA router that keeps header/footer fixed.
 // Swaps only <main> content (prefers <main.container>) via fetch + History API.
 (() => {
+  
+  function toPartialURL(urlString){
+    const u = new URL(urlString, location.href);
+    let name = u.pathname.split('/').pop() || 'index.html';
+    if(!name.endsWith('.html')) name += '.html';
+    return `${u.origin}/partials/${name}`;
+  }
+
   const MAIN_CANDIDATES = ['main.container', 'main', '#page', '#app', '#content'];
 
   function pickMain(doc){
@@ -32,8 +40,16 @@
     return u.pathname.endsWith('.html');
   }
 
+  
   async function fetchDoc(url){
-    const res = await fetch(url, { credentials: 'same-origin' });
+    const partial = toPartialURL(url);
+    const res = await fetch(partial, { credentials: 'same-origin' });
+    if(!res.ok) throw new Error('HTTP '+res.status+' while fetching '+partial);
+    const text = await res.text();
+    const parser = new DOMParser();
+    return parser.parseFromString(text, 'text/html');
+  }
+);
     if(!res.ok) throw new Error('HTTP '+res.status);
     const text = await res.text();
     const parser = new DOMParser();
@@ -134,7 +150,14 @@
     load(location.href, false);
   }
 
+  
   function init(){
+    if(!sessionStorage.getItem('spa:initialized')){
+      sessionStorage.setItem('spa:initialized','1');
+      // Ensure the current URL content is synced from partials immediately
+      load(location.href, false);
+    }
+
     // Delegate link clicks globally
     document.addEventListener('click', onClick);
     // Handle back/forward
