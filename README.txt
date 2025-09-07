@@ -1,47 +1,26 @@
-MathCenter Full v3 (tests + live + real-time v2) — Starter
-==================================================================
+
+MathCenter v4 — Clean Rebuild (0 → 100%)
+========================================
 Sana: 2025-09-07
 
-Struktura:
-- /index.html — Bosh sahifa (grid kartalar).
-- /tests.html + /js/tests.js — Oson/O‘rta/Qiyin testlar (10 savol, +/− ball, chiqish jarimasi).
-- /live.html + /js/live.js — Live xonalar: pre-join, start lock, real-time scoreboard (admin boshqaruvi).
-- /leaderboard.html + /js/leaderboard.js — Top-100 olmos reyting.
-- /settings.html + /js/settings.js — Profil, Natijalar, Balans, Yutuqlar, Promo, Admin panel.
-- /header.html, /footer.html — barcha sahifalarga dinamik yuklanadi.
-- /css/base.css — umumiy dizayn: mobil-first, green theme.
-- /assets/logo.svg — favicon/brand.
-- /firestore.rules — xavfsizlik.
+Asosiy sahifalar:
+- index.html — Bosh sahifa
+- tests.html (+ js/tests.js) — Oson/O‘rta/Qiyin testlar (10 savol)
+- live.html (+ js/live.js) — Live: pre-join, start lock, scoreboard
+- leaderboard.html (+ js/leaderboard.js) — Top-100 olmos
+- settings.html (+ js/settings.js) — Profil, Natijalar, Balans (demo), Yutuqlar, Promo, Admin panel
 
-Firebase:
-- `users/{uid}` — profil (numericId, balance, gems ...). numericId: admin (1000001/1000002).
-- `users/{uid}/results` — test natijalari.
-- `promoCodes/{code}` — promo (active, balance, gems, expiresAt).
-- `liveRooms/{roomId}` — xona (status, startAt, duration, joinLocked, ...).
-- `liveRooms/{roomId}/participants/{uid}` — ishtirokchi (score, joinedAt, ...).
+UI/UX:
+- **Header/Footer** — har bir sahifada INLINE, JS ga bog‘liq emas.
+- **Desktop**: yuqori top nav; **mobile/planshet**: pastda yopishqoq bottom bar (Android uslubida).
+- **Kun/Tun** rejim (localStorage bilan saqlanadi).
+- Modallar — profil/adm/va boshqalar; light theme’da to‘g‘ri kontrast.
 
-Kirish talabi:
-- Har sahifa `attachAuthUI({ requireSignIn: true })` bilan himoyalangan.
-- Header’da ID, 💵 balans, 💎 olmos doim ko‘rinadi.
-
-Admin (faqat numericId ∈ {1000001, 1000002}):
-- Live xonalarni yaratish/start/end.
-- Settings → Admin panel: foydalanuvchilarni qidirish/tahrirlash.
-- Kirish kodi (front-end): Math@1999 (faqat UI gate). Haqiqiy ruxsat — Firestore rules.
-
-To‘lov:
-- Balans to‘ldirish hozircha “demo”. Haqiqiy to‘lov uchun backend/payments (Payme/Click/Xazna) kerak.
+Admin:
+- Faqat `numericId ∈ {1000001, 1000002}` + UI kodi `Math@1999`.
+- Admin panelda: **numericId**, **balance**, **gems** va boshqa maydonlar tahriri.
+- Firestore rules: admin tekshiruvi son **yoki** matn ko‘rinishida.
 
 Deploy:
-- Statik hosting (Netlify/Vercel). Katalogning ildiziga joylab, URLlar “/..” ishlaydi.
-- Agar subpathda bo‘lsa, header/footer fetch yo‘llarini moslang.
-
-Eslatma:
-- Test savollari demo tarzda generatsiya qilinadi. Haqiqiy savollarni Firestore’dan o‘qish uchun `tests` kolleksiyasini qo‘shish mumkin.
-- “Ko‘p marta chiqish jarimasi” localStorage orqali hisoblanadi (sodda demo mantiq).
-- Xavfsizlik qoidalari balans/gems’ni faqat admin o‘zgartiradigan qilib yozilgan.
-
-Yaxshilash mumkin:
-- Cloud Functions orqali to‘lov/purchase tranzaksiyalari.
-- Testlar uchun rasm/formula renderer (MathJax/KaTeX).
-- Live uchun savol tarqatish va avtomatik ball berish.
+- Statik hosting (Netlify/Vercel). Barcha yo‘llar nisbiy (`./js/...`) qilib qo‘yilgan.
+- `firestore.rules` faylini Firestore’ga deploy qiling.
