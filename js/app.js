@@ -3,11 +3,13 @@ import {
   signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut,
   ensureNumericIdAndProfile, updateProfileLocked
 } from './firebase.js';
-import { doc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  runTransaction, getDoc, setDoc, addDoc, serverTimestamp, query, orderBy, limit
+  doc, onSnapshot, collection, getDocs,
+  runTransaction, getDoc, setDoc, addDoc, serverTimestamp,
+  query, orderBy, limit, where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+import { signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 // Theme
 const btnTheme = document.getElementById('btn-theme');
 const root = document.documentElement;
@@ -69,7 +71,7 @@ btnEmailSignup.addEventListener('click', async () => {
 });
 function showErr(e){ authErr.textContent = e.message; authErr.classList.remove('hidden'); }
 
-import { signInWithRedirect, getRedirectResult } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
 
 window.__mcGoogle = async function(){
   const btn = document.getElementById('btn-google');
@@ -94,7 +96,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const g = document.getElementById('btn-google');
   if (g) g.addEventListener('click', ()=> window.__mcGoogle());
 });
-
 
 // Profile modal
 const pModal = document.getElementById('profile-modal');
@@ -126,8 +127,6 @@ const badgeBal = document.getElementById('badge-balance');
 const badgeGem = document.getElementById('badge-gems');
 
 // CSV loader
-import { getFirestore, collection, getDocs as fsGetDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
 async function loadFromFirestore(collName){
   try{
     const c = collection(db, collName);
@@ -275,7 +274,6 @@ onAuthStateChanged(auth, async (user) => {
 
 renderPage('home');
 
-
 async function renderTests(){
   const items = await preferFirestore('content_tests', './content/tests.csv');
   pageRoot.innerHTML = `<h3 class="section-title">Testlar</h3>
@@ -319,8 +317,6 @@ async function renderTests(){
   });
 }
 
-
-import { where, Query, query as fsQuery } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 async function hasAccess(product){
   const price = parseInt(product.price||'0',10)||0;
   if (price<=0) return true;
@@ -363,7 +359,6 @@ async function renderSim(){
   pageRoot.innerHTML = `<h3 class="section-title">Simulyator</h3>
   <div class="cards">${items.map(card2).join('')}</div>`;
 }
-
 
 function renderSettings(){
   pageRoot.innerHTML = `
