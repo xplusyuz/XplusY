@@ -35,13 +35,6 @@ function router() {
   const hash = location.hash.replace("#", "") || "home";
   loadPage(hash);
 }
-case '#/tests': {
-  await loadPartial('partials/tests.html');
-  await ensureCSS('css/tests.css');         // sahifa CSS
-  const mod = await import('js/tests.js');  // diqqat: nisbiy yo‘l (boshi / emas)
-  mod.default.init();
-  break;
-}
 
 window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", () => {
@@ -49,3 +42,10 @@ window.addEventListener("DOMContentLoaded", () => {
   initUX && initUX();
   router();
 });
+case '#/tests': {
+  await loadPartial('partials/tests.html');
+  await ensureCSS('css/tests.css');         // sahifa CSS
+  const mod = await import('js/tests.js');  // diqqat: nisbiy yo‘l (boshi / emas)
+  mod.default.init();
+  break;
+}
