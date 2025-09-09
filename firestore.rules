@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      // Demo: allow user to DECREASE their balance and update lastPurchase
+      allow update: if isOwner(uid)
+                    && request.resource.data.keys().hasOnly(['name','email','balance','gems','createdAt','lastPurchase'])
+                    && request.resource.data.balance is int
+                    && request.resource.data.balance >= 0
+                    && request.resource.data.balance <= resource.data.balance; // only decrease or keep
+    }
+
+    match /users/{uid}/tickets/{testId} {
+      allow read: if isOwner(uid);
+      // Demo: allow create; in production prefer Cloud Function to issue tickets
+      allow create: if isOwner(uid);
+      allow delete: if false;
+      allow update: if false;
+    }
+  }
+}
