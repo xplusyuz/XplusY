@@ -23,7 +23,7 @@ async function loadPage(page) {
   }
 
   // Page-specific JS (lazy)
-  if (page === "tests") import("./tests-csv.js");
+  if (page === "tests") import("./tests.js");
   if (page === "live") import("./live-csv.js");
   if (page === "simulator") import("./simulator-csv.js");
   if (page === "leaderboard") import("./leaderboard.js");
