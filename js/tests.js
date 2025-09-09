@@ -1,11 +1,8 @@
-// js/tests.js
-// SPA integratsiya: #/tests rutida ishlaydi
-// Firebase v10: mavjud app bo'lsa qayta init qilmaymiz
+// js/tests.js (v2, relative imports & ensureCSS)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// MathJax (agar globalda bo'lmasa yuklaymiz)
 (function ensureMathJax(){
   if (!window.MathJax) {
     const s = document.createElement("script");
@@ -15,6 +12,12 @@ import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, 
     document.head.appendChild(s);
   }
 })();
+
+function ensureCSS(href){
+  if ([...document.querySelectorAll('link[rel="stylesheet"]')].some(l=>l.href.includes(href))) return;
+  const l = document.createElement('link'); l.rel='stylesheet'; l.href=href;
+  document.head.appendChild(l);
+}
 
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -29,45 +32,14 @@ if (!getApps().length) initializeApp(fbConfig);
 const auth = getAuth();
 const db   = getFirestore();
 
-// ------- DOM refs (within partial) -------
 let $ = (sel)=>document.querySelector(sel);
-let el = {
-  page: $("#tests-page"),
-  badge: $("#testsUserBadge"),
-  catalog: $("#testsCatalog"),
-  run: $("#testsRun"),
-  result: $("#testsResult"),
-  dirNote: $("#testsDirNote"),
-  cards: $("#testsCards"),
-  title: $("#testsTitle"),
-  qimg: $("#testsQimg"),
-  qtext: $("#testsQtext"),
-  choices: $("#testsChoices"),
-  timer: $("#testsTimer"),
-  progress: $("#testsProgress"),
-  prev: $("#testsPrev"),
-  next: $("#testsNext"),
-  finish: $("#testsFinish"),
-  backToCatalog: $("#testsBackToCatalog"),
-  backBtn: $("#testsBackBtn"),
-  confirmDlg: $("#testsConfirm"),
-  confirmBody: $("#testsConfirmBody"),
-  cancelPay: $("#testsCancelPay"),
-  okPay: $("#testsOkPay"),
-};
-
-// ------- State -------
+let el;
 let currentUser=null, userDocRef=null, userData=null;
 let manifest=[], catalogItems=[];
 let test=null, answers=[], idx=0, deadline=0, ticker=null;
 
-// ------- Utils -------
 const fmtSom = v => new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
-const fmtMinSec = (sec)=> {
-  const m = Math.floor(sec/60).toString().padStart(2,'0');
-  const s = Math.floor(sec%60).toString().padStart(2,'0');
-  return `${m}:${s}`;
-};
+const fmtMinSec = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
 
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
@@ -78,7 +50,7 @@ function parseCSV(text){
       else cell+=c;
     } else {
       if(c=='"') inQ=true;
-      else if(c==','){ row.push(cell.trim()); cell=''; }
+      else if(c==','){row.push(cell.trim()); cell='';}
       else if(c=='\n' || c=='\r'){ if(cell!=='' || row.length){row.push(cell.trim()); rows.push(row); row=[]; cell='';} }
       else cell+=c;
     }
@@ -86,10 +58,7 @@ function parseCSV(text){
   if(cell!=='' || row.length){row.push(cell.trim()); rows.push(row);}
   return rows.filter(r=>r.length && r.some(v=>v!==''));
 }
-function rowsToObjects(rows){
-  const header = rows[0].map(h=>h.trim());
-  return rows.slice(1).map(r=>{ const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o; });
-}
+function rowsToObjects(rows){ const header = rows[0].map(h=>h.trim()); return rows.slice(1).map(r=>{const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o;}); }
 function show(which){
   el.catalog.classList.add("hidden");
   el.run.classList.add("hidden");
@@ -101,10 +70,8 @@ function show(which){
 }
 function progress(){ el.progress.style.width = ((idx)/(test.questions.length))*100 + "%"; }
 
-// ------- Catalog -------
 async function loadManifest(){
   const u = new URL(location.href);
-  // default: csv/tests.csv (SPA konventsiyasi). Fallback: tests.csv
   const manifestPath = u.searchParams.get('manifest') || "csv/tests.csv";
   let res = await fetch(manifestPath);
   if(!res.ok){
@@ -127,9 +94,6 @@ async function hydrateCatalogFromEachCSV(){
       catalogItems.push({file:m.file, card_img, card_title, card_meta, price_som, time_min});
     }catch(e){ console.warn("CSV o‘qishda xato", m.file, e); }
   }
-  renderCatalog();
-}
-function renderCatalog(){
   el.cards.innerHTML="";
   catalogItems.forEach(item=>{
     const card=document.createElement('div'); card.className='eh-card';
@@ -151,7 +115,6 @@ function renderCatalog(){
   });
 }
 
-// ------- Test CSV -> structure -------
 function parseTestCSV(text){
   const rows = parseCSV(text);
   if(rows.length<3) throw new Error('CSV format noto‘g‘ri: kamida 3 qator');
@@ -168,9 +131,7 @@ function parseTestCSV(text){
     const penalty = parseFloat(get(r,'penalty_olmos')||get(r,'-olmos')||'0')||0;
     return {q_img, q_text, choices:{a,b,c,d}, correct, olmos, penalty};
   });
-  return {
-    title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions
-  };
+  return { title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions };
 }
 
 function renderQuestion(){
@@ -179,7 +140,7 @@ function renderQuestion(){
   el.qimg.classList.add('hidden');
   if(q.q_img){ el.qimg.src=q.q_img; el.qimg.classList.remove('hidden'); }
   el.qtext.innerHTML = q.q_text || '—';
-  el.choices.innerHTML = '';
+  el.choices.innerHTML='';
   ['a','b','c','d'].forEach(letter=>{
     const wrap=document.createElement('label'); wrap.className='eh-choice';
     const input=document.createElement('input'); input.type='radio'; input.name='ans'; input.value=letter;
@@ -207,17 +168,12 @@ function startTimer(){
 
 async function startFlow(item){
   try{
-    // 1) Load CSV
     const res = await fetch(item.file);
     if(!res.ok) throw new Error('Test CSV topilmadi');
     test = parseTestCSV(await res.text());
 
-    // 2) Auth?
-    if(!currentUser){
-      alert('Kirish talab qilinadi. Iltimos, tizimga kiring.');
-      return;
-    }
-    // 3) Confirm + Transaction
+    if(!currentUser){ alert('Kirish talab qilinadi. Iltimos, tizimga kiring.'); return; }
+
     const price = test.price_som || +item.price_som || 0;
     el.confirmBody.innerHTML = `
       <div><b>${test.title}</b></div>
@@ -230,7 +186,6 @@ async function startFlow(item){
       el.cancelPay.removeEventListener('click', onCancel);
       el.okPay.removeEventListener('click', onOk);
       el.confirmDlg.close();
-
       await runTransaction(db, async (tx)=>{
         const snap = await tx.get(userDocRef);
         if(!snap.exists()) throw new Error('User doc yo‘q');
@@ -239,15 +194,12 @@ async function startFlow(item){
         if(balance < price) throw new Error('Balans yetarli emas');
         tx.update(userDocRef, { balance: balance - price, lastPurchase: serverTimestamp() });
       });
-
       answers = Array(test.questions.length).fill(null);
       idx=0; show('run'); renderQuestion(); startTimer();
     };
     el.cancelPay.addEventListener('click', onCancel, {once:true});
     el.okPay.addEventListener('click', onOk, {once:true});
-  }catch(e){
-    alert('Boshlashda xato: '+ e.message);
-  }
+  }catch(e){ alert('Boshlashda xato: '+ e.message); }
 }
 
 function finish(){
@@ -273,7 +225,6 @@ function finish(){
   if(currentUser && net){ updateDoc(userDocRef, { gems: increment(net) }).catch(()=>{}); }
 }
 
-// ------- events -------
 function bindEvents(){
   el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); } };
   el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); } };
@@ -282,7 +233,6 @@ function bindEvents(){
   el.backBtn.onclick = ()=> show("catalog");
 }
 
-// ------- Auth -------
 function watchAuth(){
   onAuthStateChanged(auth, async (u)=>{
     currentUser = u||null;
@@ -301,27 +251,44 @@ function watchAuth(){
   });
 }
 
-// ------- Init (public) -------
 async function init(){
-  // Deep-link: #/tests?src=/csv/tests/xxx.csv
-  const url = new URL(location.href.replace('#/tests',''));
-  const directSrc = url.searchParams.get('src');
+  ensureCSS("css/tests.css");
+  el = {
+    page: document.querySelector("#tests-page"),
+    badge: document.querySelector("#testsUserBadge"),
+    catalog: document.querySelector("#testsCatalog"),
+    run: document.querySelector("#testsRun"),
+    result: document.querySelector("#testsResult"),
+    dirNote: document.querySelector("#testsDirNote"),
+    cards: document.querySelector("#testsCards"),
+    title: document.querySelector("#testsTitle"),
+    qimg: document.querySelector("#testsQimg"),
+    qtext: document.querySelector("#testsQtext"),
+    choices: document.querySelector("#testsChoices"),
+    timer: document.querySelector("#testsTimer"),
+    progress: document.querySelector("#testsProgress"),
+    prev: document.querySelector("#testsPrev"),
+    next: document.querySelector("#testsNext"),
+    finish: document.querySelector("#testsFinish"),
+    backToCatalog: document.querySelector("#testsBackToCatalog"),
+    backBtn: document.querySelector("#testsBackBtn"),
+    confirmDlg: document.querySelector("#testsConfirm"),
+    confirmBody: document.querySelector("#testsConfirmBody"),
+    cancelPay: document.querySelector("#testsCancelPay"),
+    okPay: document.querySelector("#testsOkPay"),
+  };
   bindEvents();
   watchAuth();
+  const url = new URL(location.href.replace('#/tests',''));
+  const directSrc = url.searchParams.get('src');
   try{
-    if(directSrc){
-      await startFlow({file: directSrc});
-    } else {
-      await loadManifest();
-      await hydrateCatalogFromEachCSV();
-      show("catalog");
-    }
+    if(directSrc){ await startFlow({file: directSrc}); }
+    else { await loadManifest(); await hydrateCatalogFromEachCSV(); show("catalog"); }
   }catch(e){
     el.dirNote.classList.add('danger');
     el.dirNote.innerHTML = "Xato: "+e.message;
   }
 }
 
-// Expose
 window.TestsPage = { init };
 export default window.TestsPage;
