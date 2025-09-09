@@ -1,4 +1,4 @@
-// Testlar — CSV → grid (sections + plan + filter1/2 + linkli tugma + pagination)
+// tests.csv => grid (narx + runner link) + filter + pagination
 const host = document.querySelector('#testsSections');
 const csvPath = host?.dataset?.csv || './csv/tests.csv';
 
@@ -35,10 +35,7 @@ function setupFilters(data){
   sSec.value='*'; sPlan.value='*'; sF1.value='*'; sF2.value='*';
 
   [sSec,sPlan,sF1,sF2].forEach(sel=>{
-    sel.addEventListener('change', ()=>{
-      state.section = sSec.value; state.plan = sPlan.value; state.f1 = sF1.value; state.f2 = sF2.value;
-      visibleCount = PAGE_SIZE; render();
-    });
+    sel.addEventListener('change', ()=>{ state.section=sSec.value; state.plan=sPlan.value; state.f1=sF1.value; state.f2=sF2.value; visibleCount=PAGE_SIZE; render(); });
   });
 }
 
@@ -69,83 +66,34 @@ function render(){
 
 function card(r){
   const x = el('div','card test-card');
-  const action = r.href
-    ? `<a class="btn primary" href="${r.href}">${esc(r.btn||'Ochish')}</a>`
-    : `<button class="btn" disabled>${esc(r.btn||'Ochish')}</button>`;
-  x.innerHTML = `
-    ${r.img ? `<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">` : ''}
-    ${r.title ? `<h3 style="margin:.2rem 0">${esc(r.title)}</h3>` : ''}
-    ${r.meta ? `<p class="sub">${esc(r.meta)}</p>` : ''}
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">
-      <span class="pill">${esc(r.plan)}</span>
-      ${action}
-    </div>
-  `;
+  const priceTag = r.price ? `<span class="pill" title="Narx">💳 ${formatUZS(r.price)}</span>` : `<span class="pill">FREE</span>`;
+  const link = r.href ? `./tests.html?run=${encodeURIComponent(r.href)}&price=${encodeURIComponent(r.price||0)}&title=${encodeURIComponent(r.title||'Test')}` : '';
+  const action = r.href ? `<a class="btn primary" href="${link}">${esc(r.btn||'Boshlash')}</a>` : `<button class="btn" disabled>${esc(r.btn||'Boshlash')}</button>`;
+  x.innerHTML = `${r.img?`<img src="${r.img}" alt="${esc(r.title)}" loading="lazy">`:''}${r.title?`<h3 style="margin:.2rem 0">${esc(r.title)}</h3>`:''}${r.meta?`<p class="sub">${esc(r.meta)}</p>`:''}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">${priceTag}${action}</div>`;
   return x;
 }
-
-/* Helpers */
-function opt(val, text){ return `<option value="${esc(val)}">${esc(text)}</option>`; }
-function el(tag, cls){ const n=document.createElement(tag); if(cls) n.className=cls; return n; }
-function uniq(a){ return Array.from(new Set(a)); }
-
+/* helpers */
+function opt(v,t){return `<option value="${esc(v)}">${esc(t)}</option>`} function el(t,c){const n=document.createElement(t); if(c) n.className=c; return n;}
+function uniq(a){return Array.from(new Set(a))} function formatUZS(n){try{return new Intl.NumberFormat('uz-UZ').format(n);}catch(_){return n;}}
 async function fetchCSV(p){ try{ const r=await fetch(p,{cache:'no-cache'}); if(r.ok) return await r.text(); }catch{} return null; }
-function detectDelim(line){ const cand=['|',',',';','\t']; const cnt=cand.map(d=>line.split(d).length-1); const m=Math.max(...cnt); return m>0?cand[cnt.indexOf(m)]:','; }
+function detectDelim(line){ const cand=['|',',',';','\\t']; const cnt=cand.map(d=>line.split(d).length-1); const m=Math.max(...cnt); return m>0?cand[cnt.indexOf(m)]:','; }
 function parseCSV(text){
-  const L=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-  let first=''; for(const ln of L){ const t=ln.trim(); if(t){ first=ln; break; } }
-  const d=detectDelim(first||"Img url,Title,Meta,tugma nomi,tugma linki,bo'lim,filter1,filter2,plan");
-  const rows=[]; let row=[],f='',q=false;
-  const push=()=>{ let v=f; if(v.startsWith('"')&&v.endsWith('"')) v=v.slice(1,-1).replace(/""/g,'"'); row.push(v.trim()); f=''; };
-  for(let i=0;i<text.length;i++){
-    const ch=text[i], nx=text[i+1];
-    if(ch=='"'){ if(q&&nx=='"'){f+='"'; i++;} else { q=!q; } continue; }
-    if(ch=='\n'&&!q){ push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row); row=[]; continue; }
-    if(ch==d&&!q){ push(); continue; }
-    f+=ch;
-  }
-  push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row);
-  return rows;
+  const L=text.replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n').split('\\n'); let first=''; for(const ln of L){ const t=ln.trim(); if(t){ first=ln; break; } }
+  const d=detectDelim(first||"Img url,Title,Meta,tugma nomi,tugma linki,bo'lim,filter1,filter2,plan,narx");
+  const rows=[]; let row=[],f='',q=false; const push=()=>{ let v=f; if(v.startsWith('\"')&&v.endsWith('\"')) v=v.slice(1,-1).replace(/\"\"/g,'\"'); row.push(v.trim()); f=''; };
+  for(let i=0;i<text.length;i++){ const ch=text[i], nx=text[i+1]; if(ch=='\"'){ if(q&&nx=='\"'){f+='\"'; i++;} else { q=!q; } continue; } if(ch=='\\n'&&!q){ push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row); row=[]; continue; } if(ch==d&&!q){ push(); continue; } f+=ch; }
+  push(); if(row.some(x=>x!=='') && !String(row[0]||'').trim().startsWith('#')) rows.push(row); return rows;
 }
-
 function normalize(rows){
-  if(!rows.length) return [];
-  const hdr = rows[0].map(s=>s.trim().toLowerCase());
-  const hasHdr = hdr.some(h => /img|title|tugma|bo'lim|bolim|plan|reja/.test(h));
-  const start = hasHdr ? 1 : 0;
-
-  const idx = (...names)=> {
-    const cand = names.map(n=>n.toLowerCase());
-    for(const n of cand){
-      const i = hdr.indexOf(n);
-      if(i>-1) return i;
-    }
-    return -1;
-  };
-
-  const iImg = idx('img url','img','image','rasm');
-  const iTitle = idx('title','sarlavha','nomi');
-  const iMeta = idx('meta','ta\'rif','description','desc');
-  const iBtn = idx('tugma nomi','button','btn');
-  const iHref = idx('tugma linki','link','href','url');
-  const iSec = idx("bo'lim",'bolim','section');
-  const iF1 = idx('filter1','filter 1','tag','mavzu');
-  const iF2 = idx('filter2','filter 2','tag2','sinf');
-  const iPlan = idx('plan','reja','type');
-
-  const out=[];
-  for(let r=start;r<rows.length;r++){
-    const row = rows[r]; if(!row || row.every(v=>String(v||'').trim()==='')) continue;
-    out.push({
-      img: get(row,iImg), title: get(row,iTitle), meta: get(row,iMeta),
-      btn: get(row,iBtn) || 'Ochish', href: get(row,iHref),
-      section: get(row,iSec) || 'Boshqa', f1: get(row,iF1), f2: get(row,iF2),
-      plan: (get(row,iPlan) || 'FREE').toUpperCase()
-    });
-  }
-  return out;
-
-  function get(row, i){ return i>=0 ? (row[i]||'').trim() : ''; }
+  if(!rows.length) return []; const hdr=rows[0].map(s=>String(s||'').trim().toLowerCase());
+  const getIndex=(...ns)=>{ns=ns.map(n=>n.toLowerCase()); for(const n of ns){const i=hdr.indexOf(n); if(i>-1) return i;} return -1;}
+  const iImg=getIndex('img url','img','image','rasm'), iTitle=getIndex('title','sarlavha','nomi'), iMeta=getIndex('meta',"ta'rif",'description','desc'),
+        iBtn=getIndex('tugma nomi','button','btn'), iHref=getIndex('tugma linki','link','href','url'), iSec=getIndex("bo'lim",'bolim','section'),
+        iF1=getIndex('filter1','filter 1','tag','mavzu'), iF2=getIndex('filter2','filter 2','tag2','sinf'), iPlan=getIndex('plan','reja','type'), iPrice=getIndex('narx','price','sum',"so'm");
+  const out=[]; for(let r=1;r<rows.length;r++){ const row=rows[r]; if(!row||row.every(v=>String(v||'').trim()==='')) continue;
+    out.push({img:g(row,iImg), title:g(row,iTitle), meta:g(row,iMeta), btn:g(row,iBtn)||'Boshlash', href:g(row,iHref),
+      section:g(row,iSec)||'Boshqa', f1:g(row,iF1), f2:g(row,iF2), plan:(g(row,iPlan)||'FREE').toUpperCase(), price:Number(g(row,iPrice)||0)});
+  } return out; function g(row,i){return i>=0? String(row[i]||'').trim():'';}
 }
-
-function esc(s){ return String(s||'').replace(/[&<>\"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+function esc(s){return String(s||'').replace(/[&<>\\\"']/g,c=>({\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",\"\\\"\":\"&quot;\",\"'\":\"&#39;\"}[c]));}
