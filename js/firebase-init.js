@@ -1,4 +1,4 @@
-// Firebase init (modular v10) — fill your config if needed
+// Firebase init (modular v10)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut
@@ -7,7 +7,6 @@ import {
   getFirestore, doc, getDoc, setDoc, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// You may replace with your own config (user shared xplusy-760fa; kept here for convenience)
 const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
