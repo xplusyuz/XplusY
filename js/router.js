@@ -23,7 +23,17 @@ async function loadPage(page) {
   }
 
   // Page-specific JS (lazy)
-  if (page === "tests") import("./tests.js");
+  if (page === "tests") {
+    // CSS ni ulab qo'yamiz (bir marta)
+    if (!document.querySelector('link[href*="css/tests.css"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "css/tests.css?v=4";      // cache-bust
+      document.head.appendChild(link);
+    }
+    // MUHIM: init() ni chaqirish
+    import("./tests.js?v=4").then(m => m.default.init());
+  }
   if (page === "live") import("./live-csv.js");
   if (page === "simulator") import("./simulator-csv.js");
   if (page === "leaderboard") import("./leaderboard.js");
@@ -32,7 +42,7 @@ async function loadPage(page) {
 }
 
 function router() {
-  const hash = location.hash.replace("#", "") || "home";
+  const hash = (location.hash.replace("#", "") || "home");
   loadPage(hash);
 }
 
@@ -42,10 +52,3 @@ window.addEventListener("DOMContentLoaded", () => {
   initUX && initUX();
   router();
 });
-case '#/tests': {
-  await loadPartial('partials/tests.html');
-  await ensureCSS('css/tests.css');         // sahifa CSS
-  const mod = await import('js/tests.js');  // diqqat: nisbiy yo‘l (boshi / emas)
-  mod.default.init();
-  break;
-}
