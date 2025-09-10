@@ -1,4 +1,4 @@
-// js/tests.js (v4 - CSV-driven facets)
+// js/tests.js (v7 - icon pills, Inter font, 6/8-col index)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -26,13 +26,16 @@ if (!getApps().length) initializeApp(fbConfig);
 const auth = getAuth();
 const db   = getFirestore();
 
-let $ = (sel)=>document.querySelector(sel);
+let $=(s)=>document.querySelector(s);
 let el;
 let currentUser=null, userDocRef=null, userData=null;
 let manifestRows=[], catalogItems=[], viewItems=[];
-let test=null, answers=[], idx=0, deadline=0, ticker=null;
+let test=null, answers=[], idx=0, ticker=null;
 
-// ===== Utils =====
+// Filters
+const FACET_LABELS = ["Bo'lim","tip1","tip2"];
+const FACET_ALIASES = { "Bo'lim": ["Bo'lim","Bo‘lim","bolim","Bolim","bo'lim"] };
+
 const fmtSom = v => new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
 const fmtMinSec = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
 
@@ -53,88 +56,62 @@ function parseCSV(text){
   if(cell!=='' || row.length){row.push(cell.trim()); rows.push(row);}
   return rows.filter(r=>r.length && r.some(v=>v!==''));
 }
-function rowsToObjects(rows){ const header = rows[0].map(h=>h.trim()); return rows.slice(1).map(r=>{const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o;}); }
-function show(which){
-  el.catalog.classList.add("hidden");
-  el.run.classList.add("hidden");
-  el.result.classList.add("hidden");
-  if(which==="catalog") el.catalog.classList.remove("hidden");
-  if(which==="run") el.run.classList.remove("hidden");
-  if(which==="result") el.result.classList.remove("hidden");
-  if(which==="run" && window.MathJax?.typesetPromise) window.MathJax.typesetPromise();
+function normalizeKey(key){
+  const k = key.trim();
+  if (FACET_ALIASES["Bo'lim"].some(x=>x.toLowerCase()===k.toLowerCase())) return "Bo'lim";
+  if (k.toLowerCase()==="tip1") return "tip1";
+  if (k.toLowerCase()==="tip2") return "tip2";
+  return k;
 }
-function progress(){ el.progress.style.width = ((idx)/(test.questions.length))*100 + "%"; }
-
-// ===== Manifest (CSV-driven facets) =====
-let facetKeys=[];             // e.g., ['fan','daraja','mavzu']
-let facetState={};            // selected values for each key
 
 async function loadManifest(){
   const u = new URL(location.href);
   const manifestPath = u.searchParams.get('manifest') || "csv/tests.csv";
   let res = await fetch(manifestPath);
-  if(!res.ok){
-    res = await fetch("tests.csv"); // fallback
-    if(!res.ok) throw new Error("csv/tests.csv va tests.csv topilmadi");
-  }
+  if(!res.ok){ res = await fetch("tests.csv"); if(!res.ok) throw new Error("csv/tests.csv va tests.csv topilmadi"); }
   const rows = parseCSV(await res.text());
-  const objs = rowsToObjects(rows); // each row is object with header keys
-  // Determine facet keys as all columns except 'file'
-  const header = rows[0].map(h=>h.trim());
-  facetKeys = header.filter(k=>k.toLowerCase()!=='file');
-  manifestRows = objs.map(o=>o);
-  // init facet state as 'all'
-  facetState = Object.fromEntries(facetKeys.map(k=>[k,'all']));
+  const header = rows[0].map(h=>normalizeKey(h));
+  manifestRows = rows.slice(1).map(r=>{ const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o; });
 }
 async function hydrateCatalogFromEachCSV(){
   catalogItems = [];
   for(const m of manifestRows){
-    const file = m.file?.trim(); if(!file) continue;
+    const file = (m.file||m.File||m.FILE||"").trim();
+    if(!file) continue;
     try{
       const res = await fetch(file);
       if(!res.ok) continue;
       const rows = parseCSV(await res.text());
       if(!rows.length) continue;
       const [card_img, card_title, card_meta, price_som, time_min] = rows[0];
-      // store facets = all keys except file
-      const facets = Object.fromEntries(Object.entries(m).filter(([k])=>k.toLowerCase()!=='file'));
-      catalogItems.push({file, card_img, card_title, card_meta, price_som, time_min, facets});
+      catalogItems.push({
+        file, card_img, card_title, card_meta, price_som, time_min,
+        "Bo'lim": m["Bo'lim"]||"", tip1: m["tip1"]||"", tip2: m["tip2"]||""
+      });
     }catch(e){ console.warn("CSV o‘qishda xato", file, e); }
   }
-  buildFacetUI(); // build selects from facetKeys + unique values
+  // fill selects with unique values
+  const uniq = (key)=> Array.from(new Set(catalogItems.map(x=>x[key]).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  fillSelect(el.fBolim, uniq("Bo'lim"));
+  fillSelect(el.fTip1, uniq("tip1"));
+  fillSelect(el.fTip2, uniq("tip2"));
   applyFilters();
 }
-
-function buildFacetUI(){
-  const box = el.facetBar;
-  box.innerHTML = "";
-  facetKeys.forEach(key=>{
-    // collect unique values
-    const values = Array.from(new Set(catalogItems.map(it=>String(it.facets[key]||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
-    if(values.length===0) return;
-    const w = document.createElement('label'); w.style.display='flex'; w.style.flexDirection='column'; w.style.gap='4px';
-    const nice = key.replace(/[_-]+/g,' ').replace(/\b\w/g, s => s.toUpperCase());
-    const sel = document.createElement('select'); sel.className='eh-input eh-select'; sel.dataset.key=key;
-    sel.innerHTML = `<option value="all">${nice}: barchasi</option>` + values.map(v=>`<option value="${v}">${v}</option>`).join('');
-    sel.onchange = (e)=>{ facetState[key] = e.target.value; applyFilters(); };
-    w.append(sel);
-    box.append(w);
-  });
+function fillSelect(sel, values){
+  sel.innerHTML = `<option value="all">Barchasi</option>` + values.map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
-// ===== Filtering =====
+let facetSel = { "Bo'lim":"all", tip1:"all", tip2:"all" };
 function applyFilters(){
-  const q = (el.search.value||'').toLowerCase();
   viewItems = catalogItems.filter(it=>{
-    const okQ = !q || (it.card_title?.toLowerCase().includes(q) || it.card_meta?.toLowerCase().includes(q));
-    // every facet must match if selected
-    const okF = facetKeys.every(k=> facetState[k]==='all' || String(it.facets[k]||'') === facetState[k]);
-    return okQ && okF;
+    const okB = facetSel["Bo'lim"]==='all' || it["Bo'lim"]===facetSel["Bo'lim"];
+    const ok1 = facetSel["tip1"]==='all' || it["tip1"]===facetSel["tip1"];
+    const ok2 = facetSel["tip2"]==='all' || it["tip2"]===facetSel["tip2"];
+    return okB && ok1 && ok2;
   });
   renderCatalog(viewItems);
 }
 
-// ===== Catalog render =====
 function renderCatalog(items){
   el.cards.innerHTML="";
   if(!items.length){
@@ -142,16 +119,16 @@ function renderCatalog(items){
     return;
   }
   items.forEach(item=>{
-    const card=document.createElement('div'); card.className='eh-card';
+    const card=document.createElement('div'); card.className='eh-card fade-enter';
     const img=document.createElement('img'); img.src=item.card_img||''; img.alt='banner';
     const body=document.createElement('div'); body.className='body';
     const title=document.createElement('div'); title.className='eh-title-small'; title.textContent=item.card_title||'Nomsiz test';
     const meta=document.createElement('div'); meta.className='eh-meta'; meta.textContent=item.card_meta||'';
     const row1=document.createElement('div'); row1.className='eh-row';
-    const price=document.createElement('div'); price.className='eh-pill'; price.textContent=fmtSom(+item.price_som||0);
-    const time=document.createElement('div'); time.className='eh-pill'; time.textContent=(+item.time_min||0)+' daq';
+    const price=document.createElement('div'); price.className='eh-pill pill'; price.innerHTML=`<span class="ico">💰</span>${fmtSom(+item.price_som||0)}`;
+    const time=document.createElement('div'); time.className='eh-pill pill'; time.innerHTML=`<span class="ico">⏱️</span>${(+item.time_min||0)} daq`;
     const row2=document.createElement('div'); row2.className='eh-row';
-    const open=document.createElement('a'); open.className='eh-btn'; open.textContent='Ko‘rish';
+    const open=document.createElement('a'); open.className='eh-btn ghost'; open.textContent='Ko‘rish';
     open.href = `#/tests?src=${encodeURIComponent(item.file)}`;
     const start=document.createElement('button'); start.className='eh-btn primary'; start.textContent='Boshlash';
     start.onclick = ()=>startFlow(item);
@@ -161,7 +138,6 @@ function renderCatalog(items){
   });
 }
 
-// ===== Test parse and flow =====
 function parseTestCSV(text){
   const rows = parseCSV(text);
   if(rows.length<3) throw new Error('CSV format noto‘g‘ri: kamida 3 qator');
@@ -181,34 +157,53 @@ function parseTestCSV(text){
   return { title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions };
 }
 
+// FS
+function buildIndexPanel(){
+  const box = el.index;
+  box.innerHTML = "";
+  for(let i=0;i<test.questions.length;i++){
+    const b=document.createElement('button'); b.className='dot'; b.textContent=(i+1);
+    const selected = answers[i];
+    b.classList.add(selected ? 'answered':'empty');
+    if(i===idx) b.classList.add('current');
+    b.title = selected ? `#${i+1}: belgilangan` : `#${i+1}: bo'sh`;
+    b.onclick = ()=>{ idx=i; renderQuestion(); buildIndexPanel(); };
+    box.append(b);
+  }
+}
+function updateProgress(){
+  const pct = (idx)/(test.questions.length) * 100;
+  el.progress.style.width = pct + "%";
+  el.count.textContent = `${idx+1}/${test.questions.length}`;
+}
+
 function renderQuestion(){
   const q = test.questions[idx];
-  el.title.textContent = `${test.title} — ${idx+1}/${test.questions.length}`;
-  el.qimg.classList.add('hidden');
+  $("#testsHeaderTitle").textContent = test.title;
   const imgSrc = q.q_img || test.card_img || "";
+  el.qimg.classList.add('hidden');
   if(imgSrc){ el.qimg.src=imgSrc; el.qimg.classList.remove('hidden'); }
   el.qtext.innerHTML = q.q_text || '—';
   el.choices.innerHTML='';
-  ['a','b','c','d'].forEach(letter=>{
-    const wrap=document.createElement('label'); wrap.className='eh-choice';
+  ['a','b','c','d'].forEach((letter,k)=>{
+    const wrap=document.createElement('label'); wrap.className='eh-choice fade-enter';
     const input=document.createElement('input'); input.type='radio'; input.name='ans'; input.value=letter;
     input.checked = answers[idx]===letter;
-    input.onchange = ()=>{ answers[idx]=letter; };
+    input.onchange = ()=>{ answers[idx]=letter; buildIndexPanel(); };
     const span=document.createElement('div'); span.innerHTML = `<b>${letter.toUpperCase()}.</b> ` + (q.choices[letter]||'');
     wrap.append(input, span); el.choices.append(wrap);
   });
   el.prev.disabled = idx===0;
   el.next.disabled = idx===test.questions.length-1;
-  progress();
+  updateProgress();
   window.MathJax?.typesetPromise?.([el.qtext, el.choices]);
 }
 
 function startTimer(){
   clearInterval(ticker);
-  const totalSec = test.time_min*60;
-  deadline = Date.now() + totalSec*1000;
+  const end = Date.now() + (test.time_min*60*1000);
   ticker=setInterval(()=>{
-    const left = Math.max(0, Math.floor((deadline-Date.now())/1000));
+    const left = Math.max(0, Math.floor((end-Date.now())/1000));
     el.timer.textContent = fmtMinSec(left);
     if(left<=0){ clearInterval(ticker); finish(); }
   }, 250);
@@ -227,11 +222,7 @@ async function startFlow(item){
     const res = await fetch(item.file);
     if(!res.ok) throw new Error('Test CSV topilmadi');
     test = parseTestCSV(await res.text());
-
-    if(!currentUser){
-      alert('Kirish talab qilinadi. Iltimos, tizimga kiring.');
-      return;
-    }
+    if(!currentUser){ alert('Kirish talab qilinadi. Iltimos, tizimga kiring.'); return; }
     const price = test.price_som || +item.price_som || 0;
     const bal = +userData?.balance || 0;
     const enough = bal >= price;
@@ -259,8 +250,13 @@ async function startFlow(item){
         tx.update(userDocRef, { balance: balance - price, lastPurchase: serverTimestamp() });
       });
       if(userData){ userData.balance = (+userData.balance||0) - price; updateBadgesUI(); }
+
       answers = Array(test.questions.length).fill(null);
-      idx=0; show('run'); renderQuestion(); startTimer();
+      idx=0;
+      el.fs.showModal();
+      renderQuestion();
+      buildIndexPanel();
+      startTimer();
     };
     el.cancelPay.addEventListener('click', onCancel, {once:true});
     el.okPay.addEventListener('click', onOk, {once:true});
@@ -268,6 +264,7 @@ async function startFlow(item){
 }
 
 function finish(){
+  clearInterval(ticker);
   let correct=0, wrong=0, empty=0, olmosGain=0, olmosLoss=0;
   const rows=[["#", "Savol", "Sizning javob", "To‘g‘ri", "Olmos"]];
   test.questions.forEach((q,i)=>{
@@ -285,23 +282,47 @@ function finish(){
   `;
   const table = rows.map((r,ri)=> ri? `<tr><td>${r.join("</td><td>")}</td></tr>` : `<tr><th>${r.join("</th><th>")}</th></tr>`).join("");
   $("#testsDetail").innerHTML = table;
-  show("result");
-  clearInterval(ticker);
-  if(currentUser && net){ updateDoc(userDocRef, { gems: increment(net) }).then(()=>{
+  el.result.classList.remove('hidden');
+  if(currentUser && net){
+    updateDoc(userDocRef, { gems: increment(net) }).then(()=>{
       userData && (userData.gems = (+userData.gems||0) + net, updateBadgesUI());
     }).catch(()=>{});
   }
 }
 
-// ===== Events & Auth =====
-function bindEvents(){
-  el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); } };
-  el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); } };
-  el.finish.onclick = ()=>{ if(confirm('Testni yakunlaysizmi?')) finish(); };
-  el.backToCatalog.onclick = ()=>{ clearInterval(ticker); show("catalog"); };
-  el.backBtn.onclick = ()=> show("catalog");
+function closeFS(){
+  clearInterval(ticker);
+  el.fs.close();
+  el.result.classList.add('hidden');
+}
 
-  el.search.oninput = (e)=> applyFilters();
+function kbdHandler(e){
+  if(!el.fs.open) return;
+  if(e.ctrlKey && e.key.toLowerCase()==='enter'){ e.preventDefault(); finish(); return; }
+  if(e.key==='Enter'){ e.preventDefault(); if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } return; }
+  if(e.key==='ArrowLeft'){ e.preventDefault(); if(idx>0){ idx--; renderQuestion(); buildIndexPanel(); } return; }
+  if(e.key==='ArrowRight'){ e.preventDefault(); if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } return; }
+  const map={'1':'a','2':'b','3':'c','4':'d','a':'a','b':'b','c':'c','d':'d','A':'a','B':'b','C':'c','D':'d'};
+  if(map[e.key]){
+    e.preventDefault();
+    answers[idx] = map[e.key];
+    renderQuestion(); buildIndexPanel();
+  }
+}
+
+function bindEvents(){
+  el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); buildIndexPanel(); } };
+  el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } };
+  el.finish.onclick = ()=>{ if(confirm('Testni yakunlaysizmi?')) finish(); };
+  el.backBtn.onclick = ()=>{ closeFS(); };
+  el.fs.addEventListener('cancel', (e)=>{ e.preventDefault(); });
+  el.fsClose.onclick = ()=>{ if(confirm('Chiqishni tasdiqlaysizmi?')) closeFS(); };
+
+  el.fBolim.onchange = (e)=>{ facetSel["Bo'lim"]=e.target.value; applyFilters(); };
+  el.fTip1.onchange = (e)=>{ facetSel["tip1"]=e.target.value; applyFilters(); };
+  el.fTip2.onchange = (e)=>{ facetSel["tip2"]=e.target.value; applyFilters(); };
+
+  window.addEventListener('keydown', kbdHandler);
 }
 
 function watchAuth(){
@@ -315,45 +336,47 @@ function watchAuth(){
       userDocRef = null;
       userData = null;
     }
-    updateBadgesUI();
+    if(currentUser){ el.badge.classList.add('hidden'); } else { el.badge.classList.remove('hidden'); }
   });
 }
 
-// ===== Init =====
 async function init(){
   el = {
     page: $("#tests-page"),
     badge: $("#testsUserBadge"),
     catalog: $("#testsCatalog"),
-    run: $("#testsRun"),
-    result: $("#testsResult"),
     dirNote: $("#testsDirNote"),
     cards: $("#testsCards"),
-    title: $("#testsTitle"),
-    qimg: $("#testsQimg"),
-    qtext: $("#testsQtext"),
-    choices: $("#testsChoices"),
-    timer: $("#testsTimer"),
-    progress: $("#testsProgress"),
-    prev: $("#testsPrev"),
-    next: $("#testsNext"),
-    finish: $("#testsFinish"),
-    backToCatalog: $("#testsBackToCatalog"),
-    backBtn: $("#testsBackBtn"),
     confirmDlg: $("#testsConfirm"),
     confirmBody: $("#testsConfirmBody"),
     cancelPay: $("#testsCancelPay"),
     okPay: $("#testsOkPay"),
-    search: $("#testsSearch"),
-    facetBar: $("#testsDynamicFilters"),
+    fs: $("#testsFS"),
+    fsClose: $("#fsClose"),
+    headerTitle: $("#testsHeaderTitle"),
+    count: $("#testsCount"),
+    progress: $("#testsProgress"),
+    timer: $("#testsTimer"),
+    index: $("#testsIndex"),
+    qimg: $("#testsQimg"),
+    qtext: $("#testsQtext"),
+    choices: $("#testsChoices"),
+    prev: $("#testsPrev"),
+    next: $("#testsNext"),
+    finish: $("#testsFinish"),
+    result: $("#testsResult"),
+    summary: $("#testsSummary"),
+    detail: $("#testsDetail"),
+    backBtn: $("#testsBackBtn"),
+    fBolim: $("#facetBolim"),
+    fTip1: $("#facetTip1"),
+    fTip2: $("#facetTip2"),
   };
   bindEvents();
   watchAuth();
-  const url = new URL(location.href.replace('#/tests',''));
-  const directSrc = url.searchParams.get('src');
   try{
-    if(directSrc){ await startFlow({file: directSrc}); }
-    else { await loadManifest(); await hydrateCatalogFromEachCSV(); show("catalog"); }
+    await loadManifest();
+    await hydrateCatalogFromEachCSV();
   }catch(e){
     el.dirNote.classList.add('danger');
     el.dirNote.innerHTML = "Xato: "+e.message;
