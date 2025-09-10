@@ -1,4 +1,4 @@
-// js/tests.js (v7 - icon pills, Inter font, 6/8-col index)
+// js/tests.js (v8 - 5-per-row index, random choices, no ABC labels)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -90,7 +90,6 @@ async function hydrateCatalogFromEachCSV(){
       });
     }catch(e){ console.warn("CSV o‘qishda xato", file, e); }
   }
-  // fill selects with unique values
   const uniq = (key)=> Array.from(new Set(catalogItems.map(x=>x[key]).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
   fillSelect(el.fBolim, uniq("Bo'lim"));
   fillSelect(el.fTip1, uniq("tip1"));
@@ -152,12 +151,20 @@ function parseTestCSV(text){
     const correct = (get(r,'correct')||'a').toLowerCase();
     const olmos = parseInt(get(r,'olmos')||'0',10)||0;
     const penalty = parseFloat(get(r,'penalty_olmos')||get(r,'-olmos')||'0')||0;
-    return {q_img, q_text, choices:{a,b,c,d}, correct, olmos, penalty};
+    // store choices dictionary and the correct key
+    const choices = {a,b,c,d};
+    return {q_img, q_text, choices, correct, olmos, penalty, order:null};
   });
   return { title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions };
 }
 
-// FS
+// Random helper
+function shuffle(arr){
+  const a=arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
 function buildIndexPanel(){
   const box = el.index;
   box.innerHTML = "";
@@ -180,17 +187,24 @@ function updateProgress(){
 function renderQuestion(){
   const q = test.questions[idx];
   $("#testsHeaderTitle").textContent = test.title;
+  // init stable random order once
+  if(!q.order){
+    const keys = Object.entries(q.choices).filter(([k,v])=>v!=null && v!=="").map(([k])=>k);
+    q.order = shuffle(keys); // e.g., ['c','a','b','d']
+  }
+  // image
   const imgSrc = q.q_img || test.card_img || "";
   el.qimg.classList.add('hidden');
   if(imgSrc){ el.qimg.src=imgSrc; el.qimg.classList.remove('hidden'); }
+  // text + randomized choices (without A/B/C/D labels)
   el.qtext.innerHTML = q.q_text || '—';
   el.choices.innerHTML='';
-  ['a','b','c','d'].forEach((letter,k)=>{
+  q.order.forEach(key=>{
     const wrap=document.createElement('label'); wrap.className='eh-choice fade-enter';
-    const input=document.createElement('input'); input.type='radio'; input.name='ans'; input.value=letter;
-    input.checked = answers[idx]===letter;
-    input.onchange = ()=>{ answers[idx]=letter; buildIndexPanel(); };
-    const span=document.createElement('div'); span.innerHTML = `<b>${letter.toUpperCase()}.</b> ` + (q.choices[letter]||'');
+    const input=document.createElement('input'); input.type='radio'; input.name='ans'; input.value=key;
+    input.checked = answers[idx]===key;
+    input.onchange = ()=>{ answers[idx]=key; buildIndexPanel(); };
+    const span=document.createElement('div'); span.innerHTML = q.choices[key]||'';
     wrap.append(input, span); el.choices.append(wrap);
   });
   el.prev.disabled = idx===0;
@@ -268,10 +282,10 @@ function finish(){
   let correct=0, wrong=0, empty=0, olmosGain=0, olmosLoss=0;
   const rows=[["#", "Savol", "Sizning javob", "To‘g‘ri", "Olmos"]];
   test.questions.forEach((q,i)=>{
-    const ans = answers[i];
-    if(!ans){empty++; rows.push([i+1, '—', '—', q.correct.toUpperCase(), 0]); return;}
-    if(ans===q.correct){ correct++; olmosGain += q.olmos||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), "+"+(q.olmos||0)]); }
-    else { wrong++; olmosLoss += q.penalty||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), q.penalty?("-"+q.penalty):0]); }
+    const ansKey = answers[i];
+    if(!ansKey){empty++; rows.push([i+1, '—', '—', q.correct.toUpperCase(), 0]); return;}
+    if(ansKey===q.correct){ correct++; olmosGain += q.olmos||0; rows.push([i+1,'—', ansKey.toUpperCase(), q.correct.toUpperCase(), "+"+(q.olmos||0)]); }
+    else { wrong++; olmosLoss += q.penalty||0; rows.push([i+1,'—', ansKey.toUpperCase(), q.correct.toUpperCase(), q.penalty?("-"+q.penalty):0]); }
   });
   const net = (olmosGain-olmosLoss) | 0;
   $("#testsSummary").innerHTML = `
@@ -303,11 +317,7 @@ function kbdHandler(e){
   if(e.key==='ArrowLeft'){ e.preventDefault(); if(idx>0){ idx--; renderQuestion(); buildIndexPanel(); } return; }
   if(e.key==='ArrowRight'){ e.preventDefault(); if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } return; }
   const map={'1':'a','2':'b','3':'c','4':'d','a':'a','b':'b','c':'c','d':'d','A':'a','B':'b','C':'c','D':'d'};
-  if(map[e.key]){
-    e.preventDefault();
-    answers[idx] = map[e.key];
-    renderQuestion(); buildIndexPanel();
-  }
+  if(map[e.key]){ e.preventDefault(); answers[idx] = map[e.key]; renderQuestion(); buildIndexPanel(); }
 }
 
 function bindEvents(){
