@@ -22,104 +22,25 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 /* =====================
- *  Theme (Dark/Light/Auto)
- * =====================
- * Modes:
- *  - 'dark'  : force dark
- *  - 'light' : force light
- *  - 'auto'  : follow system (default)
- * Button with id #btnTheme cycles: dark → light → auto
- */
-const THEME_KEY = 'mc_theme';
-let mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
-
-function systemIsLight(){ return mediaQuery.matches; }
-function getStoredTheme(){
-  const saved = localStorage.getItem(THEME_KEY);
-  return (saved === 'dark' || saved === 'light' || saved === 'auto') ? saved : null;
+ *  Theme: FORCE LIGHT ONLY
+ * ===================== */
+function applyLight(){
+  // Force UA widgets + colors to light
+  document.documentElement.style.colorScheme = 'light';
+  // Keep compatibility with any old styles relying on .theme-light
+  document.body.classList.add('theme-light');
+  // Remove any stored theme state from older builds
+  try { localStorage.removeItem('mc_theme'); } catch {}
+  // If there was a theme toggle button in markup, hide it gracefully
+  const btn = document.querySelector('#btnTheme');
+  if (btn){ btn.style.display = 'none'; }
 }
-function iconFor(mode){
-  if(mode === 'light') return '☀️';
-  if(mode === 'dark') return '🌙';
-  return '🖥️'; // auto
-}
-function labelFor(mode){
-  if(mode === 'light') return 'Kun (Light)';
-  if(mode === 'dark') return 'Tun (Dark)';
-  return 'Tizim (Auto)';
-}
-function applyColorScheme(light){
-  // Helps form controls and UA styling match the theme
-  document.documentElement.style.colorScheme = light ? 'light' : 'dark';
-}
-function applyThemeClass(light){
-  // Our CSS uses .theme-light to flip tokens
-  document.body.classList.toggle('theme-light', !!light);
-}
-function setTheme(mode){
-  // Resolve final appearance
-  const effectiveLight = (mode === 'light') ? true : (mode === 'dark') ? false : systemIsLight();
-  applyThemeClass(effectiveLight);
-  applyColorScheme(effectiveLight);
-  // Persist + button UI
-  localStorage.setItem(THEME_KEY, mode);
-  const t = document.querySelector('#btnTheme');
-  if(t){
-    t.textContent = iconFor(mode);
-    t.setAttribute('title', labelFor(mode));
-    t.setAttribute('aria-label', labelFor(mode));
-  }
-  document.body.dataset.theme = mode; // possible use in CSS
-}
-
-function currentTheme(){ return getStoredTheme() ?? 'auto'; }
-function cycleTheme(){
-  const order = ['dark', 'light', 'auto'];
-  const next = order[(order.indexOf(currentTheme()) + 1) % order.length];
-  setTheme(next);
-}
-
-function bindThemeListeners(){
-  // Button click cycles between modes
-  document.addEventListener('click', (e)=>{
-    if(e.target && e.target.id === 'btnTheme'){ cycleTheme(); }
-  });
-  // Keyboard 't' toggles as a shortcut
-  document.addEventListener('keydown', (e)=>{
-    if(e.key.toLowerCase() === 't' && !e.altKey && !e.metaKey && !e.ctrlKey){
-      cycleTheme();
-    }
-  });
-  // Keep windows/tabs in sync
-  window.addEventListener('storage', (e)=>{
-    if(e.key === THEME_KEY && e.newValue){
-      setTheme(e.newValue);
-    }
-  });
-  // React to system preference when in auto
-  mediaQuery.addEventListener('change', ()=>{
-    if(currentTheme() === 'auto'){ setTheme('auto'); }
-  });
-}
-
-function applyReducedMotion(){
-  const rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.body.classList.toggle('reduced-motion', rm);
-}
-
-/* Public: initialize theme on page load */
-export function initTheme(){
-  const initial = getStoredTheme() ?? 'auto';
-  setTheme(initial);
-  bindThemeListeners();
-  applyReducedMotion();
-}
+export function initTheme(){ applyLight(); }
 
 /* =====================
- *  Bottom bar (kept hidden or removed for cleanliness)
+ *  Bottom bar cleanup
  * ===================== */
 export function ensureBottomBar(){
-  // If any legacy .bottom-bar elements exist, hide them to avoid UI conflicts.
   document.querySelectorAll('.bottom-bar').forEach(el => { el.style.display = 'none'; });
 }
 
@@ -173,7 +94,6 @@ export function attachAuthUI({ requireSignIn = true } = {}){
               </div>
             </div>`;
           document.body.appendChild(o);
-          // Close on backdrop click / Escape
           o.addEventListener('click', (e)=>{ if(e.target===o) o.remove(); });
           document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ o?.remove(); }});
           o.querySelector('#overlaySignIn').addEventListener('click', async ()=>{
@@ -213,6 +133,5 @@ export function attachAuthUI({ requireSignIn = true } = {}){
 export function initUX(){
   initTheme();
   ensureBottomBar();
-  // Mark JS-ready to allow CSS progressive enhancement hooks if needed
   document.documentElement.classList.add('js-ready');
 }
