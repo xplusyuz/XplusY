@@ -1,4 +1,4 @@
-// js/tests.js (v8.2 + simple Telegram send)
+// js/tests.js (v8.2 + simple Telegram + modern result panel)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -13,6 +13,7 @@ import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, 
   }
 })();
 
+// --- Firebase ---
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -42,19 +43,32 @@ function sendTG(text) {
   } catch (_) { /* jim */ }
 }
 
-let $=(s)=>document.querySelector(s);
+// ---- Helpers & state ----
+const $=(s)=>document.querySelector(s);
 let el;
 let currentUser=null, userDocRef=null, userData=null;
 let manifestRows=[], catalogItems=[], viewItems=[];
-let test=null, answers=[], idx=0, ticker=null, startAt=null; // <-- startAt qo‘shildi
+let test=null, answers=[], idx=0, ticker=null, startAt=null;
 
 // Filters
-const FACET_LABELS = ["Bo'lim","tip1","tip2"];
 const FACET_ALIASES = { "Bo'lim": ["Bo'lim","Bo‘lim","bolim","Bolim","bo'lim"] };
-
-const fmtSom = v => new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
+const fmtSom    = (v)=> new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
 const fmtMinSec = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
 
+function getDisplayName(){
+  return (
+    userData?.fullName ||
+    userData?.name ||
+    currentUser?.displayName ||
+    (currentUser?.email ? currentUser.email.split('@')[0] : null) ||
+    "anon"
+  );
+}
+function getDisplayId(){
+  return userData?.numericId || currentUser?.uid || null;
+}
+
+// --- CSV ---
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
   for(let i=0;i<text.length;i++){
@@ -73,13 +87,14 @@ function parseCSV(text){
   return rows.filter(r=>r.length && r.some(v=>v!==''));
 }
 function normalizeKey(key){
-  const k = key.trim();
+  const k = (key||'').trim();
   if (FACET_ALIASES["Bo'lim"].some(x=>x.toLowerCase()===k.toLowerCase())) return "Bo'lim";
   if (k.toLowerCase()==="tip1") return "tip1";
   if (k.toLowerCase()==="tip2") return "tip2";
   return k;
 }
 
+// --- Manifest / Katalog ---
 async function loadManifest(){
   const u = new URL(location.href);
   const manifestPath = u.searchParams.get('manifest') || "csv/tests.csv";
@@ -126,7 +141,6 @@ function applyFilters(){
   });
   renderCatalog(viewItems);
 }
-
 function renderCatalog(items){
   el.cards.innerHTML="";
   if(!items.length){
@@ -153,6 +167,7 @@ function renderCatalog(items){
   });
 }
 
+// --- Test CSV ---
 function parseTestCSV(text){
   const rows = parseCSV(text);
   if(rows.length<3) throw new Error('CSV format noto‘g‘ri: kamida 3 qator');
@@ -173,12 +188,12 @@ function parseTestCSV(text){
   return { title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions };
 }
 
+// --- UI helpers ---
 function shuffle(arr){
   const a=arr.slice();
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-
 function buildIndexPanel(){
   const box = el.index;
   box.innerHTML = "";
@@ -197,20 +212,16 @@ function updateProgress(){
   el.progress.style.width = pct + "%";
   el.count.textContent = `${idx+1}/${test.questions.length}`;
 }
-
 function renderQuestion(){
   const q = test.questions[idx];
   el.headerTitle.textContent = test.title;
-  // init stable random order once
   if(!q.order){
     const keys = Object.entries(q.choices).filter(([k,v])=>v!=null && v!=="").map(([k])=>k);
-    q.order = shuffle(keys);
+    q.order = shuffle(keys); // random variants (A/B/C/D labelsiz)
   }
-  // image
   const imgSrc = q.q_img || test.card_img || "";
   el.qimg.classList.add('hidden');
   if(imgSrc){ el.qimg.src=imgSrc; el.qimg.classList.remove('hidden'); }
-  // text + randomized choices (no A/B/C/D labels)
   el.qtext.innerHTML = q.q_text || '—';
   el.choices.innerHTML='';
   q.order.forEach(key=>{
@@ -226,18 +237,16 @@ function renderQuestion(){
   updateProgress();
   window.MathJax?.typesetPromise?.([el.qtext, el.choices]);
 }
-
 function startTimer(){
   clearInterval(ticker);
   const end = Date.now() + (test.time_min*60*1000);
-  startAt = Date.now(); // <-- vaqtni boshlash nuqtasi
+  startAt = Date.now();
   ticker=setInterval(()=>{
     const left = Math.max(0, Math.floor((end-Date.now())/1000));
     el.timer.textContent = fmtMinSec(left);
     if(left<=0){ clearInterval(ticker); finish(); }
   }, 250);
 }
-
 function updateBadgesUI(){
   if(currentUser){ el.badge?.classList.add('hidden'); } else { el.badge?.classList.remove('hidden'); }
   if(userData){
@@ -246,6 +255,7 @@ function updateBadgesUI(){
   }
 }
 
+// --- Flow ---
 async function startFlow(item){
   try{
     const res = await fetch(item.file);
@@ -299,21 +309,23 @@ async function startFlow(item){
 function finish(){
   clearInterval(ticker);
   let correct=0, wrong=0, empty=0, olmosGain=0, olmosLoss=0;
-  const rows=[["#", "Savol", "Sizning javob", "To‘g‘ri", "Olmos"]];
+  const n = test.questions.length;
+
+  const detail = []; // jadval uchun
   test.questions.forEach((q,i)=>{
     const ans = answers[i];
-    if(!ans){empty++; rows.push([i+1, '—', '—', q.correct.toUpperCase(), 0]); return;}
-    if(ans===q.correct){ correct++; olmosGain += q.olmos||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), "+"+(q.olmos||0)]); }
-    else { wrong++; olmosLoss += q.penalty||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), q.penalty?("-"+q.penalty):0]); }
+    if(!ans){ empty++; detail.push({n:i+1, your:'—', corr:q.correct.toUpperCase(), ok:false, empty:true, gem:0}); return; }
+    if(ans===q.correct){ correct++; olmosGain += q.olmos||0; detail.push({n:i+1, your:ans.toUpperCase(), corr:q.correct.toUpperCase(), ok:true, empty:false, gem:"+"+(q.olmos||0)}); }
+    else { wrong++; olmosLoss += q.penalty||0; detail.push({n:i+1, your:ans.toUpperCase(), corr:q.correct.toUpperCase(), ok:false, empty:false, gem: (q.penalty?("-"+q.penalty):"0")}); }
   });
   const net = (olmosGain-olmosLoss) | 0;
+  const usedSec = startAt ? Math.round((Date.now()-startAt)/1000) : 0;
 
-  /* --- Telegramga xabar (eng oddiy) --- */
+  /* --- Telegramga xabar: ism + ID bilan --- */
   try {
-    const n = test.questions.length;
-    const usedSec = startAt ? Math.round((Date.now()-startAt)/1000) : 0;
-    const who = (userData?.numericId) ? `ID:${userData.numericId}` :
-                (currentUser?.email || currentUser?.uid || "anon");
+    const name = getDisplayName();
+    const id   = getDisplayId();
+    const who  = id ? `${name} (ID:${id})` : name;
     const msg =
       `📊 ${test.title}\n` +
       `👤 ${who}\n` +
@@ -324,18 +336,53 @@ function finish(){
     sendTG(msg);
   } catch(e) { /* jim */ }
 
+  // --- Interaktiv zamonaviy natija paneli (markazda) ---
+  const pct = Math.round((correct/n)*100);
+
+  // testsSummary ichiga yangi karta joylaymiz (mavjud strukturani buzmaydi)
   $("#testsSummary").innerHTML = `
-    <div><b>${test.title}</b></div>
-    <div>To‘g‘ri: <b>${correct}</b> | Xato: <b>${wrong}</b> | Bo‘sh: <b>${empty}</b></div>
-    <div>Yig‘ilgan olmos: <b>+${olmosGain}</b>${olmosLoss?`, jarima: <b>-${olmosLoss}</b>`:''}</div>
-    <div class="${net>=0?'':'eh-note danger'}">Sof olmos: <b>${net>=0?'+':''}${net}</b></div>
+    <div class="res-center">
+      <div class="res-card">
+        <div class="ring" id="resRing" style="--p:${pct}">
+          <div class="ring-hole"></div>
+          <div class="ring-label" id="resRingLabel">${correct}/${n}</div>
+        </div>
+        <div class="res-title">${test.title}</div>
+        <div class="res-chips">
+          <span class="chip ok">To‘g‘ri: ${correct}</span>
+          <span class="chip bad">Xato: ${wrong}</span>
+          <span class="chip mute">Bo‘sh: ${empty}</span>
+          <span class="chip gem">Olmos: ${(net>=0?'+':'')}${net}</span>
+          <span class="chip time">Vaqt: ${fmtMinSec(usedSec)}</span>
+        </div>
+        <div class="res-actions">
+          <button class="eh-btn" id="btnShowAll">Barchasi</button>
+          <button class="eh-btn" id="btnShowWrong">Faqat xatolar</button>
+        </div>
+      </div>
+    </div>
   `;
-  const table = rows.map((r,ri)=> ri? `<tr><td>${r.join("</td><td>")}</td></tr>` : `<tr><th>${r.join("</th><th>")}</th></tr>`).join("");
-  $("#testsDetail").innerHTML = table;
+
+  // Jadvalni dinamik to‘ldirish
+  function renderDetail(onlyWrong){
+    const head = `<tr><th>#</th><th>Siz</th><th>To‘g‘ri</th><th>Olmos</th></tr>`;
+    const body = detail
+      .filter(r=> onlyWrong ? (!r.ok && !r.empty) : true)
+      .map(r=>`<tr><td>${r.n}</td><td>${r.your}</td><td>${r.corr}</td><td>${r.gem}</td></tr>`)
+      .join("");
+    $("#testsDetail").innerHTML = head + body;
+  }
+  renderDetail(false);
+  $("#btnShowAll").onclick   = ()=>renderDetail(false);
+  $("#btnShowWrong").onclick = ()=>renderDetail(true);
+
+  // FS reji
   el.headerTitle.textContent = 'Natija';
   el.count.textContent = '';
   el.fs.classList.add('show-result');
   el.result.classList.remove('hidden');
+
+  // Olmos balansi
   if(currentUser && net){
     updateDoc(userDocRef, { gems: increment(net) }).then(()=>{
       userData && (userData.gems = (+userData.gems||0) + net, updateBadgesUI());
@@ -350,6 +397,7 @@ function closeFS(){
   el.fs.close();
 }
 
+// --- Controls ---
 function kbdHandler(e){
   if(!el.fs.open) return;
   if(e.ctrlKey && e.key.toLowerCase()==='enter'){ e.preventDefault(); finish(); return; }
@@ -359,7 +407,6 @@ function kbdHandler(e){
   const map={'1':'a','2':'b','3':'c','4':'d','a':'a','b':'b','c':'c','d':'d','A':'a','B':'b','C':'c','D':'d'};
   if(map[e.key]){ e.preventDefault(); answers[idx] = map[e.key]; renderQuestion(); buildIndexPanel(); }
 }
-
 function bindEvents(){
   el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); buildIndexPanel(); } };
   el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } };
@@ -374,7 +421,6 @@ function bindEvents(){
 
   window.addEventListener('keydown', kbdHandler);
 }
-
 function watchAuth(){
   onAuthStateChanged(auth, async (u)=>{
     currentUser = u||null;
@@ -390,6 +436,7 @@ function watchAuth(){
   });
 }
 
+// --- init ---
 async function init(){
   el = {
     page: $("#tests-page"),
