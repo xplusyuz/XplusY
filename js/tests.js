@@ -1,4 +1,4 @@
-// js/tests.js (v2, relative imports & ensureCSS)
+// js/tests.js (v4 - CSV-driven facets)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -12,12 +12,6 @@ import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, 
     document.head.appendChild(s);
   }
 })();
-
-function ensureCSS(href){
-  if ([...document.querySelectorAll('link[rel="stylesheet"]')].some(l=>l.href.includes(href))) return;
-  const l = document.createElement('link'); l.rel='stylesheet'; l.href=href;
-  document.head.appendChild(l);
-}
 
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -35,9 +29,10 @@ const db   = getFirestore();
 let $ = (sel)=>document.querySelector(sel);
 let el;
 let currentUser=null, userDocRef=null, userData=null;
-let manifest=[], catalogItems=[];
+let manifestRows=[], catalogItems=[], viewItems=[];
 let test=null, answers=[], idx=0, deadline=0, ticker=null;
 
+// ===== Utils =====
 const fmtSom = v => new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
 const fmtMinSec = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
 
@@ -50,7 +45,7 @@ function parseCSV(text){
       else cell+=c;
     } else {
       if(c=='"') inQ=true;
-      else if(c==','){row.push(cell.trim()); cell='';}
+      else if(c==','){ row.push(cell.trim()); cell=''; }
       else if(c=='\n' || c=='\r'){ if(cell!=='' || row.length){row.push(cell.trim()); rows.push(row); row=[]; cell='';} }
       else cell+=c;
     }
@@ -70,6 +65,10 @@ function show(which){
 }
 function progress(){ el.progress.style.width = ((idx)/(test.questions.length))*100 + "%"; }
 
+// ===== Manifest (CSV-driven facets) =====
+let facetKeys=[];             // e.g., ['fan','daraja','mavzu']
+let facetState={};            // selected values for each key
+
 async function loadManifest(){
   const u = new URL(location.href);
   const manifestPath = u.searchParams.get('manifest') || "csv/tests.csv";
@@ -79,23 +78,70 @@ async function loadManifest(){
     if(!res.ok) throw new Error("csv/tests.csv va tests.csv topilmadi");
   }
   const rows = parseCSV(await res.text());
-  const objs = rowsToObjects(rows);
-  manifest = objs.map(o=>({file:o.file?.trim()})).filter(o=>o.file);
+  const objs = rowsToObjects(rows); // each row is object with header keys
+  // Determine facet keys as all columns except 'file'
+  const header = rows[0].map(h=>h.trim());
+  facetKeys = header.filter(k=>k.toLowerCase()!=='file');
+  manifestRows = objs.map(o=>o);
+  // init facet state as 'all'
+  facetState = Object.fromEntries(facetKeys.map(k=>[k,'all']));
 }
 async function hydrateCatalogFromEachCSV(){
   catalogItems = [];
-  for(const m of manifest){
+  for(const m of manifestRows){
+    const file = m.file?.trim(); if(!file) continue;
     try{
-      const res = await fetch(m.file);
+      const res = await fetch(file);
       if(!res.ok) continue;
       const rows = parseCSV(await res.text());
       if(!rows.length) continue;
       const [card_img, card_title, card_meta, price_som, time_min] = rows[0];
-      catalogItems.push({file:m.file, card_img, card_title, card_meta, price_som, time_min});
-    }catch(e){ console.warn("CSV o‘qishda xato", m.file, e); }
+      // store facets = all keys except file
+      const facets = Object.fromEntries(Object.entries(m).filter(([k])=>k.toLowerCase()!=='file'));
+      catalogItems.push({file, card_img, card_title, card_meta, price_som, time_min, facets});
+    }catch(e){ console.warn("CSV o‘qishda xato", file, e); }
   }
+  buildFacetUI(); // build selects from facetKeys + unique values
+  applyFilters();
+}
+
+function buildFacetUI(){
+  const box = el.facetBar;
+  box.innerHTML = "";
+  facetKeys.forEach(key=>{
+    // collect unique values
+    const values = Array.from(new Set(catalogItems.map(it=>String(it.facets[key]||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+    if(values.length===0) return;
+    const w = document.createElement('label'); w.style.display='flex'; w.style.flexDirection='column'; w.style.gap='4px';
+    const nice = key.replace(/[_-]+/g,' ').replace(/\b\w/g, s => s.toUpperCase());
+    const sel = document.createElement('select'); sel.className='eh-input eh-select'; sel.dataset.key=key;
+    sel.innerHTML = `<option value="all">${nice}: barchasi</option>` + values.map(v=>`<option value="${v}">${v}</option>`).join('');
+    sel.onchange = (e)=>{ facetState[key] = e.target.value; applyFilters(); };
+    w.append(sel);
+    box.append(w);
+  });
+}
+
+// ===== Filtering =====
+function applyFilters(){
+  const q = (el.search.value||'').toLowerCase();
+  viewItems = catalogItems.filter(it=>{
+    const okQ = !q || (it.card_title?.toLowerCase().includes(q) || it.card_meta?.toLowerCase().includes(q));
+    // every facet must match if selected
+    const okF = facetKeys.every(k=> facetState[k]==='all' || String(it.facets[k]||'') === facetState[k]);
+    return okQ && okF;
+  });
+  renderCatalog(viewItems);
+}
+
+// ===== Catalog render =====
+function renderCatalog(items){
   el.cards.innerHTML="";
-  catalogItems.forEach(item=>{
+  if(!items.length){
+    el.cards.innerHTML = `<div class="eh-note">Hech narsa topilmadi. Filtrlarni o‘chiring yoki manifestga yangi test qo‘shing.</div>`;
+    return;
+  }
+  items.forEach(item=>{
     const card=document.createElement('div'); card.className='eh-card';
     const img=document.createElement('img'); img.src=item.card_img||''; img.alt='banner';
     const body=document.createElement('div'); body.className='body';
@@ -115,6 +161,7 @@ async function hydrateCatalogFromEachCSV(){
   });
 }
 
+// ===== Test parse and flow =====
 function parseTestCSV(text){
   const rows = parseCSV(text);
   if(rows.length<3) throw new Error('CSV format noto‘g‘ri: kamida 3 qator');
@@ -138,7 +185,8 @@ function renderQuestion(){
   const q = test.questions[idx];
   el.title.textContent = `${test.title} — ${idx+1}/${test.questions.length}`;
   el.qimg.classList.add('hidden');
-  if(q.q_img){ el.qimg.src=q.q_img; el.qimg.classList.remove('hidden'); }
+  const imgSrc = q.q_img || test.card_img || "";
+  if(imgSrc){ el.qimg.src=imgSrc; el.qimg.classList.remove('hidden'); }
   el.qtext.innerHTML = q.q_text || '—';
   el.choices.innerHTML='';
   ['a','b','c','d'].forEach(letter=>{
@@ -166,21 +214,37 @@ function startTimer(){
   }, 250);
 }
 
+function updateBadgesUI(){
+  if(currentUser){ el.badge?.classList.add('hidden'); } else { el.badge?.classList.remove('hidden'); }
+  if(userData){
+    const detail = { balance: +userData.balance||0, gems: +userData.gems||0, numericId: userData.numericId };
+    window.dispatchEvent(new CustomEvent('user-balance-updated', { detail }));
+  }
+}
+
 async function startFlow(item){
   try{
     const res = await fetch(item.file);
     if(!res.ok) throw new Error('Test CSV topilmadi');
     test = parseTestCSV(await res.text());
 
-    if(!currentUser){ alert('Kirish talab qilinadi. Iltimos, tizimga kiring.'); return; }
-
+    if(!currentUser){
+      alert('Kirish talab qilinadi. Iltimos, tizimga kiring.');
+      return;
+    }
     const price = test.price_som || +item.price_som || 0;
+    const bal = +userData?.balance || 0;
+    const enough = bal >= price;
+    const warn = enough ? "" : `<div class="eh-note" style="border-color:#6b1212">Balans yetarli emas. <a href="#/settings" class="eh-btn" style="margin-top:6px">Balansni to‘ldirish</a></div>`;
+
     el.confirmBody.innerHTML = `
       <div><b>${test.title}</b></div>
       <div class="eh-meta">Narx: <b>${fmtSom(price)}</b></div>
-      <div class="eh-note">Balansdan ushbu summa yechiladi va test boshlanadi.</div>
+      ${warn}
     `;
+    el.okPay.disabled = !enough;
     el.confirmDlg.showModal();
+
     const onCancel = ()=> el.confirmDlg.close();
     const onOk = async ()=>{
       el.cancelPay.removeEventListener('click', onCancel);
@@ -194,6 +258,7 @@ async function startFlow(item){
         if(balance < price) throw new Error('Balans yetarli emas');
         tx.update(userDocRef, { balance: balance - price, lastPurchase: serverTimestamp() });
       });
+      if(userData){ userData.balance = (+userData.balance||0) - price; updateBadgesUI(); }
       answers = Array(test.questions.length).fill(null);
       idx=0; show('run'); renderQuestion(); startTimer();
     };
@@ -222,15 +287,21 @@ function finish(){
   $("#testsDetail").innerHTML = table;
   show("result");
   clearInterval(ticker);
-  if(currentUser && net){ updateDoc(userDocRef, { gems: increment(net) }).catch(()=>{}); }
+  if(currentUser && net){ updateDoc(userDocRef, { gems: increment(net) }).then(()=>{
+      userData && (userData.gems = (+userData.gems||0) + net, updateBadgesUI());
+    }).catch(()=>{});
+  }
 }
 
+// ===== Events & Auth =====
 function bindEvents(){
   el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); } };
   el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); } };
   el.finish.onclick = ()=>{ if(confirm('Testni yakunlaysizmi?')) finish(); };
   el.backToCatalog.onclick = ()=>{ clearInterval(ticker); show("catalog"); };
   el.backBtn.onclick = ()=> show("catalog");
+
+  el.search.oninput = (e)=> applyFilters();
 }
 
 function watchAuth(){
@@ -240,42 +311,41 @@ function watchAuth(){
       userDocRef = doc(db, 'users', u.uid);
       const s = await getDoc(userDocRef);
       userData = s.exists()? s.data(): null;
-      if(userData){
-        el.badge.textContent = `ID: ${userData.numericId ?? u.uid.slice(0,8)} | Balans: ${fmtSom(+userData.balance||0)} | 💎 ${+userData.gems||0}`;
-      }else{
-        el.badge.textContent = `ID: ${u.uid.slice(0,8)}...`;
-      }
     } else {
-      el.badge.textContent = "Kirish talab qilinadi";
+      userDocRef = null;
+      userData = null;
     }
+    updateBadgesUI();
   });
 }
 
+// ===== Init =====
 async function init(){
-  ensureCSS("css/tests.css");
   el = {
-    page: document.querySelector("#tests-page"),
-    badge: document.querySelector("#testsUserBadge"),
-    catalog: document.querySelector("#testsCatalog"),
-    run: document.querySelector("#testsRun"),
-    result: document.querySelector("#testsResult"),
-    dirNote: document.querySelector("#testsDirNote"),
-    cards: document.querySelector("#testsCards"),
-    title: document.querySelector("#testsTitle"),
-    qimg: document.querySelector("#testsQimg"),
-    qtext: document.querySelector("#testsQtext"),
-    choices: document.querySelector("#testsChoices"),
-    timer: document.querySelector("#testsTimer"),
-    progress: document.querySelector("#testsProgress"),
-    prev: document.querySelector("#testsPrev"),
-    next: document.querySelector("#testsNext"),
-    finish: document.querySelector("#testsFinish"),
-    backToCatalog: document.querySelector("#testsBackToCatalog"),
-    backBtn: document.querySelector("#testsBackBtn"),
-    confirmDlg: document.querySelector("#testsConfirm"),
-    confirmBody: document.querySelector("#testsConfirmBody"),
-    cancelPay: document.querySelector("#testsCancelPay"),
-    okPay: document.querySelector("#testsOkPay"),
+    page: $("#tests-page"),
+    badge: $("#testsUserBadge"),
+    catalog: $("#testsCatalog"),
+    run: $("#testsRun"),
+    result: $("#testsResult"),
+    dirNote: $("#testsDirNote"),
+    cards: $("#testsCards"),
+    title: $("#testsTitle"),
+    qimg: $("#testsQimg"),
+    qtext: $("#testsQtext"),
+    choices: $("#testsChoices"),
+    timer: $("#testsTimer"),
+    progress: $("#testsProgress"),
+    prev: $("#testsPrev"),
+    next: $("#testsNext"),
+    finish: $("#testsFinish"),
+    backToCatalog: $("#testsBackToCatalog"),
+    backBtn: $("#testsBackBtn"),
+    confirmDlg: $("#testsConfirm"),
+    confirmBody: $("#testsConfirmBody"),
+    cancelPay: $("#testsCancelPay"),
+    okPay: $("#testsOkPay"),
+    search: $("#testsSearch"),
+    facetBar: $("#testsDynamicFilters"),
   };
   bindEvents();
   watchAuth();
