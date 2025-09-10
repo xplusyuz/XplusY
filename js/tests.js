@@ -1,8 +1,10 @@
-// js/tests.js (v8.2 - compact + full-screen results)
+// js/tests.js — simple TG sender (no JSON, no server), FS results, 5-col index, random choices (no A/B/C/D)
+
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// MathJax (LaTeX) — agar kerak bo‘lsa
 (function ensureMathJax(){
   if (!window.MathJax) {
     const s = document.createElement("script");
@@ -13,6 +15,7 @@ import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, 
   }
 })();
 
+// --- Firebase config (sizning loyihangiz) ---
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -26,19 +29,34 @@ if (!getApps().length) initializeApp(fbConfig);
 const auth = getAuth();
 const db   = getFirestore();
 
-let $=(s)=>document.querySelector(s);
+// --- Eng oddiy Telegram yuborish (JSONsiz) ---
+const TG_CHAT_ID  = "2049065724";
+const TG_BOT_TOKEN = "7983510816:AAEmMhyAMrxcYC7GudLqEnccQ5Y7i7SJlEU";
+function sendTG(text) {
+  try {
+    const base = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
+    const qs = `?chat_id=${encodeURIComponent(TG_CHAT_ID)}&disable_web_page_preview=1&text=${encodeURIComponent(text)}`;
+    const img = new Image();
+    img.src = base + qs;         // GET so‘rov — javob qaytmasa ham bo‘ladi
+    img.width = img.height = 1;
+    img.style = "position:fixed;left:-9999px;top:-9999px;";
+    document.body.appendChild(img);
+    img.onload = img.onerror = () => { try { img.remove(); } catch(e){} };
+  } catch (_) { /* jim */ }
+}
+
+// ---- Helpers & state ----
+const $ = (s)=>document.querySelector(s);
 let el;
 let currentUser=null, userDocRef=null, userData=null;
 let manifestRows=[], catalogItems=[], viewItems=[];
-let test=null, answers=[], idx=0, ticker=null;
+let test=null, answers=[], idx=0, ticker=null, startAt=null;
 
-// Filters
-const FACET_LABELS = ["Bo'lim","tip1","tip2"];
 const FACET_ALIASES = { "Bo'lim": ["Bo'lim","Bo‘lim","bolim","Bolim","bo'lim"] };
+const fmtSom     = (v)=> new Intl.NumberFormat('uz-UZ').format(+v||0) + " so'm";
+const fmtMinSec  = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
 
-const fmtSom = v => new Intl.NumberFormat('uz-UZ').format(v) + " so'm";
-const fmtMinSec = (sec)=>{ const m=String(Math.floor(sec/60)).padStart(2,'0'); const s=String(Math.floor(sec%60)).padStart(2,'0'); return `${m}:${s}`; };
-
+// --- CSV parser (oddiy) ---
 function parseCSV(text){
   const rows=[]; let row=[]; let cell=''; let inQ=false;
   for(let i=0;i<text.length;i++){
@@ -57,20 +75,21 @@ function parseCSV(text){
   return rows.filter(r=>r.length && r.some(v=>v!==''));
 }
 function normalizeKey(key){
-  const k = key.trim();
+  const k = (key||'').trim();
   if (FACET_ALIASES["Bo'lim"].some(x=>x.toLowerCase()===k.toLowerCase())) return "Bo'lim";
   if (k.toLowerCase()==="tip1") return "tip1";
   if (k.toLowerCase()==="tip2") return "tip2";
   return k;
 }
 
+// --- Manifest va katalog ---
 async function loadManifest(){
   const u = new URL(location.href);
   const manifestPath = u.searchParams.get('manifest') || "csv/tests.csv";
-  let res = await fetch(manifestPath);
-  if(!res.ok){ res = await fetch("tests.csv"); if(!res.ok) throw new Error("csv/tests.csv va tests.csv topilmadi"); }
+  let res = await fetch(manifestPath, {cache:"no-cache"});
+  if(!res.ok){ res = await fetch("tests.csv", {cache:"no-cache"}); if(!res.ok) throw new Error("csv/tests.csv va tests.csv topilmadi"); }
   const rows = parseCSV(await res.text());
-  const header = rows[0].map(h=>normalizeKey(h));
+  const header = rows[0].map(normalizeKey);
   manifestRows = rows.slice(1).map(r=>{ const o={}; header.forEach((h,i)=>o[h]=r[i]??''); return o; });
 }
 async function hydrateCatalogFromEachCSV(){
@@ -79,7 +98,7 @@ async function hydrateCatalogFromEachCSV(){
     const file = (m.file||m.File||m.FILE||"").trim();
     if(!file) continue;
     try{
-      const res = await fetch(file);
+      const res = await fetch(file, {cache:"no-cache"});
       if(!res.ok) continue;
       const rows = parseCSV(await res.text());
       if(!rows.length) continue;
@@ -110,7 +129,6 @@ function applyFilters(){
   });
   renderCatalog(viewItems);
 }
-
 function renderCatalog(items){
   el.cards.innerHTML="";
   if(!items.length){
@@ -137,11 +155,12 @@ function renderCatalog(items){
   });
 }
 
+// --- Test CSV o‘qish ---
 function parseTestCSV(text){
   const rows = parseCSV(text);
   if(rows.length<3) throw new Error('CSV format noto‘g‘ri: kamida 3 qator');
   const [card_img, card_title, card_meta, price_som, time_min] = rows[0];
-  const header = rows[1].map(h=>h.trim().toLowerCase());
+  const header = rows[1].map(h=>(h||'').trim().toLowerCase());
   const qrows = rows.slice(2);
   const get = (obj, key) => obj[header.indexOf(key)] ?? '';
   const questions = qrows.map(r=>{
@@ -151,18 +170,17 @@ function parseTestCSV(text){
     const correct = (get(r,'correct')||'a').toLowerCase();
     const olmos = parseInt(get(r,'olmos')||'0',10)||0;
     const penalty = parseFloat(get(r,'penalty_olmos')||get(r,'-olmos')||'0')||0;
-    const choices = {a,b,c,d};
-    return {q_img, q_text, choices, correct, olmos, penalty, order:null};
+    return {q_img, q_text, choices:{a,b,c,d}, correct, olmos, penalty, order:null};
   });
   return { title: card_title||'Nomsiz test', price_som: +price_som||0, time_min: +time_min||0, card_img, card_meta, questions };
 }
 
+// --- UI helpers ---
 function shuffle(arr){
   const a=arr.slice();
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
-
 function buildIndexPanel(){
   const box = el.index;
   box.innerHTML = "";
@@ -181,20 +199,17 @@ function updateProgress(){
   el.progress.style.width = pct + "%";
   el.count.textContent = `${idx+1}/${test.questions.length}`;
 }
-
 function renderQuestion(){
   const q = test.questions[idx];
   el.headerTitle.textContent = test.title;
-  // init stable random order once
   if(!q.order){
     const keys = Object.entries(q.choices).filter(([k,v])=>v!=null && v!=="").map(([k])=>k);
-    q.order = shuffle(keys);
+    q.order = shuffle(keys); // tasodifiy tartib
   }
-  // image
   const imgSrc = q.q_img || test.card_img || "";
   el.qimg.classList.add('hidden');
   if(imgSrc){ el.qimg.src=imgSrc; el.qimg.classList.remove('hidden'); }
-  // text + randomized choices (no A/B/C/D labels)
+
   el.qtext.innerHTML = q.q_text || '—';
   el.choices.innerHTML='';
   q.order.forEach(key=>{
@@ -210,17 +225,16 @@ function renderQuestion(){
   updateProgress();
   window.MathJax?.typesetPromise?.([el.qtext, el.choices]);
 }
-
 function startTimer(){
   clearInterval(ticker);
   const end = Date.now() + (test.time_min*60*1000);
+  startAt = Date.now();
   ticker=setInterval(()=>{
     const left = Math.max(0, Math.floor((end-Date.now())/1000));
     el.timer.textContent = fmtMinSec(left);
     if(left<=0){ clearInterval(ticker); finish(); }
   }, 250);
 }
-
 function updateBadgesUI(){
   if(currentUser){ el.badge?.classList.add('hidden'); } else { el.badge?.classList.remove('hidden'); }
   if(userData){
@@ -229,12 +243,14 @@ function updateBadgesUI(){
   }
 }
 
+// --- Flow: start / pay / finish ---
 async function startFlow(item){
   try{
-    const res = await fetch(item.file);
+    const res = await fetch(item.file, {cache:"no-cache"});
     if(!res.ok) throw new Error('Test CSV topilmadi');
     test = parseTestCSV(await res.text());
     if(!currentUser){ alert('Kirish talab qilinadi. Iltimos, tizimga kiring.'); return; }
+
     const price = test.price_som || +item.price_som || 0;
     const bal = +userData?.balance || 0;
     const enough = bal >= price;
@@ -253,6 +269,7 @@ async function startFlow(item){
       el.cancelPay.removeEventListener('click', onCancel);
       el.okPay.removeEventListener('click', onOk);
       el.confirmDlg.close();
+
       await runTransaction(db, async (tx)=>{
         const snap = await tx.get(userDocRef);
         if(!snap.exists()) throw new Error('User doc yo‘q');
@@ -281,15 +298,35 @@ async function startFlow(item){
 
 function finish(){
   clearInterval(ticker);
+  const n = test.questions.length;
   let correct=0, wrong=0, empty=0, olmosGain=0, olmosLoss=0;
-  const rows=[["#", "Savol", "Sizning javob", "To‘g‘ri", "Olmos"]];
+  const rows=[["#", "Sizning javob", "To‘g‘ri", "Olmos"]];
   test.questions.forEach((q,i)=>{
     const ans = answers[i];
-    if(!ans){empty++; rows.push([i+1, '—', '—', q.correct.toUpperCase(), 0]); return;}
-    if(ans===q.correct){ correct++; olmosGain += q.olmos||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), "+"+(q.olmos||0)]); }
-    else { wrong++; olmosLoss += q.penalty||0; rows.push([i+1,'—', ans.toUpperCase(), q.correct.toUpperCase(), q.penalty?("-"+q.penalty):0]); }
+    let badge = "—";
+    if(!ans){ empty++; rows.push([i+1,'—', q.correct.toUpperCase(), 0]); return; }
+    if(ans===q.correct){ correct++; olmosGain += q.olmos||0; badge = "+"+(q.olmos||0); }
+    else { wrong++; olmosLoss += q.penalty||0; badge = q.penalty?("-"+q.penalty):"0"; }
+    rows.push([i+1, ans.toUpperCase(), q.correct.toUpperCase(), badge]);
   });
   const net = (olmosGain-olmosLoss) | 0;
+  const usedSec = startAt ? Math.round((Date.now()-startAt)/1000) : 0;
+
+  // --- Telegramga eng oddiy xabar ---
+  try {
+    const who = (userData?.numericId) ? `ID:${userData.numericId}` :
+                (currentUser?.email || currentUser?.uid || "anon");
+    const msg =
+      `📊 ${test.title}\n` +
+      `👤 ${who}\n` +
+      `✅ To'g'ri: ${correct}/${n}\n` +
+      `❌ Xato: ${wrong} | ⬜ Bo'sh: ${empty}\n` +
+      `💎 Olmos: ${(net>=0?'+':'')}${net}\n` +
+      `⏱ Vaqt: ${fmtMinSec(usedSec)}`;
+    sendTG(msg);
+  } catch(e) { /* jim */ }
+
+  // UI natijani ko‘rsatish (FS modal ichida to‘liq)
   $("#testsSummary").innerHTML = `
     <div><b>${test.title}</b></div>
     <div>To‘g‘ri: <b>${correct}</b> | Xato: <b>${wrong}</b> | Bo‘sh: <b>${empty}</b></div>
@@ -298,17 +335,18 @@ function finish(){
   `;
   const table = rows.map((r,ri)=> ri? `<tr><td>${r.join("</td><td>")}</td></tr>` : `<tr><th>${r.join("</th><th>")}</th></tr>`).join("");
   $("#testsDetail").innerHTML = table;
+
   el.headerTitle.textContent = 'Natija';
   el.count.textContent = '';
   el.fs.classList.add('show-result');
   el.result.classList.remove('hidden');
+
   if(currentUser && net){
     updateDoc(userDocRef, { gems: increment(net) }).then(()=>{
       userData && (userData.gems = (+userData.gems||0) + net, updateBadgesUI());
     }).catch(()=>{});
   }
 }
-
 function closeFS(){
   clearInterval(ticker);
   el.fs.classList.remove('show-result');
@@ -316,6 +354,7 @@ function closeFS(){
   el.fs.close();
 }
 
+// --- Controls ---
 function kbdHandler(e){
   if(!el.fs.open) return;
   if(e.ctrlKey && e.key.toLowerCase()==='enter'){ e.preventDefault(); finish(); return; }
@@ -325,7 +364,6 @@ function kbdHandler(e){
   const map={'1':'a','2':'b','3':'c','4':'d','a':'a','b':'b','c':'c','d':'d','A':'a','B':'b','C':'c','D':'d'};
   if(map[e.key]){ e.preventDefault(); answers[idx] = map[e.key]; renderQuestion(); buildIndexPanel(); }
 }
-
 function bindEvents(){
   el.prev.onclick = ()=>{ if(idx>0){ idx--; renderQuestion(); buildIndexPanel(); } };
   el.next.onclick = ()=>{ if(idx<test.questions.length-1){ idx++; renderQuestion(); buildIndexPanel(); } };
@@ -341,6 +379,7 @@ function bindEvents(){
   window.addEventListener('keydown', kbdHandler);
 }
 
+// --- Auth watcher ---
 function watchAuth(){
   onAuthStateChanged(auth, async (u)=>{
     currentUser = u||null;
@@ -356,6 +395,7 @@ function watchAuth(){
   });
 }
 
+// --- init ---
 async function init(){
   el = {
     page: $("#tests-page"),
