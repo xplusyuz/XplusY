@@ -1,4 +1,4 @@
-// js/tests.js (v8.2 + Simple TG + Modern Results + Centered Analysis)
+// js/tests.js (v8.2 + Simple TG + Modern Results + Centered Analysis + LIVE support)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, serverTimestamp, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -50,6 +50,7 @@ let el;
 let currentUser=null, userDocRef=null, userData=null;
 let manifestRows=[], catalogItems=[], viewItems=[];
 let test=null, answers=[], idx=0, ticker=null, startAt=null;
+let liveInfo=null; // <-- LIVE'dan kelgan ma'lumot
 
 const FACET_ALIASES = { "Bo'lim": ["Bo'lim","Bo‘lim","bolim","Bolim","bo'lim"] };
 const fmtSom    = (v)=> new Intl.NumberFormat('uz-UZ').format(+v||0) + " so'm";
@@ -239,10 +240,11 @@ function renderQuestion(){
 }
 function startTimer(){
   clearInterval(ticker);
-  const end = Date.now() + (test.time_min*60*1000);
+  const nominalEnd = Date.now() + (test.time_min*60*1000);
+  const hardEnd = (liveInfo && +liveInfo.end) ? Math.min(nominalEnd, +liveInfo.end) : nominalEnd;
   startAt = Date.now();
   ticker=setInterval(()=>{
-    const left = Math.max(0, Math.floor((end-Date.now())/1000));
+    const left = Math.max(0, Math.floor((hardEnd-Date.now())/1000));
     el.timer.textContent = fmtMinSec(left);
     if(left<=0){ clearInterval(ticker); finish(); }
   }, 250);
@@ -262,6 +264,13 @@ async function startFlow(item){
     if(!res.ok) throw new Error('Test CSV topilmadi');
     test = parseTestCSV(await res.text());
     if(!currentUser){ alert('Kirish talab qilinadi. Iltimos, tizimga kiring.'); return; }
+
+    if(liveInfo){
+      const now = Date.now(), st = +liveInfo.start, en = +liveInfo.end;
+      if(now < st){ alert("Live hali boshlanmadi."); return; }
+      if(now >= en){ alert("Live tugagan."); return; }
+    }
+
     const price = test.price_som || +item.price_som || 0;
     const bal = +userData?.balance || 0;
     const enough = bal >= price;
@@ -321,7 +330,6 @@ function finish(){
   const net = (olmosGain-olmosLoss) | 0;
   const usedSec = startAt ? Math.round((Date.now()-startAt)/1000) : 0;
 
-  /* Telegramga xabar: ism + ID */
   try {
     const name = getDisplayName();
     const id   = getDisplayId();
@@ -336,9 +344,8 @@ function finish(){
     sendTG(msg);
   } catch(e) {}
 
-  /* Zamonaviy natija paneli + Savol tahlili (markazda) */
   const pct = Math.round((correct/n)*100);
-  $("#testsSummary").innerHTML = `
+  document.querySelector("#testsSummary").innerHTML = `
     <div class="res-center">
       <div class="res-card">
         <div class="ring" id="resRing" style="--p:${pct}">
@@ -492,6 +499,12 @@ async function init(){
   }catch(e){
     el.dirNote.classList.add('danger');
     el.dirNote.innerHTML = "Xato: "+e.message;
+  }
+
+  const liveRaw = localStorage.getItem('liveLaunch');
+  if(liveRaw){
+    try{ liveInfo = JSON.parse(liveRaw); }catch{}
+    localStorage.removeItem('liveLaunch');
   }
 }
 

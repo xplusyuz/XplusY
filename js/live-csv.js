@@ -1,65 +1,107 @@
-import { fetchCSV, byDate } from "./csv-util.js";
-const grid = document.getElementById("liveGrid");
-if(grid){
-  (async()=>{
-    try{
-      const rows = await fetchCSV(grid.dataset.csv || "./csv/live.csv");
-      rows.sort((a,b)=> byDate(a,b,"startISO"));
-      grid.classList.add("grid","cards");
-      grid.innerHTML = rows.map(r => liveCard(r)).join("");
-      initTimers();
-    }catch(e){
-      grid.innerHTML = `<div class="card"><b>Live CSV xatosi:</b> ${e.message}</div>`;
-    }
-  })();
+// js/live-csv.js — Live katalog (no filters), super premium schedule
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const $ = (s)=>document.querySelector(s);
+let el, auth, currentUser=null;
+
+function parseCSV(t){
+  const rows=[];let r=[],c='',q=false;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(q){ if(ch=='"'){ if(t[i+1]=='"'){c+='"';i++;} else q=false; } else c+=ch; }
+    else { if(ch=='"') q=true; else if(ch==','){ r.push(c.trim()); c=''; }
+      else if(ch=='\n'||ch=='\r'){ if(c!==''||r.length){ r.push(c.trim()); rows.push(r); r=[]; c=''; } }
+      else c+=ch; }
+  }
+  if(c!==''||r.length){ r.push(c.trim()); rows.push(r); }
+  return rows.filter(x=>x.length && x.some(v=>v!==''));
 }
-function liveCard(r){
-  const start = Date.parse(r.startISO||"");
-  const end = isFinite(start) ? start + (parseInt(r.durationMin||"0")*60000) : 0;
-  return `<article class="card live-card" data-start="${start||0}" data-end="${end||0}">
-    ${r.image ? `<img src="${r.image}" alt="${esc(r.title||'')}" />` : ''}
-    <div class="lc-title">${esc(r.title||'')}</div>
-    <div class="lc-meta">
-      <span class="kv">📅 ${esc((r.startISO||'').replace('T',' '))}</span>
-      <span class="kv">⏱️ ${esc(r.durationMin||'0')} daqiqa</span>
-    </div>
-    <div class="lc-tags">
-      ${r.prize ? `<span class="tag prize">🎁 ${esc(r.prize)}</span>` : ''}
-      ${r.price ? `<span class="tag price">💳 ${esc(r.price)} so‘m</span>` : ''}
-      ${r.tags ? r.tags.split('|').map(t=>`<span class="tag">${esc(t)}</span>`).join('') : ''}
-    </div>
-    <div class="lc-cta">
-      <button class="btn primary">Batafsil</button>
-      <span class="pill timer" data-timer>—:—:—</span>
-    </div>
-  </article>`;
+
+async function loadLive(){
+  let res = await fetch("csv/live.csv", {cache:"no-cache"});
+  if(!res.ok) res = await fetch("live.csv", {cache:"no-cache"});
+  const rows = parseCSV(await res.text());
+  const head = rows[0];
+  const idx = (k)=> head.indexOf(k);
+  return rows.slice(1).map(r=>{
+    const start = Date.parse(r[idx("start_iso")]);
+    let end = r[idx("end_iso")] ? Date.parse(r[idx("end_iso")]) : null;
+    const durMin = parseInt(r[idx("duration_min")]||'0',10)||0;
+    if(!end && start && durMin) end = start + durMin*60*1000;
+    return {
+      file: r[idx("file")], banner: r[idx("banner")], title: r[idx("title")], meta: r[idx("meta")],
+      price_som: +(r[idx("price_som")]||0), start, end, durMin
+    };
+  }).filter(x=>x.file && x.start && x.end);
 }
-function initTimers(){
-  const els = Array.from(document.querySelectorAll('[data-timer]'));
-  function tick(){
+
+function human(ts){
+  try{ return new Date(ts).toLocaleString('uz-UZ',{hour12:false}); }catch{ return '—'; }
+}
+function leftStr(ms){
+  if(ms<=0) return "00:00";
+  const s=Math.floor(ms/1000), m=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
+  return `${m}:${ss}`;
+}
+function state(it, now){ if(now<it.start) return "upcoming"; if(now>=it.end) return "closed"; return "open"; }
+
+function render(items){
+  const box = el.cards; box.innerHTML = "";
+  if(!items.length){ box.innerHTML = `<div class="eh-note">Hozircha live test yo'q.</div>`; return; }
+
+  items.forEach((it, i)=>{
     const now = Date.now();
-    els.forEach(el=>{
-      const host = el.closest('.live-card');
-      if(!host) return;
-      const start = parseInt(host.dataset.start||"0");
-      const end   = parseInt(host.dataset.end||"0");
-      let txt = "—";
-      if(start && now < start){
-        txt = "Boshlanishga: " + fmt(start-now);
-      } else if(end && now <= end){
-        txt = "Tugashga: " + fmt(end-now);
-      } else if(end && now > end){
-        txt = "Yakunlandi";
-      }
-      el.textContent = txt;
-    });
-  }
-  function fmt(ms){
-    const s = Math.max(0, Math.floor(ms/1000));
-    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60;
-    return [h,m,ss].map(v=>String(v).padStart(2,'0')).join(':');
-  }
-  tick();
-  setInterval(tick, 1000);
+    const st = state(it, now);
+    const div = document.createElement('div'); div.className='live-card';
+    div.innerHTML = `
+      <img src="${it.banner||''}" alt="">
+      <div class="live-body">
+        <div class="live-title">${it.title||'Nomsiz live test'}</div>
+        <div class="live-meta">${it.meta||''}</div>
+        <div class="live-row">
+          <span class="badge gold">💎 ${new Intl.NumberFormat('uz-UZ').format(it.price_som)} so'm</span>
+          <span class="badge time">🕒 ${it.durMin || Math.round((it.end-it.start)/60000)} daq</span>
+        </div>
+        <div class="live-row">
+          <span class="badge ${st==='open'?'ok':st==='upcoming'?'soon':'closed'}">${st==='open'?'Ochiq':st==='upcoming'?'Kutilmoqda':'Yopilgan'}</span>
+          <span class="countdown" id="cd_${i}"></span>
+        </div>
+        <div class="live-meta">⏩ Boshlash: ${human(it.start)} | ⏹ Tugash: ${human(it.end)}</div>
+        <div class="live-actions">
+          <button class="eh-btn ghost" id="v_${i}">Batafsil</button>
+          <button class="eh-btn primary" id="s_${i}" ${st!=='open'?'disabled':''}>Boshlash</button>
+        </div>
+      </div>`;
+    box.append(div);
+
+    const cd = div.querySelector(`#cd_${i}`);
+    const btn = div.querySelector(`#s_${i}`);
+
+    const upd = ()=>{
+      const now = Date.now();
+      const stt = state(it, now);
+      if(stt==='upcoming'){ cd.textContent="Startgacha: "+leftStr(it.start-now); btn.disabled=true; }
+      else if(stt==='open'){ cd.textContent="Tugashgacha: "+leftStr(it.end-now); btn.disabled=false; }
+      else { cd.textContent="Yopilgan"; btn.disabled=true; }
+    };
+    upd(); setInterval(upd, 1000);
+
+    div.querySelector(`#v_${i}`).onclick = ()=>{
+      alert(`${it.title}\n${it.meta}\nNarx: ${new Intl.NumberFormat('uz-UZ').format(it.price_som)} so'm\nBoshlash: ${human(it.start)}\nTugash: ${human(it.end)}`);
+    };
+    btn.onclick = ()=>{
+      if(!currentUser){ alert("Kirish talab qilinadi."); return; }
+      localStorage.setItem('liveLaunch', JSON.stringify({ file: it.file, start: it.start, end: it.end }));
+      location.hash = "#/tests";
+    };
+  });
 }
-function esc(s){ return (s||'').replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&gt;","\"":"&quot;","'":"&#39;" }[m])); }
+
+async function init(){
+  el = { page: document.getElementById("live-page"), cards: document.getElementById("liveCards") };
+  auth = getAuth(); onAuthStateChanged(auth, u=>{ currentUser = u||null; });
+  const items = await loadLive();
+  render(items);
+}
+
+export default { init };
