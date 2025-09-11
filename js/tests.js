@@ -510,14 +510,3 @@ async function init(){
 
 window.TestsPage = { init };
 export default window.TestsPage;
-// ... tests.js oxirida (init() bilan bir qatorda)
-function destroy() {
-  try { window.removeEventListener('keydown', kbdHandler); } catch {}
-  try { clearInterval(ticker); } catch {}
-  ticker = null;
-  // ixtiyoriy: dialogni yopish, local holatni tozalash
-  try { el?.fs?.close?.(); } catch {}
-  el = null;
-}
-
-export default { init, destroy };
