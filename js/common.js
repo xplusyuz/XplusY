@@ -15,6 +15,64 @@ export const firebaseConfig = {
   measurementId: "G-459PLJ7P7L"
 };
 
+
+/* =====================
+ *  Theme (light/dark/system) — persistent + PWA-friendly
+ * ===================== */
+const THEME_KEY = 'mc_theme'; // 'light' | 'dark' | 'system'
+function readThemePref(){
+  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+}
+function systemPrefersDark(){
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function applyTheme(mode){
+  const root = document.documentElement;
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  let resolved = mode;
+  if (mode === 'system') resolved = systemPrefersDark() ? 'dark' : 'light';
+  root.setAttribute('data-theme', resolved === 'dark' ? 'dark' : 'light');
+
+  // Update UA widgets color-scheme for correct native controls
+  try { root.style.colorScheme = (resolved === 'dark' ? 'dark' : 'light'); } catch {}
+
+  // Update theme-color for PWA/status bar
+  if (metaTheme){
+    metaTheme.setAttribute('content', resolved === 'dark' ? '#041f12' : '#f6fbf8');
+  }
+
+  // Update toggle icon if present
+  const btn = document.getElementById('btnTheme');
+  if (btn){
+    const isDark = resolved === 'dark';
+    btn.textContent = isDark ? '☀️' : '🌙';
+    btn.setAttribute('aria-pressed', String(isDark));
+    btn.title = isDark ? 'Kun rejimi' : 'Tun rejimi';
+  }
+}
+export function initTheme(){
+  const stored = readThemePref();
+  applyTheme(stored);
+
+  // Live update on system change if in 'system' mode
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener?.('change', () => {
+      if (readThemePref() === 'system') applyTheme('system');
+    });
+  } catch {}
+
+  // Toggle button listener
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btnTheme'){
+      const current = readThemePref();
+      // cycle: light -> dark -> system -> light
+      const next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+      applyTheme(next);
+    }
+  });
+}
 export const ADMIN_NUMERIC_IDS = [1000001, 1000002];
 
 export const app = initializeApp(firebaseConfig);
@@ -24,18 +82,7 @@ export const db = getFirestore(app);
 /* =====================
  *  Theme: FORCE LIGHT ONLY
  * ===================== */
-function applyLight(){
-  // Force UA widgets + colors to light
-  document.documentElement.style.colorScheme = 'light';
-  // Keep compatibility with any old styles relying on .theme-light
-  document.body.classList.add('theme-light');
-  // Remove any stored theme state from older builds
-  try { localStorage.removeItem('mc_theme'); } catch {}
-  // If there was a theme toggle button in markup, hide it gracefully
-  const btn = document.querySelector('#btnTheme');
-  if (btn){ btn.style.display = 'none'; }
-}
-export function initTheme(){ applyLight(); }
+// (old light-only theme removed)
 
 /* =====================
  *  Bottom bar cleanup
