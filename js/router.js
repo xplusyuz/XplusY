@@ -1,21 +1,21 @@
-// js/router.js — SPA router with init/destroy + CSS ensure
+// js/router.js — robust router (Home, Simulator, Leaderboard)
 import { attachAuthUI, initUX } from "./common.js";
 
 const app = document.getElementById("app");
 
+// Mavjud sahifalar:
 const routes = {
-  home:        "./partials/home.html",
-  tests:       "./partials/tests.html",
-  live:        "./partials/live.html",
-  simulator:   "./partials/simulator.html",
-  leaderboard: "./partials/leaderboard.html",
-  settings:    "./partials/settings.html",
+  home:        "partials/home.html",
+  simulator:   "partials/simulator.html",
+  leaderboard: "partials/leaderboard.html",
 };
 
 let currentTeardown = null;
 
+/* ---- Utils ---- */
 async function ensureCSS(href) {
   try {
+    // allaqachon ulangan bo‘lsa — qaytamiz
     if ([...document.styleSheets].some(s => s.href && s.href.includes(href))) return;
   } catch {}
   const link = document.createElement("link");
@@ -31,9 +31,10 @@ async function loadPartial(url) {
 }
 
 function parseRoute() {
+  // "#/home?x=1" -> "home"
   const raw = (location.hash || "#/home").replace(/^#\/?/, "");
-  const [pagePart] = raw.split("?");
-  return (pagePart || "home").toLowerCase();
+  const [name] = raw.split("?");
+  return (name || "home").toLowerCase();
 }
 
 function callInit(mod) {
@@ -54,8 +55,13 @@ function callInit(mod) {
   currentTeardown = destroyFn || null;
 }
 
+/* ---- Core ---- */
 async function loadPage(page) {
-  if (currentTeardown) { try { currentTeardown(); } catch (e) { console.warn("teardown error:", e); } currentTeardown = null; }
+  // Avval eski sahifaning tozalash funksiyasi
+  if (currentTeardown) {
+    try { currentTeardown(); } catch (e) { console.warn("teardown error:", e); }
+    currentTeardown = null;
+  }
 
   const url = routes[page] || routes.home;
   app.innerHTML = `<div style="padding:20px"><div class="eh-note">Yuklanmoqda...</div></div>`;
@@ -64,35 +70,25 @@ async function loadPage(page) {
     const html = await loadPartial(url);
     app.innerHTML = html;
   } catch (e) {
-    app.innerHTML = `<div class="card"><h2>Yuklashda xato</h2><p>${e.message}</p></div>`;
+    app.innerHTML = `<div class="eh-note danger" style="margin:16px">Sahifa yuklash xatosi: ${e.message}</div>`;
     console.error(e);
     return;
   }
 
+  // Sahifa skriptlari + CSS
   try {
-    if (page === "tests") {
-      await ensureCSS("css/tests.css");
-      const mod = await import("./tests.js");
-      callInit(mod);
-    } else if (page === "live") {
-      await ensureCSS("css/live.css");
-      const mod = await import("./live-csv.js");
+    if (page === "home") {
+      await ensureCSS("css/home.css");
+      const mod = await import("./home-csv.js");
       callInit(mod);
     } else if (page === "simulator") {
       await ensureCSS("css/simulator.css");
       const mod = await import("./simulator-csv.js");
       callInit(mod);
     } else if (page === "leaderboard") {
-  await ensureCSS("css/leaderboard.css");
-  const mod = await import("./leaderboard.js");
-  callInit(mod);
-    } else if (page === "settings") {
-      const mod = await import("./settings.js");
+      await ensureCSS("css/leaderboard.css");
+      const mod = await import("./leaderboard.js");
       callInit(mod);
-    } else if (page === "home") {
-      await ensureCSS("css/home.css");
-      const mod = await import("./home-csv.js").catch(()=>null);
-      if (mod) callInit(mod);
     }
   } catch (e) {
     const msg = e?.message || String(e);
@@ -112,6 +108,7 @@ function router() {
   loadPage(parseRoute());
 }
 
+/* ---- Boot ---- */
 window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", () => {
   try { attachAuthUI?.({ requireSignIn: false }); } catch {}
