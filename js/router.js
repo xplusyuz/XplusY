@@ -1,10 +1,8 @@
-// js/router.js
-// SPA router: partials yuklash + modul init/destroy boshqaruvi
+// js/router.js — SPA router with init/destroy + CSS ensure
 import { attachAuthUI, initUX } from "./common.js";
 
 const app = document.getElementById("app");
 
-// Marshrutlar -> partial yo‘llari
 const routes = {
   home:        "./partials/home.html",
   tests:       "./partials/tests.html",
@@ -14,10 +12,12 @@ const routes = {
   settings:    "./partials/settings.html",
 };
 
-let currentTeardown = null; // sahifadan chiqishda chaqiriladi
+let currentTeardown = null;
 
 async function ensureCSS(href) {
-  if ([...document.styleSheets].some(s => s.href && s.href.includes(href))) return;
+  try {
+    if ([...document.styleSheets].some(s => s.href && s.href.includes(href))) return;
+  } catch {}
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
@@ -30,7 +30,12 @@ async function loadPartial(url) {
   return res.text();
 }
 
-// Moduldan init/destroy topib chaqirish
+function parseRoute() {
+  const raw = (location.hash || "#/home").replace(/^#\/?/, "");
+  const [pagePart] = raw.split("?");
+  return (pagePart || "home").toLowerCase();
+}
+
 function callInit(mod) {
   const initFn =
     (typeof mod?.init === "function" && mod.init) ||
@@ -49,18 +54,8 @@ function callInit(mod) {
   currentTeardown = destroyFn || null;
 }
 
-function parseRoute() {
-  const raw = (location.hash || "#/home").replace(/^#\/?/, "");
-  const [pagePart] = raw.split("?");
-  return (pagePart || "home").toLowerCase();
-}
-
 async function loadPage(page) {
-  // Avvalgi sahifa tozalansin
-  if (currentTeardown) {
-    try { currentTeardown(); } catch (e) { console.warn("teardown error:", e); }
-    currentTeardown = null;
-  }
+  if (currentTeardown) { try { currentTeardown(); } catch (e) { console.warn("teardown error:", e); } currentTeardown = null; }
 
   const url = routes[page] || routes.home;
   app.innerHTML = `<div style="padding:20px"><div class="eh-note">Yuklanmoqda...</div></div>`;
@@ -74,7 +69,6 @@ async function loadPage(page) {
     return;
   }
 
-  // Sahifa bo‘yicha CSS/JS
   try {
     if (page === "tests") {
       await ensureCSS("css/tests.css");
@@ -85,6 +79,7 @@ async function loadPage(page) {
       const mod = await import("./live-csv.js");
       callInit(mod);
     } else if (page === "simulator") {
+      await ensureCSS("css/simulator.css");
       const mod = await import("./simulator-csv.js");
       callInit(mod);
     } else if (page === "leaderboard") {
@@ -94,8 +89,9 @@ async function loadPage(page) {
       const mod = await import("./settings.js");
       callInit(mod);
     } else if (page === "home") {
-      const mod = await import("./home-csv.js");
-      callInit(mod);
+      await ensureCSS("css/home.css");  // agar bor bo‘lsa
+      const mod = await import("./home-csv.js").catch(()=>null);
+      if (mod) callInit(mod);
     }
   } catch (e) {
     const msg = e?.message || String(e);
@@ -108,7 +104,6 @@ async function loadPage(page) {
     console.error(e);
   }
 
-  // Scroll tepaga
   try { window.scrollTo({ top: 0, behavior: "instant" }); } catch {}
 }
 
@@ -118,7 +113,7 @@ function router() {
 
 window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", () => {
-  attachAuthUI?.({ requireSignIn: false });
-  initUX && initUX();
+  try { attachAuthUI?.({ requireSignIn: false }); } catch {}
+  try { initUX && initUX(); } catch {}
   router();
 });
