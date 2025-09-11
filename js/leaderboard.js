@@ -6,6 +6,7 @@ import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, d
 let mounted=false, abortCtrl=null, cursor=null, sortField="gems", pageSize=30;
 let list=[], my={ uid:null, data:null, rank:null };
 
+// SAME config as your tests.js:
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -45,9 +46,9 @@ function csvToUsers(text){
     displayName: r[idx("displayname")] || r[idx("name")] || "User",
     numericId:   r[idx("numericid")] || "",
     avatar:      r[idx("avatar")] || r[idx("photo")] || "",
-    gems:        +safe(r[idx("gems")], 0),
-    score:       +safe(r[idx("score")], 0),
-    testsTaken:  +safe(r[idx("teststaken")], 0),
+    gems:        +(r[idx("gems")]||0),
+    score:       +(r[idx("score")]||0),
+    testsTaken:  +(r[idx("teststaken")]||0),
   }));
 }
 
@@ -88,12 +89,7 @@ function renderAll(){
   list.slice(3).forEach((u, i)=> listBox.append(rowNode(u, i+4)));
 }
 
-function markSeg(){
-  document.querySelectorAll(".lb-summary .seg-btn").forEach(b=>{
-    b.classList.toggle("active", b.dataset.sort === sortField);
-  });
-}
-
+/* ===== Data ===== */
 async function fetchPage(){
   // Try Firestore
   try {
@@ -127,7 +123,6 @@ async function fetchPage(){
   }
   return false;
 }
-
 async function refresh(){
   list = []; cursor = null;
   $("#lbList").innerHTML = "";
@@ -135,6 +130,12 @@ async function refresh(){
   await fetchPage();
 }
 
+/* ===== Controls ===== */
+function markSeg(){
+  document.querySelectorAll(".lb-summary .seg-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.sort === sortField);
+  });
+}
 function bind(){
   $("#lbRefresh").onclick = refresh;
   document.querySelectorAll(".lb-summary .seg-btn").forEach(b=>{

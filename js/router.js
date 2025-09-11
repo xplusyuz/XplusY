@@ -83,8 +83,9 @@ async function loadPage(page) {
       const mod = await import("./simulator-csv.js");
       callInit(mod);
     } else if (page === "leaderboard") {
-      const mod = await import("./leaderboard.js");
-      callInit(mod);
+  await ensureCSS("css/leaderboard.css");
+  const mod = await import("./leaderboard.js");
+  callInit(mod);
     } else if (page === "settings") {
       const mod = await import("./settings.js");
       callInit(mod);
