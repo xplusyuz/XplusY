@@ -89,7 +89,7 @@ async function loadPage(page) {
       const mod = await import("./settings.js");
       callInit(mod);
     } else if (page === "home") {
-      await ensureCSS("css/home.css");  // agar bor bo‘lsa
+      await ensureCSS("css/home.css");
       const mod = await import("./home-csv.js").catch(()=>null);
       if (mod) callInit(mod);
     }

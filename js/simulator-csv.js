@@ -1,190 +1,139 @@
-// js/simulator-csv.js — SPA-friendly simulator (init/destroy), keyboard + timer
-let mounted = false;
-let el = null;
-let idx = 0;
-let qList = [];
-let answers = [];
-let timer = null;
-let endAt = 0;
+// js/simulator-csv.js — CSV-driven simulator catalog (grid) with only "Bo'lim" filter
+let mounted=false, el=null, abortCtrl=null;
+let allItems=[], viewItems=[], hero=null;
+const $=(s,r=document)=>r.querySelector(s);
+const fmt=(v)=>new Intl.NumberFormat('uz-UZ').format(+v||0);
 
-const $ = (s, r = document) => r.querySelector(s);
-function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
-function choice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function shuffle(a) { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
-
-function genQuestion(level = "easy") {
-  let A, B, op, correct;
-  if (level === "hard") { A = randInt(10, 99); B = randInt(10, 99); op = choice(["+", "-", "×", "÷"]); }
-  else if (level === "mid") { A = randInt(10, 60); B = randInt(2, 30); op = choice(["+", "-", "×"]); }
-  else { A = randInt(1, 20); B = randInt(1, 10); op = choice(["+", "-"]); }
-
-  switch (op) {
-    case "+": correct = A + B; break;
-    case "-": correct = A - B; break;
-    case "×": correct = A * B; break;
-    case "÷":
-      correct = A; const mul = randInt(2, 9); B = mul; A = correct * B; correct = A / B; op = "÷";
-      break;
+/* CSV */
+function parseCSV(t){
+  const rows=[];let row=[],cell='',q=false;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(q){ if(ch=='"'){ if(t[i+1]=='"'){cell+='"';i++;} else q=false; } else cell+=ch; }
+    else { if(ch=='"') q=true;
+      else if(ch==','){ row.push(cell.trim()); cell=''; }
+      else if(ch=='\n'||ch=='\r'){ if(cell!==''||row.length){row.push(cell.trim()); rows.push(row); row=[]; cell='';} }
+      else cell+=ch; }
   }
-  const opts = new Set([correct]);
-  while (opts.size < 4) {
-    let delta = randInt(-9, 9);
-    if (delta === 0) delta = 1;
-    opts.add(correct + delta);
-  }
-  const order = shuffle(Array.from(opts));
-  const correctKey = ["a", "b", "c", "d"][order.indexOf(correct)];
-  return {
-    text: `${A} ${op} ${B} = ?`,
-    choices: { a: String(order[0]), b: String(order[1]), c: String(order[2]), d: String(order[3]) },
-    correct: correctKey
-  };
+  if(cell!==''||row.length){ row.push(cell.trim()); rows.push(row); }
+  return rows.filter(r=>r.length && r.some(v=>v!==''));
+}
+const ALIASES = { "Bo'lim": ["Bo'lim","Bo‘lim","bolim","Bolim","bo'lim","bo‘lim"] };
+function normKey(k){
+  const t=(k||'').trim().toLowerCase();
+  if (ALIASES["Bo'lim"].some(x=>x.toLowerCase()===t)) return "bolim";
+  return t;
+}
+function hydrate(rows){
+  const head = rows[0].map(normKey);
+  const idx = (k)=> head.indexOf(k);
+  const items = rows.slice(1).map(r=>({
+    type: (r[idx("type")]||"card").toLowerCase(),   // promo|card
+    bolim: r[idx("bolim")]||"",
+    img: r[idx("img")]||"",
+    title: r[idx("title")]||"",
+    meta: r[idx("meta")]||"",
+    link: r[idx("link")]||r[idx("href")]||"",
+    cta_text: r[idx("cta_text")]||"Boshlash",
+    badge: r[idx("badge")]||"",
+    price_som: r[idx("price_som")]||"",
+    time_min: r[idx("time_min")]||"",
+  }));
+  return items;
 }
 
-function buildRefs() {
+/* Render */
+function renderHero(it){
+  const box = el.hero;
+  if(!it){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="bg" style="background-image:url('${it.img||""}')"></div>
+    <div class="overlay"></div>
+    <div class="body">
+      ${it.badge? `<span class="pill">${it.badge}</span>`:""}
+      <div class="title">${it.title||""}</div>
+      <div class="meta">${it.meta||""}</div>
+      <div class="row">
+        <a class="btn" href="${it.link||"#"}">${it.cta_text||"Boshlash"}</a>
+        ${it.price_som? `<span class="pill">💰 ${fmt(it.price_som)} so'm</span>`:""}
+        ${it.time_min?  `<span class="pill">⏱️ ${fmt(it.time_min)} daq</span>`:""}
+      </div>
+    </div>`;
+}
+
+function cardNode(it){
+  const card = document.createElement("div");
+  card.className="scard";
+  card.innerHTML = `
+    ${it.img? `<img src="${it.img}" alt="">`:""}
+    <div class="sbody">
+      <div class="stitle">${it.title||""}</div>
+      <div class="smeta">${it.meta||""}</div>
+      <div class="srow">
+        ${it.price_som? `<span class="spill">💰 ${fmt(it.price_som)} so'm</span>`:""}
+        ${it.time_min?  `<span class="spill">⏱️ ${fmt(it.time_min)} daq</span>`:""}
+        ${it.badge?     `<span class="spill">${it.badge}</span>`:""}
+      </div>
+      <div class="sactions">
+        <a class="sbtn" href="${it.link||"#"}" ${/^https?:\/\//.test(it.link||"")?'target="_blank" rel="noopener"':''}>${it.cta_text||"Boshlash"}</a>
+      </div>
+    </div>`;
+  return card;
+}
+
+function fillBolimFacet(items){
+  const uniq = Array.from(new Set(items.map(x=>x.bolim).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  const sel = el.fBolim;
+  sel.innerHTML = `<option value="all">Barchasi</option>` + uniq.map(v=>`<option value="${v}">${v}</option>`).join("");
+}
+
+function applyFilter(){
+  const bolim = el.fBolim.value;
+  viewItems = allItems.filter(it => it.type!=="promo").filter(it => bolim==='all' || it.bolim===bolim);
+  const grid = el.grid; grid.innerHTML="";
+  if(!viewItems.length){ grid.innerHTML = `<div class="eh-note">Hech narsa topilmadi.</div>`; return; }
+  viewItems.forEach(it => grid.append(cardNode(it)));
+}
+
+async function loadCSV(signal){
+  let res = await fetch("csv/simulator.csv", { cache:"no-cache", signal }).catch(()=>({}));
+  if(!res?.ok) res = await fetch("simulator.csv", { cache:"no-cache", signal }).catch(()=>({}));
+  if(!res?.ok) return [];
+  const rows = parseCSV(await res.text());
+  return hydrate(rows);
+}
+
+/* PUBLIC */
+function bind(){
+  el.fBolim.onchange = applyFilter;
+}
+function init(){
+  if(mounted) destroy();
+  mounted=true;
   el = {
     root: document.getElementById("simulator-page"),
-    level: $("#sim-level"),
-    countIn: $("#sim-count"),
-    timeIn: $("#sim-time"),
-    start: $("#sim-start"),
-    play: $("#sim-play"),
-    countLb: $("#sim-count-label"),
-    timer: $("#sim-timer"),
-    qtext: $("#sim-qtext"),
-    choices: $("#sim-choices"),
-    prev: $("#sim-prev"),
-    next: $("#sim-next"),
-    finish: $("#sim-finish"),
-    result: $("#sim-result"),
+    hero: document.getElementById("simHero"),
+    grid: document.getElementById("simGrid"),
+    fBolim: document.getElementById("simFacetBolim"),
   };
+  abortCtrl = new AbortController();
+  bind();
+  loadCSV(abortCtrl.signal).then(items=>{
+    if(!mounted) return;
+    // split hero + items
+    hero = items.find(x=>x.type==="promo") || null;
+    allItems = items;
+    renderHero(hero);
+    fillBolimFacet(items.filter(x=>x.type!=="promo"));
+    applyFilter();
+  }).catch(()=>{});
 }
-
-function startGame() {
-  const n = parseInt(el.countIn.value, 10);
-  const level = el.level.value;
-  const minutes = parseInt(el.timeIn.value, 10);
-
-  qList = Array.from({ length: n }, () => genQuestion(level));
-  answers = Array(n).fill(null);
-  idx = 0;
-
-  el.play.style.display = "";
-  el.result.style.display = "none";
-
-  endAt = Date.now() + minutes * 60 * 1000;
-  runTimer();
-  renderQuestion();
+function destroy(){
+  mounted=false;
+  try{ abortCtrl?.abort(); }catch{}
+  abortCtrl=null;
+  el=null;
+  allItems=[]; viewItems=[]; hero=null;
 }
-
-function renderQuestion() {
-  const q = qList[idx];
-  if (!q) return;
-  el.countLb.textContent = `${idx + 1}/${qList.length}`;
-  el.qtext.textContent = q.text;
-  el.choices.innerHTML = "";
-
-  ["a", "b", "c", "d"].forEach(k => {
-    const wrap = document.createElement("label");
-    wrap.className = "eh-choice";
-    const input = document.createElement("input");
-    input.type = "radio"; input.name = "sim-ans"; input.value = k;
-    input.checked = answers[idx] === k;
-    input.onchange = () => { answers[idx] = k; };
-    const span = document.createElement("div"); span.textContent = q.choices[k];
-    wrap.append(input, span); el.choices.append(wrap);
-  });
-
-  el.prev.disabled = idx === 0;
-  el.next.disabled = idx === qList.length - 1;
-}
-
-function runTimer() {
-  stopTimer();
-  timer = setInterval(() => {
-    const left = Math.max(0, Math.floor((endAt - Date.now()) / 1000));
-    const m = String(Math.floor(left / 60)).padStart(2, "0");
-    const s = String(left % 60).padStart(2, "0");
-    el.timer.textContent = `${m}:${s}`;
-    if (left <= 0) finishGame();
-  }, 250);
-}
-function stopTimer() { try { clearInterval(timer); } catch {} timer = null; }
-
-function finishGame() {
-  stopTimer();
-  let ok = 0, bad = 0, empty = 0;
-  qList.forEach((q, i) => {
-    if (!answers[i]) empty++;
-    else if (answers[i] === q.correct) ok++;
-    else bad++;
-  });
-
-  el.result.style.display = "";
-  el.play.style.display = "none";
-
-  const n = qList.length;
-  const pct = Math.round((ok / n) * 100);
-
-  el.result.innerHTML = `
-    <div class="res-center">
-      <div class="res-card">
-        <div class="ring" style="--p:${pct}">
-          <div class="ring-hole"></div>
-          <div class="ring-label">${ok}/${n}</div>
-        </div>
-        <div class="res-title">Simulyator natijasi</div>
-        <div class="res-chips">
-          <span class="chip ok">To‘g‘ri: ${ok}</span>
-          <span class="chip bad">Xato: ${bad}</span>
-          <span class="chip mute">Bo‘sh: ${empty}</span>
-        </div>
-        <div class="res-actions" style="margin-top:8px">
-          <button class="eh-btn" id="sim-again">Qayta boshlash</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  $("#sim-again", el.result).onclick = () => startGame();
-}
-
-function bindEvents() {
-  el.start.onclick = () => startGame();
-  el.prev.onclick  = () => { if (idx > 0) { idx--; renderQuestion(); } };
-  el.next.onclick  = () => { if (idx < qList.length - 1) { idx++; renderQuestion(); } };
-  el.finish.onclick= () => finishGame();
-
-  // Keyboard shortcuts
-  el._kbd = (e) => {
-    if (el.play.style.display === "none") return;
-    const map = { "1": "a", "2": "b", "3": "c", "4": "d", "a": "a", "b": "b", "c": "c", "d": "d",
-                  "A": "a", "B": "b", "C": "c", "D": "d" };
-    if (map[e.key]) {
-      e.preventDefault();
-      answers[idx] = map[e.key];
-      renderQuestion();
-      return;
-    }
-    if (e.key === "ArrowLeft") { e.preventDefault(); if (idx > 0) { idx--; renderQuestion(); } }
-    if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); if (idx < qList.length - 1) { idx++; renderQuestion(); } }
-    if (e.ctrlKey && e.key.toLowerCase() === "enter") { e.preventDefault(); finishGame(); }
-  };
-  window.addEventListener("keydown", el._kbd);
-}
-
-/* ===== PUBLIC ===== */
-function init() {
-  if (mounted) destroy();
-  mounted = true;
-  buildRefs();
-  bindEvents();
-}
-function destroy() {
-  mounted = false;
-  stopTimer();
-  try { window.removeEventListener("keydown", el?._kbd); } catch {}
-  el = null;
-}
-
 export default { init, destroy };
