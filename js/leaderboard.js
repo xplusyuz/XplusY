@@ -1,12 +1,11 @@
-// js/leaderboard.js — Firestore-powered leaderboard with CSV fallback
+// js/leaderboard.js — GEMS-only leaderboard (Firestore + CSV fallback)
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-let mounted=false, abortCtrl=null, cursor=null, sortField="gems", pageSize=30;
+let mounted=false, abortCtrl=null, cursor=null;
 let list=[], my={ uid:null, data:null, rank:null };
 
-// SAME config as your tests.js:
 const fbConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -21,6 +20,7 @@ const auth = getAuth();
 const db   = getFirestore();
 
 const $=(s,r=document)=>r.querySelector(s);
+const PAGE=30;
 
 function safe(v, d=""){ return v==null? d : v; }
 function avatarOf(u){ return u.avatar || u.photoURL || "https://api.dicebear.com/7.x/initials/svg?seed="+encodeURIComponent(u.displayName||"User"); }
@@ -47,8 +47,6 @@ function csvToUsers(text){
     numericId:   r[idx("numericid")] || "",
     avatar:      r[idx("avatar")] || r[idx("photo")] || "",
     gems:        +(r[idx("gems")]||0),
-    score:       +(r[idx("score")]||0),
-    testsTaken:  +(r[idx("teststaken")]||0),
   }));
 }
 
@@ -77,8 +75,6 @@ function rowNode(u, rank){
     </div>
     <div class="chips">
       <span class="pill">💎 ${safe(u.gems,0)}</span>
-      <span class="pill">⭐ ${safe(u.score,0)}</span>
-      <span class="pill">📝 ${safe(u.testsTaken,0)}</span>
     </div>`;
   return li;
 }
@@ -91,12 +87,12 @@ function renderAll(){
 
 /* ===== Data ===== */
 async function fetchPage(){
-  // Try Firestore
+  // Try Firestore (gems only)
   try {
     const col = collection(db, "users");
     const q = cursor
-      ? query(col, orderBy(sortField, "desc"), limit(pageSize), startAfter(cursor))
-      : query(col, orderBy(sortField, "desc"), limit(pageSize));
+      ? query(col, orderBy("gems", "desc"), limit(PAGE), startAfter(cursor))
+      : query(col, orderBy("gems", "desc"), limit(PAGE));
     const snap = await getDocs(q);
     if (!snap.empty) {
       cursor = snap.docs[snap.docs.length - 1];
@@ -108,15 +104,15 @@ async function fetchPage(){
   } catch (e) {
     console.warn("Firestore o‘qishda xato yoki ruxsat yo‘q, CSV fallback ishlatiladi:", e.message);
   }
-  // Fallback to CSV (when first page only)
+  // Fallback to CSV (first load)
   if (list.length===0){
     let res = await fetch("csv/leaderboard.csv").catch(()=>({}));
     if (!res?.ok) res = await fetch("leaderboard.csv").catch(()=>({}));
     if (res?.ok){
       const users = csvToUsers(await res.text());
-      users.sort((a,b)=> (b[sortField]||0) - (a[sortField]||0));
+      users.sort((a,b)=> (b.gems||0) - (a.gems||0));
       list = users;
-      cursor = null; // no pagination in CSV
+      cursor = null;
       renderAll();
       return true;
     }
@@ -124,38 +120,47 @@ async function fetchPage(){
   return false;
 }
 async function refresh(){
-  list = []; cursor = null;
+  list=[]; cursor=null;
   $("#lbList").innerHTML = "";
   $("#lbPodium").innerHTML = "";
   await fetchPage();
 }
 
-/* ===== Controls ===== */
-function markSeg(){
-  document.querySelectorAll(".lb-summary .seg-btn").forEach(b=>{
-    b.classList.toggle("active", b.dataset.sort === sortField);
-  });
+/* ===== My rank (if signed in) — gems only ===== */
+async function resolveMy(){
+  const box = $("#lbMe");
+  box.classList.add("hidden");
+  const user = await new Promise(r=> onAuthStateChanged(getAuth(), u=>r(u)));
+  if(!user) return;
+  try {
+    const s = await getDoc(doc(db,"users",user.uid));
+    if(!s.exists()) return;
+    const d = s.data();
+    // Simple display (no heavy rank search to keep it light)
+    box.innerHTML = `
+      <div class="rank">Siz</div>
+      <img src="${avatarOf(d)}" alt="">
+      <div class="name">${safe(d.displayName,"Siz")}</div>
+      <span class="pill">💎 ${safe(d.gems,0)}</span>`;
+    box.classList.remove("hidden");
+  } catch {}
 }
+
+/* ===== Bind ===== */
 function bind(){
-  $("#lbRefresh").onclick = refresh;
-  document.querySelectorAll(".lb-summary .seg-btn").forEach(b=>{
-    b.onclick = async ()=>{
-      sortField = b.dataset.sort;
-      markSeg();
-      await refresh();
-    };
-  });
+  $("#lbRefresh").onclick = async ()=>{ await refresh(); await resolveMy(); };
   $("#lbMore").onclick = fetchPage;
 }
 
+/* ===== Public ===== */
 export default {
   async init(){
     if (mounted) this.destroy();
-    mounted = true;
+    mounted=true;
     abortCtrl = new AbortController();
     bind();
-    markSeg();
     await refresh();
+    await resolveMy();
   },
   destroy(){
     mounted=false;
