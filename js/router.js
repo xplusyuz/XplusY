@@ -115,3 +115,48 @@ window.addEventListener("DOMContentLoaded", () => {
   try { initUX && initUX(); } catch {}
   router();
 });
+
+
+/* === Robust Hash Router (idempotent) === */
+(function(){
+  if (window.__routerInit) return; // avoid multiple init
+  window.__routerInit = true;
+  const routes = {
+    "": "partials/home.html",
+    "#/": "partials/home.html",
+    "#/home": "partials/home.html",
+    "#/tests": "partials/tests.html",
+    "#/live": "partials/live.html",
+    "#/leaderboard": "partials/leaderboard.html",
+    "#/settings": "partials/settings.html",
+    "#/simulator": "partials/simulator.html"
+  };
+  const outlet = document.getElementById("app") || document.querySelector("[data-router-outlet]") || document.body;
+  async function load(url){
+    try{
+      const res = await fetch(url, {cache:"no-store"});
+      if(!res.ok) throw new Error(res.status+" "+res.statusText);
+      const html = await res.text();
+      outlet.innerHTML = html;
+      // page re-init hook
+      document.dispatchEvent(new CustomEvent("page:loaded", {detail:{url}}));
+    }catch(e){
+      outlet.innerHTML = "<div class='card' style='padding:1rem;margin:1rem'>Sahifa topilmadi yoki yuklanmadi.</div>";
+      console.error("Route load error:", e);
+    }
+  }
+  function resolve(){
+    const h = location.hash || "#/home";
+    const url = routes[h] || routes["#/home"];
+    load(url);
+  }
+  window.addEventListener("hashchange", resolve);
+  document.addEventListener("DOMContentLoaded", function(){
+    // delegate nav
+    document.body.addEventListener("click", function(e){
+      const a = e.target.closest("a[href^='#/']");
+      if(a){ e.preventDefault(); location.hash = a.getAttribute("href"); }
+    });
+    resolve();
+  });
+})();
