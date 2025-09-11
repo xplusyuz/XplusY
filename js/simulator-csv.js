@@ -1,6 +1,6 @@
 // js/simulator-csv.js — CSV-driven simulator catalog (NO TIME), fixed JS
-
 let mounted = false, abortCtrl = null;
+
 const $ = (s, r = document) => r.querySelector(s);
 const fmt = (v) => new Intl.NumberFormat('uz-UZ').format(+v || 0);
 
@@ -96,50 +96,33 @@ function applyFilter(){
 }
 
 /* ---- Lifecycle ---- */
-function bind(){
-  $("#simFacetBolim").onchange = applyFilter;
-}
+function bind(){ $("#simFacetBolim").onchange = applyFilter; }
 
-async function init(){
-  if (mounted) destroy();
-  mounted = true;
-  abortCtrl = new AbortController();
+export default {
+  async init(){
+    if (mounted) this.destroy();
+    mounted = true;
+    bind();
+    abortCtrl = new AbortController();
 
-  // CSV ni ikki joydan ko‘ramiz: csv/simulator.csv -> simulator.csv (fallback)
-  let text = "";
-  let ok = false;
-  try {
-    const r1 = await fetch("csv/simulator.csv", { cache: "no-cache", signal: abortCtrl.signal });
-    if (r1.ok) { text = await r1.text(); ok = true; }
-  } catch {}
-  if (!ok) {
-    try {
-      const r2 = await fetch("simulator.csv", { cache: "no-cache", signal: abortCtrl.signal });
-      if (r2.ok) { text = await r2.text(); ok = true; }
-    } catch {}
+    let text = "", ok = false;
+    try { const r1 = await fetch("csv/simulator.csv", { cache:"no-cache", signal:abortCtrl.signal }); if (r1.ok){ text = await r1.text(); ok = true; } } catch {}
+    if (!ok){ try { const r2 = await fetch("simulator.csv", { cache:"no-cache", signal:abortCtrl.signal }); if (r2.ok){ text = await r2.text(); ok = true; } } catch {} }
+    if (!ok){ const grid=$("#simGrid"); if(grid) grid.innerHTML = `<div class="eh-note">simulator.csv topilmadi</div>`; return; }
+
+    const rows = parseCSV(text);
+    const items = hydrate(rows);
+    window.__SIM_ALL__ = items;
+
+    const hero = items.find(x => x.type === 'promo') || null;
+    renderHero(hero);
+    fillBolimFacet(items.filter(x=>x.type!=='promo'));
+    applyFilter();
+  },
+  destroy(){
+    mounted=false;
+    try{ abortCtrl?.abort(); }catch{}
+    abortCtrl=null;
+    window.__SIM_ALL__ = null;
   }
-  if (!ok) {
-    const grid = $("#simGrid");
-    if (grid) grid.innerHTML = `<div class="eh-note">simulator.csv topilmadi</div>`;
-    return;
-  }
-
-  const rows = parseCSV(text);
-  const items = hydrate(rows);
-  window.__SIM_ALL__ = items;
-
-  const hero = items.find(x => x.type === 'promo') || null;
-  renderHero(hero);
-  fillBolimFacet(items.filter(x => x.type !== 'promo'));
-  bind();
-  applyFilter();
-}
-
-function destroy(){
-  mounted = false;
-  try { abortCtrl?.abort(); } catch {}
-  abortCtrl = null;
-  window.__SIM_ALL__ = null;
-}
-
-export default { init, destroy };
+};
