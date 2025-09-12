@@ -1,4 +1,4 @@
-// router.js — fail‑safe SPA router (default‑export aware)
+// router.js — fail‑safe SPA router (default‑export aware) + COURSES route
 import { attachAuthUI, initUX } from "./common.js";
 
 const app = document.getElementById("app");
@@ -12,6 +12,7 @@ const routes = {
   leaderboard: "partials/leaderboard.html",
   settings:    "partials/settings.html",
   profile:     "partials/profile.html",
+  courses:     "partials/courses.html",   // <‑‑ NEW
 };
 
 let currentTeardown = null;
@@ -71,6 +72,7 @@ async function navigate(){
       leaderboard: { css: "css/leaderboard.css", mod: "./leaderboard.js" },
       settings:    { css: "css/settings.css",    mod: "./settings.js" },
       profile:     { css: "css/profile.css",     mod: "./profile.js" },
+      courses:     { css: "css/courses.css",     mod: "./courses-csv.js" }, // NEW
     }[page];
 
     if(opt?.css) await ensureCSS(opt.css);
@@ -87,7 +89,7 @@ if(!window.__routerBound){
   window.addEventListener("hashchange", navigate, { passive:true });
   document.addEventListener("DOMContentLoaded", navigate, { once:true });
   window.__routerBound = true;
-  console.log("[router] bound (v2 default‑export aware)");
+  console.log("[router] bound (courses addon)");
 }
 
 window.__navigate = navigate;
