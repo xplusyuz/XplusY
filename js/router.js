@@ -1,9 +1,9 @@
-// Simple hash router (partials loader)
 (function(){
-  if (window.__router_v1) return; window.__router_v1 = true;
+  if (window.__router) return; window.__router = true;
   const routes = {
     "#/home": "partials/home.html",
     "#/tests": "partials/tests.html",
+    "#/test": "partials/test.html",
     "#/live": "partials/live.html",
     "#/leaderboard": "partials/leaderboard.html",
     "#/settings": "partials/settings.html",
@@ -24,6 +24,7 @@
   function resolve(){
     const h = location.hash || "#/home";
     const url = routes[h] || routes["#/home"];
+    $$("#topnav a").forEach(a=>a.classList.toggle("active", a.getAttribute("href")===h));
     load(url);
   }
   window.addEventListener("hashchange", resolve);
