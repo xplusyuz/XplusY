@@ -1,93 +1,123 @@
-// router.js — fail‑safe SPA router (default‑export aware)
+// js/router.js — robust router (Home, Simulator, Leaderboard)
 import { attachAuthUI, initUX } from "./common.js";
 
 const app = document.getElementById("app");
-if (!app) console.error("[router] #app topilmadi — index.html markup tekshiring");
 
+// Mavjud sahifalar:
 const routes = {
   home:        "partials/home.html",
-  tests:       "partials/tests.html",
-  live:        "partials/live.html",
   simulator:   "partials/simulator.html",
   leaderboard: "partials/leaderboard.html",
-  settings:    "partials/settings.html",
-  profile:     "partials/profile.html",
+
+  courses:     "partials/courses.html",
+
+  admin:       "partials/admin.html",
 };
 
 let currentTeardown = null;
 
-async function ensureCSS(href){
-  if(!href) return;
-  const exists = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-    .some(l => (l.getAttribute('href')||'').split('?')[0] === href);
-  if (exists) return;
+/* ---- Utils ---- */
+async function ensureCSS(href) {
+  try {
+    // allaqachon ulangan bo‘lsa — qaytamiz
+    if ([...document.styleSheets].some(s => s.href && s.href.includes(href))) return;
+  } catch {}
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = href + "?v=" + Date.now();
+  link.href = href;
   document.head.appendChild(link);
 }
 
-async function loadHTML(url){
-  try{
-    const res = await fetch(url + (url.includes("?")?"&":"?") + "v=" + Date.now(), { cache:"no-store" });
-    if(!res.ok) throw new Error(res.status + " " + res.statusText);
-    return await res.text();
-  }catch(e){
-    console.warn("[router] partial yuklanmadi:", url, e.message);
-    return `<div class="eh-note" style="margin:16px;border:1px solid #944;padding:12px;border-radius:12px">
-      <b>Sahifa yuklanmadi</b><br><small>${url}</small><br>${e.message}</div>`;
+async function loadPartial(url) {
+  const res = await fetch(url, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`${url} yuklanmadi (${res.status})`);
+  return res.text();
+}
+
+function parseRoute() {
+  // "#/home?x=1" -> "home"
+  const raw = (location.hash || "#/home").replace(/^#\/?/, "");
+  const [name] = raw.split("?");
+  return (name || "home").toLowerCase();
+}
+
+function callInit(mod) {
+  const initFn =
+    (typeof mod?.init === "function" && mod.init) ||
+    (typeof mod?.default?.init === "function" && mod.default.init) ||
+    (typeof mod?.default === "function" && mod.default) ||
+    null;
+
+  const destroyFn =
+    (typeof mod?.destroy === "function" && mod.destroy) ||
+    (typeof mod?.dispose === "function" && mod.dispose) ||
+    (typeof mod?.default?.destroy === "function" && mod.default.destroy) ||
+    (typeof mod?.default?.dispose === "function" && mod.default.dispose) ||
+    null;
+
+  if (initFn) initFn();
+  currentTeardown = destroyFn || null;
+}
+
+/* ---- Core ---- */
+async function loadPage(page) {
+  // Avval eski sahifaning tozalash funksiyasi
+  if (currentTeardown) {
+    try { currentTeardown(); } catch (e) { console.warn("teardown error:", e); }
+    currentTeardown = null;
   }
-}
 
-function callInitAndTeardown(mod){
-  try{
-    const ent = (mod && (mod.default||mod)) || null;
-    if(ent && typeof ent.init === "function"){ ent.init(app); }
-    if(ent && typeof ent.destroy === "function"){ currentTeardown = ent.destroy; }
-    else if (typeof mod?.teardown === "function"){ currentTeardown = mod.teardown; }
-    else currentTeardown = null;
-  }catch(e){
-    console.warn("[router] init/destroy chaqirishda xato:", e);
+  const url = routes[page] || routes.home;
+  app.innerHTML = `<div style="padding:20px"><div class="eh-note">Yuklanmoqda...</div></div>`;
+
+  try {
+    const html = await loadPartial(url);
+    \1
+
+    if(page==='settings'){ try{ const m = await import('./admin-visibility.js'); await m.wireAdminCard(); }catch(e){} }
+  } catch (e) {
+    app.innerHTML = `<div class="eh-note danger" style="margin:16px">Sahifa yuklash xatosi: ${e.message}</div>`;
+    console.error(e);
+    return;
   }
-}
 
-async function navigate(){
-  try{
-    const page = (location.hash || "#home").replace(/^#/, "");
-    const htmlPath = routes[page] || routes.home;
-
-    try{ if(typeof currentTeardown === "function") currentTeardown(); }catch{}
-
-    const html = await loadHTML(htmlPath);
-    app.innerHTML = html;
-
-    try{ initUX?.(); attachAuthUI?.(); }catch{}
-
-    const opt = {
-      home:        { css: "css/home.css",        mod: "./home-csv.js" },
-      tests:       { css: "css/tests.css",       mod: "./tests.js" },
-      live:        { css: "css/live.css",        mod: "./live-csv.js" },
-      simulator:   { css: "css/simulator.css",   mod: "./simulator-csv.js" },
-      leaderboard: { css: "css/leaderboard.css", mod: "./leaderboard.js" },
-      settings:    { css: "css/settings.css",    mod: "./settings.js" },
-      profile:     { css: "css/profile.css",     mod: "./profile.js" },
-    }[page];
-
-    if(opt?.css) await ensureCSS(opt.css);
-    if(opt?.mod){
-      try{ const mod = await import(opt.mod); callInitAndTeardown(mod); }
-      catch(e){ console.warn("[router] modul import qilinmadi:", opt.mod, e.message); }
-    } else currentTeardown = null;
-  }catch(e){
-    console.error("[router] navigate xatosi:", e);
+  // Sahifa skriptlari + CSS
+  try {
+    if (page === "home") {
+      await ensureCSS("css/home.css");
+      const mod = await import("./home-csv.js");
+      callInit(mod);
+    } else if (page === "simulator") {
+      await ensureCSS("css/simulator.css");
+      const mod = await import("./simulator-csv.js");
+      callInit(mod);
+    } else if (page === "leaderboard") {
+      await ensureCSS("css/leaderboard.css");
+      const mod = await import("./leaderboard.js");
+      callInit(mod);
+    }
+  } catch (e) {
+    const msg = e?.message || String(e);
+    const box = document.createElement("div");
+    box.className = "eh-note";
+    box.style.margin = "16px";
+    box.style.borderColor = "#944";
+    box.textContent = "Sahifa skriptini yuklashda xato: " + msg;
+    app.prepend(box);
+    console.error(e);
   }
+
+  try { window.scrollTo({ top: 0, behavior: "instant" }); } catch {}
 }
 
-if(!window.__routerBound){
-  window.addEventListener("hashchange", navigate, { passive:true });
-  document.addEventListener("DOMContentLoaded", navigate, { once:true });
-  window.__routerBound = true;
-  console.log("[router] bound (v2 default‑export aware)");
+function router() {
+  loadPage(parseRoute());
 }
 
-window.__navigate = navigate;
+/* ---- Boot ---- */
+window.addEventListener("hashchange", router);
+window.addEventListener("DOMContentLoaded", () => {
+  try { attachAuthUI?.({ requireSignIn: false }); } catch {}
+  try { initUX && initUX(); } catch {}
+  router();
+});
