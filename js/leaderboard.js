@@ -1,18 +1,21 @@
-import { getTopGems } from "./app.js";
+import { db, auth } from './app.js';
+import { collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-document.addEventListener("DOMContentLoaded", async ()=>{
-  const tb = document.querySelector("#tblLb tbody");
-  tb.innerHTML = "<tr><td colspan='4'>Yuklanmoqda...</td></tr>";
-  try{
-    const rows = await getTopGems(100);
-    tb.innerHTML = "";
-    rows.forEach((u, idx)=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${idx+1}</td><td>${u.firstName||'—'}</td><td>${u.numericId||'—'}</td><td>${u.gems||0}</td>`;
-      tb.appendChild(tr);
-    });
-  }catch(e){
-    tb.innerHTML = "<tr><td colspan='4'>Xatolik</td></tr>";
-    console.error(e);
-  }
-});
+export async function renderLeaderboard(root){
+  root.innerHTML = `<div class="container">
+    <div class="banner"><h2>🏆 TOP 100 — Olmos</h2></div>
+    <div class="card"><table class="table" id="lb"></table></div>
+  </div>`;
+  const tb = root.querySelector('#lb');
+  tb.innerHTML = `<tr><th>#</th><th>Foydalanuvchi</th><th>Olmos</th></tr>`;
+  const q = query(collection(db, 'users'), orderBy('gems','desc'), limit(100));
+  const snap = await getDocs(q);
+  let i=0;
+  snap.forEach(doc=>{
+    const u = doc.data();
+    i++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i}</td><td>${u.firstName||'-'} ${u.lastName||''}</td><td>${u.gems||0}</td>`;
+    tb.appendChild(tr);
+  });
+}

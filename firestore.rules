@@ -2,34 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() { return request.auth != null; }
-    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
     function isAdmin() {
       return isSignedIn() && (
-        userDoc(request.auth.uid).data.numericId in [1000001, 1000002] ||
-        userDoc(request.auth.uid).data.numericId in ["1000001", "1000002"]
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.numericId in [1000001, 1000002, "1000001", "1000002"]
       );
     }
     match /users/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid || isAdmin();
       allow create: if isSignedIn() && request.auth.uid == uid;
       allow update: if isSignedIn() && request.auth.uid == uid &&
-        !( "balance" in request.resource.data.diff(resource.data).changedKeys() ) &&
-        !( "gems" in request.resource.data.diff(resource.data).changedKeys() );
-      allow delete: if false;
-    }
-    match /counters/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
-    match /payments/{pid} {
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-    }
-    match /attempts/{aid} {
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-    }
-    match /promoCodes/{code} {
-      allow read: if true;
-      allow update: if isSignedIn();
-      allow create: if isAdmin();
+        !( "balance" in request.resource.data && request.resource.data.balance != resource.data.balance ) &&
+        !( "gems" in request.resource.data && request.resource.data.gems != resource.data.gems );
+      allow update: if isAdmin();
+      allow write: if false; // deny others
     }
   }
 }
