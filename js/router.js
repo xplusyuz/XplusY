@@ -109,7 +109,6 @@ function router() {
 }
 
 /* ---- Boot ---- */
-window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", () => {
   try { attachAuthUI?.({ requireSignIn: false }); } catch {}
   try { initUX && initUX(); } catch {}
