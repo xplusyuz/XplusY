@@ -8,6 +8,10 @@ const routes = {
   home:        "partials/home.html",
   simulator:   "partials/simulator.html",
   leaderboard: "partials/leaderboard.html",
+
+  tests:        "partials/tests.html",
+  live:         "partials/live.html",
+  settings:     "partials/settings.html",
 };
 
 let currentTeardown = null;
@@ -115,3 +119,45 @@ window.addEventListener("DOMContentLoaded", () => {
   try { initUX && initUX(); } catch {}
   router();
 });
+
+
+async function navigate(){
+  const page = (location.hash || '#home').replace('#','');
+  const htmlPath = routes[page] || routes.home;
+  const res = await fetch(htmlPath);
+  const html = await res.text();
+  app.innerHTML = html;
+
+  if(page === 'home'){
+    await ensureCSS('css/home.css');
+    const mod = await import('./home-csv.js'); callInit(mod);
+  } else if(page === 'simulator'){
+    await ensureCSS('css/simulator.css');
+    const mod = await import('./simulator-csv.js'); callInit(mod);
+  } else if(page === 'leaderboard'){
+    await ensureCSS('css/leaderboard.css');
+    const mod = await import('./leaderboard.js'); callInit(mod);
+  } else if(page === 'tests'){
+    await ensureCSS('css/tests.css');
+    const mod = await import('./tests.js'); callInit(mod);
+  } else if(page === 'live'){
+    await ensureCSS('css/live.css');
+    const mod = await import('./live-csv.js'); callInit(mod);
+  } else if(page === 'settings'){
+    await ensureCSS('css/settings.css');
+    const mod = await import('./settings.js'); callInit(mod);
+  }
+}
+
+function callInit(mod){
+  if(mod && typeof mod.init === 'function'){ mod.init(app); }
+}
+
+window.addEventListener('hashchange', navigate);
+document.addEventListener('DOMContentLoaded', navigate);
+
+if(!window.__routerBound){
+  window.addEventListener('hashchange', navigate);
+  document.addEventListener('DOMContentLoaded', navigate);
+  window.__routerBound = true;
+}
