@@ -12,6 +12,8 @@ const routes = {
   leaderboard: "partials/leaderboard.html",
   settings:    "partials/settings.html",
   profile:     "partials/profile.html",
+
+  admin:     "partials/admin.html",
 };
 
 let currentTeardown = null;
