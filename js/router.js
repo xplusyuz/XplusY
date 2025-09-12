@@ -63,6 +63,12 @@ async function navigate(){
     const html = await loadHTML(htmlPath);
     app.innerHTML = html;
 
+    // Admin card visibility (settings)
+    if(page==='settings'){
+      try{ const m = await import('./admin-visibility.js'); await m.wireAdminCard(); } catch(e){ console.warn('[router] admin-visibility', e.message); }
+    }
+
+
     try{ initUX?.(); attachAuthUI?.(); }catch{}
 
     const opt = {
