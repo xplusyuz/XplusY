@@ -1,10 +1,8 @@
-// router.js — fail‑safe SPA router (drop‑in)
+// router.js — fail‑safe SPA router (default‑export aware)
 import { attachAuthUI, initUX } from "./common.js";
 
 const app = document.getElementById("app");
-if (!app) {
-  console.error("[router] #app topilmadi — index.html markup tekshiring");
-}
+if (!app) console.error("[router] #app topilmadi — index.html markup tekshiring");
 
 const routes = {
   home:        "partials/home.html",
@@ -18,9 +16,8 @@ const routes = {
 
 let currentTeardown = null;
 
-async function ensureCSS(href) {
-  if (!href) return;
-  // avoid duplicates
+async function ensureCSS(href){
+  if(!href) return;
   const exists = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
     .some(l => (l.getAttribute('href')||'').split('?')[0] === href);
   if (exists) return;
@@ -30,43 +27,42 @@ async function ensureCSS(href) {
   document.head.appendChild(link);
 }
 
-async function loadHTML(url) {
-  try {
-    const res = await fetch(url + (url.includes("?") ? "&" : "?") + "v=" + Date.now(), { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status + " " + res.statusText);
+async function loadHTML(url){
+  try{
+    const res = await fetch(url + (url.includes("?")?"&":"?") + "v=" + Date.now(), { cache:"no-store" });
+    if(!res.ok) throw new Error(res.status + " " + res.statusText);
     return await res.text();
-  } catch (e) {
+  }catch(e){
     console.warn("[router] partial yuklanmadi:", url, e.message);
     return `<div class="eh-note" style="margin:16px;border:1px solid #944;padding:12px;border-radius:12px">
       <b>Sahifa yuklanmadi</b><br><small>${url}</small><br>${e.message}</div>`;
   }
 }
 
-function callInit(mod) {
-  try {
-    if (mod && typeof mod.init === "function") mod.init(app);
-  } catch (e) {
-    console.warn("[router] init(app) chaqirishda xato:", e);
+function callInitAndTeardown(mod){
+  try{
+    const ent = (mod && (mod.default||mod)) || null;
+    if(ent && typeof ent.init === "function"){ ent.init(app); }
+    if(ent && typeof ent.destroy === "function"){ currentTeardown = ent.destroy; }
+    else if (typeof mod?.teardown === "function"){ currentTeardown = mod.teardown; }
+    else currentTeardown = null;
+  }catch(e){
+    console.warn("[router] init/destroy chaqirishda xato:", e);
   }
 }
 
-async function navigate() {
-  try {
-    const hash = (location.hash || "#home");
-    const page = hash.replace(/^#/, "");
+async function navigate(){
+  try{
+    const page = (location.hash || "#home").replace(/^#/, "");
     const htmlPath = routes[page] || routes.home;
 
-    // teardown previous page
-    try { if (typeof currentTeardown === "function") currentTeardown(); } catch {}
+    try{ if(typeof currentTeardown === "function") currentTeardown(); }catch{}
 
-    // load html
     const html = await loadHTML(htmlPath);
     app.innerHTML = html;
 
-    // common UX hooks (header pills, auth button states, etc.)
-    try { initUX?.(); attachAuthUI?.(); } catch {}
+    try{ initUX?.(); attachAuthUI?.(); }catch{}
 
-    // per-page assets (optional; only if file exists)
     const opt = {
       home:        { css: "css/home.css",        mod: "./home-csv.js" },
       tests:       { css: "css/tests.css",       mod: "./tests.js" },
@@ -77,32 +73,21 @@ async function navigate() {
       profile:     { css: "css/profile.css",     mod: "./profile.js" },
     }[page];
 
-    if (opt?.css) await ensureCSS(opt.css);
-
-    if (opt?.mod) {
-      try {
-        const mod = await import(opt.mod);
-        callInit(mod);
-        if (typeof mod.teardown === "function") currentTeardown = mod.teardown;
-        else currentTeardown = null;
-      } catch (e) {
-        console.warn("[router] modul import qilinmadi:", opt.mod, e.message);
-      }
-    } else {
-      currentTeardown = null;
-    }
-  } catch (e) {
+    if(opt?.css) await ensureCSS(opt.css);
+    if(opt?.mod){
+      try{ const mod = await import(opt.mod); callInitAndTeardown(mod); }
+      catch(e){ console.warn("[router] modul import qilinmadi:", opt.mod, e.message); }
+    } else currentTeardown = null;
+  }catch(e){
     console.error("[router] navigate xatosi:", e);
   }
 }
 
-// Bind only once
-if (!window.__routerBound) {
-  window.addEventListener("hashchange", navigate, { passive: true });
-  document.addEventListener("DOMContentLoaded", navigate, { once: true });
+if(!window.__routerBound){
+  window.addEventListener("hashchange", navigate, { passive:true });
+  document.addEventListener("DOMContentLoaded", navigate, { once:true });
   window.__routerBound = true;
-  console.log("[router] bound");
+  console.log("[router] bound (v2 default‑export aware)");
 }
 
-// Expose manual refresh if needed
 window.__navigate = navigate;
