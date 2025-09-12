@@ -130,8 +130,21 @@ export function attachAuthUI({ requireSignIn = true } = {}){
 /* =====================
  *  Page-level UX init
  * ===================== */
+
+/* Active nav state */
+function __mcUpdateActiveNav(){
+  const hash = location.hash || '#home';
+  document.querySelectorAll('.nav.desktop-nav a').forEach(a=>{
+    const href = a.getAttribute('href')||'';
+    if(!href.startsWith('#')) return a.classList.remove('active');
+    a.classList.toggle('active', href === hash);
+  });
+}
+window.addEventListener('hashchange', __mcUpdateActiveNav, { passive:true });
+
 export function initUX(){
   initTheme();
   ensureBottomBar();
   document.documentElement.classList.add('js-ready');
+  __mcUpdateActiveNav();
 }
