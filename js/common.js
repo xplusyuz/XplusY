@@ -1,3 +1,4 @@
+console.log('%cMathCenter SPA ULTRA_SAFE_RB_v1-20250912155059Z','color:#0b0;background:#aef;padding:2px 6px;border-radius:6px');
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";

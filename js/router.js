@@ -74,7 +74,7 @@ async function loadPage(page) {
     const html = await loadPartial(url);
     \1
 
-    if(page==='settings'){ try{ const m = await import('./admin-visibility.js'); await m.wireAdminCard(); }catch(e){} }
+    /* settings-modal removed */catch(e){} }
   } catch (e) {
     app.innerHTML = `<div class="eh-note danger" style="margin:16px">Sahifa yuklash xatosi: ${e.message}</div>`;
     console.error(e);
