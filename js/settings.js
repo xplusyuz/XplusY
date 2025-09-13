@@ -99,12 +99,9 @@ qs('#promoApply').addEventListener('click', async ()=>{
 });
 
 // Admin
-let adminUnlocked=false;
-qs('#cardAdmin .btn').addEventListener('click', ()=>{
-  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) alert('Faqat 1000001/1000002');
-});
-qs('#adminEnter').addEventListener('click', ()=>{
-  const code=qs('#adminCode').value; if(code==='Math@1999'){ adminUnlocked=true; openModal('adminModal'); } else alert('Noto‘g‘ri kod');
+
+document.addEventListener('click', (e)=>{ if(e.target?.closest('#cardAdmin .btn')){ if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002'); openModal('adminModal'); } });
+} else alert('Noto‘g‘ri kod');
 });
 qs('#adm_list_all').addEventListener('click', adminListTop);
 qs('#adm_search').addEventListener('click', adminSearch);
@@ -165,3 +162,78 @@ function renderAdminTable(snap){
     table.appendChild(row);
   });
 }
+
+async function ensureAdmin(){
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
+    throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
+  }
+}
+
+document.addEventListener('click', (e)=>{
+  if(e.target?.id==='tabUsers'){ qs('#paneUsers').classList.remove('hidden'); qs('#panePromo').classList.add('hidden'); qs('#paneCSV').classList.add('hidden'); }
+  if(e.target?.id==='tabPromo'){ qs('#paneUsers').classList.add('hidden'); qs('#panePromo').classList.remove('hidden'); qs('#paneCSV').classList.add('hidden'); }
+  if(e.target?.id==='tabCSV'){ qs('#paneUsers').classList.add('hidden'); qs('#panePromo').classList.add('hidden'); qs('#paneCSV').classList.remove('hidden'); }
+});
+qs('#pr_create')?.addEventListener('click', async ()=>{
+  try{
+    await ensureAdmin();
+    const code = qs('#pr_code').value.trim();
+    if(!code) throw new Error('Kod kiriting');
+    const payload = {
+      code,
+      active: qs('#pr_active').value==='true',
+      balance: Number(qs('#pr_balance').value||0),
+      gems: Number(qs('#pr_gems').value||0),
+      percent: Number(qs('#pr_percent').value||0),
+      maxUses: Number(qs('#pr_max').value||0),
+      perUserLimit: Number(qs('#pr_peruser').value||1),
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid
+    };
+    const ex = qs('#pr_expires').value;
+    if(ex) payload.expiresAt = new Date(ex+'T23:59:59');
+    await setDoc(doc(db,'promoCodes', code), payload);
+    qs('#pr_msg').textContent = '✅ Yaratildi';
+  }catch(err){
+    qs('#pr_msg').textContent = '❌ '+err.message;
+  }
+});
+
+async function csvList(){
+  await ensureAdmin();
+  const sel = qs('#csv_select'); if(!sel) return;
+  sel.innerHTML='';
+  const snap = await getDocs(query(collection(db,'csvFiles'), orderBy('name','asc'), limit(500)));
+  if(snap.empty){ sel.innerHTML='<option value="">(Hali yo‘q)</option>'; return; }
+  snap.forEach(d=>{
+    const o=document.createElement('option');
+    o.value = d.id; o.textContent = d.data().name || d.id;
+    sel.appendChild(o);
+  });
+}
+async function csvLoad(){
+  await ensureAdmin();
+  const id = qs('#csv_select').value;
+  if(!id) return qs('#csv_text').value='';
+  const s = await getDoc(doc(db,'csvFiles', id));
+  qs('#csv_text').value = s.exists() ? (s.data().content||'') : '';
+}
+async function csvSave(){
+  await ensureAdmin();
+  let id = qs('#csv_select').value;
+  const text = qs('#csv_text').value;
+  if(!id){
+    const name = prompt('CSV nomi (mas: courses.csv):'); if(!name) return;
+    id = name;
+  }
+  await setDoc(doc(db,'csvFiles', id), {
+    name: id, content: text, updatedAt: serverTimestamp(), updatedBy: currentUser.uid
+  }, { merge:true });
+  qs('#csv_msg').textContent='✅ Saqlandi';
+  await csvList();
+  qs('#csv_select').value = id;
+}
+qs('#csv_refresh')?.addEventListener('click', csvList);
+qs('#csv_select')?.addEventListener('change', csvLoad);
+qs('#csv_save')?.addEventListener('click', csvSave);
+qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; });
