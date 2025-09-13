@@ -99,9 +99,12 @@ qs('#promoApply').addEventListener('click', async ()=>{
 });
 
 // Admin
-
-document.addEventListener('click', (e)=>{ if(e.target?.closest('#cardAdmin .btn')){ if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002'); openModal('adminModal'); } });
-} else alert('Noto‘g‘ri kod');
+let adminUnlocked=false;
+qs('#cardAdmin .btn').addEventListener('click', ()=>{
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) alert('Faqat 1000001/1000002');
+});
+qs('#adminEnter').addEventListener('click', ()=>{
+  const code=qs('#adminCode').value; if(code==='Math@1999'){ adminUnlocked=true; openModal('adminModal'); } else alert('Noto‘g‘ri kod');
 });
 qs('#adm_list_all').addEventListener('click', adminListTop);
 qs('#adm_search').addEventListener('click', adminSearch);
@@ -163,17 +166,23 @@ function renderAdminTable(snap){
   });
 }
 
+
+// Admin tabs
+document.addEventListener('click', (e)=>{
+  if(e.target?.id==='tabUsers'){ qs('#paneUsers')?.classList.remove('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabPromo'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.remove('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabCSV'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.remove('hidden'); }
+});
+
+
 async function ensureAdmin(){
   if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
     throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
   }
 }
 
-document.addEventListener('click', (e)=>{
-  if(e.target?.id==='tabUsers'){ qs('#paneUsers').classList.remove('hidden'); qs('#panePromo').classList.add('hidden'); qs('#paneCSV').classList.add('hidden'); }
-  if(e.target?.id==='tabPromo'){ qs('#paneUsers').classList.add('hidden'); qs('#panePromo').classList.remove('hidden'); qs('#paneCSV').classList.add('hidden'); }
-  if(e.target?.id==='tabCSV'){ qs('#paneUsers').classList.add('hidden'); qs('#panePromo').classList.add('hidden'); qs('#paneCSV').classList.remove('hidden'); }
-});
+
+// Promo create
 qs('#pr_create')?.addEventListener('click', async ()=>{
   try{
     await ensureAdmin();
@@ -195,9 +204,10 @@ qs('#pr_create')?.addEventListener('click', async ()=>{
     await setDoc(doc(db,'promoCodes', code), payload);
     qs('#pr_msg').textContent = '✅ Yaratildi';
   }catch(err){
-    qs('#pr_msg').textContent = '❌ '+err.message;
+    qs('#pr_msg').textContent = '❌ '+(err.message||err);
   }
 });
+
 
 async function csvList(){
   await ensureAdmin();
