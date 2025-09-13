@@ -158,24 +158,6 @@ function enableTilt(sel){
       const cx = r.left + r.width/2, cy = r.top + r.height/2;
       const dx = (e.clientX - cx) / (r.width/2);
       const dy = (e.clientY - cy) / (r.height/2);
-      el.style.transform = `perspective(600px) rotateX(${(-dy*6).toFixed(2)}deg) rotateY(${(dx*6).toFixed(2)}deg) translateZ(6px)`;
-    }, {passive:true});
-    el.addEventListener('mouseleave', ()=>{ el.style.transform = 'perspective(600px) translateZ(0)'; });
-  });
-}
-document.addEventListener('DOMContentLoaded', ()=>{
-  enableTilt('.nav.desktop-nav a, .btn'); // menyu pilllari va tugmalar
-});
-/* === Lightweight 3D tilt for modern feel === */
-function enableTilt(sel){
-  const nodes = document.querySelectorAll(sel);
-  nodes.forEach(el=>{
-    el.style.transformStyle = 'preserve-3d';
-    el.addEventListener('mousemove', (e)=>{
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width/2, cy = r.top + r.height/2;
-      const dx = (e.clientX - cx) / (r.width/2);
-      const dy = (e.clientY - cy) / (r.height/2);
       el.style.transform = `perspective(600px) rotateX(${(-dy*5).toFixed(2)}deg) rotateY(${(dx*5).toFixed(2)}deg) translateZ(6px)`;
     }, {passive:true});
     el.addEventListener('mouseleave', ()=>{ el.style.transform = 'perspective(600px) translateZ(0)'; });
