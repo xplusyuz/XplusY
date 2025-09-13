@@ -167,101 +167,83 @@ function renderAdminTable(snap){
 }
 
 
+// Admin tabs
+document.addEventListener('click', (e)=>{
+  if(e.target?.id==='tabUsers'){ qs('#paneUsers')?.classList.remove('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabPromo'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.remove('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabCSV'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.remove('hidden'); }
+});
 
-// === CSV editor via Firebase Storage (csv/ and csv/tests/) ===
-let __storage, __getDownloadURL, __listAll, __ref, __uploadString;
-async function __lazyStorage(){
-  if(__storage) return __storage;
-  const { getStorage, ref, listAll, getDownloadURL, uploadString } = await import("https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js");
-  __storage = getStorage();
-  __ref = ref; __listAll = listAll; __getDownloadURL = getDownloadURL; __uploadString = uploadString;
-  return __storage;
+
+async function ensureAdmin(){
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
+    throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
+  }
 }
 
 
+// Promo create
+qs('#pr_create')?.addEventListener('click', async ()=>{
+  try{
+    await ensureAdmin();
+    const code = qs('#pr_code').value.trim();
+    if(!code) throw new Error('Kod kiriting');
+    const payload = {
+      code,
+      active: qs('#pr_active').value==='true',
+      balance: Number(qs('#pr_balance').value||0),
+      gems: Number(qs('#pr_gems').value||0),
+      percent: Number(qs('#pr_percent').value||0),
+      maxUses: Number(qs('#pr_max').value||0),
+      perUserLimit: Number(qs('#pr_peruser').value||1),
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid
+    };
+    const ex = qs('#pr_expires').value;
+    if(ex) payload.expiresAt = new Date(ex+'T23:59:59');
+    await setDoc(doc(db,'promoCodes', code), payload);
+    qs('#pr_msg').textContent = '✅ Yaratildi';
+  }catch(err){
+    qs('#pr_msg').textContent = '❌ '+(err.message||err);
+  }
+});
 
-async function csvListStorage(){
+
+async function csvList(){
   await ensureAdmin();
-  await __lazyStorage();
-  const selFolder = qs('#csv_folder');
-  const folder = selFolder?.value || 'csv/';
   const sel = qs('#csv_select'); if(!sel) return;
-  sel.innerHTML = '';
-  try{
-    const r = __ref(__storage, folder);
-    const res = await __listAll(r);
-    if(!res.items.length){
-      sel.innerHTML = '<option value="">(Bo‘sh)</option>';
-      return;
-    }
-    res.items.sort((a,b)=> a.name.localeCompare(b.name, 'en'));
-    res.items.forEach(item=>{
-      const o = document.createElement('option');
-      o.value = folder + item.name;
-      o.textContent = item.name;
-      sel.appendChild(o);
-    });
-  }catch(err){
-    qs('#csv_msg').textContent = '❌ Ro‘yxat xatosi: ' + (err.message || err);
-  }
+  sel.innerHTML='';
+  const snap = await getDocs(query(collection(db,'csvFiles'), orderBy('name','asc'), limit(500)));
+  if(snap.empty){ sel.innerHTML='<option value="">(Hali yo‘q)</option>'; return; }
+  snap.forEach(d=>{
+    const o=document.createElement('option');
+    o.value = d.id; o.textContent = d.data().name || d.id;
+    sel.appendChild(o);
+  });
 }
-
-
-
-async function csvLoadStorage(){
+async function csvLoad(){
   await ensureAdmin();
-  await __lazyStorage();
-  const path = qs('#csv_select')?.value;
-  if(!path){ qs('#csv_text').value=''; return; }
-  try{
-    const r = __ref(__storage, path);
-    const url = await __getDownloadURL(r);
-    const txt = await fetch(url).then(r=>r.text());
-    qs('#csv_text').value = txt;
-    qs('#csv_msg').textContent = '✅ Yuklandi: ' + path;
-  }catch(err){
-    qs('#csv_msg').textContent = '❌ Yuklash xatosi: ' + (err.message || err);
-  }
+  const id = qs('#csv_select').value;
+  if(!id) return qs('#csv_text').value='';
+  const s = await getDoc(doc(db,'csvFiles', id));
+  qs('#csv_text').value = s.exists() ? (s.data().content||'') : '';
 }
-
-
-
-async function csvSaveStorage(){
+async function csvSave(){
   await ensureAdmin();
-  await __lazyStorage();
-  const folder = (qs('#csv_folder')?.value || 'csv/');
-  const sel = qs('#csv_select');
-  let path = sel?.value || '';
+  let id = qs('#csv_select').value;
   const text = qs('#csv_text').value;
-  try{
-    if(!path){
-      // New file: force under csv/tests/
-      const name = prompt('Yangi CSV nomi (mas: sample.csv) — csv/tests/ ichida yaratiladi:');
-      if(!name) return;
-      // sanitize
-      const clean = name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      path = 'csv/tests/' + clean;
-      // set dropdown selection later
-    }
-    // For safety: if creating (no previous path or switching folder), we still only allow csv/tests/
-    if(!sel?.value && !path.startsWith('csv/tests/')){
-      path = 'csv/tests/' + path.split('/').pop();
-    }
-    const r = __ref(__storage, path);
-    await __uploadString(r, text, 'raw', { contentType: 'text/csv; charset=utf-8' });
-    qs('#csv_msg').textContent = '✅ Saqlandi: ' + path;
-    // Refresh list & set selection
-    await csvListStorage();
-    if(qs('#csv_select')) qs('#csv_select').value = path;
-  }catch(err){
-    qs('#csv_msg').textContent = '❌ Saqlash xatosi: ' + (err.message || err);
+  if(!id){
+    const name = prompt('CSV nomi (mas: courses.csv):'); if(!name) return;
+    id = name;
   }
+  await setDoc(doc(db,'csvFiles', id), {
+    name: id, content: text, updatedAt: serverTimestamp(), updatedBy: currentUser.uid
+  }, { merge:true });
+  qs('#csv_msg').textContent='✅ Saqlandi';
+  await csvList();
+  qs('#csv_select').value = id;
 }
-
-
-
-qs('#csv_refresh')?.addEventListener('click', csvListStorage);
-qs('#csv_folder')?.addEventListener('change', csvListStorage);
-qs('#csv_select')?.addEventListener('change', csvLoadStorage);
-qs('#csv_save')?.addEventListener('click', csvSaveStorage);
-qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; qs('#csv_folder').value='csv/tests/'; });
+qs('#csv_refresh')?.addEventListener('click', csvList);
+qs('#csv_select')?.addEventListener('change', csvLoad);
+qs('#csv_save')?.addEventListener('click', csvSave);
+qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; });
