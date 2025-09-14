@@ -1,155 +1,287 @@
-// Settings JS (see analysis above)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import { getFirestore, collection, collectionGroup, query, orderBy, where, limit, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
+import { attachAuthUI, initUX, db, ADMIN_NUMERIC_IDS } from "./common.js";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-const firebaseConfig={apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",authDomain:"xplusy-760fa.firebaseapp.com",projectId:"xplusy-760fa",storageBucket:"xplusy-760fa.appspot.com",messagingSenderId:"992512966017",appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",measurementId:"G-459PLJ7P7L"};
-const ADMIN_NUMERIC_IDS=[1000001,1000002];
-const TG_BOT_TOKEN="8021293022:AAGud9dz-Dv_5RjsjF0RFaqgMR2LeKA6G7c";
-const TG_CHAT_ID=2049065724;
+attachAuthUI({ requireSignIn: true });
+initUX();
 
-const app=initializeApp(firebaseConfig);
-const auth=getAuth(app);
-const db=getFirestore(app);
-const storage=getStorage(app);
+const qs=(s,el=document)=>el.querySelector(s);
+const qsa=(s,el=document)=>[...el.querySelectorAll(s)];
+const show=el=>el.classList.remove('hidden');
+const hide=el=>el.classList.add('hidden');
 
-let currentUser=null,currentDoc=null;
-const qs=s=>document.querySelector(s);
-const openModal=id=>qs('#'+id)?.classList.remove('hidden');
-const closeModal=el=>el.classList.add('hidden');
-document.addEventListener('click',e=>{const o=e.target?.getAttribute?.('data-open');if(o)openModal(o);if(e.target?.hasAttribute?.('data-close')){const m=e.target.closest('.modal');if(m)closeModal(m);}});
+function openModal(id){ hideAll(); show(qs('#'+id)); }
+function hideAll(){ qsa('.modal').forEach(m=>m.classList.add('hidden')); }
+document.addEventListener('click',(e)=>{
+  const openId=e.target.getAttribute('data-open'); if(openId) openModal(openId);
+  if(e.target.hasAttribute('data-close')) e.target.closest('.modal')?.classList.add('hidden');
+  if(e.target.classList.contains('modal')) e.target.classList.add('hidden');
+});
 
-onAuthStateChanged(auth, async(user)=>{
-  currentUser=user||null; if(!user) return;
-  const uref=doc(db,'users',user.uid); const s=await getDoc(uref);
-  currentDoc=s.exists()?s.data():null; window.__mcUser={user,profile:currentDoc};
+let currentUser=null, currentDoc=null;
+document.addEventListener('mc:user-ready', async ()=>{
+  const { user, profile } = window.__mcUser; currentUser=user; currentDoc=profile;
+  if(ADMIN_NUMERIC_IDS.includes(Number(profile?.numericId))) show(qs('#cardAdmin'));
+  fillProfile(profile);
+  renderBadges(profile.badges||[]);
+});
+
+function fillProfile(d){
+  qs('#pf_numericId').value = d.numericId ?? '—';
+  qs('#pf_firstName').value = d.firstName ?? '';
+  qs('#pf_lastName').value = d.lastName ?? '';
+  qs('#pf_middleName').value = d.middleName ?? '';
+  qs('#pf_dob').value = d.dob ?? '';
+  qs('#pf_region').value = d.region ?? '';
+  qs('#pf_district').value = d.district ?? '';
+  qs('#pf_phone').value = d.phone ?? '';
+  qs('#pf_balance').value = d.balance ?? 0;
+  qs('#pf_gems').value = d.gems ?? 0;
+}
+function setEditable(x){
+  ['#pf_firstName','#pf_lastName','#pf_middleName','#pf_dob','#pf_region','#pf_district','#pf_phone'].forEach(s=> qs(s).readOnly=!x);
+  qs('#profileSave').disabled = !x;
+}
+qs('#profileEdit').addEventListener('click', ()=> setEditable(true));
+qs('#profileSave').addEventListener('click', async ()=>{
+  try{
+    const ref=doc(db,'users', currentUser.uid);
+    const data={
+      firstName: qs('#pf_firstName').value.trim(),
+      lastName: qs('#pf_lastName').value.trim(),
+      middleName: qs('#pf_middleName').value.trim(),
+      dob: qs('#pf_dob').value,
+      region: qs('#pf_region').value.trim(),
+      district: qs('#pf_district').value.trim(),
+      phone: qs('#pf_phone').value.trim(),
+    };
+    await updateDoc(ref, data);
+    alert('Profil saqlandi ✅'); setEditable(false); currentDoc={ ...currentDoc, ...data };
+  }catch(e){ alert('Xato: '+e.message); }
 });
 
 // Results
 async function loadResults(){
-  if(!currentUser) return;
-  const box=qs('#resultsBox'); if(!box) return;
-  box.innerHTML='<div class="card">Yuklanmoqda…</div>';
-  const rows=[], best=[];
-  const col=collection(db,'users',currentUser.uid,'attempts');
-  const last=await getDocs(query(col,orderBy('createdAt','desc'),limit(20)));
-  last.forEach(d=>rows.push({id:d.id,...d.data()}));
-  const all=await getDocs(query(col,orderBy('score','desc'),limit(100))); const seen=new Set();
-  all.forEach(d=>{const r=d.data();if(seen.has(r.testId))return; best.push({id:d.id,...r}); seen.add(r.testId);});
-  const frag=document.createDocumentFragment();
-  const sec1=document.createElement('div'); sec1.className='card'; sec1.innerHTML='<h4 style="margin:0 0 6px">Oxirgi 20</h4>';
-  rows.forEach(r=>{const div=document.createElement('div');div.className='row';div.innerHTML=`<div><b>${r.title||r.testId||'—'}</b> <span class="sub">(${r.type||'test'})</span></div><div class="pill">${Number(r.score||0)}%</div>`;sec1.appendChild(div);});
-  frag.appendChild(sec1);
-  const sec2=document.createElement('div'); sec2.className='card'; sec2.innerHTML='<h4 style="margin:8px 0 6px">Eng yaxshi natijalar</h4>';
-  best.sort((a,b)=>Number(b.score||0)-Number(a.score||0));
-  best.forEach(r=>{const div=document.createElement('div');div.className='row';div.innerHTML=`<div><b>${r.title||r.testId||'—'}</b> <span class="sub">(${r.type||'test'})</span></div><div class="pill success">${Number(r.score||0)}%</div>`;sec2.appendChild(div);});
-  box.innerHTML=''; box.appendChild(frag);
+  const list=qs('#resultsList'); list.innerHTML='<div class="card">Yuklanmoqda…</div>';
+  const col=collection(db,'users', currentUser.uid, 'results');
+  const snap=await getDocs(query(col, orderBy('createdAtFS','desc'), limit(20)));
+  list.innerHTML=''; if(snap.empty){ list.innerHTML='<div class="hint">Hozircha natija yo‘q.</div>'; return; }
+  snap.forEach(d=>{ const r=d.data(); const when=r.createdAt || ''; const el=document.createElement('div'); el.className='card'; el.innerHTML=`<div><b>${r.examName||'Sinov'}</b></div><div class="sub">Score: ${r.score?.toFixed?.(2) ?? r.score} — ${when}</div>`; list.appendChild(el); });
 }
-qs('#btnOpenResults')?.addEventListener('click',loadResults);
+document.querySelector('#cardResults .btn')?.addEventListener('click', loadResults);
 
-// Promo redeem
-qs('#promo_apply')?.addEventListener('click', async()=>{
+// Badges
+function renderBadges(arr){
+  const w=qs('#badgesWrap'); w.innerHTML=''; if(!arr||!arr.length){ w.innerHTML='<div class="hint">Hozircha yutuqlar yo‘q.</div>'; return; }
+  arr.forEach(b=>{ const s=document.createElement('span'); s.className='pill'; s.textContent=b; w.appendChild(s); });
+}
+
+// Promo
+qs('#promoApply').addEventListener('click', async ()=>{
+  const msg=qs('#promoMsg'); msg.textContent='';
+  const code=qs('#promoInput').value.trim(); if(!code){ msg.textContent='Kod kiriting'; return; }
   try{
-    if(!currentUser) throw new Error('Kirish kerak');
-    const code=qs('#promo_code').value.trim(); if(!code) throw new Error('Kod kiriting');
-    const ref=doc(db,'promoCodes',code); const s=await getDoc(ref); if(!s.exists()) throw new Error('Kod topilmadi');
-    const p=s.data(); if(p.active===false) throw new Error('Kod faol emas');
-    const usedRef=doc(db,'users',currentUser.uid,'promoUsed',code); const used=await getDoc(usedRef); if(used.exists()) throw new Error('Avval ishlatilgan');
-    const uref=doc(db,'users',currentUser.uid); const u=await getDoc(uref); const cur=u.data()||{};
-    await updateDoc(uref,{balance:Number(cur.balance||0)+Number(p.balance||0),gems:Number(cur.gems||0)+Number(p.gems||0)});
-    await setDoc(usedRef,{usedAt:serverTimestamp()}); qs('#promo_msg').textContent='✅ Qo‘llandi';
-  }catch(err){ qs('#promo_msg').textContent='❌ '+(err.message||err); }
+    const promoRef=doc(db,'promoCodes', code);
+    const userRef=doc(db,'users', currentUser.uid);
+    const redRef=doc(db,'users', currentUser.uid, 'promoRedemptions', code);
+    await runTransaction(db, async (tx)=>{
+      const p=await tx.get(promoRef); if(!p.exists()) throw new Error('Kod topilmadi');
+      const D=p.data();
+      if(D.active===false) throw new Error('Kod faol emas');
+      if(D.expiresAt && D.expiresAt.toDate && D.expiresAt.toDate() < new Date()) throw new Error('Muddati tugagan');
+      const used=await tx.get(redRef); if(used.exists()) throw new Error('Bu kod allaqachon ishlatilgan');
+      const u=await tx.get(userRef); if(!u.exists()) throw new Error('Foydalanuvchi topilmadi');
+      tx.update(userRef, { balance: Number(u.data().balance||0) + Number(D.balance||0), gems: Number(u.data().gems||0) + Number(D.gems||0) });
+      tx.set(redRef, { usedAt: serverTimestamp(), code });
+    });
+    msg.textContent='✅ Qo‘llandi';
+  }catch(e){ msg.textContent='❌ '+e.message; }
 });
 
-// Admin guard + tabs
-function ensureAdmin(){const num=Number(currentDoc?.numericId||0); if(![1000001,1000002].includes(num)) throw new Error('Faqat 1000001/1000002');}
-document.addEventListener('click',e=>{if(e.target?.closest('#cardAdmin [data-open="adminModal"]')){try{ensureAdmin(); openModal('adminModal');}catch(err){alert(err.message);}}});
-document.addEventListener('click',e=>{
-  if(e.target?.id==='tabUsers'){qs('#paneUsers')?.classList.remove('hidden');qs('#panePromo')?.classList.add('hidden');qs('#panePayments')?.classList.add('hidden');}
-  if(e.target?.id==='tabPromo'){qs('#paneUsers')?.classList.add('hidden');qs('#panePromo')?.classList.remove('hidden');qs('#panePayments')?.classList.add('hidden');}
-  if(e.target?.id==='tabPayments'){qs('#paneUsers')?.classList.add('hidden');qs('#panePromo')?.classList.add('hidden');qs('#panePayments')?.classList.remove('hidden');admLoadPayments();}
+// Admin visibility + open
+qs('#openAdmin')?.addEventListener('click', ()=>{
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002');
+  openModal('adminModal');
 });
 
-// Admin users
-qs('#adm_search')?.addEventListener('click', async()=>{
+// Admin table actions
+let adminUnlocked=true; // no password gate, numericId check only
+document.addEventListener('click', async (e)=>{
+  if(!e.target.classList.contains('a_save')) return;
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Ruxsat yo‘q');
+  const row=e.target.closest('.adm-row') || e.target.closest('.card'); const uid=row.getAttribute('data-uid');
+  const ref=doc(db,'users', uid);
   try{
-    ensureAdmin();
-    const qv=qs('#adm_query').value.trim(); const box=qs('#adm_table'); box.innerHTML='';
-    if(!qv){box.innerHTML='<div class="hint">Qidiruv qiymatini kiriting</div>'; return;}
-    const found=[];
-    if(/^[0-9]+$/.test(qv)){const cg=await getDocs(query(collection(db,'users'), where('numericId','==',Number(qv)), limit(30))); cg.forEach(s=>found.push({id:s.id,...s.data()}));}
-    if(found.length===0){const snap=await getDocs(query(collection(db,'users'), limit(50))); snap.forEach(s=>{const d=s.data(); if((d.phone||'').includes(qv)) found.push({id:s.id,...d});});}
-    if(!found.length){box.innerHTML='<div class="hint">Topilmadi</div>';return;}
-    renderUsers(box,found);
-  }catch(err){alert(err.message);}
+    await updateDoc(ref, {
+      numericId: Number(row.querySelector('.a_numericId').value) || null,
+      firstName: row.querySelector('.a_firstName').value.trim(),
+      lastName: row.querySelector('.a_lastName').value.trim(),
+      phone: row.querySelector('.a_phone').value.trim(),
+      region: row.querySelector('.a_region').value.trim(),
+      balance: Number(row.querySelector('.a_balance').value),
+      gems: Number(row.querySelector('.a_gems').value),
+      dob: row.querySelector('.a_dob').value
+    });
+    alert('Saqlandi ✅');
+  }catch(e){ alert('Xato: '+e.message); }
 });
-qs('#adm_list_all')?.addEventListener('click', async()=>{
-  try{ensureAdmin(); const box=qs('#adm_table'); box.innerHTML=''; const snap=await getDocs(query(collection(db,'users'), orderBy('createdAt','desc'), limit(50))); const list=[]; snap.forEach(s=>list.push({id:s.id,...s.data()})); renderUsers(box,list);}catch(err){alert(err.message);} });
-function renderUsers(box,list){list.forEach(u=>{const row=document.createElement('div');row.className='card';row.innerHTML=`<div class="row"><div><b>${u.displayName||u.email||u.id}</b> <span class="sub">ID: ${u.numericId||'—'}</span></div><div class="sub">balans: ${Number(u.balance||0).toLocaleString('ru-RU')}</div></div>`; box.appendChild(row);});}
 
-// Admin promo create
-qs('#pr_create')?.addEventListener('click', async()=>{
+async function adminListTop(){
+  const table=qs('#adm_table'); table.innerHTML='';
+  const snap=await getDocs(query(collection(db,'users'), orderBy('numericId','asc'), limit(50)));
+  renderAdminTable(snap);
+}
+async function adminSearch(){
+  const term=(qs('#adm_query').value||'').trim(); if(!term) return adminListTop();
+  let snap;
+  if(/^[0-9]+$/.test(term)){
+    snap = await getDocs(query(collection(db,'users'), where('numericId','==', Number(term)), limit(20)));
+  }else{
+    snap = await getDocs(query(collection(db,'users'), where('phone','==', term), limit(20)));
+  }
+  renderAdminTable(snap);
+}
+function renderAdminTable(snap){
+  const table=qs('#adm_table'); table.innerHTML='';
+  const head=document.createElement('div'); head.className='card';
+  head.innerHTML='<b>ID</b> | Ism | Fam | Tel | Viloyat | Balans | Olmos | DOB | Amal';
+  table.appendChild(head);
+  if(snap.empty){ const d=document.createElement('div'); d.className='hint'; d.textContent='Hech narsa topilmadi'; table.appendChild(d); return; }
+  snap.forEach(d=>{
+    const u=d.data(); const row=document.createElement('div'); row.className='card adm-row'; row.setAttribute('data-uid', d.id);
+    row.innerHTML = `
+      <input class="a_numericId" type="number" value="${u.numericId ?? ''}" />
+      <input class="a_firstName" type="text" value="${u.firstName ?? ''}" />
+      <input class="a_lastName" type="text" value="${u.lastName ?? ''}" />
+      <input class="a_phone" type="text" value="${u.phone ?? ''}" />
+      <input class="a_region" type="text" value="${u.region ?? ''}" />
+      <input class="a_balance" type="number" value="${u.balance ?? 0}" />
+      <input class="a_gems" type="number" value="${u.gems ?? 0}" />
+      <input class="a_dob" type="date" value="${u.dob ?? ''}" />
+      <button class="btn primary a_save">Saqlash</button>`;
+    table.appendChild(row);
+  });
+}
+
+document.getElementById('adm_list_all')?.addEventListener('click', adminListTop);
+document.getElementById('adm_search')?.addEventListener('click', adminSearch);
+
+// Admin tabs
+document.addEventListener('click', (e)=>{
+  if(e.target?.id==='tabUsers'){ qs('#paneUsers')?.classList.remove('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabPromo'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.remove('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
+  if(e.target?.id==='tabCSV'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.remove('hidden'); }
+});
+
+async function ensureAdmin(){
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
+    throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
+  }
+}
+
+// Promo create
+qs('#pr_create')?.addEventListener('click', async ()=>{
   try{
-    ensureAdmin();
-    const payload={
-      code:qs('#pr_code').value.trim(),
-      active:qs('#pr_active').value==='true',
-      balance:Number(qs('#pr_balance').value||0),
-      gems:Number(qs('#pr_gems').value||0),
-      percent:Number(qs('#pr_percent').value||0),
-      maxUses:Number(qs('#pr_max').value||0),
-      perUserLimit:Number(qs('#pr_peruser').value||1),
-      createdAt:serverTimestamp(),
-      createdBy:currentUser?.uid||null
+    await ensureAdmin();
+    const code = qs('#pr_code').value.trim();
+    if(!code) throw new Error('Kod kiriting');
+    const payload = {
+      code,
+      active: qs('#pr_active').value==='true',
+      balance: Number(qs('#pr_balance').value||0),
+      gems: Number(qs('#pr_gems').value||0),
+      percent: Number(qs('#pr_percent').value||0),
+      maxUses: Number(qs('#pr_max').value||0),
+      perUserLimit: Number(qs('#pr_peruser').value||1),
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid
     };
-    if(!payload.code) throw new Error('Kod');
-    const ex=qs('#pr_expires').value; if(ex) payload.expiresAt=new Date(ex+'T23:59:59');
-    await setDoc(doc(db,'promoCodes',payload.code),payload); qs('#pr_msg').textContent='✅ Yaratildi';
-  }catch(err){qs('#pr_msg').textContent='❌ '+(err.message||err);}
+    const ex = qs('#pr_expires').value;
+    if(ex) payload.expiresAt = new Date(ex+'T23:59:59');
+    await setDoc(doc(db,'promoCodes', code), payload);
+    qs('#pr_msg').textContent = '✅ Yaratildi';
+  }catch(err){
+    qs('#pr_msg').textContent = '❌ '+(err.message||err);
+  }
 });
 
-// Payments: history + submit
-async function tgSendDocument(caption,file){
-  const url=`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument`;
-  const fd=new FormData(); fd.append('chat_id',TG_CHAT_ID); fd.append('caption',caption); fd.append('document',file,file.name||'receipt');
-  const res=await fetch(url,{method:'POST',body:fd}); if(!res.ok) throw new Error('Telegram xatosi: '+res.status); return res.json();
+// CSV list/load/save
+async function csvList(){
+  await ensureAdmin();
+  const sel = qs('#csv_select'); if(!sel) return;
+  sel.innerHTML='';
+  const snap = await getDocs(query(collection(db,'csvFiles'), orderBy('name','asc'), limit(500)));
+  if(snap.empty){ sel.innerHTML='<option value="">(Hali yo‘q)</option>'; return; }
+  snap.forEach(d=>{
+    const o=document.createElement('option');
+    o.value = d.id; o.textContent = d.data().name || d.id;
+    sel.appendChild(o);
+  });
 }
-async function loadPayHistory(){
-  if(!currentUser) return; const list=qs('#pay_history'); if(!list) return;
-  list.innerHTML='<div class="card">Yuklanmoqda…</div>';
-  const snap=await getDocs(query(collection(db,'users', currentUser.uid, 'payments'), orderBy('createdAt','desc'), limit(50)));
-  list.innerHTML=''; if(snap.empty){list.innerHTML='<div class="hint">Hali to‘lov arizasi yo‘q.</div>'; return;}
-  snap.forEach(d=>{const p=d.data(); const st=p.status||'pending'; const row=document.createElement('div'); row.className='card'; row.innerHTML=`<div class="row"><div><b>${Number(p.amount||0).toLocaleString('ru-RU')} so‘m</b> <span class="sub">— ${p.method||'manual'}</span></div><div class="pill ${st}">${st}</div></div>`; list.appendChild(row);});
+async function csvLoad(){
+  await ensureAdmin();
+  const id = qs('#csv_select').value;
+  if(!id) return qs('#csv_text').value='';
+  const s = await getDoc(doc(db,'csvFiles', id));
+  qs('#csv_text').value = s.exists() ? (s.data().content||'') : '';
 }
-document.addEventListener('click',e=>{if(e.target?.closest('#cardBalance [data-open="topUpModal"]')){try{loadPayHistory();}catch{}}});
-qs('#pay_submit')?.addEventListener('click', async()=>{
+async function csvSave(){
+  await ensureAdmin();
+  let id = qs('#csv_select').value;
+  const text = qs('#csv_text').value;
+  if(!id){
+    const name = prompt('CSV nomi (mas: courses.csv):'); if(!name) return;
+    id = name;
+  }
+  await setDoc(doc(db,'csvFiles', id), {
+    name: id, content: text, updatedAt: serverTimestamp(), updatedBy: currentUser.uid
+  }, { merge:true });
+  qs('#csv_msg').textContent='✅ Saqlandi';
+  await csvList();
+  qs('#csv_select').value = id;
+}
+qs('#csv_refresh')?.addEventListener('click', csvList);
+qs('#csv_select')?.addEventListener('change', csvLoad);
+qs('#csv_save')?.addEventListener('click', csvSave);
+qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; });
+
+// ----- Top-up: save request + history (no Storage upload here) -----
+qs('#pay_submit')?.addEventListener('click', async ()=>{
+  const msg=qs('#pay_msg'); msg.textContent='';
   try{
-    if(!currentUser) throw new Error('Kirish kerak');
-    const amount=Number(qs('#pay_amount').value||0); const note=qs('#pay_note').value||''; const fileEl=qs('#pay_file'); const file=fileEl?.files?.[0];
-    if(!amount||amount<1000) throw new Error('Summani kiriting'); if(!file) throw new Error('Chek faylini tanlang');
-    const pref=doc(collection(db,'users',currentUser.uid,'payments')); const payload={id:pref.id,uid:currentUser.uid,amount,note,method:'manual',status:'pending',createdAt:serverTimestamp()};
-    await setDoc(pref,payload); try{await setDoc(doc(db,'payments_admin',pref.id),{...payload,userRef:pref.path});}catch{}
-    const r=ref(storage,`receipts/${currentUser.uid}/${pref.id}`); await uploadBytes(r,file); const url=await getDownloadURL(r);
-    await updateDoc(pref,{receiptUrl:url}); try{await updateDoc(doc(db,'payments_admin',pref.id),{receiptUrl:url});}catch{}
-    const me=window.__mcUser?.profile||{}; const cap=`MathCenter — yangi to‘lov arizasi\nID: ${me.numericId||'—'}\nUser: ${me.displayName||currentUser.email||currentUser.uid}\nSumma: ${amount.toLocaleString('ru-RU')} so‘m\nIzoh: ${note}\nReceipt: ${url}`; await tgSendDocument(cap,file);
-    qs('#pay_msg').textContent='✅ Yuborildi. Tekshiruv kutilmoqda'; qs('#pay_amount').value=''; qs('#pay_note').value=''; fileEl.value=''; await loadPayHistory();
-  }catch(err){ qs('#pay_msg').textContent='❌ '+(err.message||err); }
+    const amount = Number(qs('#pay_amount').value||0);
+    if(!amount || amount<1000) throw new Error('Summani kiriting');
+    const note = qs('#pay_note').value.trim();
+    const file = qs('#pay_file').files?.[0];
+    const payload={ amount, note, filename: file?.name || null, createdAt: new Date(), createdAtFS: serverTimestamp(), status: 'pending' };
+    // Firestore: users/{uid}/topups/{auto}
+    const refCol = collection(db,'users', currentUser.uid, 'topups');
+    // setDoc with random id via add-like pattern:
+    const randomId = Math.random().toString(36).slice(2);
+    await setDoc(doc(refCol, randomId), payload);
+    msg.textContent='✅ Yuborildi. 10–15 daqiqa ichida tekshirilib qo‘shiladi.';
+    await loadPayHistory();
+  }catch(e){
+    msg.textContent='❌ '+(e.message||e);
+  }
 });
 
-// Admin: payments queue
-async function admLoadPayments(){
-  try{
-    const num=Number(currentDoc?.numericId||0); if(!ADMIN_NUMERIC_IDS.includes(num)) return;
-    const box=qs('#adm_payments'); if(!box) return; box.innerHTML='<div class="card">Yuklanmoqda…</div>';
-    const snap=await getDocs(query(collection(db,'payments_admin'), orderBy('createdAt','desc'), limit(200))); box.innerHTML='';
-    if(snap.empty){box.innerHTML='<div class="hint">Hozircha ariza yo‘q.</div>'; return;}
-    snap.forEach(d=>{const p=d.data(); p.id=d.id; const sum=Number(p.amount||0).toLocaleString('ru-RU'); const row=document.createElement('div'); row.className='card'; row.innerHTML=`<div class="row"><div><b>${sum} so‘m</b> <span class="sub">UID: ${p.uid||'-'}</span></div><div class="sub" style="max-width:420px;overflow:auto">Izoh: ${p.note||''}</div><div><a class="btn ghost" href="${p.receiptUrl||'#'}" target="_blank">Chek</a><button class="btn success" data-approve="${p.id}">Qabul</button><button class="btn danger" data-reject="${p.id}">Rad</button></div></div>`; box.appendChild(row);});
-  }catch(err){alert(err.message);}
+export async function loadPayHistory(){
+  const wrap=qs('#pay_history'); if(!wrap) return;
+  wrap.innerHTML='<div class="card">Yuklanmoqda…</div>';
+  const col=collection(db,'users', currentUser.uid, 'topups');
+  const snap=await getDocs(query(col, orderBy('createdAtFS','desc'), limit(20)));
+  wrap.innerHTML='';
+  if(snap.empty){ wrap.innerHTML='<div class="hint">Hozircha ma’lumot yo‘q.</div>'; return; }
+  snap.forEach(d=>{
+    const r=d.data();
+    const el=document.createElement('div'); el.className='card';
+    el.innerHTML = `<div><b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b> — ${r.status||'pending'}</div>
+                    <div class="sub">${r.note||''}</div>`;
+    wrap.appendChild(el);
+  });
 }
-document.addEventListener('click', async(e)=>{
-  const ap=e.target?.getAttribute?.('data-approve'); const rj=e.target?.getAttribute?.('data-reject'); if(!ap && !rj) return;
-  const num=Number(currentDoc?.numericId||0); if(!ADMIN_NUMERIC_IDS.includes(num)) return;
-  if(ap){const comment=prompt('Izoh (ixtiyoriy):',''); try{const pa=await getDoc(doc(db,'payments_admin',ap)); const data=pa.data(); if(!data) throw new Error('Topilmadi'); const uref=doc(db,'users',data.uid); const udoc=await getDoc(uref); const bal=Number(udoc.data()?.balance||0)+Number(data.amount||0); await updateDoc(uref,{balance:bal}); await updateDoc(doc(db,'users',data.uid,'payments',ap),{status:'approved',adminComment:comment||''}); await updateDoc(doc(db,'payments_admin',ap),{status:'approved',adminComment:comment||''}); await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TG_CHAT_ID,text:`✅ Qabul qilindi: ${Number(data.amount||0).toLocaleString('ru-RU')} so‘m (UID: ${data.uid})`})}); admLoadPayments(); alert('Qabul qilindi');}catch(err){alert('Xato: '+(err.message||err));}}
-  if(rj){const comment=prompt('Rad etish sababi:',''); try{const pa=await getDoc(doc(db,'payments_admin',rj)); const data=pa.data(); if(!data) throw new Error('Topilmadi'); await updateDoc(doc(db,'users',data.uid,'payments',rj),{status:'rejected',adminComment:comment||''}); await updateDoc(doc(db,'payments_admin',rj),{status:'rejected',adminComment:comment||''}); await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:TG_CHAT_ID,text:`❌ Rad etildi: ${Number(data.amount||0).toLocaleString('ru-RU')} so‘m (UID: ${data.uid}) — ${comment||''}`})}); admLoadPayments(); alert('Rad etildi');}catch(err){alert('Xato: '+(err.message||err));}}
+
+// open TopUp => refresh history
+document.querySelector('#cardBalance [data-open="topUpModal"]')?.addEventListener('click', ()=>{
+  if(typeof loadPayHistory === 'function'){ try{ loadPayHistory(); }catch{} }
 });
