@@ -1,13 +1,20 @@
-import { attachAuthUI, initUX, db, ADMIN_NUMERIC_IDS } from "./common.js";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { attachAuthUI, initUX, db, ADMIN_NUMERIC_IDS, storage } from "./common.js";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
+
+// ==== CONFIG: Telegram =====
+const TG_TOKEN = "8021293022:AAGud9dz-Dv_5RjsjF0RFaqgMR2LeKA6G7c";
+const TG_CHAT_ID = "2049065724"; // your chat id
+const TG_API = `https://api.telegram.org/bot${TG_TOKEN}`;
+// ===========================
 
 attachAuthUI({ requireSignIn: true });
 initUX();
 
 const qs=(s,el=document)=>el.querySelector(s);
 const qsa=(s,el=document)=>[...el.querySelectorAll(s)];
-const show=el=>el.classList.remove('hidden');
-const hide=el=>el.classList.add('hidden');
+const show=el=>el?.classList.remove('hidden');
+const hide=el=>el?.classList.add('hidden');
 
 function openModal(id){ hideAll(); show(qs('#'+id)); }
 function hideAll(){ qsa('.modal').forEach(m=>m.classList.add('hidden')); }
@@ -103,148 +110,7 @@ qs('#openAdmin')?.addEventListener('click', ()=>{
   openModal('adminModal');
 });
 
-// Admin table actions
-let adminUnlocked=true; // no password gate, numericId check only
-document.addEventListener('click', async (e)=>{
-  if(!e.target.classList.contains('a_save')) return;
-  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Ruxsat yo‘q');
-  const row=e.target.closest('.adm-row') || e.target.closest('.card'); const uid=row.getAttribute('data-uid');
-  const ref=doc(db,'users', uid);
-  try{
-    await updateDoc(ref, {
-      numericId: Number(row.querySelector('.a_numericId').value) || null,
-      firstName: row.querySelector('.a_firstName').value.trim(),
-      lastName: row.querySelector('.a_lastName').value.trim(),
-      phone: row.querySelector('.a_phone').value.trim(),
-      region: row.querySelector('.a_region').value.trim(),
-      balance: Number(row.querySelector('.a_balance').value),
-      gems: Number(row.querySelector('.a_gems').value),
-      dob: row.querySelector('.a_dob').value
-    });
-    alert('Saqlandi ✅');
-  }catch(e){ alert('Xato: '+e.message); }
-});
-
-async function adminListTop(){
-  const table=qs('#adm_table'); table.innerHTML='';
-  const snap=await getDocs(query(collection(db,'users'), orderBy('numericId','asc'), limit(50)));
-  renderAdminTable(snap);
-}
-async function adminSearch(){
-  const term=(qs('#adm_query').value||'').trim(); if(!term) return adminListTop();
-  let snap;
-  if(/^[0-9]+$/.test(term)){
-    snap = await getDocs(query(collection(db,'users'), where('numericId','==', Number(term)), limit(20)));
-  }else{
-    snap = await getDocs(query(collection(db,'users'), where('phone','==', term), limit(20)));
-  }
-  renderAdminTable(snap);
-}
-function renderAdminTable(snap){
-  const table=qs('#adm_table'); table.innerHTML='';
-  const head=document.createElement('div'); head.className='card';
-  head.innerHTML='<b>ID</b> | Ism | Fam | Tel | Viloyat | Balans | Olmos | DOB | Amal';
-  table.appendChild(head);
-  if(snap.empty){ const d=document.createElement('div'); d.className='hint'; d.textContent='Hech narsa topilmadi'; table.appendChild(d); return; }
-  snap.forEach(d=>{
-    const u=d.data(); const row=document.createElement('div'); row.className='card adm-row'; row.setAttribute('data-uid', d.id);
-    row.innerHTML = `
-      <input class="a_numericId" type="number" value="${u.numericId ?? ''}" />
-      <input class="a_firstName" type="text" value="${u.firstName ?? ''}" />
-      <input class="a_lastName" type="text" value="${u.lastName ?? ''}" />
-      <input class="a_phone" type="text" value="${u.phone ?? ''}" />
-      <input class="a_region" type="text" value="${u.region ?? ''}" />
-      <input class="a_balance" type="number" value="${u.balance ?? 0}" />
-      <input class="a_gems" type="number" value="${u.gems ?? 0}" />
-      <input class="a_dob" type="date" value="${u.dob ?? ''}" />
-      <button class="btn primary a_save">Saqlash</button>`;
-    table.appendChild(row);
-  });
-}
-
-document.getElementById('adm_list_all')?.addEventListener('click', adminListTop);
-document.getElementById('adm_search')?.addEventListener('click', adminSearch);
-
-// Admin tabs
-document.addEventListener('click', (e)=>{
-  if(e.target?.id==='tabUsers'){ qs('#paneUsers')?.classList.remove('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
-  if(e.target?.id==='tabPromo'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.remove('hidden'); qs('#paneCSV')?.classList.add('hidden'); }
-  if(e.target?.id==='tabCSV'){ qs('#paneUsers')?.classList.add('hidden'); qs('#panePromo')?.classList.add('hidden'); qs('#paneCSV')?.classList.remove('hidden'); }
-});
-
-async function ensureAdmin(){
-  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
-    throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
-  }
-}
-
-// Promo create
-qs('#pr_create')?.addEventListener('click', async ()=>{
-  try{
-    await ensureAdmin();
-    const code = qs('#pr_code').value.trim();
-    if(!code) throw new Error('Kod kiriting');
-    const payload = {
-      code,
-      active: qs('#pr_active').value==='true',
-      balance: Number(qs('#pr_balance').value||0),
-      gems: Number(qs('#pr_gems').value||0),
-      percent: Number(qs('#pr_percent').value||0),
-      maxUses: Number(qs('#pr_max').value||0),
-      perUserLimit: Number(qs('#pr_peruser').value||1),
-      createdAt: serverTimestamp(),
-      createdBy: currentUser.uid
-    };
-    const ex = qs('#pr_expires').value;
-    if(ex) payload.expiresAt = new Date(ex+'T23:59:59');
-    await setDoc(doc(db,'promoCodes', code), payload);
-    qs('#pr_msg').textContent = '✅ Yaratildi';
-  }catch(err){
-    qs('#pr_msg').textContent = '❌ '+(err.message||err);
-  }
-});
-
-// CSV list/load/save
-async function csvList(){
-  await ensureAdmin();
-  const sel = qs('#csv_select'); if(!sel) return;
-  sel.innerHTML='';
-  const snap = await getDocs(query(collection(db,'csvFiles'), orderBy('name','asc'), limit(500)));
-  if(snap.empty){ sel.innerHTML='<option value="">(Hali yo‘q)</option>'; return; }
-  snap.forEach(d=>{
-    const o=document.createElement('option');
-    o.value = d.id; o.textContent = d.data().name || d.id;
-    sel.appendChild(o);
-  });
-}
-async function csvLoad(){
-  await ensureAdmin();
-  const id = qs('#csv_select').value;
-  if(!id) return qs('#csv_text').value='';
-  const s = await getDoc(doc(db,'csvFiles', id));
-  qs('#csv_text').value = s.exists() ? (s.data().content||'') : '';
-}
-async function csvSave(){
-  await ensureAdmin();
-  let id = qs('#csv_select').value;
-  const text = qs('#csv_text').value;
-  if(!id){
-    const name = prompt('CSV nomi (mas: courses.csv):'); if(!name) return;
-    id = name;
-  }
-  await setDoc(doc(db,'csvFiles', id), {
-    name: id, content: text, updatedAt: serverTimestamp(), updatedBy: currentUser.uid
-  }, { merge:true });
-  qs('#csv_msg').textContent='✅ Saqlandi';
-  await csvList();
-  qs('#csv_select').value = id;
-}
-qs('#csv_refresh')?.addEventListener('click', csvList);
-qs('#csv_select')?.addEventListener('change', csvLoad);
-qs('#csv_save')?.addEventListener('click', csvSave);
-qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; });
-
-// ----- Top-up: save request + history (no Storage upload here) -----
+// ---------- Top-up: upload to Storage, save doc, send to Telegram, history ----------
 qs('#pay_submit')?.addEventListener('click', async ()=>{
   const msg=qs('#pay_msg'); msg.textContent='';
   try{
@@ -252,13 +118,54 @@ qs('#pay_submit')?.addEventListener('click', async ()=>{
     if(!amount || amount<1000) throw new Error('Summani kiriting');
     const note = qs('#pay_note').value.trim();
     const file = qs('#pay_file').files?.[0];
-    const payload={ amount, note, filename: file?.name || null, createdAt: new Date(), createdAtFS: serverTimestamp(), status: 'pending' };
-    // Firestore: users/{uid}/topups/{auto}
+    // 1) Create doc id first
     const refCol = collection(db,'users', currentUser.uid, 'topups');
-    // setDoc with random id via add-like pattern:
-    const randomId = Math.random().toString(36).slice(2);
-    await setDoc(doc(refCol, randomId), payload);
-    msg.textContent='✅ Yuborildi. 10–15 daqiqa ichida tekshirilib qo‘shiladi.';
+    const id = Math.random().toString(36).slice(2);
+    // 2) Upload file if any
+    let fileURL=null, fileName=null;
+    if(file){
+      fileName = file.name;
+      const path = `users/${currentUser.uid}/topups/${id}/${fileName}`;
+      const sref = sRef(storage, path);
+      await uploadBytes(sref, file);
+      fileURL = await getDownloadURL(sref);
+    }
+    // 3) Save firestore
+    const payload={ 
+      amount, note, filename: fileName, fileURL: fileURL || null,
+      createdAt: new Date(), createdAtFS: serverTimestamp(), 
+      status: 'pending',
+      userNumericId: currentDoc?.numericId || null,
+      userName: `${currentDoc?.firstName||''} ${currentDoc?.lastName||''}`.trim(),
+      userPhone: currentDoc?.phone || null
+    };
+    await setDoc(doc(refCol, id), payload);
+    // 4) Try Telegram (best effort; may fail due to CORS)
+    try{
+      const caption = `🧾 Yangi to‘lov arizasi\n\n`+
+        `💰 Summasi: ${amount.toLocaleString('uz-UZ')} so‘m\n`+
+        `👤 ID: ${currentDoc?.numericId} | ${currentDoc?.firstName||''} ${currentDoc?.lastName||''}\n`+
+        `📞 Tel: ${currentDoc?.phone||'-'}\n`+
+        (note?`📝 Izoh: ${note}\n`:'')+
+        (fileURL?`📎 Chek: ${fileURL}\n`:'' )+
+        `🔗 Bot: https://t.me/MathCenter_Pay_bot`;
+      if(fileURL){
+        await fetch(`${TG_API}/sendDocument`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ chat_id: TG_CHAT_ID, caption, document: fileURL, parse_mode: "HTML" })
+        });
+      }else{
+        await fetch(`${TG_API}/sendMessage`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ chat_id: TG_CHAT_ID, text: caption })
+        });
+      }
+    }catch(err){
+      console.warn('Telegram yuborishda xatolik (ehtimol CORS):', err);
+    }
+    msg.textContent='✅ Yuborildi. Arizangiz ko‘rib chiqiladi.';
     await loadPayHistory();
   }catch(e){
     msg.textContent='❌ '+(e.message||e);
@@ -275,13 +182,117 @@ export async function loadPayHistory(){
   snap.forEach(d=>{
     const r=d.data();
     const el=document.createElement('div'); el.className='card';
-    el.innerHTML = `<div><b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b> — ${r.status||'pending'}</div>
-                    <div class="sub">${r.note||''}</div>`;
+    const st = r.status||'pending';
+    el.innerHTML = `<div class="row"><b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b>
+        <span class="status-badge status-${st}">${st}</span></div>
+        <div class="sub">${r.note||''}</div>`;
     wrap.appendChild(el);
   });
 }
 
 // open TopUp => refresh history
+document.querySelector('#cardBalance [data-open="topUpModal"]')?.addEventListener('click', ()=>{
+  if(typeof loadPayHistory === 'function'){ try{ loadPayHistory(); }catch{} }
+});
+
+// ------------------- ADMIN: payments list + approve/reject -------------------
+function ensureAdminSync(){
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))){
+    throw new Error('Faqat 1000001/1000002 ruxsat etiladi');
+  }
+}
+async function listPayments(filter='pending'){
+  ensureAdminSync();
+  const wrap = qs('#adm_pay_table'); wrap.innerHTML='<div class="card">Yuklanmoqda…</div>';
+  // search across all users: collectionGroup
+  const topups = collection(db, 'users', '__uid__', 'topups'); // placeholder
+  // Workaround: no collectionGroup via REST here; use simple approach:
+  // We'll query recent users and then merge. (If you have CF, replace with collectionGroup.)
+  // For now, list latest 100 users then pull their topups.
+  const usersSnap = await getDocs(query(collection(db,'users'), orderBy('numericId','asc'), limit(100)));
+  wrap.innerHTML='';
+  let cnt=0;
+  for (const u of usersSnap.docs){
+    const uid=u.id;
+    const col=collection(db,'users', uid, 'topups');
+    let qy;
+    if(filter==='pending') qy=query(col, where('status','==','pending'), orderBy('createdAtFS','desc'), limit(50));
+    else if(filter==='today'){
+      const start = new Date(); start.setHours(0,0,0,0);
+      qy=query(col, orderBy('createdAtFS','desc'), limit(50)); // client-side filter by createdAt (approx)
+    } else {
+      qy=query(col, orderBy('createdAtFS','desc'), limit(50));
+    }
+    const snap=await getDocs(qy);
+    snap.forEach(d=>{
+      const r=d.data(); if(filter==='today'){ /* skip if not today */ }
+      const card=document.createElement('div'); card.className='card adm-row'; card.dataset.uid=uid; card.dataset.id=d.id;
+      card.innerHTML = `
+        <div class="row">
+          <b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b>
+          <span class="status-badge status-${r.status||'pending'}">${r.status||'pending'}</span>
+        </div>
+        <div class="sub">ID: ${r.userNumericId||''} | ${r.userName||''} | ${r.userPhone||''}</div>
+        ${r.note?`<div class="sub">Izoh: ${r.note}</div>`:''}
+        ${r.fileURL?`<div class="sub"><a href="${r.fileURL}" target="_blank" rel="noopener">📎 Chekni ko‘rish</a></div>`:''}
+        <textarea class="adm-note" placeholder="Izoh (majburiy emas)"></textarea>
+        <div class="row">
+          <button class="btn primary a_approve">Qabul qilish</button>
+          <button class="btn danger a_reject">Rad etish</button>
+        </div>`;
+      wrap.appendChild(card);
+      cnt++;
+    });
+  }
+  if(!cnt){ wrap.innerHTML = '<div class="hint">Hozircha ariza yo‘q.</div>'; }
+}
+
+qs('#adm_pay_pending')?.addEventListener('click', ()=>listPayments('pending'));
+qs('#adm_pay_all')?.addEventListener('click', ()=>listPayments('all'));
+qs('#adm_pay_today')?.addEventListener('click', ()=>listPayments('today'));
+
+document.addEventListener('click', async (e)=>{
+  if(!(e.target.classList.contains('a_approve')||e.target.classList.contains('a_reject'))) return;
+  try{
+    ensureAdminSync();
+    const row = e.target.closest('.adm-row');
+    const uid=row.dataset.uid, id=row.dataset.id;
+    const reason = row.querySelector('.adm-note')?.value?.trim()||'';
+    const approved = e.target.classList.contains('a_approve');
+    const userRef = doc(db,'users', uid);
+    const topupRef = doc(db,'users', uid, 'topups', id);
+    await runTransaction(db, async (tx)=>{
+      const t = await tx.get(topupRef); if(!t.exists()) throw new Error('Top-up topilmadi');
+      const R = t.data(); if(R.status!=='pending') throw new Error('Bu ariza allaqachon ko‘rilgan');
+      if(approved){
+        // add to balance
+        const u = await tx.get(userRef); if(!u.exists()) throw new Error('User topilmadi');
+        const newBal = Number(u.data().balance||0) + Number(R.amount||0);
+        tx.update(userRef, { balance: newBal });
+        tx.update(topupRef, { status:'approved', adminNote: reason, reviewedAt: serverTimestamp(), reviewedBy: currentUser.uid });
+      }else{
+        tx.update(topupRef, { status:'rejected', adminNote: reason, reviewedAt: serverTimestamp(), reviewedBy: currentUser.uid });
+      }
+    });
+    // Telegram notify
+    try{
+      const text = (approved? '✅ QABUL QILINDI':'❌ RAD ETILDI') + `\n` + 
+        `ID:${row.querySelector('.sub')?.textContent||''}\n`+
+        (reason?`Izoh: ${reason}`:'') ;
+      await fetch(`${TG_API}/sendMessage`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ chat_id: TG_CHAT_ID, text })
+      });
+    }catch{}
+    row.querySelector('.status-badge').textContent = approved? 'approved':'rejected';
+    row.querySelector('.status-badge').className = 'status-badge ' + (approved? 'status-approved':'status-rejected');
+    alert('Bajarildi ✅');
+  }catch(err){
+    alert('Xato: '+(err.message||err));
+  }
+});
+
+// show history when opening modal
 document.querySelector('#cardBalance [data-open="topUpModal"]')?.addEventListener('click', ()=>{
   if(typeof loadPayHistory === 'function'){ try{ loadPayHistory(); }catch{} }
 });
