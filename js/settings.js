@@ -27,7 +27,6 @@ document.addEventListener('click',(e)=>{
 let currentUser=null, currentDoc=null;
 document.addEventListener('mc:user-ready', async ()=>{
   const { user, profile } = window.__mcUser; currentUser=user; currentDoc=profile;
-  // Admin card is already visible; we keep the guard on click.
   fillProfile(profile);
   renderBadges(profile.badges||[]);
 });
@@ -101,11 +100,14 @@ qs('#promoApply').addEventListener('click', async ()=>{
       tx.set(redRef, { usedAt: serverTimestamp(), code });
     });
     msg.textContent='✅ Qo‘llandi';
-  }catch(e){ msg.textContent='❌ '+e.message); }
+  }catch(e){
+    msg.textContent='❌ '+(e.message||e);
+  }
 });
 
 // Admin open (guarded)
 document.getElementById('openAdmin')?.addEventListener('click', ()=>{
+  // Guard: only numericId in ADMIN_NUMERIC_IDS can open
   if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002');
   openModal('adminModal');
 });
@@ -125,7 +127,7 @@ qs('#pay_submit')?.addEventListener('click', async ()=>{
     let fileURL=null, fileName=null;
     try{
       if(file){
-        const storage = getStorage(); // default app
+        const storage = getStorage();
         fileName = file.name;
         const path = `users/${currentUser.uid}/topups/${id}/${fileName}`;
         const sref = sRef(storage, path);
