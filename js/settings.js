@@ -247,3 +247,180 @@ qs('#csv_refresh')?.addEventListener('click', csvList);
 qs('#csv_select')?.addEventListener('change', csvLoad);
 qs('#csv_save')?.addEventListener('click', csvSave);
 qs('#csv_new')?.addEventListener('click', ()=>{ qs('#csv_select').value=''; qs('#csv_text').value=''; });
+
+
+
+// === Payments: Storage + Telegram helpers ===
+let __storage, __ref, __uploadBytes, __getDownloadURL;
+async function __lazyStorage(){
+  if(__storage) return __storage;
+  const { getStorage, ref, uploadBytes, getDownloadURL } = await import("https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js");
+  __storage = getStorage();
+  __ref = ref; __uploadBytes = uploadBytes; __getDownloadURL = getDownloadURL;
+  return __storage;
+}
+// Telegram configs
+const TG_BOT_TOKEN = "8021293022:AAGud9dz-Dv_5RjsjF0RFaqgMR2LeKA6G7c";
+const TG_CHAT_ID = 2049065724;
+async function tgSendDocument(caption, file){
+  const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument`;
+  const fd = new FormData();
+  fd.append('chat_id', TG_CHAT_ID);
+  fd.append('caption', caption);
+  fd.append('document', file, file.name || 'receipt');
+  const res = await fetch(url, { method:'POST', body: fd });
+  if(!res.ok){ throw new Error('Telegram xatosi: '+res.status); }
+  return res.json();
+}
+
+
+
+// === Top-up submit ===
+async function loadPayHistory(){
+  if(!currentUser) return;
+  const list = qs('#pay_history'); if(!list) return;
+  list.innerHTML = '<div class="card">Yuklanmoqda…</div>';
+  const col = collection(db,'users', currentUser.uid, 'payments');
+  const snap = await getDocs(query(col, orderBy('createdAt','desc'), limit(50)));
+  list.innerHTML = '';
+  if(snap.empty){ list.innerHTML = '<div class="hint">Hali to‘lov arizasi yo‘q.</div>'; return; }
+  snap.forEach(d=>{
+    const p = d.data();
+    const st = p.status || 'pending';
+    const row = document.createElement('div');
+    row.className = 'card';
+    row.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div><b>${Number(p.amount||0).toLocaleString('ru-RU')} so‘m</b> <span class="sub">— ${p.method||'unknown'}</span></div>
+      <div class="pill ${st}">${st}</div>
+    </div>`;
+    list.appendChild(row);
+  });
+}
+qs('#cardBalance [data-open="topUpModal"]')?.addEventListener('click', loadPayHistory);
+
+qs('#pay_submit')?.addEventListener('click', async ()=>{
+  try{
+    if(!currentUser) throw new Error('Kirish kerak');
+    await __lazyStorage();
+    const amount = Number(qs('#pay_amount').value||0);
+    const note = qs('#pay_note').value||'';
+    const file = qs('#pay_file').files[0];
+    if(!amount || amount<1000) throw new Error('Summani kiriting');
+    if(!file) throw new Error('Chek faylini tanlang');
+
+    // 1) Create Firestore doc (pending)
+    const pcol = collection(db,'users', currentUser.uid, 'payments');
+    const pref = doc(pcol); // auto id
+    const payload = {
+      id: pref.id,
+      uid: currentUser.uid,
+      amount, note,
+      method: 'manual',
+      status: 'pending',
+      createdAt: serverTimestamp()
+    };
+    await setDoc(pref, payload);
+    try{ await setDoc(doc(db,'payments_admin', pref.id), { ...payload, userRef: pref.path }); }catch(_){}
+
+    // 2) Upload receipt to Storage
+    const path = `receipts/${currentUser.uid}/${pref.id}`;
+    const r = __ref(__storage, path);
+    await __uploadBytes(r, file);
+    const url = await __getDownloadURL(r);
+    await updateDoc(pref, { receiptUrl: url });
+    try{ await updateDoc(doc(db,'payments_admin', pref.id), { receiptUrl: url }); }catch(_){}
+
+    // 3) Send to Telegram
+    const me = window.__mcUser?.profile || {};
+    const cap = `MathCenter — yangi to‘lov arizasi\nID: ${me.numericId||'—'}\nUser: ${me.displayName||currentUser.email||currentUser.uid}\nSumma: ${amount.toLocaleString('ru-RU')} so‘m\nIzoh: ${note}\nReceipt: ${url}`;
+    await tgSendDocument(cap, file);
+
+    qs('#pay_msg').textContent = '✅ Yuborildi. Tekshiruv kutilmoqda';
+    qs('#pay_amount').value = '';
+    qs('#pay_note').value = '';
+    qs('#pay_file').value = '';
+    await loadPayHistory();
+  }catch(err){
+    qs('#pay_msg').textContent = '❌ ' + (err.message||err);
+  }
+});
+
+
+
+// === Admin: payments queue ===
+async function admLoadPayments(){
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return;
+  const box = qs('#adm_payments'); if(!box) return;
+  box.innerHTML = '<div class="card">Yuklanmoqda…</div>';
+  const snap = await getDocs(query(collection(db,'payments_admin'), orderBy('createdAt','desc'), limit(200)));
+  box.innerHTML='';
+  if(snap.empty){ box.innerHTML = '<div class="hint">Hozircha ariza yo‘q.</div>'; return; }
+  snap.forEach(d=>{
+    const p = d.data(); p.id = d.id;
+    const row = document.createElement('div');
+    row.className = 'card';
+    const sum = Number(p.amount||0).toLocaleString('ru-RU');
+    row.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <div><b>${sum} so‘m</b> <span class="sub">UID: ${p.uid||'-'}</span></div>
+        <div class="sub" style="max-width:420px;overflow:auto">Izoh: ${p.note||''}</div>
+        <div>
+          <a class="btn ghost" href="${p.receiptUrl||'#'}" target="_blank">Chek</a>
+          <button class="btn success" data-approve="${p.id}">Qabul</button>
+          <button class="btn danger" data-reject="${p.id}">Rad</button>
+        </div>
+      </div>
+    `;
+    box.appendChild(row);
+  });
+}
+document.addEventListener('click', (e)=>{
+  if(e.target?.id==='tabPayments'){
+    qs('#paneUsers')?.classList.add('hidden');
+    qs('#panePromo')?.classList.add('hidden');
+    qs('#panePayments')?.classList.remove('hidden');
+    admLoadPayments();
+  }
+});
+document.addEventListener('click', async (e)=>{
+  const ap = e.target?.getAttribute?.('data-approve');
+  const rj = e.target?.getAttribute?.('data-reject');
+  if(ap){ 
+    const comment = prompt('Izoh (ixtiyoriy):',''); 
+    try{
+      const pa = await getDoc(doc(db,'payments_admin', ap));
+      const data = pa.data(); if(!data) throw new Error('Topilmadi');
+      const uref = doc(db,'users', data.uid);
+      const udoc = await getDoc(uref);
+      const bal = Number(udoc.data()?.balance||0) + Number(data.amount||0);
+      await updateDoc(uref, { balance: bal });
+      await updateDoc(doc(db,'users', data.uid, 'payments', ap), { status:'approved', adminComment: comment||'' });
+      await updateDoc(doc(db,'payments_admin', ap), { status:'approved', adminComment: comment||'' });
+      try{
+        await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ chat_id: TG_CHAT_ID, text: `✅ Qabul qilindi: ${Number(data.amount||0).toLocaleString('ru-RU')} so‘m (UID: ${data.uid})` })
+        });
+      }catch{}
+      admLoadPayments(); alert('Qabul qilindi');
+    }catch(err){ alert('Xato: '+(err.message||err)); }
+  }
+  if(rj){
+    const comment = prompt('Rad etish sababi:','');
+    try{
+      const pa = await getDoc(doc(db,'payments_admin', rj));
+      const data = pa.data(); if(!data) throw new Error('Topilmadi');
+      await updateDoc(doc(db,'users', data.uid, 'payments', rj), { status:'rejected', adminComment: comment||'' });
+      await updateDoc(doc(db,'payments_admin', rj), { status:'rejected', adminComment: comment||'' });
+      try{
+        await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ chat_id: TG_CHAT_ID, text: `❌ Rad etildi: ${Number(data.amount||0).toLocaleString('ru-RU')} so‘m (UID: ${data.uid}) — ${comment||''}` })
+        });
+      }catch{}
+      admLoadPayments(); alert('Rad etildi');
+    }catch(err){ alert('Xato: '+(err.message||err)); }
+  }
+});
