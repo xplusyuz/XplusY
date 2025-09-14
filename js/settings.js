@@ -109,17 +109,17 @@ qs('#promoApply').addEventListener('click', async ()=>{
 document.getElementById('openAdmin')?.addEventListener('click', ()=>{
   if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002');
   openModal('adminModal');
-  // default: load pending payments
   document.getElementById('adm_pay_pending')?.click();
 });
 
-// ---------- Top-up: upload to Storage (optional), save doc, send to Telegram, history ----------
+// ---------- Top-up: upload -> Firestore -> Telegram -> history ----------
 function bindTopup(){
   const btn = document.getElementById('pay_submit');
   if(!btn || btn._bound) return;
   btn._bound = true;
   btn.addEventListener('click', async ()=>{
-    const msg=qs('#pay_msg'); msg.textContent='';
+    const msg=qs('#pay_msg'); msg.className='hint'; msg.textContent='Yuborilmoqda…';
+    btn.disabled = true;
     try{
       const amount = Number(qs('#pay_amount').value||0);
       if(!amount || amount<1000) throw new Error('Summani kiriting');
@@ -152,7 +152,7 @@ function bindTopup(){
         userPhone: currentDoc?.phone || null
       };
       await setDoc(doc(refCol, id), payload);
-      // Telegram
+      // Telegram (best-effort)
       try{
         const caption = `🧾 Yangi to‘lov arizasi\n\n`+
           `💰 Summasi: ${amount.toLocaleString('uz-UZ')} so‘m\n`+
@@ -164,10 +164,14 @@ function bindTopup(){
         const body = fileURL? { chat_id: TG_CHAT_ID, caption, document: fileURL, parse_mode:"HTML" } : { chat_id: TG_CHAT_ID, text: caption };
         await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       }catch(err){ console.warn('Telegram yuborilmadi:', err); }
-      msg.textContent='✅ Yuborildi. Arizangiz ko‘rib chiqiladi.';
+      msg.className='hint ok'; msg.textContent='✅ Yuborildi. Arizangiz ko‘rib chiqiladi.';
+      // reset fields
+      qs('#pay_amount').value=''; qs('#pay_note').value=''; if(qs('#pay_file')) qs('#pay_file').value='';
       await loadPayHistory();
     }catch(e){
-      msg.textContent='❌ '+(e.message||e);
+      msg.className='hint err'; msg.textContent='❌ '+(e.message||e);
+    } finally {
+      btn.disabled = false;
     }
   });
 }
@@ -182,17 +186,17 @@ export async function loadPayHistory(){
   if(snap.empty){ wrap.innerHTML='<div class="hint">Hozircha ma’lumot yo‘q.</div>'; return; }
   snap.forEach(d=>{
     const r=d.data();
-    const el=document.createElement('div'); el.className='card';
     const st = r.status||'pending';
+    const el=document.createElement('div'); el.className='card';
     el.innerHTML = `<div class="row"><b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b>
         <span class="status-badge status-${st}">${st}</span></div>
-        <div class="sub">${r.note||''}</div>`;
+        ${r.note?`<div class="sub">Izoh: ${r.note}</div>`:''}
+        ${r.adminNote && st!=='pending' ? `<div class="sub"><b>Admin izohi:</b> ${r.adminNote}</div>`:''}`;
     wrap.appendChild(el);
   });
 }
 document.querySelector('#cardBalance [data-open="topUpModal"]')?.addEventListener('click', ()=>{
   if(typeof loadPayHistory === 'function'){ try{ loadPayHistory(); }catch{} }
-  // ensure listener exists (in case DOM re-render)
   bindTopup();
 });
 
@@ -277,7 +281,7 @@ document.getElementById('pr_create')?.addEventListener('click', async ()=>{
       active: qs('#pr_active').value==='true',
       balance: Number(qs('#pr_balance').value||0),
       gems: Number(qs('#pr_gems').value||0),
-      percent: Number(qs('#pr_percent').value||0),
+      percent: Number(qs','#pr_percent').value||0), // <- if typo, fix to qs('#pr_percent')
       maxUses: Number(qs('#pr_max').value||0),
       perUserLimit: Number(qs('#pr_peruser').value||1),
       createdAt: serverTimestamp(),
@@ -292,7 +296,7 @@ document.getElementById('pr_create')?.addEventListener('click', async ()=>{
   }
 });
 
-// ------------------- ADMIN: Payments list + approve/reject -------------------
+// ------------------- ADMIN: Payments list + approve/reject + filters -------------------
 async function listPayments(filter='pending'){
   ensureAdminSync();
   const wrap = qs('#adm_pay_table'); wrap.innerHTML='<div class="card">Yuklanmoqda…</div>';
@@ -303,11 +307,10 @@ async function listPayments(filter='pending'){
     const uid=u.id;
     const col=collection(db,'users', uid, 'topups');
     let qy = query(col, orderBy('createdAtFS','desc'), limit(50));
-    if(filter==='pending') qy = query(col, where('status','==','pending'), orderBy('createdAtFS','desc'), limit(50));
+    if(filter!=='all') qy = query(col, where('status','==', filter), orderBy('createdAtFS','desc'), limit(50));
     const snap=await getDocs(qy);
     snap.forEach(d=>{
       const r=d.data();
-      // show numericId and doc id clearly
       const nid = r.userNumericId ?? u.data().numericId ?? '—';
       const card=document.createElement('div'); card.className='card adm-row'; card.dataset.uid=uid; card.dataset.id=d.id;
       card.innerHTML = `
@@ -317,23 +320,23 @@ async function listPayments(filter='pending'){
         </div>
         <div class="sub">UserID: ${nid} | Name: ${r.userName||''} | Tel: ${r.userPhone||''}</div>
         <div class="sub">Topup Doc ID: ${d.id}</div>
-        ${r.note?`<div class="sub">Izoh: ${r.note}</div>`:''}
-        ${r.fileURL?`<div class="sub"><a href="${r.fileURL}" target="_blank" rel="noopener">📎 Chekni ko‘rish</a></div>`:''}
-        <textarea class="adm-note" placeholder="Izoh (majburiy emas)"></textarea>
+        ${r.note?`<div class="sub">Foydalanuvchi izohi: ${r.note}</div>`:''}
+        ${r.adminNote && r.status!=='pending' ? `<div class="sub"><b>Admin izohi:</b> ${r.adminNote}</div>`:''}
+        <textarea class="adm-note" placeholder="Admin izohi (faqat siz uchun)"></textarea>
         <div class="row">
-          <button class="btn primary a_approve">Qabul qilish</button>
-          <button class="btn danger a_reject">Rad etish</button>
+          ${r.status==='pending' ? `<button class="btn primary a_approve">Qabul qilish</button>
+          <button class="btn danger a_reject">Rad etish</button>` : ''}
         </div>`;
       wrap.appendChild(card);
       cnt++;
     });
   }
-  if(!cnt){ wrap.innerHTML = '<div class="hint">Hozircha ariza yo‘q.</div>'; }
+  if(!cnt){ wrap.innerHTML = '<div class="hint">Hech narsa yo‘q.</div>'; }
 }
-
 document.getElementById('adm_pay_pending')?.addEventListener('click', ()=>listPayments('pending'));
+document.getElementById('adm_pay_approved')?.addEventListener('click', ()=>listPayments('approved'));
+document.getElementById('adm_pay_rejected')?.addEventListener('click', ()=>listPayments('rejected'));
 document.getElementById('adm_pay_all')?.addEventListener('click', ()=>listPayments('all'));
-document.getElementById('adm_pay_today')?.addEventListener('click', ()=>listPayments('today'));
 
 document.addEventListener('click', async (e)=>{
   if(!(e.target.classList.contains('a_approve')||e.target.classList.contains('a_reject'))) return;
@@ -357,10 +360,11 @@ document.addEventListener('click', async (e)=>{
         tx.update(topupRef, { status:'rejected', adminNote: reason, reviewedAt: serverTimestamp(), reviewedBy: currentUser.uid });
       }
     });
-    // Update UI
+    // UI update
     const badge = row.querySelector('.status-badge');
     badge.textContent = approved? 'approved':'rejected';
     badge.className = 'status-badge ' + (approved? 'status-approved':'status-rejected');
+    row.querySelectorAll('.a_approve,.a_reject').forEach(b=> b.disabled=true);
     alert('Bajarildi ✅');
   }catch(err){
     alert('Xato: '+(err.message||err));
@@ -381,4 +385,3 @@ function setTab(tab){
 document.getElementById('tabPayments')?.addEventListener('click', ()=>{ setTab('Payments'); document.getElementById('adm_pay_pending')?.click(); });
 document.getElementById('tabUsers')?.addEventListener('click', ()=>{ setTab('Users'); adminListTop(); });
 document.getElementById('tabPromo')?.addEventListener('click', ()=>{ setTab('Promo'); });
-
