@@ -270,7 +270,7 @@ document.addEventListener('click', async (e)=>{
   }catch(err){ alert('Xato: '+(err.message||err)); }
 });
 
-// Promo create
+// Promo create (ADMIN)
 document.getElementById('pr_create')?.addEventListener('click', async ()=>{
   try{
     ensureAdminSync();
@@ -278,21 +278,21 @@ document.getElementById('pr_create')?.addEventListener('click', async ()=>{
     if(!code) throw new Error('Kod kiriting');
     const payload = {
       code,
-      active: qs('#pr_active').value==='true',
-      balance: Number(qs('#pr_balance').value||0),
-      gems: Number(qs('#pr_gems').value||0),
-      percent: Number(qs','#pr_percent').value||0), // <- if typo, fix to qs('#pr_percent')
-      maxUses: Number(qs('#pr_max').value||0),
-      perUserLimit: Number(qs('#pr_peruser').value||1),
+      active: qs('#pr_active').value === 'true',
+      balance: Number(qs('#pr_balance').value || 0),
+      gems: Number(qs('#pr_gems').value || 0),
+      percent: Number(qs('#pr_percent').value || 0),   // <— shu qatorda xato bor edi
+      maxUses: Number(qs('#pr_max').value || 0),
+      perUserLimit: Number(qs('#pr_peruser').value || 1),
       createdAt: serverTimestamp(),
       createdBy: currentUser.uid
     };
     const ex = qs('#pr_expires').value;
-    if(ex) payload.expiresAt = new Date(ex+'T23:59:59');
-    await setDoc(doc(db,'promoCodes', code), payload);
+    if (ex) payload.expiresAt = new Date(ex + 'T23:59:59');
+    await setDoc(doc(db, 'promoCodes', code), payload);
     qs('#pr_msg').textContent = '✅ Yaratildi';
-  }catch(err){
-    qs('#pr_msg').textContent = '❌ '+(err.message||err);
+  } catch (err) {
+    qs('#pr_msg').textContent = '❌ ' + (err.message || err);
   }
 });
 
