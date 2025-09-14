@@ -112,7 +112,7 @@ document.getElementById('openAdmin')?.addEventListener('click', ()=>{
   document.getElementById('adm_pay_pending')?.click();
 });
 
-// ---------- Top-up: upload -> Firestore -> Telegram (non-blocking) -> history ----------
+// ---------- Top-up: upload -> Firestore -> Telegram (TEXT only, non-blocking) -> history ----------
 function bindTopup(){
   const btn = document.getElementById('pay_submit');
   if(!btn || btn._bound) return;
@@ -154,18 +154,18 @@ function bindTopup(){
       qs('#pay_amount').value=''; qs('#pay_note').value=''; if(qs('#pay_file')) qs('#pay_file').value='';
       await loadPayHistory();
 
-      // Telegram fire-and-forget with 3s timeout
+      // Telegram fire-and-forget with 3s timeout (ONLY TEXT, no file)
       try{
-        const caption = `🧾 Yangi to‘lov arizasi\n\n`+
+        const caption =
+          `🧾 Yangi to‘lov arizasi\n\n`+
           `💰 Summasi: ${amount.toLocaleString('uz-UZ')} so‘m\n`+
           `👤 ID: ${currentDoc?.numericId} | ${currentDoc?.firstName||''} ${currentDoc?.lastName||''}\n`+
           `📞 Tel: ${currentDoc?.phone||'-'}\n`+
-          (note?`📝 Izoh: ${note}\n`:'')+
-          (fileURL?`📎 Chek: ${fileURL}\n`:'' );
+          (note?`📝 Izoh: ${note}\n`:'');
         const controller = new AbortController();
         setTimeout(()=>controller.abort(), 3000);
-        const url = fileURL? `${TG_API}/sendDocument` : `${TG_API}/sendMessage`;
-        const body = fileURL? { chat_id: TG_CHAT_ID, caption, document: fileURL, parse_mode:"HTML" } : { chat_id: TG_CHAT_ID, text: caption };
+        const url = `${TG_API}/sendMessage`;
+        const body = { chat_id: TG_CHAT_ID, text: caption };
         fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal: controller.signal })
           .catch(err=>console.warn('Telegram yuborilmadi:', err));
       }catch(err){ console.warn('Telegram skip:', err); }
@@ -307,6 +307,7 @@ async function listPayments(filter='pending'){
     const usersSnap = await getDocs(query(collection(db,'users'), orderBy('numericId','asc'), limit(200)));
     wrap.innerHTML='';
     let cnt=0;
+    const isImg = (u)=> typeof u==='string' && /\.(png|jpe?g|gif|webp)$/i.test(u);
     for (const u of usersSnap.docs){
       const uid=u.id;
       const col=collection(db,'users', uid, 'topups');
@@ -329,6 +330,8 @@ async function listPayments(filter='pending'){
           <div class="sub">UserID: ${nid} | Name: ${r.userName||''} | Tel: ${r.userPhone||''}</div>
           <div class="sub">Topup Doc ID: ${d.id}</div>
           ${r.note?`<div class="sub">Foydalanuvchi izohi: ${r.note}</div>`:''}
+          ${r.fileURL ? `<div class="sub">📎 <a href="${r.fileURL}" target="_blank" rel="noopener">Chekni ko‘rish</a></div>` : ''}
+          ${r.fileURL && isImg(r.fileURL) ? `<div class="sub"><img src="${r.fileURL}" alt="chek" style="max-height:140px;border-radius:10px;border:1px solid #eee"></div>` : ''}
           ${r.adminNote && r.status!=='pending' ? `<div class="sub"><b>Admin izohi:</b> ${r.adminNote}</div>`:''}
           <textarea class="adm-note" placeholder="Admin izohi (faqat siz uchun)"></textarea>
           <div class="row">
