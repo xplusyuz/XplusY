@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
+    function isAdmin() {
+      return isSignedIn() && (
+        userDoc(request.auth.uid).data.numericId in [1000001, 1000002] ||
+        userDoc(request.auth.uid).data.numericId in ["1000001", "1000002"]
+      );
+    }
+
+    // Foydalanuvchi top-up arizalari: users/{uid}/topups/{tid}
+    match /users/{uid}/topups/{tid} {
+      // O'qish: egasi yoki admin
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Yaratish: foydalanuvchi faqat pending holatda yaratadi
+      allow create: if isSignedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.amount is int
+                    && request.resource.data.status == 'pending';
+
+      // Yangilash: faqat admin (tasdiqlash, rad etish, adminNote)
+      allow update: if isSignedIn() && isAdmin();
+
+      // O'chirish: admin yoki egasi
+      allow delete: if isSignedIn() && (isAdmin() || request.auth.uid == uid);
+    }
+  }
+}
