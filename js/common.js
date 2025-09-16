@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 /* =====================
  *  Firebase bootstrap
@@ -25,20 +25,16 @@ export const db = getFirestore(app);
  *  Theme: FORCE LIGHT ONLY
  * ===================== */
 function applyLight(){
-  // Force UA widgets + colors to light
   document.documentElement.style.colorScheme = 'light';
-  // Keep compatibility with any old styles relying on .theme-light
   document.body.classList.add('theme-light');
-  // Remove any stored theme state from older builds
   try { localStorage.removeItem('mc_theme'); } catch {}
-  // If there was a theme toggle button in markup, hide it gracefully
   const btn = document.querySelector('#btnTheme');
   if (btn){ btn.style.display = 'none'; }
 }
 export function initTheme(){ applyLight(); }
 
 /* =====================
- *  Bottom bar cleanup
+ *  Kill legacy bottom bar
  * ===================== */
 export function ensureBottomBar(){
   document.querySelectorAll('.bottom-bar').forEach(el => { el.style.display = 'none'; });
@@ -64,21 +60,19 @@ async function ensureUserDoc(uid, profile){
   return (await getDoc(ref)).data();
 }
 
-/** Attach auth UI parts to header + overlay (Google sign-in) */
 export function attachAuthUI({ requireSignIn = true } = {}){
   const idEl  = ()=> document.querySelector('#hdrId');
   const balEl = ()=> document.querySelector('#hdrBal');
   const gemEl = ()=> document.querySelector('#hdrGem');
-  const btnIn = ()=> document.querySelector('#btnSignIn');
-  const btnOut= ()=> document.querySelector('#btnSignOut');
 
   onAuthStateChanged(auth, async (user)=>{
     if(!user){
-      btnIn()?.classList.remove('hidden');
-      btnOut()?.classList.add('hidden');
+      document.querySelector('#btnSignIn')?.classList.remove('hidden');
+      document.querySelector('#btnSignOut')?.classList.add('hidden');
       idEl()  && (idEl().textContent='ID: —');
       balEl() && (balEl().textContent='💵 0');
       gemEl() && (gemEl().textContent='💎 0');
+
       if(requireSignIn){
         let o=document.querySelector('#authOverlay');
         if(!o){
@@ -86,12 +80,8 @@ export function attachAuthUI({ requireSignIn = true } = {}){
           o.id='authOverlay'; o.className='modal';
           o.innerHTML=`<div class="dialog" role="dialog" aria-modal="true">
               <div class="head"><h3 style="margin:0">Kirish</h3></div>
-              <div class="body">
-                <p class="sub">Google orqali tez va xavfsiz kiring</p>
-              </div>
-              <div class="foot">
-                <button id="overlaySignIn" class="btn primary">Google bilan kirish</button>
-              </div>
+              <div class="body"><p class="sub">Google orqali tez va xavfsiz kiring</p></div>
+              <div class="foot"><button id="overlaySignIn" class="btn primary">Google bilan kirish</button></div>
             </div>`;
           document.body.appendChild(o);
           o.addEventListener('click', (e)=>{ if(e.target===o) o.remove(); });
@@ -104,17 +94,20 @@ export function attachAuthUI({ requireSignIn = true } = {}){
       }
       return;
     }
+
     document.querySelector('#authOverlay')?.remove();
     const profile = await ensureUserDoc(user.uid, user);
-    btnIn()?.classList.add('hidden');
-    btnOut()?.classList.remove('hidden');
+    document.querySelector('#btnSignIn')?.classList.add('hidden');
+    document.querySelector('#btnSignOut')?.classList.remove('hidden');
     idEl()  && (idEl().textContent='ID: '+(profile.numericId ?? '—'));
     balEl() && (balEl().textContent='💵 '+(profile.balance ?? 0));
     gemEl() && (gemEl().textContent='💎 '+(profile.gems ?? 0));
+
     window.__mcUser = { user, profile };
     document.dispatchEvent(new CustomEvent('mc:user-ready', { detail: window.__mcUser }));
   });
 
+  // Header kirish/chiqish tugmalari
   document.addEventListener('click', async (e)=>{
     if(e.target && (e.target.id==='btnSignIn' || e.target.matches('[data-action="signin"]'))){
       const provider = new GoogleAuthProvider();
@@ -128,41 +121,108 @@ export function attachAuthUI({ requireSignIn = true } = {}){
 }
 
 /* =====================
- *  Page-level UX init
+ *  Nav: active holatni yangilash
  * ===================== */
-
-/* Active nav state */
-function __mcUpdateActiveNav(){
+function updateActiveNav(){
   const hash = location.hash || '#home';
-  document.querySelectorAll('.nav.desktop-nav a').forEach(a=>{
+  document.querySelectorAll('.side-nav .nav-link').forEach(a=>{
     const href = a.getAttribute('href')||'';
-    if(!href.startsWith('#')) return a.classList.remove('active');
     a.classList.toggle('active', href === hash);
   });
 }
-window.addEventListener('hashchange', __mcUpdateActiveNav, { passive:true });
+window.addEventListener('hashchange', updateActiveNav, { passive:true });
 
+/* =====================
+ *  Off-canvas toggle (mobil/planshet)
+ * ===================== */
+function setupSideNav(){
+  const sideNav   = document.getElementById('sideNav');
+  const sideOv    = document.getElementById('sideOverlay');
+  const menuBtn   = document.getElementById('menuToggle');
+
+  const open = () => {
+    if(!sideNav) return;
+    sideNav.setAttribute('data-state','open');
+    if(sideOv){ sideOv.hidden = false; }
+    document.body.style.overflow = 'hidden';
+  };
+  const close = () => {
+    if(!sideNav) return;
+    sideNav.setAttribute('data-state','closed');
+    if(sideOv){ sideOv.hidden = true; }
+    document.body.style.overflow = '';
+  };
+
+  // Toggle
+  if(menuBtn){
+    menuBtn.addEventListener('click', ()=>{
+      const isOpen = sideNav?.getAttribute('data-state') === 'open';
+      isOpen ? close() : open();
+    });
+  }
+  // Overlay bosilganda yopish
+  sideOv?.addEventListener('click', close);
+
+  // Link bosilganda (faqat <1024px) yopish
+  sideNav?.querySelectorAll('a').forEach(a=>{
+    a.addEventListener('click', ()=>{
+      if(window.innerWidth < 1024) close();
+    });
+  });
+
+  // Rejim o‘zgarganda (responsive): PC holatida body overflow tiklash
+  window.addEventListener('resize', ()=>{
+    if(window.innerWidth >= 1024){
+      document.body.style.overflow = '';
+      sideOv && (sideOv.hidden = true);
+      sideNav && sideNav.setAttribute('data-state','open'); // PC’da doim ochiq
+    }else{
+      // Mobilga qaytganda default yopiq
+      sideNav && sideNav.setAttribute('data-state','closed');
+    }
+  }, { passive:true });
+
+  // Dastlabki holat:
+  if(window.innerWidth >= 1024){
+    sideNav?.setAttribute('data-state','open'); // PC’da ochiq
+    sideOv && (sideOv.hidden = true);
+  }else{
+    sideNav?.setAttribute('data-state','closed'); // Mobil/planshet yopiq
+  }
+}
+
+/* =====================
+ *  UX init
+ * ===================== */
 export function initUX(){
   initTheme();
   ensureBottomBar();
   document.documentElement.classList.add('js-ready');
-  __mcUpdateActiveNav();
+  setupSideNav();
+  updateActiveNav();
+
+  // Yengil 3D tilt
+  const enableTilt = (sel)=>{
+    const nodes = document.querySelectorAll(sel);
+    nodes.forEach(el=>{
+      el.style.transformStyle = 'preserve-3d';
+      el.addEventListener('mousemove', (e)=>{
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width/2, cy = r.top + r.height/2;
+        const dx = (e.clientX - cx) / (r.width/2);
+        const dy = (e.clientY - cy) / (r.height/2);
+        el.style.transform = `perspective(600px) rotateX(${(-dy*5).toFixed(2)}deg) rotateY(${(dx*5).toFixed(2)}deg) translateZ(6px)`;
+      }, {passive:true});
+      el.addEventListener('mouseleave', ()=>{ el.style.transform = 'perspective(600px) translateZ(0)'; });
+    });
+  };
+  enableTilt('.btn, .nav-link, .pill, .card');
 }
-/* === Lightweight 3D tilt for modern feel === */
-function enableTilt(sel){
-  const nodes = document.querySelectorAll(sel);
-  nodes.forEach(el=>{
-    el.style.transformStyle = 'preserve-3d';
-    el.addEventListener('mousemove', (e)=>{
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width/2, cy = r.top + r.height/2;
-      const dx = (e.clientX - cx) / (r.width/2);
-      const dy = (e.clientY - cy) / (r.height/2);
-      el.style.transform = `perspective(600px) rotateX(${(-dy*5).toFixed(2)}deg) rotateY(${(dx*5).toFixed(2)}deg) translateZ(6px)`;
-    }, {passive:true});
-    el.addEventListener('mouseleave', ()=>{ el.style.transform = 'perspective(600px) translateZ(0)'; });
-  });
-}
+
+/* =====================
+ *  DOM Ready
+ * ===================== */
 document.addEventListener('DOMContentLoaded', ()=>{
-  enableTilt('.nav.desktop-nav a, .btn, .lb-row, .scard, .eh-card');
+  initUX();
+  attachAuthUI({ requireSignIn: true });
 });
