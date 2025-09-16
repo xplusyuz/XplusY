@@ -1,11 +1,12 @@
 import { attachAuthUI, initUX, db, ADMIN_NUMERIC_IDS } from "./common.js";
 import { doc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
 
-// ==== CONFIG: Telegram (text-only) =====
+// ==== CONFIG: Telegram =====
 const TG_TOKEN = "8021293022:AAGud9dz-Dv_5RjsjF0RFaqgMR2LeKA6G7c";
 const TG_CHAT_ID = "2049065724";
 const TG_API = `https://api.telegram.org/bot${TG_TOKEN}`;
-// =======================================
+// ===========================
 
 attachAuthUI({ requireSignIn: true });
 initUX();
@@ -80,30 +81,38 @@ function renderBadges(arr){
   arr.forEach(b=>{ const s=document.createElement('span'); s.className='pill'; s.textContent=b; w.appendChild(s); });
 }
 
-// ======== Top-up (method first → confirm form) ========
-let selectedMethod = null;
-document.addEventListener('click', (e)=>{
-  const m = e.target.closest('.method');
-  if(!m) return;
-  e.preventDefault();
-  selectedMethod = m.getAttribute('data-method');
-  qsa('.method').forEach(x=> x.classList.toggle('active', x===m));
-  const fv = qs('#pay_method_view');
-  if(fv) fv.value = selectedMethod;
-  // Show direct payment link under the form
-  const linkBox = document.getElementById('pay_method_link');
-  if(linkBox){
-    let href = null, label = null;
-    if(selectedMethod==='Xazna'){ href = 'https://pay.xazna.uz/p2p/f5edea87-06a5-4d48-a01d-885cf843eb8f'; label='Xazna havolasi'; }
-    if(selectedMethod==='Click'){ href = 'https://indoor.click.uz/pay?id=0081656&t=0'; label='Click havolasi'; }
-    linkBox.innerHTML = href ? ('<a href="'+href+'" target="_blank" rel="noopener">'+label+'</a>') : '';
+// Promo apply (user)
+qs('#promoApply').addEventListener('click', async ()=>{
+  const msg=qs('#promoMsg'); msg.textContent='';
+  const code=qs('#promoInput').value.trim(); if(!code){ msg.textContent='Kod kiriting'; return; }
+  try{
+    const promoRef=doc(db,'promoCodes', code);
+    const userRef=doc(db,'users', currentUser.uid);
+    const redRef=doc(db,'users', currentUser.uid, 'promoRedemptions', code);
+    await runTransaction(db, async (tx)=>{
+      const p=await tx.get(promoRef); if(!p.exists()) throw new Error('Kod topilmadi');
+      const D=p.data();
+      if(D.active===false) throw new Error('Kod faol emas');
+      if(D.expiresAt && D.expiresAt.toDate && D.expiresAt.toDate() < new Date()) throw new Error('Muddati tugagan');
+      const used=await tx.get(redRef); if(used.exists()) throw new Error('Bu kod allaqachon ishlatilgan');
+      const u=await tx.get(userRef); if(!u.exists()) throw new Error('Foydalanuvchi topilmadi');
+      tx.update(userRef, { balance: Number(u.data().balance||0) + Number(D.balance||0), gems: Number(u.data().gems||0) + Number(D.gems||0) });
+      tx.set(redRef, { usedAt: serverTimestamp(), code });
+    });
+    msg.textContent='✅ Qo‘llandi';
+  }catch(e){
+    msg.textContent='❌ '+(e.message||e);
   }
-
 });
 
-function digitsOnly(s){ return (s||'').replace(/\D+/g,''); }
-function last4(s){ const d=digitsOnly(s); return d.slice(-4); }
+// Admin open (guarded)
+document.getElementById('openAdmin')?.addEventListener('click', ()=>{
+  if(!ADMIN_NUMERIC_IDS.includes(Number(currentDoc?.numericId))) return alert('Faqat 1000001/1000002');
+  openModal('adminModal');
+  document.getElementById('adm_pay_pending')?.click();
+});
 
+// ---------- Top-up: upload -> Firestore -> Telegram (TEXT only, non-blocking) -> history ----------
 function bindTopup(){
   const btn = document.getElementById('pay_submit');
   if(!btn || btn._bound) return;
@@ -112,24 +121,27 @@ function bindTopup(){
     const msg=qs('#pay_msg'); msg.className='hint'; msg.textContent='Yuborilmoqda…';
     btn.disabled = true;
     try{
-      if(!selectedMethod) throw new Error('Avval to‘lov usulini tanlang');
       const amount = Number(qs('#pay_amount').value||0);
-      if(!amount || amount<1000) throw new Error('Summani kiriting (min 1000)');
-      const cardIn = qs('#pay_card').value;
-      const l4 = last4(cardIn);
-      if(!l4 || l4.length<4) throw new Error('Kartaning oxirgi 4 ta raqamini kiriting');
-      const note = (qs('#pay_note').value||'').trim();
-
-      const id = Math.random().toString(36).slice(2);
+      if(!amount || amount<1000) throw new Error('Summani kiriting');
+      const note = qs('#pay_note').value.trim();
+      const file = qs('#pay_file').files?.[0];
+      // Storage (optional)
+      let fileURL=null, fileName=null, id=Math.random().toString(36).slice(2);
+      try{
+        if(file){
+          const storage = getStorage();
+          fileName = file.name;
+          const path = `users/${currentUser.uid}/topups/${id}/${fileName}`;
+          const sref = sRef(storage, path);
+          await uploadBytes(sref, file);
+          fileURL = await getDownloadURL(sref);
+        }
+      }catch(err){ console.warn('Storage xato:', err); }
+      // Firestore
       const refCol = collection(db,'users', currentUser.uid, 'topups');
-
       const payload={ 
-        amount,
-        method: selectedMethod,
-        cardLast4: l4,
-        note,
-        createdAt: new Date(),
-        createdAtFS: serverTimestamp(),
+        amount, note, filename: fileName, fileURL: fileURL || null,
+        createdAt: new Date(), createdAtFS: serverTimestamp(), 
         status: 'pending',
         userNumericId: currentDoc?.numericId || null,
         userName: `${currentDoc?.firstName||''} ${currentDoc?.lastName||''}`.trim(),
@@ -137,18 +149,16 @@ function bindTopup(){
       };
       await setDoc(doc(refCol, id), payload);
 
-      // UI
+      // UI: do not wait for Telegram
       msg.className='hint ok'; msg.textContent='✅ Yuborildi. Arizangiz ko‘rib chiqiladi.';
-      qs('#pay_amount').value=''; qs('#pay_card').value=''; qs('#pay_note').value='';
+      qs('#pay_amount').value=''; qs('#pay_note').value=''; if(qs('#pay_file')) qs('#pay_file').value='';
       await loadPayHistory();
 
-      // Telegram (text only)
+      // Telegram fire-and-forget with 3s timeout (ONLY TEXT, no file)
       try{
         const caption =
           `🧾 Yangi to‘lov arizasi\n\n`+
           `💰 Summasi: ${amount.toLocaleString('uz-UZ')} so‘m\n`+
-          `🧩 Usul: ${selectedMethod}\n`+
-          `💳 Karta: **** ${l4}\n`+
           `👤 ID: ${currentDoc?.numericId} | ${currentDoc?.firstName||''} ${currentDoc?.lastName||''}\n`+
           `📞 Tel: ${currentDoc?.phone||'-'}\n`+
           (note?`📝 Izoh: ${note}\n`:'');
@@ -182,7 +192,6 @@ export async function loadPayHistory(){
     const el=document.createElement('div'); el.className='card';
     el.innerHTML = `<div class="row"><b>${r.amount?.toLocaleString?.('uz-UZ')} so‘m</b>
         <span class="status-badge status-${st}">${st}</span></div>
-        <div class="sub">Usul: ${r.method||'-'}  |  💳 **** ${r.cardLast4||'----'}</div>
         ${r.note?`<div class="sub">Izoh: ${r.note}</div>`:''}
         ${r.adminNote && st!=='pending' ? `<div class="sub"><b>Admin izohi:</b> ${r.adminNote}</div>`:''}`;
     wrap.appendChild(el);
@@ -242,6 +251,27 @@ function renderAdminTable(snap){
 document.getElementById('adm_list_all')?.addEventListener('click', adminListTop);
 document.getElementById('adm_search')?.addEventListener('click', adminSearch);
 
+// Save user row
+document.addEventListener('click', async (e)=>{
+  if(!e.target.classList.contains('a_save')) return;
+  try{
+    ensureAdminSync();
+    const row=e.target.closest('.adm-row'); const uid=row.getAttribute('data-uid');
+    const ref=doc(db,'users', uid);
+    await updateDoc(ref, {
+      numericId: Number(row.querySelector('.a_numericId').value) || null,
+      firstName: row.querySelector('.a_firstName').value.trim(),
+      lastName: row.querySelector('.a_lastName').value.trim(),
+      phone: row.querySelector('.a_phone').value.trim(),
+      region: row.querySelector('.a_region').value.trim(),
+      balance: Number(row.querySelector('.a_balance').value),
+      gems: Number(row.querySelector('.a_gems').value),
+      dob: row.querySelector('.a_dob').value
+    });
+    alert('Saqlandi ✅');
+  }catch(err){ alert('Xato: '+(err.message||err)); }
+});
+
 // Promo create
 document.getElementById('pr_create')?.addEventListener('click', async ()=>{
   try{
@@ -277,12 +307,16 @@ async function listPayments(filter='pending'){
     const usersSnap = await getDocs(query(collection(db,'users'), orderBy('numericId','asc'), limit(200)));
     wrap.innerHTML='';
     let cnt=0;
+    const isImg = (u)=> typeof u==='string' && /\.(png|jpe?g|gif|webp)$/i.test(u);
     for (const u of usersSnap.docs){
       const uid=u.id;
       const col=collection(db,'users', uid, 'topups');
       let qy;
-      if(filter==='all'){ qy = query(col, orderBy('createdAtFS','desc'), limit(50)); }
-      else{ qy = query(col, where('status','==', filter), limit(50)); }
+      if(filter==='all'){
+        qy = query(col, orderBy('createdAtFS','desc'), limit(50));
+      }else{
+        qy = query(col, where('status','==', filter), limit(50)); // orderBy yo'q — indeks talab qilmaydi
+      }
       const snap=await getDocs(qy);
       snap.forEach(d=>{
         const r=d.data();
@@ -294,9 +328,10 @@ async function listPayments(filter='pending'){
             <span class="status-badge status-${r.status||'pending'}">${r.status||'pending'}</span>
           </div>
           <div class="sub">UserID: ${nid} | Name: ${r.userName||''} | Tel: ${r.userPhone||''}</div>
-          <div class="sub">Usul: ${r.method||'-'}  |  💳 **** ${r.cardLast4||'----'}</div>
           <div class="sub">Topup Doc ID: ${d.id}</div>
           ${r.note?`<div class="sub">Foydalanuvchi izohi: ${r.note}</div>`:''}
+          ${r.fileURL ? `<div class="sub">📎 <a href="${r.fileURL}" target="_blank" rel="noopener">Chekni ko‘rish</a></div>` : ''}
+          ${r.fileURL && isImg(r.fileURL) ? `<div class="sub"><img src="${r.fileURL}" alt="chek" style="max-height:140px;border-radius:10px;border:1px solid #eee"></div>` : ''}
           ${r.adminNote && r.status!=='pending' ? `<div class="sub"><b>Admin izohi:</b> ${r.adminNote}</div>`:''}
           <textarea class="adm-note" placeholder="Admin izohi (faqat siz uchun)"></textarea>
           <div class="row">
