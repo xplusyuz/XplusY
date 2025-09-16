@@ -155,7 +155,7 @@ function setupSidebarUI(){
   const sideNav = document.getElementById('sideNav');
   const overlay = document.getElementById('sideOverlay');
   const btn     = document.getElementById('menuToggle');
-
+initSidebar3D();
   // Initial + on resize/orientation
   syncSidebarMode();
   window.addEventListener('resize', syncSidebarMode, { passive:true });
@@ -234,3 +234,59 @@ document.addEventListener('DOMContentLoaded', ()=>{
   initUX();
   attachAuthUI({ requireSignIn: true });
 });
+function initSidebar3D(){
+  const host = document.getElementById('sideNav');
+  if(!host) return;
+
+  // Qatlamlar hali yo'q bo'lsa — yaratamiz
+  const need = (cls) => !host.querySelector('.'+cls);
+  if(need('sn-l1')){ const d=document.createElement('div'); d.className='sn-l sn-l1'; host.prepend(d); }
+  if(need('sn-l2')){ const d=document.createElement('div'); d.className='sn-l sn-l2'; host.prepend(d); }
+  if(need('sn-l3')){ const d=document.createElement('div'); d.className='sn-l sn-l3'; host.prepend(d); }
+  if(need('sn-glow')){ const d=document.createElement('div'); d.className='sn-glow'; host.appendChild(d); }
+
+  const inner = host.querySelector('.side-nav-inner');
+  const l1 = host.querySelector('.sn-l1');
+  const l2 = host.querySelector('.sn-l2');
+  const l3 = host.querySelector('.sn-l3');
+
+  const prefersReduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Desktop: sichqon bo'yicha parallax + ichki tilt
+  const onMove = (e)=>{
+    if(prefersReduced()) return;
+    const r = host.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    const dx = (e.clientX - cx) / (r.width/2);
+    const dy = (e.clientY - cy) / (r.height/2);
+    const clamp = (v,m)=> Math.max(-m, Math.min(m, v));
+
+    const rx = clamp(-dy*4, 4);   // rotateX deg
+    const ry = clamp(dx*4, 4);    // rotateY deg
+
+    inner && (inner.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`);
+    l1 && (l1.style.transform = `translateZ(-60px) translate(${dx*12}px, ${dy*10}px) scale(1.18)`);
+    l2 && (l2.style.transform = `translateZ(-40px) translate(${dx*22}px, ${dy*18}px) scale(1.12)`);
+    l3 && (l3.style.transform = `translateZ(-20px) translate(${dx*32}px, ${dy*26}px) scale(1.06)`);
+  };
+
+  const reset = ()=>{
+    if(prefersReduced()) return;
+    inner && (inner.style.transform = 'perspective(900px) translateZ(0)');
+    l1 && (l1.style.transform = 'translateZ(-60px) scale(1.18)');
+    l2 && (l2.style.transform = 'translateZ(-40px) scale(1.12)');
+    l3 && (l3.style.transform = 'translateZ(-20px) scale(1.06)');
+  };
+
+  // Faqat desktopda interaktiv harakat; mobilda statik (performa uchun)
+  const enableDesktop = () => window.matchMedia('(min-width:1024px)').matches;
+
+  host.addEventListener('mousemove', (e)=>{ if(enableDesktop()) onMove(e); }, {passive:true});
+  host.addEventListener('mouseleave', reset, {passive:true});
+
+  // Panel yopilganda/ochilganda transformlarni tiklash
+  const obs = new MutationObserver(()=> reset());
+  obs.observe(host, { attributes:true, attributeFilter:['class'] });
+
+  reset();
+}
