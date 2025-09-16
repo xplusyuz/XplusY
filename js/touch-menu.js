@@ -29,9 +29,54 @@ function closeSheet() {
 function toggleSheet(){ sheetOpen ? closeSheet() : openSheet(); }
 
 backdrop.addEventListener('click', closeSheet);
+
+// ---- Robust navigation ----
+function navTo(route){
+  if(!route) return;
+  const r = route.replace(/^#/, '').replace(/^\//, '');
+  // Try common SPA routers first
+  try{
+    const cands = [
+      ['router','go'],
+      ['router','navigate'],
+      ['appRouter','go'],
+      ['app','router','go'],
+      ['Router','go'],
+    ];
+    for(const path of cands){
+      let obj = window, ok = true;
+      for(const key of path.slice(0,-1)){
+        obj = obj?.[key];
+        if(!obj){ ok=false; break; }
+      }
+      const fn = path[path.length-1];
+      if(ok && typeof obj?.[fn] === 'function'){
+        obj[fn](r);
+        return;
+      }
+    }
+  }catch{}
+  // Fallback: hash routing
+  if(location.hash !== '#'+r){
+    location.hash = '#'+r;
+  }else{
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  }
+}
+
+// Click on sheet tiles
 sheet.addEventListener('click', (e)=>{
-  const link = e.target.closest('a.td-tile');
-  if(link){ closeSheet(); }
+  const link = e.target.closest('.td-tile');
+  if(!link) return;
+  if(link.tagName === 'BUTTON'){
+    // likely signout, let common.js handle
+    return;
+  }
+  e.preventDefault();
+  const href = link.getAttribute('href') || '';
+  const r = link.getAttribute('data-route') || href;
+  closeSheet();
+  setTimeout(()=> navTo(r), 50);
 });
 
 // ---- Drag-to-close on the sheet ----
@@ -76,18 +121,13 @@ window.addEventListener('touchmove', (e)=>{
 // ---- Draggable FAB (touch + mouse) ----
 let startX=null, startY=null, fabStartLeft=null, fabStartTop=null, dragging=false;
 function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
-
-function readFabLT(){
-  const rect = fab.getBoundingClientRect();
-  return [rect.left, rect.top];
-}
+function readFabLT(){ const r = fab.getBoundingClientRect(); return [r.left, r.top]; }
 function applyFabLT(l, t){
   fab.style.left = l + 'px';
   fab.style.top  = t + 'px';
   fab.style.right = 'auto';
   fab.style.bottom = 'auto';
 }
-
 function loadFabPos(){
   try{
     const saved = localStorage.getItem('td_fab_pos');
@@ -97,13 +137,11 @@ function loadFabPos(){
     }
   }catch{}
 }
-function saveFabPos(l, t){
-  try{ localStorage.setItem('td_fab_pos', JSON.stringify({l, t})); }catch{}
-}
+function saveFabPos(l, t){ try{ localStorage.setItem('td_fab_pos', JSON.stringify({l, t})); }catch{} }
 
 fab.addEventListener('pointerdown', (e)=>{
   e.preventDefault();
-  fab.setPointerCapture(e.pointerId);
+  fab.setPointerCapture?.(e.pointerId);
   const ptX = (e.touches ? e.touches[0].clientX : e.clientX);
   const ptY = (e.touches ? e.touches[0].clientY : e.clientY);
   startX = ptX; startY = ptY;
