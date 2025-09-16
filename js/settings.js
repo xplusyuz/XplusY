@@ -1,7 +1,4 @@
 import { attachAuthUI, initUX, db, ADMIN_NUMERIC_IDS } from "./common.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
-const storage = getStorage();
-
 import { doc, setDoc, updateDoc, collection, query, where, orderBy, limit, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 // ==== CONFIG: Telegram (text-only) =====
@@ -93,38 +90,22 @@ document.addEventListener('click', (e)=>{
   qsa('.method').forEach(x=> x.classList.toggle('active', x===m));
   const fv = qs('#pay_method_view');
   if(fv) fv.value = selectedMethod;
+  // Show direct payment link under the form
+  const linkBox = document.getElementById('pay_method_link');
+  if(linkBox){
+    let href = null, label = null;
+    if(selectedMethod==='Xazna'){ href = 'https://pay.xazna.uz/p2p/f5edea87-06a5-4d48-a01d-885cf843eb8f'; label='Xazna havolasi'; }
+    if(selectedMethod==='Click'){ href = 'https://indoor.click.uz/pay?id=0081656&t=0'; label='Click havolasi'; }
+    linkBox.innerHTML = href ? ('<a href="'+href+'" target="_blank" rel="noopener">'+label+'</a>') : '';
+  }
+
 });
 
 function digitsOnly(s){ return (s||'').replace(/\D+/g,''); }
 function last4(s){ const d=digitsOnly(s); return d.slice(-4); }
 
 function bindTopup(){
-  
-  // Bind receipt preview
-  const rIn = document.getElementById('pay_receipt');
-  const rBox = document.getElementById('receipt_preview');
-  if(rIn && !rIn._bound){
-    rIn._bound = true;
-    rIn.addEventListener('change', ()=>{
-      if(!rBox) return;
-      rBox.innerHTML='';
-      const f = rIn.files && rIn.files[0];
-      if(!f) return;
-      if((f.size||0) > 5*1024*1024){
-        rBox.textContent = '❌ Fayl 5 MB dan oshmasin';
-        return;
-      }
-      if(f.type && f.type.startsWith('image/')){
-        const img = document.createElement('img');
-        img.style.maxWidth='140px'; img.style.borderRadius='8px'; img.style.border='1px solid #ddd';
-        img.src = URL.createObjectURL(f);
-        rBox.appendChild(img);
-      }else{
-        rBox.textContent = 'Fayl tanlandi: '+(f.name||'chek.pdf');
-      }
-    });
-  }
-const btn = document.getElementById('pay_submit');
+  const btn = document.getElementById('pay_submit');
   if(!btn || btn._bound) return;
   btn._bound = true;
   btn.addEventListener('click', async ()=>{
@@ -142,23 +123,7 @@ const btn = document.getElementById('pay_submit');
       const id = Math.random().toString(36).slice(2);
       const refCol = collection(db,'users', currentUser.uid, 'topups');
 
-      
-      // Receipt file upload to Storage
-      let receiptURL=null, receiptType=null, receiptName=null, receiptSize=null;
-      const receiptInput = document.getElementById('pay_receipt');
-      const file = receiptInput && receiptInput.files && receiptInput.files[0];
-      if(file){
-        if((file.size||0) > 5*1024*1024) throw new Error('Fayl hajmi 5 MB dan oshmasin');
-        const safeName = (file.name||'receipt').replace(/[^\w.\-]+/g,'_');
-        const path = `users/${currentUser.uid}/topups/${id}/${safeName}`;
-        const storageRef = sRef(storage, path);
-        await uploadBytes(storageRef, file);
-        receiptURL = await getDownloadURL(storageRef);
-        receiptType = file.type || null;
-        receiptName = safeName;
-        receiptSize = file.size || null;
-      }
-const payload={ 
+      const payload={ 
         amount,
         method: selectedMethod,
         cardLast4: l4,
@@ -169,18 +134,12 @@ const payload={
         userNumericId: currentDoc?.numericId || null,
         userName: `${currentDoc?.firstName||''} ${currentDoc?.lastName||''}`.trim(),
         userPhone: currentDoc?.phone || null
-      
-        ,receiptURL
-        ,receiptType
-        ,receiptName
-        ,receiptSize
-};
+      };
       await setDoc(doc(refCol, id), payload);
 
       // UI
       msg.className='hint ok'; msg.textContent='✅ Yuborildi. Arizangiz ko‘rib chiqiladi.';
       qs('#pay_amount').value=''; qs('#pay_card').value=''; qs('#pay_note').value='';
-      try{ const rIn=document.getElementById('pay_receipt'); if(rIn){ rIn.value=''; const pv=document.getElementById('receipt_preview'); if(pv) pv.innerHTML=''; } }catch(_){ }
       await loadPayHistory();
 
       // Telegram (text only)
