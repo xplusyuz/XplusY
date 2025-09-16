@@ -254,3 +254,5 @@ document.addEventListener('DOMContentLoaded', ()=>{
   initUX();
   attachAuthUI({ requireSignIn: true });
 });
+// 3D tilt: nav-link, tugma, HEADER pill va kartalar
+enableTilt('.side-nav .nav-link, .btn, .mc-right .pill, .card');
