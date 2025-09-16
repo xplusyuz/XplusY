@@ -117,37 +117,16 @@ function updateActiveNav(){
     a.classList.toggle('active', href === hash);
   });
 }
-window.addEventListener('hashchange', ()=>{
-  updateActiveNav();
-  // mobil/planshetda route bosilganda panel yopilsin
-  if(!document.body.classList.contains('sidebar-desktop')) closeSidebar();
-}, { passive:true });
 
 /* ================= Sidebar controller ================= */
-let mql;
-function applyMode(e){
-  const desktop = e.matches;
-  if(desktop){
-    document.body.classList.add('sidebar-desktop');
-    openSidebar(false);   // open without locking scroll / overlay
-  }else{
-    document.body.classList.remove('sidebar-desktop');
-    closeSidebar(false);  // close without animation side-effects
-  }
-}
-
-function initMatchMedia(){
-  mql = window.matchMedia('(min-width: 1024px)');
-  applyMode(mql);               // initial
-  mql.addEventListener('change', applyMode);
-}
+const IS_DESKTOP = () => window.matchMedia('(min-width: 1024px)').matches;
 
 function openSidebar(lockScroll = true){
   const sideNav = document.getElementById('sideNav');
   const overlay = document.getElementById('sideOverlay');
   if(!sideNav) return;
   sideNav.classList.add('is-open');
-  if(overlay && !document.body.classList.contains('sidebar-desktop')){
+  if(!IS_DESKTOP() && overlay){
     overlay.hidden = false;
     if(lockScroll) document.body.style.overflow = 'hidden';
   }
@@ -158,14 +137,29 @@ function closeSidebar(restoreScroll = true){
   const overlay = document.getElementById('sideOverlay');
   if(!sideNav) return;
   sideNav.classList.remove('is-open');
-  if(overlay){ overlay.hidden = true; }
-  if(restoreScroll){ document.body.style.overflow = ''; }
+  if(overlay) overlay.hidden = true;
+  if(restoreScroll) document.body.style.overflow = '';
+}
+
+function syncSidebarMode(){
+  if(IS_DESKTOP()){
+    document.body.classList.add('sidebar-desktop');
+    openSidebar(false);     // always visible on desktop
+  }else{
+    document.body.classList.remove('sidebar-desktop');
+    closeSidebar(false);    // default closed on mobile
+  }
 }
 
 function setupSidebarUI(){
   const sideNav = document.getElementById('sideNav');
   const overlay = document.getElementById('sideOverlay');
   const btn     = document.getElementById('menuToggle');
+
+  // Initial + on resize/orientation
+  syncSidebarMode();
+  window.addEventListener('resize', syncSidebarMode, { passive:true });
+  window.addEventListener('orientationchange', syncSidebarMode, { passive:true });
 
   // Toggle
   btn?.addEventListener('click', ()=>{
@@ -176,7 +170,7 @@ function setupSidebarUI(){
   // Overlay / ESC
   overlay?.addEventListener('click', ()=> closeSidebar());
   document.addEventListener('keydown', (e)=>{
-    if(e.key === 'Escape' && !document.body.classList.contains('sidebar-desktop')){
+    if(e.key === 'Escape' && !IS_DESKTOP()){
       closeSidebar();
     }
   });
@@ -184,27 +178,23 @@ function setupSidebarUI(){
   // Link bosilganda mobil/planshetda yopish
   sideNav?.querySelectorAll('a').forEach(a=>{
     a.addEventListener('click', ()=>{
-      if(!document.body.classList.contains('sidebar-desktop')) closeSidebar();
+      if(!IS_DESKTOP()) closeSidebar();
     });
   });
 
   // Touch swipe-left (mobil)
   let startX=null, startY=null, moved=false;
   sideNav?.addEventListener('touchstart', (e)=>{
-    if(document.body.classList.contains('sidebar-desktop')) return;
+    if(IS_DESKTOP()) return;
     const t = e.touches[0]; startX = t.clientX; startY = t.clientY; moved=false;
   }, {passive:true});
   sideNav?.addEventListener('touchmove', (e)=>{
     if(startX===null) return;
     const t = e.touches[0]; const dx = t.clientX - startX; const dy = t.clientY - startY;
     if(Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) moved=true;
-    // optional: could add drag transform preview
   }, {passive:true});
   sideNav?.addEventListener('touchend', ()=>{
-    if(moved && startX!==null){
-      // chapga surib yuborilgan deb qabul qilamiz
-      closeSidebar();
-    }
+    if(moved && startX!==null){ closeSidebar(); }
     startX=null; startY=null; moved=false;
   }, {passive:true});
 }
@@ -231,9 +221,9 @@ export function initUX(){
   ensureBottomBar();
   document.documentElement.classList.add('js-ready');
 
-  initMatchMedia();     // decide desktop vs mobile by class
   setupSidebarUI();
   updateActiveNav();
+  window.addEventListener('hashchange', updateActiveNav, { passive:true });
 
   // 3D tilt on header pills, buttons, nav links, cards
   enableTilt('.side-nav .nav-link, .btn, .mc-right .pill, .card');
