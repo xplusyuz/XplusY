@@ -242,3 +242,77 @@ export function requireAuthOrModal() {
   if (!isSignedIn()) { _showAuthModal(); return false; }
   return true;
 }
+// --- MODAL: yaratish, ochish-yopish, bog'lash ---
+function ensureAuthModal() {
+  // allaqachon bor bo'lsa – o'tamiz
+  if (document.getElementById("authModal")) return;
+
+  // CSS ni kiritamiz (bir marta)
+  const css = `
+  #authModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
+  #authModal[open]{display:flex}
+  .auth-card{width:min(420px,92vw);background:#101418;color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)}
+  .auth-head{padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
+  .auth-title{font-size:18px;font-weight:700}
+  .auth-body{padding:22px 20px;display:grid;gap:14px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 14px;border-radius:12px;border:0;cursor:pointer;font-weight:600}
+  .btn-google{background:#fff;color:#111;box-shadow:inset 0 -2px 0 rgba(0,0,0,.1)}
+  .auth-close{position:absolute;top:10px;right:10px;border:0;background:transparent;color:#9aa4af;font-size:22px;cursor:pointer}
+  .auth-wrap{position:relative;padding-bottom:8px}
+  `;
+  const style = document.createElement("style");
+  style.id = "authModalCSS";
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  // HTML ni qo'shamiz
+  const html = `
+  <div id="authModal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-wrap">
+        <button class="auth-close" data-close="auth" aria-label="Yopish">×</button>
+        <div class="auth-head">
+          <div class="auth-title" id="authTitle">Kirish talab qilinadi</div>
+        </div>
+        <div class="auth-body">
+          <button class="btn btn-google" data-action="google-signin">
+            Google bilan davom etish
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+
+  // ochish/yopish triggerlari
+  document.querySelectorAll('[data-open="auth"]').forEach(el=>{
+    if(el.__bound) return; el.__bound = true;
+    el.addEventListener("click", e=>{ e.preventDefault(); _showAuthModal(); });
+  });
+  document.querySelectorAll('[data-close="auth"]').forEach(el=>{
+    if(el.__bound) return; el.__bound = true;
+    el.addEventListener("click", e=>{ e.preventDefault(); _hideAuthModal(); });
+  });
+
+  // modal ichidagi tugmalar uchun auth UI ni bog'lab qo'yamiz
+  attachAuthUI(document.getElementById("authModal"));
+}
+
+function _showAuthModal(){
+  ensureAuthModal();
+  const m = document.getElementById("authModal");
+  if (m) m.setAttribute("open",""); // display:flex
+}
+function _hideAuthModal(){
+  const m = document.getElementById("authModal");
+  if (m) m.removeAttribute("open");
+}
+if (!_user) {
+  _userData = null;
+  _bindHeader(null);
+  _toggleAuthVisibility(false);
+  _watchUserDoc(null);
+  // 🔽 shu qatordan modal ochiladi
+  _showAuthModal();
+  return;
+}
