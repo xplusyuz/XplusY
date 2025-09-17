@@ -38,7 +38,9 @@ const _ev = (name, detail) => document.dispatchEvent(new CustomEvent(name, { det
 function _setText(selectors, value) {
   const arr = Array.isArray(selectors) ? selectors : [selectors];
   for (const sel of arr) {
-    document.querySelectorAll(sel).forEach(el => { el.textContent = value ?? "—"; });
+    document.querySelectorAll(sel).forEach(el => { 
+      el.textContent = value !== null && value !== undefined ? value : "—"; 
+    });
   }
 }
 
@@ -54,9 +56,9 @@ function _formatNum(n) {
 
 function _bindHeader(data) {
   // ID / balance / gems ni turli selectorlar orqali yangilaymiz (sahifa mosligi uchun keng qamrovli)
-  _setText(['#hdrId', '#userId', '.js-user-id', '[data-bind="numericId"]'], data?.numericId ?? "—");
-  _setText(['#hdrBalance', '#balance', '.js-user-balance', '[data-bind="balance"]'], _formatNum(data?.balance ?? 0));
-  _setText(['#hdrGems', '#gems', '.js-user-gems', '[data-bind="gems"]'], _formatNum(data?.gems ?? 0));
+  _setText(['#hdrId', '#userId', '.js-user-id', '[data-bind="numericId"]'], data?.numericId);
+  _setText(['#hdrBalance', '#balance', '.js-user-balance', '[data-bind="balance"]'], _formatNum(data?.balance));
+  _setText(['#hdrGems', '#gems', '.js-user-gems', '[data-bind="gems"]'], _formatNum(data?.gems));
 }
 
 // ---------------- Numeric ID allocator ----------------
@@ -74,7 +76,7 @@ async function allocateNumericId() {
       tx.set(counterRef, { last }); // hujjatni yaratib qo'yamiz
     }
     const candidate = last + 1; // yangi id
-    tx.set(counterRef, { last: candidate }, { merge: true });
+    tx.update(counterRef, { last: candidate });
     return candidate;
   });
   return nextId;
@@ -110,24 +112,30 @@ async function ensureUserDoc(uid, profile = {}) {
     }
     // Email/displayName bo'sh qolgan bo'lsa to'ldirib yuboramiz (merge)
     const toMerge = {};
-    if (!data.email && profile.email)       toMerge.email = profile.email;
+    if (!data.email && profile.email) toMerge.email = profile.email;
     if (!data.displayName && profile.displayName) toMerge.displayName = profile.displayName;
     if (Object.keys(toMerge).length) await updateDoc(ref, toMerge);
-    return (await getDoc(ref)).data();
+    return { ...data, ...toMerge };
   }
 }
 
 // Joriy foydalanuvchining users/{uid} hujjatini realtime kuzatish
 function _watchUserDoc(uid) {
-  if (_userUnsub) { _userUnsub(); _userUnsub = null; }
+  if (_userUnsub) { 
+    _userUnsub(); 
+    _userUnsub = null; 
+  }
   if (!uid) return;
 
   const ref = doc(db, "users", uid);
-  _userUnsub = onSnapshot(ref, (d) => {
-    _userData = d.data() || null;
-    _bindHeader(_userData);
-    _ev("user:updated", { user: _user, data: _userData });
-  }, (err) => console.error("[common] onSnapshot error:", err));
+  _userUnsub = onSnapshot(ref, 
+    (d) => {
+      _userData = d.data() || null;
+      _bindHeader(_userData);
+      _ev("user:updated", { user: _user, data: _userData });
+    }, 
+    (err) => console.error("[common] onSnapshot error:", err)
+  );
 }
 
 // ---------------- Auth flows ----------------
@@ -151,11 +159,24 @@ export function waitForAuthInit() {
   });
 }
 
+// Modal yordamchilari
+function _showAuthModal() {
+  ensureAuthModal();
+  const m = document.getElementById("authModal");
+  if (m) m.style.display = "flex";
+}
+
+function _hideAuthModal() {
+  const m = document.getElementById("authModal");
+  if (m) m.style.display = "none";
+}
+
 // Sahifa bo'ylab kirish/chiqish tugmalarini biriktirish
 export function attachAuthUI(root = document) {
   // Google bilan kirish
   root.querySelectorAll('[data-action="google-signin"], .js-google-signin').forEach(btn => {
-    if (btn.__bound) return; btn.__bound = true;
+    if (btn.__bound) return; 
+    btn.__bound = true;
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       try {
@@ -173,7 +194,8 @@ export function attachAuthUI(root = document) {
 
   // Chiqish
   root.querySelectorAll('[data-action="signout"], .js-signout').forEach(btn => {
-    if (btn.__bound) return; btn.__bound = true;
+    if (btn.__bound) return; 
+    btn.__bound = true;
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       try {
@@ -186,16 +208,16 @@ export function attachAuthUI(root = document) {
       }
     });
   });
-}
 
-// Modal yordamchilari (ixtiyoriy: agar #authModal mavjud bo'lsa foydalanadi)
-function _showAuthModal() {
-  const m = document.getElementById("authModal");
-  if (m) m.style.display = "flex";
-}
-function _hideAuthModal() {
-  const m = document.getElementById("authModal");
-  if (m) m.style.display = "none";
+  // Modalni yopish tugmalari
+  root.querySelectorAll('[data-close="auth"]').forEach(btn => {
+    if (btn.__bound) return; 
+    btn.__bound = true;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      _hideAuthModal();
+    });
+  });
 }
 
 // ---------------- UX init (router.js chaqiradi) ----------------
@@ -210,8 +232,6 @@ export function initUX() {
       _toggleAuthVisibility(false);
       _watchUserDoc(null);
       _ev("user:updated", { user: null, data: null });
-      // Sayt umumiy ko'rilishi uchun modal ixtiyoriy; majburiy bo'lsa ochamiz:
-      // _showAuthModal();
       return;
     }
 
@@ -239,9 +259,13 @@ export function getCurrentUser()   { return _user; }
 export function getCurrentUserData(){ return _userData; }
 export function isSignedIn()       { return !!_user; }
 export function requireAuthOrModal() {
-  if (!isSignedIn()) { _showAuthModal(); return false; }
+  if (!isSignedIn()) { 
+    _showAuthModal(); 
+    return false; 
+  }
   return true;
 }
+
 // --- MODAL: yaratish, ochish-yopish, bog'lash ---
 function ensureAuthModal() {
   // allaqachon bor bo'lsa – o'tamiz
@@ -250,7 +274,6 @@ function ensureAuthModal() {
   // CSS ni kiritamiz (bir marta)
   const css = `
   #authModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(2px)}
-  #authModal[open]{display:flex}
   .auth-card{width:min(420px,92vw);background:#101418;color:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)}
   .auth-head{padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px}
   .auth-title{font-size:18px;font-weight:700}
@@ -260,10 +283,13 @@ function ensureAuthModal() {
   .auth-close{position:absolute;top:10px;right:10px;border:0;background:transparent;color:#9aa4af;font-size:22px;cursor:pointer}
   .auth-wrap{position:relative;padding-bottom:8px}
   `;
-  const style = document.createElement("style");
-  style.id = "authModalCSS";
-  style.textContent = css;
-  document.head.appendChild(style);
+  
+  if (!document.getElementById("authModalCSS")) {
+    const style = document.createElement("style");
+    style.id = "authModalCSS";
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
 
   // HTML ni qo'shamiz
   const html = `
@@ -284,35 +310,9 @@ function ensureAuthModal() {
   </div>`;
   document.body.insertAdjacentHTML("beforeend", html);
 
-  // ochish/yopish triggerlari
-  document.querySelectorAll('[data-open="auth"]').forEach(el=>{
-    if(el.__bound) return; el.__bound = true;
-    el.addEventListener("click", e=>{ e.preventDefault(); _showAuthModal(); });
-  });
-  document.querySelectorAll('[data-close="auth"]').forEach(el=>{
-    if(el.__bound) return; el.__bound = true;
-    el.addEventListener("click", e=>{ e.preventDefault(); _hideAuthModal(); });
-  });
-
   // modal ichidagi tugmalar uchun auth UI ni bog'lab qo'yamiz
   attachAuthUI(document.getElementById("authModal"));
 }
 
-function _showAuthModal(){
-  ensureAuthModal();
-  const m = document.getElementById("authModal");
-  if (m) m.setAttribute("open",""); // display:flex
-}
-function _hideAuthModal(){
-  const m = document.getElementById("authModal");
-  if (m) m.removeAttribute("open");
-}
-if (!_user) {
-  _userData = null;
-  _bindHeader(null);
-  _toggleAuthVisibility(false);
-  _watchUserDoc(null);
-  // 🔽 shu qatordan modal ochiladi
-  _showAuthModal();
-  return;
-}
+// Dublikat funksiyalarni olib tashlaymiz
+// (Fayl oxirida takrorlangan _showAuthModal va _hideAuthModal funksiyalari olib tashlandi)
