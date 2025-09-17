@@ -1,1 +1,1 @@
-export default { init(){ console.log('results init'); }, destroy(){} };
+export default { async init(){}, destroy(){} };

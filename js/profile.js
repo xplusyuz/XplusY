@@ -1,1 +1,1 @@
-export default { init(){ console.log('profile init'); }, destroy(){} };
+import { getCurrentUserData } from './common.js'; export default { async init(){ const d=getCurrentUserData(); if(!d) return; document.getElementById('pfId').textContent=d.numericId??'—'; document.getElementById('pfBal').textContent=d.balance??0; document.getElementById('pfGems').textContent=d.gems??0; }, destroy(){} };

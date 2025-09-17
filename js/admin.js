@@ -1,1 +1,1 @@
-export default { init(){ console.log('admin init'); }, destroy(){} };
+export default { async init(){}, destroy(){} };

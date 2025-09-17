@@ -1,1 +1,1 @@
-export default { init(){ console.log('badges init'); }, destroy(){} };
+export default { async init(){}, destroy(){} };

@@ -1,1 +1,1 @@
-export default { init(){ console.log('topup init'); }, destroy(){} };
+export default { async init(){}, destroy(){} };

@@ -1,1 +1,1 @@
-export default { init(){ console.log('promo init'); }, destroy(){} };
+export default { async init(){}, destroy(){} };
