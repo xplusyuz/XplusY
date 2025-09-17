@@ -157,12 +157,21 @@ async function renderSignedIn(user) {
     const balance = data.balance ?? 0;
     const gems = data.gems ?? 0;
     authChip.innerHTML = `
-      <div class="id-badge">
-        <div><b>ID:</b> ${id}</div>
-        <div class="meta">Balans: ${balance.toLocaleString()} so‘m • Olmos: ${gems}</div>
-        <button id="logoutBtn" class="btn">Chiqish</button>
+      <div class="id-badge" title="Sizning akkauntingiz ma'lumotlari">
+        <span class="pill">
+          <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" opacity=".15"/><path d="M7 8h10v2H7zM7 12h6v2H7z"/></svg>
+          <span class="lbl"><b>ID:</b></span> <span>${id}</span>
+        </span>
+        <span class="sep"></span>
+        <span class="pill">
+          <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" opacity=".15"/><path d="M4 9h16v2H4zM6 13h8v2H6z"/></svg>
+          <span class="lbl">Balans:</span> <span>${balance.toLocaleString()}</span>
+        </span>
+        <span class="pill">
+          <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l4 7-4 13-4-13z" opacity=".15"/></svg>
+          <span class="lbl">Olmos:</span> <span>${gems}</span>
+        </span>
       </div>`;
-    $("#logoutBtn").addEventListener("click", async () => { await signOut(auth); });
 
     panelUser.innerHTML = `
       <div><b>ID:</b> ${id}</div>
@@ -299,3 +308,20 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
     msg.classList.add("error");
   }
 });
+
+
+// ===== THEME =====
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem("xpy_theme");
+  const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+  root.setAttribute("data-theme", saved || (prefersLight ? "light" : "dark"));
+  const btn = document.getElementById("themeToggle");
+  const set = (mode) => { root.setAttribute("data-theme", mode); localStorage.setItem("xpy_theme", mode); };
+  if (btn){
+    btn.addEventListener("click", () => {
+      const cur = root.getAttribute("data-theme") || "dark";
+      set(cur === "dark" ? "light" : "dark");
+    });
+  }
+})();
