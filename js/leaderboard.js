@@ -1,1 +1,0 @@
-export default { async init(){ const box=document.getElementById('lbList'); if(!box) return; box.innerHTML='<div>Tez orada Firestoredan jonli reyting.</div>'; }, destroy(){} };

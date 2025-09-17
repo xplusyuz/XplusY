@@ -1,1 +1,0 @@
-export default { async init(){ const box=document.getElementById('liveList'); if(!box) return; box.innerHTML='<div class="card">Tez orada</div>'; }, destroy(){} };

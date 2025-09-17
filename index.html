@@ -1,71 +1,144 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MathCenter.uz — Full v3 (tests + live + real-time)</title>
-  <meta name="theme-color" content="#21c26e">
-  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
-  <link rel="alternate icon" type="image/png" href="./assets/favicon.png">
-  <link rel="stylesheet" href="./css/base.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XplusY — SPA skeleton (index + auth + header/footer)</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="icon" href="data:," />
 </head>
 <body>
-  <!-- HEADER -->
-  <header class="mc-header" role="banner">
-    <div class="mc-left">
-      <a class="brand" href="#home" aria-label="MathCenter bosh sahifa">
-        <img src="./assets/logo.svg" alt="MathCenter logo" />
-        <strong>MathCenter</strong>
-      </a>
+  <!-- ===== App Shell (index — hech qanday kontent yo'q, #app ichiga partials yuklanadi) ===== -->
+  <header class="site-header">
+    <div class="brand">
+      <span class="logo">π</span>
+      <span class="title">XplusY</span>
     </div>
-    <div class="mc-right">
-      <span id="hdrId" class="pill">ID: —</span>
-      <span id="hdrBalance" class="pill">💵 0</span>
-      <span id="hdrGems" class="pill">💎 0</span>
-      <button id="btnSignIn" class="btn primary" data-action="google-signin" data-auth="out">Kirish</button>
-      <!-- Diqqat: Chiqish faqat menyuda -->
+
+    <nav class="site-nav">
+      <a href="#home" class="nav-link">Bosh sahifa</a>
+      <a href="#tests" class="nav-link">Testlar</a>
+      <a href="#live" class="nav-link">Live</a>
+      <a href="#leaderboard" class="nav-link">Reyting</a>
+    </nav>
+
+    <div class="auth-chip" id="authChip">
+      <button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button>
     </div>
   </header>
 
-  <main id="app" class="container" role="main" tabindex="-1"></main>
+  <main id="app" class="app"></main>
 
-  <footer class="mc-footer" role="contentinfo">
-    <div class="container">
-      <div class="sub">© 2025 MathCenter Full v3 — tests + live + real-time</div>
-      <div class="sub">Mobil-first • Yashil tema • SPA</div>
-    </div>
+  <footer class="site-footer">
+    <div class="f-left">© <span id="year"></span> XplusY. Barchasi muhofaza qilingan.</div>
+    <div class="f-right">Uz • <a href="#about">Biz haqimizda</a></div>
   </footer>
 
-  <!-- Floating Touch Menu -->
-  <div class="touch-dock" id="touchDock" aria-label="Asosiy menyu">
-    <button class="td-fab" id="tdFab" aria-expanded="false" aria-controls="tdSheet" title="Menyu">☰</button>
-    <div class="td-backdrop" id="tdBackdrop" hidden></div>
-    <section class="td-sheet" id="tdSheet" role="dialog" aria-modal="true" aria-labelledby="tdSheetTitle" hidden>
-      <div class="td-grabber" id="tdGrabber" title="Tortib yopish"></div>
-      <header class="td-sheet-head">
-        <h3 id="tdSheetTitle">Menyu</h3>
-      </header>
-      <div class="td-grid" id="tdGrid">
-        <a href="#home"        class="td-tile" data-route="home"><span>🏠</span><b>Bosh sahifa</b></a>
-        <a href="#tests"       class="td-tile" data-route="tests"><span>📝</span><b>Testlar</b></a>
-        <a href="#courses"     class="td-tile" data-route="courses"><span>📚</span><b>Kurslar</b></a>
-        <a href="#live"        class="td-tile" data-route="live"><span>🔥</span><b>Live</b></a>
-        <a href="#simulator"   class="td-tile" data-route="simulator"><span>🎮</span><b>Simulator</b></a>
-        <a href="#leaderboard" class="td-tile" data-route="leaderboard"><span>🏅</span><b>Reyting</b></a>
-        <a href="#profile"     class="td-tile" data-route="profile" data-auth-required="true"><span>👤</span><b>Profil</b></a>
-        <a href="#results"     class="td-tile" data-route="results" data-auth-required="true"><span>📊</span><b>Natijalar</b></a>
-        <a href="#topup"       class="td-tile" data-route="topup" data-auth-required="true"><span>💳</span><b>To‘ldirish</b></a>
-        <a href="#badges"      class="td-tile" data-route="badges"><span>🏆</span><b>Yutuqlar</b></a>
-        <a href="#promo"       class="td-tile" data-route="promo"><span>🎁</span><b>Promo</b></a>
-        <a href="#admin"       class="td-tile" data-route="admin" data-auth-required="true"><span>🛠️</span><b>Admin</b></a>
-        <button class="td-tile td-danger" type="button" data-action="signout" data-auth="in"><span>🚪</span><b>Chiqish</b></button>
+  <!-- ===== Auth Modal ===== -->
+  <div class="modal" id="authModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="login">Kirish (ID + Parol)</button>
+          <button class="tab" data-tab="signup">Ro‘yxatdan o‘tish</button>
+        </div>
+        <button class="icon-btn close" title="Yopish" data-close>×</button>
       </div>
-    </section>
+
+      <div class="modal-body">
+        <!-- Login -->
+        <section class="tab-panel active" data-panel="login">
+          <form id="loginForm" class="form">
+            <div class="form-row">
+              <label for="loginId">ID</label>
+              <input id="loginId" name="id" inputmode="numeric" pattern="\d{7,}" placeholder="1000001" required />
+            </div>
+            <div class="form-row">
+              <label for="loginPass">Parol</label>
+              <input id="loginPass" name="password" type="password" minlength="6" placeholder="••••••" required />
+            </div>
+            <button class="btn primary wide" type="submit">Kirish</button>
+            <p class="muted small">Eslatma: kirish faqat ID + Parol orqali. Email/Google kirish mavjud emas.</p>
+            <div id="loginMsg" class="msg"></div>
+          </form>
+        </section>
+
+        <!-- Signup -->
+        <section class="tab-panel" data-panel="signup">
+          <div class="subtabs" role="tablist">
+            <button class="subtab active" data-sub="email">Email orqali</button>
+            <button class="subtab" data-sub="google">Google (faqat ro‘yxatdan o‘tish)</button>
+            <button class="subtab" data-sub="oneclick">Bir bosishda (ID beriladi)</button>
+          </div>
+
+          <!-- Email signup -->
+          <form id="signupEmailForm" class="form subpanel active" data-subpanel="email">
+            <div class="form-row">
+              <label for="seName">Ism Familiya (ixtiyoriy)</label>
+              <input id="seName" name="name" placeholder="Ism Familiya" />
+            </div>
+            <div class="form-row">
+              <label for="seEmail">Email</label>
+              <input id="seEmail" name="email" type="email" placeholder="you@email.com" required />
+            </div>
+            <div class="form-row">
+              <label for="sePass">Parol (o‘ylab toping)</label>
+              <input id="sePass" name="password" type="password" minlength="6" placeholder="kamida 6 belgi" required />
+            </div>
+            <button class="btn success wide" type="submit">Ro‘yxatdan o‘tish</button>
+            <div id="signupEmailMsg" class="msg"></div>
+          </form>
+
+          <!-- Google signup -->
+          <div class="subpanel" data-subpanel="google">
+            <p class="muted">Google orqali tezkor ro‘yxatdan o‘ting. Keyin ID beriladi va <b>parol o‘rnatish</b> shart — kelajakda kirish faqat ID + Parol orqali bo‘ladi.</p>
+            <button id="googleBtn" class="btn wide">Google bilan ro‘yxatdan o‘tish</button>
+            <div id="signupGoogleStepSetPass" class="hidden">
+              <form id="googleSetPassForm" class="form">
+                <div class="form-row">
+                  <label for="sgPass">Parol o‘rnatish</label>
+                  <input id="sgPass" type="password" minlength="6" required placeholder="kamida 6 belgi" />
+                </div>
+                <button class="btn success wide" type="submit">Parolni ulash</button>
+              </form>
+            </div>
+            <div id="signupGoogleMsg" class="msg"></div>
+          </div>
+
+          <!-- One-click signup -->
+          <form id="oneClickForm" class="form subpanel" data-subpanel="oneclick">
+            <div class="form-row">
+              <label for="ocName">Ism Familiya (ixtiyoriy)</label>
+              <input id="ocName" placeholder="Ism Familiya" />
+            </div>
+            <div class="form-row">
+              <label for="ocPass">Parol (o‘ylab toping)</label>
+              <input id="ocPass" type="password" minlength="6" placeholder="kamida 6 belgi" required />
+            </div>
+            <button class="btn success wide" type="submit">Bir bosishda ro‘yxatdan o‘tish</button>
+            <p class="muted small">Email shart emas. Sizga navbatdagi ID beriladi va tizim ichki email yaratadi.</p>
+            <div id="oneClickMsg" class="msg"></div>
+          </form>
+        </section>
+      </div>
+    </div>
   </div>
 
-  <!-- App Scripts -->
-  <script type="module" src="./js/common.js"></script>
-  <script type="module" src="./js/touch-menu.js"></script>
-  <script type="module" src="./js/router.js"></script>
+  <!-- Firebase config — BU YERGA O'Z KONFIGINGIZNI QO'YING -->
+  <script>
+    // Masalan:
+    // window.FIREBASE_CONFIG = {
+    //   apiKey: "...",
+    //   authDomain: "...",
+    //   projectId: "xplusy-760fa",
+    //   storageBucket: "...",
+    //   messagingSenderId: "...",
+    //   appId: "...",
+    //   measurementId: "...",
+    // };
+  </script>
+
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
