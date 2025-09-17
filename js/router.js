@@ -1,138 +1,136 @@
-// router.js — tiny hash‑based SPA router
-import { attachAuthUI, initUX, isSignedIn, requireAuthOrModal, getCurrentUserData } from "./common.js";
+// router.js — Partial-driven SPA (hash-based)
+import { attachAuthUI, initUX, isSignedIn, requireAuthOrModal } from "./common.js";
 
 const app = document.getElementById("app");
 if (!app) console.error("[router] #app topilmadi — index.html markup tekshiring");
 
-const routes = {
-  home: () => `
-    <section class="hero">
-      <h1>MathCenter — matematika markazi</h1>
-      <p class="sub">Tests • Live • Real‑time — hammasi bitta platformada.</p>
-    </section>
-    <div class="grid cards">
-      <div class="card">
-        <img class="hero" src="https://picsum.photos/seed/math1/1200/600" alt="Banner">
-        <h3 style="margin-top:8px">DTM Maxsus Test</h3>
-        <p class="sub">Boshlanish: tez orada • Kirish bepul</p>
-        <p style="margin-top:6px"><a class="btn primary" href="#tests">Testlarga o'tish</a></p>
-      </div>
-      <div class="card">
-        <h3>Reyting</h3>
-        <p class="sub">Olmos bo'yicha TOP‑100</p>
-        <p style="margin-top:6px"><a class="btn" href="#leaderboard">Ko'rish</a></p>
-      </div>
-      <div class="card">
-        <h3>Balansni to‘ldirish</h3>
-        <p class="sub">Click / Xazna havolalari, chek yuklash</p>
-        <p style="margin-top:6px"><a class="btn" href="#topup">To‘ldirish</a></p>
-      </div>
-    </div>
-  `,
-
-  tests: () => `
-    <section class="hero">
-      <h1>Testlar</h1>
-      <p class="sub">CSV orqali boshqariladigan testlar (soon). Hozircha demo.</p>
-    </section>
-    <div class="grid cards">
-      <div class="card">
-        <h3>DTM Demo</h3>
-        <p class="sub">Har gal yechish 5 000 so'm • +olmos / −olmos tizimi</p>
-        <p style="margin-top:6px"><a class="btn" href="#results">Demo natijalar</a></p>
-      </div>
-    </div>
-  `,
-
-  courses: () => `
-    <section class="hero"><h1>Kurslar</h1><p class="sub">Tez orada</p></section>
-  `,
-
-  live: () => `
-    <section class="hero"><h1>Live</h1><p class="sub">Real‑time musobaqalar — tez orada.</p></section>
-  `,
-
-  simulator: () => `
-    <section class="hero"><h1>Simulator</h1><p class="sub">CSV dan turli simulyatorlar — tez orada.</p></section>
-  `,
-
-  leaderboard: () => `
-    <section class="hero"><h1>Reyting</h1><p class="sub">Olmos bo'yicha TOP‑100 (demo)</p></section>
-    <div class="card"><p>Tez orada Firestoredan jonli reyting.</p></div>
-  `,
-
-  profile: () => authGate(() => {
-    const u = getCurrentUserData();
-    return `
-      <section class="hero"><h1>Profil</h1><p class="sub">Ma'lumotlarni to'ldiring</p></section>
-      <div class="card">
-        <p><b>ID:</b> ${u?.numericId ?? "—"}</p>
-        <p><b>Balance:</b> ${u?.balance ?? 0}</p>
-        <p><b>Gems:</b> ${u?.gems ?? 0}</p>
-      </div>
-    `;
-  }),
-
-  results: () => authGate(() => `
-    <section class="hero"><h1>Natijalar</h1><p class="sub">Sizning yakunlangan testlaringiz (demo)</p></section>
-    <div class="card"><p>Tez orada.</p></div>
-  `),
-
-  topup: () => authGate(() => `
-    <section class="hero"><h1>Balansni to‘ldirish</h1><p class="sub">To'lov havolalari va chek yuklash</p></section>
-    <div class="grid cards">
-      <div class="card"><h3>Click</h3><p class="sub">Havola: indoor.click.uz</p></div>
-      <div class="card"><h3>Xazna</h3><p class="sub">Havola: pay.xazna.uz</p></div>
-      <div class="card"><h3>Chek yuklash</h3><p class="sub">Tez orada Storage orqali</p></div>
-    </div>
-  `),
-
-  badges: () => `
-    <section class="hero"><h1>Yutuqlar</h1><p class="sub">Badgellar tez orada.</p></section>
-  `,
-
-  promo: () => `
-    <section class="hero"><h1>Promo</h1><p class="sub">Promokod va bonuslar tez orada.</p></section>
-  `,
-
-  admin: () => authGate(() => `
-    <section class="hero"><h1>Admin</h1><p class="sub">Faqat adminlar uchun (demo)</p></section>
-    <div class="card"><p>Panel tez orada.</p></div>
-  `),
+const ROUTES = {
+  home:        { partial: "partials/home.html" },
+  tests:       { partial: "partials/tests.html" },
+  courses:     { partial: "partials/courses.html" },
+  live:        { partial: "partials/live.html" },
+  simulator:   { partial: "partials/simulator.html" },
+  leaderboard: { partial: "partials/leaderboard.html" },
+  profile:     { partial: "partials/profile.html", auth: true },
+  results:     { partial: "partials/results.html", auth: true },
+  topup:       { partial: "partials/topup.html", auth: true },
+  badges:      { partial: "partials/badges.html" },
+  promo:       { partial: "partials/promo.html" },
+  admin:       { partial: "partials/admin.html", auth: true },
 };
 
-function authGate(renderFn){
-  if (!isSignedIn()){
-    requireAuthOrModal();
-    return `<section class="hero"><h1>Kirish talab qilinadi</h1><p class="sub">Davom etish uchun tizimga kiring.</p></section>`;
-  }
-  return renderFn();
-}
-
-function render(route){
-  const key = route || "home";
-  const view = routes[key] || routes["home"];
-  app.innerHTML = view();
-  // focus for a11y
-  app.focus({preventScroll:true});
-  // bind auth buttons within the view
-  attachAuthUI(app);
-  // scroll to top on navigation
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-// Hash router
 function getRouteFromHash(){
-  return (location.hash.replace(/^#/, "") || "home").split("?")[0];
+  const h = (location.hash || "#home").slice(1);
+  const [name] = h.split("?");
+  return name || "home";
 }
 
-function onHashChange(){
-  render(getRouteFromHash());
+async function fetchText(url){
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`[partials] Yuklab bo'lmadi: ${url} (${res.status})`);
+  return await res.text();
 }
+
+function dedupeLink(href){
+  const links = [...document.head.querySelectorAll('link[rel="stylesheet"]')];
+  return links.some(l => l.getAttribute("href") === href);
+}
+
+function execScriptsFrom(container){
+  const scripts = [...container.querySelectorAll("script")];
+  for (const old of scripts){
+    const s = document.createElement("script");
+    if (old.type) s.type = old.type;
+    if (old.src){
+      s.src = old.getAttribute("src");
+      s.async = false;
+    } else {
+      s.textContent = old.textContent;
+    }
+    old.replaceWith(s);
+  }
+}
+
+function hoistHeadAssetsFrom(container){
+  // Move <link rel="stylesheet"> to <head> (dedupe by href)
+  const links = [...container.querySelectorAll('link[rel="stylesheet"]')];
+  for (const l of links){
+    const href = l.getAttribute("href");
+    if (!href) continue;
+    if (!dedupeLink(href)){
+      const newL = document.createElement("link");
+      newL.rel = "stylesheet";
+      newL.href = href;
+      document.head.appendChild(newL);
+    }
+    l.remove();
+  }
+  // Inline <style> blocks — append to head to ensure precedence
+  const styles = [...container.querySelectorAll("style")];
+  for (const st of styles){
+    const clone = document.createElement("style");
+    clone.textContent = st.textContent;
+    document.head.appendChild(clone);
+    st.remove();
+  }
+}
+
+function authGate(routeCfg){
+  if (!routeCfg?.auth) return true;
+  if (isSignedIn()) return true;
+  requireAuthOrModal();
+  app.innerHTML = `
+    <section class="hero"><h1>Kirish talab qilinadi</h1>
+      <p class="sub">Davom etish uchun tizimga kiring.</p>
+    </section>`;
+  attachAuthUI(app);
+  return false;
+}
+
+async function render(route){
+  const key = ROUTES[route] ? route : "home";
+  const cfg = ROUTES[key];
+
+  if (!authGate(cfg)) return;
+
+  try {
+    const html = await fetchText(cfg.partial);
+    // Parse to DOM fragment
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+
+    // Hoist CSS/STYLE from partial to document head, then set content
+    hoistHeadAssetsFrom(wrapper);
+
+    // Replace app content
+    app.innerHTML = "";
+    // Move only the body children or all content
+    const nodes = [...wrapper.childNodes];
+    nodes.forEach(n => app.appendChild(n));
+
+    // Execute scripts inside the partial (including type="module")
+    execScriptsFrom(app);
+
+    // Bind auth buttons within the partial
+    attachAuthUI(app);
+
+    // Focus + scroll top
+    app.focus({preventScroll:true});
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+  } catch (err){
+    console.error("[router] partial yuklash xatosi:", err);
+    app.innerHTML = `
+      <section class="hero"><h1>404</h1>
+        <p class="sub">Sahifa topilmadi yoki yuklashda xato: <code>${cfg.partial}</code></p>
+      </section>`;
+  }
+}
+
+function onHashChange(){ render(getRouteFromHash()); }
 
 window.addEventListener("hashchange", onHashChange);
 
-// Boot
 document.addEventListener("DOMContentLoaded", () => {
   render(getRouteFromHash());
   initUX();
