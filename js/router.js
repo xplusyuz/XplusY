@@ -22,18 +22,18 @@ const ROUTES = {
 
 // Map route -> module path (ESM default export with optional {init, destroy})
 const ROUTE_MODULES = {
-  home:        "./js/home-csv.js",
-  tests:       "./js/tests.js",
-  courses:     "./js/courses-csv.js",
-  live:        "./js/live-csv.js",
-  simulator:   "./js/simulator-csv.js",
-  leaderboard: "./js/leaderboard.js",
-  profile:     "./js/profile.js",
-  results:     "./js/results.js",
-  topup:       "./js/topup.js",
-  badges:      "./js/badges.js",
-  promo:       "./js/promo.js",
-  admin:       "./js/admin.js",
+  home:        "./home-csv.js",
+  tests:       "./tests.js",
+  courses:     "./courses-csv.js",
+  live:        "./live-csv.js",
+  simulator:   "./simulator-csv.js",
+  leaderboard: "./leaderboard.js",
+  profile:     "./profile.js",
+  results:     "./results.js",
+  topup:       "./topup.js",
+  badges:      "./badges.js",
+  promo:       "./promo.js",
+  admin:       "./admin.js",
 };
 let _activeMod = null;
 async function mountModuleFor(route){
@@ -110,6 +110,18 @@ function hoistHeadAssetsFrom(container){
   }
 }
 
+
+function ensureRouteCSS(route){
+  const href = `./css/${route}.css`;
+  const already = [...document.head.querySelectorAll('link[rel="stylesheet"]')].some(l => l.getAttribute('href') === href);
+  if (!already){
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href + `?v=${Date.now()}`;
+    document.head.appendChild(l);
+  }
+}
+
 function authGate(routeCfg){
   if (!routeCfg?.auth) return true;
   if (isSignedIn()) return true;
@@ -150,6 +162,7 @@ async function render(route){
     // Bind auth buttons within the partial
     attachAuthUI(app);
 
+    ensureRouteCSS(key);
     await mountModuleFor(key);
 
     // Focus + scroll top
