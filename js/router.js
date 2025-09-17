@@ -36,6 +36,57 @@ const ROUTE_MODULES = {
   admin:       "./admin.js",
 };
 let _activeMod = null;
+
+// --- Route-scoped CSS loader ---
+// Prefixes (naively) all simple selectors with .route-<name> to keep styles inside the partial only.
+async function ensureRouteScopedCSS(route){
+  const href = `./css/${route}.css`;
+  // remove old styles for other routes
+  document.querySelectorAll('style[data-route-style]').forEach(st => {
+    if (st.getAttribute('data-route-style') !== route) st.remove();
+  });
+  try {
+    const res = await fetch(href, { cache: "no-store" });
+    if (!res.ok) return; // silently skip if not found
+    const css = await res.text();
+    const scoped = scopeCSS(css, `.route-${route}`);
+    const st = document.createElement("style");
+    st.setAttribute("data-route-style", route);
+    st.textContent = scoped;
+    document.head.appendChild(st);
+  } catch {}
+}
+
+function scopeCSS(css, prefix){
+  // Very lightweight scoper: handles regular rules and @media/@supports blocks.
+  // Leaves @keyframes and @font-face as-is.
+  const lines = css.split(/(?<=\})/g);
+  const scoped = lines.map(block => {
+    if (!block.trim()) return block;
+    if (/@(keyframes|font-face)/.test(block)) return block; // keep global
+    if (/^@media|^@supports/i.test(block.trim())){
+      // prefix inner selectors between { ... }
+      return block.replace(/\{([\s\S]*?)\}/g, (m, inner) => `{${prefixSelectors(inner, prefix)}}`);
+    }
+    return prefixSelectors(block, prefix);
+  }).join("");
+  return scoped;
+}
+
+function prefixSelectors(cssChunk, prefix){
+  // Add prefix before each selector (naive: splits by } or , within rule prelude)
+  return cssChunk.replace(/(^|}|;)\s*([^{@}][^{]*?)\s*\{/g, (m, p1, sel) => {
+    // keep HTML/Body root selectors from affecting outside by prefixing them too
+    const scopedSel = sel.split(',').map(s => {
+      s = s.trim();
+      if (!s) return s;
+      // don't prefix with :root or @..
+      return `${prefix} ${s}`;
+    }).join(', ');
+    return `${p1} ${scopedSel} {`;
+  });
+}
+
 async function mountModuleFor(route){
   const modPath = ROUTE_MODULES[route];
   if (!modPath) return;
@@ -71,44 +122,7 @@ function dedupeLink(href){
   return links.some(l => l.getAttribute("href") === href);
 }
 
-function execScriptsFrom(container){
-  const scripts = [...container.querySelectorAll("script")];
-  for (const old of scripts){
-    const s = document.createElement("script");
-    if (old.type) s.type = old.type;
-    if (old.src){
-      s.src = old.getAttribute("src");
-      s.async = false;
-    } else {
-      s.textContent = old.textContent;
-    }
-    old.replaceWith(s);
-  }
-}
 
-function hoistHeadAssetsFrom(container){
-  // Move <link rel="stylesheet"> to <head> (dedupe by href)
-  const links = [...container.querySelectorAll('link[rel="stylesheet"]')];
-  for (const l of links){
-    const href = l.getAttribute("href");
-    if (!href) continue;
-    if (!dedupeLink(href)){
-      const newL = document.createElement("link");
-      newL.rel = "stylesheet";
-      newL.href = href;
-      document.head.appendChild(newL);
-    }
-    l.remove();
-  }
-  // Inline <style> blocks — append to head to ensure precedence
-  const styles = [...container.querySelectorAll("style")];
-  for (const st of styles){
-    const clone = document.createElement("style");
-    clone.textContent = st.textContent;
-    document.head.appendChild(clone);
-    st.remove();
-  }
-}
 
 
 function ensureRouteCSS(route){
@@ -162,7 +176,6 @@ async function render(route){
     // Bind auth buttons within the partial
     attachAuthUI(app);
 
-    ensureRouteCSS(key);
     await mountModuleFor(key);
 
     // Focus + scroll top
