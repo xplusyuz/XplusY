@@ -3,7 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/fireba
 import {
   getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup,
-  linkWithCredential, EmailAuthProvider, signInAnonymously
+  linkWithCredential, linkWithPopup, EmailAuthProvider, signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction, onSnapshot
@@ -239,7 +239,7 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ---------- Login (ID + password) ----------
-$("#loginForm").addEventListener("submit", async (e) => {
+const __loginForm = $("#loginForm"); if(__loginForm) __loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const id = ($("#loginId").value || "").trim();
   const pass = $("#loginPass").value;
@@ -261,7 +261,7 @@ $("#loginForm").addEventListener("submit", async (e) => {
 });
 
 // ---------- Signup: Email ----------
-$("#signupEmailForm").addEventListener("submit", async (e) => {
+const __signupEmailForm = $("#signupEmailForm"); if(__signupEmailForm) __signupEmailForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = $("#seName").value.trim() || null;
   const email = $("#seEmail").value.trim();
@@ -291,7 +291,7 @@ const signupGoogleMsg = $("#signupGoogleMsg");
 const googleSetPassForm = $("#googleSetPassForm");
 const signupGoogleStepSetPass = $("#signupGoogleStepSetPass");
 
-googleBtn.addEventListener("click", async () => {
+if(googleBtn) googleBtn.addEventListener("click", async () => {
   signupGoogleMsg.textContent = "Google orqali kirmoqda..."; signupGoogleMsg.className = "msg";
   try {
     const { user } = await googleSignupOrLink(auth, provider);
@@ -307,7 +307,7 @@ googleBtn.addEventListener("click", async () => {
   }
 });
 
-googleSetPassForm.addEventListener("submit", async (e) => {
+if(googleSetPassForm) googleSetPassForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const pass = $("#sgPass").value;
   signupGoogleMsg.textContent = "Parol ulanmoqda..."; signupGoogleMsg.className = "msg";
@@ -330,7 +330,7 @@ googleSetPassForm.addEventListener("submit", async (e) => {
 });
 
 // ---------- Signup: One-click (no email) ----------
-$("#oneClickForm").addEventListener("submit", async (e) => {
+const __oneClickForm = $("#oneClickForm"); if(__oneClickForm) __oneClickForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = $("#ocName").value.trim() || null;
   const pass = $("#ocPass").value;
@@ -393,10 +393,11 @@ function niceAuthError(err){
 async function googleSignupOrLink(auth, provider){
   const u = auth.currentUser;
   if (u && u.isAnonymous) {
-    // Upgrade anonymous -> Google
-    const mod = await import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js");
-    return await mod.linkWithPopup(u, provider);
+    return await linkWithPopup(u, provider);
   } else {
+    return await signInWithPopup(auth, provider);
+  }
+} else {
     return await signInWithPopup(auth, provider);
   }
 }
@@ -406,9 +407,11 @@ async function emailSignupOrLink(auth, email, pass){
   const u = auth.currentUser;
   if (u && u.isAnonymous) {
     const cred = EmailAuthProvider.credential(email, pass);
-    const mod = await import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js");
-    return await mod.linkWithCredential(u, cred);
+    return await linkWithCredential(u, cred);
   } else {
+    return await createUserWithEmailAndPassword(auth, email, pass);
+  }
+} else {
     return await createUserWithEmailAndPassword(auth, email, pass);
   }
 }
