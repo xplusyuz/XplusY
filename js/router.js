@@ -10,8 +10,9 @@ const ROUTES = {
   live:        { html: "partials/live.html",        css: "css/live.css",        mod: "./js/live-csv.js" },
   simulator:   { html: "partials/simulator.html",   css: "css/simulator.css",   mod: "./js/simulator-csv.js" },
   leaderboard: { html: "partials/leaderboard.html", css: "css/leaderboard.css", mod: "./js/leaderboard.js" },
+  courses:     { html: "partials/courses.html",     css: "css/courses.css",     mod: "./js/courses.js" },
 
-  // Standalone pages (previously under settings)
+  // Standalone pages (former settings)
   profile:     { html: "partials/profile.html",     css: "css/settings.css",    mod: "./js/profile.js" },
   results:     { html: "partials/results.html",     css: "css/settings.css",    mod: "./js/results.js" },
   topup:       { html: "partials/topup.html",       css: "css/settings.css",    mod: "./js/topup.js" },
@@ -25,7 +26,7 @@ let currentTeardown = null;
 async function ensureCSS(href){
   if(!href) return;
   const clean = (x)=> (x||'').split('?')[0];
-  const exists = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+  const exists = Array.from(document.querySelectorAll('link[rel=\"stylesheet\"]'))
     .some(l => clean(l.getAttribute('href')) === href);
   if (exists) return;
   const link = document.createElement('link');
@@ -41,7 +42,7 @@ async function loadHTML(url){
     return await res.text();
   }catch(e){
     console.warn('[router] partial yuklanmadi:', url, e.message);
-    return `<div class="eh-note" style="margin:16px;border:1px solid #944;padding:12px;border-radius:12px">
+    return `<div class=\"eh-note\" style=\"margin:16px;border:1px solid #944;padding:12px;border-radius:12px\">
       <b>Sahifa yuklanmadi</b><br><small>${url}</small><br>${e.message}</div>`;
   }
 }
