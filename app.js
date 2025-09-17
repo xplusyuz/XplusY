@@ -225,7 +225,7 @@ $("#signupEmailForm").addEventListener("submit", async (e) => {
   msg.className = "msg";
 
   try {
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const cred = await emailSignupOrLink(auth, email, pass);
     const uid = cred.user.uid;
     const numericId = await ensureUserNumericId(uid, email, name);
     await setDoc(doc(db, "ids", String(numericId)), { uid, email, numericId }, { merge: true });
@@ -234,7 +234,7 @@ $("#signupEmailForm").addEventListener("submit", async (e) => {
     closeModal(authModal);
   } catch (err) {
     console.error(err);
-    msg.textContent = "Ro‘yxatdan o‘tishda xatolik: " + (err.message || err);
+    msg.textContent = "Ro‘yxatdan o‘tishda xatolik: " + niceAuthError(err);
     msg.classList.add("error");
   }
 });
@@ -248,7 +248,7 @@ const signupGoogleStepSetPass = $("#signupGoogleStepSetPass");
 googleBtn.addEventListener("click", async () => {
   signupGoogleMsg.textContent = "Google orqali kirmoqda..."; signupGoogleMsg.className = "msg";
   try {
-    const { user } = await signInWithPopup(auth, provider);
+    const { user } = await googleSignupOrLink(auth, provider);
     const uid = user.uid;
     const email = user.email;
     await ensureUserNumericId(uid, email, user.displayName || null);
@@ -256,7 +256,7 @@ googleBtn.addEventListener("click", async () => {
     signupGoogleMsg.textContent = "Google bog‘landi. Endi parol belgilang.";
   } catch (err) {
     console.error(err);
-    signupGoogleMsg.textContent = "Google ro‘yxatdan o‘tishda xatolik: " + (err.message || err);
+    signupGoogleMsg.textContent = "Google ro‘yxatdan o‘tishda xatolik: " + niceAuthError(err);
     signupGoogleMsg.classList.add("error");
   }
 });
@@ -292,7 +292,7 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
   msg.textContent = "Yaratilmoqda..."; msg.className = "msg";
 
   try {
-    const anon = await signInAnonymously(auth);
+    const anon = auth.currentUser && auth.currentUser.isAnonymous ? { user: auth.currentUser } : await signInAnonymously(auth);
     const uid = anon.user.uid;
     const numericId = await ensureUserNumericId(uid, null, name);
     const aliasEmail = `${numericId}@xplusy.local`;
@@ -304,7 +304,7 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
     closeModal(authModal);
   } catch (err) {
     console.error(err);
-    msg.textContent = "Xatolik: " + (err.message || err);
+    msg.textContent = "Xatolik: " + niceAuthError(err);
     msg.classList.add("error");
   }
 });
@@ -325,3 +325,44 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
     });
   }
 })();
+
+
+
+// ===== Helpers: error mapping =====
+function niceAuthError(err){
+  const c = err?.code || "";
+  if (c === "auth/admin-restricted-operation") {
+    return "Ro‘yxatdan o‘tish hozir admin tomonidan cheklangan yoki bu amaliyot bloklangan. Iltimos, boshqa usulni sinab ko‘ring yoki keyinroq urinib ko‘ring.";
+  }
+  if (c === "auth/operation-not-allowed") {
+    return "Ushbu kirish usuli serverda o‘chirilgan. Sign-in method sozlamalarini tekshiring.";
+  }
+  if (c === "auth/popup-closed-by-user") return "Oyna yopildi.";
+  if (c === "auth/email-already-in-use") return "Bu email allaqachon mavjud.";
+  if (c === "auth/weak-password") return "Parol juda zaif (kamida 6 belgi).";
+  return err?.message || String(err);
+}
+
+// Link Google to anonymous if possible
+async function googleSignupOrLink(auth, provider){
+  const u = auth.currentUser;
+  if (u && u.isAnonymous) {
+    // Upgrade anonymous -> Google
+    const mod = await import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js");
+    return await mod.linkWithPopup(u, provider);
+  } else {
+    return await signInWithPopup(auth, provider);
+  }
+}
+
+// Email signup that upgrades anonymous user if exists
+async function emailSignupOrLink(auth, email, pass){
+  const u = auth.currentUser;
+  if (u && u.isAnonymous) {
+    const cred = EmailAuthProvider.credential(email, pass);
+    const mod = await import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js");
+    return await mod.linkWithCredential(u, cred);
+  } else {
+    return await createUserWithEmailAndPassword(auth, email, pass);
+  }
+}
