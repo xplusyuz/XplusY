@@ -1,52 +1,13 @@
-// app.js — SPA shell + Auth system (ID + password login only)
-// Uses Firebase v10 modular SDK from gstatic CDN.
-// 1) Paste your FIREBASE_CONFIG in index.html (window.FIREBASE_CONFIG)
-// 2) The index page contains no content; partials/*.html are loaded into #app.
-//
-// Auth policy required by the user:
-// - Sign-in: ONLY by numeric ID + password (no email/Google login)
-// - Sign-up options:
-//    a) Email sign-up (email+password).
-//    b) Google sign-up (registration only) -> must set a password -> later login via ID+password.
-//    c) One-click sign-up (no email). System assigns next numeric ID and creates an internal alias email.
-// - Numeric ID sequence: 1000001, 1000002, ... assigned with a Firestore transaction from meta/counters.nextNumericId
-//
-// Firestore structure used here:
-//   meta/counters        { nextNumericId: 1000001 }
-//   users/{uid}          { numericId, name, balance, gems, createdAt, updatedAt, ... }
-//   ids/{numericId}      { numericId, uid, email }   // mapping for ID -> email used for hidden email login
-//
-// Suggested Firestore security rules snippet (adjust as needed):
-// -------------------------------------------------------------
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     function isSignedIn() { return request.auth != null; }
-//     function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
-//     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-//     function isAdmin() {
-//       return isSignedIn() && (
-//         userDoc(request.auth.uid).data.numericId in [1000001, 1000002] ||
-//         userDoc(request.auth.uid).data.numericId in ["1000001","1000002"]
-//       );
-//     }
-//     match /users/{uid} {
-//       allow read: if isOwner(uid) || isAdmin();
-//       allow create: if isOwner(uid);
-//       allow update: if isOwner(uid);
-//     }
-//     match /ids/{id} {
-//       allow read: if isSignedIn();  // allow lookup for login
-//       allow create: if isSignedIn();
-//       allow update: if isSignedIn();
-//     }
-//     match /meta/{doc} {
-//       allow read: if true;
-//       allow write: if isSignedIn(); // tighten for production
-//     }
-//   }
-// }
-// -------------------------------------------------------------
+// app.js — SPA shell + Auth + Side Panel
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup,
+  linkWithCredential, EmailAuthProvider, signInAnonymously
+} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -54,12 +15,13 @@ const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 // Render current year
 $("#year").textContent = String(new Date().getFullYear());
 
-// Modal controls
+// Modal controls (Auth)
 const authModal = $("#authModal");
-$("#openAuth").addEventListener("click", () => openModal(authModal));
+const openAuthBtn = $("#openAuth");
+if (openAuthBtn) openAuthBtn.addEventListener("click", () => openModal(authModal));
 $$("[data-close]", authModal).forEach(el => el.addEventListener("click", () => closeModal(authModal)));
-function openModal(m){ m.setAttribute("aria-hidden","false"); }
-function closeModal(m){ m.setAttribute("aria-hidden","true"); }
+function openModal(m){ m.setAttribute("aria-hidden","false"); document.body.style.overflow="hidden"; }
+function closeModal(m){ m.setAttribute("aria-hidden","true"); document.body.style.overflow=""; }
 
 // Tabs
 $$(".tab").forEach(btn => {
@@ -91,32 +53,45 @@ async function loadRoute() {
     const html = await res.text();
     app.innerHTML = html;
   } catch (e) {
-    app.innerHTML = `<div class="card"><h2>${route}</h2><p class="muted">Partial faylini (partials/${route}.html) hozircha qo‘ymagansiz.</p></div>`;
+    app.innerHTML = `<div class="card" style="padding:16px; border:1px solid rgba(255,255,255,.06); border-radius:14px; background:var(--card); box-shadow: var(--shadow);">
+      <h2 style="margin-top:0">${route}</h2>
+      <p class="muted">Partial faylini (partials/${route}.html) hozircha qo‘ymagansiz.</p>
+    </div>`;
   }
 }
 window.addEventListener("hashchange", loadRoute);
 loadRoute();
 
-// ---------------- Firebase ----------------
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup,
-  linkWithCredential, EmailAuthProvider, signInAnonymously
-} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction, updateDoc
-} from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
-
-if (!window.FIREBASE_CONFIG) {
-  console.warn("[XplusY] FIREBASE_CONFIG topilmadi. Auth ishlamaydi. index.html ichidagi kommentda ko‘rsatma bor.");
+// ===== Side Panel controls =====
+const sidePanel = $("#sidePanel");
+const menuBtn = $("#menuBtn");
+function openPanel(){
+  sidePanel.setAttribute("aria-hidden", "false");
+  if (menuBtn) menuBtn.setAttribute("aria-expanded", "true");
+  document.body.style.overflow = "hidden";
+  // focus trap start
+  const card = $(".panel-card", sidePanel);
+  if (card) card.focus();
 }
+function closePanel(){
+  sidePanel.setAttribute("aria-hidden", "true");
+  if (menuBtn) menuBtn.setAttribute("aria-expanded", "false");
+  document.body.style.overflow = "";
+}
+if (menuBtn) menuBtn.addEventListener("click", () => {
+  const hidden = sidePanel.getAttribute("aria-hidden") !== "false";
+  hidden ? openPanel() : closePanel();
+});
+$$("[data-close-panel]", sidePanel).forEach(el => el.addEventListener("click", closePanel));
+// Close on ESC & after nav click
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
+$$("[data-panel-link]", sidePanel).forEach(a => a.addEventListener("click", closePanel));
+
+// ---------------- Firebase ----------------
+if (!window.FIREBASE_CONFIG) console.warn("[XplusY] FIREBASE_CONFIG topilmadi (index.html ni tekshiring).");
 
 const appFB = initializeApp(window.FIREBASE_CONFIG || {
-  // Dummy — so that module imports don't crash if config is missing.
-  apiKey: "DUMMY",
-  authDomain: "dummy.firebaseapp.com",
-  projectId: "dummy",
+  apiKey: "DUMMY", authDomain: "dummy.firebaseapp.com", projectId: "dummy",
 });
 const auth = getAuth(appFB);
 const db = getFirestore(appFB);
@@ -124,13 +99,10 @@ const provider = new GoogleAuthProvider();
 
 // Helpers: numeric ID assignment and lookup
 async function ensureUserNumericId(uid, email, name) {
-  // If users/{uid}.numericId exists — return it
   const uref = doc(db, "users", uid);
   const usnap = await getDoc(uref);
-  if (usnap.exists() && usnap.data().numericId) {
-    return usnap.data().numericId;
-  }
-  // Else assign via transaction
+  if (usnap.exists() && usnap.data().numericId) return usnap.data().numericId;
+
   const metaRef = doc(db, "meta", "counters");
   const assignedId = await runTransaction(db, async (tx) => {
     const m = await tx.get(metaRef);
@@ -141,18 +113,12 @@ async function ensureUserNumericId(uid, email, name) {
     }
     const id = next;
     tx.set(metaRef, { nextNumericId: id + 1 }, { merge: true });
-
-    // Create/merge user document
-    const payload = {
+    tx.set(uref, {
       uid, email: email || null, name: name || null,
       numericId: id, balance: 0, gems: 0,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    };
-    tx.set(uref, payload, { merge: true });
-
-    // Mapping: ids/{id} -> {uid, email}
-    const idsRef = doc(db, "ids", String(id));
-    tx.set(idsRef, { uid, email: email || null, numericId: id, createdAt: serverTimestamp() }, { merge: true });
+    }, { merge: true });
+    tx.set(doc(db, "ids", String(id)), { uid, email: email || null, numericId: id, createdAt: serverTimestamp() }, { merge: true });
     return id;
   });
   return assignedId;
@@ -167,12 +133,21 @@ async function getEmailByNumericId(numericId) {
   return email;
 }
 
-// UI: header auth state
+// UI: header auth state + panel user block
 const authChip = $("#authChip");
+const panelUser = $("#panelUser");
+
 function renderSignedOut() {
   authChip.innerHTML = `<button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button>`;
   $("#openAuth").addEventListener("click", () => openModal(authModal));
+  panelUser.innerHTML = `
+    <div class="muted">Mehmon</div>
+    <div style="display:grid; gap:8px; margin-top:8px">
+      <button class="btn" id="panelOpenAuth">Kirish / Ro‘yxatdan o‘tish</button>
+    </div>`;
+  $("#panelOpenAuth").addEventListener("click", () => { closePanel(); openModal(authModal); });
 }
+
 async function renderSignedIn(user) {
   try {
     const uref = doc(db, "users", user.uid);
@@ -186,9 +161,17 @@ async function renderSignedIn(user) {
         <div><b>ID:</b> ${id}</div>
         <div class="meta">Balans: ${balance.toLocaleString()} so‘m • Olmos: ${gems}</div>
         <button id="logoutBtn" class="btn">Chiqish</button>
-      </div>
-    `;
+      </div>`;
     $("#logoutBtn").addEventListener("click", async () => { await signOut(auth); });
+
+    panelUser.innerHTML = `
+      <div><b>ID:</b> ${id}</div>
+      <div class="meta" style="color:var(--muted)">Balans: ${balance.toLocaleString()} so‘m • Olmos: ${gems}</div>
+      <div style="display:grid; gap:8px; margin-top:10px">
+        <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
+        <button class="btn" id="panelLogout">Chiqish</button>
+      </div>`;
+    $("#panelLogout").addEventListener("click", async () => { await signOut(auth); closePanel(); });
   } catch (e) {
     console.error(e);
     renderSignedOut();
@@ -236,7 +219,6 @@ $("#signupEmailForm").addEventListener("submit", async (e) => {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     const uid = cred.user.uid;
     const numericId = await ensureUserNumericId(uid, email, name);
-    // Ensure ids/{id} mapping is correct (email = provided email)
     await setDoc(doc(db, "ids", String(numericId)), { uid, email, numericId }, { merge: true });
     msg.textContent = `Tayyor! Sizning ID: ${numericId}. Endi kirishda faqat ID + parol ishlatiladi.`;
     msg.classList.add("ok");
@@ -261,7 +243,6 @@ googleBtn.addEventListener("click", async () => {
     const uid = user.uid;
     const email = user.email;
     await ensureUserNumericId(uid, email, user.displayName || null);
-    // Now ask to set a password (link email/password to Google account)
     signupGoogleStepSetPass.classList.remove("hidden");
     signupGoogleMsg.textContent = "Google bog‘landi. Endi parol belgilang.";
   } catch (err) {
@@ -279,13 +260,10 @@ googleSetPassForm.addEventListener("submit", async (e) => {
     const user = auth.currentUser;
     if (!user || !user.email) throw new Error("Google foydalanuvchisi aniqlanmadi.");
     const cred = EmailAuthProvider.credential(user.email, pass);
-    await linkWithCredential(user, cred); // link password to Google account
-    // Make sure mapping exists for login by ID
+    await linkWithCredential(user, cred);
     const usnap = await getDoc(doc(db, "users", user.uid));
     const numericId = usnap.exists() ? usnap.data().numericId : null;
-    if (numericId) {
-      await setDoc(doc(db, "ids", String(numericId)), { uid: user.uid, email: user.email, numericId }, { merge: true });
-    }
+    if (numericId) await setDoc(doc(db, "ids", String(numericId)), { uid: user.uid, email: user.email, numericId }, { merge: true });
     signupGoogleMsg.textContent = "Parol o‘rnatildi. Endi kirishda faqat ID + parol foydalanasiz.";
     signupGoogleMsg.classList.add("ok");
     closeModal(authModal);
@@ -305,16 +283,12 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
   msg.textContent = "Yaratilmoqda..."; msg.className = "msg";
 
   try {
-    // 1) sign in anonymously to get a uid
     const anon = await signInAnonymously(auth);
     const uid = anon.user.uid;
-    // 2) assign numeric ID
     const numericId = await ensureUserNumericId(uid, null, name);
-    // 3) create an internal alias email and link password
     const aliasEmail = `${numericId}@xplusy.local`;
     const cred = EmailAuthProvider.credential(aliasEmail, pass);
     await linkWithCredential(anon.user, cred);
-    // 4) store mapping for ID -> aliasEmail
     await setDoc(doc(db, "ids", String(numericId)), { uid, email: aliasEmail, numericId }, { merge: true });
     msg.textContent = `Tayyor! Sizning ID: ${numericId}. Endi kirishda ID (${numericId}) va parolingizdan foydalaning.`;
     msg.classList.add("ok");
@@ -325,5 +299,3 @@ $("#oneClickForm").addEventListener("submit", async (e) => {
     msg.classList.add("error");
   }
 });
-
-// -------------------- End Firebase/Auth --------------------
