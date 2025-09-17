@@ -5,6 +5,7 @@ const app = document.getElementById("app");
 if (!app) console.error("[router] #app topilmadi — index.html markup tekshiring");
 
 const ROUTES = {
+
   home:        { partial: "partials/home.html" },
   tests:       { partial: "partials/tests.html" },
   courses:     { partial: "partials/courses.html" },
@@ -18,6 +19,40 @@ const ROUTES = {
   promo:       { partial: "partials/promo.html" },
   admin:       { partial: "partials/admin.html", auth: true },
 };
+
+// Map route -> module path (ESM default export with optional {init, destroy})
+const ROUTE_MODULES = {
+  home:        "./js/home-csv.js",
+  tests:       "./js/tests.js",
+  courses:     "./js/courses-csv.js",
+  live:        "./js/live-csv.js",
+  simulator:   "./js/simulator-csv.js",
+  leaderboard: "./js/leaderboard.js",
+  profile:     "./js/profile.js",
+  results:     "./js/results.js",
+  topup:       "./js/topup.js",
+  badges:      "./js/badges.js",
+  promo:       "./js/promo.js",
+  admin:       "./js/admin.js",
+};
+let _activeMod = null;
+async function mountModuleFor(route){
+  const modPath = ROUTE_MODULES[route];
+  if (!modPath) return;
+  try {
+    const m = await import(modPath + "?v=" + Date.now());
+    _activeMod = m?.default || m;
+    if (_activeMod?.init) await _activeMod.init();
+  } catch (e){
+    console.warn("[router] Modul yuklash imkoni bo'lmadi:", modPath, e);
+  }
+}
+async function unmountActive(){
+  try { if (_activeMod?.destroy) await _activeMod.destroy(); } catch {}
+  _activeMod = null;
+}
+
+
 
 function getRouteFromHash(){
   const h = (location.hash || "#home").slice(1);
@@ -89,6 +124,7 @@ function authGate(routeCfg){
 
 async function render(route){
   const key = ROUTES[route] ? route : "home";
+  await unmountActive();
   const cfg = ROUTES[key];
 
   if (!authGate(cfg)) return;
@@ -113,6 +149,8 @@ async function render(route){
 
     // Bind auth buttons within the partial
     attachAuthUI(app);
+
+    await mountModuleFor(key);
 
     // Focus + scroll top
     app.focus({preventScroll:true});
