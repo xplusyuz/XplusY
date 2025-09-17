@@ -112,7 +112,12 @@ function getRouteFromHash(){
 }
 
 async function fetchText(url){
-  const res = await fetch(url, { cache: "no-store" });
+  const abs = new URL(url, location.href).toString();
+  const bust = abs.includes("?") ? "&" : "?";
+  const res = await fetch(abs + bust + "v=" + Date.now(), { cache: "no-store" });
+  if (!res.ok) throw new Error(`[partials] Yuklab bo'lmadi: ${url} (${res.status})`);
+  return await res.text();
+});
   if (!res.ok) throw new Error(`[partials] Yuklab bo'lmadi: ${url} (${res.status})`);
   return await res.text();
 }
