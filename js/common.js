@@ -45,20 +45,22 @@ function _setText(selectors, value) {
 }
 
 function _toggleAuthVisibility(isSignedIn) {
+  const btn = document.getElementById('btnSignIn');
+  if(btn) btn.style.display = isSignedIn ? 'none' : '';
   document.querySelectorAll('[data-auth="in"]').forEach(el => el.style.display = isSignedIn ? "" : "none");
   document.querySelectorAll('[data-auth="out"]').forEach(el => el.style.display = isSignedIn ? "none" : "");
 }
 
 function _formatNum(n) {
   if (typeof n !== "number") return n ?? 0;
-  return new Intl.NumberFormat("ru-RU").format(n);
+  return new Intl.NumberFormat("uz-UZ").format(n);
 }
 
 function _bindHeader(data) {
   // ID / balance / gems ni turli selectorlar orqali yangilaymiz (sahifa mosligi uchun keng qamrovli)
   _setText(['#hdrId', '#userId', '.js-user-id', '[data-bind="numericId"]'], data?.numericId);
-  _setText(['#hdrBalance', '#balance', '.js-user-balance', '[data-bind="balance"]'], _formatNum(data?.balance));
-  _setText(['#hdrGems', '#gems', '.js-user-gems', '[data-bind="gems"]'], _formatNum(data?.gems));
+  _setText(['#hdrBalance', '#hdrBal', '#balance', '.js-user-balance', '[data-bind="balance"]'], _formatNum(data?.balance));
+  _setText(['#hdrGems', '#hdrGem', '#gems', '.js-user-gems', '[data-bind="gems"]'], _formatNum(data?.gems));
 }
 
 // ---------------- Numeric ID allocator ----------------
