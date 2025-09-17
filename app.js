@@ -6,7 +6,7 @@ import {
   linkWithCredential, EmailAuthProvider, signInAnonymously
 } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction
+  getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
 const $ = (sel, root=document) => root.querySelector(sel);
@@ -137,7 +137,32 @@ async function getEmailByNumericId(numericId) {
 const authChip = $("#authChip");
 const panelUser = $("#panelUser");
 
+function renderAuthChipData(data){
+  const id = data?.numericId ?? "—";
+  const balance = (data?.balance ?? 0);
+  const gems = (data?.gems ?? 0);
+  authChip.innerHTML = `
+    <div class="id-badge" title="Sizning akkauntingiz ma'lumotlari">
+      <span class="pill">
+        <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" opacity=".15"/><path d="M7 8h10v2H7zM7 12h6v2H7z"/></svg>
+        <span class="lbl"><b>ID:</b></span> <span>${id}</span>
+      </span>
+      <span class="sep"></span>
+      <span class="pill">
+        <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" opacity=".15"/><path d="M4 9h16v2H4zM6 13h8v2H6z"/></svg>
+        <span class="lbl">Balans:</span> <span>${balance.toLocaleString()}</span>
+      </span>
+      <span class="pill">
+        <svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l4 7-4 13-4-13z" opacity=".15"/></svg>
+        <span class="lbl">Olmos:</span> <span>${gems}</span>
+      </span>
+    </div>`;
+}
+
+
 function renderSignedOut() {
+  if (window.__unsubUser) { try { window.__unsubUser(); } catch(_){} window.__unsubUser = null; }
+
   authChip.innerHTML = `<button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button>`;
   $("#openAuth").addEventListener("click", () => openModal(authModal));
   panelUser.innerHTML = `
@@ -150,9 +175,30 @@ function renderSignedOut() {
 
 async function renderSignedIn(user) {
   try {
+    // live listen to users/{uid}
+    if (window.__unsubUser) { try { window.__unsubUser(); } catch(_){} }
     const uref = doc(db, "users", user.uid);
-    const usnap = await getDoc(uref);
-    const data = usnap.exists() ? usnap.data() : {};
+    window.__unsubUser = onSnapshot(uref, (usnap) => {
+      const data = usnap.exists() ? usnap.data() : {};
+      renderAuthChipData(data);
+      const id = data.numericId || "—";
+      const balance = data.balance ?? 0;
+      const gems = data.gems ?? 0;
+      panelUser.innerHTML = `
+        <div><b>ID:</b> ${id}</div>
+        <div class="meta" style="color:var(--muted)">Balans: ${balance.toLocaleString()} so‘m • Olmos: ${gems}</div>
+        <div style="display:grid; gap:8px; margin-top:10px">
+          <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
+          <button class="btn" id="panelLogout">Chiqish</button>
+        </div>`;
+      const btn = $("#panelLogout"); if (btn) btn.onclick = async () => { await signOut(auth); closePanel(); };
+    }, (err) => { console.error(err); });
+
+  } catch (e) {
+    console.error(e);
+    renderSignedOut();
+  }
+};
     const id = data.numericId || "—";
     const balance = data.balance ?? 0;
     const gems = data.gems ?? 0;
