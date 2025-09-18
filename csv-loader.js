@@ -1,108 +1,42 @@
-// csv-loader.js — CSV’dan bannerlarni o‘qish va render qilish (ES module)
+// csv-loader.js — CSV -> banner UI (eng ixcham)
 
-// --- Yordamchi funksiyalar ---
-function csvParse(text) {
-  // Oddiy CSV parser: qo'shtirnoqlarni qo'llab-quvvatlaydi (RFC to'liq emas, ammo bannerlar uchun yetarli)
-  const lines = text.replace(/\r/g, "").split("\n").filter(l => l.trim().length);
-  if (!lines.length) return [];
-  const headers = lines.shift().split(",").map(h => h.trim());
-  const rows = [];
-
-  for (const line of lines) {
-    let row = [], cur = "", inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i], nx = line[i + 1];
-      if (ch === '"') {
-        if (inQ && nx === '"') { cur += '"'; i++; } else { inQ = !inQ; }
-      } else if (ch === "," && !inQ) {
-        row.push(cur); cur = "";
-      } else {
-        cur += ch;
-      }
+function csvParse(t){
+  const L=t.replace(/\r/g,"").split("\n").filter(l=>l.trim()); if(!L.length) return [];
+  const H=L.shift().split(",").map(h=>h.trim()); const out=[];
+  for(const ln of L){
+    let row=[], cur="", q=false;
+    for(let i=0;i<ln.length;i++){
+      const ch=ln[i], nx=ln[i+1];
+      if(ch==='\"'){ if(q&&nx==='\"'){cur+='\"';i++;} else q=!q; }
+      else if(ch===',' && !q){ row.push(cur); cur=""; }
+      else cur+=ch;
     }
     row.push(cur);
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = (row[i] ?? "").trim());
-    rows.push(obj);
+    const o={}; H.forEach((h,i)=> o[h]=(row[i]??"").trim()); out.push(o);
   }
-  return rows;
+  return out;
 }
-const asBool = v => String(v ?? "").trim() === "1";
-const asNum  = (v, d=0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
-function dateWindowOK(item) {
-  const now = new Date();
-  const sd = item.start_date ? new Date(item.start_date) : null;
-  const ed = item.end_date ? new Date(item.end_date) : null;
-  if (sd && now < sd) return false;
-  if (ed && now > ed) return false;
-  return true;
-}
+const b = v=>String(v??"").trim()==="1";
+const n = (v,d=0)=>{ const x=Number(v); return Number.isFinite(x)?x:d; };
+const okDate = o=>{ const now=new Date(), sd=o.start_date?new Date(o.start_date):null, ed=o.end_date?new Date(o.end_date):null; if(sd&&now<sd) return false; if(ed&&now>ed) return false; return true; };
 
-// --- UI generator ---
-function bannerCard(item, placement) {
-  const bg  = item.background ? ` style="background:${item.background}"` : "";
-  const img = item.image ? `<img src="${item.image}" alt="${item.title || ""}" loading="lazy">` : "";
-  const sub = item.subtitle ? `<p class="b-sub">${item.subtitle}</p>` : "";
-  const cta = item.cta_text ? `<span class="btn mini">${item.cta_text}</span>` : "";
-  const href = item.url ? ` href="${item.url}"` : "";
-
-  if (placement === "hero") {
-    return `<a class="banner hero-card"${href}${bg}>
-      <div class="b-txt"><h3 class="b-title">${item.title || ""}</h3>${sub}${cta}</div>
-      <div class="b-media">${img}</div>
-    </a>`;
-  }
-  if (placement === "promo") {
-    return `<a class="banner promo-card"${href}${bg}>
-      <div class="b-media">${img}</div>
-      <div class="b-txt"><h4 class="b-title">${item.title || ""}</h4>${sub}</div>
-    </a>`;
-  }
-  // sponsor
-  return `<a class="banner sponsor-card"${href} title="${item.title || ""}">
-    ${img || `<span class="sponsor-fallback">${item.title || ""}</span>`}
-  </a>`;
+function card(o, plc){
+  const bg=o.background?` style="background:${o.background}"`:"", img=o.image?`<img src="${o.image}" alt="${o.title||""}" loading="lazy">`:"";
+  const sub=o.subtitle?`<p class="b-sub">${o.subtitle}</p>`:"", cta=o.cta_text?`<span class="btn mini">${o.cta_text}</span>`:"", href=o.url?` href="${o.url}"`:"";
+  if(plc==="hero")  return `<a class="banner hero-card"${href}${bg}><div class="b-txt"><h3 class="b-title">${o.title||""}</h3>${sub}${cta}</div><div class="b-media">${img}</div></a>`;
+  if(plc==="promo") return `<a class="banner promo-card"${href}${bg}><div class="b-media">${img}</div><div class="b-txt"><h4 class="b-title">${o.title||""}</h4>${sub}</div></a>`;
+  return `<a class="banner sponsor-card"${href} title="${o.title||""}">${img||`<span class="sponsor-fallback">${o.title||""}</span>`}</a>`;
 }
 
-// Bitta bo'limni CSV dan to'ldirish
-async function loadCsvSection(section) {
-  const csvUrl = section.getAttribute("data-csv");
-  const placement = (section.getAttribute("data-placement") || "hero").toLowerCase();
-  const list = section.querySelector('[data-target="list"], .banner-list');
-  if (!csvUrl || !list) return;
-
-  // cache-busting: CSV yangilansa ham brauzer eski nusxani ushlab qolmasin
-  const url = new URL(csvUrl, location.origin);
-  url.searchParams.set("_", String(Date.now()));
-
-  try {
-    const res = await fetch(url.toString(), { cache: "no-store" });
-    if (!res.ok) throw new Error(`CSV topilmadi (${res.status})`);
-    const text = await res.text();
-    const items = csvParse(text)
-      .filter(r => asBool(r.active))
-      .filter(dateWindowOK)
-      .filter(r => (r.placement || "").toLowerCase() === placement)
-      .sort((a, b) => asNum(a.order, 9999) - asNum(b.order, 9999));
-
-    list.innerHTML = items.length
-      ? items.map(it => bannerCard(it, placement)).join("")
-      : `<div class="muted small">Banner yo‘q.</div>`;
-  } catch (e) {
-    console.error("[csv-loader] xato:", e);
-    list.innerHTML = `<div class="msg error">CSV o‘qishda xatolik. (${e.message})</div>`;
-  }
+async function fillSection(sec){
+  const csv=sec.getAttribute("data-csv"), plc=(sec.getAttribute("data-placement")||"hero").toLowerCase();
+  const list=sec.querySelector('[data-target="list"], .banner-list'); if(!csv||!list) return;
+  const url=new URL(csv, location.origin); url.searchParams.set("_", Date.now());
+  try{
+    const res=await fetch(url, {cache:"no-store"}); if(!res.ok) throw new Error(`CSV ${res.status}`);
+    const items=csvParse(await res.text()).filter(x=>b(x.active)).filter(okDate).filter(x=>(x.placement||"").toLowerCase()===plc).sort((a,c)=>n(a.order,9999)-n(c.order,9999));
+    list.innerHTML = items.length ? items.map(x=>card(x,plc)).join("") : `<div class="muted small">Banner yo‘q.</div>`;
+  }catch(e){ console.error("[csv]",e); list.innerHTML=`<div class="msg error">CSV o‘qilmadi. (${e.message})</div>`; }
 }
-
-// Jamoaviy render — barcha [data-csv] bo‘limlar uchun
-export async function hydrateCsvBanners() {
-  const sections = document.querySelectorAll("section[data-csv][data-placement]");
-  for (const sec of sections) await loadCsvSection(sec);
-}
-
-// Router yoki boshqa joylardan qulay chaqirish uchun globalga ham qo'yamiz
+export async function hydrateCsvBanners(){ const secs=document.querySelectorAll("section[data-csv][data-placement]"); for(const s of secs) await fillSection(s); }
 window.hydrateCsvBanners = hydrateCsvBanners;
-
-// Agar bu skript partial ichida emas, balki global ulangan bo'lsa — bir marta ishga tushirish ixtiyoriy:
-// (SPA router partial qo'ygach baribir chaqiradi, lekin statik sahifada ham ishlasin desangiz, quyidagini oching)
-// document.addEventListener("DOMContentLoaded", () => hydrateCsvBanners());
