@@ -93,7 +93,7 @@ function renderAuthChipData(d){
   authChip.innerHTML=`<div class="id-badge" title="Profil">
     <span class="pill">🆔:${id}</span>
     <span class="sep"></span>
-    <span class="pill">💵: ${balance.toLocaleString()}</span>
+    <span class="pill">💳: ${balance.toLocaleString()}</span>
 	<span class="sep"></span>
     <span class="pill">💎: ${gems}</span>
   </div>`;
@@ -117,7 +117,13 @@ async function renderSignedIn(user){
       renderAuthChipData(d);
       const id=d.numericId||"—", balance=d.balance??0, gems=d.gems??0;
       if(panelUser){
-        panelUser.innerHTML=`<div>🆔:${id}</div><div class="muted">💵: ${balance.toLocaleString()} <span class="sep"></span> 💎: ${gems}</div>
+        panelUser.innerHTML=`<div class="id-badge" title="Profil">
+    <span class="pill">🆔:${id}</span>
+    <span class="sep"></span>
+    <span class="pill">💳: ${balance.toLocaleString()}</span>
+	<span class="sep"></span>
+    <span class="pill">💎: ${gems}</span>
+  </div>`;
           <div style="display:grid; gap:8px; margin-top:10px">
             <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
             <button class="btn" id="panelLogout">Chiqish</button>
