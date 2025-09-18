@@ -1,6 +1,6 @@
 import { getCtx, refreshHeader } from './common.js';
 import { doc, getDoc, updateDoc, collection, addDoc, query, where, orderBy, getDocs, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
+import { ref, uploadBytes, getDownloadURL, getStorage } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 
 export async function onMount(){
   const { db, storage, user } = getCtx();
@@ -33,7 +33,6 @@ export async function onMount(){
     if(!user) { alert('Kirish talab qilinadi'); return; }
     const code = (promoInput.value||'').trim();
     if(!code){ promoMsg.textContent='Kod kiriting'; return; }
-    // Transaction: promoCodes/{code} must exist and unused
     await runTransaction(db, async (tx)=>{
       const pref = doc(db,'promoCodes',code);
       const psnap = await tx.get(pref);
@@ -59,7 +58,7 @@ export async function onMount(){
     qs.forEach(doc=>{
       const d = doc.data();
       const li = document.createElement('li');
-      li.textContent = `${(d.amount||0)} so‘m — ${d.status}`;
+      li.innerHTML = `${(d.amount||0)} so‘m — ${d.status} — <a href="${d.url}" target="_blank">chek</a>`;
       list.appendChild(li);
     });
   }

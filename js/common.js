@@ -2,7 +2,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, collection, query, orderBy, limit, getDocs, where, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
-import { firebaseConfig } from '../index.html';
+import { firebaseConfig } from './firebase-config.js';
 
 let app, auth, db, storage;
 let currentUser = null;
@@ -24,7 +24,6 @@ export async function initApp(){
   const btnGoogle = $('btnGoogle');
   const authModal = $('authModal');
   const btnCloseAuth = $('btnCloseAuth');
-  const sidePanel = $('sidePanel');
 
   btnSignIn?.addEventListener('click', ()=> authModal?.showModal());
   btnGoogle?.addEventListener('click', ()=> signIn());
@@ -44,7 +43,6 @@ export async function initApp(){
       $('authModal')?.close();
       hide(btnSignIn);
       show(btnSignOut);
-      $('spLogout')?.classList.remove('hidden');
     }else{
       $('spName') && ($('spName').textContent='Mehmon');
       $('spId') && ($('spId').textContent='ID: —');
@@ -67,7 +65,6 @@ async function ensureUserDoc(uid, name){
   await runTransaction(db, async (tx)=>{
     const snap = await tx.get(uref);
     if(!snap.exists()){
-      // numericId generator via meta/counters
       const cref = doc(db,'meta','counters');
       const csnap = await tx.get(cref);
       let last = (csnap.exists() ? (csnap.data().lastNumericId||1000000) : 1000000);

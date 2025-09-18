@@ -1,5 +1,5 @@
-import { getCtx, refreshHeader } from './common.js';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getCtx } from './common.js';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 let unsub = null;
 
