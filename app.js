@@ -117,7 +117,7 @@ async function renderSignedIn(user){
       renderAuthChipData(d);
       const id=d.numericId||"—", balance=d.balance??0, gems=d.gems??0;
       if(panelUser){
-        panelUser.innerHTML=`<div>🆔:${id}</div><div class="muted">💵: ${balance.toLocaleString()} • 💎: ${gems}</div>
+        panelUser.innerHTML=`<div>🆔:${id}</div><div class="muted">💵: ${balance.toLocaleString()} <span class="sep"></span> 💎: ${gems}</div>
           <div style="display:grid; gap:8px; margin-top:10px">
             <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
             <button class="btn" id="panelLogout">Chiqish</button>
