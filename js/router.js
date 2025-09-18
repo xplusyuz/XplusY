@@ -1,15 +1,43 @@
-import { toggleAdminUI } from './common.js';
-const routes={
-  home:{ file:'partials/home.html', js:()=>import('./views/home.js') },
-  tests:{ file:'partials/tests.html', js:()=>import('./views/tests.js') },
-  live:{ file:'partials/live.html', js:()=>import('./views/live.js') },
-  leaderboard:{ file:'partials/leaderboard.html', js:()=>import('./views/leaderboard.js') },
-  wallet:{ file:'partials/wallet.html', js:()=>import('./views/wallet.js') },
-  admin:{ file:'partials/admin.html', js:()=>import('./views/admin.js') },
+import { initApp } from './common.js';
+
+const app = document.getElementById('app');
+const sidePanel = document.getElementById('sidePanel');
+const menuBtn = document.getElementById('menuBtn');
+const spLogout = document.getElementById('spLogout');
+
+menuBtn?.addEventListener('click', ()=> sidePanel.classList.toggle('open'));
+spLogout?.addEventListener('click', ()=> window.appAPI?.signOut());
+
+const routes = {
+  home: 'partials/home.html',
+  tests: 'partials/tests.html',
+  live: 'partials/live.html',
+  leaderboard: 'partials/leaderboard.html',
+  wallet: 'partials/wallet.html',
+  admin: 'partials/admin.html',
 };
-async function loadPartial(p){ const r=await fetch(p,{cache:'no-store'}); if(!r.ok) throw new Error('Partial yuklanmadi: '+p); return await r.text(); }
-function activateNav(route){ document.querySelectorAll('.nav-item').forEach(a=> a.classList.toggle('active', a.getAttribute('data-route')===route)); }
-export function startRouter(){
-  async function render(){ const route=(location.hash||'#/home').replace('#/',''); const def=routes[route]||routes.home; try{ const html=await loadPartial(def.file); const app=document.getElementById('app'); app.innerHTML=html; const mod=await def.js(); await (mod.mount?.() ?? mod.default?.()); activateNav(route); toggleAdminUI(); }catch(e){ document.getElementById('app').innerHTML=`<div class="card">Yuklash xatosi: ${e.message}</div>`; } }
-  window.addEventListener('hashchange', render); render();
+
+async function fetchHTML(url){
+  const tpl = document.getElementById('tpl-loader');
+  app.innerHTML = tpl?.innerHTML ?? '<div>...</div>';
+  const res = await fetch(url, {cache:'no-cache'});
+  return await res.text();
 }
+
+async function render(route){
+  const path = routes[route] || routes.home;
+  app.innerHTML = await fetchHTML(path);
+  // attach page scripts
+  const mod = await import(`./${route}.js`).catch(()=>({onMount:()=>{}}));
+  mod.onMount?.();
+}
+
+window.addEventListener('hashchange', ()=>{
+  const route = location.hash.replace('#/','') || 'home';
+  render(route);
+});
+
+// First boot
+await initApp();
+const initial = location.hash.replace('#/','') || 'home';
+render(initial);
