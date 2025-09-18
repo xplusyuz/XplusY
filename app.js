@@ -94,6 +94,7 @@ function renderAuthChipData(d){
     <span class="pill">🆔:${id}</span>
     <span class="sep"></span>
     <span class="pill">💵: ${balance.toLocaleString()}</span>
+	<span class="sep"></span>
     <span class="pill">💎: ${gems}</span>
   </div>`;
 }
