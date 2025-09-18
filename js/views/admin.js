@@ -1,5 +1,4 @@
 import { listPendingTopups, approveTopup, el, fmtMoney } from '../common.js';
-
 export async function mount(){
   const tbody = document.querySelector('#pendingTbl tbody');
   tbody.innerHTML = '<tr><td colspan="5">Yuklanmoqda...</td></tr>';
@@ -16,20 +15,10 @@ export async function mount(){
       </tr>`);
       tr.querySelector('button').onclick = async ()=>{
         tr.querySelector('button').disabled = true;
-        try{
-          await approveTopup(r.id);
-          tr.remove();
-        }catch(e){
-          alert(e.message);
-          tr.querySelector('button').disabled = false;
-        }
+        try{ await approveTopup(r.id); tr.remove(); }catch(e){ alert(e.message); tr.querySelector('button').disabled = false; }
       };
       tbody.appendChild(tr);
     }
-    if (!list.length){
-      tbody.innerHTML = '<tr><td colspan="5">Hozircha so‘rov yo‘q</td></tr>';
-    }
-  }catch(e){
-    tbody.innerHTML = `<tr><td colspan="5">${e.message}</td></tr>`;
-  }
+    if (!list.length) tbody.innerHTML = '<tr><td colspan="5">Hozircha so‘rov yo‘q</td></tr>';
+  }catch(e){ tbody.innerHTML = `<tr><td colspan="5">${e.message}</td></tr>`; }
 }

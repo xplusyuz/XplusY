@@ -1,9 +1,10 @@
 import { loadCSV } from '../utils-csv.js';
-import { el, fmtMoney } from '../common.js';
+import { el, fmtMoney, img } from '../common.js';
 
 export async function mount(){
   const grid = document.getElementById('testsGrid');
   const filtersEl = document.getElementById('testFilters');
+  grid.innerHTML = '<div class="skeleton card-cover"></div><div class="skeleton card-cover"></div><div class="skeleton card-cover"></div><div class="skeleton card-cover"></div>';
   const items = await loadCSV('csv/tests.csv');
   const sections = [...new Set(items.map(i=>i.Section).filter(Boolean))];
   const types = [...new Set(items.map(i=>i.Type).filter(Boolean))];
@@ -11,17 +12,14 @@ export async function mount(){
   function render(list){
     grid.innerHTML = '';
     for (const t of list){
-      grid.appendChild(el(`
-        <div class="card">
-          <img src="${t.Img||''}" alt="" style="width:100%; height:120px; object-fit:cover; border-radius:12px" />
-          <h4 style="margin:8px 0 2px">${t.Title||'Test'}</h4>
-          <div style="font-size:12px; color:#64748b">${t.Section||''} · ${t.Type||''}</div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px">
-            <div>${fmtMoney(Number(t.Price||0))}</div>
-            <button class="btn primary">Boshlash</button>
-          </div>
-        </div>
-      `));
+      const card = el('<div class="card"></div>');
+      card.appendChild(img(t.Img||'', t.Title||''));
+      card.appendChild(el(`<h4 style="margin:8px 0 2px">${t.Title||'Test'}</h4>`));
+      card.appendChild(el(`<div style="font-size:12px; color:#64748b">${t.Section||''} · ${t.Type||''}</div>`));
+      card.appendChild(el(`<div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px">
+          <div>${fmtMoney(Number(t.Price||0))}</div><button class="btn primary">Boshlash</button>
+        </div>`));
+      grid.appendChild(card);
     }
   }
 

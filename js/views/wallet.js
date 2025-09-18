@@ -1,5 +1,4 @@
 import { createTopUpRequest } from '../common.js';
-
 export async function mount(){
   const drop = document.getElementById('drop');
   const inp = document.getElementById('fileInp');

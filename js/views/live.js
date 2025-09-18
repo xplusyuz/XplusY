@@ -1,3 +1,1 @@
-export async function mount(){
-  // placeholder
-}
+export async function mount(){}

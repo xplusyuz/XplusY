@@ -1,4 +1,4 @@
-import { state } from './common.js';
+import { toggleAdminUI } from './common.js';
 
 const routes = {
   home: { file: 'partials/home.html', js: () => import('./views/home.js') },
@@ -9,33 +9,23 @@ const routes = {
   admin: { file: 'partials/admin.html', js: () => import('./views/admin.js') },
 };
 
-async function loadPartial(path){
-  const res = await fetch(path, {cache:'no-store'});
-  if (!res.ok) throw new Error('Partial yuklanmadi: '+path);
-  return await res.text();
-}
-
-function activateNav(route){
-  document.querySelectorAll('.nav-item').forEach(a => {
-    a.classList.toggle('active', a.getAttribute('data-route') === route);
-  });
-}
+async function loadPartial(path){ const r=await fetch(path,{cache:'no-store'}); if(!r.ok) throw new Error('Partial yuklanmadi: '+path); return await r.text(); }
+function activateNav(route){ document.querySelectorAll('.nav-item').forEach(a=> a.classList.toggle('active', a.getAttribute('data-route')===route)); }
 
 export function startRouter(){
   async function render(){
-    const hash = location.hash || '#/home';
-    const route = hash.replace('#/','');
+    const route = (location.hash||'#/home').replace('#/','');
     const def = routes[route] || routes.home;
     try{
       const html = await loadPartial(def.file);
-      document.getElementById('app').innerHTML = html;
+      const app = document.getElementById('app');
+      app.innerHTML = html;
       const mod = await def.js();
       await (mod.mount?.() ?? mod.default?.());
       activateNav(route);
-      // Ensure admin visibility after render
-      import('./common.js').then(m => m && m['toggleAdminUI']?.());
+      toggleAdminUI();
     }catch(e){
-      document.getElementById('app').innerHTML = `<div class="card"><b>Yuklash xatosi:</b> ${e.message}</div>`;
+      document.getElementById('app').innerHTML = `<div class="card">Yuklash xatosi: ${e.message}</div>`;
     }
   }
   window.addEventListener('hashchange', render);

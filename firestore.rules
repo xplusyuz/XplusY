@@ -5,8 +5,6 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)); }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-
-    // Admin: users/{uid}.numericId ∈ {1000001,1000002}
     function isAdmin() {
       return isSignedIn() && (
         userDoc(request.auth.uid).data.numericId in [1000001, 1000002] ||
@@ -15,22 +13,8 @@ service cloud.firestore {
     }
 
     match /meta/{doc} { allow read: if true; allow write: if isAdmin(); }
-
-    match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid) || isAdmin();
-    }
-
-    match /topups/{id} {
-      allow create: if isSignedIn();
-      allow read: if isAdmin() || resource.data.uid == request.auth.uid;
-      allow update: if isAdmin();
-    }
-
-    match /promo_codes/{code} {
-      allow read: if true;
-      allow update, create: if isAdmin();
-    }
+    match /users/{uid} { allow read: if isOwner(uid) || isAdmin(); allow create: if isOwner(uid); allow update: if isOwner(uid) || isAdmin(); }
+    match /topups/{id} { allow create: if isSignedIn(); allow read: if isAdmin() || resource.data.uid == request.auth.uid; allow update: if isAdmin(); }
+    match /promo_codes/{code} { allow read: if true; allow update, create: if isAdmin(); }
   }
 }
