@@ -91,10 +91,10 @@ const authChip=$("#authChip"); const panelUser=$("#panelUser");
 function renderAuthChipData(d){
   const id=d?.numericId??"—", balance=d?.balance??0, gems=d?.gems??0;
   authChip.innerHTML=`<div class="id-badge" title="Profil">
-    <span class="pill"><svg class="icon-12" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" opacity=".15"/><path d="M7 8h10v2H7zM7 12h6v2H7z"/></svg><b>🆔:</b> ${id}</span>
+    <span class="pill">🆔:${id}</span>
     <span class="sep"></span>
-    <span class="pill"><svg class="icon-12" viewBox="0 0 24 24"><path d="M3 7h18v10H3z" opacity=".15"/><path d="M4 9h16v2H4zM6 13h8v2H6z"/></svg>💵: ${balance.toLocaleString()}</span>
-    <span class="pill"><svg class="icon-12" viewBox="0 0 24 24"><path d="M12 2l4 7-4 13-4-13z" opacity=".15"/></svg>💎: ${gems}</span>
+    <span class="pill">💵: ${balance.toLocaleString()}</span>
+    <span class="pill">💎: ${gems}</span>
   </div>`;
 }
 function renderSignedOut(){
@@ -116,7 +116,7 @@ async function renderSignedIn(user){
       renderAuthChipData(d);
       const id=d.numericId||"—", balance=d.balance??0, gems=d.gems??0;
       if(panelUser){
-        panelUser.innerHTML=`<div><b>🆔:</b> ${id}</div><div class="muted">💵: ${balance.toLocaleString()} • 💎: ${gems}</div>
+        panelUser.innerHTML=`<div>🆔:${id}</div><div class="muted">💵: ${balance.toLocaleString()} • 💎: ${gems}</div>
           <div style="display:grid; gap:8px; margin-top:10px">
             <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
             <button class="btn" id="panelLogout">Chiqish</button>
