@@ -3,22 +3,218 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>XplusY — SPA (index + auth + side panel)</title>
+  <title>XplusY — SPA (3D Auth, ID+Parol Login)</title>
   <!-- π favicon (inline SVG) -->
-  <link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs><rect x="4" y="4" rx="12" ry="12" width="56" height="56" fill="url(#g)"/><text x="32" y="40" font-size="32" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" fill="#0b1210" font-weight="800">π</text></svg>' />
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2334d399"/><stop offset="1" stop-color="%2310b981"/></linearGradient></defs><rect x="4" y="4" rx="12" ry="12" width="56" height="56" fill="url(%23g)"/><text x="32" y="40" font-size="32" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" fill="%230b1210" font-weight="800">π</text></svg>'/>
+
+  <style>
+    :root{
+      --bg:#0b1210; --bg-2:#101a17; --bg-3:#0e1714; --card:#12211b;
+      --muted:#9ab6a8; --txt:#eaf5ef; --brand:#34d399; --brand-2:#10b981;
+      --accent:#22d3ee; --danger:#ef4444; --ok:#22c55e;
+      --shadow:0 10px 25px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{
+      margin:0; font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:var(--txt);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(16,185,129,.15), transparent 60%),
+        radial-gradient(1000px 400px at 110% -20%, rgba(52,211,153,.12), transparent 60%),
+        var(--bg);
+      overflow-x:hidden;
+    }
+    /* Header: two rows on mobile */
+    .site-header{
+      position:sticky; top:0; z-index:60;
+      display:grid; grid-template-columns:auto 1fr auto;
+      grid-template-areas:"burger brand theme" "chip chip chip";
+      gap:10px; padding:12px 16px;
+      background:linear-gradient(180deg, rgba(18,33,27,.9), rgba(16,26,23,.85));
+      backdrop-filter: blur(8px);
+      border-bottom:1px solid rgba(255,255,255,.06);
+      box-shadow:var(--shadow);
+    }
+    #menuBtn{grid-area:burger}
+    .brand{grid-area:brand; display:flex; align-items:center; gap:10px; font-weight:700}
+    .logo{
+      width:42px; height:42px; display:grid; place-items:center;
+      background:radial-gradient(circle at 30% 20%, var(--brand), var(--brand-2));
+      color:#002714; border-radius:12px; font-weight:900;
+      text-shadow:0 1px 0 rgba(255,255,255,.3);
+      box-shadow:0 8px 20px rgba(16,185,129,.35), inset 0 -2px 6px rgba(0,0,0,.35);
+    }
+    .title{font-size:18px; letter-spacing:.3px}
+    #themeToggle{grid-area:theme; justify-self:end}
+    #authChip{grid-area:chip; width:100%}
+
+    .site-nav{display:flex; gap:10px; flex-wrap:wrap; padding:10px 16px}
+    .nav-link{padding:8px 12px; border-radius:10px; text-decoration:none; color:var(--txt); border:1px solid rgba(255,255,255,.06)}
+    .nav-link:hover{border-color: rgba(34,211,238,.35)}
+
+    .auth-chip{display:flex; align-items:center; gap:8px}
+    .id-badge{
+      display:flex; align-items:center; gap:10px;
+      padding:6px 10px; border-radius:14px;
+      background:linear-gradient(180deg, rgba(52,211,153,.16), rgba(52,211,153,.08));
+      border:1px solid rgba(52,211,153,.35);
+      box-shadow:var(--shadow);
+      white-space:nowrap; width:100%; justify-content:space-between;
+    }
+    .id-badge .pill{display:flex; align-items:center; gap:6px}
+    .id-badge .sep{width:1px; height:18px; background:rgba(255,255,255,.12)}
+    .icon-12{width:16px; height:16px; display:inline-block; vertical-align:-2px; opacity:.95}
+    .icon-12 path{fill:#9ae6b4}
+
+    .site-footer{
+      border-top:1px solid rgba(255,255,255,.06);
+      padding:18px 16px; display:flex; align-items:center; justify-content:space-between;
+      background: var(--bg-2); color: var(--muted);
+    }
+    .btn{appearance:none; border:none; cursor:pointer; padding:10px 14px; border-radius:12px; background:#1f2937; color:#f3f4f6; font-weight:600; border:1px solid rgba(255,255,255,.06); box-shadow:var(--shadow)}
+    .btn.wide{width:100%} .btn.primary{background:linear-gradient(180deg, #111827, #0f172a)} .btn.success{background:linear-gradient(180deg, #064e3b, #065f46)}
+    .btn:active{transform:translateY(1px)}
+    .form{display:grid; gap:12px} .form-row{display:grid; gap:6px} label{font-size:14px; color: var(--muted)}
+    input{background: var(--bg-3); color:var(--txt); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:10px 12px; outline:none}
+    input:focus{border-color: rgba(34,211,238,.45); box-shadow:0 0 0 3px rgba(34,211,238,.15)}
+
+    .modal{position:fixed; inset:0; display:none; align-items:center; justify-content:center}
+    .modal[aria-hidden="false"]{display:flex}
+    .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.55)}
+    .modal-card{
+      position:relative; z-index:2; width:min(880px, 94vw); max-height:90vh; overflow:auto;
+      background:linear-gradient(180deg, #0b1411, #0f1916); border:1px solid rgba(255,255,255,.08);
+      padding:0; border-radius:18px; box-shadow: var(--shadow);
+    }
+    .modal-head{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px; border-bottom:1px solid rgba(255,255,255,.06); background: var(--bg-2); border-top-left-radius:18px; border-top-right-radius:18px}
+    .tabs{display:flex; gap:8px} .tab{padding:8px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.06); background: var(--bg-3); color:var(--txt); cursor:pointer} .tab.active{border-color: rgba(34,211,238,.45); box-shadow:0 0 0 3px rgba(34,211,238,.15)}
+    .modal-body{padding:16px; display:grid; gap:16px}
+    .subtabs{display:flex; gap:8px; flex-wrap:wrap}
+    .subtab{padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.06); background: var(--bg-3); color:var(--txt)}
+    .subtab.active{border-color: rgba(34,211,238,.45)}
+    .subpanel{display:none} .subpanel.active{display:block}
+    .tab-panel{display:none} .tab-panel.active{display:block}
+    .msg{min-height:20px; font-size:14px} .msg.error{color:#ef4444} .msg.ok{color:#22c55e} .muted{color:var(--muted)} .small{font-size:12px} .hidden{display:none}
+
+    /* Side panel (doim qorong‘i) */
+    .side-panel{position:fixed; inset:0; z-index:80; display:none} .side-panel[aria-hidden="false"]{display:block}
+    .panel-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.5); opacity:0; transition:opacity .25s}
+    .panel-card{position:absolute; top:0; left:0; height:100%; width:min(86vw, 360px);
+      background:radial-gradient(120% 100% at -10% -10%, rgba(52,211,153,.1), transparent 60%), linear-gradient(180deg, #0b1411, #0f1916);
+      border-right:1px solid rgba(255,255,255,.08); transform:translateX(-102%); transition:transform .28s cubic-bezier(.2,.8,.2,1);
+      box-shadow:0 30px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); perspective:1000px;
+    }
+    .side-panel[aria-hidden="false"] .panel-backdrop{opacity:1}
+    .side-panel[aria-hidden="false"] .panel-card{transform:translateX(0)}
+    .panel-head{display:flex; align-items:center; justify-content:space-between; padding:12px 12px; border-bottom:1px solid rgba(255,255,255,.06)}
+    .panel-body{padding:12px; display:grid; gap:14px; height:calc(100% - 56px); overflow:auto}
+    .panel-nav{display:grid; gap:6px}
+    .panel-link{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; text-decoration:none; color:var(--txt); border:1px solid rgba(255,255,255,.06); background:linear-gradient(180deg, #0d1714, #0e1815); transition: transform .12s ease}
+    .panel-link:hover{border-color: rgba(34,211,238,.35); transform:translateX(2px)}
+    .panel-sep{height:1px; background:linear-gradient(90deg, rgba(255,255,255,.06), transparent)}
+    .panel-user{padding:10px 12px; border:1px dashed rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.02)}
+
+    /* Burger & theme toggle */
+    .icon-btn{background:transparent; border:none; color:var(--muted); font-size:22px; cursor:pointer}
+    .burger{width:42px; height:38px; display:grid; place-items:center; border-radius:12px; border:1px solid rgba(255,255,255,.06)}
+    .burger span{display:block; width:20px; height:2px; background:#cfe9da; margin:3px 0; border-radius:2px; transition:.25s}
+    .burger[aria-expanded="true"] span:nth-child(1){transform:translateY(5px) rotate(45deg)} .burger[aria-expanded="true"] span:nth-child(2){opacity:0} .burger[aria-expanded="true"] span:nth-child(3){transform:translateY(-5px) rotate(-45deg)}
+    .theme-toggle{width:40px; height:36px; border:1px solid rgba(255,255,255,.06); border-radius:12px}
+    .theme-toggle::before{
+      content:""; display:block; width:18px; height:18px; margin:auto;
+      mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64 13a1 1 0 0 0-1.05-1.36 7 7 0 0 1-8.23-8.23A1 1 0 0 0 11 2.36 9 9 0 1 0 21.64 13z"/></svg>') no-repeat center/contain;
+      background:#cfe9da;
+    }
+
+    /* Light theme overrides (lekin modal/panel qorong‘i ko‘rinishda qoladi) */
+    :root[data-theme="light"]{
+      --bg:#f6fbf9; --bg-2:#ecf6f1; --bg-3:#e9f3ee; --card:#fff; --txt:#0b1210; --muted:#4f6b5e;
+      --shadow:0 10px 25px rgba(0,0,0,.1), inset 0 1px 0 rgba(255,255,255,.6);
+    }
+    :root[data-theme="light"] .site-header{background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75))}
+    :root[data-theme="light"] .panel-card, :root[data-theme="light"] .panel-link, :root[data-theme="light"] .panel-head, :root[data-theme="light"] .panel-body, :root[data-theme="light"] .panel-user{ color:#eaf5ef; background:unset }
+    :root[data-theme="light"] .panel-card{background:radial-gradient(120% 100% at -10% -10%, rgba(52,211,153,.1), transparent 60%), linear-gradient(180deg, #0b1411, #0f1916)}
+    :root[data-theme="light"] .panel-link{background:linear-gradient(180deg, #0d1714, #0e1815)}
+
+    /* Glossy input groups (modal ichida) */
+    .modal-body.glossy .form .input-group{
+      display:flex; align-items:center; gap:8px;
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.09);
+      border-radius:12px; padding:6px 10px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 25px rgba(0,0,0,.20);
+    }
+    :root[data-theme="light"] .modal-body.glossy .form .input-group{
+      background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.8));
+      border-color: rgba(0,0,0,.06);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 10px 25px rgba(0,0,0,.08);
+    }
+    .modal-body.glossy .input-group input{background:transparent !important; border:none !important; outline:none; padding:10px 6px; flex:1; color:var(--txt);}
+    .ig-icon{font-size:18px; opacity:.85}
+    .card-lite{background:linear-gradient(180deg, rgba(11,20,17,.6), rgba(13,23,20,.6)); border:1px solid rgba(255,255,255,.08); padding:12px; border-radius:16px; box-shadow:var(--shadow)}
+    :root[data-theme="light"] .card-lite{background:linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.85)); border-color: rgba(0,0,0,.06)}
+    .btn.primary, .btn.success{ position:relative; overflow:hidden }
+    .btn.primary::after, .btn.success::after{ content:""; position:absolute; inset:-40% -10% auto -10%; height:200%; transform:translateX(-120%) rotate(12deg); background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.25), rgba(255,255,255,0)); transition: transform .6s cubic-bezier(.2,.8,.2,1); }
+    .btn.primary:hover::after, .btn.success:hover::after{ transform:translateX(50%) rotate(12deg) }
+
+    /* === 3D, SVG-based Auth Modal (theme-independent) === */
+    .modal-card.modal-3d,
+    :root[data-theme="light"] .modal-card.modal-3d {
+      color:#eaf5ef;
+      background: radial-gradient(120% 180% at -20% -40%, rgba(34,211,238,.12), transparent 55%),
+                  radial-gradient(120% 180% at 120% -40%, rgba(52,211,153,.14), transparent 60%),
+                  linear-gradient(180deg, #0b1411, #0f1916);
+      border: 1px solid rgba(163,230,216,.22);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06), inset 0 -1px 0 rgba(0,0,0,.4);
+      position: relative; transform-style: preserve-3d; will-change: transform;
+    }
+    .modal-card.modal-3d::before{
+      content:""; position:absolute; inset:-2px;
+      background: conic-gradient(from 180deg, rgba(34,211,238,.0), rgba(34,211,238,.35), rgba(52,211,153,.0) 40%),
+                  radial-gradient(180px 60px at 20% 0%, rgba(34,211,238,.15), transparent 70%),
+                  radial-gradient(220px 70px at 80% 0%, rgba(52,211,153,.15), transparent 70%);
+      filter: blur(8px); border-radius: 22px; z-index: 0;
+    }
+    .modal-card.modal-3d::after{
+      content:""; position:absolute; left:-30%; right:-30%; top:-40%; height:200%;
+      transform: translateX(var(--sheen-x, -120%)) rotate(8deg);
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.18), rgba(255,255,255,0));
+      transition: transform .8s cubic-bezier(.2,.8,.2,1); pointer-events:none; z-index:1;
+    }
+    .modal-card.modal-3d:hover::after{ --sheen-x: 40%; }
+    .modal-card.modal-3d .modal-head{
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.00));
+      border-bottom: 1px solid rgba(163,230,216,.18);
+      border-top-left-radius: 20px; border-top-right-radius: 20px;
+      position: relative; z-index: 2;
+    }
+    .modal-card.modal-3d .input-group{
+      display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:14px;
+      border:1px solid rgba(163,230,216,.18);
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06), inset 0 -1px 0 rgba(0,0,0,.4), 0 10px 24px rgba(0,0,0,.25);
+    }
+    .modal-card.modal-3d .input-group:focus-within{ border-color: rgba(34,211,238,.5); box-shadow: 0 0 0 6px rgba(34,211,238,.12), inset 0 1px 0 rgba(255,255,255,.08); }
+    .modal-card.modal-3d .input-group input{ background: transparent !important; border:none !important; outline:none; color:#eaf5ef; flex:1; padding:8px 6px; }
+    .ig-icon{ width:18px; height:18px; display:inline-block; }
+    .ig-icon::before{ content:""; display:block; width:18px; height:18px; background:#9ae6b4; mask: var(--icon) no-repeat center / contain; -webkit-mask: var(--icon) no-repeat center / contain; }
+    .ig-icon[data-i="id"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm4 4h10v2H7V9zm0 4h6v2H7v-2z"/></svg>'); }
+    .ig-icon[data-i="lock"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm-3 8V6a3 3 0 1 1 6 0v3H9z"/></svg>'); }
+    .ig-icon[data-i="mail"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M4 4h16a2 2 0 0 1 2 2v1l-10 6L2 7V6a2 2 0 0 1 2-2zm0 5.236V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9.236l-8.553 5.132a2 2 0 0 1-2.894 0L4 9.236z"/></svg>'); }
+    .ig-icon[data-i="key"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M14 3a7 7 0 0 0-6.708 9H2v4h3v3h4v-3h3l1.292-1.292A7 7 0 1 0 14 3zm0 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>'); }
+    .ig-icon[data-i="phone"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M6.6 10.8a15.053 15.053 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1.02-.24 11.05 11.05 0 0 0 3.48.56 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 6a1 1 0 0 1 1-1h3.48a1 1 0 0 1 1 1 11.05 11.05 0 0 0 .56 3.48 1 1 0 0 1-.24 1.02L6.6 10.8z"/></svg>'); }
+    .ig-icon[data-i="code"]{ --icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M8.2 7.4 2.6 12l5.6 4.6 1.3-1.6L5.9 12l3.9-3.4-1.6-1.2zm7.6 0-1.6 1.2L18.1 12l-3.9 3.4 1.6 1.2L21.4 12l-5.6-4.6z"/></svg>'); }
+
+    .app{padding:20px; min-height:calc(100vh - 180px)}
+  </style>
 </head>
 <body>
-  <!-- Header (mobil: 1-qator — menyu • logo+nom • tema; 2-qator — ID badge) -->
   <header class="site-header">
-    <button id="menuBtn" class="icon-btn burger" aria-label="Menyu" aria-controls="sidePanel" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
+    <button id="menuBtn" class="icon-btn burger" aria-label="Menyu" aria-controls="sidePanel" aria-expanded="false"><span></span><span></span><span></span></button>
     <div class="brand"><span class="logo">π</span><span class="title">XplusY</span></div>
     <button id="themeToggle" class="icon-btn theme-toggle" aria-label="Kun/Tun rejimi"></button>
-    <div class="auth-chip" id="authChip">
-      <button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button>
-    </div>
+    <div class="auth-chip" id="authChip"><button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button></div>
   </header>
 
   <nav class="site-nav">
@@ -36,7 +232,7 @@
     <div class="f-right">Uz • <a href="#about">Biz haqimizda</a></div>
   </footer>
 
-  <!-- Side Panel (kun/tun dan mustaqil doim bir xil qorong‘i) -->
+  <!-- Side Panel -->
   <aside id="sidePanel" class="side-panel" aria-hidden="true">
     <div class="panel-backdrop" data-close-panel></div>
     <div class="panel-card" role="dialog" aria-modal="true" aria-labelledby="panelTitle" tabindex="-1">
@@ -63,10 +259,10 @@
     </div>
   </aside>
 
-  <!-- Auth Modal -->
+  <!-- Auth Modal (3D + SVG, tema-dan mustaqil) -->
   <div class="modal" id="authModal" aria-hidden="true">
     <div class="modal-backdrop" data-close></div>
-    <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-card modal-3d" role="dialog" aria-modal="true">
       <div class="modal-head">
         <div class="tabs" role="tablist">
           <button class="tab active" data-tab="login">Kirish (ID + Parol)</button>
@@ -81,17 +277,11 @@
           <form id="loginForm" class="form" autocomplete="off">
             <div class="form-row">
               <label for="loginId">ID</label>
-              <div class="input-group">
-                <span class="ig-icon" aria-hidden="true">🆔</span>
-                <input id="loginId" name="id" inputmode="numeric" pattern="\d{7,}" placeholder="1000001" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" />
-              </div>
+              <div class="input-group"><span class="ig-icon" data-i="id" aria-hidden="true"></span><input id="loginId" name="id" inputmode="numeric" pattern="\d{7,}" placeholder="1000001" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" /></div>
             </div>
             <div class="form-row">
               <label for="loginPass">Parol</label>
-              <div class="input-group">
-                <span class="ig-icon" aria-hidden="true">🔒</span>
-                <input id="loginPass" name="password" type="password" minlength="6" placeholder="••••••" required autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
-              </div>
+              <div class="input-group"><span class="ig-icon" data-i="lock" aria-hidden="true"></span><input id="loginPass" name="password" type="password" minlength="6" placeholder="••••••" required autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" /></div>
             </div>
             <button class="btn primary wide" type="submit">Kirish</button>
             <p class="muted small">Kirish faqat <b>ID + Parol</b> orqali. Email/Google bilan kirish <b>mavjud emas</b>.</p>
@@ -110,24 +300,9 @@
 
           <!-- Email signup -->
           <form id="signupEmailForm" class="form subpanel active" data-subpanel="email" autocomplete="off">
-            <div class="form-row">
-              <label for="seName">Ism Familiya (ixtiyoriy)</label>
-              <input id="seName" name="name" placeholder="Ism Familiya" />
-            </div>
-            <div class="form-row">
-              <label for="seEmail">Email</label>
-              <div class="input-group">
-                <span class="ig-icon" aria-hidden="true">✉️</span>
-                <input id="seEmail" name="email" type="email" placeholder="you@email.com" required />
-              </div>
-            </div>
-            <div class="form-row">
-              <label for="sePass">Parol (o‘ylab toping)</label>
-              <div class="input-group">
-                <span class="ig-icon" aria-hidden="true">🔑</span>
-                <input id="sePass" name="password" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
-              </div>
-            </div>
+            <div class="form-row"><label for="seName">Ism Familiya (ixtiyoriy)</label><input id="seName" name="name" placeholder="Ism Familiya" /></div>
+            <div class="form-row"><label for="seEmail">Email</label><div class="input-group"><span class="ig-icon" data-i="mail" aria-hidden="true"></span><input id="seEmail" name="email" type="email" placeholder="you@email.com" required /></div></div>
+            <div class="form-row"><label for="sePass">Parol (o‘ylab toping)</label><div class="input-group"><span class="ig-icon" data-i="key" aria-hidden="true"></span><input id="sePass" name="password" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" /></div></div>
             <button class="btn success wide" type="submit">Ro‘yxatdan o‘tish</button>
             <div id="signupEmailMsg" class="msg"></div>
           </form>
@@ -138,13 +313,7 @@
             <button id="googleBtn" class="btn wide">Google bilan ro‘yxatdan o‘tish</button>
             <div id="signupGoogleStepSetPass" class="hidden">
               <form id="googleSetPassForm" class="form" autocomplete="off">
-                <div class="form-row">
-                  <label for="sgPass">Parol o‘rnatish</label>
-                  <div class="input-group">
-                    <span class="ig-icon" aria-hidden="true">🔑</span>
-                    <input id="sgPass" type="password" minlength="6" required placeholder="kamida 6 belgi" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
-                  </div>
-                </div>
+                <div class="form-row"><label for="sgPass">Parol o‘rnatish</label><div class="input-group"><span class="ig-icon" data-i="key" aria-hidden="true"></span><input id="sgPass" type="password" minlength="6" required placeholder="kamida 6 belgi" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" /></div></div>
                 <button class="btn success wide" type="submit">Parolni ulash</button>
               </form>
             </div>
@@ -153,17 +322,8 @@
 
           <!-- One-click signup -->
           <form id="oneClickForm" class="form subpanel" data-subpanel="oneclick" autocomplete="off">
-            <div class="form-row">
-              <label for="ocName">Ism Familiya (ixtiyoriy)</label>
-              <input id="ocName" placeholder="Ism Familiya" />
-            </div>
-            <div class="form-row">
-              <label for="ocPass">Parol (o‘ylab toping)</label>
-              <div class="input-group">
-                <span class="ig-icon" aria-hidden="true">🔑</span>
-                <input id="ocPass" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
-              </div>
-            </div>
+            <div class="form-row"><label for="ocName">Ism Familiya (ixtiyoriy)</label><input id="ocName" placeholder="Ism Familiya" /></div>
+            <div class="form-row"><label for="ocPass">Parol (o‘ylab toping)</label><div class="input-group"><span class="ig-icon" data-i="key" aria-hidden="true"></span><input id="ocPass" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" /></div></div>
             <button class="btn success wide" type="submit">Bir bosishda ro‘yxatdan o‘tish</button>
             <p class="muted small">Email shart emas. Sizga navbatdagi ID beriladi va tizim ichki email yaratadi.</p>
             <div id="oneClickMsg" class="msg"></div>
@@ -173,46 +333,39 @@
           <div class="subpanel" data-subpanel="phone">
             <div class="card-lite">
               <form id="phoneStartForm" class="form" autocomplete="off">
-                <div class="form-row">
-                  <label for="phNumber">Telefon raqam (E.164, masalan: +99890xxxxxxx)</label>
-                  <div class="input-group">
-                    <span class="ig-icon" aria-hidden="true">📱</span>
-                    <input id="phNumber" type="tel" placeholder="+99890xxxxxxx" required autocomplete="tel" />
-                  </div>
-                </div>
+                <div class="form-row"><label for="phNumber">Telefon raqam (E.164, masalan: +99890xxxxxxx)</label><div class="input-group"><span class="ig-icon" data-i="phone" aria-hidden="true"></span><input id="phNumber" type="tel" placeholder="+99890xxxxxxx" required autocomplete="tel" /></div></div>
                 <button class="btn success wide" id="phSendCode" type="submit">SMS kod yuborish</button>
                 <div id="phoneMsg" class="msg"></div>
               </form>
 
               <form id="phoneVerifyForm" class="form hidden" autocomplete="off">
-                <div class="form-row">
-                  <label for="phCode">Tasdiqlash kodi</label>
-                  <div class="input-group">
-                    <span class="ig-icon" aria-hidden="true">🔐</span>
-                    <input id="phCode" inputmode="numeric" pattern="\d{4,8}" placeholder="123456" required autocomplete="one-time-code" />
-                  </div>
-                </div>
+                <div class="form-row"><label for="phCode">Tasdiqlash kodi</label><div class="input-group"><span class="ig-icon" data-i="code" aria-hidden="true"></span><input id="phCode" inputmode="numeric" pattern="\d{4,8}" placeholder="123456" required autocomplete="one-time-code" /></div></div>
                 <button class="btn primary wide" type="submit">Kodni tasdiqlash</button>
               </form>
 
               <form id="phoneSetPassForm" class="form hidden" autocomplete="off">
-                <div class="form-row">
-                  <label for="phPass">Parol o‘rnatish (kelgusi kirish: ID+Parol)</label>
-                  <div class="input-group">
-                    <span class="ig-icon" aria-hidden="true">🔑</span>
-                    <input id="phPass" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" />
-                  </div>
-                </div>
+                <div class="form-row"><label for="phPass">Parol o‘rnatish (kelgusi kirish: ID+Parol)</label><div class="input-group"><span class="ig-icon" data-i="key" aria-hidden="true"></span><input id="phPass" type="password" minlength="6" placeholder="kamida 6 belgi" required autocomplete="new-password" /></div></div>
                 <button class="btn success wide" type="submit">Parolni ulash</button>
               </form>
             </div>
-            <!-- reCAPTCHA konteyner (invisible) -->
             <div id="phoneCaptcha" class="hidden"></div>
           </div>
         </section>
       </div>
     </div>
   </div>
+
+  <!-- Inlined partial (home) shabloni — offline holatda fetch o‘rnini bosadi -->
+  <template id="tpl-home">
+    <div class="card" style="padding:16px; border:1px solid rgba(255,255,255,.06); border-radius:14px; background:var(--card); box-shadow: var(--shadow);">
+      <h2 style="margin-top:0">SPA ishlamoqda ✅</h2>
+      <p class="muted">Yon panelni sinash uchun burger tugmasini bosing. Ro‘yxatdan o‘ting va kirishni tekshiring.</p>
+      <ul>
+        <li>Marshrutlar: <code>#home</code>, <code>#tests</code>, <code>#live</code>, <code>#leaderboard</code>, <code>#about</code>.</li>
+        <li>Kirish: <b>ID + Parol</b>. Ro‘yxatdan: <b>Email</b>, <b>Google</b>, <b>Telefon</b>, yoki <b>Bir bosishda</b>.</li>
+      </ul>
+    </div>
+  </template>
 
   <!-- Firebase config (siz bergan) -->
   <script>
@@ -226,6 +379,227 @@
       measurementId: "G-459PLJ7P7L"
     };
   </script>
-  <script type="module" src="./app.js"></script>
+
+  <!-- App (module) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, linkWithCredential, linkWithPopup, EmailAuthProvider, signInAnonymously, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp, runTransaction, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+
+    const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+    const y=$("#year"); if(y) y.textContent=String(new Date().getFullYear());
+    (()=>{
+      const root=document.documentElement;
+      const saved=localStorage.getItem("xpy_theme");
+      const prefersLight=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches;
+      root.setAttribute("data-theme", saved || (prefersLight?"light":"dark"));
+      const b=$("#themeToggle"); const set=m=>{root.setAttribute("data-theme",m); localStorage.setItem("xpy_theme",m);};
+      if(b) b.addEventListener("click", ()=>{ const cur=root.getAttribute("data-theme")||"dark"; set(cur==="dark"?"light":"dark"); });
+    })();
+
+    const appEl=$("#app"); const routes=["home","tests","live","leaderboard","about"];
+    async function loadRoute(){
+      const hash=location.hash.replace("#","")||"home";
+      const route=routes.includes(hash)?hash:"home";
+      const tpl=$("#tpl-"+route);
+      if (tpl){ appEl.innerHTML = tpl.innerHTML; return; }
+      try{
+        const res=await fetch("./partials/"+route+".html",{cache:"no-store"});
+        if(!res.ok) throw 0;
+        appEl.innerHTML=await res.text();
+      }catch{
+        appEl.innerHTML = `<div class="card" style="padding:16px; border:1px solid rgba(255,255,255,.06); border-radius:14px; background:var(--card); box-shadow: var(--shadow);"><h2 style="margin-top:0">${route}</h2><p class="muted">Partial topilmadi. Inlined <code>#tpl-${route}</code> yoki <code>partials/${route}.html</code> qo‘shing.</p></div>`;
+      }
+    }
+    addEventListener("hashchange", loadRoute); loadRoute();
+
+    // Side panel
+    const sidePanel=$("#sidePanel"), menuBtn=$("#menuBtn");
+    function openPanel(){ sidePanel.setAttribute("aria-hidden","false"); if(menuBtn) menuBtn.setAttribute("aria-expanded","true"); document.body.style.overflow="hidden"; const card=$(".panel-card",sidePanel); if(card) card.focus(); }
+    function closePanel(){ sidePanel.setAttribute("aria-hidden","true"); if(menuBtn) menuBtn.setAttribute("aria-expanded","false"); document.body.style.overflow=""; }
+    if(menuBtn) menuBtn.addEventListener("click", ()=>{ const hid=sidePanel.getAttribute("aria-hidden")!=="false"; hid?openPanel():closePanel(); });
+    $$("[data-close-panel]", sidePanel).forEach(el=>el.addEventListener("click", closePanel));
+    addEventListener("keydown", e=>{ if(e.key==="Escape") closePanel(); });
+    const panelOpenAuth=$("#panelOpenAuth"); if(panelOpenAuth) panelOpenAuth.addEventListener("click", ()=>{ closePanel(); openModal($("#authModal")); });
+
+    // Modal
+    function openModal(m){ m.setAttribute("aria-hidden","false"); document.body.style.overflow="hidden"; const card=m.querySelector(".modal-card.modal-3d"); if(card) attachTiltOn(card); }
+    function closeModal(m){ m.setAttribute("aria-hidden","true"); document.body.style.overflow=""; }
+    const authModal=$("#authModal");
+    const openAuthBtn=$("#openAuth"); if(openAuthBtn) openAuthBtn.addEventListener("click", ()=> openModal(authModal));
+    $$("[data-close]", authModal).forEach(el=>el.addEventListener("click", ()=> closeModal(authModal)));
+    $$(".tab").forEach(btn=>btn.addEventListener("click", ()=>{ $$(".tab").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); const name=btn.dataset.tab; $$(".tab-panel").forEach(p=>p.classList.toggle("active", p.dataset.panel===name)); }));
+    $$(".subtab").forEach(btn=>btn.addEventListener("click", ()=>{ $$(".subtab").forEach(b=>b.classList.remove("active")); btn.classList.add("active"); const name=btn.dataset.sub; $$(".subpanel").forEach(p=>p.classList.toggle("active", p.dataset.subpanel===name)); }));
+
+    // Tilt (mouse only, no motion)
+    function attachTiltOn(card){
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (window.matchMedia && matchMedia("(pointer: coarse)").matches) return;
+      let rID=0;
+      function onMove(e){
+        const rect=card.getBoundingClientRect();
+        const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+        const dx=(e.clientX-cx)/(rect.width/2), dy=(e.clientY-cy)/(rect.height/2);
+        const rotX=(+dy*6).toFixed(2), rotY=(-dx*6).toFixed(2);
+        cancelAnimationFrame(rID);
+        rID=requestAnimationFrame(()=>{ card.style.transform=`perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg)`; });
+      }
+      function reset(){ cancelAnimationFrame(rID); card.style.transform="perspective(1000px) rotateX(0deg) rotateY(0deg)"; }
+      card.addEventListener("mousemove", onMove); card.addEventListener("mouseleave", reset);
+    }
+
+    // Firebase
+    if(!window.FIREBASE_CONFIG) console.warn("[XplusY] FIREBASE_CONFIG yo‘q (tekshiring).");
+    const appFB=initializeApp(window.FIREBASE_CONFIG||{apiKey:"DUMMY",authDomain:"dummy.firebaseapp.com",projectId:"dummy"});
+    const auth=getAuth(appFB); const db=getFirestore(appFB); const provider=new GoogleAuthProvider();
+
+    async function ensureUserNumericId(uid,email,name){
+      const uref=doc(db,"users",uid); const usnap=await getDoc(uref);
+      if(usnap.exists()&&usnap.data().numericId) return usnap.data().numericId;
+      const metaRef=doc(db,"meta","counters");
+      const id=await runTransaction(db, async tx=>{
+        const m=await tx.get(metaRef); let next=1000001;
+        if(m.exists()&&m.data().nextNumericId){ const raw=m.data().nextNumericId; next=typeof raw==="number"?raw:parseInt(raw,10)||next; }
+        tx.set(metaRef,{nextNumericId:next+1},{merge:true});
+        tx.set(uref,{uid,email:email||null,name:name||null,numericId:next,balance:0,gems:0,createdAt:serverTimestamp(),updatedAt:serverTimestamp()},{merge:true});
+        tx.set(doc(db,"ids",String(next)),{uid,email:email||null,numericId:next,createdAt:serverTimestamp()},{merge:true});
+        return next;
+      });
+      return id;
+    }
+    async function getEmailByNumericId(numericId){
+      const s=await getDoc(doc(db,"ids",String(numericId))); if(!s.exists()) throw new Error("ID topilmadi");
+      const {email}=s.data(); if(!email) throw new Error("Ushbu ID uchun email bog‘lanmagan (parol o‘rnatilmagan).");
+      return email;
+    }
+    function niceAuthError(err){
+      const c=err?.code||"";
+      if(c==="auth/admin-restricted-operation") return "Ro‘yxatdan o‘tish cheklangan. Provider/user-creation sozlamalarini tekshiring.";
+      if(c==="auth/operation-not-allowed") return "Bu kirish usuli o‘chirilgan (Sign-in method).";
+      if(c==="auth/popup-closed-by-user") return "Oyna yopildi.";
+      if(c==="auth/email-already-in-use") return "Bu email allaqachon ro‘yxatdan o‘tgan.";
+      if(c==="auth/weak-password") return "Parol juda zaif (kamida 6 belgi).";
+      if(c==="permission-denied") return "Ruxsat berilmagan (Firestore rulesni tekshiring).";
+      return err?.message||String(err);
+    }
+
+    const authChip=$("#authChip"), panelUser=$("#panelUser");
+    function renderAuthChipData(d){
+      const id=d?.numericId??"—", balance=d?.balance??0, gems=d?.gems??0;
+      authChip.innerHTML=`<div class="id-badge" title="Profil ma'lumotlari">
+        <span class="pill"><svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z" opacity=".15"/><path d="M7 8h10v2H7zM7 12h6v2H7z"/></svg><span class="lbl"><b>ID:</b></span> <span>${id}</span></span>
+        <span class="sep"></span>
+        <span class="pill"><svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v10H3z" opacity=".15"/><path d="M4 9h16v2H4zM6 13h8v2H6z"/></svg><span class="lbl">Balans:</span> <span>${balance.toLocaleString()}</span></span>
+        <span class="pill"><svg class="icon-12" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l4 7-4 13-4-13z" opacity=".15"/></svg><span class="lbl">Olmos:</span> <span>${gems}</span></span>
+      </div>`;
+    }
+    function renderSignedOut(){
+      if(window.__unsubUser){try{window.__unsubUser();}catch{} window.__unsubUser=null;}
+      authChip.innerHTML=`<button id="openAuth" class="btn primary">Kirish / Ro‘yxatdan o‘tish</button>`;
+      const b=$("#openAuth"); if(b) b.addEventListener("click", ()=> openModal(authModal));
+      if(panelUser){ panelUser.innerHTML=`Mehmon. Kirish uchun quyidagi tugmadan foydalaning.<div style="display:grid; gap:8px; margin-top:8px"><button class="btn" id="panelOpenAuth2">Kirish / Ro‘yxatdan o‘tish</button></div>`; const b2=$("#panelOpenAuth2"); if(b2) b2.addEventListener("click", ()=>{ sidePanel.setAttribute("aria-hidden","true"); openModal(authModal); }); }
+    }
+    async function renderSignedIn(user){
+      try{
+        const uref=doc(db,"users",user.uid); if(window.__unsubUser){try{window.__unsubUser();}catch{}}
+        window.__unsubUser=onSnapshot(uref, us=>{
+          const d=us.exists()?us.data():{}; renderAuthChipData(d);
+          const id=d.numericId||"—", balance=d.balance??0, gems=d.gems??0;
+          if(panelUser){ panelUser.innerHTML=`<div><b>ID:</b> ${id}</div><div class="meta" style="color:var(--muted)">Balans: ${balance.toLocaleString()} so‘m • Olmos: ${gems}</div><div style="display:grid; gap:8px; margin-top:10px"><a href="#profile" class="panel-link" data-panel-link>👤 Profil</a><button class="btn" id="panelLogout">Chiqish</button></div>`; const lo=$("#panelLogout"); if(lo) lo.onclick=async()=>{ await signOut(auth); sidePanel.setAttribute("aria-hidden","true"); }; }
+        }, err=>console.error(err));
+      }catch(e){ console.error(e); renderSignedOut(); }
+    }
+    onAuthStateChanged(auth, u=>{ u?renderSignedIn(u):renderSignedOut(); });
+
+    // Login: ID + Password
+    const loginForm=$("#loginForm");
+    if (loginForm) loginForm.addEventListener("submit", async e=>{
+      e.preventDefault();
+      const id=($("#loginId").value||"").trim(), pass=$("#loginPass").value;
+      const msg=$("#loginMsg"); msg.textContent="Tekshirilmoqda..."; msg.className="msg";
+      try{ const email=await getEmailByNumericId(id); await signInWithEmailAndPassword(auth, email, pass); msg.textContent="Kirdingiz."; msg.classList.add("ok"); closeModal(authModal); }
+      catch(err){ console.error(err); msg.textContent="Kirish xatosi: "+niceAuthError(err); msg.classList.add("error"); }
+    });
+
+    // Signup: Email
+    const signupEmailForm=$("#signupEmailForm");
+    if (signupEmailForm) signupEmailForm.addEventListener("submit", async e=>{
+      e.preventDefault();
+      const name=$("#seName").value.trim()||null, email=$("#seEmail").value.trim(), pass=$("#sePass").value;
+      const msg=$("#signupEmailMsg"); msg.textContent="Ro‘yxatdan o‘tkazilmoqda..."; msg.className="msg";
+      try{
+        const u=auth.currentUser; let cred;
+        if(u&&u.isAnonymous){ const c=EmailAuthProvider.credential(email,pass); cred=await linkWithCredential(u,c); }
+        else{ cred=await createUserWithEmailAndPassword(auth,email,pass); }
+        const uid=cred.user.uid; const numericId=await ensureUserNumericId(uid,email,name);
+        await setDoc(doc(db,"ids",String(numericId)),{uid,email,numericId},{merge:true});
+        msg.textContent=`Tayyor! Sizning ID: ${numericId}. Endi kirishda faqat ID + parol.`; msg.classList.add("ok"); closeModal(authModal);
+      }catch(err){ console.error(err); msg.textContent="Ro‘yxatdan o‘tishda xatolik: "+niceAuthError(err); msg.classList.add("error"); }
+    });
+
+    // Signup: Google (registration only → set password)
+    const googleBtn=$("#googleBtn"), signupGoogleMsg=$("#signupGoogleMsg"), googleSetPassForm=$("#googleSetPassForm"), signupGoogleStepSetPass=$("#signupGoogleStepSetPass");
+    if (googleBtn) googleBtn.addEventListener("click", async ()=>{
+      signupGoogleMsg.textContent="Google orqali kirmoqda..."; signupGoogleMsg.className="msg";
+      try{
+        const u=auth.currentUser; let userCred; if(u&&u.isAnonymous){ userCred=await linkWithPopup(u,new GoogleAuthProvider()); } else { userCred=await signInWithPopup(auth,new GoogleAuthProvider()); }
+        const gUser=userCred.user; await ensureUserNumericId(gUser.uid,gUser.email,gUser.displayName||null);
+        signupGoogleStepSetPass.classList.remove("hidden"); signupGoogleMsg.textContent="Google bog‘landi. Endi parol belgilang (kelgusi kirish ID+Parol).";
+      }catch(err){ console.error(err); signupGoogleMsg.textContent="Google ro‘yxatdan o‘tishda xatolik: "+niceAuthError(err); signupGoogleMsg.classList.add("error"); }
+    });
+    if (googleSetPassForm) googleSetPassForm.addEventListener("submit", async e=>{
+      e.preventDefault();
+      signupGoogleMsg.textContent="Parol ulanmoqda..."; signupGoogleMsg.className="msg";
+      try{
+        const user=auth.currentUser; if(!user||!user.email) throw new Error("Google foydalanuvchisi aniqlanmadi.");
+        const pass=$("#sgPass").value; const cred=EmailAuthProvider.credential(user.email,pass); await linkWithCredential(user, cred);
+        const usnap=await getDoc(doc(db,"users",user.uid)); const numericId=usnap.exists()?usnap.data().numericId:null;
+        if(numericId) await setDoc(doc(db,"ids",String(numericId)),{uid:user.uid,email:user.email,numericId},{merge:true});
+        signupGoogleMsg.textContent="Parol o‘rnatildi. Endi kirishda faqat ID + Parol."; signupGoogleMsg.classList.add("ok"); closeModal(authModal);
+      }catch(err){ console.error(err); signupGoogleMsg.textContent="Parol ulashda xatolik: "+niceAuthError(err); signupGoogleMsg.classList.add("error"); }
+    });
+
+    // Signup: One-click (no email)
+    const oneClickForm=$("#oneClickForm");
+    if (oneClickForm) oneClickForm.addEventListener("submit", async e=>{
+      e.preventDefault();
+      const name=$("#ocName").value.trim()||null, pass=$("#ocPass").value;
+      const msg=$("#oneClickMsg"); msg.textContent="Yaratilmoqda..."; msg.className="msg";
+      try{
+        const cur=auth.currentUser; const anon=(cur&&cur.isAnonymous)?{user:cur}:await signInAnonymously(auth);
+        const uid=anon.user.uid; const numericId=await ensureUserNumericId(uid,null,name);
+        const aliasEmail=`${numericId}@xplusy.local`; const cred=EmailAuthProvider.credential(aliasEmail, pass);
+        await linkWithCredential(anon.user, cred);
+        await setDoc(doc(db,"ids",String(numericId)),{uid,email:aliasEmail,numericId},{merge:true});
+        msg.textContent=`Tayyor! Sizning ID: ${numericId}. Endi kirishda ID (${numericId}) va parol.`; msg.classList.add("ok"); closeModal(authModal);
+      }catch(err){ console.error(err); msg.textContent="Xatolik: "+niceAuthError(err); msg.classList.add("error"); }
+    });
+
+    // Signup: Phone (SMS → confirm → set password -> alias email)
+    let __phoneConf=null, __recaptcha=null;
+    function getRecaptcha(){ if(!__recaptcha){ __recaptcha=new RecaptchaVerifier(auth, "phoneCaptcha", { size:"invisible" }); } return __recaptcha; }
+    const phoneStartForm=$("#phoneStartForm"), phoneVerifyForm=$("#phoneVerifyForm"), phoneSetPassForm=$("#phoneSetPassForm"), phoneMsg=$("#phoneMsg");
+    if (phoneStartForm) phoneStartForm.addEventListener("submit", async e=>{
+      e.preventDefault(); phoneMsg.textContent="SMS yuborilmoqda..."; phoneMsg.className="msg";
+      try{ const phone=$("#phNumber").value.trim(); const appVerifier=getRecaptcha(); __phoneConf=await signInWithPhoneNumber(auth, phone, appVerifier); phoneMsg.textContent="Kod yuborildi. Iltimos, tasdiqlash kodini kiriting."; phoneVerifyForm.classList.remove("hidden"); }
+      catch(err){ console.error(err); phoneMsg.textContent="SMS yuborishda xatolik: "+niceAuthError(err); phoneMsg.classList.add("error"); }
+    });
+    if (phoneVerifyForm) phoneVerifyForm.addEventListener("submit", async e=>{
+      e.preventDefault(); phoneMsg.textContent="Kod tekshirilmoqda..."; phoneMsg.className="msg";
+      try{ const code=$("#phCode").value.trim(); const result=await __phoneConf.confirm(code); const user=result.user; await ensureUserNumericId(user.uid, user.email||null, user.displayName||null); phoneMsg.textContent="Tasdiqlandi. Endi parol o‘rnating."; phoneMsg.classList.add("ok"); phoneSetPassForm.classList.remove("hidden"); }
+      catch(err){ console.error(err); phoneMsg.textContent="Kod xato yoki muddati o‘tgan: "+niceAuthError(err); phoneMsg.classList.add("error"); }
+    });
+    if (phoneSetPassForm) phoneSetPassForm.addEventListener("submit", async e=>{
+      e.preventDefault(); phoneMsg.textContent="Parol ulanmoqda..."; phoneMsg.className="msg";
+      try{ const user=auth.currentUser; if(!user) throw new Error("Foydalanuvchi aniqlanmadi.");
+        const usnap=await getDoc(doc(db,"users",user.uid)); let numericId=null; if(usnap.exists()) numericId=usnap.data().numericId;
+        if(!numericId) numericId=await ensureUserNumericId(user.uid, user.email||null, user.displayName||null);
+        const aliasEmail=`${numericId}@xplusy.local`; const pass=$("#phPass").value; const cred=EmailAuthProvider.credential(aliasEmail, pass);
+        await linkWithCredential(user, cred);
+        await setDoc(doc(db,"ids",String(numericId)),{uid:user.uid,email:aliasEmail,numericId},{merge:true});
+        phoneMsg.textContent="Parol o‘rnatildi. Endi kirishda faqat ID + Parol foydalansiz."; phoneMsg.classList.add("ok"); closeModal(authModal);
+      }catch(err){ console.error(err); phoneMsg.textContent="Parol ulashda xatolik: "+niceAuthError(err); phoneMsg.classList.add("error"); }
+    });
+  </script>
 </body>
 </html>
