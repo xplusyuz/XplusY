@@ -123,7 +123,7 @@ async function renderSignedIn(user){
     <span class="pill">💳: ${balance.toLocaleString()}</span>
 	<span class="sep"></span>
     <span class="pill">💎: ${gems}</span>
-  </div>`;
+  </div>
           <div style="display:grid; gap:8px; margin-top:10px">
             <a href="#profile" class="panel-link" data-panel-link>👤 Profil</a>
             <button class="btn" id="panelLogout">Chiqish</button>
