@@ -279,3 +279,45 @@ if (phoneSetPassForm) phoneSetPassForm.addEventListener("submit", async e=>{
     console.error(err); phoneMsg.textContent="Parol ulashda xatolik: "+niceAuthError(err); phoneMsg.classList.add("error");
   }
 });
+// Theme boshqaruvi
+const themeBtn = document.createElement('button');
+themeBtn.className = 'theme-btn';
+themeBtn.innerHTML = '🌓';
+themeBtn.setAttribute('aria-label', 'Change theme');
+themeBtn.setAttribute('title', 'Change theme');
+
+const themeSwitcher = document.createElement('div');
+themeSwitcher.className = 'theme-switcher';
+themeSwitcher.appendChild(themeBtn);
+document.body.appendChild(themeSwitcher);
+
+// Theme ni o'qib olish
+function getTheme() {
+  return localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+
+// Theme ni o'rnatish
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  
+  // Tugma ikonkasini yangilash
+  themeBtn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+}
+
+// Boshlang'ich theme ni o'rnatish
+setTheme(getTheme());
+
+// Theme tugmasi bosilganda
+themeBtn.addEventListener('click', () => {
+  const currentTheme = getTheme();
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  setTheme(newTheme);
+});
+
+// Tizim theme o'zgarishini kuzatish
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+  if (!localStorage.getItem('theme')) {
+    setTheme(e.matches ? 'dark' : 'light');
+  }
+});
