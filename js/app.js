@@ -13,6 +13,8 @@ const footer = document.getElementById("footer");
 const menu = document.getElementById("menu");
 
 await loadFragment(header, "header.html");
+  const {{ initAuthUI }} = await import("./auth-ui.js");
+  initAuthUI();
 await loadFragment(footer, "footer.html");
 await loadFragment(menu, "menu.html");
 
@@ -24,11 +26,7 @@ const balanceEl = () => document.getElementById("balance");
 const gemsEl = () => document.getElementById("gems");
 const authBtn = () => document.getElementById("authBtn");
 
-authBtn()?.addEventListener("click", async () => {
-  const current = auth.currentUser;
-  if (current) await logout();
-  else await login();
-});
+// auth button opens modal (handled in auth-ui.js)
 
 onAuth(async (user) => {
   if (!user){

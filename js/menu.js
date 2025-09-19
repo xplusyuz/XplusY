@@ -48,3 +48,12 @@ export function setActive(id){
     a.classList.toggle("active", match);
   });
 }
+
+
+document.addEventListener("keydown", (e)=>{
+  if (e.key === "Escape"){
+    try { close() } catch {}
+    const m = document.getElementById("authModal");
+    if (m && !m.classList.contains("hidden")) m.classList.add("hidden");
+  }
+});
