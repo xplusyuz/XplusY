@@ -1,4 +1,7 @@
 // app.js — SPA router loading partials + header/footer/menu injection
+function log(){ try{ console.debug.apply(console, arguments) }catch(_){} }
+async function __boot(){
+
 import { auth, onAuth, login, logout, ensureUser, db } from "./firebase.js";
 import { initMenu, setActive } from "./menu.js";
 
@@ -75,3 +78,6 @@ window.addEventListener("load", render);
 
 // First paint: set default hash if empty (prevents empty state on first load)
 if (!location.hash) location.hash = "#/home";
+
+}
+__boot().catch(e=>{console.error('[boot]', e); const app=document.getElementById('app'); if(app){app.innerHTML = `<div class='card'>Ilova ishga tushmadi: ${e?.message||e}</div>`}});
