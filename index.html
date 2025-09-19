@@ -1,28 +1,663 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MathCenter.uz</title>
-  <meta name="description" content="MathCenter — zamonaviy matematika platformasi"/>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg"/>
-  <link rel="preload" href="assets/logo.svg" as="image"/>
-  <link rel="stylesheet" href="css/style.css?v=1"/>
-  <link rel="stylesheet" href="css/menu.css?v=1"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XplusY · MathCenter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --g1:#eafff0;         /* oq-yashil pastel */
+      --g2:#c9ffdd;         /* granit yumshoq gradient */
+      --g3:#38b26f;         /* asosiy yashil */
+      --g4:#0a8e50;         /* chuqur yashil */
+      --ink:#0b1720;        /* matn rang */
+      --muted:#5b6b74;
+      --card:#ffffff;
+      --shadow: 0 10px 30px rgba(0,0,0,.12);
+      --radius: 18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+      color:var(--ink);
+      background: radial-gradient(1200px 800px at 10% 10%, var(--g2), transparent 60%),
+                  radial-gradient(900px 700px at 90% 0%, var(--g1), transparent 55%),
+                  linear-gradient(180deg, #f7fff9 0%, #f1fff6 60%, #ecfff4 100%);
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+    /* Top Shell */
+    header.site-header{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter:saturate(1.2) blur(8px);
+      background:linear-gradient(180deg, rgba(255,255,255,.85) 0%, rgba(255,255,255,.65) 100%);
+      border-bottom:1px solid rgba(56,178,111,.2);
+    }
+    .header-inner{
+      max-width:1200px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:12px;
+    }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:.4px; }
+    .brand-logo{
+      width:42px;height:42px;border-radius:50%;
+      background: conic-gradient(from 210deg, #b7ffd5, #eafff0, #c9ffdd, #8af0b7, #38b26f);
+      box-shadow: inset 0 2px 6px rgba(255,255,255,.9), 0 6px 16px rgba(56,178,111,.35);
+      display:grid;place-items:center;color:#0a8e50;font-weight:900; font-size:20px;
+    }
+    .brand small{display:block; font-weight:600; color:var(--muted); margin-top:-4px}
+
+    /* User info row */
+    .user-strip{margin-left:auto; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+    .hello{font-weight:700}
+    .hello .age{color:var(--muted); font-weight:600}
+
+    .id-balance-card{
+      display:flex; gap:10px; align-items:center; padding:8px 12px; border-radius:calc(var(--radius) - 6px);
+      background:linear-gradient(180deg,#ffffff, #f4fff9);
+      border:1px solid rgba(56,178,111,.18);
+      box-shadow: var(--shadow);
+      font-size:14px; font-weight:700;
+    }
+    .chip{padding:6px 10px; border-radius:999px; background:#fff; border:1px solid rgba(56,178,111,.25); box-shadow:0 4px 10px rgba(0,0,0,.06)}
+    .chip .label{font-weight:600; color:var(--muted); margin-right:6px}
+
+    /* App container */
+    #app{max-width:1200px; margin:18px auto 120px; padding:0 16px}
+    .card{
+      background:var(--card);
+      border:1px solid rgba(56,178,111,.18);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+
+    /* Floating Touch Menu */
+    .fab{position:fixed; right:18px; bottom:18px; z-index:60;}
+    .fab button.main{
+      width:64px; height:64px; border:none; border-radius:50%; cursor:pointer;
+      background: radial-gradient(120% 120% at 30% 20%, #9dffd0, #38b26f 60%, #0a8e50 100%);
+      color:#fff; font-weight:900; font-size:22px; box-shadow:0 18px 36px rgba(10,142,80,.45);
+    }
+    .fab-drag{position:absolute; inset:0; cursor:grab}
+    .fab-menu{position:absolute; right:70px; bottom:6px; display:flex; gap:10px; flex-wrap:wrap; max-width:80vw}
+    .fab-menu a{
+      text-decoration:none; color:var(--ink);
+      background:#fff; border:1px solid rgba(56,178,111,.2); padding:8px 12px; border-radius:999px; font-weight:700; font-size:14px; box-shadow:0 10px 20px rgba(0,0,0,.08);
+      transform:translateY(10px); opacity:0; pointer-events:none; transition:all .28s ease;
+    }
+    .fab.open .fab-menu a{transform:translateY(0); opacity:1; pointer-events:auto}
+
+    /* Modals */
+    .modal{position:fixed; inset:0; background:rgba(13,21,17,.35); display:none; place-items:center; z-index:80}
+    .modal.open{display:grid}
+    .modal .panel{width:min(680px,92vw); background:#fff; border-radius:24px; box-shadow:0 30px 80px rgba(0,0,0,.25); border:1px solid rgba(56,178,111,.25)}
+    .panel-header{padding:16px 18px; border-bottom:1px solid rgba(56,178,111,.2); display:flex; align-items:center; justify-content:space-between}
+    .panel-header h3{margin:0}
+    .panel-body{padding:18px}
+    .tabs{display:flex; gap:6px; flex-wrap:wrap}
+    .tabs button{border:none; background:#f4fff9; padding:10px 12px; border-radius:12px; font-weight:700; cursor:pointer}
+    .tabs button.active{background:linear-gradient(180deg,#dfffea,#b9ffd3); border:1px solid rgba(56,178,111,.25)}
+    .grid{display:grid; gap:12px}
+    .grid.two{grid-template-columns:1fr 1fr}
+    .grid.three{grid-template-columns:1fr 1fr 1fr}
+    @media (max-width:720px){
+      .grid.two, .grid.three{grid-template-columns:1fr}
+      .user-strip{gap:6px}
+      .id-balance-card{width:100%; justify-content:space-between}
+    }
+    label{font-weight:700; font-size:14px}
+    input, select{width:100%; padding:10px 12px; border-radius:12px; border:1px solid rgba(56,178,111,.25); background:#fff}
+    .row{display:flex; gap:10px; align-items:center}
+    .btn{border:none; padding:10px 14px; border-radius:12px; font-weight:800; cursor:pointer}
+    .btn.primary{background:linear-gradient(180deg,#38b26f,#0a8e50); color:#fff; box-shadow:0 10px 24px rgba(10,142,80,.35)}
+    .btn.ghost{background:#fff; border:1px solid rgba(56,178,111,.3)}
+    .note{font-size:12px; color:var(--muted)}
+    .danger{color:#b00020}
+
+    /* Route pills */
+    nav.route-pills{display:flex; gap:8px; flex-wrap:wrap; margin:0 16px}
+    nav.route-pills a{ text-decoration:none; padding:8px 12px; border-radius:999px; background:#fff; border:1px solid rgba(56,178,111,.2); color:var(--ink); font-weight:700 }
+    nav.route-pills a.active{background:#eafff0}
+  </style>
 </head>
 <body>
-  <div id="shell">
-    <header class="site-header" id="header"></header>
-    <main>
-      <div id="menu"></div>
-      <section id="app" aria-live="polite"><div id="boot-loading" style="padding:24px" class="card">Yuklanmoqda…</div></section>
-    </main>
-    <footer class="site-footer" id="footer"></footer>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-logo">π</div>
+        <div>
+          <div>XplusY</div>
+          <small>MathCenter · WOW UX</small>
+        </div>
+      </div>
+      <nav class="route-pills" id="routePills"></nav>
+      <div class="user-strip">
+        <div class="hello" id="hello">Hello, Mehmon <span class="age">(—)</span></div>
+        <div class="id-balance-card" id="idBalance">
+          <div class="chip"><span class="label">ID</span><span id="chipId">—</span></div>
+          <div class="chip"><span class="label">Balans</span><span id="chipBalance">0</span></div>
+          <div class="chip"><span class="label">Ball</span><span id="chipPoints">0</span></div>
+        </div>
+        <button class="btn ghost" id="btnLogin">Kirish</button>
+        <button class="btn" id="btnLogout" style="display:none">Chiqish</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="app">
+    <div class="card">
+      <h2>Yuklanmoqda...</h2>
+      <p class="note">Partial sahifalar <code>partials/</code> papkadan dinamik yuklanadi.</p>
+    </div>
+  </main>
+
+  <!-- Floating Touch Menu (Draggable) -->
+  <div class="fab" id="fab">
+    <div class="fab-drag" id="fabDrag" title="Tortib ko'chiring"></div>
+    <button class="main" id="fabMain">≡</button>
+    <div class="fab-menu" id="fabMenu">
+      <a href="#home">Home</a>
+      <a href="#tests">Tests</a>
+      <a href="#live">Live</a>
+      <a href="#sim">Simulators</a>
+      <a href="#leaderboard">Leaderboard</a>
+      <a href="#profile">Profile</a>
+      <a href="#settings">Settings</a>
+      <a href="#logout" id="fabLogout">Logout</a>
+    </div>
   </div>
 
-  <script type="module" src="js/firebase.js?v=1"></script>
-  <script type="module" src="js/menu.js?v=1"></script>
-  <script type="module" src="js/app.js?v=1"></script>
-<noscript><div style='padding:16px'>Skriptlar o'chirilgan. Iltimos, JavaScript’ni yoqing.</div></noscript>
+  <!-- Login / Register Modal -->
+  <div id="authModal" class="modal" aria-hidden="true">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Kirish / Ro'yxatdan o'tish</h3>
+        <button class="btn ghost" id="closeAuth">✕</button>
+      </div>
+      <div class="panel-body">
+        <div class="tabs" role="tablist">
+          <button class="active" data-tab="login-id">ID + Parol</button>
+          <button data-tab="login-email">Email + Parol</button>
+          <button data-tab="login-phone">Telefon (SMS)</button>
+          <button data-tab="signup">Ro'yxatdan o'tish</button>
+        </div>
+        
+        <!-- ID + Password Login -->
+        <section data-pane="login-id">
+          <div class="grid two" style="margin-top:12px">
+            <div>
+              <label>Raqamli ID (1001, 1002...)</label>
+              <input type="number" id="idLoginNumeric" placeholder="Masalan: 1001"/>
+            </div>
+            <div>
+              <label>Parol</label>
+              <input type="password" id="idLoginPassword" placeholder="••••••"/>
+            </div>
+          </div>
+          <div class="row" style="justify-content:flex-end; margin-top:10px">
+            <button class="btn primary" id="btnLoginWithId">Kirish</button>
+          </div>
+          <p class="note">Eslatma: ID orqali kirish uchun profilingiz email bilan bog'langan bo'lishi kerak.</p>
+        </section>
+
+        <!-- Email + Password Login -->
+        <section data-pane="login-email" hidden>
+          <div class="grid two" style="margin-top:12px">
+            <div>
+              <label>Email</label>
+              <input type="email" id="emailLogin" placeholder="you@example.com"/>
+            </div>
+            <div>
+              <label>Parol</label>
+              <input type="password" id="emailPassword" placeholder="••••••"/>
+            </div>
+          </div>
+          <div class="row" style="justify-content:space-between; margin-top:10px">
+            <button class="btn ghost" id="btnGoogle">Google bilan</button>
+            <button class="btn primary" id="btnEmailLogin">Kirish</button>
+          </div>
+        </section>
+
+        <!-- Phone Login -->
+        <section data-pane="login-phone" hidden>
+          <div class="grid two" style="margin-top:12px">
+            <div>
+              <label>Telefon raqami (+998...)</label>
+              <input type="tel" id="phoneNumber" placeholder="+998 XX XXX XX XX"/>
+            </div>
+            <div>
+              <label>SMS Kod</label>
+              <input type="text" id="smsCode" placeholder="123456"/>
+            </div>
+          </div>
+          <div id="recaptcha-container" style="margin-top:8px"></div>
+          <div class="row" style="justify-content:space-between; margin-top:10px">
+            <button class="btn ghost" id="btnSendOtp">SMS yuborish</button>
+            <button class="btn primary" id="btnVerifyOtp">Tasdiqlash</button>
+          </div>
+          <p class="note">Telefon orqali kirishda parol talab qilinmaydi. Keyinroq email+parolni bog'lashingiz mumkin.</p>
+        </section>
+
+        <!-- Sign Up -->
+        <section data-pane="signup" hidden>
+          <div class="grid two" style="margin-top:12px">
+            <div>
+              <label>Email</label>
+              <input type="email" id="signEmail" placeholder="you@example.com"/>
+            </div>
+            <div>
+              <label>Parol</label>
+              <input type="password" id="signPassword" placeholder="Kamida 6 ta belgi"/>
+            </div>
+          </div>
+          <div class="row" style="justify-content:space-between; margin-top:10px">
+            <button class="btn ghost" id="btnGoogleSignup">Google bilan</button>
+            <button class="btn primary" id="btnSignup">Ro'yxatdan o'tish</button>
+          </div>
+        </section>
+
+        <p id="authError" class="danger" style="min-height:18px; margin-top:10px"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mandatory Profile Modal -->
+  <div id="profileModal" class="modal" aria-hidden="true">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Profil ma'lumotlari (majburiy)</h3>
+        <button class="btn ghost" id="closeProfile" title="Yopish">✕</button>
+      </div>
+      <div class="panel-body">
+        <div class="grid two">
+          <div>
+            <label>Ism</label>
+            <input id="pfFirstName" placeholder="Ism"/>
+          </div>
+          <div>
+            <label>Familiya</label>
+            <input id="pfLastName" placeholder="Familiya"/>
+          </div>
+          <div>
+            <label>Sharif (otasining ismi)</label>
+            <input id="pfMiddleName" placeholder="Sharif"/>
+          </div>
+          <div>
+            <label>Tug'ilgan sana</label>
+            <input type="date" id="pfDob"/>
+          </div>
+          <div>
+            <label>Telefon raqam</label>
+            <input id="pfPhone" placeholder="+998..."/>
+          </div>
+          <div>
+            <label>Telegram link</label>
+            <input id="pfTelegram" placeholder="https://t.me/username"/>
+          </div>
+          <div>
+            <label>Email</label>
+            <input id="pfEmail" placeholder="you@example.com"/>
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="pfRole">
+              <option value="oquvchi">O'quvchi</option>
+              <option value="oqituvchi">O'qituvchi</option>
+            </select>
+          </div>
+          <div>
+            <label>Viloyat</label>
+            <select id="pfRegion"></select>
+          </div>
+          <div>
+            <label>Tuman/Shahar</label>
+            <input id="pfDistrict" placeholder="Tuman yoki shahar"/>
+          </div>
+          <div style="grid-column:1/-1">
+            <label>Maktab</label>
+            <input id="pfSchool" placeholder="Maktab nomi yoki raqami"/>
+          </div>
+        </div>
+        <div class="row" style="justify-content:flex-end; margin-top:12px">
+          <button class="btn primary" id="btnSaveProfile">Saqlash</button>
+        </div>
+        <p class="note">Saqlangandan keyin profil ma'lumotlarini tahrirlab bo'lmaydi.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, RecaptchaVerifier, signInWithPhoneNumber, linkWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, runTransaction, query, where, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.appspot.com",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // ------- UI helpers -------
+    const $ = (s,root=document)=>root.querySelector(s);
+    const $$ = (s,root=document)=>Array.from(root.querySelectorAll(s));
+
+    const routes = [
+      {id:'home', label:'Home'},
+      {id:'tests', label:'Tests'},
+      {id:'live', label:'Live'},
+      {id:'sim', label:'Simulators'},
+      {id:'leaderboard', label:'Leaderboard'},
+      {id:'profile', label:'Profile'},
+      {id:'settings', label:'Settings'}
+    ];
+
+    function buildRoutePills(){
+      const nav = $('#routePills');
+      nav.innerHTML = routes.map(r => `<a href="#${r.id}" data-route="${r.id}">${r.label}</a>`).join('');
+    }
+
+    function setActiveRoutePill(){
+      const hash = location.hash.replace('#','')||'home';
+      $$('#routePills a').forEach(a=>a.classList.toggle('active', a.dataset.route===hash));
+    }
+
+    async function loadPartial(route){
+      const file = `partials/${route}.html`;
+      try{
+        const res = await fetch(file, {cache:'no-store'});
+        const html = res.ok ? await res.text() : `<div class="card"><h2>${route}</h2><p class="note">${file} topilmadi. Iltimos, yarating.</p></div>`;
+        $('#app').innerHTML = html;
+        window.scrollTo({top:0, behavior:'smooth'});
+      }catch(err){
+        $('#app').innerHTML = `<div class="card"><h2>Xatolik</h2><p class="danger">${err.message}</p></div>`;
+      }
+    }
+
+    function calcAge(iso){
+      if(!iso) return null;
+      const d = new Date(iso); const t = new Date();
+      let a = t.getFullYear()-d.getFullYear();
+      const m = t.getMonth()-d.getMonth();
+      if(m<0 || (m===0 && t.getDate()<d.getDate())) a--;
+      return a;
+    }
+
+    // ---------- Regions (UZ) ----------
+    const REGIONS = [
+      "Qoraqalpog'iston Respublikasi",
+      "Andijon",
+      "Buxoro",
+      "Farg'ona",
+      "Jizzax",
+      "Namangan",
+      "Navoiy",
+      "Qashqadaryo",
+      "Qoraqalpog'iston Respublikasi", // kept once above, but ensure unique later
+      "Samarqand",
+      "Sirdaryo",
+      "Surxondaryo",
+      "Toshkent viloyati",
+      "Toshkent shahri",
+      "Xorazm"
+    ].filter((v,i,a)=>a.indexOf(v)===i);
+
+    function fillRegionSelect(){
+      const sel = $('#pfRegion');
+      sel.innerHTML = REGIONS.map(r=>`<option value="${r}">${r}</option>`).join('');
+    }
+
+    // ---------- Numeric ID assignment ----------
+    async function ensureUserDoc(uid, providerEmail){
+      const uref = doc(db, 'users', uid);
+      return await runTransaction(db, async (tx)=>{
+        const snap = await tx.get(uref);
+        if(!snap.exists()){
+          // Get and increment lastNumericId
+          const cref = doc(db,'meta','counters');
+          const cs = await tx.get(cref);
+          const last = cs.exists() && cs.data().lastNumericId ? cs.data().lastNumericId : 1000;
+          const next = last + 1;
+          tx.set(cref, { lastNumericId: next }, { merge:true });
+
+          const now = new Date();
+          tx.set(uref, {
+            numericId: next,
+            createdAt: serverTimestamp(),
+            profileCompleted: false,
+            firstName: '', lastName:'', middleName:'', dob:'',
+            phone:'', telegram:'', email: providerEmail || '',
+            role:'oquvchi', region:'', district:'', school:'',
+            balance: 0, points: 0
+          }, { merge:true });
+          return {created:true, numericId: next};
+        }else{
+          return {created:false, numericId: snap.data().numericId};
+        }
+      });
+    }
+
+    async function getUserDoc(uid){
+      const s = await getDoc(doc(db,'users',uid));
+      return s.exists()? s.data(): null;
+    }
+
+    async function updateUserDoc(uid, data){
+      await updateDoc(doc(db,'users',uid), data);
+    }
+
+    function setUserUI(u, prof){
+      if(!u){
+        $('#hello').innerHTML = `Hello, Mehmon <span class="age">(—)</span>`;
+        $('#chipId').textContent = '—';
+        $('#chipBalance').textContent = '0';
+        $('#chipPoints').textContent = '0';
+        $('#btnLogin').style.display='inline-flex';
+        $('#btnLogout').style.display='none';
+        return;
+      }
+      const name = (prof?.firstName||'') + (prof?.lastName? (' '+prof.lastName):'');
+      const age = calcAge(prof?.dob);
+      $('#hello').innerHTML = `Hello, ${name||'Foydalanuvchi'} <span class="age">(${age??'—'} yosh)</span>`;
+      $('#chipId').textContent = prof?.numericId ?? '—';
+      $('#chipBalance').textContent = (prof?.balance ?? 0).toString();
+      $('#chipPoints').textContent = (prof?.points ?? 0).toString();
+      $('#btnLogin').style.display='none';
+      $('#btnLogout').style.display='inline-flex';
+    }
+
+    // ---------- Auth flows ----------
+    let recaptcha; let confirmationResult;
+
+    function openAuth(){ $('#authModal').classList.add('open'); }
+    function closeAuth(){ $('#authModal').classList.remove('open'); }
+
+    function switchAuthTab(id){
+      $$('.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
+      $$('[data-pane]').forEach(p=>p.hidden = (p.dataset.pane!==id));
+      $('#authError').textContent='';
+    }
+
+    $('#btnLogin').addEventListener('click', ()=>openAuth());
+    $('#closeAuth').addEventListener('click', ()=>closeAuth());
+
+    $$('.tabs button').forEach(b=>{
+      b.addEventListener('click', ()=>switchAuthTab(b.dataset.tab));
+    });
+
+    // Email login
+    $('#btnEmailLogin').addEventListener('click', async()=>{
+      try{
+        const email = $('#emailLogin').value.trim();
+        const pass = $('#emailPassword').value;
+        await signInWithEmailAndPassword(auth, email, pass);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+
+    // Google login
+    const provider = new GoogleAuthProvider();
+    $('#btnGoogle').addEventListener('click', async()=>{
+      try{
+        await signInWithPopup(auth, provider);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+    $('#btnGoogleSignup').addEventListener('click', async()=>{
+      try{
+        await signInWithPopup(auth, provider);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+
+    // Sign up email
+    $('#btnSignup').addEventListener('click', async()=>{
+      try{
+        const email = $('#signEmail').value.trim();
+        const pass = $('#signPassword').value;
+        await createUserWithEmailAndPassword(auth, email, pass);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+
+    // Phone login
+    function ensureRecaptcha(){
+      if(recaptcha) return;
+      recaptcha = new RecaptchaVerifier(auth, 'recaptcha-container', { size:'normal' });
+    }
+    $('#btnSendOtp').addEventListener('click', async()=>{
+      try{
+        ensureRecaptcha();
+        const phone = $('#phoneNumber').value.trim();
+        confirmationResult = await signInWithPhoneNumber(auth, phone, recaptcha);
+        $('#authError').textContent = 'SMS yuborildi.';
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+    $('#btnVerifyOtp').addEventListener('click', async()=>{
+      try{
+        const code = $('#smsCode').value.trim();
+        await confirmationResult.confirm(code);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+
+    // ID + password login: find email by numericId
+    $('#btnLoginWithId').addEventListener('click', async()=>{
+      try{
+        const num = parseInt($('#idLoginNumeric').value,10);
+        const pass = $('#idLoginPassword').value;
+        if(!num || !pass) throw new Error('ID va parol kiriting');
+        const q = query(collection(db,'users'), where('numericId','==', num));
+        const qs = await getDocs(q);
+        if(qs.empty) throw new Error('Bu ID topilmadi');
+        const data = qs.docs[0].data();
+        if(!data.email) throw new Error('Bu ID email bilan bog\'lanmagan. Email/Telefon orqali kiring.');
+        await signInWithEmailAndPassword(auth, data.email, pass);
+        closeAuth();
+      }catch(e){ $('#authError').textContent = e.message; }
+    });
+
+    // Logout
+    $('#btnLogout').addEventListener('click', async()=>{
+      await signOut(auth);
+      location.hash = '#home';
+    });
+    $('#fabLogout').addEventListener('click', async (e)=>{
+      e.preventDefault(); await signOut(auth); location.hash='#home';
+    });
+
+    // ---------- Profile Gate ----------
+    function openProfile(){ $('#profileModal').classList.add('open'); }
+    function closeProfile(){ $('#profileModal').classList.remove('open'); }
+    $('#closeProfile').addEventListener('click', ()=>{ /* majburiy - yopmaymiz */ });
+
+    $('#btnSaveProfile').addEventListener('click', async()=>{
+      try{
+        const u = auth.currentUser; if(!u) return;
+        const payload = {
+          firstName: $('#pfFirstName').value.trim(),
+          lastName: $('#pfLastName').value.trim(),
+          middleName: $('#pfMiddleName').value.trim(),
+          dob: $('#pfDob').value,
+          phone: $('#pfPhone').value.trim(),
+          telegram: $('#pfTelegram').value.trim(),
+          email: $('#pfEmail').value.trim() || (u.email||''),
+          role: $('#pfRole').value,
+          region: $('#pfRegion').value,
+          district: $('#pfDistrict').value.trim(),
+          school: $('#pfSchool').value.trim(),
+          profileCompleted: true
+        };
+        // Very basic validation
+        if(!payload.firstName || !payload.lastName || !payload.dob) throw new Error('Ism, familiya va tug\'ilgan sana majburiy.');
+        await updateUserDoc(u.uid, payload);
+        closeProfile();
+        const prof = await getUserDoc(u.uid);
+        setUserUI(u, {...prof, numericId: prof.numericId});
+      }catch(e){ alert(e.message); }
+    });
+
+    // ---------- Routing ----------
+    window.addEventListener('hashchange', ()=>{ setActiveRoutePill(); loadPartial(location.hash.replace('#','')||'home'); });
+
+    // ---------- Floating menu interactions ----------
+    const fab = $('#fab');
+    $('#fabMain').addEventListener('click', ()=>fab.classList.toggle('open'));
+    (function makeDraggable(){
+      const drag = $('#fabDrag');
+      let sx, sy, ox=0, oy=0, dragging=false;
+      const el = fab;
+      const start = (e)=>{ dragging=true; drag.style.cursor='grabbing'; sx = (e.touches? e.touches[0].clientX : e.clientX); sy = (e.touches? e.touches[0].clientY : e.clientY); ox = el.offsetLeft; oy = el.offsetTop; };
+      const move  = (e)=>{ if(!dragging) return; const x = (e.touches? e.touches[0].clientX : e.clientX); const y = (e.touches? e.touches[0].clientY : e.clientY); el.style.left = Math.max(8, Math.min(window.innerWidth-72, ox + (x-sx))) + 'px'; el.style.top = Math.max(8, Math.min(window.innerHeight-72, oy + (y-sy))) + 'px'; el.style.right='auto'; el.style.bottom='auto'; };
+      const end   = ()=>{ dragging=false; drag.style.cursor='grab'; };
+      drag.addEventListener('mousedown', start); document.addEventListener('mousemove', move); document.addEventListener('mouseup', end);
+      drag.addEventListener('touchstart', start, {passive:true}); document.addEventListener('touchmove', move, {passive:true}); document.addEventListener('touchend', end);
+    })();
+
+    // ---------- App bootstrap ----------
+    buildRoutePills(); setActiveRoutePill(); loadPartial(location.hash.replace('#','')||'home');
+    fillRegionSelect();
+
+    onAuthStateChanged(auth, async (user)=>{
+      if(!user){ setUserUI(null,null); return; }
+      // ensure document & numericId
+      const ensured = await ensureUserDoc(user.uid, user.email || null);
+      let profile = await getUserDoc(user.uid);
+
+      // If signed in by phone and wants to set a password later, provide helper (optional)
+      // Example: if user.email is null but pfEmail entered, we allow linking by calling linkWithCredential after save.
+
+      setUserUI(user, {...profile, numericId: profile?.numericId});
+
+      if(!profile?.profileCompleted){
+        // Pre-fill known fields
+        $('#pfFirstName').value = profile?.firstName || '';
+        $('#pfLastName').value = profile?.lastName || '';
+        $('#pfMiddleName').value = profile?.middleName || '';
+        $('#pfDob').value = profile?.dob || '';
+        $('#pfPhone').value = profile?.phone || (user.phoneNumber||'');
+        $('#pfTelegram').value = profile?.telegram || '';
+        $('#pfEmail').value = profile?.email || (user.email||'');
+        $('#pfRole').value = profile?.role || 'oquvchi';
+        $('#pfRegion').value = profile?.region || REGIONS[0];
+        $('#pfDistrict').value = profile?.district || '';
+        $('#pfSchool').value = profile?.school || '';
+        openProfile();
+      }
+    });
+
+  </script>
 </body>
 </html>
