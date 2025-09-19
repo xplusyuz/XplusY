@@ -4,8 +4,14 @@ import { initMenu, setActive } from "./menu.js";
 
 // mount header/footer/menu
 async function loadFragment(el, url){
-  const res = await fetch(url, { cache: "no-store" });
-  el.innerHTML = await res.text();
+  try{
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(url + " => " + res.status);
+    el.innerHTML = await res.text();
+  }catch(e){
+    console.error("[fragment]", e);
+    el.innerHTML = `<div class="card" style="margin:10px">Fragment yuklab bo'lmadi: <code>${url}</code><br/>${e?.message||e}</div>`;
+  }
 }
 
 const header = document.getElementById("header");
