@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MathCenter.uz — Xush kelibsiz</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <style>
+    :root{
+      --green:#0faf64;
+      --green-2:#14ba6e;
+      --edge:#e0f3eb;
+      --bg:#f6fffb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg)}
+    header{position:sticky;top:0;z-index:10;padding:8px 12px;background:#ffffffd9;border-bottom:1px solid #eaf7f1;backdrop-filter:saturate(150%) blur(6px)}
+    .header-inner{max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;}
+    .brand{font-weight:900;color:#0a8f52;font-size:18px;display:flex;align-items:center;gap:10px}
+    .brand .logo{width:36px;height:36px;border-radius:10px;background:radial-gradient(60% 60% at 50% 35%, #b9ffd9, #2de38d 55%, #0ea55a 100%);display:grid;place-items:center;box-shadow:0 0 28px rgba(14,175,100,.35), inset 0 0 18px rgba(255,255,255,.7)}
+    .brand .logo svg{width:22px;height:22px;fill:#fff}
+    .stats{display:flex;gap:8px;}
+    .card{background:#fff;border:1px solid var(--edge);border-radius:12px;padding:6px 10px;box-shadow:0 2px 6px rgba(0,0,0,.05);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:80px}
+    .card .label{font-size:11px;opacity:.7}
+    .card .value{font-size:13px;font-weight:800}
+    @media(max-width:768px){
+      .stats{flex-wrap:wrap;width:100%}
+      .stats .card{flex:1;min-width:0}
+      .brand{font-size:16px}
+    }
+    /* Compact mobile header (<=540px): 1 card */
+    .stats-compact{display:none}
+    @media(max-width:540px){
+      .stats{display:none}
+      .stats-compact{display:block}
+      .card .value{font-size:13px}
+      .card .label{font-size:11px}
+    }
+
+    main{max-width:1200px;margin:12px auto 96px;padding:0 12px}
+    #app .content{background:#fff;border:1px solid var(--edge);border-radius:16px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+
+    .fab{position:fixed;bottom:16px;right:16px;z-index:50}
+    .fab-btn{width:56px;height:56px;border-radius:20px;background:var(--green);color:#fff;border:none;font-size:24px;font-weight:900;box-shadow:0 10px 24px rgba(0,0,0,.2)}
+    .fab-menu{display:none;position:absolute;bottom:70px;right:0;flex-direction:column;gap:8px}
+    .fab.open .fab-menu{display:flex}
+    .chip{background:#fff;border:1px solid var(--edge);padding:10px 14px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,.08);font-weight:700}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><path d="M76 92h104c9 0 16-7 16-16s-7-16-16-16H60c-9 0-16 7-16 16s7 16 16 16h4c8 41 4 77-8 97-5 8 5 17 13 12 24-14 35-53 29-109zm57 0c7 39 3 74-8 94-5 9 6 18 14 12 24-16 35-56 28-106h-34z"/></svg>
+        </div>
+        <span>MathCenter.uz</span>
+      </div>
+      <div class="stats" id="headerStats">
+        <div class="card"><div class="label">Salom</div><div class="value" id="helloName">—</div><div class="label" id="helloAge">Yosh: —</div></div>
+        <div class="card"><div class="label">ID</div><div class="value" id="headerID">—</div></div>
+        <div class="card"><div class="label">Balans</div><div class="value" id="headerBalans">0</div></div>
+        <div class="card"><div class="label">Ball</div><div class="value" id="headerBall">0</div></div>
+      </div>
+      <div class="stats-compact" id="headerCompact"></div>
+    </div>
+  </header>
+
+  <main>
+    <div id="app"><div class="content">Yuklanmoqda...</div></div>
+  </main>
+
+  <div class="fab" id="fab">
+    <button class="fab-btn" id="fabBtn">≡</button>
+    <div class="fab-menu" id="fabMenu">
+      <button class="chip" data-route="home">Bosh sahifa</button>
+      <button class="chip" data-route="tests">Testlar</button>
+      <button class="chip" data-route="live">Live</button>
+      <button class="chip" data-route="profile">Profil</button>
+      <button class="chip" data-route="settings">Sozlamalar</button>
+    </div>
+  </div>
+
+<script>
+// Minimal router: load partials/<route>.html
+const routes = ["home","tests","live","profile","settings"];
+async function loadRoute(route){
+  const app = document.getElementById('app');
+  try{
+    const res = await fetch('partials/'+route+'.html?v='+Date.now());
+    if(!res.ok) throw new Error('404');
+    app.innerHTML = await res.text();
+  }catch(e){
+    app.innerHTML = '<div class="content"><h2>'+route+'</h2><p>Namuna sahifa.</p></div>';
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+  history.replaceState({},'', '#'+route);
+}
+window.addEventListener('hashchange',()=>{
+  const r = location.hash.replace('#','');
+  if(routes.includes(r)) loadRoute(r);
+});
+
+// FAB
+const fab=document.getElementById('fab');
+const fabBtn=document.getElementById('fabBtn');
+fabBtn.onclick=(e)=>{ e.stopPropagation(); fab.classList.toggle('open'); }
+fab.addEventListener('click',(e)=>{
+  const btn=e.target.closest('.chip'); if(!btn) return;
+  const r=btn.getAttribute('data-route'); if(!r) return;
+  loadRoute(r); fab.classList.remove('open');
+});
+
+// Header data (mock until Firebase connected)
+function updateHeader(userDoc){
+  document.getElementById('helloName').textContent=userDoc?.ism||'Sohibjon';
+  document.getElementById('helloAge').textContent='Yosh: '+(userDoc?.yosh||'26');
+  document.getElementById('headerID').textContent=userDoc?.numericId||'1002';
+  document.getElementById('headerBalans').textContent=(userDoc?.balans??0);
+  document.getElementById('headerBall').textContent=(userDoc?.ball??0);
+  // compact for mobile
+  const c=document.getElementById('headerCompact');
+  c.innerHTML = '<div class="card"><div style="width:100%">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-weight:800">Salom <span style="font-weight:900">'+(userDoc?.ism||'Sohibjon')+'</span></div><div class="label">'+('Yosh: '+(userDoc?.yosh||'26'))+'</div></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;">'+
+      '<div><div class="label">ID</div><div class="value">'+(userDoc?.numericId||'1002')+'</div></div>'+
+      '<div><div class="label">Balans</div><div class="value">'+(userDoc?.balans??0)+'</div></div>'+
+      '<div><div class="label">Ball</div><div class="value">'+(userDoc?.ball??0)+'</div></div>'+
+    '</div></div></div>';
+}
+
+// initial
+document.addEventListener('DOMContentLoaded',()=>{
+  const start = location.hash.replace('#','') || 'home';
+  updateHeader({}); // mock fill
+  loadRoute(routes.includes(start)? start: 'home');
+});
+</script>
+</body>
+</html>
