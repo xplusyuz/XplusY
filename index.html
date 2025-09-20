@@ -342,7 +342,9 @@
       const file = route && route !== 'home' ? `${route}.html` : 'home.html';
       try{
         const resp = await fetch(`./partials/${file}?v=${Date.now()}`);
-        if(!resp.ok) throw 0; const html = await resp.text(); appEl.innerHTML = html; highlight(route||'home');
+        if(!resp.ok) throw 0; const html = await resp.text(); appEl.innerHTML = html;
+        highlight(route||'home');
+        if((route||'home')==='profile'){ try{ await renderProfileView(); }catch(e){ console.warn('profile render', e); } }
       }catch(e){ appEl.innerHTML = '<div class="card">Sahifa topilmadi</div>'; }
     }
     window.addEventListener('hashchange', ()=> load(location.hash.replace('#','')));
@@ -446,6 +448,32 @@
       else{ show(loginBackdrop); document.getElementById('userBadge').hidden=true; }
     });
 
+    // ---- Profile renderer ----
+    async function renderProfileView(){
+      const u = auth.currentUser; if(!u){ appEl.querySelector('#profileReadonly')?.classList.add('hidden'); return; }
+      const d = (await getDoc(doc(db,'users',u.uid))).data(); if(!d){ return; }
+      const $ = (sel)=> appEl.querySelector(sel);
+      const full = [d.last,d.first,d.middle].filter(Boolean).join(' ');
+      const age = (iso=>{ if(!iso) return ''; const t=Date.now()-new Date(iso).getTime(); const y=Math.floor(t/31557600000); return y>0? `${y} yosh`:'' })(d.birth);
+      $('#pFull')?.replaceChildren(document.createTextNode(full||d.email||'Foydalanuvchi'));
+      $('#pAge')?.replaceChildren(document.createTextNode(age));
+      $('#pId')?.replaceChildren(document.createTextNode(d.numericId||'—'));
+      $('#pBalance')?.replaceChildren(document.createTextNode((d.balance??0))); 
+      $('#pScore')?.replaceChildren(document.createTextNode((d.score??0)));
+
+      const map = {
+        '#pRole': d.role,
+        '#pBirth': d.birth,
+        '#pPhone': d.phone,
+        '#pEmail': d.email,
+        '#pTelegram': d.telegram,
+        '#pRegion': d.region,
+        '#pDistrict': d.district,
+        '#pSchool': d.school,
+      };
+      for(const k in map){ const el=$(k); if(el){ el.textContent = map[k]||'—'; } }
+    }
+
     // boot
     load(location.hash.replace('#',''));
   </script>
@@ -459,5 +487,47 @@
     </div>
   </section>
   -->
+  <!-- =========================
+       /partials/profile.html (READONLY)
+       ========================== -->
+  <!--
+  <section id="profileReadonly" style="display:grid;gap:14px">
+    <div class="card" style="display:grid;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:56px;height:56px;border-radius:18px;display:grid;place-items:center;color:#fff;font-weight:900;background:linear-gradient(135deg,var(--brand),var(--brand-2));box-shadow:inset 0 -8px 14px rgba(0,0,0,.06)">👤</div>
+        <div style="display:flex;flex-direction:column;line-height:1.1">
+          <div style="font-weight:900;font-size:18px"><span id="pFull">—</span> <span id="pAge" style="color:var(--muted);font-size:13px"></span></div>
+          <div style="color:var(--muted);font-size:12px">Profil ma'lumotlari (o'qish rejimi)</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="chip"><small>🆔 ID</small><b id="pId">—</b></div>
+        <div class="chip"><small>💰 Balans</small><b id="pBalance">0</b></div>
+        <div class="chip"><small>🏅 Ball</small><b id="pScore">0</b></div>
+      </div>
+    </div>
+
+    <div class="card" style="display:grid;gap:10px">
+      <div style="font-weight:800">Aloqa va rol</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Rol</div><div id="pRole" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Telefon</div><div id="pPhone" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Email</div><div id="pEmail" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Telegram</div><div id="pTelegram" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Tug'ilgan sana</div><div id="pBirth" style="font-weight:900">—</div></div>
+      </div>
+    </div>
+
+    <div class="card" style="display:grid;gap:10px">
+      <div style="font-weight:800">Hudud va ta'lim</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Viloyat</div><div id="pRegion" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Tuman/Shahar</div><div id="pDistrict" style="font-weight:900">—</div></div>
+        <div style="padding:10px;border:1px solid var(--line);border-radius:14px"><div style="font-size:12px;color:var(--muted);font-weight:800">Maktab</div><div id="pSchool" style="font-weight:900">—</div></div>
+      </div>
+    </div>
+  </section>
+  -->
+
 </body>
 </html>
