@@ -18,88 +18,38 @@
     @media(min-width:900px){.hb-banner{grid-template-columns:1.2fr 1fr;padding:18px;gap:18px}.hb-banner.is-right{grid-template-columns:1fr 1.2fr}
       .hb-banner.is-right .hb-media{order:2}.hb-banner.is-right .hb-body{order:1;padding-left:8px}.hb-banner:not(.is-right) .hb-body{padding-left:8px}}
     .hb-err{border:1px solid #ffd2d2;background:#fff6f6;color:#7a1c1c;padding:12px;border-radius:12px}
-    .hb-note{font-size:12px; opacity:.7}
   </style>
-
   <div class="hb-wrap" id="hbWrap">
-    <div class="hb-banner"><div class="hb-media"></div><div class="hb-body"><div class="hb-title">Yuklanmoqda…</div><p class="hb-meta">Sheetdan bannerlar olinmoqda.</p></div></div>
+    <div class="hb-banner"><div class="hb-media"></div><div class="hb-body"><div class="hb-title">Yuklanmoqda…</div><p class="hb-meta">Bannerlar olinmoqda.</p></div></div>
   </div>
 
-  <script>
-  (function(){
-    const PUBHTML = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQIndVCL9XruGPEtjzW6yS3_RYrSOtpiyGI-f-gyOh9qo3t1Bw5QLPCX2PnKkECOw8FI78hLTL_37RZ/pubhtml?gid=0&single=true";
-    const urlCSV  = PUBHTML.replace('/pubhtml?', '/pub?') + '&output=csv';
-    const urlGVIZ = PUBHTML.replace('/pubhtml?', '/gviz/tq?') + '&tqx=out:json';
+  <script type="module">
+    import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, query, where, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.appspot.com", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
+    const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
 
     const wrap = document.getElementById('hbWrap');
-
-    function norm(h){ return (h||'').trim().toLowerCase(); }
-
-    function fromGViz(txt){
-      const s = txt.indexOf('{'), e = txt.lastIndexOf('}');
-      if(s<0||e<0) throw new Error('GVIZ: JSON topilmadi');
-      const j = JSON.parse(txt.slice(s,e+1));
-      const cols = j.table.cols.map(c=>norm(c.label));
-      const idx = n => cols.indexOf(norm(n));
-      const it = idx('title'), im = idx('meta'), ib = idx('button nomi'), il = idx('button linki'), ii = idx('img url');
-      return (j.table.rows||[]).map(r=>{
-        const c=r.c||[];
-        return {title:c[it]?.v||'', meta:c[im]?.v||'', btn:c[ib]?.v||'', link:c[il]?.v||'', img:c[ii]?.v||''};
-      }).filter(x=>x.title||x.meta||x.img);
-    }
-
-    function fromCSV(text){
-      const rows=[]; let i=0, f='', row=[], q=false;
-      while(i<text.length){ const ch=text[i];
-        if(q){ if(ch==='"'){ if(text[i+1]==='"'){f+='"'; i++;} else {q=false;} } else f+=ch; }
-        else { if(ch==='"'){q=true} else if(ch===','){row.push(f); f='';} else if(ch==='\\n'||ch==='\\r'){ if(f!==''||row.length){row.push(f); rows.push(row); f=''; row=[];} } else f+=ch; }
-        i++;
-      }
-      if(f!==''||row.length){ row.push(f); rows.push(row); }
-      if(!rows.length) return [];
-      const head = rows[0].map(norm);
-      const idx = n => head.indexOf(norm(n));
-      const it=idx('title'), im=idx('meta'), ib=idx('button nomi'), il=idx('button linki'), ii=idx('img url');
-      return rows.slice(1).map(r=>({title:r[it]||'', meta:r[im]||'', btn:r[ib]||'', link:r[il]||'', img:r[ii]||''})).filter(x=>x.title||x.meta||x.img);
-    }
-
-    function card(row,i){
-      const right = i%2 ? ' is-right':'';
-      const img = row.img ? `style="background-image:url('${row.img}');"`:'';
-      const btn = (row.btn && row.link) ? `<a class="hb-cta" href="${row.link}" target="_blank" rel="noopener">${row.btn}</a>`:'';
+    function card(v,i){
+      const right = i%2 ? ' is-right' : '';
+      const img = v.img ? `style="background-image:url('${v.img}');"` : '';
+      const btn = (v.btn && v.link) ? `<a class="hb-cta" href="${v.link}" target="_blank" rel="noopener">${v.btn}</a>` : '';
       return `<article class="hb-banner${right}">
         <div class="hb-media" ${img}></div>
         <div class="hb-body">
-          <h3 class="hb-title">${row.title||'—'}</h3>
-          <p class="hb-meta">${row.meta||''}</p>
+          <h3 class="hb-title">${v.title||'—'}</h3>
+          <p class="hb-meta">${v.meta||''}</p>
           ${btn}
-          <div class="hb-note">Manba: ${row.img ? 'rasm bor' : 'rasm yo‘q'}</div>
         </div>
         <span class="hb-badge">Reklama</span>
       </article>`;
     }
 
-    async function load(){
-      try{
-        // Try GVIZ first (ko'pincha barqaror)
-        const r1 = await fetch(urlGVIZ, {mode:'cors'});
-        const t1 = await r1.text();
-        const list1 = fromGViz(t1);
-        if(list1.length){ wrap.innerHTML = list1.map(card).join(''); return; }
-        // Fallback CSV
-        const r2 = await fetch(urlCSV, {mode:'cors'});
-        const t2 = await r2.text();
-        const list2 = fromCSV(t2);
-        if(list2.length){ wrap.innerHTML = list2.map(card).join(''); return; }
-        throw new Error('Hech qanday qator topilmadi (GVIZ ham, CSV ham bo‘sh).');
-      }catch(err){
-        wrap.innerHTML = `<div class="hb-err"><b>Bannerlarni yuklab bo'lmadi.</b><br>${err.message}<br>
-          <div style="margin-top:6px">Tekshirish havolalari: <a href="${urlGVIZ}" target="_blank">GVIZ</a> | <a href="${urlCSV}" target="_blank">CSV</a>.
-          Sarlavhalar: <code>Title | Meta | Button nomi | Button linki | Img url</code>. Rasm uchun <b>to‘g‘ridan-to‘g‘ri</b> jpg/png URL kiriting.</div></div>`;
-        console.error(err);
-      }
-    }
-    load();
-  })();
+    const q = query(collection(db,"home_banners"), where("active","==", true), orderBy("createdAt","desc"));
+    onSnapshot(q, (snap)=>{
+      const arr = []; snap.forEach(d=>arr.push(d.data()));
+      wrap.innerHTML = arr.length ? arr.map(card).join('') : '<div class="hb-err">Banner topilmadi.</div>';
+    }, (err)=>{ wrap.innerHTML = '<div class="hb-err">Firestore o‘qishda xato: '+err.message+'</div>'; });
   </script>
 </section>
