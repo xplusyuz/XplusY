@@ -1,871 +1,153 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="uz">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XPlusY - Ta'lim Platformasi</title>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <style>
-        /* Asosiy CSS loyihasi */
-        :root {
-            --white-granite: linear-gradient(135deg, #f5f7fa 0%, #e4e6eb 100%);
-            --green-granite: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            --dark-text: #2d3436;
-            --light-text: #ffffff;
-            --accent: #00b894;
-            --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        body {
-            background: var(--white-granite);
-            color: var(--dark-text);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        
-        /* Header va navigatsiya */
-        header {
-            background: var(--green-granite);
-            padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            box-shadow: var(--shadow);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .logo {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--light-text);
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        .nav-toggle {
-            display: none;
-            background: none;
-            border: none;
-            color: var(--light-text);
-            font-size: 1.5rem;
-            cursor: pointer;
-        }
-        
-        nav {
-            display: flex;
-            gap: 2rem;
-        }
-        
-        nav a {
-            color: var(--light-text);
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            padding: 0.5rem 1rem;
-            border-radius: 50px;
-        }
-        
-        nav a:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        
-        .user-card {
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 15px;
-            padding: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            box-shadow: var(--shadow);
-        }
-        
-        .user-info h3 {
-            font-size: 1.2rem;
-            margin-bottom: 0.2rem;
-        }
-        
-        .user-info p {
-            font-size: 0.9rem;
-            color: #636e72;
-        }
-        
-        .user-stats {
-            display: flex;
-            gap: 1rem;
-        }
-        
-        .stat {
-            text-align: center;
-        }
-        
-        .stat-value {
-            font-weight: 700;
-            color: var(--accent);
-        }
-        
-        /* Asosiy kontent */
-        main {
-            padding: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .hero {
-            background: var(--green-granite);
-            border-radius: 20px;
-            padding: 3rem;
-            text-align: center;
-            color: var(--light-text);
-            margin-bottom: 3rem;
-            box-shadow: var(--shadow);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .hero h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        .hero p {
-            font-size: 1.2rem;
-            max-width: 700px;
-            margin: 0 auto 2rem;
-        }
-        
-        .btn {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            border-radius: 50px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-        
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-        }
-        
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-bottom: 3rem;
-        }
-        
-        .feature-card {
-            background: white;
-            border-radius: 15px;
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            transition: all 0.3s ease;
-        }
-        
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
-        }
-        
-        .feature-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: var(--accent);
-        }
-        
-        /* Modal oynalar */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 2000;
-            justify-content: center;
-            align-items: center;
-            backdrop-filter: blur(5px);
-        }
-        
-        .modal-content {
-            background: var(--white-granite);
-            border-radius: 20px;
-            padding: 2rem;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            position: relative;
-            animation: modalFadeIn 0.5s;
-        }
-        
-        @keyframes modalFadeIn {
-            from { opacity: 0; transform: translateY(-50px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .close-modal {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: var(--dark-text);
-        }
-        
-        .modal h2 {
-            text-align: center;
-            margin-bottom: 2rem;
-            color: var(--accent);
-        }
-        
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-        
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 1rem;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .form-group input:focus,
-        .form-group select:focus {
-            border-color: var(--accent);
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.3);
-        }
-        
-        .form-switch {
-            text-align: center;
-            margin-top: 1rem;
-        }
-        
-        .form-switch a {
-            color: var(--accent);
-            text-decoration: none;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        
-        /* Profil sahifasi */
-        .profile {
-            display: none;
-            background: white;
-            border-radius: 20px;
-            padding: 2rem;
-            box-shadow: var(--shadow);
-            margin-bottom: 2rem;
-        }
-        
-        .profile-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid #eee;
-        }
-        
-        .profile-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-        }
-        
-        .info-item {
-            margin-bottom: 1rem;
-        }
-        
-        .info-item label {
-            font-weight: 600;
-            color: #636e72;
-            display: block;
-            margin-bottom: 0.3rem;
-        }
-        
-        .info-item p {
-            font-size: 1.1rem;
-        }
-        
-        /* Responsive dizayn */
-        @media (max-width: 768px) {
-            .nav-toggle {
-                display: block;
-            }
-            
-            nav {
-                position: fixed;
-                top: 70px;
-                right: -100%;
-                background: var(--green-granite);
-                width: 80%;
-                height: calc(100vh - 70px);
-                flex-direction: column;
-                padding: 2rem;
-                transition: all 0.4s ease;
-            }
-            
-            nav.active {
-                right: 0;
-            }
-            
-            .hero h1 {
-                font-size: 2rem;
-            }
-            
-            .user-card {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .user-stats {
-                justify-content: center;
-            }
-        }
-    </style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1, viewport-fit=cover"/>
+  <title>MathCenter.uz</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+  <link rel="stylesheet" href="/css/style.css?v=1758369821"/>
 </head>
 <body>
-    <!-- Header qismi -->
+  <!-- Splash (3s) -->
+  <div id="splash">
+    <div class="logo-wrap">
+      <img src="/assets/logo.svg" alt="MathCenter logo"/>
+      <h1>MathCenter.uz</h1>
+      <p>Xush kelibsiz!</p>
+    </div>
+  </div>
+
+  <div id="app-shell">
     <header>
-        <div class="logo">XPlusY</div>
-        <button class="nav-toggle">☰</button>
-        <nav>
-            <a href="#">Bosh sahifa</a>
-            <a href="#">Kurslar</a>
-            <a href="#">Reyting</a>
-            <a href="#">Yordam</a>
-        </nav>
-        <div class="user-card" id="userCard" style="display: none;">
-            <div class="user-info">
-                <h3 id="userName">Ism Familiya</h3>
-                <p id="userAge">X yosh</p>
-            </div>
-            <div class="user-stats">
-                <div class="stat">
-                    <div class="stat-value" id="userId">1001</div>
-                    <div>ID</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="userBalance">0</div>
-                    <div>Balans</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="userPoints">0</div>
-                    <div>Ball</div>
-                </div>
-            </div>
+      <div class="header-left">
+        <button id="btn-menu" class="button" title="Menyu">☰</button>
+        <a href="#/home" class="logo" id="btn-home">
+          <img src="/assets/logo.svg" alt="logo"/>
+          <span>MathCenter</span>
+        </a>
+        <div class="header-hello">
+          <span class="primary">Hello, Mehmon</span>
+          <span class="meta">—</span>
         </div>
+      </div>
+      <div class="header-right">
+        <div id="header-mini" class="mini-card"></div>
+        <button id="btn-profile" class="button">Profil</button>
+        <button id="btn-login" class="button">Kirish</button>
+      </div>
     </header>
 
-    <!-- Asosiy kontent -->
-    <main>
-        <section class="hero">
-            <h1>XPlusY Ta'lim Platformasiga Xush Kelibsiz!</h1>
-            <p>O'qishingizni yanada qiziqarli va samarali qilish uchun ajoyib imkoniyatlar</p>
-            <button class="btn" id="startLearning">Hoziroq Boshlash</button>
-        </section>
+    <!-- Drawer (desktop optional) -->
+    <aside id="drawer">
+      <nav class="grid">
+        <a class="nav-link" href="#/home">Bosh sahifa</a>
+        <a class="nav-link" id="nav-tests" href="#/tests">Testlar</a>
+        <a class="nav-link" id="nav-live" href="#/live">Live test</a>
+        <a class="nav-link" id="nav-about" href="#/about">Haqimizda</a>
+        <a class="nav-link" href="#/profile">Profil</a>
+      </nav>
+    </aside>
 
-        <section class="features">
-            <div class="feature-card">
-                <h3>Interaktiv Darslar</h3>
-                <p>Har xil fanlar bo'yicha interaktiv darslar va mashqlar</p>
-            </div>
-            <div class="feature-card">
-                <h3>Reyting Tizimi</h3>
-                <p>O'z bilimingizni boshqalar bilan solishtiring va mukofotlar yuting</p>
-            </div>
-            <div class="feature-card">
-                <h3>Shaxsiy Statistika</h3>
-                <p>O'qish jarayoningizni kuzatib boring va yutuqlaringizni baham ko'ring</p>
-            </div>
-        </section>
+    <main id="app"></main>
 
-        <!-- Profil bo'limi -->
-        <section class="profile" id="profileSection">
-            <div class="profile-header">
-                <h2>Shaxsiy Ma'lumotlar</h2>
-            </div>
-            <div class="profile-info">
-                <div class="info-item">
-                    <label>Ism</label>
-                    <p id="profileFirstName"></p>
-                </div>
-                <div class="info-item">
-                    <label>Familiya</label>
-                    <p id="profileLastName"></p>
-                </div>
-                <div class="info-item">
-                    <label>Sharif</label>
-                    <p id="profileMiddleName"></p>
-                </div>
-                <div class="info-item">
-                    <label>Tug'ilgan sana</label>
-                    <p id="profileBirthDate"></p>
-                </div>
-                <div class="info-item">
-                    <label>Telefon raqam</label>
-                    <p id="profilePhone"></p>
-                </div>
-                <div class="info-item">
-                    <label>Telegram</label>
-                    <p id="profileTelegram"></p>
-                </div>
-                <div class="info-item">
-                    <label>Email</label>
-                    <p id="profileEmail"></p>
-                </div>
-                <div class="info-item">
-                    <label>Status</label>
-                    <p id="profileStatus"></p>
-                </div>
-                <div class="info-item">
-                    <label>Viloyat</label>
-                    <p id="profileRegion"></p>
-                </div>
-                <div class="info-item">
-                    <label>Tuman/Shahar</label>
-                    <p id="profileDistrict"></p>
-                </div>
-                <div class="info-item">
-                    <label>Maktab</label>
-                    <p id="profileSchool"></p>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Kirish modali -->
-    <div class="modal" id="loginModal">
-        <div class="modal-content">
-            <button class="close-modal" id="closeLogin">&times;</button>
-            <h2>Tizimga Kirish</h2>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="loginId">Foydalanuvchi ID</label>
-                    <input type="text" id="loginId" required placeholder="ID raqamingizni kiriting">
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Parol</label>
-                    <input type="password" id="loginPassword" required placeholder="Parolingizni kiriting">
-                </div>
-                <button type="submit" class="btn" style="width: 100%;">Kirish</button>
-                <div class="form-switch">
-                    Akkauntingiz yo'qmi? <a id="switchToRegister">Ro'yxatdan o'tish</a>
-                </div>
-            </form>
-        </div>
+    <!-- Floating touch menu -->
+    <div id="fab" title="Tez menyu">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 7a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H8a1 1 0 110-2h3V8a1 1 0 011-1z"/></svg>
     </div>
-
-    <!-- Ro'yxatdan o'tish modali -->
-    <div class="modal" id="registerModal">
-        <div class="modal-content">
-            <button class="close-modal" id="closeRegister">&times;</button>
-            <h2>Ro'yxatdan O'tish</h2>
-            <form id="registerForm">
-                <div class="form-group">
-                    <label for="regEmail">Email manzil</label>
-                    <input type="email" id="regEmail" required placeholder="email@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="regPhone">Telefon raqam</label>
-                    <input type="tel" id="regPhone" required placeholder="+998901234567">
-                </div>
-                <div class="form-group">
-                    <label for="regPassword">Parol</label>
-                    <input type="password" id="regPassword" required placeholder="Kuchli parol yarating">
-                </div>
-                <div class="form-group">
-                    <label for="regConfirmPassword">Parolni tasdiqlash</label>
-                    <input type="password" id="regConfirmPassword" required placeholder="Parolni takrorlang">
-                </div>
-                <button type="submit" class="btn" style="width: 100%;">Ro'yxatdan o'tish</button>
-                <div class="form-switch">
-                    Akkauntingiz bormi? <a id="switchToLogin">Tizimga kirish</a>
-                </div>
-            </form>
-        </div>
+    <div id="fab-menu">
+      <a class="fab-item" href="#/tests">📊 Testlar</a>
+      <a class="fab-item" href="#/live">🟢 Live</a>
+      <a class="fab-item" href="#/profile">🧑‍💼 Profil</a>
     </div>
+  </div>
 
-    <!-- Profilni to'ldirish modali -->
-    <div class="modal" id="profileModal">
-        <div class="modal-content">
-            <h2>Profil Ma'lumotlarini To'ldiring</h2>
-            <form id="profileForm">
-                <div class="form-group">
-                    <label for="firstName">Ism</label>
-                    <input type="text" id="firstName" required>
-                </div>
-                <div class="form-group">
-                    <label for="lastName">Familiya</label>
-                    <input type="text" id="lastName" required>
-                </div>
-                <div class="form-group">
-                    <label for="middleName">Sharif</label>
-                    <input type="text" id="middleName" required>
-                </div>
-                <div class="form-group">
-                    <label for="birthDate">Tug'ilgan sana</label>
-                    <input type="date" id="birthDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="phone">Telefon raqam</label>
-                    <input type="tel" id="phone" required>
-                </div>
-                <div class="form-group">
-                    <label for="telegram">Telegram username</label>
-                    <input type="text" id="telegram" placeholder="@username">
-                </div>
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="status">Siz kim sifatida ro'yxatdan o'tyapsiz?</label>
-                    <select id="status" required>
-                        <option value="">Tanlang</option>
-                        <option value="teacher">O'qituvchi</option>
-                        <option value="student">O'quvchi</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="region">Viloyat</label>
-                    <select id="region" required>
-                        <option value="">Viloyatni tanlang</option>
-                        <option value="andijon">Andijon viloyati</option>
-                        <option value="buxoro">Buxoro viloyati</option>
-                        <option value="fargona">Farg'ona viloyati</option>
-                        <option value="jizzax">Jizzax viloyati</option>
-                        <option value="xorazm">Xorazm viloyati</option>
-                        <option value="namangan">Namangan viloyati</option>
-                        <option value="navoiy">Navoiy viloyati</option>
-                        <option value="qashqadaryo">Qashqadaryo viloyati</option>
-                        <option value="qoraqalpogiston">Qoraqalpog'iston Respublikasi</option>
-                        <option value="samarqand">Samarqand viloyati</option>
-                        <option value="sirdaryo">Sirdaryo viloyati</option>
-                        <option value="surxondaryo">Surxondaryo viloyati</option>
-                        <option value="toshkent">Toshkent viloyati</option>
-                        <option value="toshkent-shahri">Toshkent shahri</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="district">Tuman/Shahar</label>
-                    <select id="district" required disabled>
-                        <option value="">Avval viloyatni tanlang</option>
-                    </div>
-                <div class="form-group">
-                    <label for="school">Maktab</label>
-                    <input type="text" id="school" required>
-                </div>
-                <button type="submit" class="btn" style="width: 100%;">Saqlash</button>
+  <!-- LOGIN MODAL -->
+  <div class="modal" id="modal-login" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <strong>Kirish / Roʻyxatdan oʻtish</strong>
+        <button id="modal-login-close" class="button secondary">Yopish</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid two">
+          <div>
+            <h3>ID + Parol</h3>
+            <form id="login-id-form" class="grid">
+              <input class="input" id="login-id" required placeholder="ID (masalan 1001)"/>
+              <input class="input" id="login-pass" required type="password" placeholder="Parol"/>
+              <button class="button">Kirish</button>
+              <span id="login-id-error" style="color:#b91c1c"></span>
             </form>
+          </div>
+          <div>
+            <h3>Email / Google / Telefon</h3>
+            <form id="reg-email-form" class="grid">
+              <input class="input" id="reg-email" type="email" placeholder="Email"/>
+              <input class="input" id="reg-pass" type="password" placeholder="Parol"/>
+              <button class="button">Email bilan roʻyxatdan oʻtish</button>
+              <span id="reg-email-error" style="color:#b91c1c"></span>
+            </form>
+            <button id="btn-google" class="button" style="margin-top:8px">Google orqali</button>
+            <div class="grid" style="margin-top:10px">
+              <input class="input" id="reg-phone" type="tel" placeholder="+99890..."/>
+              <button id="phone-send" class="button">Telefon orqali</button>
+              <div id="recaptcha-container"></div>
+              <span id="reg-phone-error" style="color:#b91c1c"></span>
+            </div>
+          </div>
         </div>
+        <p style="color:#64748b;margin-top:8px">Eslatma: ID bilan kirish uchun admin sizga ID va parol bergan bo‘lishi kerak. Email/Google/Telefonda roʻyxatdan o‘tgach, profilni toʻldirish shart.</p>
+      </div>
     </div>
+  </div>
 
-    <script>
-        // Firebase konfiguratsiyasi
-        const firebaseConfig = {
-            apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-            authDomain: "xplusy-760fa.firebaseapp.com",
-            projectId: "xplusy-760fa",
-            storageBucket: "xplusy-760fa.appspot.com",
-            messagingSenderId: "992512966017",
-            appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-            measurementId: "G-459PLJ7P7L"
-        };
-        
-        // Firebase ni ishga tushirish
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        
-        // DOM elementlari
-        const loginModal = document.getElementById('loginModal');
-        const registerModal = document.getElementById('registerModal');
-        const profileModal = document.getElementById('profileModal');
-        const profileSection = document.getElementById('profileSection');
-        const userCard = document.getElementById('userCard');
-        const closeLogin = document.getElementById('closeLogin');
-        const closeRegister = document.getElementById('closeRegister');
-        const switchToRegister = document.getElementById('switchToRegister');
-        const switchToLogin = document.getElementById('switchToLogin');
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
-        const profileForm = document.getElementById('profileForm');
-        const regionSelect = document.getElementById('region');
-        const districtSelect = document.getElementById('district');
-        
-        // Tumanlar ma'lumotlari
-        const districtsByRegion = {
-            andijon: ["Andijon shahri", "Andijon tumani", "Asaka tumani", "Baliqchi tumani", "Buloqboshi tumani", "Bo'z tumani", "Jalaquduq tumani", "Izbosgan tumani", "Qo'rg'ontepa tumani", "Marhamat tumani", "Oltinko'l tumani", "Paxtaobod tumani", "Ulug'nor tumani", "Xo'jaobod tumani", "Xonabod tumani"],
-            buxoro: ["Buxoro shahri", "Buxoro tumani", "Vobkent tumani", "G'ijduvon tumani", "Jondor tumani", "Kogon tumani", "Qorako'l tumani", "Qorovulbozor tumani", "Olot tumani", "Peshku tumani", "Romitan tumani", "Shofirkon tumani", "Qoraqo'l tumani"],
-            fargona: ["Farg'ona shahri", "Farg'ona tumani", "Beshariq tumani", "Bog'dod tumani", "Buvayda tumani", "Dang'ara tumani", "Yozyovon tumani", "Quva tumani", "Quvasoy shahri", "Qo'qon shahri", "Qo'shtepa tumani", "Marg'ilon shahri", "Oltiariq tumani", "Rishton tumani", "So'x tumani", "Toshloq tumani", "Uchko'prik tumani", "O'zbekiston tumani", "Furqat tumani"],
-            jizzax: ["Jizzax shahri", "Jizzax tumani", "Arnasoy tumani", "Baxmal tumani", "Do'stlik tumani", "Forish tumani", "G'allaorol tumani", "Sharof Rashidov tumani", "Mirzacho'l tumani", "Paxtakor tumani", "Yangiobod tumani", "Zomin tumani", "Zafarobod tumani", "Zarbdor tumani"],
-            xorazm: ["Urganch shahri", "Urganch tumani", "Bog'ot tumani", "Gurlan tumani", "Qo'shko'pir tumani", "Xiva tumani", "Xonqa tumani", "Hazorasp tumani", "Shovot tumani", "Yangiariq tumani", "Yangibozor tumani"],
-            namangan: ["Namangan shahri", "Namangan tumani", "Kosonsoy tumani", "Mingbuloq tumani", "Norin tumani", "Pop tumani", "To'raqo'rg'on tumani", "Uchqo'rg'on tumani", "Chortoq tumani", "Chust tumani", "Yangiqo'rg'on tumani"],
-            navoiy: ["Navoiy shahri", "Navoiy tumani", "Zarafshon shahri", "Qiziltepa tumani", "Konimex tumani", "Xatirchi tumani", "Nurota tumani", "Tomdi tumani", "Uchquduq tumani"],
-            qashqadaryo: ["Qarshi shahri", "Qarshi tumani", "Dehqonobod tumani", "Kasbi tumani", "Kitob tumani", "Koson tumani", "Mirishkor tumani", "Muborak tumani", "Nishon tumani", "Chiroqchi tumani", "Shahrisabz tumani", "Yakkabog' tumani"],
-            qoraqalpogiston: ["Nukus shahri", "Amudaryo tumani", "Beruniy tumani", "Chimboy tumani", "Ellikqala tumani", "Kegayli tumani", "Mo'ynoq tumani", "Nukus tumani", "Qonliko'l tumani", "Qo'ng'irot tumani", "Shumanay tumani", "Taxtako'pir tumani", "To'rtko'l tumani", "Xo'jayli tumani"],
-            samarqand: ["Samarqand shahri", "Samarqand tumani", "Bulung'ur tumani", "Jomboy tumani", "Ishtixon tumani", "Kattaqo'rg'on tumani", "Qo'shrabot tumani", "Narpay tumani", "Nurobod tumani", "Oqdaryo tumani", "Paxtachi tumani", "Payariq tumani", "Pastdarg'om tumani", "Urgut tumani", "Toyloq tumani"],
-            sirdaryo: ["Guliston shahri", "Guliston tumani", "Boyovut tumani", "Mirzaobod tumani", "Oqoltin tumani", "Sayxunobod tumani", "Sardoba tumani", "Xovos tumani", "Sirdaryo tumani"],
-            surxondaryo: ["Termiz shahri", "Termiz tumani", "Angor tumani", "Boysun tumani", "Denov tumani", "Jarqo'rg'on tumani", "Qiziriq tumani", "Qumqo'rg'on tumani", "Muzrabot tumani", "Oltinsoy tumani", "Sariosiyo tumani", "Sherobod tumani", "Sho'rchi tumani", "Uzun tumani"],
-            toshkent: ["Angren shahri", "Bekobod shahri", "Olmaliq shahri", "Ohangaron shahri", "Chirchiq shahri", "Yangiyo'l shahri", "Bekobod tumani", "Bo'ka tumani", "Bo'stonliq tumani", "Zangiota tumani", "Qibray tumani", "Quyichirchiq tumani", "Oqqo'rg'on tumani", "Ohangaron tumani", "Parkent tumani", "Piskent tumani", "Toshkent tumani", "O'rta Chirchiq tumani", "Chinoz tumani", "Yuqori Chirchiq tumani", "Yangiyo'l tumani"],
-            "toshkent-shahri": ["Yunusobod tumani", "Mirzo Ulug'bek tumani", "Mirobod tumani", "Sergeli tumani", "Olmazor tumani", "Uchtepa tumani", "Shayxontohur tumani", "Yashnobod tumani", "Chilonzor tumani", "Yakkasaroy tumani", "Bektemir tumani"]
-        };
-        
-        // Modal oynalarni boshqarish
-        function openModal(modal) {
-            modal.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        }
-        
-        function closeModal(modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-        
-        // Tumanlarni yangilash
-        regionSelect.addEventListener('change', function() {
-            const region = this.value;
-            districtSelect.innerHTML = '';
-            
-            if (region && districtsByRegion[region]) {
-                districtSelect.removeAttribute('disabled');
-                districtsByRegion[region].forEach(district => {
-                    const option = document.createElement('option');
-                    option.value = district;
-                    option.textContent = district;
-                    districtSelect.appendChild(option);
-                });
-            } else {
-                districtSelect.setAttribute('disabled', 'disabled');
-                const option = document.createElement('option');
-                option.textContent = 'Avval viloyatni tanlang';
-                districtSelect.appendChild(option);
-            }
-        });
-        
-        // Modal oynalarni ochish/yopish
-        closeLogin.addEventListener('click', () => closeModal(loginModal));
-        closeRegister.addEventListener('click', () => closeModal(registerModal));
-        switchToRegister.addEventListener('click', () => {
-            closeModal(loginModal);
-            openModal(registerModal);
-        });
-        switchToLogin.addEventListener('click', () => {
-            closeModal(registerModal);
-            openModal(loginModal);
-        });
-        
-        // Ro'yxatdan o'tish
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const email = document.getElementById('regEmail').value;
-            const phone = document.getElementById('regPhone').value;
-            const password = document.getElementById('regPassword').value;
-            const confirmPassword = document.getElementById('regConfirmPassword').value;
-            
-            if (password !== confirmPassword) {
-                alert('Parollar mos kelmadi!');
-                return;
-            }
-            
-            try {
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-                
-                // Telefon raqamni saqlash
-                await user.updateProfile({
-                    phoneNumber: phone
-                });
-                
-                closeModal(registerModal);
-                openModal(profileModal);
-            } catch (error) {
-                console.error('Xatolik:', error);
-                alert(`Ro'yxatdan o'tishda xatolik: ${error.message}`);
-            }
-        });
-        
-        // Kirish
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const loginId = document.getElementById('loginId').value;
-            const password = document.getElementById('loginPassword').value;
-            
-            try {
-                // ID orqali foydalanuvchini topish
-                const usersSnapshot = await db.collection('users')
-                    .where('userId', '==', parseInt(loginId))
-                    .get();
-                
-                if (usersSnapshot.empty) {
-                    alert('Foydalanuvchi topilmadi!');
-                    return;
-                }
-                
-                const userDoc = usersSnapshot.docs[0];
-                const userData = userDoc.data();
-                
-                // Email orqali kirish
-                await auth.signInWithEmailAndPassword(userData.email, password);
-                
-                closeModal(loginModal);
-                updateUI();
-            } catch (error) {
-                console.error('Xatolik:', error);
-                alert(`Kirishda xatolik: ${error.message}`);
-            }
-        });
-        
-        // Profil ma'lumotlarini saqlash
-        profileForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const user = auth.currentUser;
-            if (!user) return;
-            
-            const firstName = document.getElementById('firstName').value;
-            const lastName = document.getElementById('lastName').value;
-            const middleName = document.getElementById('middleName').value;
-            const birthDate = document.getElementById('birthDate').value;
-            const phone = document.getElementById('phone').value;
-            const telegram = document.getElementById('telegram').value;
-            const email = document.getElementById('email').value;
-            const status = document.getElementById('status').value;
-            const region = document.getElementById('region').value;
-            const district = document.getElementById('district').value;
-            const school = document.getElementById('school').value;
-            
-            // Yoshi hisoblash
-            const birthDateObj = new Date(birthDate);
-            const ageDiff = Date.now() - birthDateObj.getTime();
-            const ageDate = new Date(ageDiff);
-            const age = Math.abs(ageDate.getUTCFullYear() - 1970);
-            
-            try {
-                // User ID yaratish (1001, 1002, ...)
-                const usersCount = await db.collection('users').get();
-                const userId = 1001 + usersCount.size;
-                
-                // Foydalanuvchi ma'lumotlarini saqlash
-                await db.collection('users').doc(user.uid).set({
-                    userId,
-                    firstName,
-                    lastName,
-                    middleName,
-                    birthDate,
-                    age,
-                    phone,
-                    telegram,
-                    email,
-                    status,
-                    region,
-                    district,
-                    school,
-                    balance: 0,
-                    points: 0,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                
-                closeModal(profileModal);
-                updateUI();
-            } catch (error) {
-                console.error('Xatolik:', error);
-                alert(`Ma'lumotlarni saqlashda xatolik: ${error.message}`);
-            }
-        });
-        
-        // UI ni yangilash
-        async function updateUI() {
-            const user = auth.currentUser;
-            if (!user) return;
-            
-            const userDoc = await db.collection('users').doc(user.uid).get();
-            if (!userDoc.exists) {
-                openModal(profileModal);
-                return;
-            }
-            
-            const userData = userDoc.data();
-            
-            // Foydalanuvchi kartasi
-            document.getElementById('userName').textContent = `${userData.firstName} ${userData.lastName}`;
-            document.getElementById('userAge').textContent = `${userData.age} yosh`;
-            document.getElementById('userId').textContent = userData.userId;
-            document.getElementById('userBalance').textContent = userData.balance;
-            document.getElementById('userPoints').textContent = userData.points;
-            userCard.style.display = 'flex';
-            
-            // Profil ma'lumotlari
-            document.getElementById('profileFirstName').textContent = userData.firstName;
-            document.getElementById('profileLastName').textContent = userData.lastName;
-            document.getElementById('profileMiddleName').textContent = userData.middleName;
-            document.getElementById('profileBirthDate').textContent = userData.birthDate;
-            document.getElementById('profilePhone').textContent = userData.phone;
-            document.getElementById('profileTelegram').textContent = userData.telegram;
-            document.getElementById('profileEmail').textContent = userData.email;
-            document.getElementById('profileStatus').textContent = userData.status === 'teacher' ? "O'qituvchi" : "O'quvchi";
-            document.getElementById('profileRegion').textContent = document.querySelector(`#region option[value="${userData.region}"]`).textContent;
-            document.getElementById('profileDistrict').textContent = userData.district;
-            document.getElementById('profileSchool').textContent = userData.school;
-            profileSection.style.display = 'block';
-        }
-        
-        // Auth holatini kuzatish
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                updateUI();
-            } else {
-                openModal(loginModal);
-                userCard.style.display = 'none';
-                profileSection.style.display = 'none';
-            }
-        });
-        
-        // Mobil menyu
-        document.querySelector('.nav-toggle').addEventListener('click', () => {
-            document.querySelector('nav').classList.toggle('active');
-        });
-        
-        // Tizimga kirish tugmasi
-        document.getElementById('startLearning').addEventListener('click', () => {
-            if (auth.currentUser) {
-                alert("Darslarni ko'rish sahifasiga o'ting!");
-            } else {
-                openModal(loginModal);
-            }
-        });
-    </script>
+  <!-- PROFILE MODAL (first login required) -->
+  <div class="modal" id="modal-profile" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <strong>Profilni toʻldiring (majburiy)</strong>
+        <button id="modal-profile-close" class="button secondary">Yopish</button>
+      </div>
+      <form id="profile-form">
+        <div class="modal-body">
+          <div class="grid two">
+            <input name="firstName" class="input" placeholder="Ism" required/>
+            <input name="lastName" class="input" placeholder="Familiya" required/>
+            <input name="patronymic" class="input" placeholder="Sharif"/>
+            <input name="birthDate" class="input" type="date" placeholder="Tugʻilgan sana" required/>
+            <input name="phone" class="input" type="tel" placeholder="Telefon raqam" required/>
+            <input name="telegram" class="input" placeholder="Telegram link (ixtiyoriy)"/>
+            <input name="email" class="input" type="email" placeholder="Email (agar bo‘lsa)"/>
+            <select name="role" class="input" required>
+              <option value="" disabled selected>Rolni tanlang</option>
+              <option value="Oʻquvchi">Oʻquvchi</option>
+              <option value="Oʻqituvchi">Oʻqituvchi</option>
+            </select>
+            <div>
+              <label>Viloyat</label>
+              <select id="region" name="region" class="input" required></select>
+            </div>
+            <div id="district-wrap">
+              <div style="display:none">
+                <label>Tuman/Shahar</label>
+                <select id="district-select" name="districtSelect" class="input"></select>
+              </div>
+              <div>
+                <label>Tuman/Shahar (qoʻlda)</label>
+                <input id="district-input" name="districtInput" class="input" placeholder="Masalan: Namangan shahri"/>
+              </div>
+            </div>
+            <input name="school" class="input" placeholder="Maktab (masalan: 12-maktab)"/>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="button" type="submit">Saqlash</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/auth.js?v=1758369821"></script>
 </body>
 </html>
