@@ -1,492 +1,871 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>X+Y — MathCenter SPA</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <style>
-    :root{
-      --brand:#12b67c; --brand-2:#1dd492; --brand-3:#0aa267;
-      --text:#0b1b14; --muted:#6c7a73; --card:#fff; --line:#e6f4ed;
-      --bg-1:#f7fffb; --bg-2:#eafff5; --glass:rgba(255,255,255,.7);
-      --radius:22px; --r12:14px; --r10:12px; --r8:10px;
-      --shadow-lg:0 24px 60px rgba(18,182,124,.18);
-      --shadow-md:0 14px 30px rgba(18,182,124,.18);
-      --shadow-sm:0 8px 16px rgba(18,182,124,.15);
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; font-family:Inter,system-ui,-apple-system; color:var(--text);
-      background:
-        radial-gradient(800px 400px at -10% -10%, #ebfff6 0%, rgba(235,255,246,0) 60%),
-        radial-gradient(1200px 600px at 110% -20%, #e6fff2 0%, rgba(230,255,242,0) 60%),
-        linear-gradient(160deg, #ffffff 0%, #f7fffb 50%, #ebfff6 100%);
-    }
-    a{color:inherit; text-decoration:none}
-
-    /* ====== Animations ====== */
-    @keyframes fadeUp { from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
-    @keyframes slideIn { from{transform:translateX(-100%)} to{transform:translateX(0)} }
-
-    /* ====== Topbar ====== */
-    .topbar{
-      position:sticky; top:0; z-index:50;
-      display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; padding:12px clamp(10px,2vw,18px);
-      border-bottom:1px solid var(--line);
-      backdrop-filter:blur(10px);
-      background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.75));
-    }
-    .brand{display:flex; align-items:center; gap:12px; min-width:0}
-    .pi{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:900;font-size:20px;
-        background:conic-gradient(from 220deg, var(--brand), var(--brand-2), var(--brand));
-        box-shadow: inset 0 -10px 16px rgba(0,0,0,.06), var(--shadow-sm)}
-    .title{font-weight:900; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-
-    .nav-btn{border:none;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;padding:10px 14px;border-radius:14px;cursor:pointer;font-weight:900;box-shadow:var(--shadow-sm)}
-    .nav-btn:active{transform:translateY(1px)}
-
-    /* ====== User badge ====== */
-    .user-badge{display:grid; grid-template-columns:auto auto; gap:12px; align-items:center; animation:fadeUp .35s ease both}
-    .hello{display:flex; flex-direction:column; line-height:1.05; min-width:0}
-    .hello .hi{font-weight:900; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-    .hello .sub{font-size:12px; color:var(--muted)}
-
-    .kpi{display:flex; gap:10px; flex-wrap:nowrap; overflow:auto; scrollbar-width:none}
-    .kpi::-webkit-scrollbar{display:none}
-    .chip{position:relative; padding:10px 12px; border-radius:16px; background:linear-gradient(180deg,#ffffff,#f6fffb); display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; border:1px solid var(--line); box-shadow: 0 10px 20px rgba(0,0,0,.04), 0 16px 34px rgba(18,182,124,.16), inset 0 -10px 14px rgba(0,0,0,.03);} .chip::before{content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; background:linear-gradient(180deg, rgba(18,182,124,.25), rgba(18,182,124,0)); opacity:.6; mix-blend:soft-light} .chip small{font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; font-size:11px; line-height:1} .chip b{font-weight:900; font-size:16px; line-height:1} .chip .meta{display:flex; align-items:center; gap:6px} .chip .ic{width:16px; height:16px; display:inline-grid; place-items:center} .chip .val{font-variant-numeric:tabular-nums; letter-spacing:.2px}
-    .chip::before{content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
-      background:linear-gradient(180deg, rgba(18,182,124,.25), rgba(18,182,124,0)); opacity:.6; mix-blend:soft-light}
-    .chip small{font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; font-size:11px}
-    .chip b{font-weight:900; font-size:15px}
-
-    /* ====== Drawer ====== */
-    .drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.25); display:none; z-index:55}
-    .drawer{position:fixed; inset:0 auto 0 0; width:320px; background:var(--card); border-right:1px solid var(--line);
-            transform:translateX(-100%); transition:transform .25s ease; z-index:60; display:flex; flex-direction:column;
-            box-shadow:var(--shadow-lg)}
-    .drawer.open{transform:translateX(0)}
-    .drawer header{padding:18px; font-weight:900; background:linear-gradient(135deg,#f1fff8,#fff); border-bottom:1px solid var(--line)}
-    .nav{display:flex; flex-direction:column; gap:6px; padding:12px}
-    .nav a{padding:12px 14px; border-radius:14px; font-weight:700}
-    .nav a:hover{background:#f0fff7}
-    .nav a.active{background:linear-gradient(135deg,#eafff4,#f7fffb); outline:1px solid #e8f6ef}
-
-    /* ====== App ====== */
-    #app{padding: clamp(12px,2.2vw,20px); max-width:1120px; margin:0 auto}
-    .card{background:var(--card); border-radius: var(--radius); padding:18px; border:1px solid var(--line); box-shadow:var(--shadow-md); animation:fadeUp .35s ease both}
-
-    /* ====== Modals ====== */
-    .modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:80}
-    .modal{width:min(560px, 94vw); background:#fff; border-radius:22px; box-shadow:0 30px 60px rgba(0,0,0,.25); overflow:hidden}
-    .modal header{padding:16px 18px; font-weight:900; background:linear-gradient(135deg,#ebfff6,#fff)}
-    .modal .body{padding:18px; display:grid; gap:12px}
-    .row{display:grid; gap:8px}
-    .row.inline{grid-template-columns:1fr 1fr; gap:12px}
-    label{font-size:13px; color:#406055; font-weight:800}
-    input, select{width:100%; padding:12px 12px; border-radius:12px; border:1px solid #d9efe4; outline:none; background:#fbfffd}
-    input:focus, select:focus{border-color:#bdebd8; box-shadow:0 0 0 3px #e6fff4}
-    .btn{padding:12px 14px; border-radius:12px; border:none; font-weight:900; cursor:pointer}
-    .btn.primary{background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:#fff; box-shadow:var(--shadow-sm)}
-    .btn.ghost{background:#f1fff8}
-    .actions{display:flex; justify-content:flex-end; gap:10px; padding-top:6px}
-
-    /* ====== Mobile tweaks ====== */
-    @media (max-width:740px){ .topbar{grid-template-columns:1fr; row-gap:10px; padding:8px 10px; background:#fff} .title{font-size:12px} .user-badge{grid-template-columns:1fr; gap:8px} .hello .hi{font-size:12px} .hello .sub{font-size:11px} .kpi{flex-direction:column; gap:8px} .chip{width:100%; padding:8px 10px} .chip small{font-size:10px; letter-spacing:.2px} .chip b{font-size:14px} } @media (max-width:480px){ .pi{width:38px;height:38px;border-radius:14px} .nav-btn{padding:8px 12px; border-radius:12px} .title{font-size:11px} }
-  .title{font-size:13px}
-  /* Badge pastga tushadi, hamma narsa tagma-tag aniq ko'rinadi */
-  .user-badge{grid-template-columns:1fr; gap:8px}
-  .hello .hi{font-size:13px}
-  .hello .sub{font-size:11px}
-  .kpi{flex-direction:column; gap:8px}
-  .chip{width:100%; padding:8px 10px}
-  .chip small{font-size:10px; letter-spacing:.2px}
-  .chip b{font-size:13px; font-variant-numeric:tabular-nums; letter-spacing:.2px}
-}
-
-/* Yanada ixcham ekranlar (<=480px) uchun, chiplar vizual ajralib tursin */
-@media (max-width:480px){
-  .pi{width:40px;height:40px;border-radius:14px}
-  .nav-btn{padding:8px 12px; border-radius:12px}
-  .title{font-size:12px}
-}
-      .title{font-size:14px}
-      .user-badge{grid-template-columns:1fr}
-      .chip b{font-size:14px}
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XPlusY - Ta'lim Platformasi</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <style>
+        /* Asosiy CSS loyihasi */
+        :root {
+            --white-granite: linear-gradient(135deg, #f5f7fa 0%, #e4e6eb 100%);
+            --green-granite: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --dark-text: #2d3436;
+            --light-text: #ffffff;
+            --accent: #00b894;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: var(--white-granite);
+            color: var(--dark-text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Header va navigatsiya */
+        header {
+            background: var(--green-granite);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--light-text);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--light-text);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        nav {
+            display: flex;
+            gap: 2rem;
+        }
+        
+        nav a {
+            color: var(--light-text);
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+        }
+        
+        nav a:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .user-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: var(--shadow);
+        }
+        
+        .user-info h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.2rem;
+        }
+        
+        .user-info p {
+            font-size: 0.9rem;
+            color: #636e72;
+        }
+        
+        .user-stats {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-weight: 700;
+            color: var(--accent);
+        }
+        
+        /* Asosiy kontent */
+        main {
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .hero {
+            background: var(--green-granite);
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            color: var(--light-text);
+            margin-bottom: 3rem;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 700px;
+            margin: 0 auto 2rem;
+        }
+        
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+        }
+        
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent);
+        }
+        
+        /* Modal oynalar */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background: var(--white-granite);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: modalFadeIn 0.5s;
+        }
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .close-modal {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--dark-text);
+        }
+        
+        .modal h2 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: var(--accent);
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.3);
+        }
+        
+        .form-switch {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .form-switch a {
+            color: var(--accent);
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        /* Profil sahifasi */
+        .profile {
+            display: none;
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+        
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .profile-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .info-item {
+            margin-bottom: 1rem;
+        }
+        
+        .info-item label {
+            font-weight: 600;
+            color: #636e72;
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        
+        .info-item p {
+            font-size: 1.1rem;
+        }
+        
+        /* Responsive dizayn */
+        @media (max-width: 768px) {
+            .nav-toggle {
+                display: block;
+            }
+            
+            nav {
+                position: fixed;
+                top: 70px;
+                right: -100%;
+                background: var(--green-granite);
+                width: 80%;
+                height: calc(100vh - 70px);
+                flex-direction: column;
+                padding: 2rem;
+                transition: all 0.4s ease;
+            }
+            
+            nav.active {
+                right: 0;
+            }
+            
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .user-card {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .user-stats {
+                justify-content: center;
+            }
+        }
+    </style>
 </head>
 <body>
-  <!-- Topbar -->
-  <div class="topbar">
-    <div class="brand">
-      <button id="btnOpen" class="nav-btn" aria-label="Menyuni ochish">≡</button>
-      <div class="pi" aria-hidden="true">π</div>
-      <div class="title">X+Y — MathCenter</div>
+    <!-- Header qismi -->
+    <header>
+        <div class="logo">XPlusY</div>
+        <button class="nav-toggle">☰</button>
+        <nav>
+            <a href="#">Bosh sahifa</a>
+            <a href="#">Kurslar</a>
+            <a href="#">Reyting</a>
+            <a href="#">Yordam</a>
+        </nav>
+        <div class="user-card" id="userCard" style="display: none;">
+            <div class="user-info">
+                <h3 id="userName">Ism Familiya</h3>
+                <p id="userAge">X yosh</p>
+            </div>
+            <div class="user-stats">
+                <div class="stat">
+                    <div class="stat-value" id="userId">1001</div>
+                    <div>ID</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="userBalance">0</div>
+                    <div>Balans</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="userPoints">0</div>
+                    <div>Ball</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Asosiy kontent -->
+    <main>
+        <section class="hero">
+            <h1>XPlusY Ta'lim Platformasiga Xush Kelibsiz!</h1>
+            <p>O'qishingizni yanada qiziqarli va samarali qilish uchun ajoyib imkoniyatlar</p>
+            <button class="btn" id="startLearning">Hoziroq Boshlash</button>
+        </section>
+
+        <section class="features">
+            <div class="feature-card">
+                <h3>Interaktiv Darslar</h3>
+                <p>Har xil fanlar bo'yicha interaktiv darslar va mashqlar</p>
+            </div>
+            <div class="feature-card">
+                <h3>Reyting Tizimi</h3>
+                <p>O'z bilimingizni boshqalar bilan solishtiring va mukofotlar yuting</p>
+            </div>
+            <div class="feature-card">
+                <h3>Shaxsiy Statistika</h3>
+                <p>O'qish jarayoningizni kuzatib boring va yutuqlaringizni baham ko'ring</p>
+            </div>
+        </section>
+
+        <!-- Profil bo'limi -->
+        <section class="profile" id="profileSection">
+            <div class="profile-header">
+                <h2>Shaxsiy Ma'lumotlar</h2>
+            </div>
+            <div class="profile-info">
+                <div class="info-item">
+                    <label>Ism</label>
+                    <p id="profileFirstName"></p>
+                </div>
+                <div class="info-item">
+                    <label>Familiya</label>
+                    <p id="profileLastName"></p>
+                </div>
+                <div class="info-item">
+                    <label>Sharif</label>
+                    <p id="profileMiddleName"></p>
+                </div>
+                <div class="info-item">
+                    <label>Tug'ilgan sana</label>
+                    <p id="profileBirthDate"></p>
+                </div>
+                <div class="info-item">
+                    <label>Telefon raqam</label>
+                    <p id="profilePhone"></p>
+                </div>
+                <div class="info-item">
+                    <label>Telegram</label>
+                    <p id="profileTelegram"></p>
+                </div>
+                <div class="info-item">
+                    <label>Email</label>
+                    <p id="profileEmail"></p>
+                </div>
+                <div class="info-item">
+                    <label>Status</label>
+                    <p id="profileStatus"></p>
+                </div>
+                <div class="info-item">
+                    <label>Viloyat</label>
+                    <p id="profileRegion"></p>
+                </div>
+                <div class="info-item">
+                    <label>Tuman/Shahar</label>
+                    <p id="profileDistrict"></p>
+                </div>
+                <div class="info-item">
+                    <label>Maktab</label>
+                    <p id="profileSchool"></p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Kirish modali -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <button class="close-modal" id="closeLogin">&times;</button>
+            <h2>Tizimga Kirish</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginId">Foydalanuvchi ID</label>
+                    <input type="text" id="loginId" required placeholder="ID raqamingizni kiriting">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Parol</label>
+                    <input type="password" id="loginPassword" required placeholder="Parolingizni kiriting">
+                </div>
+                <button type="submit" class="btn" style="width: 100%;">Kirish</button>
+                <div class="form-switch">
+                    Akkauntingiz yo'qmi? <a id="switchToRegister">Ro'yxatdan o'tish</a>
+                </div>
+            </form>
+        </div>
     </div>
-    <div></div>
-    <div class="user-badge" id="userBadge" hidden>
-      <div class="hello">
-        <div class="hi">Salom, <span id="helloName">Mehmon</span> <span id="helloAge"></span></div>
-        <div class="sub">Xush kelibsiz!</div>
-      </div>
-      <div class="kpi">
-        <div class="chip"><div class="meta"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="13" y2="9"/><line x1="7" y1="13" x2="11" y2="13"/></svg></span><small>ID</small></div><b class="val" id="chipId">—</b></div>
-        <div class="chip"><div class="meta"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v2"/><circle cx="16" cy="14" r="2"/></svg></span><small>Balans</small></div><b class="val" id="chipBalance">0</b></div>
-        <div class="chip"><div class="meta"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><circle cx="12" cy="8" r="5"/></svg></span><small>Ball</small></div><b class="val" id="chipScore">0</b></div>
-      </div>
+
+    <!-- Ro'yxatdan o'tish modali -->
+    <div class="modal" id="registerModal">
+        <div class="modal-content">
+            <button class="close-modal" id="closeRegister">&times;</button>
+            <h2>Ro'yxatdan O'tish</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="regEmail">Email manzil</label>
+                    <input type="email" id="regEmail" required placeholder="email@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="regPhone">Telefon raqam</label>
+                    <input type="tel" id="regPhone" required placeholder="+998901234567">
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">Parol</label>
+                    <input type="password" id="regPassword" required placeholder="Kuchli parol yarating">
+                </div>
+                <div class="form-group">
+                    <label for="regConfirmPassword">Parolni tasdiqlash</label>
+                    <input type="password" id="regConfirmPassword" required placeholder="Parolni takrorlang">
+                </div>
+                <button type="submit" class="btn" style="width: 100%;">Ro'yxatdan o'tish</button>
+                <div class="form-switch">
+                    Akkauntingiz bormi? <a id="switchToLogin">Tizimga kirish</a>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
 
-  <!-- Drawer + backdrop -->
-  <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
-  <aside id="drawer" class="drawer" aria-hidden="true">
-    <header>Menyu</header>
-    <nav class="nav">
-      <a href="#home" data-route="home" class="active">🏠 Bosh sahifa</a>
-      <a href="#tests" data-route="tests">🧪 Testlar</a>
-      <a href="#live" data-route="live">📡 Live</a>
-      <a href="#sim" data-route="sim">🧩 Simulator</a>
-      <a href="#leader" data-route="leader">🏆 Reyting</a>
-      <a href="#profile" data-route="profile">👤 Profil</a>
-      <a href="#settings" data-route="settings">⚙️ Sozlamalar</a>
-      <a href="#admin" data-route="admin">🛡️ Admin</a>
-      <a href="#logout" id="btnLogout">↩️ Chiqish</a>
-    </nav>
-  </aside>
-
-  <!-- App container -->
-  <main id="app"><div class="card">Yuklanmoqda…</div></main>
-
-  <!-- Login Modal (ID + Parol) -->
-  <div id="loginBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
-    <div class="modal" role="document">
-      <header>ID orqali kirish</header>
-      <div class="body">
-        <div class="row inline">
-          <div>
-            <label for="loginId">ID (1001…)</label>
-            <input id="loginId" type="number" inputmode="numeric" placeholder="Masalan, 1001" />
-          </div>
-          <div>
-            <label for="loginPass">Parol</label>
-            <input id="loginPass" type="password" placeholder="••••••••" />
-          </div>
+    <!-- Profilni to'ldirish modali -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content">
+            <h2>Profil Ma'lumotlarini To'ldiring</h2>
+            <form id="profileForm">
+                <div class="form-group">
+                    <label for="firstName">Ism</label>
+                    <input type="text" id="firstName" required>
+                </div>
+                <div class="form-group">
+                    <label for="lastName">Familiya</label>
+                    <input type="text" id="lastName" required>
+                </div>
+                <div class="form-group">
+                    <label for="middleName">Sharif</label>
+                    <input type="text" id="middleName" required>
+                </div>
+                <div class="form-group">
+                    <label for="birthDate">Tug'ilgan sana</label>
+                    <input type="date" id="birthDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Telefon raqam</label>
+                    <input type="tel" id="phone" required>
+                </div>
+                <div class="form-group">
+                    <label for="telegram">Telegram username</label>
+                    <input type="text" id="telegram" placeholder="@username">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="status">Siz kim sifatida ro'yxatdan o'tyapsiz?</label>
+                    <select id="status" required>
+                        <option value="">Tanlang</option>
+                        <option value="teacher">O'qituvchi</option>
+                        <option value="student">O'quvchi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="region">Viloyat</label>
+                    <select id="region" required>
+                        <option value="">Viloyatni tanlang</option>
+                        <option value="andijon">Andijon viloyati</option>
+                        <option value="buxoro">Buxoro viloyati</option>
+                        <option value="fargona">Farg'ona viloyati</option>
+                        <option value="jizzax">Jizzax viloyati</option>
+                        <option value="xorazm">Xorazm viloyati</option>
+                        <option value="namangan">Namangan viloyati</option>
+                        <option value="navoiy">Navoiy viloyati</option>
+                        <option value="qashqadaryo">Qashqadaryo viloyati</option>
+                        <option value="qoraqalpogiston">Qoraqalpog'iston Respublikasi</option>
+                        <option value="samarqand">Samarqand viloyati</option>
+                        <option value="sirdaryo">Sirdaryo viloyati</option>
+                        <option value="surxondaryo">Surxondaryo viloyati</option>
+                        <option value="toshkent">Toshkent viloyati</option>
+                        <option value="toshkent-shahri">Toshkent shahri</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="district">Tuman/Shahar</label>
+                    <select id="district" required disabled>
+                        <option value="">Avval viloyatni tanlang</option>
+                    </div>
+                <div class="form-group">
+                    <label for="school">Maktab</label>
+                    <input type="text" id="school" required>
+                </div>
+                <button type="submit" class="btn" style="width: 100%;">Saqlash</button>
+            </form>
         </div>
-        <div class="actions">
-          <button class="btn ghost" id="openRegister">Ro'yxatdan o'tish</button>
-          <button class="btn primary" id="doLogin">Kirish</button>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Register Modal (email + Google + Phone) -->
-  <div id="regBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
-    <div class="modal" role="document">
-      <header>Ro'yxatdan o'tish</header>
-      <div class="body">
-        <div class="row">
-          <label for="regEmail">Email</label>
-          <input id="regEmail" type="email" placeholder="email@example.com" />
-        </div>
-        <div class="row inline">
-          <div>
-            <label for="regPass">Parol</label>
-            <input id="regPass" type="password" placeholder="Kamida 6 belgidan" />
-          </div>
-          <div>
-            <label for="regPass2">Parol (takror)</label>
-            <input id="regPass2" type="password" placeholder="Parolni takrorlang" />
-          </div>
-        </div>
-        <div class="row">
-          <button class="btn ghost" id="regWithGoogle">Google bilan</button>
-          <button class="btn ghost" id="regWithPhone">Telefon raqam bilan</button>
-        </div>
-        <div class="actions">
-          <button class="btn" id="cancelReg">Bekor qilish</button>
-          <button class="btn primary" id="createEmailUser">Ro'yxatdan o'tish</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Profile Modal (majburiy) -->
-  <div id="profileBackdrop" class="modal-backdrop" role="dialog" aria-modal="true">
-    <div class="modal" role="document">
-      <header>Profil ma'lumotlari (majburiy)</header>
-      <div class="body">
-        <div class="row inline">
-          <div>
-            <label for="pLast">Familiya</label>
-            <input id="pLast" type="text" placeholder="Familiya"/>
-          </div>
-          <div>
-            <label for="pFirst">Ism</label>
-            <input id="pFirst" type="text" placeholder="Ism"/>
-          </div>
-        </div>
-        <div class="row inline">
-          <div>
-            <label for="pMiddle">Sharif</label>
-            <input id="pMiddle" type="text" placeholder="Sharif"/>
-          </div>
-          <div>
-            <label for="pBirth">Tug'ilgan sana</label>
-            <input id="pBirth" type="date"/>
-          </div>
-        </div>
-        <div class="row inline">
-          <div>
-            <label for="pPhone">Telefon</label>
-            <input id="pPhone" type="tel" placeholder="+998 xx xxx xx xx"/>
-          </div>
-          <div>
-            <label for="pTelegram">Telegram link</label>
-            <input id="pTelegram" type="url" placeholder="https://t.me/username"/>
-          </div>
-        </div>
-        <div class="row inline">
-          <div>
-            <label for="pEmail">Email</label>
-            <input id="pEmail" type="email" placeholder="email@example.com"/>
-          </div>
-          <div>
-            <label for="pRole">Roli</label>
-            <select id="pRole">
-              <option value="oquvchi">O'quvchi</option>
-              <option value="oqituvchi">O'qituvchi</option>
-            </select>
-          </div>
-        </div>
-        <div class="row">
-          <label for="pRegion">Viloyat</label>
-          <select id="pRegion"></select>
-        </div>
-        <div class="row">
-          <label for="pDistrict">Tuman/Shahar</label>
-          <select id="pDistrict"></select>
-        </div>
-        <div class="row">
-          <label for="pSchool">Maktab</label>
-          <input id="pSchool" type="text" placeholder="Masalan, 23-maktab"/>
-        </div>
-        <div class="actions">
-          <button class="btn" id="cancelProfile">Chiqish</button>
-          <button class="btn primary" id="saveProfile">Saqlash</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Firebase SDK + App JS -->
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, query, where, getDocs, collection, runTransaction } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-      authDomain: "xplusy-760fa.firebaseapp.com",
-      projectId: "xplusy-760fa",
-      storageBucket: "xplusy-760fa.appspot.com",
-      messagingSenderId: "992512966017",
-      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-      measurementId: "G-459PLJ7P7L"
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    // Backdrop helper
-    const backdrop = document.getElementById('drawerBackdrop');
-    function showBackdrop(){ backdrop.hidden=false; backdrop.style.display='block'; }
-    function hideBackdrop(){ backdrop.style.display='none'; backdrop.hidden=true; }
-
-    // Drawer logic
-    const drawer = document.getElementById('drawer');
-    const btnOpen = document.getElementById('btnOpen');
-    function openDrawer(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); showBackdrop(); }
-    function closeDrawer(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); hideBackdrop(); }
-    btnOpen.addEventListener('click', ()=> drawer.classList.contains('open') ? closeDrawer() : openDrawer());
-    backdrop.addEventListener('click', closeDrawer);
-    drawer.addEventListener('click', (e)=>{ if(e.target.matches('a[data-route]')) closeDrawer(); });
-
-    // Regions & districts
-    const REGIONS = {
-      "Qoraqalpog'iston Respublikasi": ["Amudaryo","Beruniy","Chimboy","Ellikqal'a","Kegeyli","Mo'ynoq","Nukus sh.","Nukus t.","Qo'ng'irot","Qorao'zak","Shumanay","Taxtako'pir","To'rtko'l","Xo'jayli"],
-      "Andijon": ["Andijon sh.","Andijon t.","Asaka","Baliqchi","Bo'z","Buloqboshi","Izboskan","Jalaquduq","Qo'rg'ontepa","Marhamat","Oltinko'l","Paxtaobod","Shahrixon","Xo'jaobod","Ulug'nor"],
-      "Buxoro": ["Buxoro sh.","Buxoro t.","G'ijduvon","Jondor","Kogon sh.","Kogon t.","Qorako'l","Qorovulbozor","Peshku","Romitan","Shofirkon","Vobkent"],
-      "Farg'ona": ["Farg'ona sh.","Farg'ona t.","Beshariq","Bog'dod","Buvayda","Dang'ara","Furqat","Oltiariq","Qo'shtepa","Quva","Quvasoy","Rishton","Shohimardon","So'x","Toshloq","Uchko'prik","Yozyovon"],
-      "Jizzax": ["Jizzax sh.","Arnasoy","Baxmal","Do'stlik","Forish","G'allaorol","Mirzacho'l","Paxtakor","Yangiobod","Zafarobod","Zarbdor","Zomin"],
-      "Qashqadaryo": ["Qarshi sh.","Qarshi t.","Chiroqchi","Dehqonobod","G'uzor","Kasbi","Kitob","Koson","Mirishkor","Muborak","Nishon","Shahrisabz","Yakkabog'"],
-      "Namangan": ["Namangan sh.","Namangan t.","Chortoq","Chust","Mingbuloq","Norin","Pop","To'raqo'rg'on","Uchqo'rg'on","Uychi","Yangiqo'rg'on"],
-      "Navoiy": ["Navoiy sh.","Konimex","Karmana","Qiziltepa","Navbahor","Nurota","Tomdi","Uchquduq","Zarafshon"],
-      "Samarqand": ["Samarqand sh.","Bulung'ur","Ishtixon","Jomboy","Kattaqo'rg'on sh.","Kattaqo'rg'on t.","Narpay","Nurobod","Oqdaryo","Paxtachi","Payariq","Pastdarg'om","Samarkand t.","Toyloq","Urgut"],
-      "Surxondaryo": ["Termiz sh.","Angor","Bandixon","Boysun","Denov","Jarqo'rg'on","Qiziriq","Muzrabot","Oltinsoy","Sariosiyo","Sherobod","Sho'rchi","Termiz t."],
-      "Sirdaryo": ["Guliston sh.","Guliston t.","Baxt","Boyovut","Hovos","Mirzaobod","Sayxunobod","Sardoba","Shirin","Sirdaryo t.","Yangiyer"],
-      "Toshkent viloyati": ["Nurafshon","Angren","Bekobod","Bo'stonliq","Bo'ka","Chinoz","Ohangaron","Oqqo'rg'on","Parkent","Piskent","Qibray","Quyichirchiq","Yangiyo'l","Yuqorichirchiq","Zangiota","Chirchiq","Toshkent t."],
-      "Toshkent shahri": ["Bektemir","Chilonzor","Mirobod","Mirzo Ulug'bek","Olmazor","Sergeli","Shayxontohur","Uchtepa","Yakkasaroy","Yashnobod","Yunusobod"],
-      "Xorazm": ["Urganch sh.","Urganch t.","Bog'ot","Gurlan","Hazorasp","Honqa","Qo'shko'pir","Shovot","Xiva","Xonqa","Yangiariq","Yangibozor"]
-    };
-
-    // Router
-    const appEl = document.getElementById('app');
-    const navLinks = document.querySelectorAll('.nav a[data-route]');
-    function highlight(route){ navLinks.forEach(a=>a.classList.toggle('active', a.dataset.route===route)); }
-    async function load(route){
-      const file = route && route !== 'home' ? `${route}.html` : 'home.html';
-      try{
-        const resp = await fetch(`./partials/${file}?v=${Date.now()}`);
-        if(!resp.ok) throw 0; const html = await resp.text(); appEl.innerHTML = html;
-        highlight(route||'home');
-        if((route||'home')==='profile'){ try{ await renderProfileView(); }catch(e){ console.warn('profile render', e); } }
-      }catch(e){ appEl.innerHTML = '<div class="card">Sahifa topilmadi</div>'; }
-    }
-    window.addEventListener('hashchange', ()=> load(location.hash.replace('#','')));
-
-    // Auth / Modals
-    const show = el => el.style.display='flex';
-    const hide = el => el.style.display='none';
-    const loginBackdrop = document.getElementById('loginBackdrop');
-    const regBackdrop = document.getElementById('regBackdrop');
-    const profileBackdrop = document.getElementById('profileBackdrop');
-
-    document.getElementById('openRegister').addEventListener('click', ()=>{ hide(loginBackdrop); show(regBackdrop); });
-    document.getElementById('cancelReg').addEventListener('click', ()=>{ hide(regBackdrop); show(loginBackdrop); });
-
-    async function loginWithIdPassword(numericId, pass){
-      const q = query(collection(db,'users'), where('numericId','==', Number(numericId)));
-      const snap = await getDocs(q);
-      if(snap.empty) throw new Error('ID topilmadi');
-      const data = snap.docs[0].data();
-      if(!data.email) throw new Error('Email bog'lanmagan');
-      return await signInWithEmailAndPassword(auth, data.email, pass);
-    }
-    document.getElementById('doLogin').addEventListener('click', async ()=>{
-      const id = document.getElementById('loginId').value.trim();
-      const pass = document.getElementById('loginPass').value.trim();
-      try{ if(!id||!pass) throw new Error('ID va parol kiriting'); await loginWithIdPassword(id, pass); hide(loginBackdrop);}catch(err){ alert(err.message); }
-    });
-
-    document.getElementById('regWithGoogle').addEventListener('click', async ()=>{
-      try{ const prov=new GoogleAuthProvider(); const res=await signInWithPopup(auth, prov); await ensureUserDocument(res.user, res.user.email||null); hide(regBackdrop); show(profileBackdrop);}catch(err){ alert(err.message); }
-    });
-    document.getElementById('regWithPhone').addEventListener('click', ()=>{ alert('Telefon raqam bilan ro'yxatdan o'tish uchun reCAPTCHA integratsiyasi talab qilinadi. Keyingi bosqichda qo'shamiz.'); });
-    document.getElementById('createEmailUser').addEventListener('click', async ()=>{
-      const email = document.getElementById('regEmail').value.trim();
-      const pass = document.getElementById('regPass').value.trim();
-      const pass2 = document.getElementById('regPass2').value.trim();
-      try{ if(!email||!pass) throw new Error('Email va parol kiriting'); if(pass!==pass2) throw new Error('Parollar mos emas');
-        const cred = await createUserWithEmailAndPassword(auth, email, pass); await ensureUserDocument(cred.user, email); hide(regBackdrop); show(profileBackdrop);
-      }catch(err){ alert(err.message); }
-    });
-
-    async function ensureUserDocument(user, email){
-      const uref = doc(db,'users', user.uid);
-      const u = await getDoc(uref);
-      if(!u.exists()){
-        await runTransaction(db, async (tx)=>{
-          const sref = doc(db,'settings','counters');
-          const s = await tx.get(sref);
-          const nextId = (s.exists()? (s.data().nextNumericId||1001) : 1001);
-          tx.set(sref, { nextNumericId: nextId+1 }, { merge:true });
-          tx.set(uref, { uid:user.uid, numericId:nextId, createdAt:serverTimestamp(), email, balance:0, score:0, profileCompleted:false }, { merge:true });
+    <script>
+        // Firebase konfiguratsiyasi
+        const firebaseConfig = {
+            apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+            authDomain: "xplusy-760fa.firebaseapp.com",
+            projectId: "xplusy-760fa",
+            storageBucket: "xplusy-760fa.appspot.com",
+            messagingSenderId: "992512966017",
+            appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+            measurementId: "G-459PLJ7P7L"
+        };
+        
+        // Firebase ni ishga tushirish
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        // DOM elementlari
+        const loginModal = document.getElementById('loginModal');
+        const registerModal = document.getElementById('registerModal');
+        const profileModal = document.getElementById('profileModal');
+        const profileSection = document.getElementById('profileSection');
+        const userCard = document.getElementById('userCard');
+        const closeLogin = document.getElementById('closeLogin');
+        const closeRegister = document.getElementById('closeRegister');
+        const switchToRegister = document.getElementById('switchToRegister');
+        const switchToLogin = document.getElementById('switchToLogin');
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const profileForm = document.getElementById('profileForm');
+        const regionSelect = document.getElementById('region');
+        const districtSelect = document.getElementById('district');
+        
+        // Tumanlar ma'lumotlari
+        const districtsByRegion = {
+            andijon: ["Andijon shahri", "Andijon tumani", "Asaka tumani", "Baliqchi tumani", "Buloqboshi tumani", "Bo'z tumani", "Jalaquduq tumani", "Izbosgan tumani", "Qo'rg'ontepa tumani", "Marhamat tumani", "Oltinko'l tumani", "Paxtaobod tumani", "Ulug'nor tumani", "Xo'jaobod tumani", "Xonabod tumani"],
+            buxoro: ["Buxoro shahri", "Buxoro tumani", "Vobkent tumani", "G'ijduvon tumani", "Jondor tumani", "Kogon tumani", "Qorako'l tumani", "Qorovulbozor tumani", "Olot tumani", "Peshku tumani", "Romitan tumani", "Shofirkon tumani", "Qoraqo'l tumani"],
+            fargona: ["Farg'ona shahri", "Farg'ona tumani", "Beshariq tumani", "Bog'dod tumani", "Buvayda tumani", "Dang'ara tumani", "Yozyovon tumani", "Quva tumani", "Quvasoy shahri", "Qo'qon shahri", "Qo'shtepa tumani", "Marg'ilon shahri", "Oltiariq tumani", "Rishton tumani", "So'x tumani", "Toshloq tumani", "Uchko'prik tumani", "O'zbekiston tumani", "Furqat tumani"],
+            jizzax: ["Jizzax shahri", "Jizzax tumani", "Arnasoy tumani", "Baxmal tumani", "Do'stlik tumani", "Forish tumani", "G'allaorol tumani", "Sharof Rashidov tumani", "Mirzacho'l tumani", "Paxtakor tumani", "Yangiobod tumani", "Zomin tumani", "Zafarobod tumani", "Zarbdor tumani"],
+            xorazm: ["Urganch shahri", "Urganch tumani", "Bog'ot tumani", "Gurlan tumani", "Qo'shko'pir tumani", "Xiva tumani", "Xonqa tumani", "Hazorasp tumani", "Shovot tumani", "Yangiariq tumani", "Yangibozor tumani"],
+            namangan: ["Namangan shahri", "Namangan tumani", "Kosonsoy tumani", "Mingbuloq tumani", "Norin tumani", "Pop tumani", "To'raqo'rg'on tumani", "Uchqo'rg'on tumani", "Chortoq tumani", "Chust tumani", "Yangiqo'rg'on tumani"],
+            navoiy: ["Navoiy shahri", "Navoiy tumani", "Zarafshon shahri", "Qiziltepa tumani", "Konimex tumani", "Xatirchi tumani", "Nurota tumani", "Tomdi tumani", "Uchquduq tumani"],
+            qashqadaryo: ["Qarshi shahri", "Qarshi tumani", "Dehqonobod tumani", "Kasbi tumani", "Kitob tumani", "Koson tumani", "Mirishkor tumani", "Muborak tumani", "Nishon tumani", "Chiroqchi tumani", "Shahrisabz tumani", "Yakkabog' tumani"],
+            qoraqalpogiston: ["Nukus shahri", "Amudaryo tumani", "Beruniy tumani", "Chimboy tumani", "Ellikqala tumani", "Kegayli tumani", "Mo'ynoq tumani", "Nukus tumani", "Qonliko'l tumani", "Qo'ng'irot tumani", "Shumanay tumani", "Taxtako'pir tumani", "To'rtko'l tumani", "Xo'jayli tumani"],
+            samarqand: ["Samarqand shahri", "Samarqand tumani", "Bulung'ur tumani", "Jomboy tumani", "Ishtixon tumani", "Kattaqo'rg'on tumani", "Qo'shrabot tumani", "Narpay tumani", "Nurobod tumani", "Oqdaryo tumani", "Paxtachi tumani", "Payariq tumani", "Pastdarg'om tumani", "Urgut tumani", "Toyloq tumani"],
+            sirdaryo: ["Guliston shahri", "Guliston tumani", "Boyovut tumani", "Mirzaobod tumani", "Oqoltin tumani", "Sayxunobod tumani", "Sardoba tumani", "Xovos tumani", "Sirdaryo tumani"],
+            surxondaryo: ["Termiz shahri", "Termiz tumani", "Angor tumani", "Boysun tumani", "Denov tumani", "Jarqo'rg'on tumani", "Qiziriq tumani", "Qumqo'rg'on tumani", "Muzrabot tumani", "Oltinsoy tumani", "Sariosiyo tumani", "Sherobod tumani", "Sho'rchi tumani", "Uzun tumani"],
+            toshkent: ["Angren shahri", "Bekobod shahri", "Olmaliq shahri", "Ohangaron shahri", "Chirchiq shahri", "Yangiyo'l shahri", "Bekobod tumani", "Bo'ka tumani", "Bo'stonliq tumani", "Zangiota tumani", "Qibray tumani", "Quyichirchiq tumani", "Oqqo'rg'on tumani", "Ohangaron tumani", "Parkent tumani", "Piskent tumani", "Toshkent tumani", "O'rta Chirchiq tumani", "Chinoz tumani", "Yuqori Chirchiq tumani", "Yangiyo'l tumani"],
+            "toshkent-shahri": ["Yunusobod tumani", "Mirzo Ulug'bek tumani", "Mirobod tumani", "Sergeli tumani", "Olmazor tumani", "Uchtepa tumani", "Shayxontohur tumani", "Yashnobod tumani", "Chilonzor tumani", "Yakkasaroy tumani", "Bektemir tumani"]
+        };
+        
+        // Modal oynalarni boshqarish
+        function openModal(modal) {
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal(modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Tumanlarni yangilash
+        regionSelect.addEventListener('change', function() {
+            const region = this.value;
+            districtSelect.innerHTML = '';
+            
+            if (region && districtsByRegion[region]) {
+                districtSelect.removeAttribute('disabled');
+                districtsByRegion[region].forEach(district => {
+                    const option = document.createElement('option');
+                    option.value = district;
+                    option.textContent = district;
+                    districtSelect.appendChild(option);
+                });
+            } else {
+                districtSelect.setAttribute('disabled', 'disabled');
+                const option = document.createElement('option');
+                option.textContent = 'Avval viloyatni tanlang';
+                districtSelect.appendChild(option);
+            }
         });
-      }
-    }
-
-    // Profile logic
-    const pRegion = document.getElementById('pRegion');
-    const pDistrict = document.getElementById('pDistrict');
-    function fillRegions(){ pRegion.innerHTML = '<option value="" disabled selected>Viloyatni tanlang</option>' + Object.keys(REGIONS).map(r=>`<option>${r}</option>`).join(''); pDistrict.innerHTML = '<option value="" disabled selected>Avval viloyatni tanlang</option>'; }
-    function onRegionChange(){ const r=pRegion.value; const d=REGIONS[r]||[]; pDistrict.innerHTML = d.map(x=>`<option>${x}</option>`).join(''); }
-    pRegion.addEventListener('change', onRegionChange); fillRegions();
-
-    document.getElementById('cancelProfile').addEventListener('click', ()=>{ show(profileBackdrop); });
-    document.getElementById('saveProfile').addEventListener('click', async ()=>{
-      try{
-        const last = document.getElementById('pLast').value.trim();
-        const first = document.getElementById('pFirst').value.trim();
-        const middle = document.getElementById('pMiddle').value.trim();
-        const birth = document.getElementById('pBirth').value;
-        const phone = document.getElementById('pPhone').value.trim();
-        const tg = document.getElementById('pTelegram').value.trim();
-        const email = document.getElementById('pEmail').value.trim();
-        const role = document.getElementById('pRole').value;
-        const region = pRegion.value; const district = pDistrict.value; const school = document.getElementById('pSchool').value.trim();
-        if(!last||!first||!birth||!phone||!role||!region||!district||!school) throw new Error('Barcha majburiy maydonlarni to'ldiring');
-        const u = auth.currentUser; if(!u) throw new Error('Avval kiring');
-        const uref = doc(db,'users', u.uid);
-        await updateDoc(uref, { last, first, middle, birth, phone, telegram:tg, email, role, region, district, school, profileCompleted:true });
-        hide(profileBackdrop); await refreshHeader(); load('home');
-      }catch(err){ alert(err.message); }
-    });
-
-    function calcAge(iso){ if(!iso) return ''; const d=new Date(iso); if(Number.isNaN(d)) return ''; const diff=Date.now()-d.getTime(); const y = Math.floor(diff/31557600000); return y>0? `${y} yosh` : '' }
-
-    async function refreshHeader(){
-      const badge = document.getElementById('userBadge');
-      const u = auth.currentUser; if(!u){ badge.hidden=true; return; }
-      const data = (await getDoc(doc(db,'users',u.uid))).data(); if(!data) return;
-      document.getElementById('helloName').textContent = data.first ? `${data.first}` : (data.email||'Foydalanuvchi');
-      document.getElementById('helloAge').textContent = data.birth ? `— ${calcAge(data.birth)}` : '';
-      document.getElementById('chipId').textContent = data.numericId||'—';
-      document.getElementById('chipBalance').textContent = (data.balance??0);
-      document.getElementById('chipScore').textContent = (data.score??0);
-      badge.hidden=false;
-    }
-
-    document.getElementById('btnLogout').addEventListener('click', async (e)=>{ e.preventDefault(); await signOut(auth); location.hash='#home'; location.reload(); });
-
-    onAuthStateChanged(auth, async (user)=>{
-      if(user){ await ensureUserDocument(user, user.email||null); const data=(await getDoc(doc(db,'users',user.uid))).data(); await refreshHeader(); if(!data?.profileCompleted){ show(profileBackdrop); } else{ hide(profileBackdrop); } hide(loginBackdrop); hide(regBackdrop); }
-      else{ show(loginBackdrop); document.getElementById('userBadge').hidden=true; }
-    });
-
-    // ---- Profile renderer ----
-    async function renderProfileView(){
-      const u = auth.currentUser; if(!u){ document.querySelector('#profileReadonly')?.classList.add('hidden'); return; }
-      const d = (await getDoc(doc(db,'users',u.uid))).data(); if(!d){ return; }
-      const appEl = document.getElementById('app');
-      const $ = (sel)=> appEl.querySelector(sel);
-      const full = [d.last,d.first,d.middle].filter(Boolean).join(' ');
-      const age = (iso=>{ if(!iso) return ''; const t=Date.now()-new Date(iso).getTime(); const y=Math.floor(t/31557600000); return y>0? `${y} yosh`:'' })(d.birth);
-      $('#pFull')?.replaceChildren(document.createTextNode(full||d.email||'Foydalanuvchi'));
-      $('#pAge')?.replaceChildren(document.createTextNode(age));
-      $('#pId')?.replaceChildren(document.createTextNode(d.numericId||'—'));
-      $('#pBalance')?.replaceChildren(document.createTextNode((d.balance??0))); 
-      $('#pScore')?.replaceChildren(document.createTextNode((d.score??0)));
-
-      const map = {
-        '#pRole': d.role,
-        '#pBirth': d.birth,
-        '#pPhone': d.phone,
-        '#pEmail': d.email,
-        '#pTelegram': d.telegram,
-        '#pRegion': d.region,
-        '#pDistrict': d.district,
-        '#pSchool': d.school,
-      };
-      for(const k in map){ const el=$(k); if(el){ el.textContent = map[k]||'—'; } }
-    }
-
-    // boot
-    load(location.hash.replace('#',''));
-  </script>
-
-  <!-- PARTIALS: /partials/home.html va boshqalar bo'lishi shart -->
-  <!-- /partials/home.html namunasi:
-  <section style="display:grid;gap:14px">
-    <div class="card">
-      <h2 style="margin:0 0 8px">Bosh sahifa</h2>
-      <p style="margin:0;color:#406055">Menyudan kerakli bo'limni tanlang.</p>
-    </div>
-  </section>
-  -->
+        
+        // Modal oynalarni ochish/yopish
+        closeLogin.addEventListener('click', () => closeModal(loginModal));
+        closeRegister.addEventListener('click', () => closeModal(registerModal));
+        switchToRegister.addEventListener('click', () => {
+            closeModal(loginModal);
+            openModal(registerModal);
+        });
+        switchToLogin.addEventListener('click', () => {
+            closeModal(registerModal);
+            openModal(loginModal);
+        });
+        
+        // Ro'yxatdan o'tish
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('regEmail').value;
+            const phone = document.getElementById('regPhone').value;
+            const password = document.getElementById('regPassword').value;
+            const confirmPassword = document.getElementById('regConfirmPassword').value;
+            
+            if (password !== confirmPassword) {
+                alert('Parollar mos kelmadi!');
+                return;
+            }
+            
+            try {
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Telefon raqamni saqlash
+                await user.updateProfile({
+                    phoneNumber: phone
+                });
+                
+                closeModal(registerModal);
+                openModal(profileModal);
+            } catch (error) {
+                console.error('Xatolik:', error);
+                alert(`Ro'yxatdan o'tishda xatolik: ${error.message}`);
+            }
+        });
+        
+        // Kirish
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const loginId = document.getElementById('loginId').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                // ID orqali foydalanuvchini topish
+                const usersSnapshot = await db.collection('users')
+                    .where('userId', '==', parseInt(loginId))
+                    .get();
+                
+                if (usersSnapshot.empty) {
+                    alert('Foydalanuvchi topilmadi!');
+                    return;
+                }
+                
+                const userDoc = usersSnapshot.docs[0];
+                const userData = userDoc.data();
+                
+                // Email orqali kirish
+                await auth.signInWithEmailAndPassword(userData.email, password);
+                
+                closeModal(loginModal);
+                updateUI();
+            } catch (error) {
+                console.error('Xatolik:', error);
+                alert(`Kirishda xatolik: ${error.message}`);
+            }
+        });
+        
+        // Profil ma'lumotlarini saqlash
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const middleName = document.getElementById('middleName').value;
+            const birthDate = document.getElementById('birthDate').value;
+            const phone = document.getElementById('phone').value;
+            const telegram = document.getElementById('telegram').value;
+            const email = document.getElementById('email').value;
+            const status = document.getElementById('status').value;
+            const region = document.getElementById('region').value;
+            const district = document.getElementById('district').value;
+            const school = document.getElementById('school').value;
+            
+            // Yoshi hisoblash
+            const birthDateObj = new Date(birthDate);
+            const ageDiff = Date.now() - birthDateObj.getTime();
+            const ageDate = new Date(ageDiff);
+            const age = Math.abs(ageDate.getUTCFullYear() - 1970);
+            
+            try {
+                // User ID yaratish (1001, 1002, ...)
+                const usersCount = await db.collection('users').get();
+                const userId = 1001 + usersCount.size;
+                
+                // Foydalanuvchi ma'lumotlarini saqlash
+                await db.collection('users').doc(user.uid).set({
+                    userId,
+                    firstName,
+                    lastName,
+                    middleName,
+                    birthDate,
+                    age,
+                    phone,
+                    telegram,
+                    email,
+                    status,
+                    region,
+                    district,
+                    school,
+                    balance: 0,
+                    points: 0,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                closeModal(profileModal);
+                updateUI();
+            } catch (error) {
+                console.error('Xatolik:', error);
+                alert(`Ma'lumotlarni saqlashda xatolik: ${error.message}`);
+            }
+        });
+        
+        // UI ni yangilash
+        async function updateUI() {
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            if (!userDoc.exists) {
+                openModal(profileModal);
+                return;
+            }
+            
+            const userData = userDoc.data();
+            
+            // Foydalanuvchi kartasi
+            document.getElementById('userName').textContent = `${userData.firstName} ${userData.lastName}`;
+            document.getElementById('userAge').textContent = `${userData.age} yosh`;
+            document.getElementById('userId').textContent = userData.userId;
+            document.getElementById('userBalance').textContent = userData.balance;
+            document.getElementById('userPoints').textContent = userData.points;
+            userCard.style.display = 'flex';
+            
+            // Profil ma'lumotlari
+            document.getElementById('profileFirstName').textContent = userData.firstName;
+            document.getElementById('profileLastName').textContent = userData.lastName;
+            document.getElementById('profileMiddleName').textContent = userData.middleName;
+            document.getElementById('profileBirthDate').textContent = userData.birthDate;
+            document.getElementById('profilePhone').textContent = userData.phone;
+            document.getElementById('profileTelegram').textContent = userData.telegram;
+            document.getElementById('profileEmail').textContent = userData.email;
+            document.getElementById('profileStatus').textContent = userData.status === 'teacher' ? "O'qituvchi" : "O'quvchi";
+            document.getElementById('profileRegion').textContent = document.querySelector(`#region option[value="${userData.region}"]`).textContent;
+            document.getElementById('profileDistrict').textContent = userData.district;
+            document.getElementById('profileSchool').textContent = userData.school;
+            profileSection.style.display = 'block';
+        }
+        
+        // Auth holatini kuzatish
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                updateUI();
+            } else {
+                openModal(loginModal);
+                userCard.style.display = 'none';
+                profileSection.style.display = 'none';
+            }
+        });
+        
+        // Mobil menyu
+        document.querySelector('.nav-toggle').addEventListener('click', () => {
+            document.querySelector('nav').classList.toggle('active');
+        });
+        
+        // Tizimga kirish tugmasi
+        document.getElementById('startLearning').addEventListener('click', () => {
+            if (auth.currentUser) {
+                alert("Darslarni ko'rish sahifasiga o'ting!");
+            } else {
+                openModal(loginModal);
+            }
+        });
+    </script>
 </body>
 </html>
