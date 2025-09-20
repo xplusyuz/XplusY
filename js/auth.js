@@ -55,7 +55,6 @@ window.App = {
       container.innerHTML = `<p>Profil ma'lumoti topilmadi.</p>`;
       return;
     }
-    
     const labels = {
       firstName:"Ism",
       lastName:"Familiya",
@@ -69,14 +68,22 @@ window.App = {
       district:"Tuman/Shahar",
       school:"Maktab"
     };
+    const icons = {
+      firstName:"👤", lastName:"🧾", patronymic:"👪", birthDate:"📅", phone:"📞",
+      telegram:"✈️", email:"✉️", role:"🎓", region:"🗺️", district:"🏙️", school:"🏫"
+    };
     const show = Object.keys(labels).filter(k => p[k] && String(p[k]).trim() !== "");
     container.innerHTML = `
-      <div class="grid two">
-        ${show.map(k=>`<div class="mini-card"><span style="min-width:140px;"><b>${labels[k]}</b></span><span>${p[k]}</span></div>`).join("")}
+      <div class="profile-grid">
+        ${show.map(k=>`
+          <div class="profile-item">
+            <div class="icon">${icons[k] ?? "•"}</div>
+            <div><div style="font-weight:700">${labels[k]}</div><div>${p[k]}</div></div>
+          </div>
+        `).join("")}
       </div>
       <p style="color:#ef4444;margin-top:12px">Eslatma: Profil ma'lumotlari tahrirlanmaydi.</p>
     `;
-    
   }
 };
 
