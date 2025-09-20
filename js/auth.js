@@ -55,12 +55,28 @@ window.App = {
       container.innerHTML = `<p>Profil ma'lumoti topilmadi.</p>`;
       return;
     }
+    
+    const labels = {
+      firstName:"Ism",
+      lastName:"Familiya",
+      patronymic:"Sharif",
+      birthDate:"Tugʻilgan sana",
+      phone:"Telefon",
+      telegram:"Telegram",
+      email:"Email",
+      role:"Rol",
+      region:"Viloyat",
+      district:"Tuman/Shahar",
+      school:"Maktab"
+    };
+    const show = Object.keys(labels).filter(k => p[k] && String(p[k]).trim() !== "");
     container.innerHTML = `
       <div class="grid two">
-        ${Object.entries(p).map(([k,v])=>`<div class="mini-card"><span style="min-width:140px;"><b>${k}</b></span><span>${v??""}</span></div>`).join("")}
+        ${show.map(k=>`<div class="mini-card"><span style="min-width:140px;"><b>${labels[k]}</b></span><span>${p[k]}</span></div>`).join("")}
       </div>
       <p style="color:#ef4444;margin-top:12px">Eslatma: Profil ma'lumotlari tahrirlanmaydi.</p>
     `;
+    
   }
 };
 
@@ -69,21 +85,21 @@ function $(sel, root=document){ return root.querySelector(sel); }
 function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
 async function refreshHeader(){
-  const hello = $(".header-hello .primary");
-  const meta = $(".header-hello .meta");
-  const mini = $("#header-mini");
+  const helloName = document.getElementById("hello-name");
+  const helloAge = document.getElementById("hello-age");
+  const mini = document.getElementById("header-mini");
   const u = auth.currentUser;
 
   if(!u){
-    hello.textContent = "Kirish talab qilinadi";
-    meta.textContent = "Avval tizimga kiring";
+    helloName.textContent = "Mehmon";
+    helloAge.textContent = "— yosh";
     mini.innerHTML = "";
     return;
   }
   const p = await loadProfile(u.uid);
   const age = p?.birthDate ? calcAge(p.birthDate) : "—";
-  hello.textContent = `Hello, ${p?.firstName ?? "Foydalanuvchi"} • ${age} yosh`;
-  meta.textContent = (p?.role ?? "—") + (p?.region ? ` • ${p.region}` : "");
+  helloName.textContent = `${p?.firstName ?? "Foydalanuvchi"}`;
+  helloAge.textContent = `${age} yosh`;
 
   mini.innerHTML = `
     <span class="mini-chip">🆔 <b>${p?.numericId ?? "—"}</b></span>
