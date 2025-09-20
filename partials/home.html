@@ -1,1 +1,137 @@
-<div class='content'><h2>Bosh sahifa</h2><p>Xush kelibsiz!</p></div>
+<section class="home-banners">
+  <style>
+    .home-banners{display:block}
+    .hb-wrap{display:grid;gap:16px}
+    /* Large promo banners */
+    .hb-banner{
+      display:grid; grid-template-columns: 1fr; gap:14px;
+      background:linear-gradient(180deg,#ffffff,#f2fff9); border:1px solid #e8fbf1;
+      border-radius:20px; padding:14px; box-shadow:0 14px 30px rgba(10,143,82,.10), 0 2px 6px rgba(0,0,0,.04);
+      overflow:hidden; position:relative;
+    }
+    .hb-media{
+      aspect-ratio: 16/9; width:100%; border-radius:16px;
+      background:#eaf7f1 center/cover no-repeat;
+      box-shadow: inset 0 0 0 1px #def3ea;
+    }
+    .hb-body{display:flex; flex-direction:column; gap:10px; padding:2px 2px 4px}
+    .hb-title{font-size:clamp(18px, 3.5vw, 28px); font-weight:900; margin:0; line-height:1.15;
+      background:linear-gradient(180deg,#0dbb6f,#0a8f52); -webkit-background-clip:text; color:transparent;}
+    .hb-meta{margin:0; color:#0c2b1b; opacity:.8; font-size:clamp(13px, 2.5vw, 16px)}
+    .hb-cta{align-self:flex-start; display:inline-flex; align-items:center; gap:10px;
+      background:#0faf64; color:#fff; font-weight:900; border:0; padding:10px 16px; border-radius:12px;
+      box-shadow:0 10px 24px rgba(15,175,100,.35); text-decoration:none; transition:transform .18s ease, box-shadow .18s ease}
+    .hb-cta:hover{ transform:translateY(-1px) scale(1.02); box-shadow:0 14px 30px rgba(15,175,100,.45) }
+    .hb-cta:active{ transform:translateY(0) scale(0.98) }
+    .hb-badge{position:absolute; top:14px; left:14px; background:#0faf64; color:#fff; font-weight:800;
+      border-radius:999px; padding:6px 10px; font-size:12px; box-shadow:0 8px 18px rgba(15,175,100,.35)}
+    /* Wide screens: media + text side by side, alternate */
+    @media(min-width:900px){
+      .hb-banner{ grid-template-columns: 1.2fr 1fr; padding:18px; gap:18px }
+      .hb-banner.is-right{ grid-template-columns: 1fr 1.2fr }
+      .hb-banner.is-right .hb-media{ order:2 }
+      .hb-banner.is-right .hb-body{ order:1; padding-left:8px }
+      .hb-banner:not(.is-right) .hb-body{ padding-left:8px }
+      .hb-title{ font-size:clamp(22px, 2vw, 32px) }
+      .hb-meta{ font-size:clamp(14px, 1.5vw, 18px) }
+    }
+    /* Skeletons */
+    .hb-skel{ animation: sk 1.2s ease-in-out infinite; background:linear-gradient(90deg,#eef8f3 25%,#ffffff 37%,#eef8f3 63%); background-size:400% 100%; }
+    @keyframes sk{ 0%{background-position:100% 0} 100%{background-position:0 0} }
+    .hb-skel.media{ height:200px; border-radius:16px }
+    .hb-skel.line{ height:18px; border-radius:6px; width:60% }
+  </style>
+
+  <div class="hb-wrap" id="hbWrap">
+    <!-- skeleton while loading -->
+    <div class="hb-banner">
+      <div class="hb-media hb-skel media"></div>
+      <div class="hb-body">
+        <div class="hb-skel line" style="width:50%"></div>
+        <div class="hb-skel line" style="width:80%"></div>
+        <div class="hb-skel line" style="width:40%"></div>
+      </div>
+    </div>
+    <div class="hb-banner is-right">
+      <div class="hb-media hb-skel media"></div>
+      <div class="hb-body">
+        <div class="hb-skel line" style="width:55%"></div>
+        <div class="hb-skel line" style="width:70%"></div>
+        <div class="hb-skel line" style="width:42%"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    const SHEET_ID   = '12f2zZWHAjY2q68KoPW3uLkCQF0WQDPZuQYPzlrovT3c';
+    const SHEET_NAME = 'Home'; // Google Sheets pastki tab nomi
+    const GVIZ_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+
+    const wrap = document.getElementById('hbWrap');
+
+    function parseGViz(text){
+      // gviz javobi: "google.visualization.Query.setResponse({...})"
+      const json = JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}')+1));
+      const cols = json.table.cols.map(c => (c.label||'').trim().toLowerCase());
+      const idx = (name)=> cols.findIndex(c => c === name.toLowerCase());
+      const iTitle = idx('title');
+      const iMeta  = idx('meta');
+      const iBtn   = idx('button nomi');
+      const iLink  = idx('button linki');
+      const iImg   = idx('img url');
+
+      const rows = (json.table.rows||[]).map(r => {
+        const c = r.c || [];
+        return {
+          title : c[iTitle]?.v ?? '',
+          meta  : c[iMeta]?.v ?? '',
+          btn   : c[iBtn]?.v ?? '',
+          link  : c[iLink]?.v ?? '',
+          img   : c[iImg]?.v ?? ''
+        };
+      }).filter(x => x.title || x.meta || x.img);
+      return rows;
+    }
+
+    function bannerTemplate(row, i){
+      const right = i % 2 === 1 ? ' is-right' : '';
+      const img = row.img ? `style="background-image:url('${row.img}');"` : '';
+      const btn = row.btn && row.link
+        ? `<a class="hb-cta" href="${row.link}" target="_blank" rel="noopener">${row.btn}</a>`
+        : '';
+      return `<article class="hb-banner${right}">
+        <div class="hb-media" ${img}></div>
+        <div class="hb-body">
+          <h3 class="hb-title">${row.title || '—'}</h3>
+          <p class="hb-meta">${row.meta || ''}</p>
+          ${btn}
+        </div>
+        <span class="hb-badge">Reklama</span>
+      </article>`;
+    }
+
+    async function load(){
+      try{
+        const res = await fetch(GVIZ_URL, {mode:'cors'});
+        const txt = await res.text();
+        const rows = parseGViz(txt);
+
+        if(!rows.length){
+          wrap.innerHTML = '<div class="content"><h3>Bannerlar topilmadi</h3><p>Google Sheet “Home” varaqqa maʼlumot kiriting.</p></div>';
+          return;
+        }
+        wrap.innerHTML = rows.map(bannerTemplate).join('');
+      }catch(err){
+        console.error('Sheet yuklash xatosi:', err);
+        wrap.innerHTML = `<div class="content">
+          <h3>Ulanish amalga oshmadi</h3>
+          <p>Google Sheets faylini <b>Anyone with the link → Viewer</b> qilib ulashing
+          yoki <b>File → Share → Publish to the web</b> qiling. Soʻng sahifani yangilang.</p>
+        </div>`;
+      }
+    }
+    load();
+  })();
+  </script>
+</section>
