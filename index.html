@@ -84,130 +84,105 @@ function updateHeader(d){ const name=d?.ism||'Sohibjon', age=d?.yosh||'26', id=d
   const c=document.getElementById('headerCompact'); c.innerHTML='<div class="card"><div style="width:100%"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;"><div style="font-weight:800">Salom <span style="font-weight:900">'+name+'</span></div><div class="label">Yosh: '+age+'</div></div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;"><div><div class="label">ID</div><div class="value">'+id+'</div></div><div><div class="label">Balans</div><div class="value">'+balans+'</div></div><div><div class="label">Ball</div><div class="value">'+ball+'</div></div></div></div></div>';
 }
 </script>
-</body></html>
-<!-- ==== INLINE PARTIAL TEMPLATES (no fetch, file:// friendly) ==== -->
-<template id="tpl-home">
-<style>
-    body{margin:0;background:#f5f7fb;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif}
-    .banner-container{max-width:1100px;margin:0 auto;padding:16px}
 
-    .banner{background:linear-gradient(135deg, #10b981, #059669);color:white;border-radius: 14px;padding:30px;text-align:center;margin:20px 0;box-shadow:0 12px 30px rgba(0,0,0,.15)}
-    .banner h2{margin:0 0 10px 0}
-    .banner img{max-width:100%;border-radius:8px;margin:12px 0}
-    .banner-btn{display:inline-block;background:white;color:#10b981;padding:12px 20px;border-radius:12px;text-decoration:none;font-weight:700}
-    .badge{display:inline-block;margin-left:8px;font-size:12px;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45)}
-  </style>
-  <div class="banner-container" id="container"></div>
-
-  <script>
-    const banners = [
-  {
-    "title": "Maxsus Chegirmalar",
-    "desc": "Hamma mahsulotlar uchun 30% gacha chegirma",
-    "image": "https://via.placeholder.com/960x300/00a86b/ffffff?text=Chegirmalar",
-    "link": "#",
-    "button": "Batafsil",
-    "type": "free"
-  },
-  {
-    "title": "Premium Kurslar",
-    "desc": "PRO obuna orqali to'liq imkoniyatlar",
-    "image": "https://via.placeholder.com/960x300/0ea5e9/ffffff?text=PRO",
-    "link": "#",
-    "button": "Ko'rish",
-    "type": "pro"
-  }
-];
-    function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
-    function render(){
-      const root = document.getElementById('container'); root.innerHTML='';
-      banners.forEach(b => {
-        root.appendChild(el(`
-          <div class="banner">
-            <h2>${b.title}<span class="badge">${(b.type||'free').toUpperCase()}</span></h2>
-            ${b.desc? '<p>'+b.desc+'</p>' : ''}
-            ${b.image? '<img src="'+b.image+'" alt="banner">' : ''}
-            ${b.link? '<p><a class="banner-btn" href="'+b.link+'">'+(b.button||'Batafsil')+'</a></p>' : ''}
-          </div>`));
-      });
-    }
-    document.addEventListener('DOMContentLoaded', render);
-  </script>
-</template>
-<template id="tpl-courses">
-<div class="content" style="padding:16px;">
-  <h2 style="margin:0.2rem 0;">Courses</h2>
-  <p>Bu sahifa inline template orqali yuklandi. Fayl kerak bo'lmasa ham ishlaydi.</p>
-</div>
-</template>
-<template id="tpl-tests">
-<div class="content" style="padding:16px;">
-  <h2 style="margin:0.2rem 0;">Tests</h2>
-  <p>Inline template.</p>
-</div>
-</template>
-<template id="tpl-simulators">
-<div class="content" style="padding:16px;">
-  <h2 style="margin:0.2rem 0;">Simulators</h2>
-  <p>Inline template.</p>
-</div>
-</template>
-<template id="tpl-results">
-<div class="content" style="padding:16px;">
-  <h2 style="margin:0.2rem 0;">Results</h2>
-  <p>Inline template.</p>
-</div>
-</template>
-<template id="tpl-profile">
-<div class="content" style="padding:16px;">
-  <h2 style="margin:0.2rem 0;">Profile</h2>
-  <p>Inline template.</p>
-</div>
-</template>
-<!-- ==== /INLINE PARTIAL TEMPLATES ==== -->
-
+<style id="iframe-spa-style">
+  #app iframe#appframe{width:100%;border:0;display:block;min-height:60vh}
+</style>
 <script>
+/* iframe-SPA: dizayn o'zgartirmasdan linked sahifalarni #app ichida ko'rsatadi */
 (function(){
-  const ROUTES = ["home","courses","tests","simulators","results","profile"];
   const app = document.getElementById("app");
+  if(!app) return;
+
+  // Create iframe on demand so we don't disturb existing layout
+  let frame = null;
+  function ensureFrame(){
+    if(frame) return frame;
+    frame = document.createElement("iframe");
+    frame.id = "appframe";
+    // start hidden; will show after load
+    frame.style.visibility = "hidden";
+    app.innerHTML = ""; // #app ichini SPA zona sifatida ishlatamiz
+    app.appendChild(frame);
+    frame.addEventListener("load", ()=>{
+      try{
+        const d = frame.contentDocument;
+        // autosize
+        frame.style.height = (d.documentElement.scrollHeight || d.body.scrollHeight || 800) + "px";
+      }catch(e){/* ignore */}
+      frame.style.visibility = "visible";
+      window.scrollTo({top:0, behavior:"smooth"});
+    });
+    return frame;
+  }
+
+  // Route -> file mapping (partials yoki bog'langan .html)
+  const DEFAULTS = {
+    "home": "partials/home.html",
+    "courses": "partials/courses.html",
+    "tests": "partials/tests.html",
+    "simulators": "partials/simulators.html",
+    "results": "partials/results.html",
+    "profile": "partials/profile.html"
+  };
+
+  function normalizeTarget(href){
+    if(!href || href==="#" ) return null;
+    // hash route (#home) -> map to partial
+    if(href.startsWith("#")){
+      const r = href.slice(1);
+      return DEFAULTS[r] || null;
+    }
+    // direct html link -> use as-is
+    if(/\.html(\?.*)?(#.*)?$/i.test(href)) return href;
+    return null;
+  }
+
+  function navigateTo(target){
+    const f = ensureFrame();
+    if(!target) return;
+    // For file:// relative paths, keep them relative
+    f.src = target;
+    history.replaceState({target}, "", target.startsWith("#") ? target : ("#"+target.replace(/^partials\//,"").replace(/\.html.*$/,"")));
+  }
+
+  // Intercept FAB/data-route buttons if present
+  document.addEventListener("click", (e)=>{
+    const btn = e.target.closest(".chip[data-route]");
+    if(btn){
+      e.preventDefault();
+      const route = btn.getAttribute("data-route");
+      navigateTo(DEFAULTS[route] || null);
+      setActive(route);
+      return;
+    }
+    // Intercept internal <a href="*.html">
+    const a = e.target.closest("a[href]");
+    if(a){
+      const t = normalizeTarget(a.getAttribute("href"));
+      if(t){
+        e.preventDefault();
+        navigateTo(t);
+      }
+    }
+  });
+
   function setActive(route){
     document.querySelectorAll('.fab-menu .chip')
       .forEach(b=> b.classList.toggle('active', b.getAttribute('data-route')===route));
   }
-  function tplId(route){ return "tpl-" + route; }
-  function navigate(route){
-    if(!ROUTES.includes(route)) route = "home";
-    const t = document.getElementById(tplId(route));
-    if(t){
-      app.innerHTML = "";
-      app.appendChild(t.content.cloneNode(true));
-    }else{
-      app.innerHTML = `<div class="content" style="padding:16px;">
-        <h2 style="margin:0.2rem 0;">${route}</h2>
-        <p>Inline template topilmadi.</p>
-      </div>`;
-    }
-    setActive(route);
-    history.replaceState({route}, "", `#${route}`);
-    window.scrollTo({top:0, behavior:"smooth"});
-    if(typeof window.onPartialLoaded === "function"){
-      try { window.onPartialLoaded(route); } catch(e){}
-    }
-  }
-  window.addEventListener("hashchange", ()=>{
-    const r = (location.hash || "#home").slice(1);
-    navigate(r);
-  });
+
+  // On load: try hash or default home
   document.addEventListener("DOMContentLoaded", ()=>{
-    const start = (location.hash || "#home").slice(1) || "home";
-    navigate(start);
-  });
-  document.querySelector(".fab-menu")?.addEventListener("click", (e)=>{
-    const btn = e.target.closest(".chip[data-route]");
-    if(!btn) return;
-    e.preventDefault();
-    const r = btn.getAttribute("data-route");
-    navigate(r);
+    let initial = "home";
+    if(location.hash){
+      const raw = location.hash.slice(1);
+      if(DEFAULTS[raw]) initial = raw;
+      else if(/\.html/i.test(raw)) initial = raw; // support #partials/home.html
+    }
+    navigateTo(DEFAULTS[initial]);
+    setActive(initial);
   });
 })();
 </script>
+</body></html>
