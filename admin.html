@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MathCenter Admin — Neo++</title>
+  <title>MathCenter Admin — Neo+++</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root{--brand:#16a34a}
@@ -31,6 +31,15 @@
     .badge{ @apply absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-full shadow; }
     .badge-free{ @apply bg-emerald-600 text-white; }
     .badge-pro{ @apply bg-amber-500 text-white; }
+
+    /* HERO button — stronger design */
+    .btn-hero{display:inline-flex; align-items:center; gap:.6rem; padding:.9rem 1.1rem; border-radius:16px; font-weight:800; letter-spacing:.01em; box-shadow:0 12px 30px rgba(16,185,129,.35); transform:translateZ(0); transition:.2s ease}
+    .btn-hero .ic{display:inline-grid; place-items:center; width:1.8rem; height:1.8rem; border-radius:12px; background:rgba(255,255,255,.15)}
+    .btn-hero:hover{transform:translateY(-2px)}
+    .btn-hero.white{background:#fff; color:#065f46; border:1px solid #fff}
+    .btn-hero.green{background:#10b981; color:#fff; border:1px solid #10b981}
+    .btn-hero.outline{background:transparent; color:#fff; border:1px solid rgba(255,255,255,.8); box-shadow:0 10px 28px rgba(0,0,0,.25)}
+    .btn-hero.grad{background:linear-gradient(135deg,#10b981,#06b6d4); color:#fff; border:0}
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-sky-50 text-gray-900">
@@ -76,7 +85,7 @@
       <div class="flex items-center gap-2">
         <div class="w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 grid place-items-center text-white text-xl font-black">π</div>
         <div>
-          <div class="text-sm font-semibold">MathCenter Admin — Neo++</div>
+          <div class="text-sm font-semibold">MathCenter Admin — Neo+++</div>
           <div class="text-xs text-gray-500">Boshqaruv paneli</div>
         </div>
       </div>
@@ -120,7 +129,7 @@
               <p id="heroSub" class="text-white/90 mt-3 max-w-xl text-[15px]">Qisqa tavsif matni…</p>
               <div id="heroTags" class="flex flex-wrap gap-2 mt-3"></div>
               <div class="mt-5 flex gap-3">
-                <a id="heroBtn" class="btn bg-white text-emerald-700 border border-white shadow-xl" target="_blank">Boshlash</a>
+                <a id="heroBtn" class="btn-hero white" target="_blank"><span class="lbl">Boshlash</span><span class="ic">➔</span></a>
               </div>
             </div>
             <div class="hidden lg:block"></div>
@@ -284,7 +293,7 @@
     // ===== Login (offline) =====
     const VALID_LOGIN='Sohibjonmath';
     const VALID_PASS='Math@1999';
-    const LS_AUTH='mc_auth4';
+    const LS_AUTH='mc_auth5';
 
     const loginPane=document.getElementById('loginPane');
     const adminUi=document.getElementById('adminUi');
@@ -314,13 +323,14 @@
     }
 
     // ===== Local data layer (except promos/users) =====
-    const LS={ banners:'neo3_banners', courses:'neo3_courses', tests:'neo3_tests', sims:'neo3_sims' };
+    const LS={ banners:'neo4_banners', courses:'neo4_courses', tests:'neo4_tests', sims:'neo4_sims' };
     const get=(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k))??d; }catch{return d;} };
     const set=(k,v)=> localStorage.setItem(k,JSON.stringify(v));
 
     // ===== Utils =====
-    function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
+    function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;","\"":"&quot;","'":"&#39;","\">":"&gt;"}[c]));}
     function downloadText(filename, text){ const blob=new Blob([text],{type:'text/html;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }
+    function safeBind(id, fn){ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); }
 
     // ===== Tabs =====
     document.querySelectorAll('.tab').forEach(b=> b.addEventListener('click', ()=> selectTab(b.dataset.tab)));
@@ -346,7 +356,7 @@
       fields.forEach(f=>{
         const wrap=document.createElement('div');
         wrap.innerHTML=`<label class="text-sm text-gray-600">${f.label}${f.required?' *':''}</label>${inputHtml(f)}`;
-        if(f.type==='checkbox') wrap.querySelector('input').checked=!!f.value; else { const inp=wrap.querySelector('input,textarea,select'); if(inp) inp.value=f.value ?? ''; }
+        if(f.type==='checkbox') wrap.querySelector('input').checked=!!f.value; else { const inp=wrap.querySelector('input,textarea,select'); if(inp){ if(f.type==='range' && f.value!=null) inp.value=f.value; else inp.value=f.value ?? ''; } }
         crudBody.appendChild(wrap);
       });
       crudModal.showModal();
@@ -358,18 +368,25 @@
     }
     function inputHtml(f){
       if(f.type==='select') return `<select name="${f.key}" class="input">${(f.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
-      if(f.type==='range') return `<input type="range" name="${f.key}" class="w-full" min="${f.min||0}" max="${f.max||1}" step="${f.step||0.05}">`;
+      if(f.type==='range') return `<input type="range" name="${f.key}" class="w-full" min="${f.min||0}" max="${f.max||1}" step="${f.step||0.05}" value="${f.value??0.55}">`;
       const base=`name="${f.key}" class="input" ${f.required?'required':''}`;
       if(f.type==='textarea') return `<textarea ${base} rows="3"></textarea>`;
       if(f.type==='checkbox') return `<input type="checkbox" ${base}>`;
-      const extra=f.step?` step="${f.step}"`:''; return `<input type="${f.type||'text'}" ${base}${extra}>`;
+      const extra=f.step?` step="${f.step}"`:''; const val=f.value!=null?` value="${f.value}"`:''; return `<input type="${f.type||'text'}" ${base}${extra}${val}>`;
     }
 
     // ===== BANNERS =====
     const bannersWrap=document.getElementById('bannersWrap');
     const heroOverlay=document.getElementById('heroOverlay');
     const heroTextBox=document.getElementById('heroTextBox');
-    document.getElementById('btnAddBanner').onclick=()=>{
+
+    // Robust delegate (fix for button not firing even if earlier error occurred)
+    document.addEventListener('click', (e)=>{
+      if(e.target.closest('#btnAddBanner')) return addBannerFlow();
+      if(e.target.closest('#btnDownloadHome')) return downloadHomeFlow();
+    });
+
+    function addBannerFlow(){
       openCrud({
         title:'Yangi banner', subtitle:'Dizayn parametrlarini tanlang',
         fields:[
@@ -387,13 +404,12 @@
         ],
         onSave: async(v)=>{ const arr=get(LS.banners,[]); v.tags=String(v.tags||'').split(',').map(s=>s.trim()).filter(Boolean); arr.unshift(v); set(LS.banners,arr); renderBanners(); applyHero(arr[0]); }
       });
-    };
+    }
 
-    document.getElementById('btnDownloadHome').onclick=()=>{
+    function downloadHomeFlow(){
       const b=(get(LS.banners,[])[0])||null; if(!b){ alert('Avval biror banner yarating.'); return; }
-      const code=buildHomePartialFrom(b);
-      downloadText('home.html', code);
-    };
+      const code=buildHomePartialFrom(b); downloadText('home.html', code);
+    }
 
     function renderBanners(){
       const arr=get(LS.banners,[]); bannersWrap.innerHTML='';
@@ -426,11 +442,7 @@
       return tpl;
     }
 
-    function fontClass(kind){
-      if(kind==='serif') return 'font-serif';
-      if(kind==='display') return 'tracking-tight';
-      return 'font-sans';
-    }
+    function fontClass(kind){ if(kind==='serif') return 'font-serif'; if(kind==='display') return 'tracking-tight'; return 'font-sans'; }
     function applyHero(b){
       document.getElementById('heroBg').style.backgroundImage=`url('${(b.imageUrl||'').replace(/'/g,'%27')}')`;
       const ov = Math.max(0, Math.min(1, Number(b.overlay ?? .55)));
@@ -443,14 +455,14 @@
       t.textContent=b.title||'—'; s.textContent=b.subtitle||'—';
       t.className = `text-4xl md:text-5xl font-black leading-tight mt-2 ${fontClass(b.titleFont||'display')}`;
       s.className = `text-white/90 mt-3 max-w-xl text-[15px] ${fontClass(b.subtitleFont||'system')}`;
-      const btn=document.getElementById('heroBtn'); btn.textContent=b.cta||'Boshlash'; btn.href=b.link||'#';
-      // button styles
-      btn.className='btn';
-      if(b.btnStyle==='yashil-solid') btn.className+=' bg-emerald-600 text-white border border-emerald-600';
-      else if(b.btnStyle==='oq-outline') btn.className+=' btn-ghost';
-      else if(b.btnStyle==='gradient') btn.className+=' text-white';
-      else btn.className+=' bg-white text-emerald-700 border border-white shadow-xl';
-      if(b.btnStyle==='gradient') btn.style.background='linear-gradient(135deg,#10b981, #06b6d4)'; else btn.style.background='';
+      const btn=document.getElementById('heroBtn'); btn.querySelector('.lbl').textContent=b.cta||'Boshlash'; btn.href=b.link||'#';
+      // HERO button variant
+      btn.className='btn-hero';
+      const st=b.btnStyle||'oq-solid';
+      if(st==='yashil-solid') btn.classList.add('green');
+      else if(st==='oq-outline') btn.classList.add('outline');
+      else if(st==='gradient') btn.classList.add('grad');
+      else btn.classList.add('white');
       const tags=(b.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
       document.getElementById('heroTags').innerHTML=tags;
     }
@@ -462,7 +474,7 @@
       const btnStyle = b.btnStyle||'oq-solid';
       const ov = Math.max(0, Math.min(1, Number(b.overlay ?? .55)));
       const tags = (b.tags||[]).join(',');
-      return `<!-- /partials/home.html — generated by Admin Neo++ -->
+      return `<!-- /partials/home.html — generated by Admin Neo+++ -->
 <section id="hero" data-img="${esc(b.imageUrl||'')}" data-title="${esc(b.title||'')}" data-subtitle="${esc(b.subtitle||'')}" data-cta="${esc(b.cta||'Boshlash')}" data-link="${esc(b.link||'#')}" data-tags="${esc(tags)}" data-align="${esc(align)}" data-title-font="${esc(tFont)}" data-sub-font="${esc(sFont)}" data-btn-style="${esc(btnStyle)}" data-overlay="${ov}">
   <style>
     #hero{position:relative;min-height:68vh;display:grid;place-items:center;padding:40px 16px;isolation:isolate}
@@ -473,7 +485,8 @@
     #hero .sub{opacity:.92;margin-top:12px;max-width:720px}
     #hero .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
     #hero .tag{font-size:12px;background:#dcfce7;color:#065f46;border:1px solid #bbf7d0;padding:6px 10px;border-radius:999px}
-    #hero .btn{display:inline-flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;text-decoration:none;font-weight:800}
+    #hero .btn{display:inline-flex;align-items:center;gap:10px;padding:14px 16px;border-radius:16px;text-decoration:none;font-weight:800}
+    #hero .ic{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:12px;background:rgba(255,255,255,.15)}
     @media (max-width:980px){#hero .box{grid-template-columns:1fr} #hero .title{font-size:32px}}
   </style>
   <div class="bg"></div>
@@ -484,7 +497,7 @@
       <h1 class="title"></h1>
       <p class="sub"></p>
       <div class="tags"></div>
-      <div class="cta" style="margin-top:16px"><a class="btn" target="_blank"></a></div>
+      <div class="cta" style="margin-top:16px"><a class="btn"><span class="lbl"></span><span class="ic">➔</span></a></div>
     </div>
     <div></div>
   </div>
@@ -499,7 +512,8 @@
     var a=(data.align||'chap'); box.style.textAlign=(a==='chap'?'left':(a==='markaz'?'center':'right'));
     var ff=function(kind){ if(kind==='serif') return 'Georgia, Cambria, Times New Roman, serif'; if(kind==='display') return 'Poppins, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif'; return 'Inter, Roboto, Segoe UI, system-ui, Arial, sans-serif'; }
     titleEl.style.fontFamily=ff(data.titleFont||'display'); subEl.style.fontFamily=ff(data.subFont||'system');
-    btn.textContent=data.cta||'Boshlash'; btn.href=data.link||'#';
+    var lbl=btn.querySelector('.lbl'); lbl.textContent=data.cta||'Boshlash'; btn.href=data.link||'#';
+    // styles
     if(data.btnStyle==='yashil-solid'){ btn.style.cssText='background:#10b981;color:#fff;border:1px solid #10b981'; }
     else if(data.btnStyle==='oq-outline'){ btn.style.cssText='background:transparent;color:#fff;border:1px solid rgba(255,255,255,.7)'; }
     else if(data.btnStyle==='gradient'){ btn.style.cssText='background:linear-gradient(135deg,#10b981,#06b6d4);color:#fff;border:0'; }
