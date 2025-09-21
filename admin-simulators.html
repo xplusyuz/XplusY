@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+</div>
+</div>
+</template>
+
+
+<script>
+const LS='adm_sims_v1';
+const get=()=>JSON.parse(localStorage.getItem(LS)||'[]');
+const set=v=>localStorage.setItem(LS,JSON.stringify(v));
+const $=s=>document.querySelector(s);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+
+
+const modal=$('#modal'), body=$('#body');
+$('#mCancel').onclick=()=>modal.close();
+function inputHtml(f){
+const base=`name="${f.key}" class="input" ${f.required?'required':''}`;
+if(f.type==='textarea') return `<textarea ${base} rows="3">${f.value||''}</textarea>`;
+return `<input type="${f.type||'text'}" ${base} value="${f.value||''}">`;
+}
+function openForm(data, onSave){
+body.innerHTML='';
+const fields=[
+{key:'imageUrl',label:'Rasm URL',type:'url',required:true,value:data?.imageUrl||''},
+{key:'title',label:'Nomi',type:'text',required:true,value:data?.title||''},
+{key:'subtitle',label:'Info',type:'textarea',value:data?.subtitle||''},
+{key:'link',label:'Havola',type:'url',value:data?.link||''},
+{key:'price',label:'Narx (UZS)',type:'number',value:data?.price??0}
+];
+fields.forEach(f=>{const w=document.createElement('div'); w.innerHTML=`<label class='text-sm text-gray-600'>${f.label}</label>${inputHtml(f)}`; body.appendChild(w);});
+modal.showModal();
+$('#mSave').onclick=()=>{const v={}; body.querySelectorAll('input,textarea').forEach(el=>v[el.name]=el.type==='number'?Number(el.value):el.value); onSave(v); modal.close();};
+}
+
+
+const grid=$('#grid');
+function render(){ grid.innerHTML=''; get().forEach((x,i)=> grid.appendChild(card(x,i))); }
+function card(x,i){
+const tpl=document.querySelector('#tpl').content.cloneNode(true);
+const free=Number(x.price||0)===0; tpl.querySelector('.badge-free').classList.toggle('hidden',!free); tpl.querySelector('.badge-pro').classList.toggle('hidden',free);
+tpl.querySelector('.img').src=x.imageUrl||''; tpl.querySelector('.title').textContent=x.title||'—'; tpl.querySelector('.sub').textContent=x.subtitle||'—';
+tpl.querySelector('.link').href=x.link||'#'; tpl.querySelector('.price').textContent=(x.price? new Intl.NumberFormat('uz-UZ').format(x.price)+' so‘m':'Bepul');
+tpl.querySelector('.edit').onclick=()=>openForm(x,v=>{const a=get(); a[i]={...x,...v}; set(a); render();});
+tpl.querySelector('.del').onclick=()=>{ if(!confirm('O‘chirishni tasdiqlaysizmi?')) return; const a=get(); a.splice(i,1); set(a); render(); };
+return tpl;
+}
+
+
+function buildPartial(){
+const arr=get();
+const items=arr.map(x=>`<article class=\"sim-card\"><img src=\"${esc(x.imageUrl||'')}\"/><div class=\"txt\"><h3>${esc(x.title||'')}</h3><p>${esc(x.subtitle||'')}</p><div class=\"row\"><a href=\"${esc(x.link||'#')}\" target=\"_blank\">O'ynash</a><span>${x.price?new Intl.NumberFormat('uz-UZ').format(x.price)+' so\'m':'Bepul'}</span></div></div></article>`).join('');
+return `<!-- /partials/simulators.html -->\n<section class=\"sims\"><style>.sims{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}.sim-card{border:1px solid #eee;border-radius:18px;overflow:hidden;background:#fff}.sim-card img{width:100%;height:160px;object-fit:cover}.sim-card .txt{padding:12px}.sim-card h3{margin:0 0 6px 0;font-size:16px}.sim-card p{margin:0 0 10px 0;font-size:12px;color:#64748b}.sim-card .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}.sim-card a{display:inline-block;padding:8px 10px;border-radius:12px;border:1px solid #e2e8f0;text-decoration:none}</style>${items}</section>`;
+}
+
+
+document.addEventListener('click',e=>{
+if(e.target.closest('#btnAdd')) return openForm(null,v=>{const a=get(); a.unshift(v); set(a); render();});
+if(e.target.closest('#btnDownload')){ const code=buildPartial(); const blob=new Blob([code],{type:'text/html;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='simulators.html'; document.body.appendChild(a); a.click(); a.remove(); }
+});
+
+
+render();
+</script>
+</body>
+</html>
