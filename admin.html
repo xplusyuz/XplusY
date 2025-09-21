@@ -242,7 +242,7 @@
   <script type="module">
     // ===== Firebase Init =====
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
     import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     const firebaseConfig = {
@@ -257,9 +257,9 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    auth.useDeviceLanguage();
     const db = getFirestore(app);
 
-    // ===== Auth (only one email allowed) =====
     const ADMIN_EMAIL = 'sohibjonmath@gmail.com';
     const btnSignIn = document.getElementById('btnSignIn');
     const btnSignOutEl = document.getElementById('btnSignOut');
@@ -267,30 +267,46 @@
     const adminUi = document.getElementById('adminUi');
     const accessDenied = document.getElementById('accessDenied');
 
-    btnSignIn.addEventListener('click', async () => {
-      try { const provider = new GoogleAuthProvider(); await signInWithPopup(auth, provider); }
-      catch (e) { alert('Kirishda xatolik: '+ e.message); }
-    });
-    btnSignOutEl.addEventListener('click', () => signOut(auth));
-
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) { toggleAuth(false); return; }
-      authEmailEl.textContent = user.email || '';
-      if (user.email !== ADMIN_EMAIL) { toggleAuth(false, true); return; }
-      toggleAuth(true);
-      selectTab('tab-dashboard');
-      await loadBanner();
-      await refreshAllGrids();
-      await loadUsers();
-      await updateAllExporters();
-    });
-
+    function showAuthError(err){ console.error('[AUTH ERROR]', err); alert('Kirishda xatolik: ' + (err?.message || err)); }
+    function isAdmin(user){ return (user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase(); }
     function toggleAuth(ok, denied=false){
       document.getElementById('btnSignIn').classList.toggle('hidden', !!ok);
       document.getElementById('btnSignOut').classList.toggle('hidden', !ok);
       adminUi.classList.toggle('hidden', !ok);
       accessDenied.classList.toggle('hidden', !denied);
     }
+
+    // Redirect natijasini ushlaymiz (popup bloklansa)
+    getRedirectResult(auth).catch(showAuthError);
+
+    btnSignIn.addEventListener('click', async () => {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        const code = e?.code || '';
+        if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/unauthorized-domain'){
+          try { await signInWithRedirect(auth, provider); return; } catch (e2){ showAuthError(e2); }
+        } else { showAuthError(e); }
+      }
+    });
+    btnSignOutEl.addEventListener('click', () => signOut(auth));
+
+    onAuthStateChanged(auth, async (user) => {
+      if (location.protocol === 'file:') console.warn('Adminni file:// orqali ochyapsiz. Iltimos, localhost yoki https orqali ishga tushiring.');
+      if (!user) { authEmailEl.textContent=''; toggleAuth(false); return; }
+      authEmailEl.textContent = user.email || '';
+      if (!isAdmin(user)) { toggleAuth(false, true); return; }
+      toggleAuth(true);
+      try{
+        if (typeof selectTab === 'function') selectTab('tab-dashboard');
+        if (typeof loadBanner === 'function') await loadBanner();
+        if (typeof refreshAllGrids === 'function') await refreshAllGrids();
+        if (typeof loadUsers === 'function') await loadUsers();
+        if (typeof updateAllExporters === 'function') await updateAllExporters();
+      } catch(err){ console.error('Init error after auth:', err); }
+    });
 
     // ===== Tabs =====
     document.querySelectorAll('.tab').forEach(b=> b.addEventListener('click', ()=> selectTab(b.dataset.tab)));
