@@ -25,6 +25,7 @@ input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px soli
   <span>MathCenter.uz • Admin</span></div>
   <div class="row" id="authBox"><span id="who" class="pill">Guest</span><button id="btnLogin" class="btn">Google bilan kirish</button><button id="btnLogout" class="btn outline hidden">Chiqish</button></div>
 </div></header>
+
 <main class="wrap">
   <div id="gate" class="card"><h3>Ruxsat tekshirilyapti…</h3><p class="note">Faqat <b>sohibjonmath@gmail.com</b> admin panelga kira oladi.</p></div>
   <div id="panel" class="hidden">
@@ -36,6 +37,8 @@ input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px soli
       <button class="tab" data-tab="promo">Promo kodlar</button>
       <button class="tab" data-tab="users">Users</button>
     </div>
+
+    <!-- HOME -->
     <section id="tab-home" class="tabpane">
       <div class="card">
         <h3>Yangi banner qo‘shish</h3>
@@ -53,11 +56,16 @@ input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px soli
       </div>
       <div class="card"><h3>Mavjud bannerlar</h3><div id="home-list" class="grid"></div></div>
     </section>
+
+    <!-- GENERIC -->
     <section id="tab-courses" class="tabpane hidden"></section>
     <section id="tab-tests" class="tabpane hidden"></section>
     <section id="tab-simulators" class="tabpane hidden"></section>
+
+    <!-- PROMO -->
     <section id="tab-promo" class="tabpane hidden">
-      <div class="card"><h3>Promo kod yaratish</h3>
+      <div class="card">
+        <h3>Promo kod yaratish</h3>
         <div class="grid">
           <div><label>Kod</label><input id="promo-code" type="text" placeholder="MATH50"></div>
           <div><label>Chegirma (%)</label><input id="promo-off" type="number" value="10" min="1" max="100"></div>
@@ -69,51 +77,207 @@ input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px soli
       </div>
       <div class="card"><h3>Promo kodlar</h3><div id="promo-list" class="grid"></div></div>
     </section>
+
+    <!-- USERS -->
     <section id="tab-users" class="tabpane hidden">
-      <div class="card"><h3>Foydalanuvchilar</h3>
+      <div class="card">
+        <h3>Foydalanuvchilar</h3>
         <div class="row" style="gap:8px"><input id="user-search" type="text" placeholder="Ism, email, ID..."><button id="user-refresh" class="btn outline">Yangilash</button></div>
         <div id="users-list" class="grid" style="margin-top:12px"></div>
-        <p class="note">Kolleksiya: <code>users</code>.</p>
+        <p class="note">Kolleksiya: <code>users</code>. (yosh, balans, ball, role) tahrirlash mumkin.</p>
       </div>
     </section>
   </div>
 </main>
+
 <script type="module">
-import {{ initializeApp, getApps, getApp }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {{ getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {{ getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDocs, limit }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import {{ getStorage, ref as sRef, uploadBytes, getDownloadURL }} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-const cfg = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.appspot.com", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"}; const app = getApps().length ? getApp() : initializeApp(cfg);
-const auth=getAuth(app), db=getFirestore(app), st=getStorage(app); const provider=new GoogleAuthProvider(); const ADMIN_EMAIL="sohibjonmath@gmail.com";
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, getDocs, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+// YOUR FIREBASE CONFIG:
+const cfg = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+
+const app = getApps().length ? getApp() : initializeApp(cfg);
+const auth = getAuth(app), db = getFirestore(app), st = getStorage(app);
+const provider = new GoogleAuthProvider();
+const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+
 const gate=document.getElementById('gate'), panel=document.getElementById('panel'), who=document.getElementById('who');
 const btnLogin=document.getElementById('btnLogin'), btnLogout=document.getElementById('btnLogout');
-btnLogin.onclick=async()=>{{try{{await signInWithPopup(auth,provider);}}catch(e){{alert(e.message);}}}}; btnLogout.onclick=async()=>{{await signOut(auth);}};
-onAuthStateChanged(auth,(u)=>{{ if(!u){{ who.textContent="Guest"; btnLogin.classList.remove('hidden'); btnLogout.classList.add('hidden'); gate.classList.remove('hidden'); panel.classList.add('hidden'); gate.innerHTML="<h3>Admin panelga kirish</h3><p class='note'>Faqat <b>"+ADMIN_EMAIL+"</b></p>"; return; }} who.textContent=u.email||u.displayName||u.uid; btnLogin.classList.add('hidden'); btnLogout.classList.remove('hidden'); if(u.email!==ADMIN_EMAIL){{ gate.innerHTML="<h3>Ruxsat yo‘q</h3><p class='note'>Siz: "+(u.email||'—')+"</p>"; panel.classList.add('hidden'); gate.classList.remove('hidden'); }} else {{ panel.classList.remove('hidden'); gate.classList.add('hidden'); initTabs(); initHome(); initGeneric('courses'); initGeneric('tests'); initGeneric('simulators'); initPromo(); initUsers(); }} }});
-function initTabs(){{ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{{ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); document.querySelectorAll('.tabpane').forEach(p=>p.classList.add('hidden')); document.getElementById('tab-'+t.dataset.tab).classList.remove('hidden'); }})); }}
-async function uploadImage(file){{ const path=`admin_uploads/${{Date.now()}}_${{file.name.replace(/[^a-z0-9_.-]/gi,'_')}}`; const rf=sRef(st,path); await uploadBytes(rf,file); return await getDownloadURL(rf);}}
-function initHome(){{ const elTitle=document.getElementById('home-title'), elMeta=document.getElementById('home-meta'), elBtn=document.getElementById('home-btn'), elLink=document.getElementById('home-link'), elImg=document.getElementById('home-img'), elFile=document.getElementById('home-file'), elUp=document.getElementById('home-upload'), elNote=document.getElementById('home-upload-note'), elAdd=document.getElementById('home-add'), list=document.getElementById('home-list');
-  elUp.onclick=async()=>{{try{{if(!elFile.files[0])return alert('Fayl tanlang'); elUp.disabled=true; elNote.textContent='Yuklanmoqda…'; const url=await uploadImage(elFile.files[0]); elImg.value=url; elNote.textContent='Yuklandi!';}}catch(e){{elNote.textContent='Xato: '+e.message;}}finally{{elUp.disabled=false;}}}};
-  elAdd.onclick=async()=>{{try{{const p={{title:elTitle.value.trim(),meta:elMeta.value.trim(),btn:elBtn.value.trim(),link:elLink.value.trim(),img:elImg.value.trim(),active:true,createdAt:Date.now()}}; await addDoc(collection(db,'home_banners'),p); elTitle.value=elMeta.value=elBtn.value=elLink.value=elImg.value=''; alert('Qo‘shildi');}}catch(e){{alert('Xato: '+e.message);}}}};
+
+btnLogin.onclick = async ()=>{ try{ await signInWithPopup(auth, provider); }catch(e){ alert(e.message); } };
+btnLogout.onclick = async ()=>{ await signOut(auth); };
+
+onAuthStateChanged(auth,(u)=>{
+  if(!u){
+    who.textContent="Guest";
+    btnLogin.classList.remove('hidden'); btnLogout.classList.add('hidden');
+    gate.classList.remove('hidden'); panel.classList.add('hidden');
+    gate.innerHTML="<h3>Admin panelga kirish</h3><p class='note'>Faqat <b>"+ADMIN_EMAIL+"</b></p>";
+    return;
+  }
+  who.textContent=u.email||u.displayName||u.uid;
+  btnLogin.classList.add('hidden'); btnLogout.classList.remove('hidden');
+
+  if(u.email!==ADMIN_EMAIL){
+    gate.innerHTML="<h3>Ruxsat yo‘q</h3><p class='note'>Siz: "+(u.email||'—')+"</p>";
+    panel.classList.add('hidden'); gate.classList.remove('hidden');
+  }else{
+    panel.classList.remove('hidden'); gate.classList.add('hidden');
+    initTabs(); initHome(); initGeneric('courses'); initGeneric('tests'); initGeneric('simulators'); initPromo(); initUsers();
+  }
+});
+
+function initTabs(){
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.add('hidden'));
+    document.getElementById('tab-'+t.dataset.tab).classList.remove('hidden');
+  }));
+}
+
+async function uploadImage(file){
+  const path=`admin_uploads/${Date.now()}_${file.name.replace(/[^a-z0-9_.-]/gi,'_')}`;
+  const rf=sRef(st,path); await uploadBytes(rf,file); return await getDownloadURL(rf);
+}
+
+// HOME
+function initHome(){
+  const elTitle=document.getElementById('home-title'), elMeta=document.getElementById('home-meta'), elBtn=document.getElementById('home-btn'), elLink=document.getElementById('home-link'), elImg=document.getElementById('home-img'), elFile=document.getElementById('home-file'), elUp=document.getElementById('home-upload'), elNote=document.getElementById('home-upload-note'), elAdd=document.getElementById('home-add'), list=document.getElementById('home-list');
+  elUp.onclick=async()=>{ try{ if(!elFile.files[0])return alert('Fayl tanlang'); elUp.disabled=true; elNote.textContent='Yuklanmoqda…'; const url=await uploadImage(elFile.files[0]); elImg.value=url; elNote.textContent='Yuklandi!'; }catch(e){ elNote.textContent='Xato: '+e.message; }finally{ elUp.disabled=false; } };
+  elAdd.onclick=async()=>{ try{ const p={title:elTitle.value.trim(),meta:elMeta.value.trim(),btn:elBtn.value.trim(),link:elLink.value.trim(),img:elImg.value.trim(),active:true,createdAt:Date.now()}; await addDoc(collection(db,'home_banners'),p); elTitle.value=elMeta.value=elBtn.value=elLink.value=elImg.value=''; alert('Qo‘shildi'); }catch(e){ alert('Xato: '+e.message); } };
   const qy=query(collection(db,'home_banners'), where('active','==', true));
-  onSnapshot(qy,(snap)=>{{const arr=[]; snap.forEach(d=>arr.push({{id:d.id,...d.data()}})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr);}}, (err)=>{{list.innerHTML='<div class="note">Xato: '+err.message+'</div>';}});
-  function render(items){{list.innerHTML=''; items.forEach(v=>{{const div=document.createElement('div'); div.className='card item'; div.innerHTML=`<div class="thumb" style="background-image:url('${{v.img||""}}')"></div><div style="flex:1"><div class="row spread"><strong>${{v.title||'—'}}</strong><span class="pill">${{v.active?'ACTIVE':'OFF'}}</span></div><div class="note">${{v.meta||''}}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn outline" data-act="edit">Tahrirlash</button><button class="btn danger" data-act="del">O‘chirish</button></div></div>`; div.querySelector('[data-act="edit"]').onclick=async()=>{{const nt=prompt('Sarlavha',v.title||'')??v.title; const nm=prompt('Meta',v.meta||'')??v.meta; const nb=prompt('Tugma nomi',v.btn||'')??v.btn; const nl=prompt('Tugma linki',v.link||'')??v.link; const ni=prompt('Rasm URL',v.img||'')??v.img; const na=confirm('Aktiv bo‘lsinmi? OK=Ha, Cancel=Yo‘q'); await updateDoc(doc(db,'home_banners',v.id),{{title:nt,meta:nm,btn:nb,link:nl,img:ni,active:na}});}}; div.querySelector('[data-act="del"]').onclick=async()=>{{if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,'home_banners',v.id));}}; list.appendChild(div);}});}}
-function initGeneric(kind){{ const pane=document.getElementById('tab-'+kind);
-  pane.innerHTML=`<div class="card"><h3>${{kind[0].toUpperCase()+kind.slice(1)}} — yangi card</h3><div class="grid"><div><label>Title</label><input id="${{kind}}-title" type="text"></div><div><label>Meta</label><input id="${{kind}}-meta" type="text"></div><div><label>Button nomi</label><input id="${{kind}}-btn" type="text"></div><div><label>Button linki</label><input id="${{kind}}-link" type="url" placeholder="https://..."></div><div><label>Rasm (URL yoki fayl)</label><input id="${{kind}}-img" type="url" placeholder="https://..."><div class="row" style="margin-top:8px"><input id="${{kind}}-file" type="file" accept="image/*"><button id="${{kind}}-upload" class="btn outline">Faylni yuklash</button><span class="note" id="${{kind}}-upload-note"></span></div></div></div><div class="row" style="margin-top:12px"><button id="${{kind}}-add" class="btn">Qo‘shish</button></div><p class="note">Kolleksiya: <code>${{kind}}</code></p></div><div class="card"><h3>Ro‘yxat</h3><div id="${{kind}}-list" class="grid"></div></div>`;
-  const elTitle=document.getElementById(`${{kind}}-title`), elMeta=document.getElementById(`${{kind}}-meta`), elBtn=document.getElementById(`${{kind}}-btn`), elLink=document.getElementById(`${{kind}}-link`), elImg=document.getElementById(`${{kind}}-img`), elFile=document.getElementById(`${{kind}}-file`), elUp=document.getElementById(`${{kind}}-upload`), elNote=document.getElementById(`${{kind}}-upload-note`), elAdd=document.getElementById(`${{kind}}-add`), list=document.getElementById(`${{kind}}-list`);
-  elUp.onclick=async()=>{{try{{if(!elFile.files[0])return alert('Fayl tanlang'); elUp.disabled=true; elNote.textContent='Yuklanmoqda…'; const url=await uploadImage(elFile.files[0]); elImg.value=url; elNote.textContent='Yuklandi!';}}catch(e){{elNote.textContent='Xato: '+e.message;}}finally{{elUp.disabled=false;}}}};
-  elAdd.onclick=async()=>{{try{{const p={{title:elTitle.value.trim(),meta:elMeta.value.trim(),btn:elBtn.value.trim(),link:elLink.value.trim(),img:elImg.value.trim(),active:true,createdAt:Date.now()}}; await addDoc(collection(db,kind),p); elTitle.value=elMeta.value=elBtn.value=elLink.value=elImg.value='';}}catch(e){{alert('Xato: '+e.message);}}}};
-  const qy=query(collection(db,kind), where('active','==', true)); onSnapshot(qy,(snap)=>{{const arr=[]; snap.forEach(d=>arr.push({{id:d.id,...d.data()}})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr);}},(err)=>{{list.innerHTML='<div class="note">Xato: '+err.message+'</div>';}});
-  function render(items){{list.innerHTML=''; items.forEach(v=>{{const div=document.createElement('div'); div.className='card item'; div.innerHTML=`<div class="thumb" style="background-image:url('${{v.img||""}}')"></div><div style="flex:1"><div class="row spread"><strong>${{v.title||'—'}}</strong><span class="pill">${{v.active?'ACTIVE':'OFF'}}</span></div><div class="note">${{v.meta||''}}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn outline" data-act="edit">Tahrirlash</button><button class="btn danger" data-act="del">O‘chirish</button></div></div>`; div.querySelector('[data-act="edit"]').onclick=async()=>{{const nt=prompt('Sarlavha',v.title||'')??v.title; const nm=prompt('Meta',v.meta||'')??v.meta; const nb=prompt('Tugma nomi',v.btn||'')??v.btn; const nl=prompt('Tugma linki',v.link||'')??v.link; const ni=prompt('Rasm URL',v.img||'')??v.img; const na=confirm('Aktiv bo‘lsinmi? OK=Ha, Cancel=Yo‘q'); await updateDoc(doc(db,kind,v.id),{{title:nt,meta:nm,btn:nb,link:nl,img:ni,active:na}});}}; div.querySelector('[data-act="del"]').onclick=async()=>{{if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,kind,v.id));}}; list.appendChild(div);}});}}
-function initPromo(){{
+  onSnapshot(qy,(snap)=>{ const arr=[]; snap.forEach(d=>arr.push({id:d.id,...d.data()})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr); }, (err)=>{ list.innerHTML='<div class="note">Xato: '+err.message+'</div>'; });
+  function render(items){
+    list.innerHTML='';
+    items.forEach(v=>{
+      const div=document.createElement('div'); div.className='card item';
+      div.innerHTML=`<div class="thumb" style="background-image:url('${v.img||""}')"></div>
+      <div style="flex:1"><div class="row spread"><strong>${v.title||'—'}</strong><span class="pill">${v.active?'ACTIVE':'OFF'}</span></div>
+      <div class="note">${v.meta||''}</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn outline" data-act="edit">Tahrirlash</button>
+        <button class="btn danger" data-act="del">O‘chirish</button>
+      </div></div>`;
+      div.querySelector('[data-act="edit"]').onclick=async()=>{
+        const nt=prompt('Sarlavha',v.title||'')??v.title;
+        const nm=prompt('Meta',v.meta||'')??v.meta;
+        const nb=prompt('Tugma nomi',v.btn||'')??v.btn;
+        const nl=prompt('Tugma linki',v.link||'')??v.link;
+        const ni=prompt('Rasm URL',v.img||'')??v.img;
+        const na=confirm('Aktiv bo‘lsinmi? OK=Ha, Cancel=Yo‘q');
+        await updateDoc(doc(db,'home_banners',v.id),{title:nt,meta:nm,btn:nb,link:nl,img:ni,active:na});
+      };
+      div.querySelector('[data-act="del"]').onclick=async()=>{ if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,'home_banners',v.id)); };
+      list.appendChild(div);
+    });
+  }
+}
+
+// Generic (courses/tests/simulators)
+function initGeneric(kind){
+  const pane=document.getElementById('tab-'+kind);
+  pane.innerHTML=`<div class="card"><h3>${kind[0].toUpperCase()+kind.slice(1)} — yangi card</h3>
+    <div class="grid">
+      <div><label>Title</label><input id="${kind}-title" type="text"></div>
+      <div><label>Meta</label><input id="${kind}-meta" type="text"></div>
+      <div><label>Button nomi</label><input id="${kind}-btn" type="text"></div>
+      <div><label>Button linki</label><input id="${kind}-link" type="url" placeholder="https://..."></div>
+      <div><label>Rasm (URL yoki fayl)</label><input id="${kind}-img" type="url" placeholder="https://...">
+        <div class="row" style="margin-top:8px"><input id="${kind}-file" type="file" accept="image/*">
+          <button id="${kind}-upload" class="btn outline">Faylni yuklash</button><span class="note" id="${kind}-upload-note"></span></div></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="${kind}-add" class="btn">Qo‘shish</button></div>
+    <p class="note">Kolleksiya: <code>${kind}</code></p></div>
+    <div class="card"><h3>Ro‘yxat</h3><div id="${kind}-list" class="grid"></div></div>`;
+  const elTitle=document.getElementById(`${kind}-title`), elMeta=document.getElementById(`${kind}-meta`), elBtn=document.getElementById(`${kind}-btn`), elLink=document.getElementById(`${kind}-link`), elImg=document.getElementById(`${kind}-img`), elFile=document.getElementById(`${kind}-file`), elUp=document.getElementById(`${kind}-upload`), elNote=document.getElementById(`${kind}-upload-note`), elAdd=document.getElementById(`${kind}-add`), list=document.getElementById(`${kind}-list`);
+  elUp.onclick=async()=>{ try{ if(!elFile.files[0])return alert('Fayl tanlang'); elUp.disabled=true; elNote.textContent='Yuklanmoqda…'; const url=await uploadImage(elFile.files[0]); elImg.value=url; elNote.textContent='Yuklandi!'; }catch(e){ elNote.textContent='Xato: '+e.message; }finally{ elUp.disabled=false; } };
+  elAdd.onclick=async()=>{ try{ const p={title:elTitle.value.trim(),meta:elMeta.value.trim(),btn:elBtn.value.trim(),link:elLink.value.trim(),img:elImg.value.trim(),active:true,createdAt:Date.now()}; await addDoc(collection(db,kind),p); elTitle.value=elMeta.value=elBtn.value=elLink.value=elImg.value=''; }catch(e){ alert('Xato: '+e.message); } };
+  const qy=query(collection(db,kind), where('active','==', true));
+  onSnapshot(qy,(snap)=>{ const arr=[]; snap.forEach(d=>arr.push({id:d.id,...d.data()})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr); }, (err)=>{ list.innerHTML='<div class="note">Xato: '+err.message+'</div>'; });
+  function render(items){
+    list.innerHTML='';
+    items.forEach(v=>{
+      const div=document.createElement('div'); div.className='card item';
+      div.innerHTML=`<div class="thumb" style="background-image:url('${v.img||""}')"></div>
+      <div style="flex:1"><div class="row spread"><strong>${v.title||'—'}</strong><span class="pill">${v.active?'ACTIVE':'OFF'}</span></div>
+      <div class="note">${v.meta||''}</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn outline" data-act="edit">Tahrirlash</button>
+        <button class="btn danger" data-act="del">O‘chirish</button>
+      </div></div>`;
+      div.querySelector('[data-act="edit"]').onclick=async()=>{
+        const nt=prompt('Sarlavha',v.title||'')??v.title;
+        const nm=prompt('Meta',v.meta||'')??v.meta;
+        const nb=prompt('Tugma nomi',v.btn||'')??v.btn;
+        const nl=prompt('Tugma linki',v.link||'')??v.link;
+        const ni=prompt('Rasm URL',v.img||'')??v.img;
+        const na=confirm('Aktiv bo‘lsinmi? OK=Ha, Cancel=Yo‘q');
+        await updateDoc(doc(db,kind,v.id),{title:nt,meta:nm,btn:nb,link:nl,img:ni,active:na});
+      };
+      div.querySelector('[data-act="del"]').onclick=async()=>{ if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,kind,v.id)); };
+      list.appendChild(div);
+    });
+  }
+}
+
+// Promo
+function initPromo(){
   const elCode=document.getElementById('promo-code'), elOff=document.getElementById('promo-off'), elExp=document.getElementById('promo-exp'), elMax=document.getElementById('promo-max'), elAdd=document.getElementById('promo-add'), list=document.getElementById('promo-list');
-  elAdd.onclick=async()=>{{try{{const p={{code:(elCode.value||'').trim().toUpperCase(),off:Number(elOff.value)||0,exp:(elExp.value||'').trim(),max:Number(elMax.value)||1,used:0,active:true,createdAt:Date.now()}}; if(!p.code)return alert('Kod kiriting'); await addDoc(collection(db,'promocodes'),p); elCode.value=''; elOff.value=10; elExp.value=''; elMax.value=1;}}catch(e){{alert('Xato: '+e.message);}}}};
-  onSnapshot(collection(db,'promocodes'),(snap)=>{{const arr=[]; snap.forEach(d=>arr.push({{id:d.id,...d.data()}})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr);}});
-  function render(items){{list.innerHTML=''; items.forEach(v=>{{const div=document.createElement('div'); div.className='card'; div.innerHTML=`<div class="row spread"><strong>${{v.code}}</strong><span class="pill">${{v.active?'ACTIVE':'OFF'}}</span></div><div class="note">Chegirma: ${{v.off}}% · Limit: ${{v.used||0}}/${{v.max||1}} · Tugash: ${{v.exp||'—'}}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn outline" data-act="toggle">${{v.active?'O‘chir':'Yoq'}}</button><button class="btn danger" data-act="del">O‘chirish</button></div>`; div.querySelector('[data-act="toggle"]').onclick=async()=>{{await updateDoc(doc(db,'promocodes',v.id),{{active:!v.active}});}}; div.querySelector('[data-act="del"]').onclick=async()=>{{if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,'promocodes',v.id));}}; list.appendChild(div);}});}}
-function initUsers(){{
+  elAdd.onclick=async()=>{ try{ const p={code:(elCode.value||'').trim().toUpperCase(),off:Number(elOff.value)||0,exp:(elExp.value||'').trim(),max:Number(elMax.value)||1,used:0,active:true,createdAt:Date.now()}; if(!p.code)return alert('Kod kiriting'); await addDoc(collection(db,'promocodes'),p); elCode.value=''; elOff.value=10; elExp.value=''; elMax.value=1; }catch(e){ alert('Xato: '+e.message); } };
+  onSnapshot(collection(db,'promocodes'),(snap)=>{ const arr=[]; snap.forEach(d=>arr.push({id:d.id,...d.data()})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr); });
+  function render(items){
+    list.innerHTML='';
+    items.forEach(v=>{
+      const div=document.createElement('div'); div.className='card';
+      div.innerHTML=`<div class="row spread"><strong>${v.code}</strong><span class="pill">${v.active?'ACTIVE':'OFF'}</span></div>
+      <div class="note">Chegirma: ${v.off}% · Limit: ${v.used||0}/${v.max||1} · Tugash: ${v.exp||'—'}</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn outline" data-act="toggle">${v.active?'O‘chir':'Yoq'}</button>
+        <button class="btn danger" data-act="del">O‘chirish</button>
+      </div>`;
+      div.querySelector('[data-act="toggle"]').onclick=async()=>{ await updateDoc(doc(db,'promocodes',v.id),{active:!v.active}); };
+      div.querySelector('[data-act="del"]').onclick=async()=>{ if(confirm('O‘chirishni tasdiqlang')) await deleteDoc(doc(db,'promocodes',v.id)); };
+      list.appendChild(div);
+    });
+  }
+}
+
+// Users
+function initUsers(){
   const list=document.getElementById('users-list'), search=document.getElementById('user-search'), refresh=document.getElementById('user-refresh');
-  async function loadUsers(){{list.innerHTML=''; const snap=await getDocs(limit(collection(db,'users'),200)); const arr=[]; snap.forEach(d=>arr.push({{id:d.id,...d.data()}})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr);}}
-  function render(items){{list.innerHTML=''; items.forEach(u=>{{const div=document.createElement('div'); div.className='card'; div.innerHTML=`<div class="row spread"><strong>${{u.ism||'—'}} ${{u.familiya||''}}</strong><span class="pill">${{u.role||'user'}}</span></div><div class="note">Email: ${{u.email||'—'}} · ID: ${{u.numericId||'—'}} · Yosh: ${{u.yosh||'—'}} · Balans: ${{u.balans||0}} · Ball: ${{u.ball||0}}</div><div class="row" style="gap:8px;margin-top:8px"><button class="btn outline" data-act="edit">Tahrirlash</button></div>`; div.querySelector('[data-act="edit"]').onclick=async()=>{{const ny=prompt('Yosh',u.yosh||'')??u.yosh; const nb=prompt('Balans',u.balans||'0')??u.balans; const nl=prompt('Ball',u.ball||'0')??u.ball; const nr=prompt('Role (user/teacher/admin)',u.role||'user')??u.role; await updateDoc(doc(db,'users',u.id),{{yosh:ny,balans:Number(nb)||0,ball:Number(nl)||0,role:nr||'user'}});}}; list.appendChild(div);}});}}
-  refresh.onclick=loadUsers; search.addEventListener('input',()=>{{const q=search.value.toLowerCase(); document.querySelectorAll('#users-list .card').forEach(card=>{{card.style.display=card.textContent.toLowerCase().includes(q)?'':'none';}});}}); loadUsers();
-}}
+  async function loadUsers(){ list.innerHTML=''; const snap=await getDocs(limit(collection(db,'users'),200)); const arr=[]; snap.forEach(d=>arr.push({id:d.id,...d.data()})); arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)); render(arr); }
+  function render(items){
+    list.innerHTML='';
+    items.forEach(u=>{
+      const div=document.createElement('div'); div.className='card';
+      div.innerHTML=`<div class="row spread"><strong>${u.ism||'—'} ${u.familiya||''}</strong><span class="pill">${u.role||'user'}</span></div>
+      <div class="note">Email: ${u.email||'—'} · ID: ${u.numericId||'—'} · Yosh: ${u.yosh||'—'} · Balans: ${u.balans||0} · Ball: ${u.ball||0}</div>
+      <div class="row" style="gap:8px;margin-top:8px"><button class="btn outline" data-act="edit">Tahrirlash</button></div>`;
+      div.querySelector('[data-act="edit"]').onclick=async()=>{
+        const ny=prompt('Yosh',u.yosh||'')??u.yosh;
+        const nb=prompt('Balans',u.balans||'0')??u.balans;
+        const nl=prompt('Ball',u.ball||'0')??u.ball;
+        const nr=prompt('Role (user/teacher/admin)',u.role||'user')??u.role;
+        await updateDoc(doc(db,'users',u.id),{yosh:ny,balans:Number(nb)||0,ball:Number(nl)||0,role:nr||'user'});
+      };
+      list.appendChild(div);
+    });
+  }
+  refresh.onclick=loadUsers;
+  search.addEventListener('input', ()=>{ const q=search.value.toLowerCase(); document.querySelectorAll('#users-list .card').forEach(card=>{ card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none'; }); });
+  loadUsers();
+}
 </script>
 </body></html>
