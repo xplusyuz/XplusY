@@ -32,8 +32,8 @@
       </div>
       <div class="ml-auto flex items-center gap-2">
         <span id="authEmail" class="text-sm text-gray-600"></span>
-        <button id="btnSignIn" class="btn btn-primary">Google bilan kirish</button>
-        <button id="btnSignOut" class="btn btn-secondary hidden">Chiqish</button>
+        <button id="btnSignIn" type="button" class="btn btn-primary">Google bilan kirish</button>
+        <button id="btnSignOut" type="button" class="btn btn-secondary hidden">Chiqish</button>
       </div>
     </div>
   </header>
@@ -278,6 +278,9 @@
 
     // Redirect natijasini ushlaymiz (popup bloklansa)
     getRedirectResult(auth).catch(showAuthError);
+
+    // mark when auth listeners are wired
+    window.__authReady = true;
 
     btnSignIn.addEventListener('click', async () => {
       const provider = new GoogleAuthProvider();
@@ -577,6 +580,24 @@
     function downloadText(filename, text){ const blob = new Blob([text], {type:'text/html;charset=utf-8'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }
     async function copyText(text){ try{ await navigator.clipboard.writeText(text); alert('Kod nusxalandi.'); }catch(e){ alert('Nusxalashda xatolik: '+e.message); } }
     function previewCode(iframe, code){ iframe.srcdoc = code; }
+  </script>
+
+  <!-- Fallback (non-module) helper: if module didn't bind within 2s, clicking Sign In shows guidance -->
+  <script>
+    (function(){
+      setTimeout(function(){
+        try{
+          if (window.__authReady) return; // module attached fine
+          var btn = document.getElementById('btnSignIn');
+          if (!btn) return;
+          if (btn.__fallbackBound) return; btn.__fallbackBound = true;
+          btn.addEventListener('click', function(){
+            alert('Kirish ishlamadi: iltimos adminni HTTP orqali (masalan, http://localhost:5500/admin.html) oching va Firebase Authentication → Authorized domains ga domeningizni qo\'shing. Agar popup bloklansa, redirect avtomatik ishlashi uchun sahifani qayta oching.');
+          });
+          console.warn('[Fallback] Auth module yuklanmagan. HTTP orqali oching yoki konsolni tekshiring.');
+        }catch(e){ /* ignore */ }
+      }, 2000);
+    })();
   </script>
 </body>
 </html>
