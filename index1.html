@@ -35,9 +35,9 @@
   <header>
     <div class="header-inner">
       <div class="brand">
-        <div class="logo" aria-hidden="true">
-          <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><path d="M76 92h104c9 0 16-7 16-16s-7-16-16-16H60c-9 0-16 7-16 16s7 16 16 16h4c8 41 4 77-8 97-5 8 5 17 13 12 24-14 35-53 29-109zm57 0c7 39 3 74-8 94-5 9 6 18 14 12 24-16 35-56 28-106h-34z"/></svg>
-        </div>
+  <div class="logo" aria-hidden="true">
+    <img src="assets/favicon.svg" alt="Logo" />
+  </div>
         <div class="brand-title"><h1>MathCenter.uz</h1></div>
       </div>
       <div class="stats" id="headerStats">
@@ -62,26 +62,110 @@
     </div>
   </div>
 <script>
-const routes=["home","courses","tests","simulators","results","profile"];
-const fab=document.getElementById('fab'); const fabBtn=document.getElementById('fabBtn'); const fabMenu=document.getElementById('fabMenu');
-function closeFab(){ if(fab.classList.contains('open')){ fab.classList.add('closing'); setTimeout(()=>{ fab.classList.remove('open'); fab.classList.remove('closing');},180);}}
-fabBtn.onclick=(e)=>{ e.stopPropagation(); if(fab.classList.contains('open')) closeFab(); else fab.classList.add('open'); };
-fabMenu.addEventListener('click',(e)=>{ const btn=e.target.closest('.chip'); if(!btn) return; const r=btn.getAttribute('data-route'); if(!r) return; loadRoute(r); closeFab(); });
-document.addEventListener('click',(e)=>{ if(fab.classList.contains('open') && !fab.contains(e.target)) closeFab(); });
-document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeFab(); });
-function setActive(route){ document.querySelectorAll('.fab-menu .chip').forEach(b=>b.classList.toggle('active', b.getAttribute('data-route')===route)); }
-async function loadRoute(route){
-  const app=document.getElementById('app');
-  try{ const res=await fetch('partials/'+route+'.html?v='+Date.now()); if(!res.ok) throw 0; app.innerHTML=await res.text(); }
-  catch(_){ app.innerHTML='<div class="content"><h2>'+route+'</h2><p>Namuna sahifa.</p></div>'; }
-  setActive(route); history.replaceState({},'', '#'+route); window.scrollTo({top:0,behavior:'smooth'});
-}
-window.addEventListener('hashchange',()=>{ const r=location.hash.replace('#',''); if(routes.includes(r)) loadRoute(r); });
-document.addEventListener('DOMContentLoaded',()=>{ const start=location.hash.replace('#','')||'home'; setActive(start); loadRoute(start); updateHeader({}); });
-function updateHeader(d){ const name=d?.ism||'Sohibjon', age=d?.yosh||'26', id=d?.numericId||'1002', balans=d?.balans??0, ball=d?.ball??0;
-  document.getElementById('helloName').textContent=name; document.getElementById('helloAge').textContent='Yosh: '+age;
-  document.getElementById('headerID').textContent=id; document.getElementById('headerBalans').textContent=balans; document.getElementById('headerBall').textContent=ball;
-  const c=document.getElementById('headerCompact'); c.innerHTML='<div class="card"><div style="width:100%"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;"><div style="font-weight:800">Salom <span style="font-weight:900">'+name+'</span></div><div class="label">Yosh: '+age+'</div></div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;"><div><div class="label">ID</div><div class="value">'+id+'</div></div><div><div class="label">Balans</div><div class="value">'+balans+'</div></div><div><div class="label">Ball</div><div class="value">'+ball+'</div></div></div></div></div>';
-}
+/* ===== Non-invasive Shadow Router (Design-safe) ===== */
+(function(){
+  // 1) Routelarni nomlash:
+  const ROUTES = {
+    home: 'home.html',
+    courses: 'courses.html',
+    tests: 'tests.html',
+    simulators: 'simulators.html'
+  };
+
+  // 2) Kontentni joylaydigan joyni topish:
+  //    - Avval <main> yoki role="main" izlaymiz
+  //    - Bo'lmasa footer oldidan qo'shamiz
+  function ensureHost(){
+    let before = document.querySelector('main,[role="main"]');
+    if(!before){
+      const foot = document.querySelector('footer');
+      if(foot){ before = foot; }
+    }
+    const host = document.createElement('div');
+    host.id = 'app-view'; // faqat JS’da bor; CSS qo‘shmaymiz
+    if(before){
+      before.parentNode.insertBefore(host, before.tagName.toLowerCase()==='footer' ? before : before.firstChild);
+    }else{
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+
+  const host = ensureHost();
+  const shadow = host.attachShadow ? host.attachShadow({mode:'open'}) : null;
+
+  // 3) Aktiv menyuni belgilang (stylingni o‘zgartirmaymiz, faqat .active class qo‘yamiz)
+  function highlight(route){
+    document.querySelectorAll('a[data-route], a[href^="#"]').forEach(a=>{
+      const href = (a.getAttribute('href')||'').replace('#','');
+      const dr = a.getAttribute('data-route') || href;
+      if(ROUTES[dr] && dr===route) a.classList.add('active'); else a.classList.remove('active');
+    });
+  }
+
+  function routeFromHash(){
+    const h = (location.hash||'').replace('#','').trim();
+    return ROUTES[h] ? h : 'home';
+  }
+
+  function injectHTMLDoc(doc){
+    const target = shadow || host;
+    target.innerHTML = ''; // eski kontentni tozalash
+
+    // head ichidagi style/link larni scope ichiga ko‘chirib qo‘yamiz
+    const head = doc.querySelector('head');
+    if(head){
+      head.querySelectorAll('style,link[rel="stylesheet"]').forEach(n=>{
+        target.appendChild(n.cloneNode(true));
+      });
+    }
+
+    // body (yoki documentElement) ni qo‘yamiz
+    const wrap = document.createElement('div');
+    wrap.innerHTML = (doc.body ? doc.body.innerHTML : doc.documentElement.innerHTML) || '';
+    target.appendChild(wrap);
+
+    // script’larni qayta ishga tushiramiz
+    const scripts = target.querySelectorAll('script');
+    scripts.forEach(old=>{
+      const s = document.createElement('script');
+      [...old.attributes].forEach(a=>s.setAttribute(a.name, a.value));
+      if(!old.src) s.textContent = old.textContent || '';
+      old.replaceWith(s);
+    });
+  }
+
+  async function load(route){
+    const file = ROUTES[route] || ROUTES.home;
+    try{
+      const res = await fetch(file, {cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      injectHTMLDoc(doc);
+      highlight(route);
+    }catch(err){
+      const target = shadow || host;
+      target.innerHTML = '<div style="padding:12px;border:1px solid #e5f3ed;border-radius:10px;background:#f8fdfb">Sahifa yuklanmadi: '+file+'</div>';
+      highlight(null);
+    }
+  }
+
+  // Ichki hash linklari (#home, #courses, ...) SPA sifatida ishlasin
+  document.addEventListener('click', (e)=>{
+    const a = e.target.closest('a[href^="#"]');
+    if(!a) return;
+    const r = a.getAttribute('href').slice(1);
+    if(ROUTES[r]){
+      e.preventDefault();
+      if(routeFromHash() !== r) location.hash = r; else load(r);
+    }
+  });
+
+  window.addEventListener('hashchange', ()=> load(routeFromHash()));
+
+  // Boshlash
+  load(routeFromHash());
+})();
 </script>
 </body></html>
