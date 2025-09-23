@@ -3,42 +3,633 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>XplusY — MathCenter</title>
-  <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="assets/css/style.css">
+  <title>MathCenter.uz — Xush kelibsiz</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <style>
+    :root{ --green:#0faf64; --edge:#e0f3eb; --bg:#f6fffb; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg)}
+
+    header{position:sticky;top:0;z-index:10;padding:10px 16px;background:#ffffffd9;border-bottom:1px solid #eaf7f1;backdrop-filter:saturate(150%) blur(6px);}
+    .header-inner{max-width:1200px;margin:0 auto;display:grid;gap:12px;align-items:center;}
+    @media(min-width:900px){ .header-inner{ grid-template-columns: 1fr auto; } }
+
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:48px;height:48px;border-radius:14px;background:radial-gradient(60% 60% at 50% 35%, #b9ffd9, #2de38d 55%, #0ea55a 100%);display:grid;place-items:center;box-shadow:0 0 36px rgba(14,175,100,.35), inset 0 0 20px rgba(255,255,255,.7)}
+    .logo svg{width:28px;height:28px;fill:#fff}
+    .brand-title{padding:8px 12px;border-radius:14px;background:linear-gradient(145deg,#f7fffb,#eafff5);box-shadow:0 10px 18px #b0f5d633,inset 0 -3px 8px rgba(255,255,255,.8)}
+    .brand-title h1{margin:0;font-size:20px;background:linear-gradient(180deg,#0dbb6f,#0a8f52);-webkit-background-clip:text;color:transparent;font-weight:900;letter-spacing:.3px}
+
+    .stats{display:grid; grid-auto-flow:column; gap:10px;}
+    .card{background:#fff;border:1px solid var(--edge);border-radius:14px;padding:10px 12px;box-shadow:0 12px 28px rgba(10,143,82,.12), 0 2px 6px rgba(0,0,0,.05);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:52px;min-width:90px}
+    .card .label{font-size:12px;opacity:.7}
+    .card .value{font-size:14px;font-weight:800}
+    @media(max-width:899px){ .header-inner{ grid-template-columns:1fr; } }
+    .stats-compact{display:none}
+    @media(max-width:540px){ .stats{display:none} .stats-compact{display:block} }
+
+    main{max-width:1200px;margin:16px auto 96px;padding:0 16px}
+    .content{background:#fff;border:1px solid var(--edge);border-radius:16px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+
+    .fab{position:fixed;right:16px;bottom:16px;z-index:50}
+    .fab-btn{width:56px;height:56px;border-radius:20px;background:var(--green);color:#fff;border:none;font-size:24px;font-weight:900;box-shadow:0 10px 24px rgba(0,0,0,.2)}
+    .fab-menu{display:none;position:absolute;right:0;bottom:70px;flex-direction:column;gap:8px}
+    .fab.open .fab-menu{display:flex}
+    .chip{background:#fff;border:1px solid var(--edge);padding:10px 14px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,.08);font-weight:800;transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease, color .18s ease}
+    .chip:hover{transform:scale(1.05); box-shadow:0 6px 16px rgba(0,0,0,.14)}
+    .chip.active{background:#0faf64;color:#fff;border-color:#0faf64;box-shadow:0 8px 22px rgba(15,175,100,.35)}
+
+    /* ===== Modallar (design-safe) ===== */
+    .mc-modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.25);z-index:80}
+    .mc-modal.open{display:grid}
+    .mc-card{background:#fff;border:1px solid #eaf7f1;border-radius:16px;box-shadow:0 10px 26px rgba(0,0,0,.12);max-width:720px;width:100%;padding:16px;max-height:90vh;overflow:auto}
+    body.modal-open{overflow:hidden}
+    .mc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .mc-title{font-weight:900}
+    .mc-close{border:none;background:#fff;border:1px solid #eaf7f1;border-radius:10px;cursor:pointer;padding:6px 10px}
+    .mc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    @media(max-width:640px){ .mc-grid{grid-template-columns:1fr} }
+    .mc-row{display:grid;gap:6px}
+    .mc-row label{font-size:12px;opacity:.7}
+    .mc-row input, .mc-row select{padding:10px 12px;border:1px solid #eaf7f1;border-radius:12px;outline:none}
+    .mc-row input:focus, .mc-row select:focus{box-shadow:0 0 0 3px rgba(15,175,100,.18)}
+    .mc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    .mc-btn{padding:10px 14px;border-radius:12px;border:1px solid #eaf7f1;background:#fff;cursor:pointer;font-weight:800}
+    .mc-btn--pri{background:#0faf64;color:#fff;border-color:#0faf64}
+    .mc-badge{display:inline-block;border:1px solid #eaf7f1;border-radius:999px;padding:4px 10px;font-size:12px}
+    .mc-tab.active{background:var(--green);color:#fff;border-color:var(--green)}
+
+    /* Profil ko‘rinishi */
+    #profileView .p-card{background:#fff;border:1px solid #eaf7f1;border-radius:14px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+    #profileView .p-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    @media(max-width:640px){ #profileView .p-grid{grid-template-columns:1fr} }
+    #profileView .p-item{display:grid;gap:4px}
+    #profileView .p-item .k{font-size:12px;opacity:.7}
+    #profileView .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  </style>
 </head>
 <body>
-  <header class="top">
-    <div class="nav container">
-      <div class="brand"><div class="pi">π</div><strong>XplusY</strong></div>
-      <nav>
-        <a href="home.html">Bosh sahifa</a>
-        <a href="courses.html">Kurslar</a>
-        <a href="simulators.html">Simulyator</a>
-        <a href="tests.html">Testlar</a>
-        <a href="admin.html">Admin</a>
-      </nav>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><path d="M76 92h104c9 0 16-7 16-16s-7-16-16-16H60c-9 0-16 7-16 16s7 16 16 16h4c8 41 4 77-8 97-5 8 5 17 13 12 24-14 35-53 29-109zm57 0c7 39 3 74-8 94-5 9 6 18 14 12 24-16 35-56 28-106h-34z"/></svg>
+        </div>
+        <div class="brand-title"><h1>MathCenter.uz</h1></div>
+      </div>
+      <div class="stats" id="headerStats">
+        <div class="card"><div class="label">Salom</div><div class="value" id="helloName">—</div><div class="label" id="helloAge">Yosh: —</div></div>
+        <div class="card"><div class="label">ID</div><div class="value" id="headerID">—</div></div>
+        <div class="card"><div class="label">Balans</div><div class="value" id="headerBalans">0</div></div>
+        <div class="card"><div class="label">Ball</div><div class="value" id="headerBall">0</div></div>
+      </div>
+      <div class="stats-compact" id="headerCompact"></div>
     </div>
   </header>
-  <main class="container">
-    <div class="grid">
-      <div class="col-12">
-        <div class="hero">
-          <div class="bg" style="background-image:linear-gradient(90deg,#eafaf2,#dff7ee)"></div>
-          <div class="veil"></div>
-          <div class="inner">
-            <span class="badge">Xush kelibsiz</span>
-            <h1>MathCenter — Oq & Yashil Granit dizayn</h1>
-            <p>Courses, Simulators, Tests — hammasi bitta joyda. Admin orqali kartalarni Firestore’dan boshqaring.</p>
-            <div class="actions">
-              <a class="pill" href="home.html">Home</a>
-              <a class="pill" href="admin.html">Admin panel</a>
-            </div>
-          </div>
-        </div>
-      </div>
+
+  <main>
+    <div id="app">
+      <div class="content"><h2>Bosh sahifa</h2><p>Xush kelibsiz!</p></div>
     </div>
   </main>
-  <div class="footer small">© 2025 XplusY</div>
+
+  <div class="fab" id="fab">
+    <button class="fab-btn" id="fabBtn">≡</button>
+    <div class="fab-menu" id="fabMenu">
+      <button class="chip" data-route="home">Bosh sahifa</button>
+      <button class="chip" data-route="courses">Kurslar</button>
+      <button class="chip" data-route="tests">Testlar</button>
+      <button class="chip" data-route="simulators">Simulyatorlar</button>
+      <button class="chip" data-route="results">Natijalar</button>
+      <button class="chip" data-route="profile">Profil</button>
+    </div>
+  </div>
+
+  <!-- ===== Modallar ===== -->
+
+  <!-- AUTH: Kirish(ID+parol) / Ro‘yxatdan (Email/Google) -->
+  <div class="mc-modal" id="authModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true" style="max-width:640px">
+      <div class="mc-head">
+        <div class="mc-title">Kirish / Ro‘yxatdan o‘tish</div>
+        <button class="mc-close" data-x="authModal">✕</button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button id="tabLogin" class="mc-btn mc-tab active">Kirish (ID)</button>
+        <button id="tabSignup" class="mc-btn mc-tab">Ro‘yxatdan (Email / Google)</button>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="authLogin">
+        <div class="mc-grid">
+          <div class="mc-row"><label>Numeric ID</label><input id="login_id" placeholder="1002 yoki 10025"></div>
+          <div class="mc-row"><label>Parol</label><input type="password" id="login_pass" placeholder="Parol"></div>
+        </div>
+        <div class="mc-actions">
+          <button class="mc-btn mc-btn--pri" id="btnLoginId">Kirish</button>
+        </div>
+        <div style="margin-top:10px;font-size:13px;opacity:.8">Google orqali ro‘yxatdan o‘tgan bo‘lsangiz — pastdagi “Parol o‘rnatish” orqali ID+parol bilan kirish imkonini yoqing.</div>
+      </div>
+
+      <!-- SIGNUP -->
+      <div id="authSignup" style="display:none">
+        <div class="mc-grid">
+          <div class="mc-row"><label>Email</label><input id="signup_email" type="email" placeholder="email@misol.uz"></div>
+          <div class="mc-row"><label>Parol (ixtiyoriy)</label><input id="signup_pass" type="password" placeholder="Agar hozir kiritmoqchi bo‘lsangiz"></div>
+        </div>
+        <div class="mc-actions">
+          <button class="mc-btn" id="btnSignupEmail">Email bilan ro‘yxatdan</button>
+          <button class="mc-btn mc-btn--pri" id="btnSignupGoogle">Google bilan</button>
+        </div>
+        <div style="margin-top:10px;font-size:13px;opacity:.8">Google bilan kirgandan so‘ng sizga parol o‘rnatish oynasi chiqadi.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SET PASSWORD (Google/Email signupdan keyin) -->
+  <div class="mc-modal" id="setPasswordModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true" style="max-width:520px">
+      <div class="mc-head">
+        <div class="mc-title">Parol o‘rnatish</div>
+        <button class="mc-close" data-x="setPasswordModal">✕</button>
+      </div>
+      <div class="mc-grid">
+        <div class="mc-row" style="grid-column:1/-1"><label>Yangi parol</label><input type="password" id="new_pass" placeholder="Yangi parol (≥6 belgi)"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Parolni tasdiqlang</label><input type="password" id="new_pass_confirm" placeholder="Parolni tasdiqlang"></div>
+      </div>
+      <div class="mc-actions"><button class="mc-btn mc-btn--pri" id="btnSetPassword">Saqlash</button></div>
+      <div style="margin-top:8px;font-size:13px;opacity:.8">Parol o‘rnatilgach, keyingi safar **ID + parol** bilan kirishingiz mumkin bo‘ladi.</div>
+    </div>
+  </div>
+
+  <!-- Birinchi profil to‘ldirish -->
+  <div class="mc-modal" id="profileModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true">
+      <div class="mc-head">
+        <div class="mc-title">Profil ma’lumotlari</div>
+        <button class="mc-close" data-x="profileModal">✕</button>
+      </div>
+      <div class="mc-grid">
+        <div class="mc-row"><label>Ism</label><input id="p_ism" placeholder="Ism"></div>
+        <div class="mc-row"><label>Familiya</label><input id="p_familiya" placeholder="Familiya"></div>
+        <div class="mc-row"><label>Sharif</label><input id="p_sharif" placeholder="Sharif"></div>
+        <div class="mc-row"><label>Tug‘ilgan sana</label><input type="date" id="p_tugilgan"></div>
+        <div class="mc-row"><label>Telefon</label><input id="p_tel" placeholder="+99890..."></div>
+        <div class="mc-row"><label>Telegram link</label><input id="p_tg" placeholder="https://t.me/username"></div>
+        <div class="mc-row"><label>Email</label><input id="p_email" placeholder="email@misol.uz"></div>
+        <div class="mc-row"><label>Roli</label>
+          <select id="p_role">
+            <option value="">Tanlang</option>
+            <option value="oquvchi">O‘quvchi</option>
+            <option value="oqituvchi">O‘qituvchi</option>
+          </select>
+        </div>
+        <div class="mc-row"><label>Viloyat</label><select id="p_viloyat"></select></div>
+        <div class="mc-row"><label>Tuman</label><select id="p_tuman"></select></div>
+        <div class="mc-row"><label>Maktab</label><input id="p_maktab" placeholder="Maktab nomi/raqami"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Yashash manzili</label><input id="p_manzil" placeholder="Manzil"></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn mc-btn--pri" id="btnSaveProfile">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promo kod -->
+  <div class="mc-modal" id="promoModal" aria-hidden="true">
+    <div class="mc-card">
+      <div class="mc-head">
+        <div class="mc-title">Promo kod</div>
+        <button class="mc-close" data-x="promoModal">✕</button>
+      </div>
+      <div class="mc-grid">
+        <div class="mc-row" style="grid-column:1/-1">
+          <label>Promo kod kiriting</label>
+          <input id="promoInput" placeholder="ABC123">
+        </div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn mc-btn--pri" id="btnApplyPromo">Tasdiqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin: Promo -->
+  <div class="mc-modal" id="adminPromoModal" aria-hidden="true">
+    <div class="mc-card">
+      <div class="mc-head">
+        <div class="mc-title">Admin: Promo yaratish</div>
+        <button class="mc-close" data-x="adminPromoModal">✕</button>
+      </div>
+      <div class="mc-grid">
+        <div class="mc-row"><label>Kod</label><input id="ad_promo_code" placeholder="PRO2025"></div>
+        <div class="mc-row"><label>Chegirma (%)</label><input type="number" id="ad_promo_off" placeholder="10"></div>
+        <div class="mc-row"><label>Amal qilish (kun)</label><input type="number" id="ad_promo_days" placeholder="30"></div>
+        <div class="mc-row"><label>Limit (foydalanish)</label><input type="number" id="ad_promo_limit" placeholder="100"></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn mc-btn--pri" id="btnCreatePromo">Yaratish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin: Users -->
+  <div class="mc-modal" id="adminUsersModal" aria-hidden="true">
+    <div class="mc-card">
+      <div class="mc-head">
+        <div class="mc-title">Admin: Users</div>
+        <button class="mc-close" data-x="adminUsersModal">✕</button>
+      </div>
+      <div class="mc-grid">
+        <div class="mc-row"><label>Numeric ID bilan qidirish</label><input id="ad_user_id" placeholder="1002"></div>
+        <div class="mc-row"><label>Balans (+/-)</label><input type="number" id="ad_user_balance" placeholder="10000"></div>
+        <div class="mc-row"><label>Ball (+/-)</label><input type="number" id="ad_user_points" placeholder="50"></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn" id="btnFindUser">Topish</button>
+        <button class="mc-btn mc-btn--pri" id="btnUpdateUser">Yangilash</button>
+      </div>
+      <div id="ad_user_result" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ===== Router (sening kod) ===== -->
+  <script>
+    const routes=["home","courses","tests","simulators","results","profile"];
+    const fab=document.getElementById('fab'); const fabBtn=document.getElementById('fabBtn'); const fabMenu=document.getElementById('fabMenu');
+    function closeFab(){ if(fab.classList.contains('open')){ fab.classList.add('closing'); setTimeout(()=>{ fab.classList.remove('open'); fab.classList.remove('closing');},180);}}
+    fabBtn.onclick=(e)=>{ e.stopPropagation(); if(fab.classList.contains('open')) closeFab(); else fab.classList.add('open'); };
+    fabMenu.addEventListener('click',(e)=>{ const btn=e.target.closest('.chip'); if(!btn) return; const r=btn.getAttribute('data-route'); if(!r) return; loadRoute(r); closeFab(); });
+    document.addEventListener('click',(e)=>{ if(fab.classList.contains('open') && !fab.contains(e.target)) closeFab(); });
+    document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeFab(); });
+    function setActive(route){ document.querySelectorAll('.fab-menu .chip').forEach(b=>b.classList.toggle('active', b.getAttribute('data-route')===route)); }
+
+    // Dual-source loader: /partials/<route>.html -> fallback: /<route>.html
+    async function loadRoute(route){
+      const app=document.getElementById('app');
+      async function tryFetch(url){ const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw 0; return await res.text(); }
+      try{
+        let html;
+        try{ html=await tryFetch('partials/'+route+'.html?v='+Date.now()); }
+        catch{ html=await tryFetch(route+'.html?v='+Date.now()); } // fallback to root files like home.html
+        app.innerHTML=html;
+      }catch(_){
+        app.innerHTML='<div class="content"><h2>'+route+'</h2><p>Namuna sahifa.</p></div>';
+      }
+      setActive(route); history.replaceState({},'', '#'+route); window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    window.addEventListener('hashchange',()=>{ const r=location.hash.replace('#',''); if(routes.includes(r)) loadRoute(r); });
+    document.addEventListener('DOMContentLoaded',()=>{ const start=location.hash.replace('#','')||'home'; setActive(start); loadRoute(start); updateHeader({}); });
+
+    function updateHeader(d){
+      const name=d?.ism||'Sohibjon', age=d?.yosh||'26', id=d?.numericId||'1002', balans=d?.balans??0, ball=d?.ball??0;
+      document.getElementById('helloName').textContent=name; document.getElementById('helloAge').textContent='Yosh: '+age;
+      document.getElementById('headerID').textContent=id; document.getElementById('headerBalans').textContent=balans; document.getElementById('headerBall').textContent=ball;
+      const c=document.getElementById('headerCompact'); c.innerHTML='<div class="card"><div style="width:100%"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;"><div style="font-weight:800">Salom <span style="font-weight:900">'+name+'</span></div><div class="label">Yosh: '+age+'</div></div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;"><div><div class="label">ID</div><div class="value">'+id+'</div></div><div><div class="label">Balans</div><div class="value">'+balans+'</div></div><div><div class="label">Ball</div><div class="value">'+ball+'</div></div></div></div></div>';
+    }
+  </script>
+
+  <!-- ===== Firebase + Profil/Admin + Auth (type=module) ===== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth, onAuthStateChanged,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      signInWithPopup, GoogleAuthProvider, updatePassword, updateProfile
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
+      query, collection, where, getDocs, serverTimestamp, addDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+
+    const appFB = initializeApp(firebaseConfig);
+    const auth = getAuth(appFB);
+    const db   = getFirestore(appFB);
+
+    const $  = (s, r=document)=>r.querySelector(s);
+    const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+
+    function openModal(id){ const m=$('#'+id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
+    function closeModal(id){ const m=$('#'+id); if(m){ m.classList.remove('open'); if(!document.querySelector('.mc-modal.open')) document.body.classList.remove('modal-open'); } }
+    $$('.mc-close').forEach(btn=>btn.addEventListener('click',()=>closeModal(btn.dataset.x)));
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $$('.mc-modal.open').forEach(m=>m.classList.remove('open')); document.body.classList.remove('modal-open'); } });
+
+    // ---------- Regions (regions.json) ----------
+    let REGIONS = {};
+    async function loadRegions(){
+      try{ const res=await fetch('regions.json',{cache:'no-store'}); REGIONS = await res.json(); }catch{ REGIONS={}; }
+    }
+    function fillRegionSelects(currentViloyat='', currentTuman=''){
+      const vil = document.getElementById('p_viloyat');
+      const tum = document.getElementById('p_tuman');
+      if(!vil || !tum) return;
+      const vilOpts = Object.keys(REGIONS||{});
+      vil.innerHTML = '<option value="">Tanlang</option>' + vilOpts.map(v=>`<option ${v===currentViloyat?'selected':''}>${v}</option>`).join('');
+      const tList = (REGIONS||{})[currentViloyat]||[];
+      tum.innerHTML = '<option value="">Tanlang</option>' + tList.map(t=>`<option ${t===currentTuman?'selected':''}>${t}</option>`).join('');
+      vil.onchange = ()=>{
+        const list = (REGIONS||{})[vil.value]||[];
+        tum.innerHTML = '<option value="">Tanlang</option>' + list.map(t=>`<option>${t}</option>`).join('');
+      };
+    }
+
+    if (typeof window.updateHeader!=='function'){ window.updateHeader=()=>{}; }
+
+    // ---------- AUTH (ID+parol login / Email+Google signup / Set password) ----------
+    const provider = new GoogleAuthProvider();
+
+    const tabLogin = document.getElementById('tabLogin');
+    const tabSignup = document.getElementById('tabSignup');
+    const authLogin = document.getElementById('authLogin');
+    const authSignup = document.getElementById('authSignup');
+
+    tabLogin?.addEventListener('click', ()=>{
+      tabLogin.classList.add('active'); tabSignup.classList.remove('active');
+      authLogin.style.display='block'; authSignup.style.display='none';
+    });
+    tabSignup?.addEventListener('click', ()=>{
+      tabSignup.classList.add('active'); tabLogin.classList.remove('active');
+      authSignup.style.display='block'; authLogin.style.display='none';
+    });
+
+    async function findUserByNumericId(nid){
+      if(!nid) return null;
+      const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
+      if(qs.empty) return null;
+      return { docId: qs.docs[0].id, data: qs.docs[0].data() };
+    }
+
+    // Login (ID+parol)
+    document.getElementById('btnLoginId')?.addEventListener('click', async ()=>{
+      const nid = document.getElementById('login_id').value.trim();
+      const pass = document.getElementById('login_pass').value;
+      if(!nid || !pass) return alert('ID va parol kiriting');
+      try{
+        const found = await findUserByNumericId(nid);
+        if(!found) return alert('Foydalanuvchi topilmadi');
+        const email = found.data.email || found.data.emailAddress || found.data.mail || found.data.userEmail;
+        if(!email) return alert('Bu ID uchun email yo‘q. Google bilan kirib, parol o‘rnating.');
+        await signInWithEmailAndPassword(auth, email, pass);
+        closeModal('authModal');
+      }catch(err){
+        console.error(err);
+        alert('Kirishda xato: '+(err.message||err.code||'Noma\'lum'));
+      }
+    });
+
+    // Email bilan ro‘yxatdan (parol ixtiyoriy)
+    document.getElementById('btnSignupEmail')?.addEventListener('click', async ()=>{
+      const email = document.getElementById('signup_email').value.trim();
+      const pass  = document.getElementById('signup_pass').value;
+      if(!email) return alert('Email kiriting');
+      try{
+        const password = pass || (Math.random().toString(36).slice(-12)+'A1!');
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const u = cred.user;
+        const ref = doc(db,'users',u.uid);
+        const snap = await getDoc(ref);
+        const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
+        await setDoc(ref, { email, ism: u.displayName||'', numericId, createdAt: serverTimestamp() }, { merge:true });
+        if(!pass){ // parolsiz yaratgan bo‘lsa — darhol o‘rnatishni so‘raymiz
+          openModal('setPasswordModal');
+        }
+        closeModal('authModal');
+      }catch(err){
+        console.error(err);
+        alert('Ro‘yxatdan o‘tishda xato: '+(err.message||err.code||'Noma\'lum'));
+      }
+    });
+
+    // Google bilan kirish/ro‘yxatdan
+    document.getElementById('btnSignupGoogle')?.addEventListener('click', async ()=>{
+      try{
+        const result = await signInWithPopup(auth, provider);
+        const u = result.user;
+        const ref = doc(db,'users',u.uid);
+        const snap = await getDoc(ref);
+        const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
+        await setDoc(ref, { email: u.email, ism: u.displayName||'', numericId, provider:'google', createdAt: serverTimestamp() }, { merge:true });
+        openModal('setPasswordModal'); // ID+parol uchun
+        closeModal('authModal');
+      }catch(err){
+        console.error(err);
+        alert('Google sign-in xatosi: '+(err.message||err.code||'Noma\'lum'));
+      }
+    });
+
+    // Set password
+    document.getElementById('btnSetPassword')?.addEventListener('click', async ()=>{
+      const p  = document.getElementById('new_pass').value;
+      const pc = document.getElementById('new_pass_confirm').value;
+      if(!p || p.length<6) return alert('Parol kamida 6 belgi bo‘lsin');
+      if(p!==pc) return alert('Parollar mos emas');
+      const u = auth.currentUser; if(!u) return alert('Avval tizimga kiring');
+      try{
+        await updatePassword(u, p);
+        alert('Parol o‘rnatildi. Endi ID + parol bilan kira olasiz.');
+        closeModal('setPasswordModal');
+      }catch(err){
+        console.error(err);
+        alert('Parolni saqlashda xato: '+(err.message||err.code||'Noma\'lum'));
+      }
+    });
+
+    // ---------- Promo / Admin ----------
+    document.getElementById('btnApplyPromo')?.addEventListener('click', async ()=>{
+      const u = auth.currentUser; if(!u) return openModal('authModal');
+      const code = document.getElementById('promoInput').value.trim().toUpperCase();
+      if(!code) return;
+      await addDoc(collection(db,'promo_attempts'), { uid:u.uid, code, at:serverTimestamp() });
+      alert('So‘rov yuborildi (promo_attempts). Admin tekshiradi.');
+      closeModal('promoModal');
+    });
+
+    document.getElementById('btnCreatePromo')?.addEventListener('click', async ()=>{
+      const u = auth.currentUser; if(!u) return;
+      const me = await getDoc(doc(db,'users',u.uid));
+      if(!me.exists() || (me.data().numericId!==1002 && me.data().numericId!=='1002')) return alert('Ruxsat yo‘q');
+      const code = document.getElementById('ad_promo_code').value.trim().toUpperCase();
+      const off  = +document.getElementById('ad_promo_off').value||0;
+      const days = +document.getElementById('ad_promo_days').value||30;
+      const lim  = +document.getElementById('ad_promo_limit').value||100;
+      if(!code) return;
+      await setDoc(doc(db,'promocodes', code), { code, off, days, limit: lim, used: 0, createdAt: serverTimestamp(), createdBy: u.uid }, { merge:true });
+      alert('Promo yaratildi'); closeModal('adminPromoModal');
+    });
+
+    document.getElementById('btnFindUser')?.addEventListener('click', async ()=>{
+      const u = auth.currentUser; if(!u) return;
+      const me = await getDoc(doc(db,'users',u.uid));
+      if(!me.exists() || (me.data().numericId!==1002 && me.data().numericId!=='1002')) return alert('Ruxsat yo‘q');
+      const nid = document.getElementById('ad_user_id').value.trim(); if(!nid) return;
+      const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
+      const box = document.getElementById('ad_user_result');
+      if(qs.empty){ box.textContent='Topilmadi'; return; }
+      const d = qs.docs[0].data();
+      box.textContent = `Topildi: ${d.ism||''} ${d.familiya||''} (ID: ${d.numericId||''}) Balans=${d.balans||0}, Ball=${d.ball||0}`;
+    });
+
+    document.getElementById('btnUpdateUser')?.addEventListener('click', async ()=>{
+      const u = auth.currentUser; if(!u) return;
+      const me = await getDoc(doc(db,'users',u.uid));
+      if(!me.exists() || (me.data().numericId!==1002 && me.data().numericId!=='1002')) return alert('Ruxsat yo‘q');
+      const nid = document.getElementById('ad_user_id').value.trim(); if(!nid) return;
+      const addBal = +document.getElementById('ad_user_balance').value||0;
+      const addPts = +document.getElementById('ad_user_points').value||0;
+      const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
+      if(qs.empty) return alert('Foydalanuvchi topilmadi');
+      const ref = doc(db,'users',qs.docs[0].id);
+      const cur = qs.docs[0].data();
+      await updateDoc(ref, { balans: (cur.balans||0)+addBal, ball: (cur.ball||0)+addPts, updatedAt: serverTimestamp() });
+      alert('Yangilandi');
+    });
+
+    // ---------- Profil renderer (fallback) ----------
+    const originalLoadRoute = window.loadRoute;
+    window.loadRoute = async function(route){
+      await originalLoadRoute(route);
+      if(route==='profile'){ safeRenderProfile(); }
+    };
+
+    function ensureProfileSkeleton(){
+      const app = document.getElementById('app'); if(!app) return;
+      if(!app.querySelector('#profileView')){
+        const html = `
+          <div id="profileView" class="content">
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+              <h2 style="margin:0">Profil</h2>
+              <div class="row">
+                <button class="mc-btn" id="btnOpenPromo">Promo kod</button>
+                <button class="mc-btn" id="btnOpenAdminPromo" style="display:none">Admin Promo</button>
+                <button class="mc-btn" id="btnOpenAdminUsers" style="display:none">Admin Users</button>
+              </div>
+            </div>
+            <div class="p-card"><div class="p-grid" id="profileGrid"><div class="p-item"><div class="k">Holat</div><div class="v"><strong>Yuklanmoqda…</strong></div></div></div></div>
+          </div>`;
+        app.insertAdjacentHTML('afterbegin', html);
+        document.getElementById('btnOpenPromo')?.addEventListener('click', ()=>openModal('promoModal'));
+        document.getElementById('btnOpenAdminPromo')?.addEventListener('click', ()=>openModal('adminPromoModal'));
+        document.getElementById('btnOpenAdminUsers')?.addEventListener('click', ()=>openModal('adminUsersModal'));
+      }
+    }
+
+    async function renderProfilePage(){
+      ensureProfileSkeleton();
+      const grid = document.getElementById('profileGrid');
+      const u = auth.currentUser;
+
+      if(!u){ openModal('authModal'); grid.innerHTML = `<div class="p-item"><div class="k">Holat</div><div class="v"><strong>Kirish talab etiladi</strong></div></div>`; return; }
+
+      await loadRegions();
+
+      const ref = doc(db,'users',u.uid);
+      const snap = await getDoc(ref);
+      const d = snap.exists() ? snap.data() : {};
+
+      // Selectlarni foydalanuvchi qiymatlariga mos to‘ldirish
+      fillRegionSelects(d.viloyat||'', d.tuman||'');
+
+      // Majburiy maydonlar
+      const must = ['ism','familiya','tel','role','viloyat','tuman'];
+      if(must.some(k=>!d[k])) openModal('profileModal');
+
+      // Admin tugmalari (faqat numericId=1002)
+      const isAdmin = (d.numericId===1002 || d.numericId==='1002');
+      document.getElementById('btnOpenAdminPromo')?.style.setProperty('display', isAdmin?'inline-block':'none');
+      document.getElementById('btnOpenAdminUsers')?.style.setProperty('display', isAdmin?'inline-block':'none');
+
+      const show = (k,v)=>`<div class="p-item"><div class="k">${k}</div><div class="v"><strong>${v||'—'}</strong></div></div>`;
+      grid.innerHTML = [
+        show('Ism', d.ism),
+        show('Familiya', d.familiya),
+        show('Sharif', d.sharif),
+        show('Tug‘ilgan sana', d.tugilganSana),
+        show('Telefon', d.tel),
+        show('Telegram', d.tg),
+        show('Email', d.email || u.email),
+        show('Rol', d.role),
+        show('Viloyat', d.viloyat),
+        show('Tuman', d.tuman),
+        show('Maktab', d.maktab),
+        show('Manzil', d.manzil),
+        show('Numeric ID', d.numericId),
+        show('Balans', d.balans),
+        show('Ball', d.ball),
+      ].join('');
+    }
+
+    function safeRenderProfile(){
+      renderProfilePage().catch(()=>{});
+      queueMicrotask(()=>renderProfilePage().catch(()=>{}));
+      setTimeout(()=>renderProfilePage().catch(()=>{}), 300);
+    }
+
+    // Auth -> Header live + profile refresh
+    onAuthStateChanged(auth, (user)=>{
+      if(user){
+        onSnapshot(doc(db,'users',user.uid), (snap)=>{
+          const u = snap.exists()? snap.data(): {};
+          window.updateHeader({
+            ism:       u.ism ?? user.displayName ?? 'Foydalanuvchi',
+            yosh:      u.yosh ?? '',
+            numericId: u.numericId ?? '',
+            balans:    u.balans ?? 0,
+            ball:      u.ball ?? 0
+          });
+        });
+        if((location.hash||'')==='#profile') safeRenderProfile();
+      } else {
+        window.updateHeader({ ism:'—', yosh:'', numericId:'', balans:0, ball:0 });
+      }
+    });
+
+    // FAB orqali profile bosilganda login bo‘lmasa auth modal
+    document.getElementById('fabMenu')?.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.chip'); if(!btn) return;
+      if(btn.dataset.route==='profile' && !auth.currentUser) openModal('authModal');
+    });
+
+    // Profil saqlash (modal)
+    document.getElementById('btnSaveProfile')?.addEventListener('click', async ()=>{
+      const u = auth.currentUser; if(!u) return;
+      const data = {
+        ism: $('#p_ism').value.trim(),
+        familiya: $('#p_familiya').value.trim(),
+        sharif: $('#p_sharif').value.trim(),
+        tugilganSana: $('#p_tugilgan').value,
+        tel: $('#p_tel').value.trim(),
+        tg: $('#p_tg').value.trim(),
+        email: $('#p_email').value.trim() || u.email || "",
+        role: $('#p_role').value,
+        viloyat: $('#p_viloyat').value,
+        tuman: $('#p_tuman').value,
+        maktab: $('#p_maktab').value.trim(),
+        manzil: $('#p_manzil').value.trim(),
+        updatedAt: serverTimestamp()
+      };
+      if(!data.ism || !data.familiya || !data.tel || !data.role || !data.viloyat || !data.tuman){
+        return alert('Majburiy maydonlar: Ism, Familiya, Telefon, Rol, Viloyat, Tuman');
+      }
+      const ref = doc(db,'users',u.uid);
+      const snap = await getDoc(ref);
+      const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
+      await setDoc(ref, { ...snap.data(), ...data, numericId }, { merge:true });
+      try{ await updateProfile(u, { displayName: data.ism }); }catch{}
+      closeModal('profileModal');
+      if((location.hash||'')==='#profile') safeRenderProfile();
+    });
+  </script>
 </body>
 </html>
