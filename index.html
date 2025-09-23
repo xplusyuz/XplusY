@@ -119,8 +119,8 @@
       <!-- LOGIN -->
       <div id="authLogin">
         <div class="mc-grid">
-          <div class="mc-row"><label>Numeric ID</label><input id="login_id" placeholder="38864 yoki 12500"></div>
-          <div class="mc-row"><label>Parol</label><input type="password" id="login_pass" placeholder="Parol"></div>
+          <div class="mc-row"><label>Numeric ID</label><input id="login_id" placeholder="38864 yoki 12500" autocomplete="username"></div>
+          <div class="mc-row"><label>Parol</label><input type="password" id="login_pass" placeholder="Parol" autocomplete="current-password"></div>
         </div>
         <div class="mc-actions">
           <button class="mc-btn mc-btn--pri" id="btnLoginId">Kirish</button>
@@ -129,8 +129,8 @@
       <!-- SIGNUP -->
       <div id="authSignup" style="display:none">
         <div class="mc-grid">
-          <div class="mc-row"><label>Email</label><input id="signup_email" type="email" placeholder="email@misol.uz"></div>
-          <div class="mc-row"><label>Parol (ixtiyoriy)</label><input id="signup_pass" type="password" placeholder="Agar hozir kiritmoqchi bo‘lsangiz"></div>
+          <div class="mc-row"><label>Email</label><input id="signup_email" type="email" placeholder="email@misol.uz" autocomplete="email"></div>
+          <div class="mc-row"><label>Parol (ixtiyoriy)</label><input id="signup_pass" type="password" placeholder="Agar hozir kiritmoqchi bo‘lsangiz" autocomplete="new-password"></div>
         </div>
         <div class="mc-actions">
           <button class="mc-btn" id="btnSignupEmail">Email bilan ro‘yxatdan</button>
@@ -148,8 +148,8 @@
         <button class="mc-close" data-x="setPasswordModal">✕</button>
       </div>
       <div class="mc-grid">
-        <div class="mc-row" style="grid-column:1/-1"><label>Yangi parol</label><input type="password" id="new_pass" placeholder="Yangi parol (≥6 belgi)"></div>
-        <div class="mc-row" style="grid-column:1/-1"><label>Parolni tasdiqlang</label><input type="password" id="new_pass_confirm" placeholder="Parolni tasdiqlang"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Yangi parol</label><input type="password" id="new_pass" placeholder="Yangi parol (≥6 belgi)" autocomplete="new-password"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Parolni tasdiqlang</label><input type="password" id="new_pass_confirm" placeholder="Parolni tasdiqlang" autocomplete="new-password"></div>
       </div>
       <div class="mc-actions"><button class="mc-btn mc-btn--pri" id="btnSetPassword">Saqlash</button></div>
     </div>
@@ -279,13 +279,51 @@
     window.addEventListener('hashchange',()=>{ const r=location.hash.replace('#',''); if(routes.includes(r)) loadRoute(r); });
     document.addEventListener('DOMContentLoaded',()=>{ const start=location.hash.replace('#','')||'home'; setActive(start); loadRoute(start); updateHeader({}); });
 
+    // --- Header helpers: mask ID + calc age ---
+    function maskId(id){
+      if(id==null || id==='' || id==='-') return '-';
+      const s = String(id);
+      if(s.length<=3) return 'ID•••'+s;
+      return 'ID•••'+s.slice(-3);
+    }
+    function calcAge(dob){ // "YYYY-MM-DD"
+      if(!dob) return '-';
+      const p = dob.split('-'); if(p.length<3) return '-';
+      const dt = new Date(+p[0], +p[1]-1, +p[2]); if(isNaN(dt)) return '-';
+      const t = new Date();
+      let a = t.getFullYear()-dt.getFullYear();
+      const m = t.getMonth()-dt.getMonth();
+      if(m<0 || (m===0 && t.getDate()<dt.getDate())) a--;
+      return a>=0 ? String(a) : '-';
+    }
+
     function updateHeader(d){
-      // Defaultlar – kirilmagan paytda hammasi "-"
-      const name=d?.ism??'-', age=d?.yosh??'-', id=d?.numericId??'-', balans=(d?.balans??'-'), ball=(d?.ball??'-');
-      document.getElementById('helloName').textContent=name; document.getElementById('helloAge').textContent='Yosh: '+age;
-      document.getElementById('headerID').textContent=id; document.getElementById('headerBalans').textContent=balans; document.getElementById('headerBall').textContent=ball;
+      const name   = d?.ism ?? '-';
+      const dob    = d?.tugilganSana ?? '';
+      const age    = calcAge(dob);
+      const nid    = d?.numericId ?? '-';
+      const balans = (d?.balans ?? '-');
+      const ball   = (d?.ball ?? '-');
+
+      document.getElementById('helloName').textContent = name;
+      document.getElementById('helloAge').textContent  = 'Yosh: '+age;
+      document.getElementById('headerID').textContent  = maskId(nid);
+      document.getElementById('headerBalans').textContent = balans;
+      document.getElementById('headerBall').textContent   = ball;
+
       const c=document.getElementById('headerCompact');
-      c.innerHTML='<div class="card"><div style="width:100%"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;"><div style="font-weight:800">Salom <span style="font-weight:900">'+name+'</span></div><div class="label">Yosh: '+age+'</div></div><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;"><div><div class="label">ID</div><div class="value">'+id+'</div></div><div><div class="label">Balans</div><div class="value">'+balans+'</div></div><div><div class="label">Ball</div><div class="value">'+ball+'</div></div></div></div></div>';
+      c.innerHTML = `
+      <div class="card"><div style="width:100%">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="font-weight:800">Salom <span style="font-weight:900">${name}</span></div>
+          <div class="label">Yosh: ${age}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;">
+          <div><div class="label">ID</div><div class="value">${maskId(nid)}</div></div>
+          <div><div class="label">Balans</div><div class="value">${balans}</div></div>
+          <div><div class="label">Ball</div><div class="value">${ball}</div></div>
+        </div>
+      </div></div>`;
     }
   </script>
 
@@ -299,7 +337,8 @@
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
     import {
       getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
-      query, collection, where, getDocs, serverTimestamp, addDoc, increment, Timestamp
+      query, collection, where, getDocs, serverTimestamp, addDoc,
+      increment, Timestamp, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -372,7 +411,7 @@
         const found = await findUserByNumericId(nid);
         if(!found) return alert('Foydalanuvchi topilmadi');
         const email = found.data.email || found.data.emailAddress || found.data.mail || found.data.userEmail;
-        if(!email) return alert('Bu ID uchun email yo‘q. Google bilan kirib, parol o‘rnatib oling.');
+        if(!email) return alert('Bu ID uchun email yo‘q. Google bilan kirib, parol o‘rnating.');
         await signInWithEmailAndPassword(auth, email, pass);
         closeModal('authModal');
       }catch(err){ alert('Kirishda xato: '+(err.message||err.code)); }
@@ -436,8 +475,8 @@
         </div>`;
     }
 
-    $('#btnCheckPromo')?.addEventListener('click', async ()=>{
-      const code = $('#promoInput').value.trim().toUpperCase();
+    document.getElementById('btnCheckPromo')?.addEventListener('click', async ()=>{
+      const code = document.getElementById('promoInput').value.trim().toUpperCase();
       if(!code) return;
       const ref = doc(db,'promocodes', code);
       const snap = await getDoc(ref);
@@ -445,56 +484,59 @@
       renderPromoInfo({ code, ...snap.data() });
     });
 
-    // Foydalanuvchi uchun promo qo‘llash
-    $('#btnApplyPromo')?.addEventListener('click', async ()=>{
+    // Foydalanuvchi uchun promo qo‘llash — BIR MARTA (transaction + subcollection)
+    document.getElementById('btnApplyPromo')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return openModal('authModal');
-      const code = $('#promoInput').value.trim().toUpperCase();
+      const code = document.getElementById('promoInput').value.trim().toUpperCase();
       if(!code) return;
 
-      const ref = doc(db,'promocodes', code);
-      const snap = await getDoc(ref);
-      if(!snap.exists()) return alert('Kod topilmadi');
+      const promoRef = doc(db,'promocodes', code);
+      const userRef  = doc(db,'users', u.uid);
+      const redRef   = doc(db, 'promocodes', code, 'redemptions', u.uid);
 
-      const d = snap.data();
-      // Validatsiya: expiry va limit
-      const now = Date.now();
-      const expiresMs = d.expiresAt ? (d.expiresAt.seconds? d.expiresAt.seconds*1000 : d.expiresAt) : null;
-      if(expiresMs && now > expiresMs) return alert('Kod muddati tugagan');
-      if(d.limit != null && d.used != null && d.used >= d.limit) return alert('Kod limiti tugagan');
+      try{
+        await runTransaction(db, async (tx)=>{
+          const promoSnap = await tx.get(promoRef);
+          if(!promoSnap.exists()) throw new Error('Kod topilmadi');
 
-      // User doc
-      const uref = doc(db,'users',u.uid);
-      const usnap = await getDoc(uref);
-      const cur = usnap.exists()? usnap.data(): {};
+          const d = promoSnap.data();
+          const now = Date.now();
+          const expMs = d.expiresAt ? (d.expiresAt.seconds ? d.expiresAt.seconds*1000 : d.expiresAt) : null;
+          if(expMs && now > expMs) throw new Error('Kod muddati tugagan');
+          if(d.limit != null && d.used != null && d.used >= d.limit) throw new Error('Kod limiti tugagan');
 
-      // Balansga bonus qo‘shish (agar bor bo‘lsa)
-      const addBonus = Number(d.bonus||0);
-      const newData = {};
-      if(addBonus>0){ newData.balans = (cur.balans||0) + addBonus; }
+          const redSnap = await tx.get(redRef);
+          if(redSnap.exists()) throw new Error('Siz bu koddan allaqachon foydalandingiz');
 
-      // Chegirma “faol” bo‘lsin (keyingi xaridlarda ishlatish uchun)
-      if(d.off){ newData.activeDiscount = { code, off: d.off, expiresAt: expiresMs? Timestamp.fromMillis(expiresMs): null }; }
+          const userSnap = await tx.get(userRef);
+          const cur = userSnap.exists()? userSnap.data(): {};
+          const addBonus = Number(d.bonus||0);
 
-      await updateDoc(uref, { ...newData, lastPromoCode: code, promoUpdatedAt: serverTimestamp() });
+          const updates = { lastPromoCode: code, promoUpdatedAt: serverTimestamp() };
+          if(addBonus>0) updates.balans = (cur.balans||0) + addBonus;
+          if(d.off) updates.activeDiscount = { code, off: d.off, expiresAt: expMs? Timestamp.fromMillis(expMs): null };
 
-      // Redemption log + used++
-      await addDoc(collection(db,'promo_redemptions'), { uid:u.uid, code, at:serverTimestamp() });
-      await updateDoc(ref, { used: increment(1) });
+          tx.set(userRef, updates, { merge:true });
+          tx.set(redRef, { uid:u.uid, at: serverTimestamp() });
+          tx.update(promoRef, { used: increment(1) });
+        });
 
-      renderPromoInfo({ code, ...d, used:(d.used||0)+1 });
-      alert('Promo qo‘llandi!');
-      closeModal('promoModal');
+        alert('Promo qo‘llandi!');
+        closeModal('promoModal');
+      }catch(err){
+        alert(err.message || 'Promo qo‘llashda xato');
+      }
     });
 
     // -------- Admin (ID = 38864) --------
     function isAdminNumericId(val){ return (val===38864 || val==='38864'); }
 
-    $('#btnCreatePromo')?.addEventListener('click', async ()=>{
+    document.getElementById('btnCreatePromo')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return;
       const me = await getDoc(doc(db,'users',u.uid));
       if(!me.exists() || !isAdminNumericId(me.data().numericId)) return alert('Ruxsat yo‘q');
 
-      const code = $('#ad_promo_code').value.trim().toUpperCase();
+      const code = document.getElementById('ad_promo_code').value.trim().toUpperCase();
       const off  = +($('#ad_promo_off').value||0);
       const bonus= +($('#ad_promo_bonus').value||0);
       const lim  = +($('#ad_promo_limit').value||0);
@@ -511,23 +553,23 @@
     });
 
     // Admin users
-    $('#btnFindUser')?.addEventListener('click', async ()=>{
+    document.getElementById('btnFindUser')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return;
       const me = await getDoc(doc(db,'users',u.uid));
       if(!me.exists() || !isAdminNumericId(me.data().numericId)) return alert('Ruxsat yo‘q');
-      const nid = $('#ad_user_id').value.trim(); if(!nid) return;
+      const nid = document.getElementById('ad_user_id').value.trim(); if(!nid) return;
       const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
-      const box = $('#ad_user_result');
+      const box = document.getElementById('ad_user_result');
       if(qs.empty){ box.textContent='Topilmadi'; return; }
       const d = qs.docs[0].data();
       box.textContent = `Topildi: ${d.ism||''} ${d.familiya||''} (ID: ${d.numericId||''}) Balans=${d.balans||0}, Ball=${d.ball||0}`;
     });
 
-    $('#btnUpdateUser')?.addEventListener('click', async ()=>{
+    document.getElementById('btnUpdateUser')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return;
       const me = await getDoc(doc(db,'users',u.uid));
       if(!me.exists() || !isAdminNumericId(me.data().numericId)) return alert('Ruxsat yo‘q');
-      const nid = $('#ad_user_id').value.trim(); if(!nid) return;
+      const nid = document.getElementById('ad_user_id').value.trim(); if(!nid) return;
       const addBal = +($('#ad_user_balance').value||0);
       const addPts = +($('#ad_user_points').value||0);
       const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
@@ -563,22 +605,35 @@
             <div class="p-card"><div class="p-grid" id="profileGrid"><div class="p-item"><div class="k">Holat</div><div class="v"><strong>Yuklanmoqda…</strong></div></div></div></div>
           </div>`;
         app.insertAdjacentHTML('afterbegin', html);
-        $('#btnOpenPromo')?.addEventListener('click', ()=>openModal('promoModal'));
-        $('#btnOpenAdminPromo')?.addEventListener('click', ()=>openModal('adminPromoModal'));
-        $('#btnOpenAdminUsers')?.addEventListener('click', ()=>openModal('adminUsersModal'));
-        $('#btnLogout')?.addEventListener('click', async ()=>{ await signOut(auth); location.hash='#home'; });
-        $('#btnEditProfile')?.addEventListener('click', async ()=>{
+        document.getElementById('btnOpenPromo')?.addEventListener('click', ()=>openModal('promoModal'));
+        document.getElementById('btnOpenAdminPromo')?.addEventListener('click', ()=>openModal('adminPromoModal'));
+        document.getElementById('btnOpenAdminUsers')?.addEventListener('click', ()=>openModal('adminUsersModal'));
+        document.getElementById('btnLogout')?.addEventListener('click', async ()=>{ await signOut(auth); location.hash='#home'; });
+        document.getElementById('btnEditProfile')?.addEventListener('click', async ()=>{
           const u = auth.currentUser; if(!u) return openModal('authModal');
           const snap = await getDoc(doc(db,'users',u.uid)); const d = snap.exists()? snap.data(): {};
           // Prefill
-          $('#p_ism').value = d.ism||''; $('#p_familiya').value=d.familiya||''; $('#p_sharif').value=d.sharif||'';
-          $('#p_tugilgan').value = d.tugilganSana||''; $('#p_tel').value=d.tel||''; $('#p_tg').value=d.tg||'';
-          $('#p_email').value=d.email||u.email||''; $('#p_role').value=d.role||'';
+          document.getElementById('p_ism').value = d.ism||''; document.getElementById('p_familiya').value=d.familiya||''; document.getElementById('p_sharif').value=d.sharif||'';
+          document.getElementById('p_tugilgan').value = d.tugilganSana||''; document.getElementById('p_tel').value=d.tel||''; document.getElementById('p_tg').value=d.tg||'';
+          document.getElementById('p_email').value=d.email||u.email||''; document.getElementById('p_role').value=d.role||'';
           await loadRegions(); fillRegionSelects(d.viloyat||'', d.tuman||'');
-          $('#p_maktab').value=d.maktab||''; $('#p_manzil').value=d.manzil||'';
+          document.getElementById('p_maktab').value=d.maktab||''; document.getElementById('p_manzil').value=d.manzil||'';
           openModal('profileModal');
         });
       }
+    }
+
+    function showRow(k,v){ return `<div class="p-item"><div class="k">${k}</div><div class="v"><strong>${(v??'')===''?'—':v}</strong></div></div>`; }
+
+    function calcAgeStr(dob){
+      if(!dob) return '—';
+      const p = dob.split('-'); if(p.length<3) return '—';
+      const dt = new Date(+p[0], +p[1]-1, +p[2]); if(isNaN(dt)) return '—';
+      const t = new Date();
+      let a = t.getFullYear()-dt.getFullYear();
+      const m = t.getMonth()-dt.getMonth();
+      if(m<0 || (m===0 && t.getDate()<dt.getDate())) a--;
+      return a>=0 ? `${a} yosh` : '—';
     }
 
     async function renderProfilePage(){
@@ -596,29 +651,27 @@
 
       // Admin tugmalari (ID=38864)
       const isAdmin = (d.numericId===38864 || d.numericId==='38864');
-      $('#btnOpenAdminPromo')?.style.setProperty('display', isAdmin?'inline-block':'none');
-      $('#btnOpenAdminUsers')?.style.setProperty('display', isAdmin?'inline-block':'none');
-
-      const show = (k,v)=>`<div class="p-item"><div class="k">${k}</div><div class="v"><strong>${(v??'')===''?'—':v}</strong></div></div>`;
+      document.getElementById('btnOpenAdminPromo')?.style.setProperty('display', isAdmin?'inline-block':'none');
+      document.getElementById('btnOpenAdminUsers')?.style.setProperty('display', isAdmin?'inline-block':'none');
 
       grid.innerHTML = [
-        show('Ism', d.ism),
-        show('Familiya', d.familiya),
-        show('Sharif', d.sharif),
-        show('Tug‘ilgan sana', d.tugilganSana),
-        show('Telefon', d.tel),
-        show('Telegram', d.tg),
-        show('Email', d.email || u.email),
-        show('Rol', d.role),
-        show('Viloyat', d.viloyat),
-        show('Tuman', d.tuman),
-        show('Maktab', d.maktab),
-        show('Manzil', d.manzil),
-        show('Numeric ID', d.numericId),
-        show('Balans', d.balans),
-        show('Ball', d.ball),
-        (d.activeDiscount? show('Faol chegirma', `${d.activeDiscount.off}% (kod: ${d.activeDiscount.code||''})`): ''),
-        (d.lastPromoCode? show('Oxirgi promo', d.lastPromoCode): '')
+        showRow('Ism', d.ism),
+        showRow('Familiya', d.familiya),
+        showRow('Sharif', d.sharif),
+        showRow('Tug‘ilgan sana', d.tugilganSana ? `${d.tugilganSana} (${calcAgeStr(d.tugilganSana)})` : ''),
+        showRow('Telefon', d.tel),
+        showRow('Telegram', d.tg),
+        showRow('Email', d.email || u.email),
+        showRow('Rol', d.role),
+        showRow('Viloyat', d.viloyat),
+        showRow('Tuman', d.tuman),
+        showRow('Maktab', d.maktab),
+        showRow('Manzil', d.manzil),
+        showRow('Numeric ID (to‘liq)', d.numericId),  /* profilda to‘liq ko‘rinadi */
+        showRow('Balans', d.balans),
+        showRow('Ball', d.ball),
+        (d.activeDiscount? showRow('Faol chegirma', `${d.activeDiscount.off}% (kod: ${d.activeDiscount.code||''})`): ''),
+        (d.lastPromoCode? showRow('Oxirgi promo', d.lastPromoCode): '')
       ].join('');
     }
 
@@ -635,7 +688,7 @@
           const u = snap.exists()? snap.data(): {};
           window.updateHeader({
             ism:       u.ism ?? user.displayName ?? '-',
-            yosh:      u.yosh ?? '-',
+            tugilganSana: u.tugilganSana ?? '',
             numericId: u.numericId ?? '-',
             balans:    (u.balans ?? 0),
             ball:      (u.ball ?? 0)
@@ -643,7 +696,7 @@
         });
         if((location.hash||'')==='#profile') safeRenderProfile();
       } else {
-        window.updateHeader({ ism:'-', yosh:'-', numericId:'-', balans:'-', ball:'-' });
+        window.updateHeader({ ism:'-', tugilganSana:'', numericId:'-', balans:'-', ball:'-' });
       }
     });
 
