@@ -279,13 +279,7 @@
     window.addEventListener('hashchange',()=>{ const r=location.hash.replace('#',''); if(routes.includes(r)) loadRoute(r); });
     document.addEventListener('DOMContentLoaded',()=>{ const start=location.hash.replace('#','')||'home'; setActive(start); loadRoute(start); updateHeader({}); });
 
-    // --- Header helpers: mask ID + calc age ---
-    function maskId(id){
-      if(id==null || id==='' || id==='-') return '-';
-      const s = String(id);
-      if(s.length<=3) return 'ID•••'+s;
-      return 'ID•••'+s.slice(-3);
-    }
+    // --- Header helpers: yoshni hisoblash ---
     function calcAge(dob){ // "YYYY-MM-DD"
       if(!dob) return '-';
       const p = dob.split('-'); if(p.length<3) return '-';
@@ -301,13 +295,13 @@
       const name   = d?.ism ?? '-';
       const dob    = d?.tugilganSana ?? '';
       const age    = calcAge(dob);
-      const nid    = d?.numericId ?? '-';
+      const nid    = d?.numericId ?? '-';     /* ← to‘liq ID */
       const balans = (d?.balans ?? '-');
       const ball   = (d?.ball ?? '-');
 
       document.getElementById('helloName').textContent = name;
       document.getElementById('helloAge').textContent  = 'Yosh: '+age;
-      document.getElementById('headerID').textContent  = maskId(nid);
+      document.getElementById('headerID').textContent  = nid || '-';
       document.getElementById('headerBalans').textContent = balans;
       document.getElementById('headerBall').textContent   = ball;
 
@@ -319,7 +313,7 @@
           <div class="label">Yosh: ${age}</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center;">
-          <div><div class="label">ID</div><div class="value">${maskId(nid)}</div></div>
+          <div><div class="label">ID</div><div class="value">${nid||'-'}</div></div>
           <div><div class="label">Balans</div><div class="value">${balans}</div></div>
           <div><div class="label">Ball</div><div class="value">${ball}</div></div>
         </div>
@@ -403,9 +397,9 @@
       return { docId: qs.docs[0].id, data: qs.docs[0].data() };
     }
 
-    $('#btnLoginId')?.addEventListener('click', async ()=>{
-      const nid = $('#login_id').value.trim();
-      const pass = $('#login_pass').value;
+    document.getElementById('btnLoginId')?.addEventListener('click', async ()=>{
+      const nid = document.getElementById('login_id').value.trim();
+      const pass = document.getElementById('login_pass').value;
       if(!nid || !pass) return alert('ID va parol kiriting');
       try{
         const found = await findUserByNumericId(nid);
@@ -417,9 +411,9 @@
       }catch(err){ alert('Kirishda xato: '+(err.message||err.code)); }
     });
 
-    $('#btnSignupEmail')?.addEventListener('click', async ()=>{
-      const email = $('#signup_email').value.trim();
-      const pass  = $('#signup_pass').value;
+    document.getElementById('btnSignupEmail')?.addEventListener('click', async ()=>{
+      const email = document.getElementById('signup_email').value.trim();
+      const pass  = document.getElementById('signup_pass').value;
       if(!email) return alert('Email kiriting');
       try{
         const password = pass || (Math.random().toString(36).slice(-12)+'A1!');
@@ -434,7 +428,7 @@
       }catch(err){ alert('Ro‘yxatdan o‘tishda xato: '+(err.message||err.code)); }
     });
 
-    $('#btnSignupGoogle')?.addEventListener('click', async ()=>{
+    document.getElementById('btnSignupGoogle')?.addEventListener('click', async ()=>{
       try{
         const result = await signInWithPopup(auth, provider);
         const u = result.user;
@@ -447,9 +441,9 @@
       }catch(err){ alert('Google sign-in xatosi: '+(err.message||err.code)); }
     });
 
-    $('#btnSetPassword')?.addEventListener('click', async ()=>{
-      const p  = $('#new_pass').value;
-      const pc = $('#new_pass_confirm').value;
+    document.getElementById('btnSetPassword')?.addEventListener('click', async ()=>{
+      const p  = document.getElementById('new_pass').value;
+      const pc = document.getElementById('new_pass_confirm').value;
       if(!p || p.length<6) return alert('Parol kamida 6 belgi bo‘lsin');
       if(p!==pc) return alert('Parollar mos emas');
       const u = auth.currentUser; if(!u) return alert('Avval tizimga kiring');
@@ -459,13 +453,13 @@
 
     // -------- Promo (user) --------
     function renderPromoInfo(d){
-      if(!d){ $('#promoInfo').innerHTML=''; return; }
+      if(!d){ document.getElementById('promoInfo').innerHTML=''; return; }
       const exp = d.expiresAt ? new Date((d.expiresAt.seconds? d.expiresAt.seconds*1000 : d.expiresAt)).toLocaleDateString() : '—';
       const limit = (d.limit ?? '—');
       const used = (d.used ?? 0);
       const off = (d.off ?? 0);
       const bonus = (d.bonus ?? 0);
-      $('#promoInfo').innerHTML = `
+      document.getElementById('promoInfo').innerHTML = `
         <div class="p-card" style="border-radius:12px">
           <div><b>Kod:</b> ${d.code||'—'}</div>
           <div><b>Chegirma:</b> ${off}%</div>
@@ -537,10 +531,11 @@
       if(!me.exists() || !isAdminNumericId(me.data().numericId)) return alert('Ruxsat yo‘q');
 
       const code = document.getElementById('ad_promo_code').value.trim().toUpperCase();
-      const off  = +($('#ad_promo_off').value||0);
-      const bonus= +($('#ad_promo_bonus').value||0);
-      const lim  = +($('#ad_promo_limit').value||0);
-      const exp  = $('#ad_promo_expires').value ? Timestamp.fromMillis(new Date($('#ad_promo_expires').value).getTime()+24*60*60*1000-1) : null;
+      const off  = +(document.getElementById('ad_promo_off').value||0);
+      const bonus= +(document.getElementById('ad_promo_bonus').value||0);
+      const lim  = +(document.getElementById('ad_promo_limit').value||0);
+      const expV = document.getElementById('ad_promo_expires').value;
+      const exp  = expV ? Timestamp.fromMillis(new Date(expV).getTime()+24*60*60*1000-1) : null;
       if(!code) return;
 
       await setDoc(doc(db,'promocodes', code), {
@@ -570,8 +565,8 @@
       const me = await getDoc(doc(db,'users',u.uid));
       if(!me.exists() || !isAdminNumericId(me.data().numericId)) return alert('Ruxsat yo‘q');
       const nid = document.getElementById('ad_user_id').value.trim(); if(!nid) return;
-      const addBal = +($('#ad_user_balance').value||0);
-      const addPts = +($('#ad_user_points').value||0);
+      const addBal = +(document.getElementById('ad_user_balance').value||0);
+      const addPts = +(document.getElementById('ad_user_points').value||0);
       const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
       if(qs.empty) return alert('Foydalanuvchi topilmadi');
       const ref = doc(db,'users',qs.docs[0].id);
@@ -624,7 +619,6 @@
     }
 
     function showRow(k,v){ return `<div class="p-item"><div class="k">${k}</div><div class="v"><strong>${(v??'')===''?'—':v}</strong></div></div>`; }
-
     function calcAgeStr(dob){
       if(!dob) return '—';
       const p = dob.split('-'); if(p.length<3) return '—';
@@ -667,7 +661,7 @@
         showRow('Tuman', d.tuman),
         showRow('Maktab', d.maktab),
         showRow('Manzil', d.manzil),
-        showRow('Numeric ID (to‘liq)', d.numericId),  /* profilda to‘liq ko‘rinadi */
+        showRow('Numeric ID (to‘liq)', d.numericId),
         showRow('Balans', d.balans),
         showRow('Ball', d.ball),
         (d.activeDiscount? showRow('Faol chegirma', `${d.activeDiscount.off}% (kod: ${d.activeDiscount.code||''})`): ''),
@@ -710,18 +704,18 @@
     document.getElementById('btnSaveProfile')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return;
       const data = {
-        ism: $('#p_ism').value.trim(),
-        familiya: $('#p_familiya').value.trim(),
-        sharif: $('#p_sharif').value.trim(),
-        tugilganSana: $('#p_tugilgan').value,
-        tel: $('#p_tel').value.trim(),
-        tg: $('#p_tg').value.trim(),
-        email: $('#p_email').value.trim() || u.email || "",
-        role: $('#p_role').value,
-        viloyat: $('#p_viloyat').value,
-        tuman: $('#p_tuman').value,
-        maktab: $('#p_maktab').value.trim(),
-        manzil: $('#p_manzil').value.trim(),
+        ism: document.getElementById('p_ism').value.trim(),
+        familiya: document.getElementById('p_familiya').value.trim(),
+        sharif: document.getElementById('p_sharif').value.trim(),
+        tugilganSana: document.getElementById('p_tugilgan').value,
+        tel: document.getElementById('p_tel').value.trim(),
+        tg: document.getElementById('p_tg').value.trim(),
+        email: document.getElementById('p_email').value.trim() || u.email || "",
+        role: document.getElementById('p_role').value,
+        viloyat: document.getElementById('p_viloyat').value,
+        tuman: document.getElementById('p_tuman').value,
+        maktab: document.getElementById('p_maktab').value.trim(),
+        manzil: document.getElementById('p_manzil').value.trim(),
         updatedAt: serverTimestamp()
       };
       if(!data.ism || !data.familiya || !data.tel || !data.role || !data.viloyat || !data.tuman){
