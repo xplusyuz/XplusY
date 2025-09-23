@@ -1,0 +1,29 @@
+
+// Firebase initialization (modular v10) — Foydalanuvchi configini shu yerga qo'ying.
+export const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+export async function bootFirebase(){
+  const [{ initializeApp }] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js"),
+  ]);
+  const app = initializeApp(firebaseConfig);
+  const [ firestore, storage ] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js"),
+  ]);
+  const db = firestore.getFirestore(app);
+  const st = storage.getStorage(app);
+  // window-ga qo'yamiz ki barcha sahifada ishlasin
+  window.db = db;
+  window.storage = st;
+  window.fs = firestore;
+  window.st = storage;
+  return { db, st, fs: firestore, stMod: storage };
+}
