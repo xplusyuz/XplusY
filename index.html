@@ -75,7 +75,6 @@
     #profileView .p-item{display:grid;gap:4px}
     #profileView .p-item .k{font-size:12px;opacity:.7}
     #profileView .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    /* Admin-only default hidden */
     .admin-only{display:none}
   </style>
 </head>
@@ -112,11 +111,9 @@
       <button class="chip" data-route="simulators">Simulyatorlar</button>
       <button class="chip" data-route="results">Natijalar</button>
       <button class="chip" data-route="profile">Profil</button>
-      <!-- tashqi admin kerak emas -->
     </div>
   </div>
 
-  <!-- ===== AUTH / PROFILE / PROMO — o‘zingiz yuborganidek (qisqartirmasdan qoldirdim) ===== -->
   <!-- AUTH -->
   <div class="mc-modal" id="authModal" aria-hidden="true">
     <div class="mc-card" role="dialog" aria-modal="true" style="max-width:640px">
@@ -190,8 +187,7 @@
     </div>
   </div>
 
-  <!-- ===== ADMIN ADD MODALLARI ===== -->
-  <!-- Banner qo‘shish -->
+  <!-- ADMIN ADD MODALLARI -->
   <div class="mc-modal" id="adminBannerModal" aria-hidden="true">
     <div class="mc-card" role="dialog" aria-modal="true">
       <div class="mc-head"><div class="mc-title">Banner qo‘shish</div><button class="mc-close" data-x="adminBannerModal">✕</button></div>
@@ -210,7 +206,6 @@
     </div>
   </div>
 
-  <!-- Card qo‘shish (courses/simulators/tests: oddiy) -->
   <div class="mc-modal" id="adminCardModal" aria-hidden="true">
     <div class="mc-card" role="dialog" aria-modal="true">
       <div class="mc-head"><div class="mc-title" id="cardModalTitle">Card qo‘shish</div><button class="mc-close" data-x="adminCardModal">✕</button></div>
@@ -240,7 +235,6 @@
     </div>
   </div>
 
-  <!-- Onlayn test qo‘shish -->
   <div class="mc-modal" id="adminTestOnlineModal" aria-hidden="true">
     <div class="mc-card" role="dialog" aria-modal="true">
       <div class="mc-head"><div class="mc-title">Onlayn test qo‘shish</div><button class="mc-close" data-x="adminTestOnlineModal">✕</button></div>
@@ -261,7 +255,7 @@
     </div>
   </div>
 
-  <!-- ===== Router (partials YO'Q) ===== -->
+  <!-- ===== ROUTER / UI (no-partials) ===== -->
   <script>
     const routes = ["home","courses","tests","simulators","results","profile"];
     const fab=document.getElementById('fab'); const fabBtn=document.getElementById('fabBtn'); const fabMenu=document.getElementById('fabMenu');
@@ -318,6 +312,8 @@
           </div>
         </div>`;
     }
+    // globalga beramiz, modul ichida ham chaqiriladi
+    window.cardHTML = cardHTML;
 
     const Views = {
       home: async ()=> section("Bosh sahifa", `
@@ -335,12 +331,16 @@
       profile: async ()=> section("Profil", `<div id="profileView" class="content"></div>`)
     };
 
+    let CURRENT_IS_ADMIN = false;
+
     async function loadRoute(route){
       if(!routes.includes(route)) route="home";
       const app=document.getElementById('app');
       app.innerHTML = await Views[route]();
       history.replaceState({},'', '#'+route); setActive(route); window.scrollTo({top:0,behavior:'smooth'});
       mountAdminControls(route);
+      // admin UI ko‘rsatishni qayta qo‘llaymiz
+      if(CURRENT_IS_ADMIN){ document.querySelectorAll('.admin-only').forEach(el=>el.style.display=''); document.querySelectorAll('.content .admin-toolbar').forEach(el=>el.style.display='flex'); }
       if(route==="home") fetchHomeBanners().catch(()=>{});
       if(route==="courses") bootListPage('courses');
       if(route==="simulators") bootListPage('simulators');
@@ -400,29 +400,23 @@
     const $  = (s, r=document)=>r.querySelector(s);
     const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
-    // ---- Admin check (faqat 38864) ----
     function isAdminNumericId(val){ return (val===38864 || val==='38864'); }
     function toggleAdminUI(isAdmin){
-      // header badge
-      const badge = $('#adminBadge');
-      if(badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
-      // barcha admin-only elementlar
+      const badge = $('#adminBadge'); if(badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
       $$('.admin-only').forEach(el=>{ el.style.display = isAdmin ? '' : 'none'; });
-      // content ichidagi .admin-toolbar ko‘rsatish
       $$('.content .admin-toolbar').forEach(el=>{ el.style.display = isAdmin ? 'flex' : 'none'; });
+      window.CURRENT_IS_ADMIN = isAdmin; // global flag
     }
 
-    // ===== HOME: Bannerlar =====
     async function fetchHomeBanners(){
       const box = $('#homeBanners'); if(!box) return;
       try{
         const qs = await getDocs(query(collection(db,'banners'), orderBy('createdAt','desc'), qLimit(8)));
         if(qs.empty){ box.innerHTML = `<div class="gcard"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`; return; }
-        box.innerHTML = qs.docs.map(d=>cardHTML(d.data())).join('');
+        box.innerHTML = qs.docs.map(d=>window.cardHTML(d.data())).join('');
       }catch(err){ box.innerHTML = `<div class="gcard"><div class="body"><h3>Xatolik</h3><div class="meta">${err?.message||'Bannerlarni yuklab bo‘lmadi'}</div></div></div>`; }
     }
 
-    // ====== FILTER util ======
     function unique(arr){ return Array.from(new Set(arr.filter(Boolean))); }
     function fillFilterSelects(coll, docs){
       const f1 = $(`#${coll}_f1`), f2 = $(`#${coll}_f2`), f3 = $(`#${coll}_f3`);
@@ -441,7 +435,6 @@
       return true;
     }
 
-    // ===== ADMIN GUARD =====
     async function requireAdmin(){
       const u = auth.currentUser; if(!u){ openModal('authModal'); throw new Error('Kirish talab etiladi'); }
       const snap = await getDoc(doc(db,'users',u.uid));
@@ -450,108 +443,64 @@
       return { u, d };
     }
 
-    // ===== CARD SAQLASH HELPERS =====
-    function normUrl(v){ if(!v) return ''; // rasm yo‘li: img/rasm.jpg yoki to‘liq URL
-      if(/^https?:\/\//i.test(v) || v.startsWith('img/') || v.startsWith('assets/')) return v;
-      return v; // boshqa nisbiy yo‘llarni ham qoldiramiz
-    }
+    function normUrl(v){ if(!v) return ''; if(/^https?:\/\//i.test(v) || v.startsWith('img/') || v.startsWith('assets/')) return v; return v; }
     async function saveBanner(payload){
       await requireAdmin();
-      const data = {
-        title: payload.title||'',
-        banner: normUrl(payload.image||''),
-        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
-        link: payload.link||'',
-        createdAt: serverTimestamp(),
-      };
+      const data = { title: payload.title||'', banner: normUrl(payload.image||''), filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'', link: payload.link||'', createdAt: serverTimestamp() };
       await addDoc(collection(db,'banners'), data);
     }
     async function saveCard(coll, payload){
       await requireAdmin();
-      const data = {
-        title: payload.title||'Nomlanmagan',
-        cover: normUrl(payload.image||''),
-        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
-        subject: payload.subject||'', level: payload.level||'', type: payload.type||'',
-        duration: payload.duration||'', link: payload.link||'',
-        createdAt: serverTimestamp()
-      };
+      const data = { title: payload.title||'Nomlanmagan', cover: normUrl(payload.image||''), filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'', subject: payload.subject||'', level: payload.level||'', type: payload.type||'', duration: payload.duration||'', link: payload.link||'', createdAt: serverTimestamp() };
+      if(coll==='tests' && !data.type) data.type='oddiy'; // majburiy
       await addDoc(collection(db,coll), data);
     }
     async function saveOnlineTest(payload){
       await requireAdmin();
       const startMs = payload.start ? new Date(payload.start).getTime() : null;
       const endMs   = payload.end   ? new Date(payload.end).getTime()   : null;
-      const data = {
-        title: payload.title||'Test',
-        image: normUrl(payload.image||''),
-        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
-        type:'online',
-        startAt: startMs? Timestamp.fromMillis(startMs): null,
-        endAt: endMs? Timestamp.fromMillis(endMs): null,
-        link: payload.link||'',
-        createdAt: serverTimestamp()
-      };
+      const data = { title: payload.title||'Test', image: normUrl(payload.image||''), filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'', type:'online', startAt: startMs? Timestamp.fromMillis(startMs): null, endAt: endMs? Timestamp.fromMillis(endMs): null, link: payload.link||'', createdAt: serverTimestamp() };
       await addDoc(collection(db,'tests'), data);
     }
 
-    // ===== ADMIN MODAL UX =====
     function openModal(id){ const m=$('#'+id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
     function closeModal(id){ const m=$('#'+id); if(m){ m.classList.remove('open'); if(!document.querySelector('.mc-modal.open')) document.body.classList.remove('modal-open'); } }
     $$('.mc-close').forEach(btn=>btn.addEventListener('click',()=>closeModal(btn.dataset.x)));
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $$('.mc-modal.open').forEach(m=>m.classList.remove('open')); document.body.classList.remove('modal-open'); } });
 
-    // Har bir route yuklanganda admin tugmalarini ulash
     function mountAdminControls(route){
-      // barcha admin-only ko‘rsat/berkit (onAuthStateChanged ichida ham boshqariladi)
-      // HOME
       if(route==='home'){
         $('#home_add_banner')?.addEventListener('click', ()=>openModal('adminBannerModal'));
       }
-      // COURSES / SIMULATORS / TESTS
       ['courses','simulators','tests'].forEach(coll=>{
         if(route!==coll) return;
-        // toolbar
         $(`#${coll}_add_toolbar`)?.addEventListener('click', ()=>{
-          if(coll==='tests'){
-            // tanlash: oddiy card modalmi yoki onlayn testmi?
-            const ask = confirm('Onlayn test qo‘shasizmi? OK=Onlayn, Cancel=Oddiy card');
-            if(ask) openModal('adminTestOnlineModal'); else openModal('adminCardModal');
-          } else {
-            openModal('adminCardModal');
-          }
-          // modalga kolleksiyani oldindan tanlab qo‘yamiz
-          const sel = $('#cd_coll'); if(sel && sel.querySelector(`option[value="${coll}"]`)) sel.value = (coll==='tests'?'tests':''+coll);
-        });
-        // filter yonida va ichida
-        $(`#${coll}_add_here1`)?.addEventListener('click', ()=>{
-          openModal('adminCardModal');
-          const sel = $('#cd_coll'); if(sel) sel.value = coll;
-          // joriy filterni modalga ko‘chirish
-          $('#cd_f1').value = $(`#${coll}_f1`)?.value || '';
-          $('#cd_f2').value = $(`#${coll}_f2`)?.value || '';
-          $('#cd_f3').value = $(`#${coll}_f3`)?.value || '';
-        });
-        $(`#${coll}_add_near1`)?.addEventListener('click', ()=>{
-          openModal(coll==='tests' ? 'adminTestOnlineModal' : 'adminCardModal');
-          if(coll!=='tests'){
-            const sel = $('#cd_coll'); if(sel) sel.value = coll;
-            $('#cd_f1').value = $(`#${coll}_f1`)?.value || '';
-          } else {
-            $('#to_f1').value = $(`#${coll}_f1`)?.value || '';
-          }
-        });
-        $(`#${coll}_add_fab`)?.addEventListener('click', ()=>{
           if(coll==='tests'){
             const ask = confirm('Onlayn test qo‘shasizmi? OK=Onlayn, Cancel=Oddiy card');
             if(ask) openModal('adminTestOnlineModal'); else openModal('adminCardModal');
           } else openModal('adminCardModal');
           const sel = $('#cd_coll'); if(sel) sel.value = coll;
         });
+        $(`#${coll}_add_here1`)?.addEventListener('click', ()=>{
+          openModal('adminCardModal'); const sel=$('#cd_coll'); if(sel) sel.value=coll;
+          $('#cd_f1').value = $(`#${coll}_f1`)?.value || '';
+          $('#cd_f2').value = $(`#${coll}_f2`)?.value || '';
+          $('#cd_f3').value = $(`#${coll}_f3`)?.value || '';
+        });
+        $(`#${coll}_add_near1`)?.addEventListener('click', ()=>{
+          if(coll==='tests') openModal('adminTestOnlineModal'); else openModal('adminCardModal');
+          const sel=$('#cd_coll'); if(sel) sel.value=coll; if(coll!=='tests'){ $('#cd_f1').value=$(`#${coll}_f1`)?.value||''; }
+        });
+        $(`#${coll}_add_fab`)?.addEventListener('click', ()=>{
+          if(coll==='tests'){
+            const ask = confirm('Onlayn test qo‘shasizmi? OK=Onlayn, Cancel=Oddiy card');
+            if(ask) openModal('adminTestOnlineModal'); else openModal('adminCardModal');
+          } else openModal('adminCardModal');
+          const sel=$('#cd_coll'); if(sel) sel.value=coll;
+        });
       });
     }
 
-    // ====== GENERIC list pages (courses/simulators) ======
     function bootListPage(coll){
       const box = $(`#${coll}_cards`);
       const btnPrev = $(`#${coll}_prev`);
@@ -560,31 +509,26 @@
       const f1=$(`#${coll}_f1`), f2=$(`#${coll}_f2`), f3=$(`#${coll}_f3`);
       const resetBtn=$(`#${coll}_reset`);
 
-      const PAGE=12;
-      let cacheAll = [];
-      let page = 1, lastDoc=null, stackCursors = [];
+      const PAGE=12; let page = 1, lastDoc=null, stackCursors = []; let filterCache=[];
 
       async function loadForFilters(){
         const qs = await getDocs(query(collection(db,coll), orderBy('createdAt','desc'), qLimit(300)));
-        cacheAll = qs.docs.map(d=>({id:d.id, ...d.data()}));
-        fillFilterSelects(coll, cacheAll);
+        filterCache = qs.docs.map(d=>({id:d.id, ...d.data()}));
+        fillFilterSelects(coll, filterCache);
       }
-
       async function loadPage(direction){
         const filters = {f1: f1?.value||'', f2: f2?.value||'', f3: f3?.value||''};
         let qBase = query(collection(db,coll), orderBy('createdAt','desc'), qLimit(PAGE));
         if(direction==='next' && lastDoc){ qBase = query(collection(db,coll), orderBy('createdAt','desc'), startAfter(lastDoc), qLimit(PAGE)); }
         if(direction==='prev'){
-          if(stackCursors.length<=1) return;
-          stackCursors.pop();
-          const cursor = stackCursors[stackCursors.length-1];
+          if(stackCursors.length<=1) return; stackCursors.pop(); const cursor = stackCursors[stackCursors.length-1];
           qBase = cursor ? query(collection(db,coll), orderBy('createdAt','desc'), startAfter(cursor), qLimit(PAGE)) : query(collection(db,coll), orderBy('createdAt','desc'), qLimit(PAGE));
           page = Math.max(1, page-1);
         }
         const qs = await getDocs(qBase);
         const docs = qs.docs.map(d=>({id:d.id, ...d.data()}));
         const fdocs = docs.filter(d=>matchFilters(d, filters.f1, filters.f2, filters.f3));
-        box.innerHTML = fdocs.length ? fdocs.map(d=>cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Hech narsa topilmadi</h3></div></div>`;
+        box.innerHTML = fdocs.length ? fdocs.map(d=>window.cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Hech narsa topilmadi</h3></div></div>`;
         if(direction!=='prev'){
           if(qs.docs.length){ stackCursors.push(qs.docs[0]); lastDoc = qs.docs[qs.docs.length-1]; }
           if(direction==='next') page++;
@@ -603,10 +547,9 @@
       btnNext?.addEventListener('click', ()=>loadPage('next'));
 
       loadForFilters().catch(()=>{});
-      loadPage().catch(err=>{ box.innerHTML = `<div class="gcard"><div class="body"><h3>Xato</h3><div class="meta">${err?.message||''}</div></div></div>`; });
+      loadPage().catch(err=>{ box.innerHTML = `<div class=\"gcard\"><div class=\"body\"><h3>Xato</h3><div class=\"meta\">${err?.message||''}</div></div></div>`; });
     }
 
-    // ====== TESTS page: online first, then filtered oddiy + pagination ======
     function bootTestsPage(){
       const coll='tests';
       const onlineBlock = $(`#${coll}_online_block`);
@@ -617,8 +560,7 @@
       const f1=$(`#${coll}_f1`), f2=$(`#${coll}_f2`), f3=$(`#${coll}_f3`);
       const resetBtn=$(`#${coll}_reset`);
 
-      const PAGE=12;
-      let page = 1, lastDoc=null, stackCursors = [];
+      const PAGE=12; let page = 1, lastDoc=null, stackCursors = [];
 
       async function renderOnline(){
         if(!onlineBlock) return;
@@ -640,30 +582,30 @@
                   const s = sMs ? new Date(sMs).toLocaleString() : '';
                   const e = eMs ? new Date(eMs).toLocaleString() : '';
                   const live = (sMs && eMs) ? (now >= sMs && now <= eMs) : false;
-                  return cardHTML(x, [(s&&e)?`Boshlash: ${s}`:'', (s&&e)?`Tugash: ${e}`:'', live?'LIVE':'']);
+                  return window.cardHTML(x, [(s&&e)?`Boshlash: ${s}`:'', (s&&e)?`Tugash: ${e}`:'', live?'LIVE':'']);
                 }).join('')}
               </div>
             </div>`;
           $('#tests_add_online_toolbar')?.addEventListener('click', ()=>openModal('adminTestOnlineModal'));
+          if(window.CURRENT_IS_ADMIN){ onlineBlock.querySelectorAll('.admin-toolbar').forEach(el=>el.style.display='flex'); }
         }catch{ onlineBlock.innerHTML=''; }
       }
 
       async function loadOddiy(direction){
         const filters = {f1: f1?.value||'', f2: f2?.value||'', f3: f3?.value||''};
-        let qBase = query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), qLimit(PAGE));
-        if(direction==='next' && lastDoc){ qBase = query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), startAfter(lastDoc), qLimit(PAGE)); }
+        // Soddalashtirildi: faqat oddiy
+        let qBase = query(collection(db,'tests'), where('type','==','oddiy'), orderBy('createdAt','desc'), qLimit(PAGE));
+        if(direction==='next' && lastDoc){ qBase = query(collection(db,'tests'), where('type','==','oddiy'), orderBy('createdAt','desc'), startAfter(lastDoc), qLimit(PAGE)); }
         if(direction==='prev'){
-          if(stackCursors.length<=1) return;
-          stackCursors.pop();
-          const cursor = stackCursors[stackCursors.length-1];
-          qBase = cursor ? query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), startAfter(cursor), qLimit(PAGE))
-                         : query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), qLimit(PAGE));
+          if(stackCursors.length<=1) return; stackCursors.pop(); const cursor = stackCursors[stackCursors.length-1];
+          qBase = cursor ? query(collection(db,'tests'), where('type','==','oddiy'), orderBy('createdAt','desc'), startAfter(cursor), qLimit(PAGE))
+                         : query(collection(db,'tests'), where('type','==','oddiy'), orderBy('createdAt','desc'), qLimit(PAGE));
           page = Math.max(1, page-1);
         }
         const qs = await getDocs(qBase);
         const docs = qs.docs.map(d=>({id:d.id, ...d.data()}));
         const fdocs = docs.filter(d=>matchFilters(d, filters.f1, filters.f2, filters.f3));
-        box.innerHTML = fdocs.length ? fdocs.map(d=>cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Oddiy test topilmadi</h3></div></div>`;
+        box.innerHTML = fdocs.length ? fdocs.map(d=>window.cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Oddiy test topilmadi</h3></div></div>`;
         if(direction!=='prev'){
           if(qs.docs.length){ stackCursors.push(qs.docs[0]); lastDoc = qs.docs[qs.docs.length-1]; }
           if(direction==='next') page++;
@@ -678,14 +620,13 @@
       f3?.addEventListener('change', ()=>{ page=1; lastDoc=null; stackCursors=[]; loadOddiy(); });
       resetBtn?.addEventListener('click', ()=>{ if(f1) f1.value=''; if(f2) f2.value=''; if(f3) f3.value=''; page=1; lastDoc=null; stackCursors=[]; loadOddiy(); });
 
-      $('#tests_prev')?.addEventListener('click', ()=>loadOddiy('prev'));
-      $('#tests_next')?.addEventListener('click', ()=>loadOddiy('next'));
+      btnPrev?.addEventListener('click', ()=>loadOddiy('prev'));
+      btnNext?.addEventListener('click', ()=>loadOddiy('next'));
 
       renderOnline().catch(()=>{});
-      loadOddiy().catch(err=>{ box.innerHTML = `<div class="gcard"><div class="body"><h3>Xato</h3><div class="meta">${err?.message||''}</div></div></div>`; });
+      loadOddiy().catch(err=>{ box.innerHTML = `<div class=\"gcard\"><div class=\"body\"><h3>Xato</h3><div class=\"meta\">${err?.message||''}</div></div></div>`; });
     }
 
-    // ===== REGIONS va PROFILE (o‘zingizdagi kabi) =====
     let REGIONS = {};
     async function loadRegions(){ try{ const res=await fetch('regions.json',{cache:'no-store'}); REGIONS = await res.json(); }catch{ REGIONS={}; } }
     function fillRegionSelects(currentViloyat='', currentTuman=''){
@@ -699,15 +640,12 @@
     async function findUserByNumericId(nid){
       if(!nid) return null;
       const qs = await getDocs(query(collection(db,'users'), where('numericId','==', isNaN(+nid)? nid : +nid )));
-      if(qs.empty) return null;
-      return { docId: qs.docs[0].id, data: qs.docs[0].data() };
+      if(qs.empty) return null; return { docId: qs.docs[0].id, data: qs.docs[0].data() };
     }
 
-    // AUTH tabs
     document.getElementById('tabLogin')?.addEventListener('click', ()=>{ $('#tabLogin').classList.add('active'); $('#tabSignup').classList.remove('active'); $('#authLogin').style.display='block'; $('#authSignup').style.display='none'; });
     document.getElementById('tabSignup')?.addEventListener('click', ()=>{ $('#tabSignup').classList.add('active'); $('#tabLogin').classList.remove('active'); $('#authSignup').style.display='block'; $('#authLogin').style.display='none'; });
 
-    // ID + Parol bilan kirish
     document.getElementById('btnLoginId')?.addEventListener('click', async ()=>{
       const nid = $('#login_id').value.trim(); const pass = $('#login_pass').value;
       if(!nid || !pass) return alert('ID va parol kiriting');
@@ -721,38 +659,29 @@
       }catch(err){ alert('Kirishda xato: '+(err.message||err.code)); }
     });
 
-    // Email signup
     document.getElementById('btnSignupEmail')?.addEventListener('click', async ()=>{
       const email = $('#signup_email').value.trim(); const pass  = $('#signup_pass').value;
       if(!email) return alert('Email kiriting');
       try{
         const password = pass || (Math.random().toString(36).slice(-12)+'A1!');
         const cred = await createUserWithEmailAndPassword(auth, email, password);
-        const u = cred.user;
-        const ref = doc(db,'users',u.uid);
-        const snap = await getDoc(ref);
+        const u = cred.user; const ref = doc(db,'users',u.uid); const snap = await getDoc(ref);
         const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
         await setDoc(ref, { email, ism: u.displayName||'', numericId, createdAt: serverTimestamp() }, { merge:true });
-        if(!pass) openModal('setPasswordModal');
-        closeModal('authModal');
+        if(!pass) openModal('setPasswordModal'); closeModal('authModal');
       }catch(err){ alert('Ro‘yxatdan o‘tishda xato: '+(err.message||err.code)); }
     });
 
-    // Google signup
     document.getElementById('btnSignupGoogle')?.addEventListener('click', async ()=>{
       try{
         const result = await signInWithPopup(auth, provider);
-        const u = result.user;
-        const ref = doc(db,'users',u.uid);
-        const snap = await getDoc(ref);
+        const u = result.user; const ref = doc(db,'users',u.uid); const snap = await getDoc(ref);
         const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
         await setDoc(ref, { email: u.email, ism: u.displayName||'', numericId, provider:'google', createdAt: serverTimestamp() }, { merge:true });
-        openModal('setPasswordModal');
-        closeModal('authModal');
+        openModal('setPasswordModal'); closeModal('authModal');
       }catch(err){ alert('Google sign-in xatosi: '+(err.message||err.code)); }
     });
 
-    // Parol o‘rnatish
     document.getElementById('btnSetPassword')?.addEventListener('click', async ()=>{
       const p  = $('#new_pass').value; const pc = $('#new_pass_confirm').value;
       if(!p || p.length<6) return alert('Parol kamida 6 belgi bo‘lsin');
@@ -762,7 +691,6 @@
       catch(err){ alert('Parolni saqlashda xato: '+(err.message||err.code)); }
     });
 
-    // PROMO
     function renderPromoInfo(d){
       if(!d){ $('#promoInfo').innerHTML=''; return; }
       const exp = d.expiresAt ? new Date((d.expiresAt.seconds? d.expiresAt.seconds*1000 : d.expiresAt)).toLocaleDateString() : '—';
@@ -807,7 +735,6 @@
       }catch(err){ alert(err.message || 'Promo qo‘llashda xato'); }
     });
 
-    // PROFILE UI
     function ensureProfileSkeleton(){
       const container = document.getElementById('profileView'); if(!container) return;
       if(!container.innerHTML.trim()){
@@ -837,12 +764,7 @@
       }
     }
     function showRow(k,v){ return `<div class="p-item"><div class="k">${k}</div><div class="v"><strong>${(v??'')===''?'—':v}</strong></div></div>`; }
-    function calcAgeStr(dob){
-      if(!dob) return '—'; const p = dob.split('-'); if(p.length<3) return '—';
-      const dt = new Date(+p[0], +p[1]-1, +p[2]); if(isNaN(dt)) return '—';
-      const t = new Date(); let a = t.getFullYear()-dt.getFullYear(); const m = t.getMonth()-dt.getMonth();
-      if(m<0 || (m===0 && t.getDate()<dt.getDate())) a--; return a>=0 ? `${a} yosh` : '—';
-    }
+    function calcAgeStr(dob){ if(!dob) return '—'; const p = dob.split('-'); if(p.length<3) return '—'; const dt = new Date(+p[0], +p[1]-1, +p[2]); if(isNaN(dt)) return '—'; const t = new Date(); let a = t.getFullYear()-dt.getFullYear(); const m = t.getMonth()-dt.getMonth(); if(m<0 || (m===0 && t.getDate()<dt.getDate())) a--; return a>=0 ? `${a} yosh` : '—'; }
     async function renderProfilePage(){
       ensureProfileSkeleton();
       const grid = $('#profileGrid'); const u = auth.currentUser;
@@ -862,54 +784,30 @@
     }
     window.safeRenderProfile = function(){ renderProfilePage().catch(()=>{}); queueMicrotask(()=>renderProfilePage().catch(()=>{})); setTimeout(()=>renderProfilePage().catch(()=>{}), 300); };
 
-    // === ADMIN MODAL SAQLASH HANDLERLARI ===
+    // SAQLASH HANDLERLARI
     $('#btnSaveBanner')?.addEventListener('click', async ()=>{
       try{
-        await saveBanner({
-          title: $('#bn_title').value.trim(),
-          image: $('#bn_img').value.trim(),
-          f1: $('#bn_f1').value.trim(), f2: $('#bn_f2').value.trim(), f3: $('#bn_f3').value.trim(),
-          link: $('#bn_link').value.trim()
-        });
-        closeModal('adminBannerModal');
-        alert('Banner saqlandi'); if(location.hash==='#home') fetchHomeBanners();
+        await saveBanner({ title: $('#bn_title').value.trim(), image: $('#bn_img').value.trim(), f1: $('#bn_f1').value.trim(), f2: $('#bn_f2').value.trim(), f3: $('#bn_f3').value.trim(), link: $('#bn_link').value.trim() });
+        closeModal('adminBannerModal'); alert('Banner saqlandi'); if(location.hash==='#home') fetchHomeBanners();
       }catch(err){ alert(err.message||'Saqlashda xato'); }
     });
 
     $('#btnSaveCard')?.addEventListener('click', async ()=>{
       try{
-        const coll = $('#cd_coll').value;
-        await saveCard(coll, {
-          title: $('#cd_title').value.trim(),
-          image: $('#cd_img').value.trim(),
-          f1: $('#cd_f1').value.trim(), f2: $('#cd_f2').value.trim(), f3: $('#cd_f3').value.trim(),
-          subject: $('#cd_subject').value.trim(), level: $('#cd_level').value.trim(),
-          type: $('#cd_type').value.trim(), duration: $('#cd_duration').value.trim(),
-          link: $('#cd_link').value.trim()
-        });
-        closeModal('adminCardModal');
-        alert('Card saqlandi');
-        if(location.hash==='#courses') loadRoute('courses');
-        if(location.hash==='#simulators') loadRoute('simulators');
-        if(location.hash==='#tests') loadRoute('tests');
+        const coll = $('#cd_coll').value; const forcedType = (coll==='tests') ? 'oddiy' : ($('#cd_type').value.trim());
+        await saveCard(coll, { title: $('#cd_title').value.trim(), image: $('#cd_img').value.trim(), f1: $('#cd_f1').value.trim(), f2: $('#cd_f2').value.trim(), f3: $('#cd_f3').value.trim(), subject: $('#cd_subject').value.trim(), level: $('#cd_level').value.trim(), type: forcedType, duration: $('#cd_duration').value.trim(), link: $('#cd_link').value.trim() });
+        closeModal('adminCardModal'); alert('Card saqlandi');
+        if(location.hash==='#courses') loadRoute('courses'); if(location.hash==='#simulators') loadRoute('simulators'); if(location.hash==='#tests') loadRoute('tests');
       }catch(err){ alert(err.message||'Saqlashda xato'); }
     });
 
     $('#btnSaveOnlineTest')?.addEventListener('click', async ()=>{
       try{
-        await saveOnlineTest({
-          title: $('#to_title').value.trim(),
-          image: $('#to_img').value.trim(),
-          f1: $('#to_f1').value.trim(), f2: $('#to_f2').value.trim(), f3: $('#to_f3').value.trim(),
-          start: $('#to_start').value, end: $('#to_end').value,
-          link: $('#to_link').value.trim()
-        });
-        closeModal('adminTestOnlineModal');
-        alert('Onlayn test saqlandi'); if(location.hash==='#tests') loadRoute('tests');
+        await saveOnlineTest({ title: $('#to_title').value.trim(), image: $('#to_img').value.trim(), f1: $('#to_f1').value.trim(), f2: $('#to_f2').value.trim(), f3: $('#to_f3').value.trim(), start: $('#to_start').value, end: $('#to_end').value, link: $('#to_link').value.trim() });
+        closeModal('adminTestOnlineModal'); alert('Onlayn test saqlandi'); if(location.hash==='#tests') loadRoute('tests');
       }catch(err){ alert(err.message||'Saqlashda xato'); }
     });
 
-    // ==== AUTH STATE ====
     onAuthStateChanged(auth, (user)=>{
       if(user){
         onSnapshot(doc(db,'users',user.uid), (snap)=>{
@@ -924,47 +822,16 @@
       }
     });
 
-    // Profilni saqlash
     document.getElementById('btnSaveProfile')?.addEventListener('click', async ()=>{
       const u = auth.currentUser; if(!u) return;
-      const data = {
-        ism: $('#p_ism').value.trim(), familiya: $('#p_familiya').value.trim(), sharif: $('#p_sharif').value.trim(),
-        tugilganSana: $('#p_tugilgan').value, tel: $('#p_tel').value.trim(), tg: $('#p_tg').value.trim(),
-        email: $('#p_email').value.trim() || u.email || "", role: $('#p_role').value,
-        viloyat: $('#p_viloyat').value, tuman: $('#p_tuman').value,
-        maktab: $('#p_maktab').value.trim(), manzil: $('#p_manzil').value.trim(),
-        updatedAt: serverTimestamp()
-      };
-      if(!data.ism || !data.familiya || !data.tel || !data.role || !data.viloyat || !data.tuman){
-        return alert('Majburiy: Ism, Familiya, Telefon, Rol, Viloyat, Tuman');
-      }
+      const data = { ism: $('#p_ism').value.trim(), familiya: $('#p_familiya').value.trim(), sharif: $('#p_sharif').value.trim(), tugilganSana: $('#p_tugilgan').value, tel: $('#p_tel').value.trim(), tg: $('#p_tg').value.trim(), email: $('#p_email').value.trim() || u.email || "", role: $('#p_role').value, viloyat: $('#p_viloyat').value, tuman: $('#p_tuman').value, maktab: $('#p_maktab').value.trim(), manzil: $('#p_manzil').value.trim(), updatedAt: serverTimestamp() };
+      if(!data.ism || !data.familiya || !data.tel || !data.role || !data.viloyat || !data.tuman){ return alert('Majburiy: Ism, Familiya, Telefon, Rol, Viloyat, Tuman'); }
       const ref = doc(db,'users',u.uid); const snap = await getDoc(ref);
       const numericId = (snap.exists() && snap.data().numericId) ? snap.data().numericId : 1000 + Math.floor(Date.now()/1000)%900000;
       await setDoc(ref, { ...snap.data(), ...data, numericId }, { merge:true });
       try{ await updateProfile(u, { displayName: data.ism }); }catch{}
       closeModal('profileModal'); if((location.hash||'')==='#profile') window.safeRenderProfile();
     });
-
-    // === Kichik helper: cardHTML (ES modul ichida ham kerak) ===
-    window.cardHTML = function(d, extraMeta=[]){
-      const img = d.cover || d.banner || d.image || "assets/placeholder.png";
-      const title = d.title || d.name || "Nomlanmagan";
-      const meta = [d.level, d.subject, d.type, d.duration, ...extraMeta].filter(Boolean).join(" · ");
-      return `
-        <div class="gcard">
-          <img class="cover" src="${img}" alt="">
-          <div class="body">
-            <h3>${title}</h3>
-            ${meta?`<div class="meta">${meta}</div>`:""}
-            <div class="row" style="margin-top:6px">
-              ${d.filter1?`<span class="badge">${d.filter1}</span>`:""}
-              ${d.filter2?`<span class="badge">${d.filter2}</span>`:""}
-              ${d.filter3?`<span class="badge">${d.filter3}</span>`:""}
-              ${d.type==='online'?`<span class="badge">ONLINE</span>`:""}
-            </div>
-          </div>
-        </div>`;
-    }
   </script>
 </body>
 </html>
