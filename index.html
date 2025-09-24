@@ -17,6 +17,7 @@
     .logo svg{width:28px;height:28px;fill:#fff}
     .brand-title{padding:8px 12px;border-radius:14px;background:linear-gradient(145deg,#f7fffb,#eafff5);box-shadow:0 10px 18px #b0f5d633,inset 0 -3px 8px rgba(255,255,255,.8)}
     .brand-title h1{margin:0;font-size:20px;background:linear-gradient(180deg,#0dbb6f,#0a8f52);-webkit-background-clip:text;color:transparent;font-weight:900;letter-spacing:.3px}
+    .admin-badge{margin-left:6px;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--edge);background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.08);font-weight:900;color:#0a8f52;display:none}
     .stats{display:grid; grid-auto-flow:column; gap:10px;}
     .card{background:#fff;border:1px solid var(--edge);border-radius:14px;padding:10px 12px;box-shadow:0 12px 28px rgba(10,143,82,.12), 0 2px 6px rgba(0,0,0,.05);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:52px;min-width:90px}
     .card .label{font-size:12px;opacity:.7}
@@ -25,7 +26,8 @@
     .stats-compact{display:none}
     @media(max-width:540px){ .stats{display:none} .stats-compact{display:block} }
     main{max-width:1200px;margin:16px auto 96px;padding:0 16px}
-    .content{background:#fff;border:1px solid var(--edge);border-radius:16px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+    .content{background:#fff;border:1px solid var(--edge);border-radius:16px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,.06);position:relative}
+    .content .admin-toolbar{position:absolute;right:12px;top:12px;display:none;gap:8px}
     .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
     .gcard{background:#fff;border:1px solid var(--edge);border-radius:14px;overflow:hidden;box-shadow:0 10px 22px rgba(0,0,0,.06)}
     .gcard .cover{aspect-ratio:16/9;background:#f3f7f5;object-fit:cover;width:100%}
@@ -41,10 +43,13 @@
     .chip{background:#fff;border:1px solid var(--edge);padding:10px 14px;border-radius:12px;box-shadow:0 2px 6px rgba(0,0,0,.08);font-weight:800;transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease, color .18s ease; text-decoration:none; color:inherit}
     .chip:hover{transform:scale(1.05); box-shadow:0 6px 16px rgba(0,0,0,.14)}
     .chip.active{background:#0faf64;color:#fff;border-color:#0faf64;box-shadow:0 8px 22px rgba(15,175,100,.35)}
-    .filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0 12px}
+    .filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0 12px;align-items:center}
     @media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:520px){.filters{grid-template-columns:1fr}}
-    .filters select{padding:10px 12px;border:1px solid var(--edge);border-radius:12px}
+    .filters .flt{display:flex;gap:6px;align-items:center}
+    .filters select{flex:1;padding:10px 12px;border:1px solid var(--edge);border-radius:12px}
+    .btn-mini{padding:8px 10px;border-radius:10px;border:1px solid var(--edge);background:#fff;cursor:pointer;font-weight:900}
+    .btn-mini--pri{background:#0faf64;color:#fff;border-color:#0faf64}
     .pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
     .pager .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--edge);background:#fff;cursor:pointer;font-weight:800}
     .pager .btn[disabled]{opacity:.5;cursor:not-allowed}
@@ -70,6 +75,8 @@
     #profileView .p-item{display:grid;gap:4px}
     #profileView .p-item .k{font-size:12px;opacity:.7}
     #profileView .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    /* Admin-only default hidden */
+    .admin-only{display:none}
   </style>
 </head>
 <body>
@@ -80,6 +87,7 @@
           <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><path d="M76 92h104c9 0 16-7 16-16s-7-16-16-16H60c-9 0-16 7-16 16s7 16 16 16h4c8 41 4 77-8 97-5 8 5 17 13 12 24-14 35-53 29-109zm57 0c7 39 3 74-8 94-5 9 6 18 14 12 24-16 35-56 28-106h-34z"/></svg>
         </div>
         <div class="brand-title"><h1>MathCenter.uz</h1></div>
+        <span id="adminBadge" class="admin-badge">ADMIN</span>
       </div>
       <div class="stats" id="headerStats">
         <div class="card"><div class="label">Salom</div><div class="value" id="helloName">-</div><div class="label" id="helloAge">Yosh: -</div></div>
@@ -104,13 +112,11 @@
       <button class="chip" data-route="simulators">Simulyatorlar</button>
       <button class="chip" data-route="results">Natijalar</button>
       <button class="chip" data-route="profile">Profil</button>
-      <a id="adminLink" class="chip" href="admin.html" style="display:none">Admin</a>
+      <!-- tashqi admin kerak emas -->
     </div>
   </div>
 
-  <!-- ===== AUTH / PROFILE / PROMO modallar (o‘zgarmagan) ===== -->
-  <!-- (… siz bergan modal strukturasi shu yerda — qisqartirilmagan …) -->
-
+  <!-- ===== AUTH / PROFILE / PROMO — o‘zingiz yuborganidek (qisqartirmasdan qoldirdim) ===== -->
   <!-- AUTH -->
   <div class="mc-modal" id="authModal" aria-hidden="true">
     <div class="mc-card" role="dialog" aria-modal="true" style="max-width:640px">
@@ -184,6 +190,77 @@
     </div>
   </div>
 
+  <!-- ===== ADMIN ADD MODALLARI ===== -->
+  <!-- Banner qo‘shish -->
+  <div class="mc-modal" id="adminBannerModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true">
+      <div class="mc-head"><div class="mc-title">Banner qo‘shish</div><button class="mc-close" data-x="adminBannerModal">✕</button></div>
+      <div class="mc-grid">
+        <div class="mc-row" style="grid-column:1/-1"><label>Sarlavha</label><input id="bn_title" placeholder="Masalan: Yangi kurslar"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Rasm (URL yoki img/rasm.jpg)</label><input id="bn_img" placeholder="img/banner.jpg yoki https://..."></div>
+        <div class="mc-row"><label>Filter 1</label><input id="bn_f1" placeholder="10-sinf"></div>
+        <div class="mc-row"><label>Filter 2</label><input id="bn_f2" placeholder="1-chorak"></div>
+        <div class="mc-row"><label>Filter 3</label><input id="bn_f3" placeholder="Algebra"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Link (ixtiyoriy)</label><input id="bn_link" placeholder="#courses yoki https://..."></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn" data-x="adminBannerModal">Bekor qilish</button>
+        <button class="mc-btn mc-btn--pri" id="btnSaveBanner">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card qo‘shish (courses/simulators/tests: oddiy) -->
+  <div class="mc-modal" id="adminCardModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true">
+      <div class="mc-head"><div class="mc-title" id="cardModalTitle">Card qo‘shish</div><button class="mc-close" data-x="adminCardModal">✕</button></div>
+      <div class="mc-grid">
+        <div class="mc-row" style="grid-column:1/-1"><label>Qaysi bo‘lim</label>
+          <select id="cd_coll">
+            <option value="courses">Kurslar</option>
+            <option value="simulators">Simulyatorlar</option>
+            <option value="tests">Testlar (Oddiy)</option>
+          </select>
+        </div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Sarlavha</label><input id="cd_title" placeholder="Nomlanmagan"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Rasm (URL yoki img/rasm.jpg)</label><input id="cd_img" placeholder="img/cover.jpg yoki https://..."></div>
+        <div class="mc-row"><label>Filter 1</label><input id="cd_f1" placeholder="10-sinf"></div>
+        <div class="mc-row"><label>Filter 2</label><input id="cd_f2" placeholder="1-chorak"></div>
+        <div class="mc-row"><label>Filter 3</label><input id="cd_f3" placeholder="Algebra"></div>
+        <div class="mc-row"><label>Fan (ixtiyoriy)</label><input id="cd_subject" placeholder="Matematika"></div>
+        <div class="mc-row"><label>Daraja (ixtiyoriy)</label><input id="cd_level" placeholder="Boshlang‘ich"></div>
+        <div class="mc-row"><label>Turi (ixtiyoriy)</label><input id="cd_type" placeholder="video/pdf/lab..."></div>
+        <div class="mc-row"><label>Davomiylik</label><input id="cd_duration" placeholder="45 daqiqa"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Link</label><input id="cd_link" placeholder="https://... yoki #tests"></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn" data-x="adminCardModal">Bekor qilish</button>
+        <button class="mc-btn mc-btn--pri" id="btnSaveCard">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onlayn test qo‘shish -->
+  <div class="mc-modal" id="adminTestOnlineModal" aria-hidden="true">
+    <div class="mc-card" role="dialog" aria-modal="true">
+      <div class="mc-head"><div class="mc-title">Onlayn test qo‘shish</div><button class="mc-close" data-x="adminTestOnlineModal">✕</button></div>
+      <div class="mc-grid">
+        <div class="mc-row" style="grid-column:1/-1"><label>Sarlavha</label><input id="to_title" placeholder="Test nomi"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Rasm (URL yoki img/rasm.jpg)</label><input id="to_img" placeholder="img/test.jpg"></div>
+        <div class="mc-row"><label>Filter 1</label><input id="to_f1" placeholder="10-sinf"></div>
+        <div class="mc-row"><label>Filter 2</label><input id="to_f2" placeholder="1-chorak"></div>
+        <div class="mc-row"><label>Filter 3</label><input id="to_f3" placeholder="Algebra"></div>
+        <div class="mc-row"><label>Boshlash</label><input id="to_start" type="datetime-local"></div>
+        <div class="mc-row"><label>Tugash</label><input id="to_end" type="datetime-local"></div>
+        <div class="mc-row" style="grid-column:1/-1"><label>Link</label><input id="to_link" placeholder="Test sahifasi yoki #"></div>
+      </div>
+      <div class="mc-actions">
+        <button class="mc-btn" data-x="adminTestOnlineModal">Bekor qilish</button>
+        <button class="mc-btn mc-btn--pri" id="btnSaveOnlineTest">Saqlash</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Router (partials YO'Q) ===== -->
   <script>
     const routes = ["home","courses","tests","simulators","results","profile"];
@@ -194,12 +271,20 @@
     document.addEventListener('click',(e)=>{ if(fab.classList.contains('open') && !fab.contains(e.target)) closeFab(); });
     document.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeFab(); });
     function setActive(route){ document.querySelectorAll('.fab-menu .chip').forEach(b=>b.classList.toggle('active', b.getAttribute('data-route')===route)); }
-    function section(title, inner=""){ return `<div class="content"><h2 style="margin-top:0">${title}</h2>${inner||""}</div>`; }
+    function section(title, inner="", extraToolbarHTML=""){ return `<div class="content">
+      <div class="admin-toolbar admin-only">${extraToolbarHTML||""}</div>
+      <h2 style="margin-top:0">${title}</h2>${inner||""}
+    </div>`; }
+
     function listShell(title, coll){ return section(title, `
       <div class="filters">
-        <select id="${coll}_f1"><option value="">Filter 1</option></select>
-        <select id="${coll}_f2"><option value="">Filter 2</option></select>
-        <select id="${coll}_f3"><option value="">Filter 3</option></select>
+        <div class="flt">
+          <select id="${coll}_f1"><option value="">Filter 1</option></select>
+          <button class="btn-mini admin-only" id="${coll}_add_here1">+ ichida</button>
+          <button class="btn-mini admin-only" id="${coll}_add_near1">+ yonida</button>
+        </div>
+        <div class="flt"><select id="${coll}_f2"><option value="">Filter 2</option></select></div>
+        <div class="flt"><select id="${coll}_f3"><option value="">Filter 3</option></select></div>
         <button class="chip" id="${coll}_reset">Tozalash</button>
       </div>
       <div id="${coll}_online_block"></div>
@@ -209,7 +294,11 @@
         <div id="${coll}_pageinfo">1-sahifa</div>
         <button class="btn" id="${coll}_next" disabled>Keyingi →</button>
       </div>
-    `); }
+      <div style="position:sticky;bottom:8px;display:flex;justify-content:flex-end;margin-top:10px">
+        <button class="btn-mini btn-mini--pri admin-only" id="${coll}_add_fab">+ Card qo‘shish</button>
+      </div>
+    `, `<button class="btn-mini btn-mini--pri" id="${coll}_add_toolbar">+ Card</button>`); }
+
     function cardHTML(d, extraMeta=[]){
       const img = d.cover || d.banner || d.image || "assets/placeholder.png";
       const title = d.title || d.name || "Nomlanmagan";
@@ -229,6 +318,7 @@
           </div>
         </div>`;
     }
+
     const Views = {
       home: async ()=> section("Bosh sahifa", `
         <div class="grid-cards" id="homeBanners"></div>
@@ -237,18 +327,20 @@
           <a class="gcard" onclick="loadRoute('tests')" style="cursor:pointer"><div class="body"><h3>Testlar</h3><div class="meta">Onlayn va oddiy</div></div></a>
           <a class="gcard" onclick="loadRoute('simulators')" style="cursor:pointer"><div class="body"><h3>Simulyatorlar</h3><div class="meta">Trening</div></div></a>
         </div>
-      `),
+      `, `<button class="btn-mini btn-mini--pri" id="home_add_banner">+ Banner</button>`),
       courses: async ()=> listShell("Kurslar","courses"),
       simulators: async ()=> listShell("Simulyatorlar","simulators"),
       tests: async ()=> listShell("Testlar","tests"),
       results: async ()=> section("Natijalar", `<p>Shaxsiy natijalaringiz tez orada shu yerda bo‘ladi.</p>`),
       profile: async ()=> section("Profil", `<div id="profileView" class="content"></div>`)
     };
+
     async function loadRoute(route){
       if(!routes.includes(route)) route="home";
       const app=document.getElementById('app');
       app.innerHTML = await Views[route]();
       history.replaceState({},'', '#'+route); setActive(route); window.scrollTo({top:0,behavior:'smooth'});
+      mountAdminControls(route);
       if(route==="home") fetchHomeBanners().catch(()=>{});
       if(route==="courses") bootListPage('courses');
       if(route==="simulators") bootListPage('simulators');
@@ -289,7 +381,7 @@
     import {
       getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
       query, collection, where, getDocs, serverTimestamp, increment, Timestamp, runTransaction,
-      orderBy, limit as qLimit, startAfter
+      orderBy, limit as qLimit, startAfter, addDoc
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -308,9 +400,17 @@
     const $  = (s, r=document)=>r.querySelector(s);
     const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 
-    // ---- Admin chip (faqat 38864) ----
+    // ---- Admin check (faqat 38864) ----
     function isAdminNumericId(val){ return (val===38864 || val==='38864'); }
-    function toggleAdminLink(profile){ const link=$('#adminLink'); if(!link) return; link.style.display = (profile && isAdminNumericId(profile.numericId)) ? 'inline-block' : 'none'; }
+    function toggleAdminUI(isAdmin){
+      // header badge
+      const badge = $('#adminBadge');
+      if(badge) badge.style.display = isAdmin ? 'inline-block' : 'none';
+      // barcha admin-only elementlar
+      $$('.admin-only').forEach(el=>{ el.style.display = isAdmin ? '' : 'none'; });
+      // content ichidagi .admin-toolbar ko‘rsatish
+      $$('.content .admin-toolbar').forEach(el=>{ el.style.display = isAdmin ? 'flex' : 'none'; });
+    }
 
     // ===== HOME: Bannerlar =====
     async function fetchHomeBanners(){
@@ -341,6 +441,116 @@
       return true;
     }
 
+    // ===== ADMIN GUARD =====
+    async function requireAdmin(){
+      const u = auth.currentUser; if(!u){ openModal('authModal'); throw new Error('Kirish talab etiladi'); }
+      const snap = await getDoc(doc(db,'users',u.uid));
+      const d = snap.exists()? snap.data() : {};
+      if(!isAdminNumericId(d.numericId)) throw new Error('Sizda admin huquqi yo‘q');
+      return { u, d };
+    }
+
+    // ===== CARD SAQLASH HELPERS =====
+    function normUrl(v){ if(!v) return ''; // rasm yo‘li: img/rasm.jpg yoki to‘liq URL
+      if(/^https?:\/\//i.test(v) || v.startsWith('img/') || v.startsWith('assets/')) return v;
+      return v; // boshqa nisbiy yo‘llarni ham qoldiramiz
+    }
+    async function saveBanner(payload){
+      await requireAdmin();
+      const data = {
+        title: payload.title||'',
+        banner: normUrl(payload.image||''),
+        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
+        link: payload.link||'',
+        createdAt: serverTimestamp(),
+      };
+      await addDoc(collection(db,'banners'), data);
+    }
+    async function saveCard(coll, payload){
+      await requireAdmin();
+      const data = {
+        title: payload.title||'Nomlanmagan',
+        cover: normUrl(payload.image||''),
+        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
+        subject: payload.subject||'', level: payload.level||'', type: payload.type||'',
+        duration: payload.duration||'', link: payload.link||'',
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db,coll), data);
+    }
+    async function saveOnlineTest(payload){
+      await requireAdmin();
+      const startMs = payload.start ? new Date(payload.start).getTime() : null;
+      const endMs   = payload.end   ? new Date(payload.end).getTime()   : null;
+      const data = {
+        title: payload.title||'Test',
+        image: normUrl(payload.image||''),
+        filter1: payload.f1||'', filter2: payload.f2||'', filter3: payload.f3||'',
+        type:'online',
+        startAt: startMs? Timestamp.fromMillis(startMs): null,
+        endAt: endMs? Timestamp.fromMillis(endMs): null,
+        link: payload.link||'',
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db,'tests'), data);
+    }
+
+    // ===== ADMIN MODAL UX =====
+    function openModal(id){ const m=$('#'+id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
+    function closeModal(id){ const m=$('#'+id); if(m){ m.classList.remove('open'); if(!document.querySelector('.mc-modal.open')) document.body.classList.remove('modal-open'); } }
+    $$('.mc-close').forEach(btn=>btn.addEventListener('click',()=>closeModal(btn.dataset.x)));
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $$('.mc-modal.open').forEach(m=>m.classList.remove('open')); document.body.classList.remove('modal-open'); } });
+
+    // Har bir route yuklanganda admin tugmalarini ulash
+    function mountAdminControls(route){
+      // barcha admin-only ko‘rsat/berkit (onAuthStateChanged ichida ham boshqariladi)
+      // HOME
+      if(route==='home'){
+        $('#home_add_banner')?.addEventListener('click', ()=>openModal('adminBannerModal'));
+      }
+      // COURSES / SIMULATORS / TESTS
+      ['courses','simulators','tests'].forEach(coll=>{
+        if(route!==coll) return;
+        // toolbar
+        $(`#${coll}_add_toolbar`)?.addEventListener('click', ()=>{
+          if(coll==='tests'){
+            // tanlash: oddiy card modalmi yoki onlayn testmi?
+            const ask = confirm('Onlayn test qo‘shasizmi? OK=Onlayn, Cancel=Oddiy card');
+            if(ask) openModal('adminTestOnlineModal'); else openModal('adminCardModal');
+          } else {
+            openModal('adminCardModal');
+          }
+          // modalga kolleksiyani oldindan tanlab qo‘yamiz
+          const sel = $('#cd_coll'); if(sel && sel.querySelector(`option[value="${coll}"]`)) sel.value = (coll==='tests'?'tests':''+coll);
+        });
+        // filter yonida va ichida
+        $(`#${coll}_add_here1`)?.addEventListener('click', ()=>{
+          openModal('adminCardModal');
+          const sel = $('#cd_coll'); if(sel) sel.value = coll;
+          // joriy filterni modalga ko‘chirish
+          $('#cd_f1').value = $(`#${coll}_f1`)?.value || '';
+          $('#cd_f2').value = $(`#${coll}_f2`)?.value || '';
+          $('#cd_f3').value = $(`#${coll}_f3`)?.value || '';
+        });
+        $(`#${coll}_add_near1`)?.addEventListener('click', ()=>{
+          openModal(coll==='tests' ? 'adminTestOnlineModal' : 'adminCardModal');
+          if(coll!=='tests'){
+            const sel = $('#cd_coll'); if(sel) sel.value = coll;
+            $('#cd_f1').value = $(`#${coll}_f1`)?.value || '';
+          } else {
+            $('#to_f1').value = $(`#${coll}_f1`)?.value || '';
+          }
+        });
+        $(`#${coll}_add_fab`)?.addEventListener('click', ()=>{
+          if(coll==='tests'){
+            const ask = confirm('Onlayn test qo‘shasizmi? OK=Onlayn, Cancel=Oddiy card');
+            if(ask) openModal('adminTestOnlineModal'); else openModal('adminCardModal');
+          } else openModal('adminCardModal');
+          const sel = $('#cd_coll'); if(sel) sel.value = coll;
+        });
+      });
+    }
+
     // ====== GENERIC list pages (courses/simulators) ======
     function bootListPage(coll){
       const box = $(`#${coll}_cards`);
@@ -351,7 +561,7 @@
       const resetBtn=$(`#${coll}_reset`);
 
       const PAGE=12;
-      let cacheAll = []; // local cache for filter dropdowns
+      let cacheAll = [];
       let page = 1, lastDoc=null, stackCursors = [];
 
       async function loadForFilters(){
@@ -362,34 +572,26 @@
 
       async function loadPage(direction){
         const filters = {f1: f1?.value||'', f2: f2?.value||'', f3: f3?.value||''};
-
-        // base query (paginate by createdAt)
         let qBase = query(collection(db,coll), orderBy('createdAt','desc'), qLimit(PAGE));
         if(direction==='next' && lastDoc){ qBase = query(collection(db,coll), orderBy('createdAt','desc'), startAfter(lastDoc), qLimit(PAGE)); }
         if(direction==='prev'){
           if(stackCursors.length<=1) return;
-          stackCursors.pop(); // current
+          stackCursors.pop();
           const cursor = stackCursors[stackCursors.length-1];
           qBase = cursor ? query(collection(db,coll), orderBy('createdAt','desc'), startAfter(cursor), qLimit(PAGE)) : query(collection(db,coll), orderBy('createdAt','desc'), qLimit(PAGE));
           page = Math.max(1, page-1);
         }
-
         const qs = await getDocs(qBase);
         const docs = qs.docs.map(d=>({id:d.id, ...d.data()}));
-
-        // client-side filter (simple, scalable with index later)
         const fdocs = docs.filter(d=>matchFilters(d, filters.f1, filters.f2, filters.f3));
-
         box.innerHTML = fdocs.length ? fdocs.map(d=>cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Hech narsa topilmadi</h3></div></div>`;
-
-        // manage cursors
         if(direction!=='prev'){
           if(qs.docs.length){ stackCursors.push(qs.docs[0]); lastDoc = qs.docs[qs.docs.length-1]; }
           if(direction==='next') page++;
         }
         info.textContent = `${page}-sahifa`;
         btnPrev.disabled = (page<=1);
-        btnNext.disabled = (qs.docs.length<PAGE); // next page yo‘q
+        btnNext.disabled = (qs.docs.length<PAGE);
       }
 
       f1?.addEventListener('change', ()=>{ page=1; lastDoc=null; stackCursors=[]; loadPage(); });
@@ -400,7 +602,6 @@
       btnPrev?.addEventListener('click', ()=>loadPage('prev'));
       btnNext?.addEventListener('click', ()=>loadPage('next'));
 
-      // init
       loadForFilters().catch(()=>{});
       loadPage().catch(err=>{ box.innerHTML = `<div class="gcard"><div class="body"><h3>Xato</h3><div class="meta">${err?.message||''}</div></div></div>`; });
     }
@@ -417,7 +618,6 @@
       const resetBtn=$(`#${coll}_reset`);
 
       const PAGE=12;
-      let cacheForFilters = []; // offline(oddiy) va online aralashdan unique filterlar
       let page = 1, lastDoc=null, stackCursors = [];
 
       async function renderOnline(){
@@ -427,33 +627,30 @@
           if(qs.empty){ onlineBlock.innerHTML=''; return; }
           const now = Date.now();
           const items = qs.docs.map(d=>({id:d.id, ...d.data()}));
-          // onlinelar meta: vaqtlar
           onlineBlock.innerHTML = `
             <div class="content" style="margin-bottom:12px">
+              <div class="admin-toolbar admin-only">
+                <button class="btn-mini btn-mini--pri" id="tests_add_online_toolbar">+ Onlayn test</button>
+              </div>
               <h3 style="margin-top:0">Onlayn testlar (doim birinchi)</h3>
               <div class="grid-cards">
                 ${items.map(x=>{
-                  const s = x.startAt ? new Date((x.startAt.seconds?x.startAt.seconds*1000:x.startAt)).toLocaleString() : '';
-                  const e = x.endAt ? new Date((x.endAt.seconds?x.endAt.seconds*1000:x.endAt)).toLocaleString() : '';
-                  const live = (x.startAt && x.endAt) ? (now >= (x.startAt.seconds?x.startAt.seconds*1000:x.startAt) && now <= (x.endAt.seconds?x.endAt.seconds*1000:x.endAt)) : false;
+                  const sMs = x.startAt ? (x.startAt.seconds?x.startAt.seconds*1000:x.startAt) : null;
+                  const eMs = x.endAt ? (x.endAt.seconds?x.endAt.seconds*1000:x.endAt) : null;
+                  const s = sMs ? new Date(sMs).toLocaleString() : '';
+                  const e = eMs ? new Date(eMs).toLocaleString() : '';
+                  const live = (sMs && eMs) ? (now >= sMs && now <= eMs) : false;
                   return cardHTML(x, [(s&&e)?`Boshlash: ${s}`:'', (s&&e)?`Tugash: ${e}`:'', live?'LIVE':'']);
                 }).join('')}
               </div>
-            </div>
-          `;
+            </div>`;
+          $('#tests_add_online_toolbar')?.addEventListener('click', ()=>openModal('adminTestOnlineModal'));
         }catch{ onlineBlock.innerHTML=''; }
-      }
-
-      async function loadForFilters(){
-        const qs = await getDocs(query(collection(db,'tests'), orderBy('createdAt','desc'), qLimit(400)));
-        cacheForFilters = qs.docs.map(d=>({id:d.id, ...d.data()}));
-        fillFilterSelects(coll, cacheForFilters.filter(x=>x.type!=='online')); // filterlar faqat oddiylarga
       }
 
       async function loadOddiy(direction){
         const filters = {f1: f1?.value||'', f2: f2?.value||'', f3: f3?.value||''};
         let qBase = query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), qLimit(PAGE));
-        // Firestore’da `where('type','!=','online')` ishlashi uchun composite index talab etilishi mumkin.
         if(direction==='next' && lastDoc){ qBase = query(collection(db,'tests'), where('type','!=','online'), orderBy('type'), orderBy('createdAt','desc'), startAfter(lastDoc), qLimit(PAGE)); }
         if(direction==='prev'){
           if(stackCursors.length<=1) return;
@@ -466,9 +663,7 @@
         const qs = await getDocs(qBase);
         const docs = qs.docs.map(d=>({id:d.id, ...d.data()}));
         const fdocs = docs.filter(d=>matchFilters(d, filters.f1, filters.f2, filters.f3));
-
         box.innerHTML = fdocs.length ? fdocs.map(d=>cardHTML(d)).join('') : `<div class="gcard"><div class="body"><h3>Oddiy test topilmadi</h3></div></div>`;
-
         if(direction!=='prev'){
           if(qs.docs.length){ stackCursors.push(qs.docs[0]); lastDoc = qs.docs[qs.docs.length-1]; }
           if(direction==='next') page++;
@@ -487,11 +682,10 @@
       $('#tests_next')?.addEventListener('click', ()=>loadOddiy('next'));
 
       renderOnline().catch(()=>{});
-      loadForFilters().catch(()=>{});
       loadOddiy().catch(err=>{ box.innerHTML = `<div class="gcard"><div class="body"><h3>Xato</h3><div class="meta">${err?.message||''}</div></div></div>`; });
     }
 
-    // ===== REGIONS va PROFILE (siz berganidek) =====
+    // ===== REGIONS va PROFILE (o‘zingizdagi kabi) =====
     let REGIONS = {};
     async function loadRegions(){ try{ const res=await fetch('regions.json',{cache:'no-store'}); REGIONS = await res.json(); }catch{ REGIONS={}; } }
     function fillRegionSelects(currentViloyat='', currentTuman=''){
@@ -509,9 +703,11 @@
       return { docId: qs.docs[0].id, data: qs.docs[0].data() };
     }
 
+    // AUTH tabs
     document.getElementById('tabLogin')?.addEventListener('click', ()=>{ $('#tabLogin').classList.add('active'); $('#tabSignup').classList.remove('active'); $('#authLogin').style.display='block'; $('#authSignup').style.display='none'; });
     document.getElementById('tabSignup')?.addEventListener('click', ()=>{ $('#tabSignup').classList.add('active'); $('#tabLogin').classList.remove('active'); $('#authSignup').style.display='block'; $('#authLogin').style.display='none'; });
 
+    // ID + Parol bilan kirish
     document.getElementById('btnLoginId')?.addEventListener('click', async ()=>{
       const nid = $('#login_id').value.trim(); const pass = $('#login_pass').value;
       if(!nid || !pass) return alert('ID va parol kiriting');
@@ -525,6 +721,7 @@
       }catch(err){ alert('Kirishda xato: '+(err.message||err.code)); }
     });
 
+    // Email signup
     document.getElementById('btnSignupEmail')?.addEventListener('click', async ()=>{
       const email = $('#signup_email').value.trim(); const pass  = $('#signup_pass').value;
       if(!email) return alert('Email kiriting');
@@ -541,6 +738,7 @@
       }catch(err){ alert('Ro‘yxatdan o‘tishda xato: '+(err.message||err.code)); }
     });
 
+    // Google signup
     document.getElementById('btnSignupGoogle')?.addEventListener('click', async ()=>{
       try{
         const result = await signInWithPopup(auth, provider);
@@ -554,6 +752,7 @@
       }catch(err){ alert('Google sign-in xatosi: '+(err.message||err.code)); }
     });
 
+    // Parol o‘rnatish
     document.getElementById('btnSetPassword')?.addEventListener('click', async ()=>{
       const p  = $('#new_pass').value; const pc = $('#new_pass_confirm').value;
       if(!p || p.length<6) return alert('Parol kamida 6 belgi bo‘lsin');
@@ -563,6 +762,7 @@
       catch(err){ alert('Parolni saqlashda xato: '+(err.message||err.code)); }
     });
 
+    // PROMO
     function renderPromoInfo(d){
       if(!d){ $('#promoInfo').innerHTML=''; return; }
       const exp = d.expiresAt ? new Date((d.expiresAt.seconds? d.expiresAt.seconds*1000 : d.expiresAt)).toLocaleDateString() : '—';
@@ -607,12 +807,7 @@
       }catch(err){ alert(err.message || 'Promo qo‘llashda xato'); }
     });
 
-    // PROFILE
-    function openModal(id){ const m=$('#'+id); if(m){ m.classList.add('open'); document.body.classList.add('modal-open'); } }
-    function closeModal(id){ const m=$('#'+id); if(m){ m.classList.remove('open'); if(!document.querySelector('.mc-modal.open')) document.body.classList.remove('modal-open'); } }
-    $$('.mc-close').forEach(btn=>btn.addEventListener('click',()=>closeModal(btn.dataset.x)));
-    document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ $$('.mc-modal.open').forEach(m=>m.classList.remove('open')); document.body.classList.remove('modal-open'); } });
-
+    // PROFILE UI
     function ensureProfileSkeleton(){
       const container = document.getElementById('profileView'); if(!container) return;
       if(!container.innerHTML.trim()){
@@ -623,15 +818,11 @@
               <button class="mc-btn" id="btnEditProfile">Tahrirlash</button>
               <button class="mc-btn" id="btnLogout">Chiqish</button>
               <button class="mc-btn" id="btnOpenPromo">Promo</button>
-              <button class="mc-btn" id="btnOpenAdminPromo" style="display:none">Admin Promo</button>
-              <button class="mc-btn" id="btnOpenAdminUsers" style="display:none">Admin Users</button>
             </div>
           </div>
           <div class="p-card"><div class="p-grid" id="profileGrid"><div class="p-item"><div class="k">Holat</div><div class="v"><strong>Yuklanmoqda…</strong></div></div></div></div>
         `;
         $('#btnOpenPromo')?.addEventListener('click', ()=>openModal('promoModal'));
-        $('#btnOpenAdminPromo')?.addEventListener('click', ()=>openModal('adminPromoModal'));
-        $('#btnOpenAdminUsers')?.addEventListener('click', ()=>openModal('adminUsersModal'));
         $('#btnLogout')?.addEventListener('click', async ()=>{ await signOut(auth); location.hash='#home'; });
         $('#btnEditProfile')?.addEventListener('click', async ()=>{
           const u = auth.currentUser; if(!u) return openModal('authModal');
@@ -658,9 +849,6 @@
       if(!u){ openModal('authModal'); grid.innerHTML = showRow('Holat','Kirish talab etiladi'); return; }
       await loadRegions();
       const ref = doc(db,'users',u.uid); const snap = await getDoc(ref); const d = snap.exists() ? snap.data() : {};
-      const isAdmin = (d.numericId===38864 || d.numericId==='38864');
-      $('#btnOpenAdminPromo')?.style.setProperty('display', isAdmin?'inline-block':'none');
-      $('#btnOpenAdminUsers')?.style.setProperty('display', isAdmin?'inline-block':'none');
       grid.innerHTML = [
         showRow('Ism', d.ism), showRow('Familiya', d.familiya), showRow('Sharif', d.sharif),
         showRow('Tug‘ilgan sana', d.tugilganSana ? `${d.tugilganSana} (${calcAgeStr(d.tugilganSana)})` : ''),
@@ -670,21 +858,69 @@
         showRow('Balans', d.balans), showRow('Ball', d.ball),
         (d.activeDiscount? showRow('Faol chegirma', `${d.activeDiscount.off}% (kod: ${d.activeDiscount.code||''})`): ''),
         (d.lastPromoCode? showRow('Oxirgi promo', d.lastPromoCode): '')
-      ].join('');
+      ].filter(Boolean).join('');
     }
     window.safeRenderProfile = function(){ renderProfilePage().catch(()=>{}); queueMicrotask(()=>renderProfilePage().catch(()=>{})); setTimeout(()=>renderProfilePage().catch(()=>{}), 300); };
 
+    // === ADMIN MODAL SAQLASH HANDLERLARI ===
+    $('#btnSaveBanner')?.addEventListener('click', async ()=>{
+      try{
+        await saveBanner({
+          title: $('#bn_title').value.trim(),
+          image: $('#bn_img').value.trim(),
+          f1: $('#bn_f1').value.trim(), f2: $('#bn_f2').value.trim(), f3: $('#bn_f3').value.trim(),
+          link: $('#bn_link').value.trim()
+        });
+        closeModal('adminBannerModal');
+        alert('Banner saqlandi'); if(location.hash==='#home') fetchHomeBanners();
+      }catch(err){ alert(err.message||'Saqlashda xato'); }
+    });
+
+    $('#btnSaveCard')?.addEventListener('click', async ()=>{
+      try{
+        const coll = $('#cd_coll').value;
+        await saveCard(coll, {
+          title: $('#cd_title').value.trim(),
+          image: $('#cd_img').value.trim(),
+          f1: $('#cd_f1').value.trim(), f2: $('#cd_f2').value.trim(), f3: $('#cd_f3').value.trim(),
+          subject: $('#cd_subject').value.trim(), level: $('#cd_level').value.trim(),
+          type: $('#cd_type').value.trim(), duration: $('#cd_duration').value.trim(),
+          link: $('#cd_link').value.trim()
+        });
+        closeModal('adminCardModal');
+        alert('Card saqlandi');
+        if(location.hash==='#courses') loadRoute('courses');
+        if(location.hash==='#simulators') loadRoute('simulators');
+        if(location.hash==='#tests') loadRoute('tests');
+      }catch(err){ alert(err.message||'Saqlashda xato'); }
+    });
+
+    $('#btnSaveOnlineTest')?.addEventListener('click', async ()=>{
+      try{
+        await saveOnlineTest({
+          title: $('#to_title').value.trim(),
+          image: $('#to_img').value.trim(),
+          f1: $('#to_f1').value.trim(), f2: $('#to_f2').value.trim(), f3: $('#to_f3').value.trim(),
+          start: $('#to_start').value, end: $('#to_end').value,
+          link: $('#to_link').value.trim()
+        });
+        closeModal('adminTestOnlineModal');
+        alert('Onlayn test saqlandi'); if(location.hash==='#tests') loadRoute('tests');
+      }catch(err){ alert(err.message||'Saqlashda xato'); }
+    });
+
+    // ==== AUTH STATE ====
     onAuthStateChanged(auth, (user)=>{
       if(user){
         onSnapshot(doc(db,'users',user.uid), (snap)=>{
           const u = snap.exists()? snap.data(): {};
           updateHeader({ ism: u.ism ?? user.displayName ?? '-', tugilganSana: u.tugilganSana ?? '', numericId: u.numericId ?? '-', balans: (u.balans ?? 0), ball: (u.ball ?? 0) });
-          toggleAdminLink(u);
+          toggleAdminUI( isAdminNumericId(u.numericId) );
         });
         if((location.hash||'')==='#profile') window.safeRenderProfile();
       } else {
         updateHeader({ ism:'-', tugilganSana:'', numericId:'-', balans:'-', ball:'-' });
-        toggleAdminLink(null);
+        toggleAdminUI(false);
       }
     });
 
@@ -708,6 +944,27 @@
       try{ await updateProfile(u, { displayName: data.ism }); }catch{}
       closeModal('profileModal'); if((location.hash||'')==='#profile') window.safeRenderProfile();
     });
+
+    // === Kichik helper: cardHTML (ES modul ichida ham kerak) ===
+    window.cardHTML = function(d, extraMeta=[]){
+      const img = d.cover || d.banner || d.image || "assets/placeholder.png";
+      const title = d.title || d.name || "Nomlanmagan";
+      const meta = [d.level, d.subject, d.type, d.duration, ...extraMeta].filter(Boolean).join(" · ");
+      return `
+        <div class="gcard">
+          <img class="cover" src="${img}" alt="">
+          <div class="body">
+            <h3>${title}</h3>
+            ${meta?`<div class="meta">${meta}</div>`:""}
+            <div class="row" style="margin-top:6px">
+              ${d.filter1?`<span class="badge">${d.filter1}</span>`:""}
+              ${d.filter2?`<span class="badge">${d.filter2}</span>`:""}
+              ${d.filter3?`<span class="badge">${d.filter3}</span>`:""}
+              ${d.type==='online'?`<span class="badge">ONLINE</span>`:""}
+            </div>
+          </div>
+        </div>`;
+    }
   </script>
 </body>
 </html>
