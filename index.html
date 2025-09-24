@@ -292,11 +292,6 @@
     const Views = {
       home: async ()=> section('Bosh sahifa', `
         <div class="grid" id="homeBanners"></div>
-        <div class="grid" style="margin-top:12px">
-          <a class="card" onclick="loadRoute('courses')" style="cursor:pointer"><div class="body"><h3>Kurslar</h3><div class="meta">Yangi darslar</div></div></a>
-          <a class="card" onclick="loadRoute('tests')" style="cursor:pointer"><div class="body"><h3>Testlar</h3><div class="meta">Onlayn va oddiy</div></div></a>
-          <a class="card" onclick="loadRoute('simulators')" style="cursor:pointer"><div class="body"><h3>Simulyatorlar</h3><div class="meta">Trening</div></div></a>
-        </div>
       `, `<button class="btn btn--pri" id="home_add_banner">+ Banner</button>`),
 
       courses: async ()=> listShell('Kurslar','courses'),
@@ -478,16 +473,44 @@
     // Home banners
     function renderHome(){
       const box = $('#homeBanners');
-      const list = [...DB.banners].sort((a,b)=>b.ts-a.ts).slice(0,8);
-      box.innerHTML = list.length? list.map(b=>cardHTML({...b, img:b.img, title:b.title, f1:b.f1, f2:b.f2, f3:b.f3})).join('') : `<div class="card"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`;
+      const list = [...DB.banners].sort((a,b)=>b.ts-a.ts).slice(0,24);
+      function bannerHTML(b){
+        const img=b.img||'https://picsum.photos/960/480?random='+(b.rand||0);
+        return `<div class="card"><img class="cover" src="${img}" alt=""><div class="body"><h3>${b.title||'Banner'}</h3>${(b.f1||b.f2||b.f3)?`<div class="meta">${[b.f1,b.f2,b.f3].filter(Boolean).join(' · ')}</div>`:''}${b.link?`<div class="badges" style="margin-top:6px"><a class="badge" href="${b.link}">O‘tish</a></div>`:''}</div></div>`;
+      }
+      box.innerHTML = list.length? list.map(bannerHTML).join('') : `<div class="card"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`;
+      $('#home_add_banner')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearBannerForm(); openModal('bannerModal'); });
+    })).join('') : `<div class="card"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`;
       $('#home_add_banner')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearBannerForm(); openModal('bannerModal'); });
     }
 
     // Generic lists
     function bootList(coll){
-      const store = DB[coll]; const box = $('#'+coll+'_grid'); const f1=$('#'+coll+'_f1'), f2=$('#'+coll+'_f2'), f3=$('#'+coll+'_f3'); const reset=$('#'+coll+'_reset');
+      const box = document.getElementById(coll+'_grid');
+      const f1  = document.getElementById(coll+'_f1');
+      const f2  = document.getElementById(coll+'_f2');
+      const f3  = document.getElementById(coll+'_f3');
+      const reset = document.getElementById(coll+'_reset');
       const PAGE=12; let page=1;
-      function uniq(a){ return Array.from(new Set(a.filter(Boolean))); }
+      const getStore = ()=> DB[coll];
+      const uniq = a => Array.from(new Set(a.filter(Boolean)));
+      function fillFilters(){
+        const list = getStore();
+        const u1=uniq(list.map(d=>d.f1)), u2=uniq(list.map(d=>d.f2)), u3=uniq(list.map(d=>d.f3));
+        f1.innerHTML='<option value="">Filter 1</option>'+u1.map(x=>`<option>${x}</option>`).join('');
+        f2.innerHTML='<option value="">Filter 2</option>'+u2.map(x=>`<option>${x}</option>`).join('');
+        f3.innerHTML='<option value="">Filter 3</option>'+u3.map(x=>`<option>${x}</option>`).join('');
+      }
+      function filtered(){ const s1=f1.value, s2=f2.value, s3=f3.value; return getStore().filter(d=>(!s1||d.f1===s1)&&(!s2||d.f2===s2)&&(!s3||d.f3===s3)); }
+      function render(){ const arr=filtered().slice().sort((a,b)=>b.ts-a.ts); const start=(page-1)*PAGE; const items=arr.slice(start,start+PAGE); box.innerHTML = items.length? items.map(cardHTML).join('') : `<div class="card"><div class="body"><h3>Hech narsa topilmadi</h3></div></div>`; document.getElementById(coll+'_pageinfo').textContent=page+'-sahifa'; document.getElementById(coll+'_prev').disabled=(page<=1); document.getElementById(coll+'_next').disabled=(start+PAGE>=arr.length); }
+      fillFilters(); render();
+      f1.onchange=f2.onchange=f3.onchange=()=>{ page=1; render(); };
+      reset.onclick=()=>{ f1.value=''; f2.value=''; f3.value=''; page=1; render(); };
+      document.getElementById(coll+'_prev').onclick=()=>{ if(page>1){ page--; render(); } };
+      document.getElementById(coll+'_next').onclick=()=>{ page++; render(); };
+      document.getElementById(coll+'_add_card')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearCardForm(); document.getElementById('cd_coll').value = (coll==='tests'?'testsOddiy':coll); document.getElementById('cd_f1').value=f1.value||''; document.getElementById('cd_f2').value=f2.value||''; document.getElementById('cd_f3').value=f3.value||''; openModal('cardModal'); });
+      document.getElementById(coll+'_add_here1')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearCardForm(); document.getElementById('cd_coll').value=(coll==='tests'?'testsOddiy':coll); document.getElementById('cd_f1').value=f1.value||''; openModal('cardModal'); });
+    }
       function fillFilters(){
         const u1=uniq(store.map(d=>d.f1)), u2=uniq(store.map(d=>d.f2)), u3=uniq(store.map(d=>d.f3));
         f1.innerHTML='<option value="">Filter 1</option>'+u1.map(x=>`<option>${x}</option>`).join('');
