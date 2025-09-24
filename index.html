@@ -353,6 +353,31 @@
     }
 
     async function loadRoute(route){
+      try{
+        if(!routes.includes(route)) route='home';
+        const app = document.getElementById('app'); if(!app) return;
+        const viewFn = Views[route]; if(typeof viewFn!=="function"){ console.warn('Unknown route', route); return; }
+        app.innerHTML = await viewFn();
+        history.replaceState({},'', '#'+route);
+        setActive(route);
+        window.scrollTo({top:0,behavior:'smooth'});
+        // Show admin UI if needed
+        if(isAdmin()){
+          (app.querySelectorAll('.admin-only')||[]).forEach(el=>el.style.display='');
+          (app.querySelectorAll('.admin-toolbar')||[]).forEach(el=>el.style.display='flex');
+        }
+        if(route==='home') renderHome();
+        if(route==='courses') bootList('courses');
+        if(route==='simulators') bootList('simulators');
+        if(route==='tests') bootTests();
+        if(route==='admin'){ const m=document.getElementById('adminModal'); if(m){ openModal('adminModal'); } }
+      }catch(err){
+        console.error('loadRoute error', err);
+        alert('Sahifani yuklashda xatolik. Bosh sahifaga qaytyapmiz.');
+        history.replaceState({},'', '#home');
+        try{ const app=document.getElementById('app'); if(app) app.innerHTML = await Views.home(); renderHome(); }catch(e){ console.error(e); }
+      }
+    }{
       if(!routes.includes(route)) route='home';
       const app = document.getElementById('app');
       app.innerHTML = await Views[route]();
@@ -472,11 +497,18 @@
 
     // Home banners
     function renderHome(){
-      const box = $('#homeBanners');
-      const list = [...DB.banners].sort((a,b)=>b.ts-a.ts).slice(0,24);
+      const box = document.getElementById('homeBanners');
+      if(!box) return; // guard
+      const list = (DB.banners||[]).slice().sort((a,b)=> (b.ts||0)-(a.ts||0)).slice(0,24);
       function bannerHTML(b){
-        const img=b.img||'https://picsum.photos/960/480?random='+(b.rand||0);
-        return `<div class="card"><img class="cover" src="${img}" alt=""><div class="body"><h3>${b.title||'Banner'}</h3>${(b.f1||b.f2||b.f3)?`<div class="meta">${[b.f1,b.f2,b.f3].filter(Boolean).join(' · ')}</div>`:''}${b.link?`<div class="badges" style="margin-top:6px"><a class="badge" href="${b.link}">O‘tish</a></div>`:''}</div></div>`;
+        const img=b?.img||'https://picsum.photos/960/480?random='+(b?.rand||0);
+        const meta=[b?.f1,b?.f2,b?.f3].filter(Boolean).join(' · ');
+        return `<div class="card"><img class="cover" src="${img}" alt=""><div class="body"><h3>${b?.title||'Banner'}</h3>${meta?`<div class="meta">${meta}</div>`:''}${b?.link?`<div class="badges" style="margin-top:6px"><a class="badge" href="${b.link}">O‘tish</a></div>`:''}</div></div>`;
+      }
+      box.innerHTML = list.length? list.map(bannerHTML).join('') : `<div class="card"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`;
+      const addBtn=document.getElementById('home_add_banner');
+      if(addBtn) addBtn.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearBannerForm(); openModal('bannerModal'); });
+    }" alt=""><div class="body"><h3>${b.title||'Banner'}</h3>${(b.f1||b.f2||b.f3)?`<div class="meta">${[b.f1,b.f2,b.f3].filter(Boolean).join(' · ')}</div>`:''}${b.link?`<div class="badges" style="margin-top:6px"><a class="badge" href="${b.link}">O‘tish</a></div>`:''}</div></div>`;
       }
       box.innerHTML = list.length? list.map(bannerHTML).join('') : `<div class="card"><div class="body"><h3>Bannerlar hali yo‘q</h3></div></div>`;
       $('#home_add_banner')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearBannerForm(); openModal('bannerModal'); });
@@ -486,18 +518,36 @@
 
     // Generic lists
     function bootList(coll){
-      const box = document.getElementById(coll+'_grid');
-      const f1  = document.getElementById(coll+'_f1');
-      const f2  = document.getElementById(coll+'_f2');
-      const f3  = document.getElementById(coll+'_f3');
+      const box   = document.getElementById(coll+'_grid');
+      const f1    = document.getElementById(coll+'_f1');
+      const f2    = document.getElementById(coll+'_f2');
+      const f3    = document.getElementById(coll+'_f3');
       const reset = document.getElementById(coll+'_reset');
+      if(!box || !f1 || !f2 || !f3 || !reset){ console.warn('bootList missing nodes for', coll); return; }
       const PAGE=12; let page=1;
-      const getStore = ()=> DB[coll];
-      const uniq = a => Array.from(new Set(a.filter(Boolean)));
+      const getStore = ()=> Array.isArray(DB[coll])? DB[coll]: [];
+      const uniq = a => Array.from(new Set((a||[]).filter(Boolean)));
       function fillFilters(){
         const list = getStore();
-        const u1=uniq(list.map(d=>d.f1)), u2=uniq(list.map(d=>d.f2)), u3=uniq(list.map(d=>d.f3));
+        const u1=uniq(list.map(d=>d?.f1));
+        const u2=uniq(list.map(d=>d?.f2));
+        const u3=uniq(list.map(d=>d?.f3));
         f1.innerHTML='<option value="">Filter 1</option>'+u1.map(x=>`<option>${x}</option>`).join('');
+        f2.innerHTML='<option value="">Filter 2</option>'+u2.map(x=>`<option>${x}</option>`).join('');
+        f3.innerHTML='<option value="">Filter 3</option>'+u3.map(x=>`<option>${x}</option>`).join('');
+      }
+      function filtered(){ const s1=f1.value, s2=f2.value, s3=f3.value; return getStore().filter(d=> d && (!s1||d.f1===s1)&&(!s2||d.f2===s2)&&(!s3||d.f3===s3)); }
+      function render(){ const arr=filtered().slice().sort((a,b)=> (b?.ts||0)-(a?.ts||0)); const start=(page-1)*PAGE; const items=arr.slice(start,start+PAGE); box.innerHTML = items.length? items.map(cardHTML).join('') : `<div class="card"><div class="body"><h3>Hech narsa topilmadi</h3></div></div>`; const pi=document.getElementById(coll+'_pageinfo'); const prv=document.getElementById(coll+'_prev'); const nxt=document.getElementById(coll+'_next'); if(pi) pi.textContent=page+'-sahifa'; if(prv) prv.disabled=(page<=1); if(nxt) nxt.disabled=(start+PAGE>=arr.length); }
+      fillFilters(); render();
+      f1.onchange=f2.onchange=f3.onchange=()=>{ page=1; render(); };
+      reset.onclick=()=>{ f1.value=''; f2.value=''; f3.value=''; page=1; render(); };
+      const prv=document.getElementById(coll+'_prev'); const nxt=document.getElementById(coll+'_next');
+      if(prv) prv.onclick=()=>{ if(page>1){ page--; render(); } };
+      if(nxt) nxt.onclick=()=>{ page++; render(); };
+      const addBtn=document.getElementById(coll+'_add_card'); const addHere=document.getElementById(coll+'_add_here1');
+      if(addBtn) addBtn.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearCardForm(); const sel=document.getElementById('cd_coll'); if(sel) sel.value = (coll==='tests'?'testsOddiy':coll); document.getElementById('cd_f1').value=f1.value||''; document.getElementById('cd_f2').value=f2.value||''; document.getElementById('cd_f3').value=f3.value||''; openModal('cardModal'); });
+      if(addHere) addHere.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearCardForm(); const sel=document.getElementById('cd_coll'); if(sel) sel.value=(coll==='tests'?'testsOddiy':coll); document.getElementById('cd_f1').value=f1.value||''; openModal('cardModal'); });
+    }</option>`).join('');
         f2.innerHTML='<option value="">Filter 2</option>'+u2.map(x=>`<option>${x}</option>`).join('');
         f3.innerHTML='<option value="">Filter 3</option>'+u3.map(x=>`<option>${x}</option>`).join('');
       }
@@ -531,11 +581,36 @@
 
     // Tests
     function bootTests(){
-      bootList('tests'); // oddiy render uchun lekin biz filtlar bilan bir xil API kerak => DB.tests dan faqat oddiy ko‘rsatamiz
-      const onlineBox = $('#tests_online');
+      // online blok mavjud bo'lmasa ham ishlayversin
+      const onlineBox = document.getElementById('tests_online');
       function renderOnline(){
-        const now=Date.now(); const items=DB.tests.filter(t=>t.type==='online').sort((a,b)=>b.ts-a.ts).slice(0,24);
+        if(!onlineBox) return; // guard
+        const now=Date.now(); const items=(DB.tests||[]).filter(t=>t.type==='online').slice().sort((a,b)=> (b.ts||0)-(a.ts||0)).slice(0,24);
         if(items.length===0){ onlineBox.innerHTML=''; return; }
+        onlineBox.innerHTML = `<div class="content" style="margin-bottom:12px"><div class="admin-toolbar admin-only"><button class="btn btn--pri" id="tests_add_online_toolbar">+ Onlayn test</button></div><h3 style="margin-top:0">Onlayn testlar (birinchi ko‘rinadi)</h3><div class="grid">${items.map(x=>{ const live = (x.start && x.end) ? (now>=x.start && now<=x.end) : false; const s = x.start? new Date(x.start).toLocaleString() : ''; const e = x.end? new Date(x.end).toLocaleString() : ''; return cardHTML({...x}, [(s&&e)?`Boshlash: ${s}`:'',(s&&e)?`Tugash: ${e}`:'', live?'LIVE':'']); }).join('')}</div></div>`;
+        if(isAdmin()) onlineBox.querySelectorAll('.admin-toolbar').forEach(el=>el.style.display='flex');
+        const tbtn=document.getElementById('tests_add_online_toolbar');
+        if(tbtn) tbtn.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearOnlineForm(); openModal('onlineTestModal'); });
+      }
+      renderOnline();
+      const addBtn=document.getElementById('tests_add_online'); if(addBtn) addBtn.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearOnlineForm(); openModal('onlineTestModal'); });
+
+      // oddiylar uchun umumiy ro'yxat renderer
+      bootList('tests');
+
+      // override grid to show only oddiy
+      const coll='tests';
+      const f1=document.getElementById(coll+'_f1'), f2=document.getElementById(coll+'_f2'), f3=document.getElementById(coll+'_f3'); const box=document.getElementById(coll+'_grid'); if(!f1||!f2||!f3||!box) return;
+      const PAGE=12; let page=1;
+      const uniq=a=>Array.from(new Set((a||[]).filter(Boolean)));
+      function fillFilters(){ const src=(DB.tests||[]).filter(t=>t.type!=='online'); const u1=uniq(src.map(d=>d?.f1)), u2=uniq(src.map(d=>d?.f2)), u3=uniq(src.map(d=>d?.f3)); f1.innerHTML='<option value="">Filter 1</option>'+u1.map(x=>`<option>${x}</option>`).join(''); f2.innerHTML='<option value="">Filter 2</option>'+u2.map(x=>`<option>${x}</option>`).join(''); f3.innerHTML='<option value="">Filter 3</option>'+u3.map(x=>`<option>${x}</option>`).join(''); }
+      function filtered(){ const s1=f1.value,s2=f2.value,s3=f3.value; return (DB.tests||[]).filter(t=>t.type!=='online').filter(d=> d && (!s1||d.f1===s1)&&(!s2||d.f2===s2)&&(!s3||d.f3===s3)); }
+      function render(){ const arr=filtered().slice().sort((a,b)=> (b?.ts||0)-(a?.ts||0)); const start=(page-1)*PAGE; const pageItems=arr.slice(start,start+PAGE); box.innerHTML = pageItems.length? pageItems.map(cardHTML).join('') : `<div class="card"><div class="body"><h3>Oddiy test topilmadi</h3></div></div>`; const pi=document.getElementById(coll+'_pageinfo'); const prv=document.getElementById(coll+'_prev'); const nxt=document.getElementById(coll+'_next'); if(pi) pi.textContent=page+'-sahifa (oddiy)'; if(prv) prv.disabled=(page<=1); if(nxt) nxt.disabled=(start+PAGE>=arr.length); }
+      fillFilters(); render();
+      f1.onchange=f2.onchange=f3.onchange=()=>{ page=1; render(); };
+      const prv=document.getElementById(coll+'_prev'); const nxt=document.getElementById(coll+'_next'); if(prv) prv.onclick=()=>{ if(page>1){ page--; render(); } }; if(nxt) nxt.onclick=()=>{ page++; render(); };
+      const reset=document.getElementById(coll+'_reset'); if(reset) reset.onclick=()=>{ f1.value='';f2.value='';f3.value='';page=1;render(); };
+    }
         onlineBox.innerHTML = `<div class="content" style="margin-bottom:12px"><div class="admin-toolbar admin-only"><button class="btn btn--pri" id="tests_add_online_toolbar">+ Onlayn test</button></div><h3 style="margin-top:0">Onlayn testlar (birinchi ko‘rinadi)</h3><div class="grid">${items.map(x=>{ const live = (x.start && x.end) ? (now>=x.start && now<=x.end) : false; const s = x.start? new Date(x.start).toLocaleString() : ''; const e = x.end? new Date(x.end).toLocaleString() : ''; return cardHTML({...x}, [(s&&e)?`Boshlash: ${s}`:'',(s&&e)?`Tugash: ${e}`:'', live?'LIVE':'']); }).join('')}</div></div>`;
         if(isAdmin()) onlineBox.querySelectorAll('.admin-toolbar').forEach(el=>el.style.display='flex');
         $('#tests_add_online_toolbar')?.addEventListener('click', ()=>{ if(!isAdmin()) return alert('Admin kerak'); clearOnlineForm(); openModal('onlineTestModal'); });
@@ -769,9 +844,10 @@
     }
 
     // INIT
-    function setActive(route){ $$('#fabMenu .chip').forEach(b=>b.classList.toggle('active', b.dataset.route===route)); }
+    window.onerror = function(msg, src, line, col, err){ console.error('Global error:', msg, src, line, col, err); alert('Kutilmagan xato. Sahifa qayta yuklanadi.'); location.hash='#home'; setTimeout(()=>location.reload(), 100); };
+    function setActive(route){ (document.querySelectorAll('#fabMenu .chip')||[]).forEach(b=>b.classList.toggle('active', b.dataset.route===route)); }
     function boot(){ setHeader(); const start=location.hash.replace('#','')||'home'; loadRoute(start); }
-    boot();
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
   </script>
 </body>
 </html>
