@@ -1,5 +1,5 @@
-import { auth, db, listLatest, saveProfileToFirestore, getProfile, loadProfileFromFirestore, signOutGoogle } from '../assets/app.js';
-import { getDocs, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { auth, listLatest, saveProfileToFirestore, getProfile, loadProfileFromFirestore, isProfileComplete, generateUniqueNumericId, signOutGoogle } from '../assets/app.js';
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 /* Build profile modal */
 function ensureProfileModal(){
@@ -43,22 +43,26 @@ function ensureProfileModal(){
   </div>`;
   document.body.appendChild(w);
 
-  function genId(){ return String(Math.floor(10000000 + Math.random()*90000000)); }
-
-  function prefill(){
+  async function prefill(){
     const u=auth.currentUser; if(!u) return;
-    const p=getProfile();
-    w.querySelector('#pfId').value = p?.numericId || genId();
-    w.querySelector('#pfFirst').value = p?.first || '';
-    w.querySelector('#pfLast').value = p?.last || '';
-    w.querySelector('#pfPatron').value = p?.patron || '';
-    w.querySelector('#pfBirth').value = p?.birth || '';
-    w.querySelector('#pfPhone').value = p?.phone || '';
-    w.querySelector('#pfTelegram').value = p?.telegram || '';
-    w.querySelector('#pfEmail').value = p?.email || (u.email||'');
-    w.querySelector('#pfAddress').value = p?.address || '';
-    w.querySelector('#pfSchool').value = p?.school || '';
-    w.querySelector('#pfRole').value = p?.role || '';
+    const p=getProfile() || await loadProfileFromFirestore();
+    if(p){
+      w.querySelector('#pfId').value = p.numericId;
+      w.querySelector('#pfFirst').value = p.first||'';
+      w.querySelector('#pfLast').value = p.last||'';
+      w.querySelector('#pfPatron').value = p.patron||'';
+      w.querySelector('#pfBirth').value = p.birth||'';
+      w.querySelector('#pfPhone').value = p.phone||'';
+      w.querySelector('#pfTelegram').value = p.telegram||'';
+      w.querySelector('#pfEmail').value = p.email|| (u.email||'');
+      w.querySelector('#pfAddress').value = p.address||'';
+      w.querySelector('#pfSchool').value = p.school||'';
+      w.querySelector('#pfRole').value = p.role||'';
+    } else {
+      // unique id
+      try{ w.querySelector('#pfId').value = await generateUniqueNumericId(); }catch{ w.querySelector('#pfId').value = String(Math.floor(10000000 + Math.random()*90000000)); }
+      w.querySelector('#pfEmail').value = u.email||'';
+    }
   }
 
   w.querySelector('#pfSave').addEventListener('click', async ()=>{
@@ -80,8 +84,7 @@ function ensureProfileModal(){
     try{
       await saveProfileToFirestore(profile);
       w.classList.remove('open');
-      document.dispatchEvent(new CustomEvent('profile-updated'));
-      alert('Profil saqlandi');
+      // Unlock handled by auth listener upon profile-updated event
     }catch(e){ alert(e.message); }
   });
   w.querySelector('#pfCancel').addEventListener('click', ()=>{ alert('Profil majburiy. Iltimos to‘ldiring.'); });
@@ -89,7 +92,6 @@ function ensureProfileModal(){
   w.prefill = prefill;
 }
 function showProfileModal(){ ensureProfileModal(); const w=document.getElementById('profileModal'); w.prefill(); w.classList.add('open'); }
-function hideProfileModal(){ const w=document.getElementById('profileModal'); if(w) w.classList.remove('open'); }
 
 /* Banner */
 async function loadBanner(){
@@ -105,7 +107,7 @@ async function loadBanner(){
   }catch(e){ console.error(e); }
 }
 
-/* Profile sidebar render */
+/* Sidebar */
 function renderProfile(){
   const p = getProfile();
   const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent = v||'-'; };
@@ -116,16 +118,15 @@ function renderProfile(){
 }
 
 document.getElementById('editProfile')?.addEventListener('click', showProfileModal);
-document.getElementById('logout')?.addEventListener('click', async ()=>{ await signOutGoogle(); renderProfile(); });
+document.getElementById('logout')?.addEventListener('click', async ()=>{ await signOutGoogle(); });
 
-document.addEventListener('profile-updated', renderProfile);
+document.addEventListener('profile-updated', ()=>{ renderProfile(); });
 
-/* On load: if no profile in cache after sign-in, open modal */
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 onAuthStateChanged(auth, async (user)=>{
   if(user){
     const p = getProfile() || await loadProfileFromFirestore();
-    if(!p || !p.first || !p.last || !p.birth || !p.phone || !p.role) showProfileModal();
+    if(!isProfileComplete(p)) showProfileModal();
+    renderProfile();
   }
 });
 
