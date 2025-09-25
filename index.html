@@ -644,7 +644,19 @@ function onlineState(x){
   const start = x.start ? new Date(x.start).getTime():null;
   const end   = x.end   ? new Date(x.end).getTime():null;
   const isOnline = x.mode==='online';
+  function fmt(sec){
+    const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+    const pad=n=>String(n).padStart(2,'0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
   if(!isOnline) return {label:'Oddiy', open:true, countdown:''};
+  if(start && now<start){
+    const sec=Math.max(0, Math.floor((start-now)/1000));
+    return {label:'Online (kutish)', open:false, countdown:fmt(sec)};
+  }
+  if(end && now>end){ return {label:'Yopiq', open:false, countdown:''}; }
+  return {label:'Online', open:true, countdown:''};
+};
   if(start && now<start){
     const sec=Math.max(0, Math.floor((start-now)/1000));
     return {label:'Online (kutish)', open:false, countdown:`${sec}s`};
@@ -699,8 +711,8 @@ setInterval(()=>{
 }, 1000);
 
 // ===== Admin auth & create =====
-const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
-const ADMIN_IDS = [1000001,1000002,38864];
+const ADMIN_EMAILS = ["sohibjonmath@gmail.com"]; 
+const ADMIN_IDS = [38864];
 function isAdmin(user){ return user && ADMIN_EMAILS.includes(user.email); }
 function isAdminIdLocal(){ return !!stateUser.numericId && ADMIN_IDS.includes(Number(stateUser.numericId)); }
 
@@ -852,23 +864,37 @@ document.getElementById('form-balance')?.addEventListener('submit', async (e)=>{
 </script>
 
 <!--
-======================== FIRESTORE RULES TAVSIYA (draft) ========================
+======================== FIRESTORE RULES TAVSIYA (production draft) ========================
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn(){ return request.auth != null; }
     function isAdmin(){ return isSignedIn() && request.auth.token.email in ['sohibjonmath@gmail.com']; }
 
-    // Ommaviy kontent o'qish mumkin
-    match /{col}/{doc} where col in ['home_banners','courses','tests','simulators'] {
-      allow read: if true;               // public
+    // Ommaviy kontent o'qish mumkin, yozish faqat admin
+    match /{col}/{doc} where col in ['home_banners','courses','tests','simulators','promocodes'] {
+      allow read: if true;               // public read
       allow create, update, delete: if isAdmin();
     }
 
-    // Agar profilni ham Firestore’da saqlamoqchi bo'lsangiz
+    // Foydalanuvchi profili
     match /users/{uid} {
-      allow read: if isSignedIn() && request.auth.uid == uid;
-      allow write: if request.auth.uid == uid; // yoki isAdmin()
+      // Foydalanuvchi o'zi o'qiydi; o'zi yangilaydi
+      allow read, update: if isSignedIn() && request.auth.uid == uid;
+      // Yaratishni har qanday signed-in foydalanuvchi qilishi mumkin
+      allow create: if isSignedIn();
+      // Balansni o'zgartirish faqat admin: agar request.resource.data.balance != resource.data.balance bo'lsa, admin bo'lsin
+      allow update: if (
+        isSignedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).keys().hasOnly(['name','birth','points','numericId'])
+      ) || (
+        isAdmin()
+      );
+    }
+
+    // Numeric ID ↔ UID mapping — faqat admin yozadi, o'qish ham faqat admin
+    match /users_by_numeric/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
     }
   }
 }
