@@ -148,3 +148,129 @@ async function boot(){
   document.getElementById('pf-save').addEventListener('click', saveProfileLocally);
 }
 document.addEventListener('DOMContentLoaded', boot);
+
+
+/* ===== Regions (Uzbekistan) ===== */
+let UZ_REGIONS = {};
+async function loadRegions(){
+  try{
+    const res = await fetch('assets/regions.json', { cache:'no-store' });
+    if(res.ok){ UZ_REGIONS = await res.json(); }
+  }catch(e){ console.warn('regions.json yuklanmadi', e); }
+}
+function fillRegionSelect(){
+  const sel = document.getElementById('pf-region');
+  sel.innerHTML = '<option value="" disabled selected>Viloyatni tanlang</option>' + 
+    Object.keys(UZ_REGIONS).map(r=>`<option>${r}</option>`).join('');
+  sel.addEventListener('change', ()=> fillDistrictSelect(sel.value));
+}
+function fillDistrictSelect(region){
+  const sel = document.getElementById('pf-district');
+  const arr = UZ_REGIONS[region] || [];
+  sel.innerHTML = '<option value="" disabled selected>Tuman/Shahar</option>' + arr.map(d=>`<option>${d}</option>`).join('');
+}
+
+/* ===== Firebase Auth (Google) ===== */
+const fbConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+let auth, provider;
+function initAuth(){
+  if(!firebase.apps.length){ firebase.initializeApp(fbConfig); }
+  auth = firebase.auth();
+  provider = new firebase.auth.GoogleAuthProvider();
+  // UI events
+  const modal = document.getElementById('auth-modal');
+  document.getElementById('btn-login').onclick = ()=> modal.classList.add('show');
+  document.getElementById('auth-close').onclick = ()=> modal.classList.remove('show');
+  document.getElementById('google-login').onclick = async ()=>{
+    try{
+      await auth.signInWithPopup(provider);
+      modal.classList.remove('show');
+    }catch(e){
+      alert('Kirishda xatolik: ' + e.message);
+    }
+  };
+  document.getElementById('btn-logout').onclick = ()=> auth.signOut();
+
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      // Greeter, set defaults
+      state.profile = {
+        ...state.profile,
+        name: state.profile.name || (user.displayName || ''),
+        uid: state.profile.uid || (user.uid.slice(0,8)), // app ichidagi ID alohida ham bo'lishi mumkin
+      };
+      localStorage.setItem('mc_profile', JSON.stringify(state.profile));
+      document.getElementById('btn-login').style.display='none';
+      document.getElementById('btn-logout').style.display='inline-flex';
+    }else{
+      document.getElementById('btn-login').style.display='inline-flex';
+      document.getElementById('btn-logout').style.display='none';
+    }
+    updateGreeting();
+    hydrateProfileForm();
+  });
+}
+
+/* ===== Greeting bar ===== */
+function updateGreeting(){
+  const P = state.profile || {};
+  const name = P.name || 'Mehmon';
+  document.getElementById('greet-name').textContent = 'Salom, ' + name + '!';
+  document.getElementById('greet-id').textContent = 'ID: ' + (P.uid || '—');
+  document.getElementById('greet-balance').textContent = 'Balans: ' + (P.balance||0);
+  document.getElementById('greet-points').textContent = 'Ball: ' + (P.points||0);
+}
+
+/* ===== Profile helpers ===== */
+function hydrateProfileForm(){
+  const ids = ["pf-name","pf-region","pf-district","pf-id","pf-balance","pf-points"];
+  ids.forEach(id=>{
+    const key = id.replace('pf-','');
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(key==='region' || key==='district'){
+      if(state.profile[key]){
+        // ensure the option exists first
+        if(key==='region'){
+          const r = state.profile.region;
+          if(r && UZ_REGIONS[r]){
+            document.getElementById('pf-region').value = r;
+            fillDistrictSelect(r);
+          }
+        }
+        if(key==='district'){
+          document.getElementById('pf-district').value = state.profile.district;
+        }
+      }
+    }else{
+      if(state.profile && state.profile[key]!=null){ el.value = state.profile[key]; }
+    }
+  });
+}
+
+/* Extend saveProfile to read selects */
+const origSave = saveProfileLocally;
+saveProfileLocally = function(){
+  origSave();
+  updateGreeting();
+};
+
+/* ===== Boot patch ===== */
+const origBoot = boot;
+boot = async function(){
+  await loadRegions();
+  await origBoot();
+  fillRegionSelect();
+  // If profile already has a region, set districts
+  if(state.profile && state.profile.region){ fillDistrictSelect(state.profile.region); }
+  hydrateProfileForm();
+  initAuth();
+};
