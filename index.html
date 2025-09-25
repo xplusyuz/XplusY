@@ -778,51 +778,98 @@ document.getElementById('form-item').addEventListener('submit', async (e)=>{
   }catch(err){ alert('Xatolik: '+err.message); }
 });
 
+<!-- REPLACE from here ↓↓↓ -->
+<script type="module">
 // Promo create
 document.getElementById('form-promo')?.addEventListener('submit', async (e)=>{
-  e.preventDefault(); const f=e.target; const user=auth.currentUser; if(!(isAdmin(user)||isAdminIdLocal())) return alert('Ruxsat yo'q');
+  e.preventDefault();
+  const f=e.target; 
+  const user=auth.currentUser; 
+  if(!(isAdmin(user)||isAdminIdLocal())) return alert('Ruxsat yo\'q');
+
   const expires = f.expires.value? new Date(f.expires.value): null;
-  const payload={ code:f.code.value.trim().toUpperCase(), amount:Number(f.amount.value||0), kind:f.kind.value,
-    expiresAt: expires? expires.toISOString(): null, usageLimit:Number(f.usageLimit.value||0)||0, perUser: f.perUser.value==='true',
-    minBalance:Number(f.minBalance.value||0)||0, maxBenefit:Number(f.maxBenefit.value||0)||0,
-    usedCount:0, usedByIds:[], active:true, createdAt:serverTimestamp() };
-  try{ await addDoc(colRefs.promocodes, payload); f.reset(); alert('Promo saqlandi'); }catch(err){ alert('Xatolik: '+err.message); }
+  const payload={
+    code: (f.code.value||'').trim().toUpperCase(),
+    amount: Number(f.amount.value||0),
+    kind: f.kind.value,
+    expiresAt: expires? expires.toISOString(): null,
+    usageLimit: Number(f.usageLimit.value||0)||0,
+    perUser: f.perUser.value==='true',
+    minBalance: Number(f.minBalance.value||0)||0,
+    maxBenefit: Number(f.maxBenefit.value||0)||0,
+    usedCount: 0,
+    usedByIds: [],
+    active: true,
+    createdAt: serverTimestamp()
+  };
+
+  try{
+    await addDoc(colRefs.promocodes, payload);
+    f.reset();
+    alert('Promo saqlandi');
+  }catch(err){
+    alert('Xatolik: '+err.message);
+  }
 });
 
 // Promo list (live)
 onSnapshot(query(colRefs.promocodes, orderBy('createdAt','desc')), snap=>{
-  const box=document.getElementById('promo-list'); if(!box) return;
-  const rows=[]; snap.forEach(d=>{ const p=d.data(); rows.push(`${p.code} — ${p.kind==='percent'?p.amount+'%':(p.amount+' so'm')} ${p.expiresAt?('· gacha: '+p.expiresAt):''} · used: ${p.usedCount}/${p.usageLimit||'∞'} ${p.minBalance?('· minBal: '+p.minBalance):''} ${p.maxBenefit?('· cap: '+p.maxBenefit):''} ${p.active?'':'(o'chiq)'}`); });
-  box.textContent = rows.join('
-');
+  const box=document.getElementById('promo-list');
+  if(!box) return;
+  const rows=[];
+  snap.forEach(d=>{
+    const p=d.data();
+    rows.push(
+      `${p.code} — ${p.kind==='percent'? (p.amount+'%') : (p.amount+' so\'m')} ` +
+      `${p.expiresAt?('· gacha: '+p.expiresAt):''} · used: ${p.usedCount}/${p.usageLimit||'∞'} ` +
+      `${p.minBalance?('· minBal: '+p.minBalance):''} ${p.maxBenefit?('· cap: '+p.maxBenefit):''} ` +
+      `${p.active?'':'(o\'chiq)'}`
+    );
+  });
+  box.textContent = rows.join('\n');
 });
 
 // Promo apply (profile)
 document.getElementById('btn-apply-promo')?.addEventListener('click', async ()=>{
   const input = (document.getElementById('promoInput').value||'').trim().toUpperCase();
-  const msg = document.getElementById('promo-msg'); if(!msg) return; msg.textContent='';
+  const msg = document.getElementById('promo-msg');
+  if(!msg) return;
+  msg.textContent='';
   if(!input) return;
+
   try{
     const qSnap = await getDocs(query(colRefs.promocodes, where('code','==', input)));
-    if(qSnap.empty) return msg.textContent='❌ Noto'g'ri promo kod';
-    const d=qSnap.docs[0]; const p=d.data();
+    if(qSnap.empty){ msg.textContent='❌ Noto\'g\'ri promo kod'; return; }
+
+    const d=qSnap.docs[0];
+    const p=d.data();
     const now = Date.now();
-    if(p.active===false) return msg.textContent='❌ Promo o'chiq';
-    if(p.expiresAt && now > new Date(p.expiresAt).getTime()) return msg.textContent='❌ Muddat tugagan';
-    if(p.usageLimit && p.usedCount>=p.usageLimit) return msg.textContent='❌ Limit tugagan';
+    if(p.active===false){ msg.textContent='❌ Promo o\'chiq'; return; }
+    if(p.expiresAt && now > new Date(p.expiresAt).getTime()){ msg.textContent='❌ Muddat tugagan'; return; }
+    if(p.usageLimit && p.usedCount>=p.usageLimit){ msg.textContent='❌ Limit tugagan'; return; }
+
     const uidNum = Number(stateUser.numericId||0);
-    if(p.perUser && Array.isArray(p.usedByIds) && p.usedByIds.includes(uidNum)) return msg.textContent='❌ Ushbu promo allaqachon ishlatilgan';
-    if(p.minBalance && Number(stateUser.balance||0) < p.minBalance) return msg.textContent = `❌ Minimal balans: ${p.minBalance}`;
+    if(p.perUser && Array.isArray(p.usedByIds) && p.usedByIds.includes(uidNum)){
+      msg.textContent='❌ Ushbu promo allaqachon ishlatilgan'; 
+      return;
+    }
+    if(p.minBalance && Number(stateUser.balance||0) < p.minBalance){
+      msg.textContent = `❌ Minimal balans: ${p.minBalance}`;
+      return;
+    }
+
     // Hisoblash + cap
     let add = 0;
-    if(p.kind==='flat'){ add = p.amount; } else { add = Math.round((Number(stateUser.balance||0)) * (p.amount/100)); }
+    if(p.kind==='flat'){ add = p.amount; }
+    else { add = Math.round((Number(stateUser.balance||0)) * (p.amount/100)); }
     if(p.maxBenefit && add > p.maxBenefit) add = p.maxBenefit;
 
-    // Lokal balans yangilash
+    // Lokal balans
     stateUser.balance = Number(stateUser.balance||0) + Math.max(0, add);
-    localStorage.setItem(LS_USER, JSON.stringify(stateUser)); renderProfile();
+    localStorage.setItem(LS_USER, JSON.stringify(stateUser));
+    renderProfile();
 
-    // Firestore balans (agar mapping mavjud bo'lsa)
+    // Firestore balans (mapping bo'lsa)
     try{
       if(auth.currentUser){
         await updateDoc(doc(db,'users',auth.currentUser.uid), { balance: Number(stateUser.balance) });
@@ -830,22 +877,34 @@ document.getElementById('btn-apply-promo')?.addEventListener('click', async ()=>
         const mapSnap = await getDoc(doc(db,'users_by_numeric', String(stateUser.numericId)));
         if(mapSnap.exists()){
           const tgtUid = mapSnap.data().uid;
-          await updateDoc(doc(db,'users', tgtUid), { balance: Number(stateUser.balance) });
+          if(tgtUid){
+            await updateDoc(doc(db,'users', tgtUid), { balance: Number(stateUser.balance) });
+          }
         }
       }
-    }catch(e){ console.warn('Firestore balance update warn', e); }
+    }catch(e){
+      console.warn('Firestore balance update warn', e);
+    }
 
     // Promo yangilash
     await updateDoc(doc(db, 'promocodes', d.id), { usedCount: increment(1), usedByIds: arrayUnion(uidNum) });
     msg.textContent = `✅ Qo'llandi! ${add} so'm qo'shildi`;
-  }catch(err){ msg.textContent = 'Xatolik: '+err.message; }
+  }catch(err){
+    msg.textContent = 'Xatolik: '+err.message;
+  }
 });
 
 // Admin balance update
 document.getElementById('form-balance')?.addEventListener('submit', async (e)=>{
-  e.preventDefault(); const f=e.target; const user=auth.currentUser; if(!(isAdmin(user)||isAdminIdLocal())) return alert('Ruxsat yo'q');
-  const nid = Number(f.numericId.value||0); const delta = Number(f.delta.value||0);
-  if(!nid) return alert('Numeric ID kiriting');
+  e.preventDefault();
+  const f=e.target; 
+  const user=auth.currentUser; 
+  if(!(isAdmin(user)||isAdminIdLocal())) { alert('Ruxsat yo\'q'); return; }
+
+  const nid = Number(f.numericId.value||0);
+  const delta = Number(f.delta.value||0);
+  if(!nid){ alert('Numeric ID kiriting'); return; }
+
   try{
     const mapRef = doc(db,'users_by_numeric', String(nid));
     const mapSnap = await getDoc(mapRef);
@@ -854,52 +913,19 @@ document.getElementById('form-balance')?.addEventListener('submit', async (e)=>{
       await updateDoc(doc(db,'users', uid), { balance: increment(delta) });
       alert('Balans Firestore’da yangilandi');
     } else {
-      if(stateUser.numericId==nid){ stateUser.balance = Number(stateUser.balance||0)+delta; localStorage.setItem(LS_USER, JSON.stringify(stateUser)); renderProfile(); }
+      if(stateUser.numericId==nid){
+        stateUser.balance = Number(stateUser.balance||0)+delta;
+        localStorage.setItem(LS_USER, JSON.stringify(stateUser));
+        renderProfile();
+      }
       alert('Mapping topilmadi (users_by_numeric). Avval profilni auth bilan saqlang.');
     }
-  }catch(err){ alert('Xatolik: '+err.message); }
+  }catch(err){
+    alert('Xatolik: '+err.message);
+  }
+
   f.reset();
 });
-
 </script>
-
-<!--
-======================== FIRESTORE RULES TAVSIYA (production draft) ========================
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isSignedIn(){ return request.auth != null; }
-    function isAdmin(){ return isSignedIn() && request.auth.token.email in ['sohibjonmath@gmail.com']; }
-
-    // Ommaviy kontent o'qish mumkin, yozish faqat admin
-    match /{col}/{doc} where col in ['home_banners','courses','tests','simulators','promocodes'] {
-      allow read: if true;               // public read
-      allow create, update, delete: if isAdmin();
-    }
-
-    // Foydalanuvchi profili
-    match /users/{uid} {
-      // Foydalanuvchi o'zi o'qiydi; o'zi yangilaydi
-      allow read, update: if isSignedIn() && request.auth.uid == uid;
-      // Yaratishni har qanday signed-in foydalanuvchi qilishi mumkin
-      allow create: if isSignedIn();
-      // Balansni o'zgartirish faqat admin: agar request.resource.data.balance != resource.data.balance bo'lsa, admin bo'lsin
-      allow update: if (
-        isSignedIn() && request.auth.uid == uid && request.resource.data.diff(resource.data).keys().hasOnly(['name','birth','points','numericId'])
-      ) || (
-        isAdmin()
-      );
-    }
-
-    // Numeric ID ↔ UID mapping — faqat admin yozadi, o'qish ham faqat admin
-    match /users_by_numeric/{id} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
-    }
-  }
-}
-===============================================================================
--->
-
 </body>
 </html>
