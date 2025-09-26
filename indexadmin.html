@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Index Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --primary:#19b36b; --bg:#f3faf6; --text:#0b1f17; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 16px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background:#fff; border:1px solid rgba(0,0,0,.06); border-radius:16px; box-shadow: 0 12px 28px rgba(0,0,0,.06); padding:16px; }
+    input, textarea, select { width:100%; padding:10px 12px; border-radius:12px; border:1px solid rgba(0,0,0,.12); }
+    .btn { padding:10px 14px; border-radius:12px; border:none; cursor:pointer; }
+    .btn.primary { background: var(--primary); color:#fff; }
+    .stack { display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+    .grid { display:grid; grid-template-columns: 1fr; gap:10px; }
+    .list-row { display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:8px; align-items:center;}
+    .list-row button { padding:8px 10px; }
+    .muted { opacity:.75; }
+    @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Index (Bosh sahifa) Admin</h1>
+    <div class="stack">
+      <span id="authInfo" class="btn" style="background:#fff; border:1px solid rgba(0,0,0,.08)">Kirmagansiz</span>
+      <button id="loginBtn" class="btn">Google bilan kirish</button>
+      <button id="logoutBtn" class="btn" style="display:none">Chiqish</button>
+      <button id="saveFirestore" class="btn primary" style="display:none">Firestore-ga saqlash</button>
+      <button id="exportJson" class="btn">JSON eksport</button>
+      <label class="btn">
+        JSON import <input id="importJson" type="file" accept=".json" hidden/>
+      </label>
+      <a class="btn" href="index.html" target="_blank">Sahifani ko‘rish ↗</a>
+    </div>
+    <p class="muted">Kontent Firestoredagi <code>meta/index_page</code> hujjatiga saqlanadi. Offline rejimda <code>indexadmin.json</code> ishlaydi.</p>
+
+    <div class="row">
+      <div class="card">
+        <h3>Mavzu</h3>
+        <div class="row">
+          <div><label>Primary <input id="cPrimary" type="color"/></label></div>
+          <div><label>Granite BG <input id="cGranite" type="color"/></label></div>
+          <div><label>Matn <input id="cText" type="color"/></label></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Hero</h3>
+        <label>Sarlavha <input id="heroTitle"/></label><br>
+        <label>Taglavha <input id="heroSub"/></label><br>
+        <label>Fon (CSS bg) <input id="heroBg" placeholder="linear-gradient(...)"/></label><br>
+        <div class="row">
+          <div><label>CTA Primary label <input id="c1Label"/></label></div>
+          <div><label>CTA Primary link <input id="c1Href"/></label></div>
+          <div><label>CTA Secondary label <input id="c2Label"/></label></div>
+          <div><label>CTA Secondary link <input id="c2Href"/></label></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Banners (karusel)</h3>
+        <div id="bannerList" class="grid"></div>
+        <button id="addBanner" class="btn">+ Banner</button>
+      </div>
+
+      <div class="card">
+        <h3>Promo kartalar</h3>
+        <div id="promoList" class="grid"></div>
+        <button id="addPromo" class="btn">+ Promo</button>
+      </div>
+
+      <div class="card">
+        <h3>Features</h3>
+        <div id="featList" class="grid"></div>
+        <button id="addFeat" class="btn">+ Feature</button>
+      </div>
+
+      <div class="card">
+        <h3>Testimonials</h3>
+        <div id="testiList" class="grid"></div>
+        <button id="addTesti" class="btn">+ Testimonial</button>
+      </div>
+
+      <div class="card">
+        <h3>Hamkorlar</h3>
+        <div id="partnerList" class="grid"></div>
+        <button id="addPartner" class="btn">+ Partner</button>
+      </div>
+
+      <div class="card">
+        <h3>Video</h3>
+        <label>YouTube ID <input id="ytId" placeholder="dQw4w9WgXcQ"/></label>
+      </div>
+
+      <div class="card">
+        <h3>Adminlar</h3>
+        <label>Admin email-lar (vergul bilan) <textarea id="adminEmails" rows="3"></textarea></label>
+      </div>
+
+      <div class="card">
+        <h3>JSON</h3>
+        <textarea id="raw" rows="18" spellcheck="false" style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;"></textarea>
+        <div class="stack" style="margin-top:8px">
+          <button id="applyRaw" class="btn">JSON qo'llash</button>
+          <button id="refreshRaw" class="btn">Yuklab olish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.firebasestorage.app", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const ui = {
+    authInfo: document.getElementById("authInfo"),
+    login: document.getElementById("loginBtn"),
+    logout: document.getElementById("logoutBtn"),
+    saveFs: document.getElementById("saveFirestore"),
+    exportJson: document.getElementById("exportJson"),
+    importJson: document.getElementById("importJson"),
+    raw: document.getElementById("raw"),
+    applyRaw: document.getElementById("applyRaw"),
+    refreshRaw: document.getElementById("refreshRaw"),
+    // theme
+    cPrimary: document.getElementById("cPrimary"),
+    cGranite: document.getElementById("cGranite"),
+    cText: document.getElementById("cText"),
+    // hero
+    heroTitle: document.getElementById("heroTitle"),
+    heroSub: document.getElementById("heroSub"),
+    heroBg: document.getElementById("heroBg"),
+    c1Label: document.getElementById("c1Label"),
+    c1Href: document.getElementById("c1Href"),
+    c2Label: document.getElementById("c2Label"),
+    c2Href: document.getElementById("c2Href"),
+    // lists
+    bannerList: document.getElementById("bannerList"),
+    promoList: document.getElementById("promoList"),
+    featList: document.getElementById("featList"),
+    testiList: document.getElementById("testiList"),
+    partnerList: document.getElementById("partnerList"),
+    // video/admin
+    ytId: document.getElementById("ytId"),
+    adminEmails: document.getElementById("adminEmails"),
+  };
+
+  let cfg = null;
+
+  async function loadConfig() {
+    try {
+      const snap = await getDoc(doc(db, "meta", "index_page"));
+      if (snap.exists()) return snap.data();
+    } catch(e){}
+    try {
+      const r = await fetch("indexadmin.json", {cache:"no-store"});
+      if (r.ok) return await r.json();
+    } catch(e){}
+    return null;
+  }
+
+  function isAdmin(user, c){
+    const emails = (c?.admins?.emails||[]).map(x=>x.toLowerCase());
+    if (user?.email && emails.includes(user.email.toLowerCase())) return true;
+    // fallback: read from headerfooteradmin.json
+    return false;
+  }
+
+  function renderLists(){
+    // banners
+    ui.bannerList.innerHTML = "";
+    (cfg.banners||[]).forEach((b,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = `
+        <input placeholder="Rasm URL (img/...)" value="${b.img||""}"/>
+        <input placeholder="Sarlavha" value="${b.title||""}"/>
+        <input placeholder="Link" value="${b.href||""}"/>
+        <button data-del class="btn">O'chirish</button>
+        <input placeholder="Tag (FREE/PRO/NEW)" value="${b.tag||""}"/>
+        <input placeholder="Qisqa sub" value="${b.subtitle||""}"/>
+      `;
+      const inputs = row.querySelectorAll("input");
+      const [img,title,href,_,tag,sub] = inputs;
+      img.oninput = () => cfg.banners[i].img = img.value;
+      title.oninput = () => cfg.banners[i].title = title.value;
+      href.oninput = () => cfg.banners[i].href = href.value;
+      tag.oninput = () => cfg.banners[i].tag = tag.value;
+      sub.oninput = () => cfg.banners[i].subtitle = sub.value;
+      row.querySelector("[data-del]").onclick = ()=>{ cfg.banners.splice(i,1); renderLists(); syncRaw(); };
+      ui.bannerList.appendChild(row);
+    });
+
+    // promo
+    ui.promoList.innerHTML = "";
+    (cfg.promo||[]).forEach((p,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = `
+        <input placeholder="Sarlavha" value="${p.title||""}"/>
+        <input placeholder="Tavsif" value="${p.desc||""}"/>
+        <input placeholder="Ikonka (nomi)" value="${p.icon||""}"/>
+        <button data-del class="btn">O'chirish</button>
+      `;
+      const [t,d,ic] = row.querySelectorAll("input");
+      t.oninput = () => cfg.promo[i].title = t.value;
+      d.oninput = () => cfg.promo[i].desc = d.value;
+      ic.oninput = () => cfg.promo[i].icon = ic.value;
+      row.querySelector("[data-del]").onclick = ()=>{ cfg.promo.splice(i,1); renderLists(); syncRaw(); };
+      ui.promoList.appendChild(row);
+    });
+
+    // features
+    ui.featList.innerHTML = "";
+    (cfg.features||[]).forEach((f,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = `
+        <input placeholder="Sarlavha" value="${f.title||""}"/>
+        <input placeholder="Tavsif" value="${f.desc||""}"/>
+        <div></div><button data-del class="btn">O'chirish</button>
+      `;
+      const [t,d] = row.querySelectorAll("input");
+      t.oninput = () => cfg.features[i].title = t.value;
+      d.oninput = () => cfg.features[i].desc = d.value;
+      row.querySelector("[data-del]").onclick = ()=>{ cfg.features.splice(i,1); renderLists(); syncRaw(); };
+      ui.featList.appendChild(row);
+    });
+
+    // testimonials
+    ui.testiList.innerHTML = "";
+    (cfg.testimonials||[]).forEach((t,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = `
+        <input placeholder="Ism" value="${t.name||""}"/>
+        <input placeholder="Matn" value="${t.text||""}"/>
+        <div></div><button data-del class="btn">O'chirish</button>
+      `;
+      const [n,tx] = row.querySelectorAll("input");
+      n.oninput = () => cfg.testimonials[i].name = n.value;
+      tx.oninput = () => cfg.testimonials[i].text = tx.value;
+      row.querySelector("[data-del]").onclick = ()=>{ cfg.testimonials.splice(i,1); renderLists(); syncRaw(); };
+      ui.testiList.appendChild(row);
+    });
+
+    // partners
+    ui.partnerList.innerHTML = "";
+    (cfg.partners||[]).forEach((p,i)=>{
+      const row = document.createElement("div");
+      row.className = "list-row";
+      row.innerHTML = `
+        <input placeholder="Logo URL" value="${p.logo||""}"/>
+        <input placeholder="Havola" value="${p.href||""}"/>
+        <div></div><button data-del class="btn">O'chirish</button>
+      `;
+      const [logo,href] = row.querySelectorAll("input");
+      logo.oninput = () => cfg.partners[i].logo = logo.value;
+      href.oninput = () => cfg.partners[i].href = href.value;
+      row.querySelector("[data-del]").onclick = ()=>{ cfg.partners.splice(i,1); renderLists(); syncRaw(); };
+      ui.partnerList.appendChild(row);
+    });
+  }
+
+  function render(){
+    document.documentElement.style.setProperty("--primary", cfg.theme?.primary || "#19b36b");
+    document.documentElement.style.setProperty("--bg", cfg.theme?.graniteBg || "#f3faf6");
+    document.documentElement.style.setProperty("--text", cfg.theme?.text || "#0b1f17");
+
+    ui.cPrimary.value = cfg.theme?.primary || "#19b36b";
+    ui.cGranite.value = cfg.theme?.graniteBg || "#f3faf6";
+    ui.cText.value = cfg.theme?.text || "#0b1f17";
+
+    ui.heroTitle.value = cfg.hero?.title || "";
+    ui.heroSub.value = cfg.hero?.subtitle || "";
+    ui.heroBg.value = cfg.hero?.bg || "";
+    ui.c1Label.value = cfg.hero?.ctaPrimary?.label || "";
+    ui.c1Href.value = cfg.hero?.ctaPrimary?.href || "";
+    ui.c2Label.value = cfg.hero?.ctaSecondary?.label || "";
+    ui.c2Href.value = cfg.hero?.ctaSecondary?.href || "";
+
+    ui.ytId.value = cfg.video?.youtubeId || "";
+    ui.adminEmails.value = (cfg.admins?.emails||[]).join(", ");
+
+    renderLists();
+    syncRaw();
+  }
+
+  function syncRaw(){ ui.raw.value = JSON.stringify(cfg, null, 2); }
+
+  // Handlers
+  ui.cPrimary.oninput = () => (cfg.theme.primary = ui.cPrimary.value, render());
+  ui.cGranite.oninput = () => (cfg.theme.graniteBg = ui.cGranite.value, render());
+  ui.cText.oninput = () => (cfg.theme.text = ui.cText.value, render());
+
+  ui.heroTitle.oninput = () => (cfg.hero.title = ui.heroTitle.value, syncRaw());
+  ui.heroSub.oninput = () => (cfg.hero.subtitle = ui.heroSub.value, syncRaw());
+  ui.heroBg.oninput = () => (cfg.hero.bg = ui.heroBg.value, syncRaw());
+  ui.c1Label.oninput = () => (cfg.hero.ctaPrimary.label = ui.c1Label.value, syncRaw());
+  ui.c1Href.oninput = () => (cfg.hero.ctaPrimary.href = ui.c1Href.value, syncRaw());
+  ui.c2Label.oninput = () => (cfg.hero.ctaSecondary.label = ui.c2Label.value, syncRaw());
+  ui.c2Href.oninput = () => (cfg.hero.ctaSecondary.href = ui.c2Href.value, syncRaw());
+
+  document.getElementById("addBanner").onclick = ()=>{ cfg.banners.push({img:"",title:"",subtitle:"",href:"#",tag:""}); renderLists(); syncRaw(); };
+  document.getElementById("addPromo").onclick = ()=>{ cfg.promo.push({title:"",desc:"",icon:""}); renderLists(); syncRaw(); };
+  document.getElementById("addFeat").onclick = ()=>{ cfg.features.push({title:"",desc:""}); renderLists(); syncRaw(); };
+  document.getElementById("addTesti").onclick = ()=>{ cfg.testimonials.push({name:"",text:""}); renderLists(); syncRaw(); };
+  document.getElementById("addPartner").onclick = ()=>{ cfg.partners.push({logo:"",href:"#"}); renderLists(); syncRaw(); };
+
+  // Raw JSON
+  document.getElementById("applyRaw").onclick = ()=>{ try{ cfg = JSON.parse(ui.raw.value); render(); } catch(e){ alert("JSON xato: "+e.message);} };
+  document.getElementById("refreshRaw").onclick = ()=> syncRaw();
+
+  // Export/Import
+  document.getElementById("exportJson").onclick = ()=>{
+    const blob = new Blob([JSON.stringify(cfg, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "indexadmin.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  document.getElementById("importJson").onchange = async (e)=>{
+    const f = e.target.files[0]; if (!f) return;
+    try { const txt = await f.text(); cfg = JSON.parse(txt); render(); } catch(e){ alert("JSON xato: "+e.message); }
+    e.target.value = "";
+  };
+
+  // Auth and save
+  document.getElementById("loginBtn").onclick = async ()=> { await signInWithPopup(auth, new GoogleAuthProvider()); };
+  document.getElementById("logoutBtn").onclick = async ()=> { await signOut(auth); };
+  document.getElementById("saveFirestore").onclick = async ()=>{
+    try{
+      await setDoc(doc(db, "meta", "index_page"), cfg, {merge:false});
+      alert("Firestore-ga saqlandi ✅");
+    }catch(e){ alert("Xato: "+e.message); }
+  };
+
+  onAuthStateChanged(auth, async (user)=>{
+    cfg = await loadConfig();
+    if (!cfg) cfg = {theme:{}, hero:{ctaPrimary:{}, ctaSecondary:{}}, banners:[], promo:[], features:[], testimonials:[], partners:[], video:{}, admins:{emails:[]}};
+    render();
+    if (user){
+      ui.authInfo.textContent = user.email || user.uid;
+      document.getElementById("loginBtn").style.display="none";
+      document.getElementById("logoutBtn").style.display="inline-block";
+      document.getElementById("saveFirestore").style.display = isAdmin(user, cfg) ? "inline-block" : "none";
+    } else {
+      ui.authInfo.textContent = "Kirmagansiz";
+      document.getElementById("loginBtn").style.display="inline-block";
+      document.getElementById("logoutBtn").style.display="none";
+      document.getElementById("saveFirestore").style.display = "none";
+    }
+  });
+</script>
+</body>
+</html>

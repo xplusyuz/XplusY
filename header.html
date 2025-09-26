@@ -1,0 +1,191 @@
+<!-- HEADER FRAGMENT -->
+<style>
+  :root {
+    --primary: #19b36b;
+    --primary-dark: #118654;
+    --accent: #A0EBC5;
+    --text: #0b1f17;
+    --granite-bg: #f2f8f5;
+  }
+  header.xpy-header {
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--granite-bg);
+    border-bottom: 1px solid rgba(0,0,0,.06);
+  }
+  .xpy-container {
+    max-width: 1100px; margin: 0 auto; padding: .8rem 1rem;
+    display:flex; align-items:center; gap:1rem; justify-content:space-between;
+  }
+  .xpy-brand {
+    display:flex; align-items:center; gap:.6rem; text-decoration:none; color:var(--text);
+    font-weight:700; letter-spacing:.2px;
+  }
+  .xpy-logo {
+    width: 42px; height: 42px; border-radius: 12px; 
+    background: radial-gradient(ellipse at 30% 30%, #fff 0%, #dff5ea 45%, #b6ebd2 100%);
+    border: 1px solid rgba(0,0,0,.06);
+    box-shadow: 0 8px 24px rgba(25,179,107,.25), inset 0 0 12px rgba(25,179,107,.35);
+    display:grid; place-items:center; font-size:26px; color:var(--primary-dark);
+  }
+  .xpy-nav a {
+    color: var(--text); text-decoration:none; padding:.6rem .8rem; border-radius:12px;
+  }
+  .xpy-nav a:hover { background: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.06);}
+  .xpy-auth {
+    display:flex; align-items:center; gap:.6rem;
+  }
+  .xpy-btn {
+    border:1px solid rgba(0,0,0,.08); padding:.55rem .85rem; border-radius:12px; background:#fff; cursor:pointer;
+  }
+  .xpy-btn.primary { background: var(--primary); color:#fff; border:none; }
+  .xpy-profile-pill {
+    font-size:.9rem; padding:.45rem .7rem; border-radius:999px; background:#fff;
+    border:1px solid rgba(0,0,0,.08); color:var(--text);
+    max-width: 52vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  @media (max-width: 720px) {
+    .xpy-nav { display:none; }
+  }
+</style>
+
+<header class="xpy-header" data-xpy="header">
+  <div class="xpy-container">
+    <a class="xpy-brand" href="/" id="xpyBrand">
+      <div class="xpy-logo">π</div>
+      <div>
+        <div id="xpyLogoText">π XplusY</div>
+        <small style="opacity:.7" id="xpyLogoSub">MathCenter</small>
+      </div>
+    </a>
+    <nav class="xpy-nav" id="xpyMenu"></nav>
+    <div class="xpy-auth">
+      <span class="xpy-profile-pill" id="xpyProfilePill" title="Profil"></span>
+      <button class="xpy-btn" id="xpyLoginBtn">Google bilan kirish</button>
+      <button class="xpy-btn" id="xpyLogoutBtn" style="display:none">Chiqish</button>
+      <a class="xpy-btn primary" id="xpyAdminBtn" href="headerfooteradmin.html" style="display:none">Admin</a>
+    </div>
+  </div>
+</header>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.firebasestorage.app", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const els = {
+    menu: document.getElementById("xpyMenu"),
+    pill: document.getElementById("xpyProfilePill"),
+    login: document.getElementById("xpyLoginBtn"),
+    logout: document.getElementById("xpyLogoutBtn"),
+    admin: document.getElementById("xpyAdminBtn"),
+    logoText: document.getElementById("xpyLogoText"),
+    logoSub: document.getElementById("xpyLogoSub"),
+    brand: document.getElementById("xpyBrand"),
+  };
+
+  let configCache = null;
+
+  async function loadConfig() {
+    try {
+      const ref = doc(db, "meta", "header_footer");
+      const snap = await getDoc(ref);
+      if (snap.exists()) return snap.data();
+    } catch (e) { console.warn("Firestore config not found", e); }
+    try {
+      const resp = await fetch("headerfooteradmin.json", { cache: "no-store" });
+      if (resp.ok) return await resp.json();
+    } catch (e) { console.warn("Local JSON load error", e); }
+    return {"theme": {"primary": "#19b36b", "primaryDark": "#118654", "accent": "#A0EBC5", "text": "#0b1f17", "graniteBg": "#f2f8f5"}, "brand": {"logoText": "\u03c0 XplusY", "logoSubtitle": "MathCenter", "logoHref": "/"}, "menu": [{"title": "Bosh sahifa", "href": "index.html", "icon": "home"}, {"title": "Testlar", "href": "tests.html", "icon": "check-square"}, {"title": "Kurslar", "href": "courses.html", "icon": "book-open"}, {"title": "Simulyator", "href": "simulators.html", "icon": "cpu"}, {"title": "Natijalar", "href": "results.html", "icon": "bar-chart-2"}, {"title": "Profil", "href": "profile.html", "icon": "user"}], "auth": {"enabled": true, "requireProfileComplete": true}, "profileHeader": {"show": true, "format": "Salom, {name}! ID: {id} \u2022 Balans: {balans} \u2022 Ball: {ball}"}, "admins": {"uids": ["1000001", "1000002"], "emails": ["admin@xplusy.uz"]}, "footer": {"links": [{"title": "Yordam", "href": "help.html"}, {"title": "Qoidalar", "href": "rules.html"}, {"title": "Aloqa", "href": "contact.html"}], "copyright": "\u00a9 2025 XplusY MathCenter"}};
+  }
+
+  function renderMenu(menu) {
+    els.menu.innerHTML = "";
+    (menu || []).forEach(item => {
+      const a = document.createElement("a");
+      a.href = item.href; a.textContent = item.title;
+      els.menu.appendChild(a);
+    });
+  }
+
+  function isAdmin(user, cfg) {
+    if (!user || !cfg?.admins) return false;
+    const e = (user.email||"").toLowerCase();
+    if ((cfg.admins.emails||[]).map(x=>x.toLowerCase()).includes(e)) return true;
+    return false;
+  }
+
+  async function ensureUserDoc(user) {
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        name: user.displayName || "Foydalanuvchi",
+        id: Math.floor(1000 + Math.random()*9000),
+        balans: 0,
+        ball: 0,
+        email: user.email || null,
+        createdAt: Date.now()
+      });
+    }
+    const data = (await getDoc(ref)).data();
+    return data;
+  }
+
+  function applyBrand(cfg) {
+    if (!cfg?.brand) return;
+    els.logoText.textContent = cfg.brand.logoText || "π XplusY";
+    els.logoSub.textContent = cfg.brand.logoSubtitle || "MathCenter";
+    if (cfg.brand.logoHref) els.brand.href = cfg.brand.logoHref;
+    if (cfg.theme) {
+      const r = document.documentElement;
+      r.style.setProperty("--primary", cfg.theme.primary || getComputedStyle(r).getPropertyValue("--primary"));
+      r.style.setProperty("--primary-dark", cfg.theme.primaryDark || getComputedStyle(r).getPropertyValue("--primary-dark"));
+      r.style.setProperty("--accent", cfg.theme.accent || getComputedStyle(r).getPropertyValue("--accent"));
+      r.style.setProperty("--text", cfg.theme.text || getComputedStyle(r).getPropertyValue("--text"));
+      r.style.setProperty("--granite-bg", cfg.theme.graniteBg || getComputedStyle(r).getPropertyValue("--granite-bg"));
+    }
+  }
+
+  function setSignedOutUI() {
+    els.pill.textContent = "";
+    els.login.style.display = "inline-block";
+    els.logout.style.display = "none";
+    els.admin.style.display = "none";
+  }
+
+  function setSignedInUI(profile, cfg, user) {
+    const fmt = (cfg?.profileHeader?.format) || "Salom, {name}! ID: {id} • Balans: {balans} • Ball: {ball}";
+    const txt = fmt
+      .replace("{name}", profile.name)
+      .replace("{id}", profile.id)
+      .replace("{balans}", profile.balans)
+      .replace("{ball}", profile.ball);
+    els.pill.textContent = txt;
+    els.login.style.display = "none";
+    els.logout.style.display = "inline-block";
+    els.admin.style.display = isAdmin(user, cfg) ? "inline-block" : "none";
+  }
+
+  els.login.addEventListener("click", async () => {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  });
+  els.logout.addEventListener("click", async () => signOut(auth));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!configCache) configCache = await loadConfig();
+    applyBrand(configCache);
+    renderMenu(configCache.menu);
+    if (user) {
+      const profile = await ensureUserDoc(user);
+      setSignedInUI(profile, configCache, user);
+    } else {
+      setSignedOutUI();
+    }
+  });
+</script>
