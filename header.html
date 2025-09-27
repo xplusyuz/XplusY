@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MathCenter Header — Firebase (Prod)</title>
 
-  <!-- Favicon: 3D/granit logo (inline SVG) -->
+  <!-- Favicon (logo bilan bir xil) -->
   <link rel="icon" type="image/svg+xml"
     href='data:image/svg+xml;utf8,
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
@@ -98,9 +98,9 @@
     .dd-sep{height:1px;background:var(--gray-200);margin:4px 0}
     .dd-danger{color:#b91c1c}
 
-    /* Mobile controls (global defaults) */
+    /* Mobile defaults (desktopda yashirin) */
     .mobileBtn{display:none;background:none;border:0;font-size:22px;padding:8px;border-radius:12px}
-    .navOverlay{display:none}                 /* desktopda ko‘rinmaydi */
+    .navOverlay{display:none}
     .navOverlay.open{display:block}
     .mnav ul{list-style:none;margin:0;padding:10px}
     .mnav a{display:flex;gap:10px;align-items:center;background:var(--gray-50);margin:6px 0;padding:12px 14px;border-radius:12px;font-weight:600;color:var(--text);text-decoration:none}
@@ -128,7 +128,7 @@
       .mc-top__left .mini{font-size:12px;gap:6px}
       .mc-top__right{gap:10px}
       .nav{display:none} /* desktop nav yashirin */
-      /* Off-canvas panel */
+      /* Off-canvas */
       .navOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);z-index:70}
       .navPanel{position:absolute;left:0;top:0;height:100%;width:320px;background:#fff;box-shadow:0 0 28px rgba(0,0,0,.18);display:flex;flex-direction:column}
       .navPanel__head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--gray-200)}
@@ -289,37 +289,32 @@
     </div>
   </div>
 
-  <!-- Firebase v10 modular + guards -->
+  <!-- Firebase v10 modular (importlar yuqorida, init guard + IIFE) -->
   <script type="module">
-    // Bir martalik init guard (dinamik include bo'lsa ham dublikat bo'lmasin)
-    if (!window.__MC_HEADER_INIT) {
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
+      setPersistence, browserLocalPersistence
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain:"xplusy-760fa.firebaseapp.com",
+      projectId:"xplusy-760fa",
+      storageBucket:"xplusy-760fa.firebasestorage.app",
+      messagingSenderId:"992512966017",
+      appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId:"G-459PLJ7P7L"
+    };
+
+    (async () => {
+      if (window.__MC_HEADER_INIT) return;
       window.__MC_HEADER_INIT = true;
 
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-      import {
-        getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
-        setPersistence, browserLocalPersistence
-      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-      import {
-        getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, serverTimestamp
-      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-      const firebaseConfig = {
-        apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-        authDomain:"xplusy-760fa.firebaseapp.com",
-        projectId:"xplusy-760fa",
-        storageBucket:"xplusy-760fa.firebasestorage.app",
-        messagingSenderId:"992512966017",
-        appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",
-        measurementId:"G-459PLJ7P7L"
-      };
-
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      await setPersistence(auth, browserLocalPersistence);
-
-      // DOM refs
+      // DOM
       const loginBtn = document.getElementById('loginBtn');
       const userBtn  = document.getElementById('userBtn');
       const dropdown = document.getElementById('userDropdown');
@@ -334,24 +329,26 @@
       const ddPoints  = document.getElementById('ddPoints');
       const ddId      = document.getElementById('ddId');
       const ddAvatar  = document.getElementById('ddAvatar');
-
       const openProfileLink = document.getElementById('openProfile');
       const logoutLink = document.getElementById('logoutLink');
-
       const navOverlay = document.getElementById('navOverlay');
       const mobileBtn  = document.getElementById('mobileBtn');
       const closeNav   = document.getElementById('closeNav');
-
       const profileModal = document.getElementById('profileModal');
       const closeProfile  = document.getElementById('closeProfile');
-
       const regionSel = document.getElementById('region');
       const districtSel = document.getElementById('district');
 
+      // Firebase
+      const app  = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db   = getFirestore(app);
+      await setPersistence(auth, browserLocalPersistence);
+
       // Mobile menu
-      mobileBtn.addEventListener('click',()=>{ navOverlay.classList.add('open'); navOverlay.setAttribute('aria-hidden','false'); });
-      closeNav.addEventListener('click',()=>{ navOverlay.classList.remove('open'); navOverlay.setAttribute('aria-hidden','true'); });
-      navOverlay.addEventListener('click',e=>{ if(e.target===navOverlay){ closeNav.click(); } });
+      mobileBtn?.addEventListener('click', ()=>{ navOverlay.classList.add('open'); navOverlay.setAttribute('aria-hidden','false'); });
+      closeNav?.addEventListener('click', ()=>{ navOverlay.classList.remove('open'); navOverlay.setAttribute('aria-hidden','true'); });
+      navOverlay?.addEventListener('click', e=>{ if(e.target===navOverlay) closeNav.click(); });
 
       // Dropdown
       function toggleDropdown(force){
@@ -359,11 +356,8 @@
         dropdown.classList.toggle('open', open);
         userBtn.setAttribute('aria-expanded', open? 'true':'false');
       }
-      userBtn.addEventListener('click', (e)=>{
-        if(e.target.closest('.dropdown')) return;
-        toggleDropdown();
-      });
-      document.addEventListener('click',(e)=>{ if(!userBtn.contains(e.target)) toggleDropdown(false); });
+      userBtn?.addEventListener('click', e=>{ if(e.target.closest('.dropdown')) return; toggleDropdown(); });
+      document.addEventListener('click', e=>{ if(!userBtn?.contains(e.target)) toggleDropdown(false); });
 
       // Region → district
       const districtsByRegion = {
@@ -386,25 +380,26 @@
         if(r && districtsByRegion[r]) districtsByRegion[r].forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;districtSel.appendChild(o);});
       });
 
-      // Modal helpers
+      // Modal
       const openModal = ()=> profileModal.style.display='flex';
       const closeModal = ()=> profileModal.style.display='none';
-      openProfileLink?.addEventListener('click',e=>{e.preventDefault(); openModal(); toggleDropdown(false);});
-      closeProfile?.addEventListener('click',closeModal);
-      window.addEventListener('click',e=>{ if(e.target===profileModal) closeModal(); });
+      openProfileLink?.addEventListener('click', e=>{ e.preventDefault(); openModal(); toggleDropdown(false); });
+      closeProfile?.addEventListener('click', closeModal);
+      window.addEventListener('click', e=>{ if(e.target===profileModal) closeModal(); });
 
-      // Auth guards
+      // Auth (guard)
       const provider = new GoogleAuthProvider();
       let __SIGNIN_BUSY = false;
-      loginBtn.addEventListener('click', async ()=>{
+      loginBtn?.addEventListener('click', async ()=>{
         if (__SIGNIN_BUSY) return;
         __SIGNIN_BUSY = true;
         try { await signInWithPopup(auth, provider); }
-        catch (e) { console.error(e); alert("Kirishda xatolik: "+(e?.message||"noma'lum")); }
+        catch(e){ console.error(e); alert("Kirishda xatolik: " + (e?.message || "noma'lum")); }
         finally { __SIGNIN_BUSY = false; }
       });
-      logoutLink.addEventListener('click', async (e)=>{ e.preventDefault(); await signOut(auth); });
+      logoutLink?.addEventListener('click', async (e)=>{ e.preventDefault(); await signOut(auth); });
 
+      // Real-time user
       let unsubUser = null;
       onAuthStateChanged(auth, async (user)=>{
         if(!user){
@@ -456,7 +451,7 @@
         });
       });
 
-      // Profile save
+      // Profil saqlash
       document.getElementById('profileForm')?.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const user = auth.currentUser; if(!user) return alert("Avval tizimga kiring.");
@@ -465,7 +460,7 @@
           lastName:  document.getElementById('lastName').value.trim(),
           middleName:document.getElementById('middleName').value.trim(),
           birthDate: document.getElementById('birthDate').value||null,
-          region: regionSel.value||null, district: districtSel.value||null,
+          region: regionSel?.value||null, district: districtSel?.value||null,
           school: document.getElementById('school').value.trim()||null,
           role: document.getElementById('role').value||'user',
           updatedAt: serverTimestamp()
@@ -474,13 +469,13 @@
         closeModal();
       });
 
-      // Active menu (desktop & mobile)
+      // Active menu
       const path = location.pathname.replace(/\/index\.html?$/,'/');
       document.querySelectorAll('.nav a, .mnav a').forEach(a=>{
         const clean = (a.getAttribute('href')||'').replace(/\/index\.html?$/,'/');
         a.parentElement?.classList.toggle('active', clean===path);
       });
-    }
+    })();
   </script>
 </body>
 </html>
