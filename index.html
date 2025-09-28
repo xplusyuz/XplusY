@@ -394,11 +394,7 @@
       <button id="bnNext" aria-label="Keyingi" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#fff;border-radius:50%;width:40px;height:40px;box-shadow:0 6px 16px rgba(0,0,0,.2)">›</button>
     </section>
 
-    <nav style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0">
-      <button class="gTab active" data-sec="tests">Testlar</button>
-      <button class="gTab" data-sec="courses">Kurslar</button>
-      <button class="gTab" data-sec="simulators">Simulyatorlar</button>
-    </nav>
+    
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 12px">
       <input id="q" placeholder="Qidiruv…" style="padding:10px;border:1px solid #e5e7eb;border-radius:999px"/>
@@ -831,7 +827,23 @@
         });
       }
 
-      function statusOf(it){
+      
+      function colorForTag(tag){
+        const t = String(tag||'').toLowerCase();
+        // Default palette
+        const map = {
+          'algebra': {bg:'#eff6ff', bd:'#bfdbfe', tx:'#1e40af'},
+          'geometriya': {bg:'#ecfdf5', bd:'#a7f3d0', tx:'#065f46'},
+          'fizika': {bg:'#fff7ed', bd:'#fed7aa', tx:'#9a3412'},
+          'kimyo': {bg:'#fdf2f8', bd:'#fbcfe8', tx:'#9d174d'},
+          'trigonometriya': {bg:'#eef2ff', bd:'#c7d2fe', tx:'#3730a3'},
+          'kombinatorika': {bg:'#f0f9ff', bd:'#bae6fd', tx:'#075985'},
+          'kasr': {bg:'#f5f3ff', bd:'#ddd6fe', tx:'#5b21b6'},
+          'test': {bg:'#f0fdf4', bd:'#bbf7d0', tx:'#166534'}
+        };
+        return map[t] || {bg:'#f8fafc', bd:'#e2e8f0', tx:'#334155'};
+      }
+function statusOf(it){
         if(it.mode !== 'online') return {label:null, state:'static'};
         const now = Date.now();
         const s = it.startAt? Date.parse(it.startAt): null;
@@ -923,10 +935,23 @@
         document.getElementById('dtHtml').innerHTML = it.detailsHtml || '<p>Ma’lumot yo‘q.</p>';
         const meta = document.getElementById('dtMeta'); meta.innerHTML='';
         const svgTag = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7a2 2 0 0 1 2-2h7l9 7-9 7H5a2 2 0 0 1-2-2V7z" stroke="#64748b"/></svg>';
-        (it.tags||[]).forEach(t=>{ const b=document.createElement('span'); b.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#fff'; b.innerHTML=svgTag+'<span>'+t+'</span>'; meta.appendChild(b); });
+        (it.tags||[]).forEach(t=>{ const c=colorForTag(t); const b=document.createElement('span'); b.style.cssText=`display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${c.bd};border-radius:999px;font-size:12px;background:${c.bg};color:${c.tx}`; b.innerHTML=svgTag(c)+`<span>${t}</span>`; meta.appendChild(b); });
         if(it.mode){ const b=document.createElement('span'); b.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#f0fdf4;color:#14532d'; b.textContent=it.mode; meta.appendChild(b); }
         if(it.prize && isBest){ const b=document.createElement('span'); b.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#fff'; b.textContent='🏆 '+it.prize; meta.appendChild(b); }
         const modal = document.getElementById('detailModal');
+        const calendar = document.getElementById('dtCalendar'); const shareTG = document.getElementById('dtShareTG'); const copyBtn = document.getElementById('dtCopyLink');
+        const absUrl = (it.link && it.link.startsWith('http')) ? it.link : (location.origin + (it.link||'#'));
+        shareTG.href = `https://t.me/share/url?url=${encodeURIComponent(absUrl)}&text=${encodeURIComponent(it.title||'')}`;
+        shareTG.style.display='inline-flex';
+        copyBtn.style.display='inline-flex'; copyBtn.onclick = ()=>{ navigator.clipboard.writeText(absUrl).then(()=>{ copyBtn.textContent='Nusxalandi ✓'; setTimeout(()=> copyBtn.textContent='Linkni nusxalash', 1500); }); };
+        // Calendar button (only if start/end)
+        if(it.startAt && it.endAt){
+          const fmt=(d)=>{ const z=new Date(d).toISOString().replace(/[-:]/g,'').replace('.000',''); return z; };
+          const start=fmt(it.startAt), end=fmt(it.endAt);
+          const calUrl=`https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(it.title||'')}&dates=${start}/${end}&details=${encodeURIComponent((it.detailsHtml||'').replace(/<[^>]+>/g,''))}&location=${encodeURIComponent(absUrl)}`;
+          calendar.href = calUrl; calendar.style.display='inline-flex';
+        } else { calendar.style.display='none'; }
+
         const prim = document.getElementById('dtPrimary'); prim.href = it.link || '#';
         const sec = document.getElementById('dtSecondary'); sec.href = it.link || '#';
         const timerEl = document.getElementById('dtTimer'); timerEl.style.display='none';
@@ -941,10 +966,7 @@
         window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; }, {once:true});
       }
 
-      document.querySelectorAll('.gTab').forEach(t=> t.addEventListener('click', ()=>{
-        document.querySelectorAll('.gTab').forEach(x=>x.classList.remove('active'));
-        t.classList.add('active'); section=t.dataset.sec; activeTags.clear(); page=1; buildTags(); renderGrid();
-      }));
+      // banner ostidagi .gTab tugmalari olib tashlandi
       document.getElementById('q').addEventListener('input', ()=>{ page=1; renderGrid(); });
       document.getElementById('pgPrev').addEventListener('click', ()=>{ page=Math.max(1,page-1); renderGrid(); });
       document.getElementById('pgNext').addEventListener('click', ()=>{ page=page+1; renderGrid(); });
@@ -968,10 +990,13 @@
           <div id="dtMeta" style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px 0"></div>
           <div id="dtHtml" style="line-height:1.6;color:#374151"></div>
           <div id="dtTimer" style="margin-top:12px;font-weight:600;color:#14532d;display:none"></div><div id="dtProgressWrap" style="display:none;margin-top:10px;background:#f3f4f6;border-radius:999px;height:10px;overflow:hidden"><div id="dtProgress" style="height:100%;width:0%"></div></div>
-          <div style="display:flex;gap:10px;margin-top:14px">
-            <a id="dtPrimary" href="#" class="btn-primary" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700">Boshlash</a>
-            <a id="dtSecondary" href="#" class="btn-ghost" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb">Batafsil</a>
-          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+  <a id="dtPrimary" href="#" class="btn-primary" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700">Boshlash</a>
+  <a id="dtSecondary" href="#" class="btn-ghost" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb">Batafsil</a>
+  <a id="dtCalendar" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">📅 Kalendar</a>
+  <a id="dtShareTG" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">Telegram</a>
+  <button id="dtCopyLink" type="button" style="padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;display:none">Linkni nusxalash</button>
+</div>
         </div>
       </div>
     </div>
