@@ -35,6 +35,8 @@
       --shadow:0 10px 30px rgba(0,0,0,.08);--tr:all .25s cubic-bezier(.25,.8,.25,1);--radius:14px
     }
     *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff}
+
+    /* Dropdown kesilmasin */
     .mc-header{box-shadow:var(--shadow);border-radius:var(--radius);overflow:visible;border:1px solid var(--gray-200);background:#fff;position:relative;z-index:20}
     .container{max-width:1280px;margin:0 auto;padding:0 16px}
     .row{display:flex;align-items:center;justify-content:space-between}
@@ -128,7 +130,7 @@
     .mnav a{display:flex;gap:10px;align-items:center;background:var(--gray-50);margin:6px 0;padding:12px 14px;border-radius:12px;font-weight:600;color:#111;text-decoration:none}
     .mnav a:hover{background:var(--primary-light);color:#0b3d2c}
 
-    /* Modal (view/edit + promo + admin) */
+    /* Modal (view/edit + promo) */
     .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);z-index:120;align-items:center;justify-content:center}
     .card{width:92%;max-width:680px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 20px 44px rgba(0,0,0,.22)}
     .card__head{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:18px 22px;display:flex;align-items:center;justify-content:space-between}
@@ -142,6 +144,7 @@
     input:focus,select:focus{outline:none;box-shadow:0 0 0 3px rgba(46,139,87,.15);border-color:var(--primary)}
     .submit{width:100%}
 
+    /* Promo modal compact */
     .sheet{background:#fff;border-radius:16px;max-width:520px;width:92%;overflow:hidden;box-shadow:var(--shadow)}
     .sheet__body{padding:16px}
 
@@ -159,13 +162,13 @@
       .closeNav{background:#fff;border:1px solid var(--gray-200);width:36px;height:36px;border-radius:10px;font-size:16px;cursor:pointer}
       .mobileBtn{display:block}
     }
-
-    /* Card hover */
+  
+    /* Card hover enhancements */
     .mc-card{ transition: transform .18s ease, box-shadow .18s ease; }
     .mc-card:hover{ transform: translateY(-4px); box-shadow: 0 16px 36px rgba(0,0,0,.12); }
     .btn-primary, .btn-ghost{ transition: transform .18s ease, box-shadow .18s ease; }
     .btn-primary:hover, .btn-ghost:hover{ transform: translateY(-2px); }
-  </style>
+    </style>
 </head>
 <body>
   <header class="mc-header" id="mcHeader">
@@ -208,11 +211,6 @@
           </nav>
 
           <div class="auth">
-            <!-- ADMIN BUTTON (faqat adminlarga ko‘rinadi) -->
-            <button id="adminBtn" class="btn btn--ghost" style="display:none">
-              <i class="fa-solid fa-shield-halved"></i> Admin
-            </button>
-
             <button id="openPromo" class="btn btn--promo" title="Promo kod faollashtirish"><i class="fa-solid fa-gift"></i> Promo kod</button>
             <button id="loginBtn" class="btn btn--primary"><i class="fab fa-google"></i> Google orqali kirish</button>
 
@@ -377,7 +375,7 @@
     <div class="sheet">
       <div class="sheet__body">
         <h3 style="margin:0 0 6px;font-weight:800"><i class="fa-solid fa-gift"></i> Promo kod</h3>
-        <p style="color:#555;margin:6px 0 12px">Chegirma yoki balans to‘ldirish uchun promokodingizni kiriting:</p>
+        <p style="color:#555;margin:6px 0 12px">Chegirma uchun promokodingizni kiriting:</p>
         <div style="display:flex;gap:10px;align-items:center">
           <input id="promoInput" placeholder="Masalan: KUZ25" style="flex:1;padding:10px;border:1px solid var(--gray-200);border-radius:10px"/>
           <button id="checkPromo" class="btn btn--primary">Tekshirish</button>
@@ -396,6 +394,8 @@
       <button id="bnNext" aria-label="Keyingi" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#fff;border-radius:50%;width:40px;height:40px;box-shadow:0 6px 16px rgba(0,0,0,.2)">›</button>
     </section>
 
+    
+
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 12px">
       <input id="q" placeholder="Qidiruv…" style="padding:10px;border:1px solid #e5e7eb;border-radius:999px"/>
       <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
@@ -410,7 +410,7 @@
     </div>
   </main>
 
-  <!-- Firebase + UI (HEADER LOGIKA + PROMO + CONTENT + ADMIN) -->
+  <!-- Firebase + UI (HEADER LOGIKA + PROMO + CONTENT RENDERER) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
@@ -496,24 +496,6 @@
       const promoInput = $('promoInput');
       const promoResult = $('promoResult');
 
-      // Admin UI
-      const adminBtn = $('adminBtn');
-      const adminModal = $('adminModal');
-      const closeAdmin = $('closeAdmin');
-      const tabPromo = $('tabPromo');
-      const tabUsers = $('tabUsers');
-      const adminPromoSec = $('adminPromoSec');
-      const adminUsersSec = $('adminUsersSec');
-      // Promo form fields (admin)
-      const pCode = $('pCode'), pAmount = $('pAmount'), pFrom = $('pFrom'), pTo = $('pTo'), pMax = $('pMax');
-      const promoForm = $('promoForm'), promoCreateMsg = $('promoCreateMsg');
-      // Users balance (admin)
-      const uQuery = $('uQuery'), uFind = $('uFind'), uCard = $('uCard');
-      const uName = $('uName'), uId = $('uId'), uBal = $('uBal');
-      const uNewBalance = $('uNewBalance'), uDelta = $('uDelta'), uSave = $('uSave');
-      const uMsg = $('uMsg');
-      let __foundUserRef = null;
-
       // Firebase
       const app  = initializeApp(firebaseConfig);
       const auth = getAuth(app);
@@ -590,13 +572,12 @@
       // Real-time user
       let unsubUser = null;
       onAuthStateChanged(auth, async (user)=>{
-        window.__currentUser = user || null; // promo/admin uchun ham kerak
+        window.__currentUser = user || null; // promo uchun ham kerak
         if(!user){
           if (loginBtn) loginBtn.style.display='inline-flex';
           if (userBtn) userBtn.style.display='none';
           if (unsubUser) unsubUser(); unsubUser=null;
           dropdown.classList.remove('open');
-          if (adminBtn) adminBtn.style.display='none';
         } else {
           if (loginBtn) loginBtn.style.display='none';
           if (userBtn) userBtn.style.display='flex';
@@ -686,11 +667,6 @@
               if (regionSel){ const ev = new Event('change'); regionSel.dispatchEvent(ev); }
               districtSel.value = d.district || '';
             }
-
-            // ==== Admin visibility ====
-            const ADMIN_IDS = new Set([1001,1002,1003]);
-            const isAdmin = ADMIN_IDS.has(d.numericId);
-            if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-flex' : 'none';
           });
         }
       });
@@ -725,7 +701,7 @@
         if (a.parentElement) a.parentElement.classList.toggle('active', clean===path);
       });
 
-      /* ================= PROMO LOGIKASI (Firestore) ================= */
+      /* ================= PROMO LOGIKASI ================= */
       function showPromoMsg(text, type='ok'){
         if (!promoResult) return; 
         promoResult.textContent = text;
@@ -738,81 +714,48 @@
       if (closePromo) closePromo.addEventListener('click', closePromoModal);
       window.addEventListener('click', e=>{ if(e.target===promoModal) closePromoModal(); });
 
-      // Firestore asosida redeem: promo_codes/{CODE} -> checks -> usage/claims -> user.balance ++
       if (checkPromo) checkPromo.addEventListener('click', async ()=>{
         const user = window.__currentUser;
         if(!user){ alert('Promo kodni faollashtirish uchun tizimga kiring.'); return; }
 
         const code=(promoInput.value||'').trim().toUpperCase();
-        if(!code) return;
-
         try{
-          // 1) promo_codes
-          const codeRef = doc(db, 'promo_codes', code);
-          const codeSnap = await getDoc(codeRef);
-          if (!codeSnap.exists()) {
-            showPromoMsg('Bunday promo kod topilmadi.','error');
-            return;
+          const conf = window.__PROMO_CONF || { list: [] };
+          if (!window.__PROMO_CONF_LOADED) {
+            try { const r = await fetch('admin.json?_=' + Date.now()); const j = await r.json(); conf.list = (j?.promo_codes)||[]; window.__PROMO_CONF = conf; window.__PROMO_CONF_LOADED = true; }
+            catch(e){ /* admin.json bo'lmasa ham mayli */ }
           }
-          const item = codeSnap.data();
-          const now = Date.now();
-          const from = item.validFrom ? Date.parse(item.validFrom) : 0;
-          const to   = item.validTo   ? Date.parse(item.validTo)   : 0;
-          if ((from && now < from) || (to && now > to)) {
-            showPromoMsg('Promo kod muddati yaroqsiz.','error');
-            return;
-          }
+          const item=(conf.list||[]).find(p=>String(p.code).toUpperCase()===code);
+          if(!item){ showPromoMsg('Bunday promo kod topilmadi.','error'); return; }
 
-          if (item.type !== 'balance_topup') {
-            showPromoMsg('Bu kod qo‘llab-quvvatlanmaydi.','error');
-            return;
-          }
+          const now=Date.now(), from=Date.parse(item.validFrom||0)||0, to=Date.parse(item.validTo||0)||0;
+          if((from && now<from) || (to && now>to)){ showPromoMsg('Promo kod muddati yaroqsiz.','error'); return; }
 
-          const claimId = `${code}_${user.uid}`;
-          const claimRef = doc(db, 'promo_claims', claimId);
-          const usageRef = doc(db, 'promo_usage', code);
-          const userRef  = doc(db, 'users', user.uid);
+          const q = query(collection(db,'promo_claims'), where('uid','==',user.uid), where('code','==',code));
+          const qSnap = await getDocs(q);
+          if(!qSnap.empty){ showPromoMsg('Siz bu promo koddan allaqachon foydalandingiz.','error'); return; }
 
+          const usageRef = doc(db,'promo_usage', code);
           await runTransaction(db, async (tx)=>{
-            // foydalanuvchi allaqachon ishlatganmi?
-            const cSnap = await tx.get(claimRef);
-            if (cSnap.exists()) throw new Error('already_claimed');
-
-            // limit tekshirish
-            const uSnap = await tx.get(usageRef);
-            let used = (uSnap.exists() ? (uSnap.data().used || 0) : 0);
+            const docSnap = await tx.get(usageRef);
+            let used = 0;
+            if (docSnap.exists()) used = docSnap.data().used || 0;
             const maxUse = item.maxUse || 0;
             if (maxUse && used >= maxUse) throw new Error('limit_reached');
-
-            // user balance
-            const usrSnap = await tx.get(userRef);
-            const curBal = usrSnap.exists() ? (usrSnap.data().balance ?? 0) : 0;
-            const nextBal = curBal + (item.amount || 0);
-
-            // yozishlar
             tx.set(usageRef, { code, used: used+1, updatedAt: serverTimestamp() }, { merge:true });
-            tx.set(claimRef, {
-              code, uid: user.uid, email: user.email || null,
-              displayName: user.displayName || null, at: serverTimestamp(), amount: item.amount || 0
-            });
-            tx.update(userRef, { balance: nextBal, updatedAt: serverTimestamp() });
-
-            // log
-            const logsRef = collection(db, 'balance_logs');
-            tx.set(doc(logsRef), {
-              uid: user.uid, before: curBal, after: nextBal, delta: (item.amount || 0),
-              at: serverTimestamp(), by: user.uid, reason: `promo:${code}`
-            });
           });
 
-          showPromoMsg(`Tasdiqlandi: +${item.amount||0} so‘m balansga qo‘shildi. Kod: ${item.code || code}`,'ok');
+          await addDoc(collection(db,'promo_claims'), {
+            code, uid: user.uid, email: user.email || null, displayName: user.displayName || null, at: serverTimestamp()
+          });
+
+          showPromoMsg(`Tasdiqlandi: ${item.discountPercent}% chegirma. Kod: ${item.code}`,'ok');
         }catch(e){
-          const msg = String(e.message || e);
-          if (msg.includes('already_claimed')) showPromoMsg('Siz bu promo koddan allaqachon foydalangansiz.','error');
-          else if (msg.includes('limit_reached')) showPromoMsg('Promo kod ishlatib bo‘lingan.','error');
+          if(String(e).includes('limit_reached')) showPromoMsg('Promo kod ishlatib bo‘lingan.','error');
           else { console.error(e); showPromoMsg('Server xatosi. Qayta urining.','error'); }
         }
       });
+      /* ================= /PROMO ================= */
 
       /* ======= KONTENT RENDERER (admin.json) ======= */
       const PAGE_SIZE = 18;
@@ -822,6 +765,7 @@
       const pgPrev = document.getElementById('pgPrev');
       const pgNext = document.getElementById('pgNext');
       const pgInfo = document.getElementById('pgInfo');
+      const tabs = document.querySelectorAll('.gTab');
       const bannerTrack = document.getElementById('bannerTrack');
 
       let bnIdx = 0, bnTimer = null;
@@ -848,7 +792,7 @@
           d.style.cssText = 'min-width:100%;display:flex;align-items:center;gap:16px;padding:16px;background:'+ (b.bg||'#0b3d2c') +';color:#fff';
           d.innerHTML = `
             <div style="flex:1">
-              <div id="bnTitle" style="font-size:28px;font-weight:800;line-height:1.1">${b.title||''}</div>
+              <div style="font-size:28px;font-weight:800;line-height:1.1">${b.title||''}</div>
               <div style="opacity:.9;margin-top:6px">${b.subtitle||''}</div>
               ${b.link? `<a href="${b.link}" style="display:inline-block;margin-top:12px;padding:10px 14px;border-radius:10px;background:#fff;color:#0b3d2c;text-decoration:none;font-weight:700">Batafsil</a>`:''}
             </div>
@@ -883,8 +827,10 @@
         });
       }
 
+      
       function colorForTag(tag){
         const t = String(tag||'').toLowerCase();
+        // Default palette
         const map = {
           'algebra': {bg:'#eff6ff', bd:'#bfdbfe', tx:'#1e40af'},
           'geometriya': {bg:'#ecfdf5', bd:'#a7f3d0', tx:'#065f46'},
@@ -897,7 +843,7 @@
         };
         return map[t] || {bg:'#f8fafc', bd:'#e2e8f0', tx:'#334155'};
       }
-      function statusOf(it){
+function statusOf(it){
         if(it.mode !== 'online') return {label:null, state:'static'};
         const now = Date.now();
         const s = it.startAt? Date.parse(it.startAt): null;
@@ -911,11 +857,11 @@
 
       function renderGrid(){
         clearTimers();
-        const queryStr = (q.value||'').toLowerCase().trim();
+        const query = (q.value||'').toLowerCase().trim();
         let items = (section==='home') ? [...(dbData.cards.tests||[]), ...(dbData.cards.courses||[]), ...(dbData.cards.simulators||[])].filter(it=>it.home) : [...(dbData.cards[section]||[])];
         items.sort((a,b)=> (b.best?1:0) - (a.best?1:0));
         if(activeTags.size){ items = items.filter(it => (it.tags||[]).some(t=> activeTags.has(t))); }
-        if(queryStr){ items = items.filter(it => (it.title||'').toLowerCase().includes(queryStr)); }
+        if(query){ items = items.filter(it => (it.title||'').toLowerCase().includes(query)); }
 
         const total = items.length; const pages = Math.max(1, Math.ceil(total / 18));
         page = Math.min(Math.max(1,page), pages);
@@ -931,13 +877,12 @@
             ${it.image? `<img src="${it.image}" alt="" style="width:100%;height:160px;object-fit:cover">`:''}
             <div style="padding:12px">
               <div style="display:flex;gap:6px;align-items:center;justify-content:space-between">
-                <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:8px">${it.title||""}${((section==="tests") || (section==="home" && it.mode))? `<span style="font-size:11px;padding:2px 6px;border:1px solid #e5e7eb;border-radius:999px">${it.mode||''}</span>` : ``}</h3>
+                <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:8px">${it.title||""}${((section==="tests") || (section==="home" && it.mode))? `<span style="font-size:11px;padding:2px 6px;border:1px solid #e5e7eb;border-radius:999px">${it.mode}</span>` : ``}</h3>
                 ${it.best? '<span style="padding:4px 8px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px">BEST</span>':''}
               </div>
               ${(section==='courses'||section==='simulators') 
                   ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">
-                        ${(it.tags||[]).map(t=>{ const c=colorForTag(t); return `<span style='display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid ${c.bd};border-radius:999px;font-size:12px;background:${c.bg};color:${c.tx}'>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7a2 2 0 0 1 2-2h7l9 7-9 7H5a2 2 0 0 1-2-2V7z" stroke="#94a3b8"/></svg><span>${t}</span></span>`}).join('')}
+                        ${(it.tags||[]).map(t=>`<span style='display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#fff'><svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7a2 2 0 0 1 2-2h7l9 7-9 7H5a2 2 0 0 1-2-2V7z" stroke="#94a3b8"/></svg><span>${t}</span></span>`).join('')}
                      </div>`
                   : `<div style="margin:6px 0;color:#555;font-size:12px">${(it.tags||[]).join(' • ')}</div>` }
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
@@ -975,9 +920,9 @@
           return okTag && okQ;
         }).length;
         const totalPages = Math.max(1, Math.ceil(filtered / 18));
-        pgInfo.textContent = `${page}/${totalPages}`;
-        pgPrev.disabled = (page<=1);
-        pgNext.disabled = (page>=totalPages);
+        document.getElementById('pgInfo').textContent = `${page}/${totalPages}`;
+        document.getElementById('pgPrev').disabled = (page<=1);
+        document.getElementById('pgNext').disabled = (page>=totalPages);
       }
 
       function openDetail(it){
@@ -990,7 +935,7 @@
         document.getElementById('dtHtml').innerHTML = it.detailsHtml || '<p>Ma’lumot yo‘q.</p>';
         const meta = document.getElementById('dtMeta'); meta.innerHTML='';
         const svgTag = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7a2 2 0 0 1 2-2h7l9 7-9 7H5a2 2 0 0 1-2-2V7z" stroke="#64748b"/></svg>';
-        (it.tags||[]).forEach(t=>{ const c=colorForTag(t); const b=document.createElement('span'); b.style.cssText=`display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${c.bd};border-radius:999px;font-size:12px;background:${c.bg};color:${c.tx}`; b.innerHTML=svgTag+`<span>${t}</span>`; meta.appendChild(b); });
+        (it.tags||[]).forEach(t=>{ const c=colorForTag(t); const b=document.createElement('span'); b.style.cssText=`display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${c.bd};border-radius:999px;font-size:12px;background:${c.bg};color:${c.tx}`; b.innerHTML=svgTag(c)+`<span>${t}</span>`; meta.appendChild(b); });
         if(it.mode){ const b=document.createElement('span'); b.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#f0fdf4;color:#14532d'; b.textContent=it.mode; meta.appendChild(b); }
         if(it.prize && isBest){ const b=document.createElement('span'); b.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid #e5e7eb;border-radius:999px;font-size:12px;background:#fff'; b.textContent='🏆 '+it.prize; meta.appendChild(b); }
         const modal = document.getElementById('detailModal');
@@ -999,6 +944,7 @@
         shareTG.href = `https://t.me/share/url?url=${encodeURIComponent(absUrl)}&text=${encodeURIComponent(it.title||'')}`;
         shareTG.style.display='inline-flex';
         copyBtn.style.display='inline-flex'; copyBtn.onclick = ()=>{ navigator.clipboard.writeText(absUrl).then(()=>{ copyBtn.textContent='Nusxalandi ✓'; setTimeout(()=> copyBtn.textContent='Linkni nusxalash', 1500); }); };
+        // Calendar button (only if start/end)
         if(it.startAt && it.endAt){
           const fmt=(d)=>{ const z=new Date(d).toISOString().replace(/[-:]/g,'').replace('.000',''); return z; };
           const start=fmt(it.startAt), end=fmt(it.endAt);
@@ -1020,150 +966,31 @@
         window.addEventListener('click', e=>{ if(e.target===modal) modal.style.display='none'; }, {once:true});
       }
 
+      // banner ostidagi .gTab tugmalari olib tashlandi
       document.getElementById('q').addEventListener('input', ()=>{ page=1; renderGrid(); });
       document.getElementById('pgPrev').addEventListener('click', ()=>{ page=Math.max(1,page-1); renderGrid(); });
       document.getElementById('pgNext').addEventListener('click', ()=>{ page=page+1; renderGrid(); });
 
+      // Load and render content
       loadData().then(()=>{ renderBanners(); buildTags(); renderGrid(); const h=document.getElementById('bnTitle'); if(h){ h.textContent='Bosh sahifa'; } });
 
+      // Header menyusini filter sifatida ishlatish
       document.querySelectorAll('#deskNav a[data-sec]').forEach(a=>{
         a.addEventListener('click', (e)=>{
           e.preventDefault();
           const sec = a.getAttribute('data-sec');
+          // home/results bo'lsa, hozircha testsni ko'rsatamiz yoki bo'limga mos kontentni yozamiz
           if(sec==='home'){ section='home'; } 
-          else if(sec==='results'){ section='tests'; }
+          else if(sec==='results'){ section='tests'; /* TODO: results view */ }
           else { section = sec; }
           page=1; activeTags.clear();
           document.querySelectorAll('#deskNav li').forEach(li=> li.classList.remove('active'));
           a.parentElement.classList.add('active');
+          // banner sarlavhasini yangilash (faqat vizual)
           const h = document.getElementById('bnTitle'); if(h){ h.textContent = (section==='home'?'Bosh sahifa': section==='tests'?'Yangi testlar': section==='courses'?'Yangi kurslar': section==='simulators'?'Yangi simulyatorlar':'MathCenter'); }
           buildTags(); renderGrid();
           const gridEl = document.getElementById('grid'); if(gridEl){ window.scrollTo({top: gridEl.offsetTop-80, behavior:'smooth'}); }
         });
-      });
-
-      /* ================= ADMIN MODAL ================= */
-      if (adminBtn) adminBtn.addEventListener('click', ()=>{
-        if (!window.__currentUser) return alert('Avval tizimga kiring.');
-        adminModal.style.display='flex';
-        adminPromoSec.style.display='block';
-        adminUsersSec.style.display='none';
-      });
-      if (closeAdmin) closeAdmin.addEventListener('click', ()=> adminModal.style.display='none');
-      window.addEventListener('click', e=>{ if(e.target===adminModal) adminModal.style.display='none'; });
-
-      if (tabPromo) tabPromo.addEventListener('click', ()=>{
-        adminPromoSec.style.display='block';
-        adminUsersSec.style.display='none';
-      });
-      if (tabUsers) tabUsers.addEventListener('click', ()=>{
-        adminPromoSec.style.display='none';
-        adminUsersSec.style.display='block';
-      });
-
-      // Promo yaratish (admin)
-      if (promoForm) promoForm.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        try {
-          const me = auth.currentUser;
-          if (!me) return alert('Kirish talab qilinadi');
-
-          const code = (pCode.value || '').trim().toUpperCase();
-          const amount = parseInt(pAmount.value, 10);
-          const maxUse = parseInt(pMax.value, 10) || 0;
-          if (!code || !amount || amount < 1) throw new Error('Kod va summa to‘g‘ri kiriting');
-
-          const vf = pFrom.value ? new Date(pFrom.value).toISOString() : null;
-          const vt = pTo.value ? new Date(pTo.value).toISOString() : null;
-
-          await setDoc(doc(db, 'promo_codes', code), {
-            code,
-            type: 'balance_topup',
-            amount,
-            validFrom: vf,
-            validTo: vt,
-            maxUse,
-            createdAt: serverTimestamp(),
-            createdBy: me.uid
-          }, { merge: true });
-
-          promoCreateMsg.style.color = '#065f46';
-          promoCreateMsg.textContent = `✅ ${code} yaratildi: +${amount} so‘m`;
-          pCode.value = ''; pAmount.value=''; pFrom.value=''; pTo.value=''; pMax.value='0';
-        } catch (err) {
-          console.error(err);
-          promoCreateMsg.style.color = '#b91c1c';
-          promoCreateMsg.textContent = '❌ Promo yaratishda xatolik: ' + (err?.message || 'noma’lum');
-        }
-      });
-
-      // Foydalanuvchini topish
-      if (uFind) uFind.addEventListener('click', async ()=>{
-        try {
-          __foundUserRef = null; uCard.style.display='none'; uMsg.textContent='';
-
-          const qv = (uQuery.value || '').trim();
-          if (!qv) return;
-
-          let ref = null, snap = null;
-
-          if (/^\d+$/.test(qv)) {
-            const q1 = query(collection(db, 'users'), where('numericId', '==', Number(qv)));
-            const s1 = await getDocs(q1);
-            if (!s1.empty) { ref = s1.docs[0].ref; snap = s1.docs[0]; }
-          } else if (qv.includes('@')) {
-            const q2 = query(collection(db, 'users'), where('email', '==', qv));
-            const s2 = await getDocs(q2);
-            if (!s2.empty) { ref = s2.docs[0].ref; snap = s2.docs[0]; }
-          }
-
-          if (!ref) { uMsg.style.color='#b91c1c'; uMsg.textContent='Topilmadi'; return; }
-
-          const d = snap.data() || {};
-          __foundUserRef = ref;
-          uName.textContent = [d.firstName, d.lastName].filter(Boolean).join(' ') || d.displayName || 'Foydalanuvchi';
-          uId.textContent = d.numericId ?? '—';
-          uBal.textContent = d.balance ?? 0;
-          uNewBalance.value = '';
-          uDelta.value = '';
-          uCard.style.display = 'block';
-        } catch (e) {
-          console.error(e);
-          uMsg.style.color='#b91c1c'; uMsg.textContent='Xatolik';
-        }
-      });
-
-      // Balansni saqlash
-      if (uSave) uSave.addEventListener('click', async ()=>{
-        try {
-          if (!__foundUserRef) return;
-
-          const nb = uNewBalance.value !== '' ? Number(uNewBalance.value) : null;
-          const dl = uDelta.value !== '' ? Number(uDelta.value) : null;
-
-          await runTransaction(db, async (tx)=>{
-            const s = await tx.get(__foundUserRef);
-            const cur = (s.exists() ? (s.data().balance ?? 0) : 0);
-            let next = cur;
-            if (nb !== null && !Number.isNaN(nb)) next = nb;
-            if (dl !== null && !Number.isNaN(dl)) next = Math.max(0, next + dl);
-
-            tx.update(__foundUserRef, { balance: next, updatedAt: serverTimestamp() });
-
-            const logsRef = collection(db, 'balance_logs');
-            tx.set(doc(logsRef), {
-              uid: __foundUserRef.id, before: cur, after: next, delta: (next - cur),
-              at: serverTimestamp(), by: auth.currentUser?.uid || null, reason: 'admin_edit'
-            });
-          });
-
-          uMsg.style.color='#065f46'; uMsg.textContent='✅ Saqlandi';
-          const s2 = await getDoc(__foundUserRef);
-          uBal.textContent = s2.data()?.balance ?? 0;
-        } catch (e) {
-          console.error(e);
-          uMsg.style.color='#b91c1c'; uMsg.textContent='❌ Xatolik';
-        }
       });
 
     })();
@@ -1182,107 +1009,15 @@
           <h3 id="dtTitle" style="margin:0 0 8px 0;font-size:22px"></h3>
           <div id="dtMeta" style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px 0"></div>
           <div id="dtHtml" style="line-height:1.6;color:#374151"></div>
-          <div id="dtTimer" style="margin-top:12px;font-weight:600;color:#14532d;display:none"></div>
-          <div id="dtProgressWrap" style="display:none;margin-top:10px;background:#f3f4f6;border-radius:999px;height:10px;overflow:hidden"><div id="dtProgress" style="height:100%;width:0%"></div></div>
+          <div id="dtTimer" style="margin-top:12px;font-weight:600;color:#14532d;display:none"></div><div id="dtProgressWrap" style="display:none;margin-top:10px;background:#f3f4f6;border-radius:999px;height:10px;overflow:hidden"><div id="dtProgress" style="height:100%;width:0%"></div></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-            <a id="dtPrimary" href="#" class="btn-primary" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700">Boshlash</a>
-            <a id="dtSecondary" href="#" class="btn-ghost" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb">Batafsil</a>
-            <a id="dtCalendar" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">📅 Kalendar</a>
-            <a id="dtShareTG" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">Telegram</a>
-            <button id="dtCopyLink" type="button" style="padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;display:none">Linkni nusxalash</button>
-          </div>
+  <a id="dtPrimary" href="#" class="btn-primary" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700">Boshlash</a>
+  <a id="dtSecondary" href="#" class="btn-ghost" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb">Batafsil</a>
+  <a id="dtCalendar" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">📅 Kalendar</a>
+  <a id="dtShareTG" href="#" target="_blank" style="text-decoration:none;padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;display:none">Telegram</a>
+  <button id="dtCopyLink" type="button" style="padding:10px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;display:none">Linkni nusxalash</button>
+</div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ADMIN MODAL (FULL) -->
-  <div id="adminModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="adminTitle" style="display:none">
-    <div class="card" style="max-width:860px;width:92%">
-      <div class="card__head">
-        <div id="adminTitle" class="card__title">Admin Panel</div>
-        <button id="closeAdmin" class="close" aria-label="Yopish">&times;</button>
-      </div>
-      <div class="card__body">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-          <button id="tabPromo"  class="btn btn--ghost" type="button">🎁 Promo yaratish</button>
-          <button id="tabUsers"  class="btn btn--ghost" type="button">👤 Balans tahrirlash</button>
-        </div>
-
-        <!-- Promo yaratish -->
-        <section id="adminPromoSec">
-          <form id="promoForm">
-            <div class="row2">
-              <div class="group">
-                <label for="pCode">Promo kod (masalan: KUZ25)</label>
-                <input id="pCode" placeholder="Katta harflar tavsiya (A-Z, 0-9)" required />
-              </div>
-              <div class="group">
-                <label for="pAmount">Balansga qo‘shiladigan summa</label>
-                <input id="pAmount" type="number" min="1" placeholder="masalan: 10000" required />
-              </div>
-            </div>
-            <div class="row2">
-              <div class="group">
-                <label for="pFrom">Boshlanish vaqti</label>
-                <input id="pFrom" type="datetime-local" />
-              </div>
-              <div class="group">
-                <label for="pTo">Tugash vaqti</label>
-                <input id="pTo" type="datetime-local" />
-              </div>
-            </div>
-            <div class="row2">
-              <div class="group">
-                <label for="pMax">Umumiy foydalanish soni (0 = cheksiz)</label>
-                <input id="pMax" type="number" min="0" value="0" required />
-              </div>
-              <div class="group">
-                <label>Tip</label>
-                <input value="balance_topup" disabled class="id-badge" />
-              </div>
-            </div>
-            <button class="btn btn--primary" type="submit">Promo yaratish</button>
-            <div id="promoCreateMsg" style="margin-top:10px;font-weight:700"></div>
-            <p style="margin-top:8px;color:#555;font-size:13px">
-              Izoh: foydalanuvchi har bir koddan faqat bir marta foydalana oladi. Redeem paytida balans avtomatik to‘ldiriladi.
-            </p>
-          </form>
-        </section>
-
-        <!-- Foydalanuvchi balansi -->
-        <section id="adminUsersSec" style="display:none">
-          <div class="row2">
-            <div class="group">
-              <label for="uQuery">Qidiruv (numericId yoki email)</label>
-              <input id="uQuery" placeholder="masalan: 1005 yoki user@example.com" />
-            </div>
-            <div class="group">
-              <label>&nbsp;</label>
-              <button id="uFind" class="btn btn--ghost" type="button">Qidirish</button>
-            </div>
-          </div>
-
-          <div id="uCard" style="display:none;border:1px solid #e5e7eb;border-radius:12px;padding:12px">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div id="uName" style="font-weight:800">—</div>
-              <span class="id-badge">ID — <b id="uId">—</b></span>
-              <span><i class="fa-solid fa-coins" style="color:#2E8B57"></i> <b id="uBal">0</b></span>
-            </div>
-            <div class="row2" style="margin-top:10px">
-              <div class="group">
-                <label for="uNewBalance">Yangi balans (mutlaq qiymat)</label>
-                <input id="uNewBalance" type="number" min="0" />
-              </div>
-              <div class="group">
-                <label for="uDelta">Qo‘shish/Ayirish (∆)</label>
-                <input id="uDelta" type="number" />
-              </div>
-            </div>
-            <button id="uSave" class="btn btn--primary" type="button">Saqlash</button>
-            <div id="uMsg" style="margin-top:10px;font-weight:700"></div>
-          </div>
-        </section>
       </div>
     </div>
   </div>
