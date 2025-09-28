@@ -75,10 +75,10 @@
         <div><label>Link</label><input id="f-link"/></div>
         <div><label>Best?</label><input id="f-best" type="checkbox"/></div>
         <div><label>Tags (vergul bilan)</label><input id="f-tags" placeholder="algebra, online"/></div>
-        <div><label>Mode (tests uchun: online/offline)</label><input id="f-mode" placeholder="online"/></div>
-        <div><label>StartAt</label><input id="f-start" type="datetime-local"/></div>
-        <div><label>EndAt</label><input id="f-end" type="datetime-local"/></div>
-        <div class="full"><label>Prize / Qo'shimcha</label><input id="f-prize"/></div>
+        <div><label>Mode (tests uchun: online/offline)</label><input id="f-mode" class="only-tests" placeholder="online"/></div>
+        <div><label>StartAt</label><input id="f-start" class="only-best" type="datetime-local"/></div>
+        <div><label>EndAt</label><input id="f-end" class="only-best" type="datetime-local"/></div>
+        <div class="full"><label>Prize / Qo'shimcha</label><input id="f-prize" class="only-best"/></div>
         <div class="full"><label>Details HTML</label><textarea id="f-details"></textarea></div>
         <div><label>Promo code</label><input id="f-promo-code"/></div>
         <div><label>Valid From</label><input id="f-promo-from" type="date"/></div>
@@ -97,7 +97,20 @@
     const $ = s => document.querySelector(s);
     const list = $('#list');
     const editorSec = $('#editor');
-    const statusEl = $('#status');
+    
+    function toggleEditorFields(){
+      const sec = (document.querySelector('#f-section')?.value || state.tab || '').trim();
+      const isBest = document.querySelector('#f-best')?.checked;
+      document.querySelectorAll('.only-best').forEach(el=>{
+        const box = el.closest('div') || el;
+        box.style.display = isBest ? '' : 'none';
+      });
+      document.querySelectorAll('.only-tests').forEach(el=>{
+        const box = el.closest('div') || el;
+        box.style.display = (sec==='tests') ? '' : 'none';
+      });
+    }
+const statusEl = $('#status');
 
     let state = {
       data: { meta:{version:1,updatedAt:new Date().toISOString()}, promo_codes:[], banners:[], cards:{tests:[],courses:[],simulators:[]} },
@@ -206,6 +219,10 @@
       const eAt = $('#f-end');
       const prize = $('#f-prize');
       const details = $('#f-details');
+      toggleEditorFields();
+      $('#f-section').addEventListener('input', toggleEditorFields);
+      $('#f-best').addEventListener('change', toggleEditorFields);
+
       const pc = $('#f-promo-code');
       const pf = $('#f-promo-from');
       const pt = $('#f-promo-to');
@@ -276,7 +293,11 @@
           prize: $('#f-prize').value.trim() || undefined,
           detailsHtml: $('#f-details').value || undefined
         };
-        const arr = (sec==='banners')? state.data.banners : state.data.cards[sec];
+        
+        // Cleanup fields based on section/best
+        if(sec!=='tests'){ delete obj.mode; }
+        if(!obj.best){ delete obj.startAt; delete obj.endAt; delete obj.prize; }
+const arr = (sec==='banners')? state.data.banners : state.data.cards[sec];
         if(state.editing && state.editing.idx!=null && state.editing.section===state.tab) arr[state.editing.idx]=obj; else arr.push(obj);
       } else {
         return alert('Noma’lum bo‘lim');
