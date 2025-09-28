@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Kontent (Firebase promos + slider)</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--primary:#2E8B57;--primary-dark:#1F6B45;--accent:#FFC107;--muted:#6b7280;--bg:#f7f8fa;--card:#fff;--br:#e5e7eb;--shadow:0 10px 30px rgba(0,0,0,.08);--radius:14px;--tr:all .2s ease}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:#111}
+    .container{max-width:1200px;margin:0 auto;padding:16px}
+    header{background:#fff;border-bottom:1px solid var(--br);box-shadow:var(--shadow)}
+    header .container{padding:10px 16px}
+    .brand{display:flex;align-items:center;gap:10px}.pi{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+    .brand b{color:var(--primary)}
+    .btn{border:1px solid var(--br);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn--start{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;border:0}
+    .btn--ghost{background:#fff}
+    .btn--promo{background:#fffbeb;border:1px solid #facc15}
+    /* Slider */
+    .slider{position:relative;border-radius:16px;overflow:hidden;background:#dbece3;box-shadow:var(--shadow);margin:16px 0}
+    .slides{display:flex;transition:transform .45s ease}
+    .slide{min-width:100%;position:relative}
+    .slide img{width:100%;height:260px;object-fit:cover;display:block}
+    .banner__body{position:absolute;inset:auto 0 0 0;padding:16px;background:linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0));color:#fff}
+    .banner__title{font-weight:800;font-size:22px;margin:0 0 6px}
+    .banner__btn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#111;padding:10px 14px;border-radius:999px;text-decoration:none;font-weight:700}
+    .navBtn{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.8)}
+    .navPrev{left:10px}.navNext{right:10px}
+    .dots{position:absolute;left:0;right:0;bottom:8px;display:flex;gap:6px;justify-content:center}
+    .dot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.6)} .dot.active{background:#fff}
+    /* Toolbar */
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:18px 0}
+    .tags{display:flex;gap:8px;flex-wrap:wrap}
+    .tag{border:1px solid var(--br);background:#fff;border-radius:999px;padding:6px 12px;font-weight:600;cursor:pointer}
+    .tag.active{background:var(--primary);color:#fff;border-color:transparent}
+    .pager{display:flex;gap:6px;align-items:center}
+    /* Grid + cards */
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+    .col-4{grid-column:span 4}@media (max-width:1024px){.col-4{grid-column:span 6}}@media (max-width:640px){.col-4{grid-column:span 12}}
+    .card{background:var(--card);border:1px solid var(--br);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+    .card__thumb{width:100%;height:160px;object-fit:cover;background:#f2f2f2}
+    .card__body{padding:14px}
+    .card__title{font-weight:800;margin:0 0 8px;font-size:16px}
+    .chipline{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .chip{font-size:12px;border:1px solid var(--br);border-radius:999px;padding:4px 8px;color:#444;background:#fff}
+    .chip--best{background:#fffbeb;border-color:#facc15;color:#92400e}
+    .meta{font-size:12px;color:#6b7280;display:flex;gap:10px;flex-wrap:wrap}
+    .row{display:flex;gap:8px;align-items:center;margin-top:10px}
+    .timer{font-variant-numeric:tabular-nums;background:#0b3d2c;color:#fff;padding:6px 10px;border-radius:8px;font-weight:700}
+    /* Modal */
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:50;align-items:center;justify-content:center;padding:16px}
+    .modal.open{display:flex}.sheet{background:#fff;border-radius:16px;max-width:900px;width:100%;overflow:hidden;box-shadow:var(--shadow)}
+    .sheet__media{width:100%;height:300px;object-fit:cover;background:#f2f2f2}
+    .sheet__body{padding:16px}.sheet__title{margin:0 0 8px;font-weight:800}.sheet__actions{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="brand">
+        <div class="pi">π</div><div><b>MathCenter</b> — platforma</div>
+      </div>
+      <div style="margin-top:8px; display:flex; gap:8px; align-items:center">
+        <button id="openPromo" class="btn btn--promo"><i class="fa-solid fa-gift"></i> Promo kod</button>
+        <!-- Mock auth state for demo button -->
+        <small id="authHint" style="color:#6b7280">Promo faollashtirish uchun Google orqali kiring (headeringizdagi auth bilan ishlaydi)</small>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="app" data-page="home">
+    <!-- Slider banners -->
+    <section id="sliderHost"></section>
+
+    <div class="toolbar">
+      <div class="tags" id="tagBar"></div>
+      <div class="pager">
+        <button class="btn" id="prevBtn"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="pageInfo" style="min-width:80px;text-align:center"></span>
+        <button class="btn" id="nextBtn"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </div>
+    <section class="grid" id="cardGrid"></section>
+  </main>
+
+  <!-- Details modal -->
+  <div class="modal" id="detailModal" aria-hidden="true">
+    <div class="sheet">
+      <img id="mImg" class="sheet__media" alt="">
+      <div class="sheet__body">
+        <h3 id="mTitle" class="sheet__title"></h3>
+        <div id="mText" style="color:#333;line-height:1.6"></div>
+        <div class="sheet__actions">
+          <div class="meta" id="mMeta"></div>
+          <div class="row">
+            <span id="mTimer" class="timer" style="display:none"></span>
+            <a id="mStart" class="btn btn--start" href="#" target="_blank" rel="noopener">Boshlash</a>
+            <button id="mClose" class="btn">Yopish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Promo modal -->
+  <div class="modal" id="promoModal" aria-hidden="true">
+    <div class="sheet" style="max-width:520px">
+      <div class="sheet__body">
+        <h3 class="sheet__title"><i class="fa-solid fa-gift"></i> Promo kod</h3>
+        <p style="color:#555;margin:8px 0">Chegirma uchun promokodingizni kiriting:</p>
+        <div class="row">
+          <input id="promoInput" placeholder="Masalan: KUZ25" style="flex:1;padding:10px;border:1px solid var(--br);border-radius:10px"/>
+          <button id="checkPromo" class="btn btn--start">Tekshirish</button>
+          <button id="closePromo" class="btn">Yopish</button>
+        </div>
+        <p id="promoResult" style="margin-top:10px;font-weight:700"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, addDoc, runTransaction, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain:"xplusy-760fa.firebaseapp.com",
+      projectId:"xplusy-760fa",
+      storageBucket:"xplusy-760fa.firebasestorage.app",
+      messagingSenderId:"992512966017",
+      appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId:"G-459PLJ7P7L"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const provider = new GoogleAuthProvider();
+    const authHint = document.getElementById('authHint');
+
+    // If you don't have your own header auth button here, let user sign in via clicking the hint text:
+    if (authHint) {
+      authHint.style.cursor = 'pointer';
+      authHint.addEventListener('click', async ()=>{
+        try{ await signInWithPopup(auth, provider);}catch(e){ console.error(e); alert('Google bilan kirishda xato.'); }
+      });
+    }
+
+    onAuthStateChanged(auth, (user)=>{
+      if (authHint) authHint.textContent = user ? ('Kirdingiz: ' + (user.displayName||user.email)) : 'Promo faollashtirish uchun Google orqali kiring (headeringizdagi auth bilan ishlaydi)';
+      window.__currentUser = user || null;
+    });
+
+    /* -------- Content (admin.json) + Slider + Cards + Promo (with Firestore usage) -------- */
+    (function(){
+      const state = { page:(document.getElementById('app').dataset.page||'home').toLowerCase(), json:null, filterTag:'barchasi', pageSize:18, pageIndex:0, timers:{} };
+      const $=id=>document.getElementById(id);
+      const sliderHost=$('sliderHost'), grid=$('cardGrid'), tagBar=$('tagBar'), prevBtn=$('prevBtn'), nextBtn=$('nextBtn'), pageInfo=$('pageInfo');
+      const modal=$('detailModal'), mImg=$('mImg'), mTitle=$('mTitle'), mText=$('mText'), mMeta=$('mMeta'), mTimer=$('mTimer'), mStart=$('mStart'), mClose=$('mClose');
+      const promoModal=$('promoModal'), openPromo=$('openPromo'), closePromo=$('closePromo'), checkPromo=$('checkPromo'), promoInput=$('promoInput'), promoResult=$('promoResult');
+
+      fetch('admin.json?_='+Date.now()).then(r=>r.json()).then(data=>{ state.json=data; renderAll(); })
+      .catch(e=>{ console.error(e); sliderHost.innerHTML='<div class="slider" style="padding:20px">admin.json topilmadi.</div>' });
+
+      function renderAll(){ renderSlider(); buildTags(); renderCards(); }
+
+      // ----- Slider (multi-banner) -----
+      function visibleOnPage(p){ if(!p||!p.length) return true; if(state.page==='home') return true; return p.map(x=>x.toLowerCase()).includes(state.page); }
+      function renderSlider(){
+        const banners=(state.json?.banners||[]).filter(b=>b.visible!==false && visibleOnPage(b.pages));
+        if(!banners.length){ sliderHost.innerHTML=''; return; }
+        const slides = banners.map(b=>`
+          <div class="slide">
+            ${b.image?`<img src="${b.image}" alt="">`:''}
+            <div class="banner__body">
+              <h3 class="banner__title">${b.title||''}</h3>
+              <a class="banner__btn" href="${b.link||'#'}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> O‘tish</a>
+            </div>
+          </div>`).join('');
+
+        const dots = banners.map((_,i)=>`<div class="dot" data-i="${i}"></div>`).join('');
+
+        sliderHost.innerHTML = `
+          <div class="slider">
+            <div class="slides" id="slides">${slides}</div>
+            <button class="navBtn navPrev" id="navPrev"><i class="fa-solid fa-chevron-left"></i></button>
+            <button class="navBtn navNext" id="navNext"><i class="fa-solid fa-chevron-right"></i></button>
+            <div class="dots" id="dots">${dots}</div>
+          </div>`;
+
+        let idx=0; const slidesEl=$('slides'); const dotsEl=$('dots'); const len=banners.length;
+        const setIdx = i => { idx=(i+len)%len; slidesEl.style.transform = 'translateX(' + (-idx*100) + '%)'; [...dotsEl.children].forEach((d,k)=>d.classList.toggle('active', k===idx)); };
+        setIdx(0);
+        const prev=()=>setIdx(idx-1), next=()=>setIdx(idx+1);
+        $('navPrev').onclick=prev; $('navNext').onclick=next;
+        [...dotsEl.children].forEach(d=> d.addEventListener('click', ()=> setIdx(+d.dataset.i)));
+        let timer = setInterval(next, 5000);
+        slidesEl.addEventListener('mouseenter', ()=>clearInterval(timer));
+        slidesEl.addEventListener('mouseleave', ()=> timer=setInterval(next,5000));
+      }
+
+      // ----- Tags + Cards -----
+      function buildTags(){
+        const items=(state.json?.cards||[]).filter(c=>c.visible!==false && visibleOnPage(c.pages));
+        const set=new Set(); items.forEach(c=>(c.tags||[]).forEach(t=>set.add(t)));
+        const tags=['barchasi',...Array.from(set).sort((a,b)=>a.localeCompare(b,'uz'))];
+        tagBar.innerHTML=tags.map(t=>`<button class="tag ${t===state.filterTag?'active':''}" data-t="${t}">${t}</button>`).join('');
+        tagBar.querySelectorAll('.tag').forEach(btn=>btn.addEventListener('click',()=>{ state.filterTag=btn.dataset.t; state.pageIndex=0; buildTags(); renderCards(); }));
+      }
+      function sortCards(a,b){
+        const ax=(a.type||'').toLowerCase()==='best'?0:1, bx=(b.type||'').toLowerCase()==='best'?0:1;
+        if(ax!==bx) return ax-bx;
+        const ta=Date.parse(a.startAt||0)||0, tb=Date.parse(b.startAt||0)||0;
+        if(tb!==ta) return tb-ta;
+        return (a.title||'').localeCompare(b.title||'','uz');
+      }
+      function baseCards(){
+        let items=(state.json?.cards||[]).filter(c=>c.visible!==false && visibleOnPage(c.pages));
+        if(state.filterTag!=='barchasi') items=items.filter(c=>(c.tags||[]).map(x=>x.toLowerCase()).includes(state.filterTag.toLowerCase()));
+        items.sort(sortCards); return items;
+      }
+      function renderCards(){
+        const items=baseCards(); const total=items.length; const pages=Math.max(1,Math.ceil(total/state.pageSize));
+        state.pageIndex=Math.min(state.pageIndex,pages-1);
+        const start=state.pageIndex*state.pageSize; const pageItems=items.slice(start,start+state.pageSize);
+        grid.innerHTML=pageItems.map(renderCard).join('');
+        grid.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openModalById(b.dataset.open)));
+        grid.querySelectorAll('[data-countdown]').forEach(n=>setupCountdown(n.dataset.countdown,n));
+        pageInfo.textContent=`${state.pageIndex+1} / ${pages}`;
+        prevBtn.disabled=state.pageIndex<=0; nextBtn.disabled=state.pageIndex>=pages-1;
+      }
+      prevBtn.addEventListener('click',()=>{ if(state.pageIndex>0){state.pageIndex--;renderCards();}});
+      nextBtn.addEventListener('click',()=>{ state.pageIndex++; renderCards(); });
+
+      function renderCard(c){
+        const isBest=(c.type||'').toLowerCase()==='best';
+        const img=c.image?`<img class="card__thumb" src="${c.image}" alt="">`:`<div class="card__thumb"></div>`;
+        const tags=(c.tags||[]).map(t=>`<span class="chip ${isBest?'chip--best':''}">#${t}</span>`).join('');
+        const timeMeta=(isBest&&(c.startAt||c.endAt))?`<div class="meta"><span><i class="fa-regular fa-clock"></i> ${(c.startAt?new Date(c.startAt).toLocaleString('uz-UZ'):'')}${c.endAt?' — '+new Date(c.endAt).toLocaleString('uz-UZ'):''}</span></div>`:'';
+        const actions=isBest
+          ? `<div class="row">${countdownOrAction(c)}<button class="btn btn--ghost" data-open="${c.id||''}"><i class="fa-regular fa-circle-question"></i> Batafsil</button></div>`
+          : `<div class="row"><a class="btn btn--start" href="${c.link||'#'}" target="_blank" rel="noopener"><i class="fa-solid fa-play"></i> Boshlash</a></div>`;
+        return `<article class="card col-4">${img}<div class="card__body"><h4 class="card__title">${c.title||''}</h4>${timeMeta}<div class="chipline">${tags}</div>${actions}</div></article>`;
+      }
+      function countdownOrAction(c){
+        const now=Date.now(), start=Date.parse(c.startAt||'')||0, end=Date.parse(c.endAt||'')||0;
+        if(start && now<start){ const id=c.id||String(Math.random()); return `<span class="timer" data-countdown="${id}" data-start="${start}" data-end="${end}">00:00:00</span>`; }
+        if(end && now>end){ return `<button class="btn" disabled><i class="fa-regular fa-circle-xmark"></i> Vaqt tugadi</button>`; }
+        return `<a class="btn btn--start" href="${c.link||'#'}" target="_blank" rel="noopener"><i class="fa-solid fa-play"></i> Boshlash</a>`;
+      }
+      function setupCountdown(id,node){
+        const start=+node.dataset.start; clearInterval(state.timers[id]);
+        const tick=()=>{ let diff=start-Date.now(); if(diff<=0){ clearInterval(state.timers[id]); node.outerHTML=`<a class="btn btn--start" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-play"></i> Boshlash</a>`; return;}
+          const h=Math.floor(diff/3600000); diff-=h*3600000; const m=Math.floor(diff/60000); diff-=m*60000; const s=Math.floor(diff/1000);
+          node.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; };
+        tick(); state.timers[id]=setInterval(tick,1000);
+      }
+      function openModalById(id){
+        const item=(state.json?.cards||[]).find(x=>String(x.id)===String(id)); if(!item) return;
+        mImg.src=item.image||''; mTitle.textContent=item.title||''; mText.innerHTML=item.detailHtml||(item.detailText||'');
+        mMeta.innerHTML=`<span><i class="fa-regular fa-clock"></i> ${item.startAt?new Date(item.startAt).toLocaleString('uz-UZ'):''}${item.endAt?' — '+new Date(item.endAt).toLocaleString('uz-UZ'):''}</span><span>•</span><span>${(item.tags||[]).map(t=>'#'+t).join(' ')}</span>`;
+        const now=Date.now(), start=Date.parse(item.startAt||0)||0, end=Date.parse(item.endAt||0)||0;
+        mTimer.style.display='none'; mStart.style.display='inline-flex'; mStart.href=item.link||'#'; mStart.textContent='Boshlash'; mStart.classList.add('btn--start');
+        if(start && now<start){ mTimer.style.display='inline-block'; mStart.style.display='none'; startModalTimer(start); }
+        else if(end && now>end){ mStart.textContent='Vaqt tugadi'; mStart.classList.remove('btn--start'); mStart.classList.add('btn'); mStart.href='#'; }
+        modal.classList.add('open');
+      }
+      function startModalTimer(start){
+        const id='_modal'; clearInterval(state.timers[id]);
+        const tick=()=>{ let diff=start-Date.now(); if(diff<=0){ clearInterval(state.timers[id]); mTimer.style.display='none'; mStart.style.display='inline-flex'; mStart.classList.add('btn--start'); mStart.textContent='Boshlash'; return;}
+          const h=Math.floor(diff/3600000); diff-=h*3600000; const m=Math.floor(diff/60000); diff-=m*60000; const s=Math.floor(diff/1000);
+          mTimer.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; };
+        tick(); state.timers[id]=setInterval(tick,1000);
+      }
+      $('mClose').addEventListener('click',()=>modal.classList.remove('open'));
+      modal.addEventListener('click',e=>{ if(e.target===modal) modal.classList.remove('open'); });
+
+      // ---------- Promo with Firestore usage tracking ----------
+      function openPromoModal(){ promoResult.textContent=''; promoInput.value=''; promoModal.classList.add('open'); }
+      const w = window; w.openPromoModal = openPromoModal;
+      if(openPromo) openPromo.addEventListener('click', openPromoModal);
+      if(closePromo) closePromo.addEventListener('click', ()=>promoModal.classList.remove('open'));
+      promoModal.addEventListener('click', e=>{ if(e.target===promoModal) promoModal.classList.remove('open'); });
+
+      if(checkPromo) checkPromo.addEventListener('click', async ()=>{
+        const user = w.__currentUser;
+        if(!user){ alert('Promo kodni faollashtirish uchun tizimga kiring.'); return; }
+
+        const code=(promoInput.value||'').trim().toUpperCase();
+        const list=(state.json?.promo_codes||[]);
+        const item=list.find(p=>String(p.code).toUpperCase()===code);
+        if(!item){ showPromoMsg('Bunday promo kod topilmadi.','error'); return; }
+
+        const now=Date.now(), from=Date.parse(item.validFrom||0)||0, to=Date.parse(item.validTo||0)||0;
+        if((from && now<from) || (to && now>to)){ showPromoMsg('Promo kod muddati yaroqsiz.','error'); return; }
+
+        try{
+          // 1) Check if this user already claimed
+          const q = query(collection(db,'promo_claims'), where('uid','==',user.uid), where('code','==',code));
+          const qSnap = await getDocs(q);
+          if(!qSnap.empty){ showPromoMsg('Siz bu promo koddan allaqachon foydalandingiz.','error'); return; }
+
+          // 2) Transactional increment usage counter
+          const usageRef = doc(db,'promo_usage', code);
+          await runTransaction(db, async (tx)=>{
+            const docSnap = await tx.get(usageRef);
+            let used = 0;
+            if (docSnap.exists()) used = docSnap.data().used || 0;
+            const maxUse = item.maxUse || 0;
+            if (maxUse && used >= maxUse) throw new Error('limit_reached');
+            tx.set(usageRef, { code, used: used+1, updatedAt: serverTimestamp() }, { merge:true });
+          });
+
+          // 3) Write claim row
+          await addDoc(collection(db,'promo_claims'), {
+            code, uid: user.uid, email: user.email || null, displayName: user.displayName || null, at: serverTimestamp()
+          });
+
+          showPromoMsg(`Tasdiqlandi: ${item.discountPercent}% chegirma. Kod: ${item.code}`,'ok');
+        }catch(e){
+          if(String(e).includes('limit_reached')) showPromoMsg('Promo kod ishlatib bo‘lingan.','error');
+          else { console.error(e); showPromoMsg('Server xatosi. Qayta urining.','error'); }
+        }
+      });
+
+      function showPromoMsg(text, type='ok'){
+        promoResult.textContent = text;
+        promoResult.style.color = (type==='ok') ? '#065f46' : '#b91c1c';
+      }
+    })();
+  </script>
+</body>
+</html>
