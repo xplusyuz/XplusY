@@ -42,8 +42,7 @@
         <span style="color:var(--muted)">LocalStorage kaliti: <code>__ADMIN_JSON</code></span>
       </div>
       <div style="margin-top:8px;color:var(--muted)" id="status"></div>
-      <div class="tabs">
-        <div class="tab active" data-tab="banners">Banners</div>
+      <div class="tabs"><div class="tab" data-tab="banners">Bannerlar</div><div class="tab" data-tab="best">Best card</div><div class="tab" data-tab="ordinary">Oddiy card</div><div class="tab" data-tab="promo">Promo</div><div class="tab" data-tab="users">Foydalanuvchilar</div></div>
         <div class="tab" data-tab="tests">Tests</div>
         <div class="tab" data-tab="courses">Courses</div>
         <div class="tab" data-tab="simulators">Simulators</div>
@@ -53,7 +52,8 @@
   </header>
 
   <main class="container">
-    <section id="list" class="grid"></section>
+    <section id="usersSec" class="card hidden"><h3>Foydalanuvchilar</h3><div id="usersPanel"></div></section>
+<section id="list" class="grid"></section>
 
     <section id="editor" class="card hidden">
       <h3 id="editorTitle">Yangi element</h3>
@@ -73,8 +73,8 @@
         <div><label>Subtitle</label><input id="f-subtitle"/></div>
         <div><label>Image URL</label><input id="f-image"/></div>
         <div><label>Link</label><input id="f-link"/></div>
-        <div><label>Best?</label><input id="f-best" type="checkbox"/></div><div><label>Bosh sahifada ko'rsatilsin?</label><input id="f-home" type="checkbox"/></div>
-        <div><label>Tags (vergul bilan)</label><input id="f-tags" placeholder="algebra, online"/></div>
+        <div><label>Best?</label><input id="f-best" type="checkbox"/></div><div><label>Bosh sahifada ko'rsatilsin?</label><input id="f-home" type="checkbox"/></div><div class="only-best"><label>Qaysi bo‘limlarda ko‘rinsin?</label><div style="display:flex;gap:12px;align-items:center"><label><input type="checkbox" id="t-tests"> Testlar</label><label><input type="checkbox" id="t-courses"> Kurslar</label><label><input type="checkbox" id="t-simulators"> Simulyatorlar</label></div></div>
+        <div><label>Tags (vergul bilan)</label><input id="f-tags" class="hide-when-best" placeholder="algebra, online"/></div>
         <div><label>Mode (tests uchun: online/offline)</label><input id="f-mode" class="only-tests" placeholder="online"/></div>
         <div><label>StartAt</label><input id="f-start" class="only-best" type="datetime-local"/></div>
         <div><label>EndAt</label><input id="f-end" class="only-best" type="datetime-local"/></div>
@@ -109,6 +109,7 @@
         const box = el.closest('div') || el;
         box.style.display = (sec==='tests') ? '' : 'none';
       });
+      document.querySelectorAll('.hide-when-best').forEach(el=>{ const box=el.closest('div')||el; box.style.display = isBest ? 'none' : ''; });
     }
 const statusEl = $('#status');
 
@@ -157,6 +158,7 @@ const statusEl = $('#status');
       });
       $('#saveLocalBtn').addEventListener('click',()=>{ localStorage.setItem('__ADMIN_JSON', JSON.stringify(state.data)); setStatus('LocalStorage yangilandi'); });
       $('#resetLocalBtn').addEventListener('click',()=>{ localStorage.removeItem('__ADMIN_JSON'); setStatus('LocalStorage tozalandi'); });
+      document.querySelectorAll('.hide-when-best').forEach(el=>{ const box=el.closest('div')||el; box.style.display = isBest ? 'none' : ''; });
     }
 
     function sectionItems(){
@@ -202,6 +204,7 @@ const statusEl = $('#status');
         el.querySelector('.btn-del').onclick = ()=> { if(confirm('O‘chirish?')){ items.splice(idx,1); render(); } };
         list.appendChild(el);
       });
+      document.querySelectorAll('.hide-when-best').forEach(el=>{ const box=el.closest('div')||el; box.style.display = isBest ? 'none' : ''; });
     }
 
     function openEditor(ref){
@@ -266,6 +269,73 @@ const statusEl = $('#status');
     }
 
     function toLocal(iso){ const d=new Date(iso); const tz=d.getTimezoneOffset(); const d2=new Date(d.getTime()-tz*60000); return d2.toISOString().slice(0,16); }
+
+    
+    // === USERS VIEW (Firebase) ===
+    async function ensureFirebase(){
+      if(window.firebaseApp){ return window.firebaseApp; }
+      if(!(window.firebase && firebase.initializeApp)){ console.warn('Firebase SDK topilmadi'); return null; }
+      try{
+        if(!firebase.getApps || firebase.getApps().length===0){
+          window.firebaseApp = firebase.initializeApp(window.__FIREBASE_CONFIG || {});
+        } else {
+          window.firebaseApp = firebase.getApps()[0];
+        }
+        return window.firebaseApp;
+      } catch(e){ console.warn(e); return null; }
+    }
+    async function renderUsersView(){
+      list.classList.add('hidden');
+      editorSec.classList.add('hidden');
+      const box = document.getElementById('usersSec');
+      box.classList.remove('hidden');
+      const panel = document.getElementById('usersPanel');
+      panel.innerHTML = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<input id="u-q" placeholder="Email yoki ID" style="padding:10px;border:1px solid #e5e7eb;border-radius:10px">'
+        +'<button id="u-find">Qidirish</button>'
+        +'</div>'
+        +'<div id="u-results" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px"></div>';
+      document.getElementById('u-find').onclick = async ()=>{
+        const q = (document.getElementById('u-q').value||'').trim().toLowerCase();
+        const app = await ensureFirebase();
+        if(!app){ alert('Firebase ulangan emas. Headerdagi config kerak.'); return; }
+        const db = firebase.firestore();
+        let ref = db.collection('users');
+        if(q){
+          const resEl = document.getElementById('u-results'); resEl.innerHTML='Yuklanmoqda...';
+          const [byEmail, byId] = await Promise.all([
+            ref.where('email','==',q).get().catch(()=>({empty:true,docs:[]})),
+            (!isNaN(Number(q))? ref.where('numericId','==',Number(q)).get(): Promise.resolve({empty:true,docs:[]}))
+          ]);
+          const docs = [...(byEmail.docs||[]), ...(byId.docs||[])];
+          resEl.innerHTML='';
+          if(docs.length===0){ resEl.textContent='Topilmadi'; return; }
+          docs.forEach(d=>{
+            const u = d.data();
+            const card = document.createElement('div');
+            card.className='card';
+            card.innerHTML = `<div style="display:flex;gap:10px;align-items:center">
+                <div style="width:44px;height:44px;border-radius:999px;background:#eef2ff;display:flex;align-items:center;justify-content:center">${(u.name||'?')[0]||'?'}</div>
+                <div><div style="font-weight:700">${u.name||''}</div><div style="font-size:12px;color:#6b7280">${u.email||''}</div></div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:8px">
+                <div style="flex:1"><label>Balance</label><input type="number" value="${u.balance||0}" data-k="balance"></div>
+                <div style="flex:1"><label>Points</label><input type="number" value="${u.points||0}" data-k="points"></div>
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+                <button data-act="save">Saqlash</button>
+              </div>`;
+            card.querySelector('[data-act="save"]').onclick = async ()=>{
+              const bal = Number(card.querySelector('input[data-k="balance"]').value||0);
+              const pts = Number(card.querySelector('input[data-k="points"]').value||0);
+              await db.collection('users').doc(d.id).update({balance: bal, points: pts}).catch(e=> alert('Xatolik: '+e));
+              alert('Yangilandi');
+            };
+            document.getElementById('u-results').appendChild(card);
+          });
+        }
+      };
+    }
 
     function saveEditor(){
       const sec = $('#f-section').value || state.tab;
