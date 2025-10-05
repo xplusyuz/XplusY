@@ -27,6 +27,8 @@
     th{font-weight:700}
     .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:999px;font-size:12px}
     .muted{color:#6b7280}
+    .highlight{background:#FFFDE7}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#E8F5E9;border:1px solid var(--gray-200);font-size:12px}
   </style>
 </head>
 <body>
@@ -45,6 +47,7 @@
     <h1><i class="fa-solid fa-chart-line"></i> Natijalar</h1>
     <p class="muted" id="who"></p>
 
+    <!-- Oxirgi test natijalari -->
     <section class="card" style="margin-top:12px">
       <div class="card__body">
         <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
@@ -70,12 +73,39 @@
         </div>
       </div>
     </section>
+
+    <!-- Reyting (umumiy ball) -->
+    <section class="card" style="margin-top:16px">
+      <div class="card__body">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
+          <div class="badge"><i class="fa-solid fa-trophy"></i> Reyting — umumiy yig‘ilgan ball</div>
+          <div id="myPlace" class="muted"></div>
+        </div>
+
+        <div id="emptyRank" class="muted" style="display:none">Reyting ma’lumotlari topilmadi.</div>
+        <div style="overflow:auto">
+          <table id="tblRank">
+            <thead>
+              <tr>
+                <th>O‘rin</th>
+                <th>Foydalanuvchi</th>
+                <th>Ball</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRank"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, collection, query, where, orderBy, limit, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import {
+      getFirestore, collection, query, where, orderBy, limit, getDocs, Timestamp,
+      doc, getDoc, getCountFromServer
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -96,8 +126,13 @@
     const empty = document.getElementById('empty');
     const btnRefresh = document.getElementById('btnRefresh');
 
+    const tbodyRank = document.getElementById('tbodyRank');
+    const emptyRank = document.getElementById('emptyRank');
+    const myPlaceEl = document.getElementById('myPlace');
+
     const provider = new GoogleAuthProvider();
 
+    // Oxirgi test natijalari
     async function loadResults(uid){
       tbody.innerHTML = '';
       empty.style.display = 'none';
@@ -112,10 +147,12 @@
         empty.style.display = 'block';
         return;
       }
-      snap.forEach(doc=>{
-        const r = doc.data();
+      snap.forEach(docSnap=>{
+        const r = docSnap.data();
         const tr = document.createElement('tr');
-        const dt = r.createdAt?.toDate ? r.createdAt.toDate() : (r.createdAt instanceof Timestamp ? r.createdAt.toDate() : new Date(r.createdAt||Date.now()));
+        const dt = r.createdAt?.toDate ? r.createdAt.toDate()
+                 : (r.createdAt instanceof Timestamp ? r.createdAt.toDate()
+                 : new Date(r.createdAt||Date.now()));
         const percent = r.percent ?? (r.max ? Math.round((100*r.score)/r.max) : '');
         tr.innerHTML = `
           <td>${r.title || '—'}</td>
@@ -127,18 +164,95 @@
       });
     }
 
-    btnRefresh.addEventListener('click', async ()=>{
+    // Reyting (users.points bo‘yicha TOP-100)
+    async function loadLeaderboard(currentUid){
+      tbodyRank.innerHTML = '';
+      emptyRank.style.display = 'none';
+      myPlaceEl.textContent = '';
+
+      // TOP-100
+      const qTop = query(
+        collection(db, 'users'),
+        orderBy('points','desc'),
+        limit(100)
+      );
+      const topSnap = await getDocs(qTop);
+      if (topSnap.empty) {
+        emptyRank.style.display = 'block';
+        return;
+      }
+
+      let rank = 0;
+      let myRowFound = false;
+
+      topSnap.forEach((docSnap)=>{
+        rank++;
+        const u = docSnap.data();
+        const uid = docSnap.id;
+        const name = u.displayName || u.name || 'Foydalanuvchi';
+        const idBadge = u.numericId ? `<span class="pill">ID: ${u.numericId}</span>` : '';
+        const tr = document.createElement('tr');
+        if (uid === currentUid) { tr.classList.add('highlight'); myRowFound = true; }
+        tr.innerHTML = `
+          <td>#${rank}</td>
+          <td>${name} ${idBadge}</td>
+          <td>${u.points ?? 0}</td>
+        `;
+        tbodyRank.appendChild(tr);
+      });
+
+      // Mening o‘rnim (Top-100 dan tashqarida bo‘lsa ham)
+      if (currentUid){
+        const meRef = doc(db, 'users', currentUid);
+        const meSnap = await getDoc(meRef);
+        if (meSnap.exists()){
+          const me = meSnap.data();
+          const myPts = me.points ?? 0;
+
+          // Sizdan ko‘p ballga ega bo‘lganlar soni + 1
+          try{
+            const qGreater = query(collection(db,'users'), where('points','>', myPts));
+            const countSnap = await getCountFromServer(qGreater);
+            const myRank = (countSnap.data().count || 0) + 1;
+
+            myPlaceEl.textContent = `Sizning o‘rningiz: #${myRank} — Ball: ${myPts}`;
+            if (!myRowFound && myRank>100){
+              // Agar TOP-100 da bo‘lmasa — jadval ostiga o‘zingiz uchun alohida qatordan ko‘rsatib qo‘yamiz
+              const tr = document.createElement('tr');
+              tr.classList.add('highlight');
+              const name = me.displayName || me.name || 'Siz';
+              const idBadge = me.numericId ? `<span class="pill">ID: ${me.numericId}</span>` : '';
+              tr.innerHTML = `
+                <td>#${myRank}</td>
+                <td>${name} ${idBadge}</td>
+                <td>${myPts}</td>
+              `;
+              tbodyRank.appendChild(tr);
+            }
+          }catch(e){
+            // Agar count ishlamasa, hech bo‘lmaganda o‘z ballingizni ko‘rsatamiz
+            myPlaceEl.textContent = `Sizning ballingiz: ${myPts}`;
+          }
+        }
+      }
+    }
+
+    async function refreshAll(){
       const u = auth.currentUser;
       if(!u){ await signInWithPopup(auth, provider); return; }
-      loadResults(u.uid);
-    });
+      await loadResults(u.uid);
+      await loadLeaderboard(u.uid);
+    }
+
+    btnRefresh.addEventListener('click', refreshAll);
 
     onAuthStateChanged(auth, async (u)=>{
       if(!u){
-        who.textContent = "Natijalarni ko‘rish uchun tizimga kiring.";
+        who.textContent = "Natijalarni ko‘rish va reytingni ko‘rish uchun tizimga kiring.";
       }else{
         who.textContent = (u.displayName ? (u.displayName + ' — ') : '') + (u.email || '');
-        loadResults(u.uid);
+        await loadResults(u.uid);
+        await loadLeaderboard(u.uid);
       }
     });
   </script>
