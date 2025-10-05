@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Natijalar</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+  <style>
+    :root{--primary:#2E8B57;--primary-dark:#1F6B45;--gray-200:#e5e7eb;--shadow:0 10px 30px rgba(0,0,0,.08)}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;background:#fff;color:#111}
+    header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--gray-200);z-index:10}
+    .container{max-width:1200px;margin:0 auto;padding:12px 16px}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#111}
+    .brand__pi{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:var(--shadow)}
+    .nav a{padding:8px 12px;border-radius:10px;text-decoration:none;color:#111}
+    .nav a:hover{background:#E8F5E9}
+    .btn{border:1px solid var(--gray-200);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
+    h1{font-family:Montserrat,sans-serif;margin:18px 0 6px}
+    .card{border:1px solid var(--gray-200);border-radius:14px;box-shadow:var(--shadow);background:#fff}
+    .card__body{padding:16px}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--gray-200);text-align:left;font-size:14px}
+    th{font-weight:700}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:999px;font-size:12px}
+    .muted{color:#6b7280}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container row">
+      <a href="/" class="brand"><div class="brand__pi">π</div><strong>MathCenter</strong></a>
+      <nav class="nav" aria-label="Menyu">
+        <a href="index.html"><i class="fa-solid fa-house"></i> Bosh sahifa</a>
+        <a href="index.html" onclick="event.preventDefault(); history.back();" title="Orqaga">&#8592; Orqaga</a>
+        <a href="balance.html"><i class="fa-solid fa-wallet"></i> Balans</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container" style="padding:16px">
+    <h1><i class="fa-solid fa-chart-line"></i> Natijalar</h1>
+    <p class="muted" id="who"></p>
+
+    <section class="card" style="margin-top:12px">
+      <div class="card__body">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
+          <div class="badge"><i class="fa-regular fa-circle-check"></i> Oxirgi topshirilgan testlar</div>
+          <div>
+            <button id="btnRefresh" class="btn"><i class="fa-solid fa-rotate"></i> Yangilash</button>
+          </div>
+        </div>
+
+        <div id="empty" class="muted" style="display:none">Hali natijalar yo‘q.</div>
+        <div style="overflow:auto">
+          <table id="tbl">
+            <thead>
+              <tr>
+                <th>Test</th>
+                <th>Ball</th>
+                <th>%</th>
+                <th>Sana</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, collection, query, where, orderBy, limit, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain:"xplusy-760fa.firebaseapp.com",
+      projectId:"xplusy-760fa",
+      storageBucket:"xplusy-760fa.firebasestorage.app",
+      messagingSenderId:"992512966017",
+      appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId:"G-459PLJ7P7L"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const who = document.getElementById('who');
+    const tbody = document.getElementById('tbody');
+    const empty = document.getElementById('empty');
+    const btnRefresh = document.getElementById('btnRefresh');
+
+    const provider = new GoogleAuthProvider();
+
+    async function loadResults(uid){
+      tbody.innerHTML = '';
+      empty.style.display = 'none';
+      const qy = query(
+        collection(db, 'results'),
+        where('uid','==', uid),
+        orderBy('createdAt','desc'),
+        limit(100)
+      );
+      const snap = await getDocs(qy);
+      if (snap.empty) {
+        empty.style.display = 'block';
+        return;
+      }
+      snap.forEach(doc=>{
+        const r = doc.data();
+        const tr = document.createElement('tr');
+        const dt = r.createdAt?.toDate ? r.createdAt.toDate() : (r.createdAt instanceof Timestamp ? r.createdAt.toDate() : new Date(r.createdAt||Date.now()));
+        const percent = r.percent ?? (r.max ? Math.round((100*r.score)/r.max) : '');
+        tr.innerHTML = `
+          <td>${r.title || '—'}</td>
+          <td>${(r.score ?? '—')}${r.max ? ' / '+r.max : ''}</td>
+          <td>${percent!=='' ? percent+'%' : '—'}</td>
+          <td>${dt.toLocaleString('uz-UZ')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    btnRefresh.addEventListener('click', async ()=>{
+      const u = auth.currentUser;
+      if(!u){ await signInWithPopup(auth, provider); return; }
+      loadResults(u.uid);
+    });
+
+    onAuthStateChanged(auth, async (u)=>{
+      if(!u){
+        who.textContent = "Natijalarni ko‘rish uchun tizimga kiring.";
+      }else{
+        who.textContent = (u.displayName ? (u.displayName + ' — ') : '') + (u.email || '');
+        loadResults(u.uid);
+      }
+    });
+  </script>
+</body>
+</html>
