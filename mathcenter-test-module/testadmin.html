@@ -8,7 +8,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
-  <!-- MathJax -->
   <script>
     window.MathJax = { tex: {inlineMath: [['$', '$'], ['\\(', '\\)']]}, svg: {fontCache: 'global'} };
   </script>
@@ -24,7 +23,6 @@
     .brand__pi{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:var(--shadow)}
     .nav a{padding:8px 12px;border-radius:10px;text-decoration:none;color:#111}
     .nav a:hover{background:#E8F5E9}
-
     main{padding:16px}
     h1{font-family:Montserrat,sans-serif;margin:12px 0}
     .grid{display:grid;grid-template-columns:1fr;gap:12px}
@@ -104,63 +102,24 @@
     const btnCopy = document.getElementById('btnCopy');
     const fileInput = document.getElementById('fileInput');
 
-    let DATA = {
-      id: "algebra-1",
-      title: "Algebra — Boshlang'ich Test",
-      durationSeconds: 900,
-      questions: []
-    };
+    let DATA = { id: "algebra-1", title: "Algebra — Boshlang'ich Test", durationSeconds: 900, questions: [] };
 
-    function rerenderPreview() {
-      if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise();
-    }
+    function rerenderPreview() { if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise(); }
 
     function mkQuestion(q = null) {
-      const base = q || {
-        id: `q${Date.now()}`,
-        text: "Bu yerga savol matni. Masalan: $\\int_0^1 x^2\\,dx$ ?",
-        image: "",
-        options: [
-          {id:"A", text:"Variant A"},
-          {id:"B", text:"Variant B"},
-          {id:"C", text:"Variant C"}
-        ],
-        correctIndex: 0,
-        points: 1
-      };
-      DATA.questions.push(base);
-      renderQuestions();
+      const base = q || { id: `q${Date.now()}`, text: "Bu yerga savol matni. Masalan: $\\int_0^1 x^2\\,dx$ ?", image: "", options: [{id:"A",text:"Variant A"},{id:"B",text:"Variant B"},{id:"C",text:"Variant C"}], correctIndex: 0, points: 1 };
+      DATA.questions.push(base); renderQuestions();
     }
+    function delQuestion(i){ DATA.questions.splice(i,1); renderQuestions(); }
+    function addOption(i){ const q=DATA.questions[i]; const L=String.fromCharCode(65+q.options.length); q.options.push({id:L,text:`Variant ${L}`}); renderQuestions(); }
+    function delOption(i,oi){ const q=DATA.questions[i]; q.options.splice(oi,1); if(q.correctIndex>=q.options.length) q.correctIndex=q.options.length-1; renderQuestions(); }
 
-    function delQuestion(idx) {
-      DATA.questions.splice(idx,1);
-      renderQuestions();
-    }
-
-    function addOption(qi) {
-      const q = DATA.questions[qi];
-      const letter = String.fromCharCode(65 + q.options.length);
-      q.options.push({id: letter, text: `Variant ${letter}`});
-      renderQuestions();
-    }
-
-    function delOption(qi, oi) {
-      const q = DATA.questions[qi];
-      q.options.splice(oi,1);
-      if (q.correctIndex >= q.options.length) q.correctIndex = q.options.length - 1;
-      renderQuestions();
-    }
-
-    function renderQuestions() {
-      testId.value = DATA.id;
-      testTitle.value = DATA.title;
-      duration.value = DATA.durationSeconds;
-
-      qList.innerHTML = '';
-      DATA.questions.forEach((q, i) => {
-        const box = document.createElement('div');
-        box.className = 'qbox';
-        box.innerHTML = `
+    function renderQuestions(){
+      testId.value=DATA.id; testTitle.value=DATA.title; duration.value=DATA.durationSeconds;
+      qList.innerHTML='';
+      DATA.questions.forEach((q,i)=>{
+        const box=document.createElement('div'); box.className='qbox';
+        box.innerHTML=`
           <div class="rowx" style="justify-content:space-between;align-items:center">
             <strong>#${i+1} — <span class="muted">${q.id}</span></strong>
             <div>
@@ -168,7 +127,6 @@
               <button class="btn btn-danger" data-act="delQ" data-i="${i}"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>
-
           <div class="rowx" style="margin-top:8px">
             <div style="flex:1;min-width:260px">
               <label>Savol matni (LaTeX qo‘llanadi)</label>
@@ -185,14 +143,16 @@
               <input type="number" min="1" data-bind="points" data-i="${i}" value="${q.points||1}"/>
             </div>
           </div>
-
           <div style="margin-top:8px">
             <label>Variantlar</label>
             <div class="grid" style="gap:8px">
-              ${q.options.map((opt, oi) => `
+              ${q.options.map((opt,oi)=>`
                 <div class="optrow">
-                  <div><strong>${opt.id || String.fromCharCode(65+oi)}</strong></div>
-                  <div style="display:flex;flex-direction:column;gap:6px"><input type="text" data-bind="opt" data-i="${i}" data-oi="${oi}" value="${opt.text}"/><div class="preview opt-preview">${opt.text}</div></div>
+                  <div><strong>${opt.id||String.fromCharCode(65+oi)}</strong></div>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <input type="text" data-bind="opt" data-i="${i}" data-oi="${oi}" value="${opt.text}"/>
+                    <div class="preview opt-preview">${opt.text}</div>
+                  </div>
                   <div class="rowx">
                     <label class="pill" style="cursor:pointer">
                       <input type="radio" name="correct-${i}" ${q.correctIndex===oi?'checked':''} data-bind="correct" data-i="${i}" data-oi="${oi}"> To‘g‘ri
@@ -202,112 +162,68 @@
                 </div>
               `).join('')}
             </div>
-          </div>
-        `;
+          </div>`;
         qList.appendChild(box);
       });
       rerenderPreview();
 
       qList.querySelectorAll('textarea[data-bind="text"]').forEach(el=>{
         el.addEventListener('input', e=>{
-          const i = Number(e.target.dataset.i);
-          DATA.questions[i].text = e.target.value;
-          e.target.parentElement.querySelector('.preview').textContent = e.target.value;
-          rerenderPreview();
+          const i=+e.target.dataset.i; DATA.questions[i].text = e.target.value;
+          e.target.parentElement.querySelector('.preview').textContent = e.target.value; rerenderPreview();
         });
       });
       qList.querySelectorAll('input[data-bind="image"]').forEach(el=>{
-        el.addEventListener('input', e=>{
-          const i = Number(e.target.dataset.i);
-          DATA.questions[i].image = e.target.value.trim();
-          renderQuestions();
-        });
+        el.addEventListener('input', e=>{ const i=+e.target.dataset.i; DATA.questions[i].image=e.target.value.trim(); renderQuestions(); });
       });
       qList.querySelectorAll('input[data-bind="points"]').forEach(el=>{
-        el.addEventListener('input', e=>{
-          const i = Number(e.target.dataset.i);
-          DATA.questions[i].points = Number(e.target.value||1);
-        });
+        el.addEventListener('input', e=>{ const i=+e.target.dataset.i; DATA.questions[i].points=+e.target.value||1; });
       });
       qList.querySelectorAll('input[data-bind="opt"]').forEach(el=>{
         el.addEventListener('input', e=>{
-          const i = Number(e.target.dataset.i);
-          const oi = Number(e.target.dataset.oi);
-          DATA.questions[i].options[oi].text = e.target.value;
-          const wrap = e.target.parentElement;
-          const pv = wrap.querySelector('.opt-preview');
-          if (pv) { pv.textContent = e.target.value; }
-          if (window.MathJax && window.MathJax.typesetPromise) MathJax.typesetPromise();
+          const i=+e.target.dataset.i, oi=+e.target.dataset.oi;
+          DATA.questions[i].options[oi].text=e.target.value;
+          const pv=e.target.parentElement.querySelector('.opt-preview'); if(pv) pv.textContent=e.target.value; rerenderPreview();
         });
       });
       qList.querySelectorAll('input[data-bind="correct"]').forEach(el=>{
-        el.addEventListener('change', e=>{
-          const i = Number(e.target.dataset.i);
-          const oi = Number(e.target.dataset.oi);
-          DATA.questions[i].correctIndex = oi;
-        });
+        el.addEventListener('change', e=>{ const i=+e.target.dataset.i, oi=+e.target.dataset.oi; DATA.questions[i].correctIndex=oi; });
       });
       qList.querySelectorAll('button[data-act="delQ"]').forEach(el=>{
-        el.addEventListener('click', e=>{
-          const i = Number(e.currentTarget.dataset.i);
-          if (confirm('Ushbu savolni o‘chirasizmi?')) delQuestion(i);
-        });
+        el.addEventListener('click', e=>{ const i=+e.currentTarget.dataset.i; if(confirm('Ushbu savolni o‘chirasizmi?')) delQuestion(i); });
       });
       qList.querySelectorAll('button[data-act="addOpt"]').forEach(el=>{
-        el.addEventListener('click', e=>{
-          const i = Number(e.currentTarget.dataset.i);
-          addOption(i);
-        });
+        el.addEventListener('click', e=>{ addOption(+e.currentTarget.dataset.i); });
       });
       qList.querySelectorAll('button[data-act="delOpt"]').forEach(el=>{
         el.addEventListener('click', e=>{
-          const i = Number(e.currentTarget.dataset.i);
-          const oi = Number(e.currentTarget.dataset.oi);
-          const q = DATA.questions[i];
-          if (q.options.length <= 2) { alert('Kamida 2 ta variant bo‘lsin.'); return; }
-          delOption(i, oi);
+          const i=+e.currentTarget.dataset.i, oi=+e.currentTarget.dataset.oi;
+          const q=DATA.questions[i]; if(q.options.length<=2){ alert('Kamida 2 ta variant bo‘lsin.'); return; } delOption(i,oi);
         });
       });
     }
 
-    btnAddQ.addEventListener('click', () => mkQuestion());
-    testId.addEventListener('input', e => DATA.id = e.target.value.trim());
-    testTitle.addEventListener('input', e => DATA.title = e.target.value.trim());
-    duration.addEventListener('input', e => DATA.durationSeconds = Number(e.target.value||0));
+    btnAddQ.addEventListener('click', ()=> mkQuestion());
+    testId.addEventListener('input', e=> DATA.id=e.target.value.trim());
+    testTitle.addEventListener('input', e=> DATA.title=e.target.value.trim());
+    duration.addEventListener('input', e=> DATA.durationSeconds=+e.target.value||0);
 
-    btnImport.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const txt = await f.text();
-      try {
-        const obj = JSON.parse(txt);
-        DATA = {
-          id: obj.id || 'test-id',
-          title: obj.title || 'Yangi test',
-          durationSeconds: Number(obj.durationSeconds || 0),
-          questions: Array.isArray(obj.questions) ? obj.questions : []
-        };
+    btnImport.addEventListener('click', ()=> fileInput.click());
+    fileInput.addEventListener('change', async (e)=>{
+      const f=e.target.files[0]; if(!f) return; const txt=await f.text();
+      try{
+        const obj=JSON.parse(txt);
+        DATA={ id: obj.id||'test-id', title: obj.title||'Yangi test', durationSeconds:+(obj.durationSeconds||0), questions: Array.isArray(obj.questions)?obj.questions:[] };
         renderQuestions();
-      } catch {
-        alert('JSON formatida xato.');
-      }
+      }catch{ alert('JSON formatida xato.'); }
     });
 
-    btnCopy.addEventListener('click', async () => {
-      const payload = JSON.stringify(DATA, null, 2);
-      await navigator.clipboard.writeText(payload);
-      alert('JSON clipboardga nusxalandi.');
+    btnCopy.addEventListener('click', async()=>{
+      const payload=JSON.stringify(DATA,null,2); await navigator.clipboard.writeText(payload); alert('JSON clipboardga nusxalandi.');
     });
-
-    btnDownload.addEventListener('click', () => {
-      const payload = JSON.stringify(DATA, null, 2);
-      const blob = new Blob([payload], {type:'application/json'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (DATA.id || 'test') + '.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
+    btnDownload.addEventListener('click', ()=>{
+      const payload=JSON.stringify(DATA,null,2); const blob=new Blob([payload],{type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=(DATA.id||'test')+'.json'; a.click(); URL.revokeObjectURL(a.href);
     });
 
     mkQuestion();

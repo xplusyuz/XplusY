@@ -1,13 +1,14 @@
-MathCenter Test Module
+MathCenter Test Module — FIXED (single navigator toggle)
 
 Fayllar:
-- test.html  — Test bajarish sahifasi (MathJax + UI)
-- test.js    — Interaktiv logika, timer, review, Firestore natija yozish
-- test.json  — Namuna test (algebra-1)
-- testadmin.html — Admin konstruktor (JSON yaratish/tahrirlash)
-- img/jgp1.jpg  — Namuna rasm yo'li uchun placeholder
+- test.html  — Test bajarish sahifasi (MathJax + mobil drawer, bitta toggle)
+- test.js    — Interaktiv logika (duplicate const yo'q), timer, review, Firestore natija yozish
+- testadmin.html — Admin konstruktor (LaTeX preview variantlarda)
+- test.json  — Namuna test
+- natijalar.html — Natija ko‘rish sahifasi
+- img/jgp1.jpg — Namuna rasm
 
 Ishga tushirish:
-1) testadmin.html ni oching, savollarni to'ldiring, JSON yuklab oling (masalan, algebra1.json).
-2) test.html?file=algebra1.json orqali testni ishga tushiring.
-3) test.js dagi SAVE_TO_FIRESTORE = true holatida Firebase `results` kolleksiyasiga natija yoziladi (config kiriting).
+1) testadmin.html → savollarni to‘ldiring → JSON yuklab oling (algebra1.json).
+2) test.html?file=algebra1.json orqali testni oching.
+3) Tugagach, “Natijalar” tugmasidan natijalarni ko‘ring. Firebase `results` kolleksiyasiga yoziladi.
