@@ -23,26 +23,22 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// === UI elementlar ===
-const testTitleEl = document.getElementById('testTitle');
-const counterEl   = document.getElementById('counter');
-const timerEl     = document.getElementById('timer');
-const barEl       = document.getElementById('bar');
-const qwrap       = document.getElementById('qwrap');
-const btnPrev     = document.getElementById('btnPrev');
-const btnNext     = document.getElementById('btnNext');
-const btnFinish   = document.getElementById('btnFinish');
-const scoreHint   = document.getElementById('scoreHint');
-const qnav         = document.getElementById('qnav');
-const qnavGrid     = document.getElementById('qnavGrid');
-const btnQnavToggle= document.getElementById('btnQnavToggle');
-const btnQnavClose = document.getElementById('btnQnavClose');
-const qnavOverlay  = document.getElementById('qnavOverlay');
+// === UI elementlar (BIR MARTA e'lon) ===
+const testTitleEl   = document.getElementById('testTitle');
+const counterEl     = document.getElementById('counter');
+const timerEl       = document.getElementById('timer');
+const barEl         = document.getElementById('bar');
+const qwrap         = document.getElementById('qwrap');
+const btnPrev       = document.getElementById('btnPrev');
+const btnNext       = document.getElementById('btnNext');
+const btnFinish     = document.getElementById('btnFinish');
+const scoreHint     = document.getElementById('scoreHint');
 
-const qnav         = document.getElementById('qnav');
-const qnavGrid     = document.getElementById('qnavGrid');
-const btnQnavToggle= document.getElementById('btnQnavToggle');
-
+// Navigator elementlari
+const qnav          = document.getElementById('qnav');
+const qnavGrid      = document.getElementById('qnavGrid');
+const btnQnavToggle = document.getElementById('btnQnavToggle');
+const qnavHdr       = document.getElementById('qnavHdr');
 
 // === Holat ===
 let TEST = null;
@@ -75,21 +71,19 @@ async function typeset() {
   }
 }
 
-
 // === Savollar navigatori ===
 function renderQNav(){
-  if (!TEST) return;
+  if (!TEST || !qnavGrid) return;
   const total = TEST.questions.length;
   let html = '';
   for (let i=0;i<total;i++){
     const answered = (answers[i] !== null && answers[i] !== undefined);
     const classes = ['qnav__btn'];
-    if (answered) classes.push('answered');
+    if (answered) classes.push('answered'); // to'qroq yashil CSS bilan
     if (i === idx) classes.push('active');
     html += `<button class="${classes.join(' ')}" data-go="${i}" role="listitem" aria-label="Savol ${i+1}">${i+1}</button>`;
   }
   qnavGrid.innerHTML = html;
-  // click handler (delegate)
   qnavGrid.querySelectorAll('button[data-go]').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       const to = parseInt(e.currentTarget.dataset.go,10);
@@ -101,7 +95,6 @@ function renderQNav(){
     });
   });
 }
-
 
 // === Savol renderi ===
 function renderQuestion() {
@@ -115,9 +108,7 @@ function renderQuestion() {
   `;
 
   if (q.image) {
-    html += `
-      <div class="q-media"><img src="${q.image}" alt="savol rasmi" loading="lazy"/></div>
-    `;
+    html += `<div class="q-media"><img src="${q.image}" alt="savol rasmi" loading="lazy"/></div>`;
   }
 
   html += `<div class="options">`;
@@ -144,8 +135,6 @@ function renderQuestion() {
       progress();
       renderQNav();
       typeset();
-      renderQNav();
-      typeset();
     });
   });
 
@@ -165,7 +154,6 @@ function calcScore() {
   });
   return score;
 }
-
 
 async function finishTest(auto=false) {
   const max = sumMaxPoints();
@@ -199,9 +187,7 @@ async function finishTest(auto=false) {
   // Firestore (ixtiyoriy)
   if (SAVE_TO_FIRESTORE) {
     const u = auth.currentUser;
-    if (!u) {
-      try { await signInWithPopup(auth, provider); } catch {}
-    }
+    if (!u) { try { await signInWithPopup(auth, provider); } catch {} }
     const user = auth.currentUser;
     try {
       await addDoc(collection(db,'results'), {
@@ -216,41 +202,6 @@ async function finishTest(auto=false) {
         createdAt: serverTimestamp()
       });
     } catch (e) {
-      console.warn('Natijani saqlashda xatolik:', e);
-    }
-  }
-}
-</strong> / ${max} — ${percent}%</div>
-      <div class="muted">${auto ? "Vaqt tugadi — test avtomatik yakunlandi." : "Tabriklaymiz!"}</div>
-      <button class="btn" id="btnReview"><i class="fa-regular fa-eye"></i> Javoblarni ko‘rish</button>
-    </div>
-  `;
-  typeset();
-
-  btnPrev.style.display = 'none';
-  btnNext.style.display = 'none';
-  btnFinish.style.display = 'none';
-  document.getElementById('btnReview').addEventListener('click', showReview);
-
-  // Firestore (ixtiyoriy)
-  if (SAVE_TO_FIRESTORE) {
-    const u = auth.currentUser;
-    if (!u) {
-      try { await signInWithPopup(auth, provider); }
-      catch { /* foydalanuvchi bekor qildi */ }
-    }
-    const user = auth.currentUser;
-    try {
-      await addDoc(collection(db,'results'), {
-        uid: user ? user.uid : null,
-        title: TEST.title || 'Test',
-        testId: TEST.id || null,
-        questionsCount: Array.isArray(TEST.questions) ? TEST.questions.length : null,
-        durationSeconds: TEST.durationSeconds || null,
-        score, max, percent,
-        createdAt: serverTimestamp()
-      });
-} catch (e) {
       console.warn('Natijani saqlashda xatolik:', e);
     }
   }
@@ -310,11 +261,11 @@ async function bootstrap() {
   answers = Array(TEST.questions.length).fill(null);
   scoreHint.textContent = `Ball: 0 / ${sumMaxPoints()}`;
   renderQuestion();
+  renderQNav();
   progress();
   startTimer();
 
-  onAuthStateChanged(auth, () => { /* noop */ });
-
+  // Tugmalar
   btnPrev.addEventListener('click', () => {
     if (idx>0) { idx--; renderQuestion(); renderQNav(); }
   });
@@ -325,10 +276,37 @@ async function bootstrap() {
     finishTest(false);
   });
 
+  // Ball hint yangilash
   qwrap.addEventListener('change', () => {
     const score = calcScore();
     scoreHint.textContent = `Ball: ${score} / ${sumMaxPoints()}`;
   });
+
+  // Drawer toggle: ko‘z tugmasi
+  if (btnQnavToggle && qnav){
+    const isOpen = qnav.classList.contains('open');
+    btnQnavToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    btnQnavToggle.innerHTML = isOpen ? '<i class="fa-regular fa-eye-slash"></i> Yopish' : '<i class="fa-regular fa-eye"></i> Ko‘rish';
+    btnQnavToggle.addEventListener('click', ()=>{
+      const nowOpen = qnav.classList.toggle('open');
+      btnQnavToggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      btnQnavToggle.innerHTML = nowOpen ? '<i class="fa-regular fa-eye-slash"></i> Yopish' : '<i class="fa-regular fa-eye"></i> Ko‘rish';
+    });
+  }
+  // Drawer toggle: sarlavhani bosish
+  if (qnavHdr && qnav){
+    qnavHdr.addEventListener('click', (ev)=>{
+      if (ev.target && ev.target.closest('#btnQnavToggle')) return;
+      const nowOpen = qnav.classList.toggle('open');
+      if (btnQnavToggle){
+        btnQnavToggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+        btnQnavToggle.innerHTML = nowOpen ? '<i class="fa-regular fa-eye-slash"></i> Yopish' : '<i class="fa-regular fa-eye"></i> Ko‘rish';
+      }
+    });
+  }
+
+  // Auth holatini kuzatish (ixtiyoriy)
+  onAuthStateChanged(auth, () => {});
 }
 
 bootstrap();
