@@ -33,6 +33,11 @@ const btnPrev     = document.getElementById('btnPrev');
 const btnNext     = document.getElementById('btnNext');
 const btnFinish   = document.getElementById('btnFinish');
 const scoreHint   = document.getElementById('scoreHint');
+const qnav         = document.getElementById('qnav');
+const qnavGrid     = document.getElementById('qnavGrid');
+const btnQnavToggle= document.getElementById('btnQnavToggle');
+const btnQnavClose = document.getElementById('btnQnavClose');
+const qnavOverlay  = document.getElementById('qnavOverlay');
 
 const qnav         = document.getElementById('qnav');
 const qnavGrid     = document.getElementById('qnavGrid');
@@ -45,6 +50,7 @@ let idx = 0;
 let answers = []; // foydalanuvchi tanlovi: option index yoki null
 let timerId = null;
 let remain = 0; // soniya
+let initialRemain = 0;
 
 // === Yordamchi ===
 function qs(name, url = window.location.href) {
@@ -160,16 +166,61 @@ function calcScore() {
   return score;
 }
 
+
 async function finishTest(auto=false) {
   const max = sumMaxPoints();
   const score = calcScore();
   const percent = Math.round(100 * score / max);
+  const totalQ = TEST.questions.length;
+  let correctCount = 0;
+  TEST.questions.forEach((q, i) => { if (answers[i] === q.correctIndex) correctCount++; });
+  const durationSeconds = Number(TEST.durationSeconds || 0);
+  const timeTakenSeconds = durationSeconds ? Math.max(0, durationSeconds - remain) : null;
 
   // Natija ekrani
   qwrap.innerHTML = `
     <div class="center" style="flex-direction:column;gap:10px">
       <div style="font-family:Montserrat;font-size:22px">Test yakunlandi</div>
       <div class="pill">Ball: <strong>${score}</strong> / ${max} — ${percent}%</div>
+      <div class="muted">${auto ? "Vaqt tugadi — test avtomatik yakunlandi." : "Tabriklaymiz!"}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+        <a class="btn" href="natijalar.html"><i class="fa-solid fa-chart-line"></i> Natijalar</a>
+        <button class="btn" id="btnReview"><i class="fa-regular fa-eye"></i> Javoblarni ko‘rish</button>
+      </div>
+    </div>
+  `;
+  typeset();
+
+  btnPrev.style.display = 'none';
+  btnNext.style.display = 'none';
+  btnFinish.style.display = 'none';
+  document.getElementById('btnReview').addEventListener('click', showReview);
+
+  // Firestore (ixtiyoriy)
+  if (SAVE_TO_FIRESTORE) {
+    const u = auth.currentUser;
+    if (!u) {
+      try { await signInWithPopup(auth, provider); } catch {}
+    }
+    const user = auth.currentUser;
+    try {
+      await addDoc(collection(db,'results'), {
+        uid: user ? user.uid : null,
+        title: TEST.title || 'Test',
+        testId: TEST.id || null,
+        score, max, percent,
+        totalQuestions: totalQ,
+        correctCount: correctCount,
+        durationSeconds: durationSeconds || null,
+        timeTakenSeconds: timeTakenSeconds,
+        createdAt: serverTimestamp()
+      });
+    } catch (e) {
+      console.warn('Natijani saqlashda xatolik:', e);
+    }
+  }
+}
+</strong> / ${max} — ${percent}%</div>
       <div class="muted">${auto ? "Vaqt tugadi — test avtomatik yakunlandi." : "Tabriklaymiz!"}</div>
       <button class="btn" id="btnReview"><i class="fa-regular fa-eye"></i> Javoblarni ko‘rish</button>
     </div>
@@ -193,10 +244,13 @@ async function finishTest(auto=false) {
       await addDoc(collection(db,'results'), {
         uid: user ? user.uid : null,
         title: TEST.title || 'Test',
+        testId: TEST.id || null,
+        questionsCount: Array.isArray(TEST.questions) ? TEST.questions.length : null,
+        durationSeconds: TEST.durationSeconds || null,
         score, max, percent,
         createdAt: serverTimestamp()
       });
-    } catch (e) {
+} catch (e) {
       console.warn('Natijani saqlashda xatolik:', e);
     }
   }
@@ -231,6 +285,7 @@ function showReview() {
 // === Timer ===
 function startTimer() {
   remain = Number(TEST.durationSeconds || 0);
+  initialRemain = remain;
   timerEl.textContent = fmtTime(remain);
   if (timerId) clearInterval(timerId);
   if (!remain) return;
