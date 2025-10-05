@@ -71,6 +71,28 @@ async function typeset() {
   }
 }
 
+// === Randomization ===
+const RANDOMIZE_QUESTIONS = true;
+const RANDOMIZE_OPTIONS = true;
+
+function shuffleArray(arr){
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function shuffleOptionsInQuestion(q){
+  if (!Array.isArray(q.options) || q.options.length < 2) return q;
+  const original = q.options.map((opt, idx) => ({...opt, __idx: idx}));
+  shuffleArray(original);
+  const newCorrectIndex = original.findIndex(o => o.__idx === q.correctIndex);
+  q.options = original.map(({__idx, ...rest}) => rest);
+  q.correctIndex = newCorrectIndex;
+  return q;
+}
+
 // === Savollar navigatori ===
 function renderQNav(){
   if (!TEST || !qnavGrid) return;
@@ -118,7 +140,6 @@ function renderQuestion() {
       <label class="opt">
         <input type="radio" name="opt" value="${i}" ${checked}/>
         <div>
-          <div><strong>${opt.id || String.fromCharCode(65+i)}</strong></div>
           <div>${opt.text}</div>
         </div>
       </label>
@@ -223,7 +244,7 @@ function showReview() {
             const mark =
               (j === q.correctIndex) ? ' <span class="pill">To‘g‘ri</span>' :
               (j === user) ? ' <span class="pill" style="background:#FEE2E2;border-color:#fecaca">Sizning tanlov</span>' : '';
-            return `<div class="opt" style="cursor:default">${opt.id || String.fromCharCode(65+j)}. ${opt.text}${mark}</div>`;
+            return `<div class="opt" style="cursor:default">${opt.text}${mark}</div>`;
           }).join('')}
         </div>
       </div></div>
