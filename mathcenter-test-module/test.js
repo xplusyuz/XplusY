@@ -138,6 +138,8 @@ function renderQuestion() {
       progress();
       renderQNav();
       typeset();
+      renderQNav();
+      typeset();
     });
   });
 
