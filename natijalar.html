@@ -32,8 +32,8 @@
     table{width:100%;border-collapse:separate;border-spacing:0}
     th,td{padding:10px 12px;border-bottom:1px solid var(--gray-200);text-align:left;font-size:14px}
     th{font-weight:700}
-
     .err{margin-top:8px;color:#b91c1c;font-size:13px}
+    .me{background:#f0fdf4} /* mening qatorim */
   </style>
 </head>
 <body>
@@ -52,14 +52,15 @@
     <h1><i class="fa-solid fa-chart-line"></i> Natijalar</h1>
     <p class="muted" id="who"></p>
 
+    <!-- Oxirgi natijalar -->
     <section class="card" style="margin-top:12px">
       <div class="card__body">
         <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
           <div class="badge"><i class="fa-regular fa-circle-check"></i> Oxirgi topshirilgan testlar</div>
           <div style="display:flex;gap:8px;align-items:center">
             <button id="btnRefresh" class="btn"><i class="fa-solid fa-rotate"></i> Yangilash</button>
-            <button id="btnLogin" class="btn" title="Google bilan kirish" style="display:none"><i class="fa-brands fa-google"></i> Kirish</button>
-            <button id="btnLogout" class="btn" title="Chiqish" style="display:none"><i class="fa-solid fa-right-from-bracket"></i> Chiqish</button>
+            <button id="btnLogin" class="btn" style="display:none"><i class="fa-brands fa-google"></i> Kirish</button>
+            <button id="btnLogout" class="btn" style="display:none"><i class="fa-solid fa-right-from-bracket"></i> Chiqish</button>
           </div>
         </div>
 
@@ -81,6 +82,33 @@
         </div>
       </div>
     </section>
+
+    <!-- Reyting (Top-10) -->
+    <section class="card" style="margin-top:16px">
+      <div class="card__body">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
+          <div class="badge"><i class="fa-solid fa-trophy"></i> Reyting — Umumiy yig‘ilgan ball</div>
+          <div>
+            <button id="btnRankRefresh" class="btn"><i class="fa-solid fa-rotate"></i> Yangilash</button>
+          </div>
+        </div>
+        <div style="overflow:auto">
+          <table id="tblRank">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Foydalanuvchi</th>
+                <th>Yig‘ilgan ball</th>
+                <th>Umumiy max</th>
+                <th>%</th>
+                <th>Urinishlar</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRank"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script type="module">
@@ -88,7 +116,6 @@
     import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, collection, query, where, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    // --- Firebase config (sizniki bilan bir xil) ---
     const firebaseConfig = {
       apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
       authDomain:"xplusy-760fa.firebaseapp.com",
@@ -112,10 +139,12 @@
     const btnLogin = document.getElementById('btnLogin');
     const btnLogout = document.getElementById('btnLogout');
 
-    // --- UI helpers ---
-    function clearTable(){ tbody.innerHTML = ''; }
-    function showEmpty(v){ empty.style.display = v ? 'block' : 'none'; }
-    function showError(msg){ if(!msg){ errEl.style.display='none'; errEl.textContent=''; } else { errEl.style.display='block'; errEl.textContent=msg; } }
+    const tbodyRank = document.getElementById('tbodyRank');
+    const btnRankRefresh = document.getElementById('btnRankRefresh');
+
+    function showError(msg){ errEl.style.display = msg ? 'block':'none'; errEl.textContent = msg || ''; }
+    function clearTable(){ tbody.innerHTML=''; }
+    function showEmpty(v){ empty.style.display = v ? 'block':'none'; }
 
     function appendRow(r){
       const tr = document.createElement('tr');
@@ -130,59 +159,78 @@
       tbody.appendChild(tr);
     }
 
-    function renderRowsSnap(snap){
-      if (snap.empty) { showEmpty(true); return; }
-      showEmpty(false);
-      snap.forEach(doc=> appendRow(doc.data()));
-    }
-
-    function renderRowsClient(arr){
-      if (!arr.length) { showEmpty(true); return; }
-      showEmpty(false);
-      arr.forEach(r=> appendRow(r));
-    }
-
-    // --- Asosiy yuklovchi: indeks bo'lmasa ham ishlaydi ---
     async function loadResults(uid){
       clearTable(); showEmpty(false); showError('');
-
       try {
-        // Indeksli varianti (uid == X + orderBy(createdAt desc))
         const q1 = query(
           collection(db, 'results'),
           where('uid','==', uid),
           orderBy('createdAt','desc'),
           limit(100)
         );
-        const snap1 = await getDocs(q1);
-        renderRowsSnap(snap1);
+        const snap = await getDocs(q1);
+        if (snap.empty) { showEmpty(true); return; }
+        snap.forEach(doc=> appendRow(doc.data()));
       } catch (err) {
-        // Fallback: indeks yo'q bo'lsa, faqat where bilan olib, klientda sortlab beramiz
         console.warn('Index yo‘q, fallback ishga tushdi:', err?.message);
         showError('Indeks yo‘q kabi. Hozircha vaqtincha tartiblash klientda bajarildi. (Admin: results(uid asc, createdAt desc) kompozit indeks qo‘shing)');
+        // fallback
         try {
-          const q2 = query(
-            collection(db, 'results'),
-            where('uid','==', uid)
-          );
+          const q2 = query(collection(db, 'results'), where('uid','==', uid));
           const snap2 = await getDocs(q2);
           const items = [];
           snap2.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
           items.sort((a,b) => {
             const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds*1000 : 0);
             const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds*1000 : 0);
-            return tb - ta; // desc
+            return tb - ta;
           });
-          renderRowsClient(items.slice(0, 100));
-        } catch (err2) {
-          console.error(err2);
-          showError('Natijalarni yuklashda muammo: ' + (err2?.message || 'noma’lum xato'));
+          if (!items.length) { showEmpty(true); return; }
+          items.slice(0,100).forEach(r => appendRow(r));
+        } catch (e2) {
+          showError('Natijalarni yuklashda muammo: ' + (e2?.message||''));
           showEmpty(true);
         }
       }
     }
 
-    // --- Auth holati ---
+    // ---------- Reyting (Top-10) ----------
+    function clearRank(){ tbodyRank.innerHTML=''; }
+    function appendRank(i, r, meUid){
+      const tr = document.createElement('tr');
+      if (r.uid === meUid) tr.classList.add('me');
+      const pct = r.totalMax ? Math.round(100 * r.totalScore / r.totalMax) : 0;
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td>${r.displayName || (r.uid?.slice(0,6)+'…') || 'Noma’lum'}</td>
+        <td>${r.totalScore ?? 0}</td>
+        <td>${r.totalMax ?? 0}</td>
+        <td>${pct}%</td>
+        <td>${r.attempts ?? 0}</td>
+      `;
+      tbodyRank.appendChild(tr);
+    }
+
+    async function loadRank(){
+      clearRank();
+      const me = auth.currentUser;
+      const meUid = me?.uid || null;
+
+      // Top-10 by totalScore desc
+      const qTop = query(
+        collection(db, 'leaderboard'),
+        orderBy('totalScore', 'desc'),
+        limit(10)
+      );
+      const snapTop = await getDocs(qTop);
+      let i = 1;
+      snapTop.forEach(doc => { appendRank(i++, doc.data(), meUid); });
+
+      // (ixtiyoriy) Mening o‘rnimni topish — agar Top-10 da bo‘lmasam ham
+      // Tezroq ishlashi uchun bu qadamni hozircha o‘tkazib turamiz.
+    }
+
+    // ---------- Auth ----------
     onAuthStateChanged(auth, async (u)=>{
       if(!u){
         who.textContent = "Natijalarni ko‘rish uchun tizimga kiring.";
@@ -193,11 +241,12 @@
         who.textContent = (u.displayName ? (u.displayName + ' — ') : '') + (u.email || '');
         btnLogin.style.display = 'none';
         btnLogout.style.display = 'inline-flex';
-        loadResults(u.uid);
+        await loadResults(u.uid);
       }
+      await loadRank(); // reyting hammaga ochiq; login bo'lmasa ham yuklab olamiz
     });
 
-    // --- Tugmalar ---
+    // ---------- Tugmalar ----------
     btnRefresh.addEventListener('click', async ()=>{
       const u = auth.currentUser;
       if(!u){
@@ -205,14 +254,10 @@
       }
       loadResults(auth.currentUser.uid);
     });
+    btnLogin.addEventListener('click', async ()=>{ try { await signInWithPopup(auth, provider); } catch(e){} });
+    btnLogout.addEventListener('click', async ()=>{ try { await signOut(auth); } catch(e){} });
 
-    btnLogin.addEventListener('click', async ()=>{
-      try { await signInWithPopup(auth, provider); } catch(e){ showError('Kirish bekor qilindi yoki xato: ' + (e?.message||'')); }
-    });
-
-    btnLogout.addEventListener('click', async ()=>{
-      try { await signOut(auth); } catch(e){ /* ignore */ }
-    });
+    btnRankRefresh.addEventListener('click', loadRank);
   </script>
 </body>
 </html>
