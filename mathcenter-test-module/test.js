@@ -34,6 +34,11 @@ const btnNext     = document.getElementById('btnNext');
 const btnFinish   = document.getElementById('btnFinish');
 const scoreHint   = document.getElementById('scoreHint');
 
+const qnav         = document.getElementById('qnav');
+const qnavGrid     = document.getElementById('qnavGrid');
+const btnQnavToggle= document.getElementById('btnQnavToggle');
+
+
 // === Holat ===
 let TEST = null;
 let idx = 0;
@@ -63,6 +68,34 @@ async function typeset() {
     await MathJax.typesetPromise();
   }
 }
+
+
+// === Savollar navigatori ===
+function renderQNav(){
+  if (!TEST) return;
+  const total = TEST.questions.length;
+  let html = '';
+  for (let i=0;i<total;i++){
+    const answered = (answers[i] !== null && answers[i] !== undefined);
+    const classes = ['qnav__btn'];
+    if (answered) classes.push('answered');
+    if (i === idx) classes.push('active');
+    html += `<button class="${classes.join(' ')}" data-go="${i}" role="listitem" aria-label="Savol ${i+1}">${i+1}</button>`;
+  }
+  qnavGrid.innerHTML = html;
+  // click handler (delegate)
+  qnavGrid.querySelectorAll('button[data-go]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      const to = parseInt(e.currentTarget.dataset.go,10);
+      if (!isNaN(to)){
+        idx = to;
+        renderQuestion();
+        renderQNav();
+      }
+    });
+  });
+}
+
 
 // === Savol renderi ===
 function renderQuestion() {
@@ -103,6 +136,8 @@ function renderQuestion() {
     r.addEventListener('change', (e) => {
       answers[idx] = parseInt(e.target.value,10);
       progress();
+      renderQNav();
+      typeset();
     });
   });
 
@@ -224,10 +259,10 @@ async function bootstrap() {
   onAuthStateChanged(auth, () => { /* noop */ });
 
   btnPrev.addEventListener('click', () => {
-    if (idx>0) { idx--; renderQuestion(); }
+    if (idx>0) { idx--; renderQuestion(); renderQNav(); }
   });
   btnNext.addEventListener('click', () => {
-    if (idx < TEST.questions.length-1) { idx++; renderQuestion(); }
+    if (idx < TEST.questions.length-1) { idx++; renderQuestion(); renderQNav(); }
   });
   btnFinish.addEventListener('click', () => {
     finishTest(false);
