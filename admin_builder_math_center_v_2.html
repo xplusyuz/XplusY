@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Admin JSON Builder (v2)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --primary:#2E8B57;/* brand green */
+      --primary-600:#26784B;
+      --primary-700:#1F6B45;
+      --muted:#f4f6f8;
+      --border:#e5e7eb;
+      --text:#0f172a;
+      --soft:#ffffff;
+      --chip:#e8f5ed;
+      --warn:#B45309;
+      --danger:#b91c1c;
+      --ok:#047857;
+      --shadow:0 10px 24px rgba(0,0,0,.08);
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:linear-gradient(180deg,#fff,#fafafa)}
+    .container{max-width:1180px;margin:28px auto;padding:0 16px}
+    header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,.04)}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:12px 16px}
+    .brand{display:flex;gap:10px;align-items:center}
+    .logo{width:38px;height:38px;border-radius:10px;background:radial-gradient(100% 100% at 50% 0%,#3aa76d 0%,#1f6b45 100%);box-shadow:inset 0 -6px 12px rgba(0,0,0,.25)}
+    .brand h1{font-size:18px;margin:0}
+    .btn{appearance:none;border:1px solid var(--border);background:#fff;border-radius:12px;padding:10px 14px;cursor:pointer;transition:.15s box-shadow,.15s transform,.15s background;display:inline-flex;gap:8px;align-items:center}
+    .btn:hover{box-shadow:var(--shadow)}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn.primary:hover{background:var(--primary-600)}
+    .btn.ghost{background:#fff}
+    .btn.danger{border-color:var(--danger);color:var(--danger);background:#fff}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    @media (max-width:1024px){.grid{grid-template-columns:1fr}}
+    section.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    section.card>header{position:unset;border:0;box-shadow:none;background:transparent}
+    section.card h2{font-size:18px;margin:0}
+    .card-body{padding:16px}
+    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:12px}
+    .row:last-child{margin-bottom:0}
+    .col-12{grid-column:span 12}
+    .col-6{grid-column:span 6}
+    .col-4{grid-column:span 4}
+    .col-3{grid-column:span 3}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:12px;color:#475569}
+    .field input[type="text"],
+    .field input[type="url"],
+    .field input[type="datetime-local"],
+    .field input[type="color"],
+    .field textarea,
+    .field select{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#fff;font:inherit}
+    .field textarea{min-height:92px;resize:vertical}
+    .switch{display:flex;gap:10px;align-items:center}
+    .switch input{width:20px;height:20px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{background:var(--chip);border:1px dashed #b6ead0;padding:6px 10px;border-radius:999px;font-size:12px;display:inline-flex;gap:6px;align-items:center}
+    .chip button{border:0;background:transparent;cursor:pointer}
+    .list{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+    .item{border:1px solid var(--border);border-radius:14px;padding:12px;background:linear-gradient(180deg,#fff,#fbfbfb)}
+    .item-head{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .item-head .title{font-weight:600}
+    .item-actions{display:flex;gap:8px}
+    .muted{color:#64748b}
+    .json-pane{white-space:pre;overflow:auto;background:#0b1520;color:#e0f2f1;border-radius:var(--radius);padding:14px;font-size:12.5px;line-height:1.45;border:1px solid #0b2a2a}
+    .help{font-size:12px;color:#475569}
+    .sep{height:1px;background:var(--border);margin:10px 0}
+    .kbd{padding:2px 6px;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;background:#fff;font-size:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="toolbar container">
+      <div class="brand">
+        <div class="logo"></div>
+        <h1>Admin JSON Builder — MathCenter</h1>
+      </div>
+      <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnFetch">Fetch /admin.json</button>
+        <button class="btn" id="btnLoadLS" title="LocalStorage’dan yuklash">Load LocalStorage</button>
+        <button class="btn" id="btnSaveLS" title="LocalStorage’ga saqlash">Publish LocalStorage</button>
+        <button class="btn" id="btnImport">Import JSON</button>
+        <button class="btn" id="btnDownload">Download JSON</button>
+        <button class="btn primary" id="btnCopy">Copy JSON</button>
+        <button class="btn danger" id="btnReset">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="display:flex;flex-direction:column;gap:18px;margin-top:20px">
+    <div class="grid">
+      <!-- BANNERS -->
+      <section class="card">
+        <header class="toolbar" style="padding:12px 16px">
+          <h2>Bannerlar</h2>
+          <div class="item-actions">
+            <button class="btn" id="addBanner">+ Banner qo‘shish</button>
+          </div>
+        </header>
+        <div class="card-body">
+          <div id="bannerList" class="list"></div>
+          <p class="help">Bannerlar uchun tavsiya etiladigan maydonlar: <b>title</b>, <b>subtitle</b>, <b>image</b> (yoki <b>bg</b> + CSS), <b>link</b>. Teglar ixtiyoriy.</p>
+        </div>
+      </section>
+
+      <!-- CARDS -->
+      <section class="card">
+        <header class="toolbar" style="padding:12px 16px">
+          <h2>Kartalar (Tests / Courses / Simulators)</h2>
+          <div class="item-actions">
+            <button class="btn" data-add-card="tests">+ Test qo‘shish</button>
+            <button class="btn" data-add-card="courses">+ Kurs qo‘shish</button>
+            <button class="btn" data-add-card="simulators">+ Simulyator qo‘shish</button>
+          </div>
+        </header>
+        <div class="card-body">
+          <div class="item" style="border-style:dashed">
+            <div class="item-head"><div class="title muted">Kartalar ro‘yxatlari</div></div>
+            <div class="row">
+              <div class="col-12 field"><label>Filtrlar yordamchi (ko‘rish uchun):</label>
+                <div class="help">Kartalarda <b>mode</b> tanlang: <span class="kbd">static</span> (default) yoki <span class="kbd">online</span>. Online bo‘lsa <b>startAt</b> va <b>endAt</b> talab qilinadi. <b>best</b> belgisi — birinchi chiqish, <b>home</b> — Bosh sahifada ko‘rinsin.</div>
+              </div>
+            </div>
+          </div>
+
+          <h3 style="margin:14px 0 6px">Tests</h3>
+          <div id="testsList" class="list"></div>
+
+          <div class="sep"></div>
+          <h3 style="margin:6px 0">Courses</h3>
+          <div id="coursesList" class="list"></div>
+
+          <div class="sep"></div>
+          <h3 style="margin:6px 0">Simulators</h3>
+          <div id="simulatorsList" class="list"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- JSON PREVIEW -->
+    <section class="card">
+      <header class="toolbar" style="padding:12px 16px"><h2>JSON natija (jonli)</h2></header>
+      <div class="card-body">
+        <pre class="json-pane" id="jsonOut">{
+  "banners": [],
+  "cards": {"tests":[],"courses":[],"simulators":[]}
+}</pre>
+        <p class="help">Eslatma: Sana-vaqtlar <b>ISO 8601</b> formatga (mahalliy vaqt zonasi bilan) avtomatik normalizatsiya qilinadi, masalan <code>2025-10-20T19:00:00+05:00</code>.</p>
+      </div>
+    </section>
+  </main>
+
+  <input type="file" id="fileInput" accept="application/json" hidden>
+
+<script>
+/********************  Qo‘llanma: maydon helperlari  ********************/
+const state = {
+  banners: [],
+  cards: { tests: [], courses: [], simulators: [] }
+};
+
+const $ = (sel, el=document) => el.querySelector(sel);
+const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+
+function createEl(tag, attrs={}){ const el = document.createElement(tag); Object.assign(el, attrs); return el; }
+
+// LocalStorage kaliti
+const LS_KEY = "__ADMIN_JSON";
+
+// Sana/vaqtni ISO (mahalliy TZ bilan) formatga o‘tkazish
+function toISOWithTZ(value){
+  if(!value) return undefined;
+  // Agar value allaqachon ISO bo‘lsa — qaytarib yuboramiz
+  if(/\dT\d{2}:\d{2}/.test(value) && /Z|[+-]\d{2}:?\d{2}$/.test(value)) return value;
+  // datetime-local -> ISO with TZ
+  const d = new Date(value);
+  if(Number.isNaN(+d)) return undefined;
+  const pad = n => String(n).padStart(2,'0');
+  const y=d.getFullYear(); const m=pad(d.getMonth()+1); const dd=pad(d.getDate());
+  const hh=pad(d.getHours()); const mm=pad(d.getMinutes()); const ss=pad(d.getSeconds());
+  const offMin = -d.getTimezoneOffset();
+  const sign = offMin>=0?'+':'-';
+  const abs = Math.abs(offMin); const oh=pad(Math.floor(abs/60)); const om=pad(abs%60);
+  return `${y}-${m}-${dd}T${hh}:${mm}:${ss}${sign}${oh}:${om}`;
+}
+
+// Bo‘sh qiymatlarni olib tashlash (deep)
+function prune(obj){
+  if(Array.isArray(obj)) return obj.map(prune).filter(v=>!(v===undefined || (typeof v==='object' && v!==null && Object.keys(v).length===0)));
+  if(obj && typeof obj==='object'){
+    const out={};
+    for(const [k,v] of Object.entries(obj)){
+      const pv = prune(v);
+      if(pv===undefined) continue;
+      if(typeof pv==='string' && pv.trim()==='') continue;
+      if(Array.isArray(pv) && pv.length===0) continue;
+      if(typeof pv==='object' && pv!==null && Object.keys(pv).length===0) continue;
+      out[k]=pv;
+    }
+    return out;
+  }
+  if(obj===null) return undefined;
+  return obj;
+}
+
+function updatePreview(){
+  const data = { banners: state.banners, cards: state.cards };
+  $('#jsonOut').textContent = JSON.stringify(prune(data), null, 2);
+}
+
+/********************  TAG chips  ********************/
+function buildTagsUI(initial=[]){
+  const wrap = createEl('div');
+  const chips = createEl('div',{className:'chips'});
+  const input = createEl('input',{type:'text',placeholder:'teg yozing va Enter'});
+  const tags = [...initial];
+  function render(){
+    chips.innerHTML='';
+    for(const t of tags){
+      const c = createEl('span',{className:'chip'});
+      c.append(t);
+      const x = createEl('button',{innerHTML:'✕',title:'O‘chirish'});
+      x.onclick = ()=>{ const i=tags.indexOf(t); if(i>-1){ tags.splice(i,1); render(); updatePreview(); } };
+      c.append(' ',x); chips.append(c);
+    }
+  }
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter' || e.key===','){
+      e.preventDefault(); const val=input.value.trim(); if(!val) return; if(!tags.includes(val)) tags.push(val); input.value=''; render(); updatePreview();
+    }
+  });
+  wrap.getValue = ()=>[...tags];
+  wrap.setValue = arr=>{ tags.splice(0,tags.length,...(arr||[])); render(); };
+  wrap.append(chips,input);
+  render();
+  return wrap;
+}
+
+/********************  ITEM builders  ********************/
+function bannerItem(data={}){
+  const item = createEl('div',{className:'item'});
+  const head = createEl('div',{className:'item-head'});
+  const title = createEl('div',{className:'title',textContent:data.title||'Yangi banner'});
+  const actions = createEl('div',{className:'item-actions'});
+  const btnUp = createEl('button',{className:'btn ghost',textContent:'↑'});
+  const btnDown = createEl('button',{className:'btn ghost',textContent:'↓'});
+  const btnDel = createEl('button',{className:'btn danger',textContent:'O‘chirish'});
+  actions.append(btnUp,btnDown,btnDel); head.append(title,actions); item.append(head);
+
+  const row1 = createEl('div',{className:'row'});
+  const fTitle = fieldText('Sarlavha','title',data.title||'');
+  const fSubtitle = fieldText('Kichik sarlavha','subtitle',data.subtitle||'');
+  fTitle.oninput = ()=>{ title.textContent=fTitle.value.trim()||'Yangi banner'; updatePreview(); };
+  row1.append(col(6,fTitle), col(6,fSubtitle));
+
+  const row2 = createEl('div',{className:'row'});
+  const fImage = fieldText('Rasm URL (image)','image',data.image||'');
+  const fLink = fieldText('Link (ixtiyoriy)','link',data.link||'');
+  row2.append(col(6,fImage), col(6,fLink));
+
+  const row3 = createEl('div',{className:'row'});
+  const fBg = fieldText('Fon rangi (hex) yoki CSS','bg',data.bg||'');
+  const tagsUI = buildTagsUI(data.tags||[]);
+  const fldTags = wrapField('Teglar', tagsUI);
+  row3.append(col(6,fBg), col(6,fldTags));
+
+  item.append(row1,row2,row3);
+
+  item.getValue = ()=>({
+    title: fTitle.value.trim(),
+    subtitle: fSubtitle.value.trim(),
+    image: fImage.value.trim(),
+    link: fLink.value.trim(),
+    bg: fBg.value.trim(),
+    tags: tagsUI.getValue()
+  });
+
+  btnDel.onclick = ()=>{ const i=state.banners.indexOf(item); if(i>-1){ state.banners.splice(i,1); item.remove(); updatePreview(); } };
+  btnUp.onclick = ()=>{ const i=state.banners.indexOf(item); if(i>0){ const t=state.banners[i-1]; state.banners[i-1]=item; state.banners[i]=t; bannerList.insertBefore(item,bannerList.children[i-1]); updatePreview(); } };
+  btnDown.onclick = ()=>{ const i=state.banners.indexOf(item); if(i>-1 && i<state.banners.length-1){ const t=state.banners[i+1]; state.banners[i+1]=item; state.banners[i]=t; bannerList.insertBefore(t,item); updatePreview(); } };
+
+  return item;
+}
+
+function cardItem(kind, data={}){
+  const item = createEl('div',{className:'item'});
+  const head = createEl('div',{className:'item-head'});
+  const title = createEl('div',{className:'title',textContent:data.title||labelByKind(kind)});
+  const actions = createEl('div',{className:'item-actions'});
+  const btnUp = createEl('button',{className:'btn ghost',textContent:'↑'});
+  const btnDown = createEl('button',{className:'btn ghost',textContent:'↓'});
+  const btnDel = createEl('button',{className:'btn danger',textContent:'O‘chirish'});
+  actions.append(btnUp,btnDown,btnDel); head.append(title,actions); item.append(head);
+
+  const row1 = createEl('div',{className:'row'});
+  const fTitle = fieldText('Sarlavha','title',data.title||'');
+  const fImage = fieldText('Rasm URL (image)','image',data.image||'');
+  fTitle.oninput = ()=>{ title.textContent=fTitle.value.trim()||labelByKind(kind); updatePreview(); };
+  row1.append(col(8,fTitle), col(4,fImage));
+
+  const row2 = createEl('div',{className:'row'});
+  const fLink = fieldText('Asosiy link','link',data.link||'');
+  const tagsUI = buildTagsUI(data.tags||[]);
+  row2.append(col(6,fLink), col(6, wrapField('Teglar', tagsUI)));
+
+  const row3 = createEl('div',{className:'row'});
+  const fBest = fieldSwitch('BEST (birinchi chiqsin)','best',!!data.best);
+  const fHome = fieldSwitch('HOME (Bosh sahifada ko‘rinsin)','home',!!data.home);
+  const fMode = fieldSelect('Mode','mode', data.mode||'static', [
+    {v:'static',t:'static (default)'},
+    {v:'online',t:'online (vaqt bilan)'}
+  ]);
+  row3.append(col(4,fBest), col(4,fHome), col(4,fMode));
+
+  const row4 = createEl('div',{className:'row', id:'rowOnline'});
+  const fPrize = fieldText('Sovrin (ixtiyoriy)','prize',data.prize||'');
+  const fStart = fieldDate('Boshlanish (online)','startAt', data.startAt||'');
+  const fEnd = fieldDate('Tugash (online)','endAt', data.endAt||'');
+  row4.append(col(4,fStart), col(4,fEnd), col(4,fPrize));
+
+  const row5 = createEl('div',{className:'row'});
+  const fDetails = fieldTextarea('Batafsil HTML (modal uchun)','detailsHtml',data.detailsHtml||'');
+  row5.append(col(12,fDetails));
+
+  function toggleOnline(){ row4.style.display = (fMode.value==='online') ? 'grid' : 'none'; }
+  toggleOnline();
+  fMode.addEventListener('change',()=>{ toggleOnline(); updatePreview(); });
+
+  item.append(row1,row2,row3,row4,row5);
+
+  item.getValue = ()=>{
+    const base = {
+      title: fTitle.value.trim(),
+      image: fImage.value.trim(),
+      link: fLink.value.trim(),
+      tags: tagsUI.getValue(),
+      best: fBest.checked,
+      home: fHome.checked,
+      mode: fMode.value
+    };
+    if(base.mode==='online'){
+      base.startAt = toISOWithTZ(fStart.value || fStart.dataset.raw || '');
+      base.endAt   = toISOWithTZ(fEnd.value   || fEnd.dataset.raw   || '');
+      if(!base.startAt || !base.endAt){ alert('Online karta uchun start/end sanalari to‘liq kiriting!'); }
+      if(fPrize.value.trim()) base.prize = fPrize.value.trim();
+    }
+    if(fDetails.value.trim()) base.detailsHtml = fDetails.value.trim();
+    return base;
+  };
+
+  const listEl = byKindList(kind);
+  btnDel.onclick = ()=>{ const arr = state.cards[kind]; const i=arr.indexOf(item); if(i>-1){ arr.splice(i,1); item.remove(); updatePreview(); } };
+  btnUp.onclick = ()=>{ const arr = state.cards[kind]; const i=arr.indexOf(item); if(i>0){ const t=arr[i-1]; arr[i-1]=item; arr[i]=t; listEl.insertBefore(item,listEl.children[i-1]); updatePreview(); } };
+  btnDown.onclick = ()=>{ const arr = state.cards[kind]; const i=arr.indexOf(item); if(i>-1 && i<arr.length-1){ const t=arr[i+1]; arr[i+1]=item; arr[i]=t; listEl.insertBefore(t,item); updatePreview(); } };
+
+  return item;
+}
+
+/********************  Field helpers  ********************/
+function fieldText(labelText, name, val=''){
+  const w = createEl('div',{className:'field'});
+  const l = createEl('label',{textContent:labelText});
+  const i = createEl('input',{type:'text',name,value:val});
+  w.append(l,i); return i;
+}
+function fieldTextarea(labelText, name, val=''){
+  const w = createEl('div',{className:'field'});
+  const l = createEl('label',{textContent:labelText});
+  const i = createEl('textarea',{name,value:val});
+  w.append(l,i); return i;
+}
+function fieldSelect(labelText,name,val,options){
+  const w = createEl('div',{className:'field'});
+  const l = createEl('label',{textContent:labelText});
+  const s = createEl('select',{name});
+  for(const o of options){ const opt=createEl('option',{value:o.v,textContent:o.t}); if(o.v===val) opt.selected=true; s.append(opt); }
+  w.append(l,s); return s;
+}
+function fieldDate(labelText, name, raw){
+  const w = createEl('div',{className:'field'});
+  const l = createEl('label',{textContent:labelText});
+  const i = createEl('input',{type:'datetime-local',name});
+  /* Agar raw ISO berilgan bo‘lsa, datetime-local formatga ko‘rsatamiz */
+  if(raw){
+    const d = new Date(raw);
+    if(!Number.isNaN(+d)){
+      i.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    } else {
+      // foydalanuvchi no-ISO matn kiritgan bo‘lishi mumkin — saqlashda toISOWithTZ qilamiz
+      i.dataset.raw = raw;
+    }
+  }
+  w.append(l,i); return i;
+}
+function fieldSwitch(labelText, name, val){
+  const w = createEl('div',{className:'field'});
+  const l = createEl('label',{textContent:labelText});
+  const s = createEl('div',{className:'switch'});
+  const i = createEl('input',{type:'checkbox',name,checked:!!val});
+  s.append(i, createEl('span',{className:'muted',textContent: val?'ha':'yo‘q'}));
+  i.addEventListener('change',()=> s.lastChild.textContent = i.checked?'ha':'yo‘q');
+  w.append(l,s); return i;
+}
+function wrapField(labelText, node){
+  const w = createEl('div',{className:'field'}); const l=createEl('label',{textContent:labelText}); w.append(l,node); return w;
+}
+function col(span, node){ const d=createEl('div',{className:`col-${span}`}); d.append(node); return d; }
+
+function byKindList(kind){ return ({tests:$('#testsList'), courses:$('#coursesList'), simulators:$('#simulatorsList')})[kind]; }
+function labelByKind(kind){ return ({tests:'Yangi test', courses:'Yangi kurs', simulators:'Yangi simulyator'})[kind]; }
+
+/********************  Actions  ********************/
+const bannerList = $('#bannerList');
+$('#addBanner').onclick = ()=>{ const it=bannerItem({title:'Yangi banner'}); state.banners.push(it); bannerList.append(it); updatePreview(); };
+$$('[data-add-card]').forEach(btn=>{
+  btn.onclick = ()=>{ const k=btn.getAttribute('data-add-card'); const it=cardItem(k, {title:labelByKind(k)}); state.cards[k].push(it); byKindList(k).append(it); updatePreview(); };
+});
+
+function collect(){
+  const banners = state.banners.map(node=>node.getValue());
+  const cards = {
+    tests: state.cards.tests.map(n=>n.getValue()),
+    courses: state.cards.courses.map(n=>n.getValue()),
+    simulators: state.cards.simulators.map(n=>n.getValue())
+  };
+  return prune({banners, cards});
+}
+
+$('#btnCopy').onclick = ()=>{ const t=JSON.stringify(collect(),null,2); navigator.clipboard.writeText(t).then(()=> alert('JSON nusxa olindi!')); };
+$('#btnDownload').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='admin.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+$('#btnSaveLS').onclick = ()=>{ localStorage.setItem(LS_KEY, JSON.stringify(collect())); alert('LocalStorage’ga saqlandi (__ADMIN_JSON)'); };
+$('#btnLoadLS').onclick = ()=>{
+  const raw = localStorage.getItem(LS_KEY); if(!raw){ alert('LocalStorage’da topilmadi'); return; }
+  try{ loadFromJSON(JSON.parse(raw)); }catch(e){ alert('LocalStorage JSON xato'); }
+};
+$('#btnReset').onclick = ()=>{ if(!confirm('Hammasini tozalaymizmi?')) return; state.banners.length=0; bannerList.innerHTML=''; for(const k of ['tests','courses','simulators']){ state.cards[k].length=0; byKindList(k).innerHTML=''; } updatePreview(); };
+$('#btnImport').onclick = ()=> $('#fileInput').click();
+$('#fileInput').addEventListener('change', e=>{
+  const f=e.target.files?.[0]; if(!f) return; const fr=new FileReader(); fr.onload = ()=>{
+    try{ const obj = JSON.parse(String(fr.result)); loadFromJSON(obj); }catch(err){ alert('JSON o‘qib bo‘lmadi: '+err.message); }
+  }; fr.readAsText(f);
+});
+$('#btnFetch').onclick = async ()=>{
+  try{
+    const res = await fetch('/admin.json',{cache:'no-store'});
+    if(!res.ok) throw new Error(res.status+'');
+    const obj = await res.json();
+    loadFromJSON(obj);
+  }catch(e){ alert('Fetch xatolik: '+e.message+' — Netlify yo‘liga/huquqlarga tekshirib ko‘ring'); }
+};
+
+function loadFromJSON(obj){
+  // tozalash
+  $('#btnReset').click();
+  const banners = Array.isArray(obj?.banners)? obj.banners:[];
+  for(const b of banners){ const it=bannerItem(b); state.banners.push(it); bannerList.append(it); }
+
+  const groups = obj?.cards||{};
+  for(const kind of ['tests','courses','simulators']){
+    const arr = Array.isArray(groups[kind])? groups[kind]:[];
+    for(const c of arr){ const it=cardItem(kind,c); state.cards[kind].push(it); byKindList(kind).append(it); }
+  }
+  updatePreview();
+}
+
+// Demo boshlang‘ich namunasi
+loadFromJSON({
+  banners:[{title:'🎉 2025 AKSIYASI', subtitle:'Promo kod: 2025 — balans +100 000 so‘m', image:'https://picsum.photos/seed/promo/900/300', link:'/promo-2025.html', tags:[]}],
+  cards:{
+    tests:[{title:'Algebra — Onlayn sinov (30 savol)', image:'https://picsum.photos/seed/algebra/640/360', link:'/tests/algebra-30.html', tags:['algebra','test'], best:true, home:true, mode:'online', prize:'1-o‘rin — 500 000 so‘m', startAt:'2025-10-20T19:00:00+05:00', endAt:'2025-10-20T21:00:00+05:00', detailsHtml:'<p>30 ta savol, 120 daqiqa.</p>'}],
+    courses:[{title:'Kombinatorika — tezkor kurs', image:'https://picsum.photos/seed/comb/640/360', link:'/courses/comb.html', tags:['kombinatorika']}],
+    simulators:[{title:'Kasrlarni soddalashtirish simulyatori', image:'https://picsum.photos/seed/fractions/640/360', link:'/sim/kasr.html', tags:['kasr','simulyator'], home:true}]
+  }
+});
+
+updatePreview();
+</script>
+</body>
+</html>
