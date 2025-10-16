@@ -153,12 +153,8 @@
           </nav>
 
           <div style="display:flex;align-items:center;gap:10px">
-            <!-- Admin tugmasi (faqat isAdmin=true foydalanuvchiga) -->
             <button id="adminBtn" class="btn btn--ghost" style="display:none"><i class="fa-solid fa-shield-halved"></i> Admin</button>
-
-            <!-- Kirish / Foydalanuvchi -->
             <button id="openLogin" class="btn btn--primary"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
-
             <div id="userBtn" class="userBtn">
               <div id="avatarFallback" class="avatar">U</div>
               <div class="user__meta">
@@ -169,12 +165,11 @@
                 </div>
               </div>
               <button id="userMenuBtn" class="btn btn--ghost" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:32px;height:32px;padding:0"><i class="fa-solid fa-chevron-down"></i></button>
-
               <div id="userDropdown" class="dropdown">
                 <div style="padding:12px 14px;border-bottom:1px solid var(--gray-200)">
                   <div style="font-weight:800" id="ddFullName">Foydalanuvchi</div>
                   <div style="color:#6b7280;font-size:12px;margin-top:6px">
-                    <i class="fa-solid fa-star" style="color:var(--primary)"></i> <b id="ddPoints">0</b> • <span id="ddClass">Sinf —</span>
+                    <i class="fa-solid fa-star" style="color:#2E8B57"></i> <b id="ddPoints">0</b> • <span id="ddClass">Sinf —</span>
                   </div>
                 </div>
                 <a class="dd-link" href="#" id="openProfile" style="display:block;padding:12px 14px;text-decoration:none;color:#111"><i class="fa-regular fa-user"></i> Profil (login/parol)</a>
@@ -188,7 +183,10 @@
     </div>
   </header>
 
-  <!-- Banner + Cards + Natijalar -->
+  <div id="netNote" style="display:none;margin:10px 16px;padding:10px;border:1px dashed #f59e0b;border-radius:10px;background:#FFFBEB;color:#92400e">
+    ⚠️ Tarmoq cheklovi sabab Google CDN (gstatic) bloklangan bo‘lishi mumkin. SDK muqobil CDN orqali yuklandi.
+  </div>
+
   <main class="container">
     <section id="bannerCarousel" style="position:relative;overflow:hidden;border-radius:16px;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.06)">
       <div id="bannerTrack" style="display:flex;transition:transform .5s ease"></div>
@@ -203,7 +201,6 @@
 
     <section id="grid"></section>
 
-    <!-- Natijalar (Reyting) -->
     <section id="resultsSec" style="display:none;margin-top:18px">
       <h2 style="margin:12px 0 8px">Reyting (Ball bo‘yicha)</h2>
       <div style="overflow:auto;border:1px solid #e5e7eb;border-radius:12px">
@@ -215,7 +212,7 @@
     </section>
   </main>
 
-  <!-- === Kirish (login/parol) modal — faqat lite_users ro‘yxati uchun === -->
+  <!-- Login modal -->
   <div id="loginModal" class="modal" data-flex="true">
     <div class="card" style="max-width:480px">
       <div class="card__head"><div class="card__title">Kirish</div><button id="closeLogin" class="close" aria-label="Yopish">&times;</button></div>
@@ -229,7 +226,7 @@
     </div>
   </div>
 
-  <!-- === Profil (login/parolni almashtirish) === -->
+  <!-- Profile modal -->
   <div id="profileModal" class="modal" data-flex="true">
     <div class="card">
       <div class="card__head"><div class="card__title">Profil (login/parol)</div><button id="closeProfile" class="close" aria-label="Yopish">&times;</button></div>
@@ -250,7 +247,7 @@
     </div>
   </div>
 
-  <!-- === Admin (Excel yuklash: F.I.Sh | Sinf | login | parol) === -->
+  <!-- Admin modal -->
   <div id="adminModal" class="modal" data-flex="true">
     <div class="card">
       <div class="card__head"><div class="card__title">Admin — Foydalanuvchilarni Excel orqali qo‘shish</div><button id="closeAdmin" class="close" aria-label="Yopish">&times;</button></div>
@@ -267,16 +264,44 @@
     </div>
   </div>
 
-  <!-- SheetJS (Excel o‘qish uchun) -->
+  <!-- Excel lib -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- Firebase (faqat Firestore) -->
+  <!-- App script with Firebase fallback -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
+    // ===== Firebase SDK dynamic loader with CDN fallbacks =====
+    const CDN = {
+      primary: 'https://www.gstatic.com/firebasejs/10.12.0',
+      alt1: 'https://esm.sh/firebase@10.12.0',              // ESM bundle
+      alt2: 'https://cdn.jsdelivr.net/npm/firebase@10.12.0' // npm mirror
+    };
+
+    let appMod, fsMod;
+    try {
+      appMod = await import(`${CDN.primary}/firebase-app.js`);
+      fsMod  = await import(`${CDN.primary}/firebase-firestore.js`);
+      console.log('[lite] Firebase loaded from gstatic');
+    } catch (e1) {
+      console.warn('[lite] gstatic blocked, trying esm.sh', e1);
+      try {
+        appMod = await import(`${CDN.alt1}/app`);
+        fsMod  = await import(`${CDN.alt1}/firestore`);
+        document.getElementById('netNote').style.display = 'block';
+        console.log('[lite] Firebase loaded from esm.sh');
+      } catch (e2) {
+        console.warn('[lite] esm.sh failed, trying jsDelivr', e2);
+        appMod = await import(`${CDN.alt2}/app/dist/index.esm.js`);
+        fsMod  = await import(`${CDN.alt2}/firestore/dist/index.esm.js`);
+        document.getElementById('netNote').style.display = 'block';
+        console.log('[lite] Firebase loaded from jsDelivr');
+      }
+    }
+
+    const { initializeApp } = appMod;
+    const {
       getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc,
       query, where, getDocs, orderBy
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    } = fsMod;
 
     // === Firebase config (sizniki) ===
     const firebaseConfig = {
@@ -294,7 +319,6 @@
     const db  = getFirestore(app);
 
     // --- One-time admin seeder (login: Math@1999, parol: Math@28021999) ---
-    // Admin yaratilib bo'lgach, quyidagi blokni o'chirib qo'yish tavsiya etiladi.
     const DEFAULT_ADMIN = {
       fullName: 'Admin',
       class: '—',
@@ -322,12 +346,12 @@
     }
     ensureAdminOnce();
 
-    // ====== Helpers ======
+    // ===== Helpers =====
     const $ = (id)=>document.getElementById(id);
     const show = (el, on=true)=>{ if(!el) return; el.style.display = on? (el.dataset.flex?'flex':'block') : 'none'; };
     const toast = (el, msg, ok=true)=>{ if(!el) return; el.textContent = msg; el.style.color = ok? '#065f46':'#b91c1c'; };
 
-    // ====== UI refs ======
+    // ===== UI refs =====
     const openLogin = $('openLogin'), loginModal = $('loginModal'), liLogin = $('liLogin'), liPass = $('liPass'), doLogin = $('doLogin'), loginMsg = $('loginMsg'), closeLogin = $('closeLogin');
     const userBtn = $('userBtn'), userMenuBtn = $('userMenuBtn'), userDropdown = $('userDropdown'), logoutLink = $('logoutLink');
     const uFullName = $('uFullName'), uPoints = $('uPoints'), uClass = $('uClass');
@@ -336,18 +360,18 @@
     const adminBtn = $('adminBtn'), adminModal = $('adminModal'), closeAdmin = $('closeAdmin'), excelFile = $('excelFile'), previewExcel = $('previewExcel'), importExcel = $('importExcel'), adminMsg = $('adminMsg'), excelPreview = $('excelPreview');
     const bannerTrack = $('bannerTrack'), bnPrev = $('bnPrev'), bnNext = $('bnNext'), q = $('q'), chipsEl = $('chips'), grid = $('grid'), resultsSec = $('resultsSec'), resultsBody = $('resultsBody');
 
-    // ====== App state ======
+    // ===== App state =====
     let currentLiteUser = null; // {id, fullName, className, login, points, isAdmin}
     let dbData = null;          // liteadmin.json dan
 
-    // ====== Cards state ======
+    // ===== Cards state =====
     const PAGE_SIZE = 18;
     let section = 'home';
     let page = 1;
     const activeTags = new Set();
     let bnIdx = 0, bnTimer = null;
 
-    // ====== Nav (section switching) ======
+    // ===== Nav (section switching) =====
     const deskNav = document.getElementById('deskNav');
     deskNav.querySelectorAll('a[data-sec]').forEach(a=>{
       a.addEventListener('click', (e)=>{
@@ -365,21 +389,20 @@
       });
     });
 
-    // ====== Login modal ======
+    // ===== Login modal =====
     function openLoginModal(){ show(loginModal,true); }
     function closeLoginModal(){ show(loginModal,false); }
     openLogin.addEventListener('click', openLoginModal);
     closeLogin.addEventListener('click', closeLoginModal);
     window.addEventListener('click', e=>{ if(e.target===loginModal) closeLoginModal(); });
 
-    // Dropdown
     userMenuBtn.addEventListener('click', (e)=>{
       e.stopPropagation();
       userDropdown.classList.toggle('open');
     });
     document.addEventListener('click',(e)=>{ if(!userBtn.contains(e.target)) userDropdown.classList.remove('open'); });
 
-    // ====== Local persistence ======
+    // ===== Local persistence =====
     function saveSession(u){ localStorage.setItem('__LITE_USER', JSON.stringify(u)); }
     function loadSession(){ try{ const s=localStorage.getItem('__LITE_USER'); return s? JSON.parse(s):null; } catch { return null; } }
     function clearSession(){ localStorage.removeItem('__LITE_USER'); }
@@ -399,11 +422,10 @@
       ddFullName.textContent = full;
       ddPoints.textContent = u.points ?? 0;
       ddClass.textContent = u.className || '—';
-      // Admin tugmasi
       adminBtn.style.display = u.isAdmin ? 'inline-flex' : 'none';
     }
 
-    // ====== Lite login (Firestore: lite_users) ======
+    // ===== Lite login (Firestore: lite_users) =====
     async function doLiteLogin(){
       loginMsg.textContent='';
       const L = (liLogin.value||'').trim();
@@ -425,11 +447,9 @@
       }
     }
     doLogin.addEventListener('click', doLiteLogin);
-
-    // Logout
     logoutLink.addEventListener('click', (e)=>{ e.preventDefault(); currentLiteUser=null; clearSession(); reflectUser(null); });
 
-    // ====== Profil (login/parolni o‘zgartirish) ======
+    // ===== Profil (login/parolni o‘zgartirish) =====
     function openProfileModal(){
       if(!currentLiteUser){ openLoginModal(); return; }
       pfFullName.value = currentLiteUser.fullName || '';
@@ -453,7 +473,7 @@
         login: pfLogin.value.trim()
       };
       const newPass = pfPass.value.trim();
-      if(newPass) payload.password = newPass; // demo: client-side; prod: hash
+      if(newPass) payload.password = newPass;
       try{
         await updateDoc(doc(db,'lite_users', currentLiteUser.id), payload);
         Object.assign(currentLiteUser, { fullName: payload.fullName, className: payload.class, login: payload.login });
@@ -464,7 +484,7 @@
       }catch(e){ console.error(e); toast(pfMsg,'Saqlashda xato', false); }
     });
 
-    // ====== Admin (Excel import) ======
+    // ===== Admin (Excel import) =====
     function openAdmin(){ if(!currentLiteUser?.isAdmin){ return; } show(adminModal,true); }
     function closeAdminModal(){ show(adminModal,false); }
     adminBtn.addEventListener('click', openAdmin);
@@ -480,13 +500,12 @@
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1}); // 2D rows
-      // Expect: [F.I.Sh, Sinf, login, parol]
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1});
       const out = [];
       for(let i=0;i<rows.length;i++){
         const r = rows[i];
         if(!r || r.length<4) continue;
-        if(i===0 && String(r[0]).toLowerCase().includes('f') ) continue; // header skip
+        if(i===0 && String(r[0]).toLowerCase().includes('f') ) continue;
         out.push({fullName:String(r[0]||'').trim(), class:String(r[1]||'').trim(), login:String(r[2]||'').trim(), password:String(r[3]||'').trim(), points:0, isAdmin:false});
       }
       parsedRows = out;
@@ -512,12 +531,9 @@
         let added = 0;
         for(const r of parsedRows){
           if(!r.login || !r.password || !r.fullName) continue;
-          // login unikal bo‘lishi uchun bor-yo‘qligini tekshiramiz
           const qref = query(collection(db,'lite_users'), where('login','==', r.login));
           const qs = await getDocs(qref);
-          if(!qs.empty){ // mavjud — tashlab ketamiz
-            continue;
-          }
+          if(!qs.empty){ continue; }
           await addDoc(collection(db,'lite_users'), r);
           added++;
         }
@@ -526,7 +542,7 @@
       }catch(e){ console.error(e); toast(adminMsg,'Importda xato', false); }
     });
 
-    // ====== Cards & Banners (liteadmin.json) ======
+    // ===== Cards & Banners (liteadmin.json) =====
     async function loadLiteData(){
       try{
         const r = await fetch('liteadmin.json?_=' + Date.now());
@@ -537,10 +553,11 @@
     function moveBanner(i){
       const n = (dbData.banners||[]).length || 1;
       bnIdx = ((i % n) + n) % n;
-      bannerTrack.style.transform = `translateX(-${bnIdx*100}%)`;
+      document.getElementById('bannerTrack').style.transform = `translateX(-${bnIdx*100}%)`;
     }
     function renderBanners(){
-      bannerTrack.innerHTML = '';
+      const track = document.getElementById('bannerTrack');
+      track.innerHTML = '';
       (dbData.banners||[]).forEach(b=>{
         const d = document.createElement('div');
         d.style.cssText = 'min-width:100%;display:flex;align-items:center;gap:16px;padding:16px;background:'+ (b.bg||'#0b3d2c') +';color:#fff';
@@ -552,17 +569,17 @@
           </div>
           ${b.image? `<img src="${b.image}" alt="" style="width:520px;max-width:50%;border-radius:12px;object-fit:cover">`:''}
         `;
-        bannerTrack.appendChild(d);
+        track.appendChild(d);
       });
       moveBanner(0);
       if(bnTimer) clearInterval(bnTimer);
       bnTimer = setInterval(()=> moveBanner(bnIdx+1), 5000);
-      bnPrev.onclick = ()=> moveBanner(bnIdx-1);
-      bnNext.onclick = ()=> moveBanner(bnIdx+1);
+      document.getElementById('bnPrev').onclick = ()=> moveBanner(bnIdx-1);
+      document.getElementById('bnNext').onclick = ()=> moveBanner(bnIdx+1);
     }
 
     function buildTags(){
-      const items = dbData.cards[section] || [];
+      const items = (dbData.cards?.[section]) || [];
       const all = new Set();
       items.forEach(it=> (it.tags||[]).forEach(t=> all.add(t)) );
       chipsEl.innerHTML = '';
@@ -590,10 +607,8 @@
     function renderGrid(){
       const queryStr = (q.value||'').toLowerCase().trim();
       let items = (section==='home')
-        ? [...(dbData.cards.tests||[]), ...(dbData.cards.courses||[]), ...(dbData.cards.simulators||[])]
-            .filter(it=>it.home)
+        ? [...(dbData.cards.tests||[]), ...(dbData.cards.courses||[]), ...(dbData.cards.simulators||[])].filter(it=>it.home)
         : [...(dbData.cards[section]||[])];
-
       items.sort((a,b)=> (b.best?1:0) - (a.best?1:0));
       if(activeTags.size){ items = items.filter(it => (it.tags||[]).some(t=> activeTags.has(t))); }
       if(queryStr){ items = items.filter(it => (it.title||'').toLowerCase().includes(queryStr)); }
@@ -646,7 +661,7 @@
       });
     }
 
-    // ====== Natijalar (points desc) ======
+    // ===== Natijalar (points desc) =====
     async function renderResults(){
       try{
         const qref = query(collection(db,'lite_users'), orderBy('points','desc'));
@@ -662,7 +677,7 @@
       }
     }
 
-    // ====== Init flow (single definition, no duplicates) ======
+    // ===== Init flow =====
     (async ()=>{
       const sess = loadSession();
       if(sess){ currentLiteUser = sess; reflectUser(currentLiteUser); }
