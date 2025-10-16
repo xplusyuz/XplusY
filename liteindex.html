@@ -293,6 +293,35 @@
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
 
+    // --- One-time admin seeder (login: Math@1999, parol: Math@28021999) ---
+    // Admin yaratilib bo'lgach, quyidagi blokni o'chirib qo'yish tavsiya etiladi.
+    const DEFAULT_ADMIN = {
+      fullName: 'Admin',
+      class: '—',
+      login: 'Math@1999',
+      password: 'Math@28021999',
+      points: 0,
+      isAdmin: true
+    };
+    async function ensureAdminOnce(){
+      if (localStorage.getItem('__LITE_ADMINSEEDED__') === '1') return;
+      try{
+        const qs = await getDocs(query(collection(db,'lite_users'), where('login','==', DEFAULT_ADMIN.login)));
+        if (qs.empty){
+          await addDoc(collection(db,'lite_users'), DEFAULT_ADMIN);
+          console.log('[lite] Admin created.');
+        } else {
+          const ref = qs.docs[0].ref;
+          await updateDoc(ref, { isAdmin: true, password: DEFAULT_ADMIN.password, fullName: DEFAULT_ADMIN.fullName });
+          console.log('[lite] Admin updated.');
+        }
+        localStorage.setItem('__LITE_ADMINSEEDED__', '1');
+      } catch(e){
+        console.error('[lite] ensureAdminOnce error:', e);
+      }
+    }
+    ensureAdminOnce();
+
     // ====== Helpers ======
     const $ = (id)=>document.getElementById(id);
     const show = (el, on=true)=>{ if(!el) return; el.style.display = on? (el.dataset.flex?'flex':'block') : 'none'; };
@@ -561,7 +590,8 @@
     function renderGrid(){
       const queryStr = (q.value||'').toLowerCase().trim();
       let items = (section==='home')
-        ? [...(dbData.cards.tests||[]), ...(dbData.cards.courses||[]), ...(dbData.cards.simulators||[])].filter(it=>it.home)
+        ? [...(dbData.cards.tests||[]), ...(dbData.cards.courses||[]), ...(dbData.cards.simulators||[])]
+            .filter(it=>it.home)
         : [...(dbData.cards[section]||[])];
 
       items.sort((a,b)=> (b.best?1:0) - (a.best?1:0));
