@@ -33,7 +33,7 @@
       --shadow:0 10px 30px rgba(0,0,0,.08);--tr:all .25s cubic-bezier(.25,.8,.25,1);--radius:14px
     }
     *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff;color:var(--text)}
     .container{max-width:1280px;margin:0 auto;padding:0 16px}
     .row{display:flex;align-items:center;justify-content:space-between}
 
@@ -105,7 +105,16 @@
     tbody td{border-bottom:1px solid #f1f5f9;padding:10px}
     .rank{font-weight:800}
 
+    /* Mobile tweaks */
     @media (max-width:900px){ .logo__txt{display:none} .user__name{max-width:140px} }
+    @media (max-width:480px){
+      .mc-main .row{align-items:stretch; gap:10px}
+      .nav{order:3; flex-basis:100%; margin-top:8px}
+      .nav ul{flex-wrap:wrap; gap:6px}
+      .nav li{flex:1 1 calc(50% - 6px)}
+      .nav a{padding:10px 12px}
+      .logo__pi{width:56px;height:56px}
+    }
   </style>
 </head>
 <body>
@@ -188,7 +197,7 @@
     </section>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 12px">
-      <input id="q" placeholder="Qidiruv…" style="padding:10px;border:1px solid #e5e7eb;border-radius:999px"/>
+      <input id="q" placeholder="Qidiruv…" style="padding:10px;border:1px solid #e5e7eb;border-radius:999px;flex:1;min-width:220px"/>
       <div id="chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     </div>
 
@@ -207,23 +216,23 @@
   </main>
 
   <!-- === Kirish (login/parol) modal — faqat lite_users ro‘yxati uchun === -->
-  <div id="loginModal" class="modal">
+  <div id="loginModal" class="modal" data-flex="true">
     <div class="card" style="max-width:480px">
-      <div class="card__head"><div class="card__title">Kirish</div><button id="closeLogin" class="close">&times;</button></div>
+      <div class="card__head"><div class="card__title">Kirish</div><button id="closeLogin" class="close" aria-label="Yopish">&times;</button></div>
       <div class="card__body">
         <p style="margin-top:0;color:#4b5563">Foydalanuvchilarni admin Excel orqali qo‘shadi. Quyida <b>login</b> va <b>parol</b>ingizni kiriting.</p>
         <div class="group"><label>Login</label><input id="liLogin" autocomplete="username"/></div>
         <div class="group"><label>Parol</label><input id="liPass" type="password" autocomplete="current-password"/></div>
         <button id="doLogin" class="btn btn--primary submit"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
-        <div id="loginMsg" style="margin-top:10px;font-weight:700;color:#b91c1c"></div>
+        <div id="loginMsg" style="margin-top:10px;font-weight:700"></div>
       </div>
     </div>
   </div>
 
   <!-- === Profil (login/parolni almashtirish) === -->
-  <div id="profileModal" class="modal">
+  <div id="profileModal" class="modal" data-flex="true">
     <div class="card">
-      <div class="card__head"><div class="card__title">Profil (login/parol)</div><button id="closeProfile" class="close">&times;</button></div>
+      <div class="card__head"><div class="card__title">Profil (login/parol)</div><button id="closeProfile" class="close" aria-label="Yopish">&times;</button></div>
       <div class="card__body">
         <form id="profileForm">
           <div class="row2">
@@ -242,9 +251,9 @@
   </div>
 
   <!-- === Admin (Excel yuklash: F.I.Sh | Sinf | login | parol) === -->
-  <div id="adminModal" class="modal">
+  <div id="adminModal" class="modal" data-flex="true">
     <div class="card">
-      <div class="card__head"><div class="card__title">Admin — Foydalanuvchilarni Excel orqali qo‘shish</div><button id="closeAdmin" class="close">&times;</button></div>
+      <div class="card__head"><div class="card__title">Admin — Foydalanuvchilarni Excel orqali qo‘shish</div><button id="closeAdmin" class="close" aria-label="Yopish">&times;</button></div>
       <div class="card__body">
         <p style="margin-top:0">Fayl ustun tartibi: <b>F.I.Sh</b> | <b>Sinf</b> | <b>login</b> | <b>parol</b>. Birinchi qator — sarlavha bo‘lishi mumkin.</p>
         <input id="excelFile" type="file" accept=".xlsx,.xls" />
@@ -302,7 +311,14 @@
     let currentLiteUser = null; // {id, fullName, className, login, points, isAdmin}
     let dbData = null;          // liteadmin.json dan
 
-    // ====== Sections ======
+    // ====== Cards state ======
+    const PAGE_SIZE = 18;
+    let section = 'home';
+    let page = 1;
+    const activeTags = new Set();
+    let bnIdx = 0, bnTimer = null;
+
+    // ====== Nav (section switching) ======
     const deskNav = document.getElementById('deskNav');
     deskNav.querySelectorAll('a[data-sec]').forEach(a=>{
       a.addEventListener('click', (e)=>{
@@ -412,7 +428,6 @@
       try{
         await updateDoc(doc(db,'lite_users', currentLiteUser.id), payload);
         Object.assign(currentLiteUser, { fullName: payload.fullName, className: payload.class, login: payload.login });
-        if(newPass) {/* not stored client */}
         saveSession(currentLiteUser);
         reflectUser(currentLiteUser);
         toast(pfMsg,'Saqlandi', true);
@@ -471,7 +486,7 @@
           // login unikal bo‘lishi uchun bor-yo‘qligini tekshiramiz
           const qref = query(collection(db,'lite_users'), where('login','==', r.login));
           const qs = await getDocs(qref);
-          if(!qs.empty){ // mavjud — yangilash emas, tashlab ketamiz
+          if(!qs.empty){ // mavjud — tashlab ketamiz
             continue;
           }
           await addDoc(collection(db,'lite_users'), r);
@@ -483,12 +498,6 @@
     });
 
     // ====== Cards & Banners (liteadmin.json) ======
-    const PAGE_SIZE = 18;
-    let section = 'home';
-    let page = 1;
-    const activeTags = new Set();
-    let bnIdx = 0, bnTimer = null;
-
     async function loadLiteData(){
       try{
         const r = await fetch('liteadmin.json?_=' + Date.now());
@@ -592,8 +601,6 @@
           if(st2.state==='before'){ act.href = '#'; act.onclick = (e)=> e.preventDefault(); }
           if(st2.state==='after'){ act.href = '#'; act.textContent = 'Vaqt tugadi'; act.onclick = (e)=> e.preventDefault(); }
         }
-        // no details modal in lite; link yetarli
-        // countdown
         const cd = card.querySelector('.cd');
         if(cd){
           const until = Number(cd.getAttribute('data-until'));
@@ -625,15 +632,11 @@
       }
     }
 
-    // ====== Init flow ======
-    let section = 'home';
-    let page = 1;
+    // ====== Init flow (single definition, no duplicates) ======
     (async ()=>{
-      // session
       const sess = loadSession();
       if(sess){ currentLiteUser = sess; reflectUser(currentLiteUser); }
       else{ reflectUser(null); }
-      // content
       await loadLiteData();
       renderBanners();
       buildTags();
