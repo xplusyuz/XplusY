@@ -45,9 +45,10 @@
     .carousel .dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px}
     .dot{width:8px;height:8px;border-radius:50%;background:#ffffff80}
     .dot.active{background:#fff}
-    /* Cards */
+    /* Filters */
     .filters{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
     .chip{padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;background:#fff;font-size:13px;cursor:pointer}
+    .chip.main{font-weight:700;padding:10px 16px}
     .chip.active{background:#e9f5ef;border-color:#b7e2c7;color:var(--green)}
     .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
     .tile{overflow:hidden}
@@ -83,14 +84,8 @@
     <h2>Kirish</h2>
     <p class="hint">Tizimga kirish faqat admin tomonidan ro‘yxatga olingan foydalanuvchilar uchun.</p>
     <div style="display:grid;gap:12px;margin-top:12px">
-      <div>
-        <label>Login</label>
-        <input id="login" placeholder="Masalan: student1" autocomplete="username"/>
-      </div>
-      <div>
-        <label>Parol</label>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/>
-      </div>
+      <div><label>Login</label><input id="login" placeholder="Masalan: student1" autocomplete="username"/></div>
+      <div><label>Parol</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
       <button id="doLogin" class="btn">Kirish</button>
       <div id="loginErr" class="hint" style="color:#b91c1c;display:none"></div>
     </div>
@@ -115,7 +110,9 @@
         <div class="dots" id="dots"></div>
       </div>
 
-      <!-- Filters -->
+      <!-- Main tags (asosiy) -->
+      <div class="filters" id="mainTags"></div>
+      <!-- Sub tags (mayda) -->
       <div class="filters" id="filters"></div>
 
       <!-- Cards -->
@@ -128,9 +125,8 @@
   </footer>
 
   <script>
-    // helper
     const $ = sel => document.querySelector(sel);
-    const state = { db: null, me: null, tag: 'hammasi', tags: new Set(['hammasi']) };
+    const state = { db: null, me: null, main: 'hammasi', tag: 'hammasi', tags: new Set(['hammasi']), mains: new Set(['hammasi']) };
 
     async function loadDB(){
       const res = await fetch('liteadmin.json?_=' + Date.now());
@@ -145,11 +141,9 @@
     function logout(){ localStorage.removeItem('lite.me'); location.reload(); }
 
     function renderHome(){
-      // header
       $('#btnLogout').style.display='inline-flex';
       const isAdmin = state.me.role === 'admin';
       $('#btnAdmin').style.display = isAdmin ? 'inline-flex' : 'none';
-      // userbar
       $('#greet').textContent = `Salom, ${state.me.name} ${state.me.surname}`;
       $('#points').textContent = state.me.points ?? 0;
       $('#roleBadge').textContent = isAdmin ? 'Admin' : 'Foydalanuvchi';
@@ -173,10 +167,20 @@
         [...dots.children].forEach((d,i)=>d.classList.toggle('active', i===idx));
       }, 3500);
 
-      // tags & cards
+      // Main & Sub tags
+      const mainBox = $('#mainTags'); mainBox.innerHTML='';
       const filters = $('#filters'); filters.innerHTML='';
+      state.mains = new Set(['hammasi']);
+      (state.db.cards||[]).filter(c=>c.active).forEach(c=>state.mains.add(c.main||'boshqa'));
+      [...state.mains].forEach(m=>{
+        const chip=document.createElement('button');
+        chip.className='chip main'+(m===state.main?' active':'');
+        chip.textContent=m;
+        chip.onclick=()=>{ state.main=m; state.tag='hammasi'; renderHome(); };
+        mainBox.appendChild(chip);
+      });
       state.tags = new Set(['hammasi']);
-      (state.db.cards||[]).filter(c=>c.active).forEach(c=>c.tags?.forEach(t=>state.tags.add(t)));
+      (state.db.cards||[]).filter(c=>c.active && (state.main==='hammasi' || (c.main||'boshqa')===state.main)).forEach(c=>c.tags?.forEach(t=>state.tags.add(t)));
       [...state.tags].forEach(t=>{
         const chip=document.createElement('button');
         chip.className='chip'+(t===state.tag?' active':'');
@@ -187,11 +191,19 @@
         filters.querySelectorAll('.chip').forEach(ch=>{
           ch.classList.toggle('active', ch.textContent===state.tag);
         });
+        mainBox.querySelectorAll('.chip.main').forEach(ch=>{
+          ch.classList.toggle('active', ch.textContent===state.main);
+        });
       }
       renderCards();
       function renderCards(){
         const grid = $('#grid'); grid.innerHTML='';
-        const list = (state.db.cards||[]).filter(c=>c.active && (state.tag==='hammasi' || (c.tags||[]).includes(state.tag)));
+        const list = (state.db.cards||[]).filter(c=>{
+          if(!c.active) return false;
+          const inMain = (state.main==='hammasi') || ((c.main||'boshqa')===state.main);
+          const inSub = (state.tag==='hammasi') || ((c.tags||[]).includes(state.tag));
+          return inMain && inSub;
+        });
         list.forEach(c=>{
           const el = document.createElement('a');
           el.className='tile card'; el.href=c.link||'#'; el.target='_blank';
@@ -211,33 +223,30 @@
       if(me){ state.me = me; $('#loginPanel').style.display='none'; $('#home').style.display='block'; await loadDB(); renderHome(); }
     }
 
-    // events
     $('#btnLogout').onclick=logout;
     $('#btnAdmin').onclick=()=>location.href='liteadmin.html';
-    $('#doLogin').onclick=async ()=>{
+    document.getElementById('doLogin').onclick=async ()=>{
       try{
-        $('#loginErr').style.display='none';
-        const login = $('#login').value.trim();
-        const pass = $('#password').value.trim();
+        document.getElementById('loginErr').style.display='none';
+        const login = document.getElementById('login').value.trim();
+        const pass = document.getElementById('password').value.trim();
         const db = await loadDB();
-        // admin?
         if(login===db.auth?.admin?.login && pass===db.auth?.admin?.password){
           const me={login,name:'Admin',surname:'',role:'admin',points:0};
           state.me=me; saveSession(me);
           location.href='liteadmin.html';
           return;
         }
-        // users
         const u = (db.users||[]).find(u=>u.login===login && u.password===pass);
         if(!u){ throw new Error('Login yoki parol xato.'); }
         const me={login:u.login,name:u.name,surname:u.surname,role:'user',points:u.points||0};
         state.me=me; saveSession(me);
-        $('#loginPanel').style.display='none';
-        $('#home').style.display='block';
+        document.getElementById('loginPanel').style.display='none';
+        document.getElementById('home').style.display='block';
         renderHome();
       }catch(err){
-        $('#loginErr').textContent=err.message;
-        $('#loginErr').style.display='block';
+        document.getElementById('loginErr').textContent=err.message;
+        document.getElementById('loginErr').style.display='block';
       }
     };
 

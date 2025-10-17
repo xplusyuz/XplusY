@@ -26,12 +26,12 @@
     .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
     input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;outline:0}
     table{width:100%;border-collapse:separate;border-spacing:0 10px}
-    th,td{text-align:left;padding:10px 12px}
+    th,td{text-align:left;padding:10px 12px;vertical-align:middle}
     tr{background:#fff} tr td:first-child, tr th:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
     tr td:last-child, tr th:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
-    .col-6{grid-column:span 6} .col-4{grid-column:span 4} .col-3{grid-column:span 3} .col-12{grid-column:span 12}
-    @media (max-width:900px){ .grid{grid-template-columns:repeat(6,1fr)} .col-6{grid-column:span 6} .col-4{grid-column:span 6} .col-3{grid-column:span 6} }
+    .col-6{grid-column:span 6} .col-4{grid-column:span 4} .col-3{grid-column:span 3} .col-8{grid-column:span 8} .col-12{grid-column:span 12}
+    @media (max-width:900px){ .grid{grid-template-columns:repeat(6,1fr)} .col-6{grid-column:span 6} .col-8{grid-column:span 6} .col-4{grid-column:span 6} .col-3{grid-column:span 6} }
   </style>
 </head>
 <body>
@@ -59,24 +59,12 @@
   <section id="users" class="card">
     <h3>Foydalanuvchilar</h3>
     <div class="grid">
-      <div class="col-6">
-        <label>Login</label><input id="u_login" placeholder="student1">
-      </div>
-      <div class="col-6">
-        <label>Parol</label><input id="u_password" placeholder="1234">
-      </div>
-      <div class="col-4">
-        <label>Ism</label><input id="u_name" placeholder="Ali">
-      </div>
-      <div class="col-4">
-        <label>Familiya</label><input id="u_surname" placeholder="Valiyev">
-      </div>
-      <div class="col-4">
-        <label>Sinf</label><input id="u_class" placeholder="10A">
-      </div>
-      <div class="col-6">
-        <label>Ball</label><input id="u_points" type="number" value="0">
-      </div>
+      <div class="col-6"><label>Login</label><input id="u_login" placeholder="student1"></div>
+      <div class="col-6"><label>Parol</label><input id="u_password" placeholder="1234"></div>
+      <div class="col-4"><label>Ism</label><input id="u_name" placeholder="Ali"></div>
+      <div class="col-4"><label>Familiya</label><input id="u_surname" placeholder="Valiyev"></div>
+      <div class="col-4"><label>Sinf</label><input id="u_class" placeholder="10A"></div>
+      <div class="col-6"><label>Ball</label><input id="u_points" type="number" value="0"></div>
       <div class="col-6" style="display:flex;align-items:end;gap:8px">
         <button class="btn" id="addUser">Qo'shish</button>
         <button class="btn ghost" id="resetUserForm">Tozalash</button>
@@ -122,9 +110,10 @@
         <select id="c_kind"><option value="test">test</option><option value="kurs">kurs</option><option value="sim">sim</option></select>
       </div>
       <div class="col-8"><label>Sarlavha</label><input id="c_title" placeholder="Algebra — Boshlang'ich"></div>
+      <div class="col-4"><label>Asosiy teg</label><input id="c_main" placeholder="Masalan: Testlar"></div>
+      <div class="col-8"><label>Teglar (vergul bilan)</label><input id="c_tags" placeholder="test,algebra,easy"></div>
       <div class="col-6"><label>Rasm URL</label><input id="c_image" placeholder="https://..."></div>
       <div class="col-6"><label>Link</label><input id="c_link" placeholder="#"></div>
-      <div class="col-6"><label>Teglar (vergul bilan)</label><input id="c_tags" placeholder="test,algebra,easy"></div>
       <div class="col-6"><label>Faolmi?</label><select id="c_active"><option value="true">Ha</option><option value="false">Yo'q</option></select></div>
       <div class="col-12" style="display:flex;align-items:end;gap:8px">
         <button class="btn" id="addCard">Qo'shish</button>
@@ -133,7 +122,7 @@
     </div>
     <div style="margin-top:12px;overflow:auto">
       <table>
-        <thead><tr><th>Rasm</th><th>Sarlavha</th><th>Turi</th><th>Teglar</th><th>Faol</th><th>Amal</th></tr></thead>
+        <thead><tr><th>Rasm</th><th>Sarlavha</th><th>Turi</th><th>Asosiy teg</th><th>Teglar</th><th>Faol</th><th>Amal</th></tr></thead>
         <tbody id="cardsT"></tbody>
       </table>
     </div>
@@ -154,7 +143,6 @@
   const state = { db:null };
 
   function ensureAdminSession(){
-    // Simple check: allow access if admin logged in via liteindex (stored in localStorage)
     const me = JSON.parse(localStorage.getItem('lite.me')||'null');
     if(!(me && me.role==='admin')){
       alert('Admin sifatida kiring (Math@1999 / Math@28021999).');
@@ -166,7 +154,7 @@
     const res = await fetch('liteadmin.json?_=' + Date.now());
     if(!res.ok) throw new Error('liteadmin.json yuklanmadi');
     state.db = await res.json();
-    $('#status').textContent = 'Yuklandi';
+    document.getElementById('status').textContent = 'Yuklandi';
     renderTables();
   }
 
@@ -189,7 +177,7 @@
     (state.db.banners||[]).forEach((b,idx)=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `<td><img src="${b.image}" style="width:120px;height:54px;object-fit:cover;border-radius:8px"></td>
-      <td>${b.title}</td><td>${b.subtitle||''}</td><td>${b.active?'Ha':'Yo\\'q'}</td>
+      <td>${b.title}</td><td>${b.subtitle||''}</td><td>${b.active?"Ha":"Yo'q"}</td>
       <td style="display:flex;gap:8px">
         <button class="btn ghost" onclick="editBanner(${idx})">Edit</button>
         <button class="btn" onclick="delBanner(${idx})">Del</button>
@@ -201,7 +189,7 @@
     (state.db.cards||[]).forEach((c,idx)=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `<td><img src="${c.image}" style="width:120px;height:80px;object-fit:cover;border-radius:8px"></td>
-      <td>${c.title}</td><td>${c.kind}</td><td>${(c.tags||[]).join(', ')}</td><td>${c.active?'Ha':'Yo\\'q'}</td>
+      <td>${c.title}</td><td>${c.kind}</td><td>${c.main||''}</td><td>${(c.tags||[]).join(', ')}</td><td>${c.active?"Ha":"Yo'q"}</td>
       <td style="display:flex;gap:8px">
         <button class="btn ghost" onclick="editCard(${idx})">Edit</button>
         <button class="btn" onclick="delCard(${idx})">Del</button>
@@ -211,43 +199,47 @@
   }
 
   // USERS handlers
-  $('#addUser').onclick = ()=>{
+  document.getElementById('addUser').onclick = ()=>{
     const u = {
-      login: $('#u_login').value.trim(),
-      password: $('#u_password').value.trim(),
-      name: $('#u_name').value.trim(),
-      surname: $('#u_surname').value.trim(),
-      class: $('#u_class').value.trim(),
-      points: Number($('#u_points').value||0)
+      login: document.getElementById('u_login').value.trim(),
+      password: document.getElementById('u_password').value.trim(),
+      name: document.getElementById('u_name').value.trim(),
+      surname: document.getElementById('u_surname').value.trim(),
+      class: document.getElementById('u_class').value.trim(),
+      points: Number(document.getElementById('u_points').value||0)
     };
     if(!u.login || !u.password || !u.name) return alert('Login, parol va ism majburiy.');
     (state.db.users ||= []).push(u);
     renderTables(); resetUserForm();
   };
-  $('#resetUserForm').onclick = resetUserForm;
-  function resetUserForm(){ ['u_login','u_password','u_name','u_surname','u_class','u_points'].forEach(id=>$('#'+id).value=''); $('#u_points').value=0; }
+  document.getElementById('resetUserForm').onclick = resetUserForm;
+  function resetUserForm(){ ['u_login','u_password','u_name','u_surname','u_class','u_points'].forEach(id=>document.getElementById(id).value=''); document.getElementById('u_points').value=0; }
   window.editUser = idx =>{
     const u = state.db.users[idx];
-    $('#u_login').value=u.login; $('#u_password').value=u.password; $('#u_name').value=u.name; $('#u_surname').value=u.surname; $('#u_class').value=u.class; $('#u_points').value=u.points||0;
-    // replace on next add click
-    $('#addUser').onclick = ()=>{
+    document.getElementById('u_login').value=u.login;
+    document.getElementById('u_password').value=u.password;
+    document.getElementById('u_name').value=u.name;
+    document.getElementById('u_surname').value=u.surname;
+    document.getElementById('u_class').value=u.class;
+    document.getElementById('u_points').value=u.points||0;
+    document.getElementById('addUser').onclick = ()=>{
       const nu = {
-        login: $('#u_login').value.trim(),
-        password: $('#u_password').value.trim(),
-        name: $('#u_name').value.trim(),
-        surname: $('#u_surname').value.trim(),
-        class: $('#u_class').value.trim(),
-        points: Number($('#u_points').value||0)
+        login: document.getElementById('u_login').value.trim(),
+        password: document.getElementById('u_password').value.trim(),
+        name: document.getElementById('u_name').value.trim(),
+        surname: document.getElementById('u_surname').value.trim(),
+        class: document.getElementById('u_class').value.trim(),
+        points: Number(document.getElementById('u_points').value||0)
       };
       state.db.users[idx]=nu; renderTables(); resetUserForm();
-      $('#addUser').onclick = ()=>{
+      document.getElementById('addUser').onclick = ()=>{
         const u2 = {
-          login: $('#u_login').value.trim(),
-          password: $('#u_password').value.trim(),
-          name: $('#u_name').value.trim(),
-          surname: $('#u_surname').value.trim(),
-          class: $('#u_class').value.trim(),
-          points: Number($('#u_points').value||0)
+          login: document.getElementById('u_login').value.trim(),
+          password: document.getElementById('u_password').value.trim(),
+          name: document.getElementById('u_name').value.trim(),
+          surname: document.getElementById('u_surname').value.trim(),
+          class: document.getElementById('u_class').value.trim(),
+          points: Number(document.getElementById('u_points').value||0)
         };
         if(!u2.login || !u2.password || !u2.name) return alert('Login, parol va ism majburiy.');
         (state.db.users ||= []).push(u2); renderTables(); resetUserForm();
@@ -257,42 +249,45 @@
   window.delUser = idx =>{ if(confirm('O‘chirish?')){ state.db.users.splice(idx,1); renderTables(); } };
 
   // BANNERS handlers
-  $('#addBanner').onclick = ()=>{
+  document.getElementById('addBanner').onclick = ()=>{
     const b = {
       id: uid('b_'),
-      title: $('#b_title').value.trim(),
-      subtitle: $('#b_subtitle').value.trim(),
-      image: $('#b_image').value.trim(),
-      link: $('#b_link').value.trim()||'#',
-      active: $('#b_active').value==='true'
+      title: document.getElementById('b_title').value.trim(),
+      subtitle: document.getElementById('b_subtitle').value.trim(),
+      image: document.getElementById('b_image').value.trim(),
+      link: document.getElementById('b_link').value.trim()||'#',
+      active: document.getElementById('b_active').value==='true'
     };
     if(!b.title || !b.image) return alert('Sarlavha va rasm majburiy.');
     (state.db.banners ||= []).push(b); renderTables(); resetBanner();
   };
-  $('#resetBanner').onclick = resetBanner;
-  function resetBanner(){ ['b_title','b_subtitle','b_image','b_link'].forEach(id=>$('#'+id).value=''); $('#b_active').value='true'; }
+  document.getElementById('resetBanner').onclick = resetBanner;
+  function resetBanner(){ ['b_title','b_subtitle','b_image','b_link'].forEach(id=>document.getElementById(id).value=''); document.getElementById('b_active').value='true'; }
   window.editBanner = idx => {
     const b = state.db.banners[idx];
-    $('#b_title').value=b.title; $('#b_subtitle').value=b.subtitle||''; $('#b_image').value=b.image; $('#b_link').value=b.link||'#'; $('#b_active').value=b.active?'true':'false';
-    $('#addBanner').onclick = ()=>{
+    document.getElementById('b_title').value=b.title;
+    document.getElementById('b_subtitle').value=b.subtitle||'';
+    document.getElementById('b_image').value=b.image;
+    document.getElementById('b_link').value=b.link||'#';
+    document.getElementById('b_active').value=b.active?'true':'false';
+    document.getElementById('addBanner').onclick = ()=>{
       state.db.banners[idx] = {
         id: b.id,
-        title: $('#b_title').value.trim(),
-        subtitle: $('#b_subtitle').value.trim(),
-        image: $('#b_image').value.trim(),
-        link: $('#b_link').value.trim()||'#',
-        active: $('#b_active').value==='true'
+        title: document.getElementById('b_title').value.trim(),
+        subtitle: document.getElementById('b_subtitle').value.trim(),
+        image: document.getElementById('b_image').value.trim(),
+        link: document.getElementById('b_link').value.trim()||'#',
+        active: document.getElementById('b_active').value==='true'
       };
       renderTables(); resetBanner();
-      // revert handler to add mode
-      $('#addBanner').onclick = ()=>{
+      document.getElementById('addBanner').onclick = ()=>{
         const nb = {
           id: uid('b_'),
-          title: $('#b_title').value.trim(),
-          subtitle: $('#b_subtitle').value.trim(),
-          image: $('#b_image').value.trim(),
-          link: $('#b_link').value.trim()||'#',
-          active: $('#b_active').value==='true'
+          title: document.getElementById('b_title').value.trim(),
+          subtitle: document.getElementById('b_subtitle').value.trim(),
+          image: document.getElementById('b_image').value.trim(),
+          link: document.getElementById('b_link').value.trim()||'#',
+          active: document.getElementById('b_active').value==='true'
         };
         if(!nb.title || !nb.image) return alert('Sarlavha va rasm majburiy.');
         (state.db.banners ||= []).push(nb); renderTables(); resetBanner();
@@ -302,46 +297,54 @@
   window.delBanner = idx => { if(confirm('O‘chirish?')){ state.db.banners.splice(idx,1); renderTables(); } };
 
   // CARDS handlers
-  $('#addCard').onclick = ()=>{
+  document.getElementById('addCard').onclick = ()=>{
     const c = {
       id: uid('c_'),
-      kind: $('#c_kind').value,
-      title: $('#c_title').value.trim(),
-      image: $('#c_image').value.trim(),
-      link: $('#c_link').value.trim()||'#',
-      tags: $('#c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
-      active: $('#c_active').value==='true'
+      kind: document.getElementById('c_kind').value,
+      title: document.getElementById('c_title').value.trim(),
+      main: document.getElementById('c_main').value.trim(),
+      image: document.getElementById('c_image').value.trim(),
+      link: document.getElementById('c_link').value.trim()||'#',
+      tags: document.getElementById('c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      active: document.getElementById('c_active').value==='true'
     };
     if(!c.title || !c.image) return alert('Sarlavha va rasm majburiy.');
     (state.db.cards ||= []).push(c); renderTables(); resetCard();
   };
-  $('#resetCard').onclick = resetCard;
-  function resetCard(){ ['c_title','c_image','c_link','c_tags'].forEach(id=>$('#'+id).value=''); $('#c_active').value='true'; $('#c_kind').value='test'; }
+  document.getElementById('resetCard').onclick = resetCard;
+  function resetCard(){ ['c_title','c_image','c_link','c_tags','c_main'].forEach(id=>document.getElementById(id).value=''); document.getElementById('c_active').value='true'; document.getElementById('c_kind').value='test'; }
 
   window.editCard = idx =>{
     const c = state.db.cards[idx];
-    $('#c_kind').value=c.kind; $('#c_title').value=c.title; $('#c_image').value=c.image; $('#c_link').value=c.link||'#'; $('#c_tags').value=(c.tags||[]).join(', '); $('#c_active').value=c.active?'true':'false';
-    $('#addCard').onclick = ()=>{
+    document.getElementById('c_kind').value=c.kind;
+    document.getElementById('c_title').value=c.title;
+    document.getElementById('c_main').value=c.main||'';
+    document.getElementById('c_image').value=c.image;
+    document.getElementById('c_link').value=c.link||'#';
+    document.getElementById('c_tags').value=(c.tags||[]).join(', ');
+    document.getElementById('c_active').value=c.active?'true':'false';
+    document.getElementById('addCard').onclick = ()=>{
       state.db.cards[idx] = {
         id:c.id,
-        kind: $('#c_kind').value,
-        title: $('#c_title').value.trim(),
-        image: $('#c_image').value.trim(),
-        link: $('#c_link').value.trim()||'#',
-        tags: $('#c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
-        active: $('#c_active').value==='true'
+        kind: document.getElementById('c_kind').value,
+        title: document.getElementById('c_title').value.trim(),
+        main: document.getElementById('c_main').value.trim(),
+        image: document.getElementById('c_image').value.trim(),
+        link: document.getElementById('c_link').value.trim()||'#',
+        tags: document.getElementById('c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+        active: document.getElementById('c_active').value==='true'
       };
       renderTables(); resetCard();
-      // revert handler to add mode
-      $('#addCard').onclick = ()=>{
+      document.getElementById('addCard').onclick = ()=>{
         const nc = {
           id: uid('c_'),
-          kind: $('#c_kind').value,
-          title: $('#c_title').value.trim(),
-          image: $('#c_image').value.trim(),
-          link: $('#c_link').value.trim()||'#',
-          tags: $('#c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
-          active: $('#c_active').value==='true'
+          kind: document.getElementById('c_kind').value,
+          title: document.getElementById('c_title').value.trim(),
+          main: document.getElementById('c_main').value.trim(),
+          image: document.getElementById('c_image').value.trim(),
+          link: document.getElementById('c_link').value.trim()||'#',
+          tags: document.getElementById('c_tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+          active: document.getElementById('c_active').value==='true'
         };
         if(!nc.title || !nc.image) return alert('Sarlavha va rasm majburiy.');
         (state.db.cards ||= []).push(nc); renderTables(); resetCard();
@@ -354,21 +357,21 @@
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
-    ['users','banners','cards','import'].forEach(id=>$('#'+id).style.display='none');
-    $('#'+t.dataset.tab).style.display='block';
+    ['users','banners','cards','import'].forEach(id=>document.getElementById(id).style.display='none');
+    document.getElementById(t.dataset.tab).style.display='block';
   });
 
   // Export JSON
-  $('#btnExport').onclick = ()=>{
+  document.getElementById('btnExport').onclick = ()=>{
     const blob = new Blob([JSON.stringify(state.db, null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'liteadmin.json';
     a.click(); URL.revokeObjectURL(a.href);
   };
 
   // Import Excel/CSV
-  $('#fileInput').addEventListener('change', async (e)=>{
+  document.getElementById('fileInput').addEventListener('change', async (e)=>{
     const f = e.target.files[0];
-    if(!f){ $('#importStatus').textContent='Fayl tanlanmagan'; return; }
+    if(!f){ document.getElementById('importStatus').textContent='Fayl tanlanmagan'; return; }
     const name = f.name.toLowerCase();
     try{
       if(name.endsWith('.csv')){
@@ -382,17 +385,15 @@
         const rows = XLSX.utils.sheet_to_json(ws, {header:1});
         appendUsersRows(rows);
       }
-      $('#importStatus').textContent = 'Import bajarildi';
+      document.getElementById('importStatus').textContent = 'Import bajarildi';
       renderTables();
     }catch(err){
-      $('#importStatus').textContent = 'Xatolik: '+err.message;
+      document.getElementById('importStatus').textContent = 'Xatolik: '+err.message;
     }
   });
   function appendUsersRows(rows){
-    // expect header present or not
-    const lower = (s)=>String(s||'').toLowerCase();
-    // Try to detect header
     let start = 0;
+    const lower = s=>String(s||'').toLowerCase();
     if(rows.length && ['login','password','name','surname','class','points'].every(h => rows[0].map(lower).includes(h))){
       start = 1;
     }
