@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reyting — MathCenter Lite</title>
+  <meta name="color-scheme" content="light"/>
+  <style>
+    :root{ --green:#2E8B57; --bg:#f7faf8; --text:#1a1f1c; --muted:#6b7280; --card:#fff; --shadow:0 8px 24px rgba(0,0,0,.08); --radius:18px; }
+    *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .container{max-width:1000px;margin:0 auto;padding:16px}
+    h2{margin:10px 0}
+    .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    table{width:100%;border-collapse:separate;border-spacing:0 10px}
+    th,td{text-align:left;padding:12px;vertical-align:middle}
+    tr{background:#fff} tr td:first-child, tr th:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+    tr td:last-child, tr th:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+    .toolbar{display:flex;gap:8px;align-items:center}
+    .spacer{flex:1}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:var(--green);color:#fff;border:0;cursor:pointer;font-weight:600}
+    select{padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar" style="margin-top:8px;margin-bottom:8px">
+      <h2 style="margin:0">Reyting</h2>
+      <span class="spacer"></span>
+      <button class="btn" onclick="location.href='liteindex.html'">Bosh sahifaga qaytish</button>
+    </div>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <label>Test bo‘yicha filtr:</label>
+        <select id="testSel"><option value="all">Barchasi</option></select>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr><th>#</th><th>Ism</th><th>Familiya</th><th>Sinf</th><th>Ball</th><th>Test</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    async function loadJSON(u){ const r = await fetch(u+'?_='+Date.now()); if(!r.ok) throw new Error(u+' yuklanmadi'); return r.json(); }
+    async function main(){
+      const [usersDB, scores] = await Promise.all([loadJSON('liteadmin.json'), loadJSON('ball.json').catch(()=>[]) ]);
+      const userMap = new Map((usersDB.users||[]).map(u=>[u.login, u]));
+      // collect tests list
+      const tests = Array.from(new Set(scores.map(s=>s.testTitle || s.testId || 'Nomlanmagan')));
+      const sel = $('#testSel');
+      tests.forEach(t=>{ const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+      function render(){
+        const flt = sel.value;
+        const rows = scores
+          .filter(x=> flt==='all' ? true : ((x.testTitle||x.testId||'Nomlanmagan')===flt))
+          .map(x=>{
+            const u = userMap.get(x.login)||{};
+            return { name:u.name||'', surname:u.surname||'', class:u.class||'', score:x.score||0, testTitle:x.testTitle||x.testId||'Nomlanmagan' };
+          })
+          .sort((a,b)=>b.score-a.score);
+        const tb = $('#tbody'); tb.innerHTML='';
+        rows.forEach((r,i)=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${i+1}</td><td>${r.name}</td><td>${r.surname}</td><td>${r.class}</td><td>${r.score}</td><td>${r.testTitle}</td>`;
+          tb.appendChild(tr);
+        });
+      }
+      sel.onchange = render;
+      render();
+    }
+    main();
+  </script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Test Admin — MathCenter Lite</title>
+  <meta name="color-scheme" content="light"/>
+  <style>
+    :root{ --green:#2E8B57; --green-700:#1F6B45; --bg:#f7faf8; --text:#1a1f1c; --muted:#6b7280; --card:#fff; --shadow:0 8px 24px rgba(0,0,0,.08); --radius:18px; }
+    *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;background:#fff;border-bottom:1px solid #eee;z-index:5}
+    .container{max-width:1100px;margin:0 auto;padding:16px}
+    .stack{display:flex;align-items:center;gap:12px}
+    .spacer{flex:1}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--green)}
+    .brand .pi{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--green-700));display:grid;place-items:center;color:#fff;box-shadow:var(--shadow)}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:var(--green);color:#fff;border:0;cursor:pointer;font-weight:600}
+    .btn.ghost{background:#e9f5ef;color:var(--green)}
+    .card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    input,select,textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;outline:0}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+    .col-6{grid-column:span 6} .col-12{grid-column:span 12} .col-4{grid-column:span 4} .col-8{grid-column:span 8}
+    .q{display:grid;gap:8px;border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff}
+    .muted{color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+<header>
+  <div class="container stack">
+    <div class="brand"><div class="pi">π</div><div>Test Admin</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="location.href='liteindex.html'">Bosh sahifa</button>
+    <button class="btn" id="btnExport">test.json yuklab olish</button>
+  </div>
+</header>
+
+<main class="container" style="display:grid;gap:16px;margin-top:16px">
+  <section class="card">
+    <h3>Yangi test</h3>
+    <div class="grid">
+      <div class="col-6"><label>Test nomi</label><input id="t_title" placeholder="Algebra — 20 savol"></div>
+      <div class="col-6"><label>Vaqt (daqiqada)</label><input id="t_minutes" type="number" min="1" value="20"></div>
+    </div>
+    <div class="muted" style="margin-top:6px">Har bir savolga ball kiriting; umumiy ball avtomatik hisoblanadi.</div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;align-items:center;gap:8px">
+      <h3 style="margin:0">Savollar</h3>
+      <span class="spacer"></span>
+      <button class="btn" id="addQ">Savol qo'shish</button>
+    </div>
+    <div id="qs" style="display:grid;gap:12px;margin-top:12px"></div>
+  </section>
+</main>
+
+<script>
+  const $ = s => document.querySelector(s);
+  const state = { test:{ id: uid('t_'), title:'', durationSec:1200, questions:[] } };
+
+  function uid(prefix){ return prefix + Math.random().toString(36).slice(2,8); }
+  function downloadJSON(obj, name){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  document.getElementById('addQ').onclick = ()=> addQuestion();
+
+  function addQuestion(q){
+    const idx = state.test.questions.length;
+    const el = document.createElement('div');
+    el.className = 'q';
+    const id = q?.id || uid('q_');
+    el.innerHTML = `
+      <div><label>Savol matni</label><textarea data-role="text" rows="2" placeholder="Savol matni...">${q?.text||''}</textarea></div>
+      <div class="grid">
+        <div class="col-6"><label>Variant A</label><input data-role="o0" placeholder="A"></div>
+        <div class="col-6"><label>Variant B</label><input data-role="o1" placeholder="B"></div>
+        <div class="col-6"><label>Variant C</label><input data-role="o2" placeholder="C"></div>
+        <div class="col-6"><label>Variant D</label><input data-role="o3" placeholder="D"></div>
+        <div class="col-6"><label>To‘g‘ri javob</label>
+          <select data-role="ans">
+            <option value="0">A</option>
+            <option value="1">B</option>
+            <option value="2">C</option>
+            <option value="3">D</option>
+          </select>
+        </div>
+        <div class="col-6"><label>Ball</label><input data-role="points" type="number" min="1" value="${q?.points||1}"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn ghost" data-role="del">O‘chirish</button>
+      </div>
+    `;
+    const delBtn = el.querySelector('[data-role="del"]');
+    delBtn.onclick = ()=>{ el.remove(); state.test.questions = state.test.questions.filter(x=>x.id!==id); };
+    $('#qs').appendChild(el);
+    // initialize/patch
+    state.test.questions.push({ id, text:q?.text||'', options:q?.options||['','','',''], correctIndex:q?.correctIndex||0, points:q?.points||1 });
+    // bind
+    el.querySelector('[data-role="text"]').addEventListener('input', e=>{
+      const it = state.test.questions.find(x=>x.id===id); it.text = e.target.value;
+    });
+    ['o0','o1','o2','o3'].forEach((k,i)=>{
+      const input = el.querySelector(`[data-role="${k}"]`);
+      input.value = (state.test.questions.find(x=>x.id===id).options[i]) || '';
+      input.addEventListener('input', e=>{
+        const it = state.test.questions.find(x=>x.id===id); it.options[i] = e.target.value;
+      });
+    });
+    el.querySelector('[data-role="ans"]').value = String(state.test.questions.find(x=>x.id===id).correctIndex||0);
+    el.querySelector('[data-role="ans"]').addEventListener('change', e=>{
+      const it = state.test.questions.find(x=>x.id===id); it.correctIndex = Number(e.target.value);
+    });
+    el.querySelector('[data-role="points"]').addEventListener('input', e=>{
+      const it = state.test.questions.find(x=>x.id===id); it.points = Number(e.target.value||1);
+    });
+  }
+
+  document.getElementById('t_title').addEventListener('input', e=>state.test.title = e.target.value.trim());
+  document.getElementById('t_minutes').addEventListener('input', e=>state.test.durationSec = Math.max(60, Number(e.target.value||1)*60));
+
+  document.getElementById('btnExport').onclick = ()=>{
+    const total = state.test.questions.reduce((s,q)=>s+(q.points||0),0);
+    const out = [{ id: state.test.id, title: state.test.title || 'Yangi test', durationSec: state.test.durationSec, totalPoints: total, questions: state.test.questions }];
+    downloadJSON(out, 'test.json');
+  };
+</script>
+</body>
+</html>

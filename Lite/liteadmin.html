@@ -7,9 +7,7 @@
   <meta name="color-scheme" content="light"/>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    :root{
-      --green:#2E8B57; --green-700:#1F6B45; --bg:#f7faf8; --text:#1a1f1c; --muted:#6b7280; --card:#fff; --shadow:0 8px 24px rgba(0,0,0,.08); --radius:18px;
-    }
+    :root{ --green:#2E8B57; --green-700:#1F6B45; --bg:#f7faf8; --text:#1a1f1c; --muted:#6b7280; --card:#fff; --shadow:0 8px 24px rgba(0,0,0,.08); --radius:18px; }
     *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
     header{position:sticky;top:0;background:#fff;border-bottom:1px solid #eee;z-index:5}
     .container{max-width:1200px;margin:0 auto;padding:16px}
@@ -31,6 +29,7 @@
     tr td:last-child, tr th:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
     .col-6{grid-column:span 6} .col-4{grid-column:span 4} .col-3{grid-column:span 3} .col-8{grid-column:span 8} .col-12{grid-column:span 12}
+    .avatar-preview{width:54px;height:54px;border-radius:50%;object-fit:cover;background:#eef2f1}
     @media (max-width:900px){ .grid{grid-template-columns:repeat(6,1fr)} .col-6{grid-column:span 6} .col-8{grid-column:span 6} .col-4{grid-column:span 6} .col-3{grid-column:span 6} }
   </style>
 </head>
@@ -65,6 +64,14 @@
       <div class="col-4"><label>Familiya</label><input id="u_surname" placeholder="Valiyev"></div>
       <div class="col-4"><label>Sinf</label><input id="u_class" placeholder="10A"></div>
       <div class="col-6"><label>Ball</label><input id="u_points" type="number" value="0"></div>
+      <div class="col-6">
+        <label>Avatar rasm</label>
+        <input id="u_avatar_file" type="file" accept="image/*"/>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <img id="u_avatar_preview" class="avatar-preview" alt=""/>
+          <span class="pill">ixtiyoriy</span>
+        </div>
+      </div>
       <div class="col-6" style="display:flex;align-items:end;gap:8px">
         <button class="btn" id="addUser">Qo'shish</button>
         <button class="btn ghost" id="resetUserForm">Tozalash</button>
@@ -72,7 +79,7 @@
     </div>
     <div style="margin-top:12px;overflow:auto">
       <table>
-        <thead><tr><th>Login</th><th>Ism</th><th>Familiya</th><th>Sinf</th><th>Ball</th><th>Amal</th></tr></thead>
+        <thead><tr><th>Avatar</th><th>Login</th><th>Ism</th><th>Familiya</th><th>Sinf</th><th>Ball</th><th>Amal</th></tr></thead>
         <tbody id="usersT"></tbody>
       </table>
     </div>
@@ -132,7 +139,7 @@
   <section id="import" class="card" style="display:none">
     <h3>Excel/CSV import</h3>
     <p class="muted">Excel fayl (xlsx, xls) yoki CSV yuklab, foydalanuvchilar ro'yxatini qo'shing.
-      Ustunlar: <b>login, password, name, surname, class, points</b>.</p>
+      Ustunlar: <b>login, password, name, surname, class, points, avatar</b> (avatar base64 ixtiyoriy).</p>
     <input id="fileInput" type="file" accept=".xlsx,.xls,.csv"/>
     <div id="importStatus" class="pill" style="margin-top:10px;display:inline-block">Fayl tanlanmagan</div>
   </section>
@@ -140,7 +147,7 @@
 
 <script>
   const $ = s => document.querySelector(s);
-  const state = { db:null };
+  const state = { db:null, avatarData:null };
 
   function ensureAdminSession(){
     const me = JSON.parse(localStorage.getItem('lite.me')||'null');
@@ -165,7 +172,8 @@
     const ut = $('#usersT'); ut.innerHTML='';
     (state.db.users||[]).forEach((u,idx)=>{
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${u.login}</td><td>${u.name}</td><td>${u.surname}</td><td>${u.class}</td><td>${u.points||0}</td>
+      const av = u.avatar ? `<img src="${u.avatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover">` : '';
+      tr.innerHTML = `<td>${av}</td><td>${u.login}</td><td>${u.name}</td><td>${u.surname}</td><td>${u.class}</td><td>${u.points||0}</td>
         <td style="display:flex;gap:8px">
           <button class="btn ghost" onclick="editUser(${idx})">Edit</button>
           <button class="btn" onclick="delUser(${idx})">Del</button>
@@ -198,7 +206,27 @@
     });
   }
 
+  // Helpers
+  function toDataURL(file){
+    return new Promise((resolve,reject)=>{
+      const r=new FileReader();
+      r.onload=e=>resolve(e.target.result);
+      r.onerror=reject;
+      r.readAsDataURL(file);
+    });
+  }
+  function downloadJSON(obj, name){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  }
+
   // USERS handlers
+  document.getElementById('u_avatar_file').addEventListener('change', async (e)=>{
+    const f = e.target.files[0];
+    state.avatarData = f ? await toDataURL(f) : null;
+    if(state.avatarData){ document.getElementById('u_avatar_preview').src = state.avatarData; }
+  });
+
   document.getElementById('addUser').onclick = ()=>{
     const u = {
       login: document.getElementById('u_login').value.trim(),
@@ -206,14 +234,15 @@
       name: document.getElementById('u_name').value.trim(),
       surname: document.getElementById('u_surname').value.trim(),
       class: document.getElementById('u_class').value.trim(),
-      points: Number(document.getElementById('u_points').value||0)
+      points: Number(document.getElementById('u_points').value||0),
+      avatar: state.avatarData || null
     };
     if(!u.login || !u.password || !u.name) return alert('Login, parol va ism majburiy.');
     (state.db.users ||= []).push(u);
     renderTables(); resetUserForm();
   };
   document.getElementById('resetUserForm').onclick = resetUserForm;
-  function resetUserForm(){ ['u_login','u_password','u_name','u_surname','u_class','u_points'].forEach(id=>document.getElementById(id).value=''); document.getElementById('u_points').value=0; }
+  function resetUserForm(){ ['u_login','u_password','u_name','u_surname','u_class','u_points'].forEach(id=>document.getElementById(id).value=''); document.getElementById('u_points').value=0; state.avatarData=null; document.getElementById('u_avatar_preview').removeAttribute('src'); }
   window.editUser = idx =>{
     const u = state.db.users[idx];
     document.getElementById('u_login').value=u.login;
@@ -222,6 +251,7 @@
     document.getElementById('u_surname').value=u.surname;
     document.getElementById('u_class').value=u.class;
     document.getElementById('u_points').value=u.points||0;
+    if(u.avatar){ document.getElementById('u_avatar_preview').src=u.avatar; }
     document.getElementById('addUser').onclick = ()=>{
       const nu = {
         login: document.getElementById('u_login').value.trim(),
@@ -229,7 +259,8 @@
         name: document.getElementById('u_name').value.trim(),
         surname: document.getElementById('u_surname').value.trim(),
         class: document.getElementById('u_class').value.trim(),
-        points: Number(document.getElementById('u_points').value||0)
+        points: Number(document.getElementById('u_points').value||0),
+        avatar: state.avatarData || u.avatar || null
       };
       state.db.users[idx]=nu; renderTables(); resetUserForm();
       document.getElementById('addUser').onclick = ()=>{
@@ -239,7 +270,8 @@
           name: document.getElementById('u_name').value.trim(),
           surname: document.getElementById('u_surname').value.trim(),
           class: document.getElementById('u_class').value.trim(),
-          points: Number(document.getElementById('u_points').value||0)
+          points: Number(document.getElementById('u_points').value||0),
+          avatar: state.avatarData || null
         };
         if(!u2.login || !u2.password || !u2.name) return alert('Login, parol va ism majburiy.');
         (state.db.users ||= []).push(u2); renderTables(); resetUserForm();
@@ -362,11 +394,11 @@
   });
 
   // Export JSON
-  document.getElementById('btnExport').onclick = ()=>{
-    const blob = new Blob([JSON.stringify(state.db, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'liteadmin.json';
-    a.click(); URL.revokeObjectURL(a.href);
-  };
+  document.getElementById('btnExport').onclick = ()=> downloadJSON(state.db, 'liteadmin.json');
+  function downloadJSON(obj, name){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  }
 
   // Import Excel/CSV
   document.getElementById('fileInput').addEventListener('change', async (e)=>{
@@ -398,7 +430,7 @@
       start = 1;
     }
     for(let i=start;i<rows.length;i++){
-      const [login,password,name,surname,klass,points] = rows[i];
+      const [login,password,name,surname,klass,points,avatar] = rows[i];
       if(!login || !password || !name) continue;
       (state.db.users ||= []).push({
         login:String(login).trim(),
@@ -406,7 +438,8 @@
         name:String(name).trim(),
         surname:String(surname||'').trim(),
         class:String(klass||'').trim(),
-        points:Number(points||0)
+        points:Number(points||0),
+        avatar:(avatar||'').startsWith('data:image') ? String(avatar) : null
       });
     }
   }
