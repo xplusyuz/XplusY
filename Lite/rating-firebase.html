@@ -1,60 +1,73 @@
 <!doctype html>
-<html lang="uz"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>MathCenter — Reyting (Firestore)</title><meta name="color-scheme" content="dark"/>
-<link rel="stylesheet" href="assets/styles.css"/>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MathCenter — Reyting</title>
+<link rel="icon" type="image/svg+xml" href="assets/pi-logo.svg">
+<link rel="stylesheet" href="assets/styles.css">
+
+<!-- Firebase -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  import { firebaseConfig } from "./config.js";
-  const app = initializeApp(firebaseConfig);
-  window._db = getFirestore(app);
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import config from "./config.js";
+const app = initializeApp(config);
+const db = getFirestore(app);
+
+window.addEventListener("DOMContentLoaded", loadRating);
+
+async function loadRating(){
+  const tbl=document.getElementById("ratingBody");
+  tbl.innerHTML="<tr><td colspan='4'>Yuklanmoqda...</td></tr>";
+  try{
+    const q=query(collection(db,"public_results"),orderBy("score","desc"));
+    const snap=await getDocs(q);
+    const arr=[];
+    snap.forEach(doc=>{
+      const d=doc.data();
+      arr.push({
+        name:d.name||"Foydalanuvchi",
+        score:d.score||0,
+        title:d.title||"",
+        date:d.createdAt?.toDate?.()?.toLocaleString()||""
+      });
+    });
+    arr.sort((a,b)=>b.score-a.score);
+    tbl.innerHTML=arr.map((r,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td>${r.name}</td>
+        <td>${r.title}</td>
+        <td>${r.score}</td>
+      </tr>`).join("")||"<tr><td colspan='4'>Natijalar topilmadi</td></tr>";
+  }catch(e){
+    console.error(e);
+    tbl.innerHTML="<tr><td colspan='4'>Xatolik: "+e.message+"</td></tr>";
+  }
+}
 </script>
-</head><body>
-<header class="nav">
-  <div class="container stack">
-    <div class="brand"><div class="pi">π</div><div>Reyting</div></div>
-    <div class="spacer"></div>
-    <button class="btn ghost" onclick="location.href='liteindex.html'">Bosh sahifa</button>
+</head>
+
+<body>
+<header class="header-glass">
+  <div class="container row">
+    <div class="brand">
+      <img src="assets/pi-logo.svg" class="pi"><h2>Reyting</h2>
+    </div>
+    <div class="sp"></div>
+    <a href="index.html" class="btn ghost">🏠 Bosh sahifa</a>
   </div>
 </header>
 
-<main class="container" style="display:grid;gap:16px;margin-top:16px">
-  <section class="card" style="padding:16px">
-    <div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">Umumiy reyting</h3><span class="badge">public_results</span></div>
-    <table class="table" id="rt">
-      <thead><tr><th>O‘rin</th><th>Ism Familiya</th><th>Sinf</th><th>Login</th><th>Umumiy ball</th></tr></thead>
-      <tbody></tbody>
+<main class="container">
+  <div class="card p">
+    <h3>Foydalanuvchilar reytingi</h3>
+    <table class="table mt">
+      <thead><tr><th>#</th><th>Foydalanuvchi</th><th>Test nomi</th><th>Ball</th></tr></thead>
+      <tbody id="ratingBody"></tbody>
     </table>
-  </section>
+  </div>
 </main>
-
-<script type="module">
-import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-async function build(){
-  const tb = document.querySelector('#rt tbody'); tb.innerHTML='';
-  try{
-    const snap = await getDocs(collection(window._db,"public_results"));
-    const sums = new Map();
-    snap.forEach(d=>{
-      const x=d.data();
-      const key=x.login||'unknown';
-      const prev = sums.get(key) || {login:key,name:'',class:'',total:0};
-      prev.total += Number(x.score)||0;
-      prev.name = (x.name||prev.name||'').trim();
-      prev.class = x.class||prev.class||'';
-      sums.set(key, prev);
-    });
-    const rows = Array.from(sums.values()).sort((a,b)=>b.total-a.total);
-    rows.forEach((r,i)=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML = `<td>${i+1}</td><td>${r.name}</td><td>${r.class}</td><td>${r.login}</td><td>${r.total}</td>`;
-      tb.appendChild(tr);
-    });
-  }catch(e){
-    document.querySelector('#rt tbody').innerHTML = `<tr><td colspan="5" class="hint">Firestore xatosi: ${e.message}</td></tr>`;
-  }
-}
-build();
-</script>
-</body></html>
+</body>
+</html>

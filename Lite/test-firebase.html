@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MathCenter — Test</title>
+<link rel="icon" type="image/svg+xml" href="assets/pi-logo.svg">
+<link rel="stylesheet" href="assets/styles.css">
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import config from "./config.js";
+const app = initializeApp(config);
+const db = getFirestore(app);
+
+window.addEventListener("DOMContentLoaded", () => init(db));
+async function init(db){
+  const url = new URL(window.location.href);
+  const testId = url.searchParams.get("id");
+  const testData = await fetch("test.json").then(r=>r.json());
+  const test = testData.tests.find(t=>t.id===testId);
+  if(!test){document.body.innerHTML="<h2>Test topilmadi.</h2>";return;}
+
+  const qEl = document.getElementById("question");
+  const optsEl = document.getElementById("options");
+  const nextBtn = document.getElementById("nextBtn");
+  const resultEl = document.getElementById("result");
+
+  let idx=0, score=0;
+  let startTime = Date.now();
+
+  function renderQ(){
+    const q = test.questions[idx];
+    qEl.innerHTML = q.text;
+    optsEl.innerHTML = "";
+    q.options.forEach((opt,i)=>{
+      const btn = document.createElement("button");
+      btn.className="btn opt";
+      btn.innerHTML = opt;
+      btn.onclick=()=>select(i);
+      optsEl.appendChild(btn);
+    });
+    MathJax.typesetPromise();
+  }
+
+  async function select(i){
+    const q=test.questions[idx];
+    if(i===q.answerIndex) score+=q.points;
+    idx++;
+    if(idx<test.questions.length){renderQ();}
+    else { await finish(); }
+  }
+
+  async function finish(){
+    const duration = Math.round((Date.now()-startTime)/1000);
+    document.querySelector(".quiz").style.display="none";
+    resultEl.style.display="block";
+    resultEl.innerHTML = `
+      <h2>Test yakunlandi ✅</h2>
+      <p>Ball: <b>${score}</b> / ${test.questions.reduce((s,q)=>s+q.points,0)}</p>
+      <p>Davomiylik: ${duration} sekund</p>
+      <a href="rating-firebase.html" class="btn">Reytingni ko‘rish</a>`;
+    // Firestore’ga yozish
+    try{
+      await addDoc(collection(db,"public_results"),{
+        testId:test.id,
+        title:test.title,
+        score,
+        max:test.questions.reduce((s,q)=>s+q.points,0),
+        duration,
+        createdAt:serverTimestamp()
+      });
+    }catch(e){console.error("Firestore xatosi:",e);}
+  }
+
+  renderQ();
+}
+</script>
+
+<!-- MathJax -->
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+
+<body>
+<header class="header-glass">
+  <div class="container row">
+    <div class="brand"><img src="assets/pi-logo.svg" class="pi"><h2>Test</h2></div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="quiz card p">
+    <h3 id="question"></h3>
+    <div id="options" class="mt"></div>
+  </div>
+  <div id="result" class="card p" style="display:none;text-align:center"></div>
+</main>
+</body>
+</html>
