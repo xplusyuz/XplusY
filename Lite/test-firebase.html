@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MathCenter — Test (LaTeX + Navigator)</title>
+  <title>MathCenter — Test (Firebase autosave)</title>
   <meta name="color-scheme" content="light"/>
   <style>
 :root{--green:#2E8B57;--green-700:#1F6B45;--bg:#f7faf8;--text:#1a1f1c;--muted:#6b7280;--card:#fff;--shadow:0 8px 24px rgba(0,0,0,.08);--radius:18px}
@@ -37,7 +37,20 @@ input,select,textarea{width:100%;padding:12px 14px;border:1px solid #e5e7eb;bord
     window.MathJax = { tex: {inlineMath: [['$','$'], ['\\(','\\)']]}, svg: {fontCache: 'global'} };
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    const firebaseConfig = {
+      apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain:"xplusy-760fa.firebaseapp.com",
+      projectId:"xplusy-760fa",
+    };
+    window._app = initializeApp(firebaseConfig);
+    window._db = getFirestore(_app);
+  </script>
 </head>
+
 <body>
 <header class="nav">
   <div class="container stack">
@@ -64,7 +77,7 @@ input,select,textarea{width:100%;padding:12px 14px;border:1px solid #e5e7eb;bord
         <button class="btn" type="button" id="nextBtn">Keyingi</button>
         <div class="spacer"></div>
         <button class="btn" id="btnSubmit" type="button">Topshirish</button>
-        <button class="btn ghost" id="btnExport" type="button" style="display:none">Natijani ball.json ga qo'shish (yuklab olish)</button>
+        
       </div>
       <div id="resultBox" class="hint" style="margin-top:8px"></div>
     </section>
@@ -116,10 +129,27 @@ function renderQuestion(){
 function next(){ if(state.current < state.test.questions.length-1){ state.current++; renderQuestion(); renderNavigator(); } }
 function prev(){ if(state.current > 0){ state.current--; renderQuestion(); renderNavigator(); } }
 
-function grade(){
+async function grade(){
   const t=state.test; let score=0; let max=0;
   t.questions.forEach((q,qi)=>{ max += Number(q.points)||t.perQuestionDefault||1; if(state.answers[qi]===q.answerIndex) score += Number(q.points)||t.perQuestionDefault||1; });
-  $('#resultBox').innerHTML = `<b>Natija:</b> ${score} / ${max}`; $('#btnExport').style.display='inline-flex';
+  $('#resultBox').innerHTML = `<b>Natija:</b> ${score} / ${max}`;
+  try{
+    const me = state.me || {};
+    const t = state.test;
+    await addDoc(collection(window._db,"results"), {
+      login: me.login||"unknown",
+      name: (me.name||"")+" "+(me.surname||""),
+      class: me.class||"",
+      testId: t.id,
+      score: score,
+      maxScore: max,
+      when: serverTimestamp()
+    });
+    $('#resultBox').innerHTML += " — <b>Saqlash: OK</b>";
+  }catch(e){
+    $('#resultBox').innerHTML += " — Saqlash xatosi";
+    console.error(e);
+  }
   const now = new Date().toISOString();
   state.lastResult = {login: state.me?.login||'unknown', testId: t.id, score, maxScore: max, when: now};
 }
