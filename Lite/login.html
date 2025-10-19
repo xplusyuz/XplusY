@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Kirish</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="header"></div>
+  <main class="container" style="max-width:520px;">
+    <div class="card" style="padding: 16px;">
+      <div class="content">
+        <h2>Kirish</h2>
+        <p class="muted">Admin tomonidan berilgan login-parol bilan tizimga kiring.</p>
+        <form id="loginForm">
+          <label>Login<br/><input id="login" required style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:12px;"/></label><br/><br/>
+          <label>Parol<br/><input id="password" type="password" required style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:12px;"/></label><br/><br/>
+          <button class="btn btn-primary" type="submit">Kirish</button>
+        </form>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">© 2025 MathCenter</footer>
+
+  <script type="module">
+    
+function renderHeader(active = "home") {
+  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  const authBlock = user
+    ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
+       <span class="badge">Ism: ${user.name}</span>
+       <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
+    : `<a class="btn" href="login.html">Kirish</a>`;
+
+  return `
+  <header class="header">
+    <div class="header-inner container">
+      <div class="brand">
+        <div class="pi">π</div>
+        <div>MathCenter</div>
+      </div>
+      <nav class="nav">
+        <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
+        <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
+        <a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>
+      </nav>
+      <div class="auth">${authBlock}</div>
+    </div>
+  </header>`;
+}
+
+function bindLogout() {
+  const btn = document.querySelector("#logoutBtn");
+  if (btn) {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("mc_user");
+      location.href = "index.html";
+    });
+  }
+}
+
+    document.getElementById('header').innerHTML = renderHeader();
+    bindLogout();
+
+    async function loadUsers() {
+      const res = await fetch('assets/users.json?cache=' + Date.now());
+      if (!res.ok) throw new Error('users.json topilmadi');
+      return res.json();
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const login = document.getElementById('login').value.trim();
+      const password = document.getElementById('password').value;
+
+      const users = await loadUsers();
+      const u = users.find(x => x.login === login && x.password === password);
+      if (!u) return alert('Login yoki parol xato');
+
+      localStorage.setItem('mc_user', JSON.stringify(u));
+      location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Test</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="header"></div>
+  <main class="container">
+    <div id="testWrap"></div>
+  </main>
+  <footer class="footer">© 2025 MathCenter</footer>
+
+  <script type="module">
+    import { db, ready } from './js/firebase-init.js';
+    import { doc, getDoc, setDoc, runTransaction, serverTimestamp, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    {header_component}
+    document.getElementById('header').innerHTML = renderHeader();
+    bindLogout();
+
+    const u = JSON.parse(localStorage.getItem('mc_user')||'null');
+    if (!u) { alert('Test yechish uchun tizimga kiring'); location.href='login.html'; }
+
+    async function loadJSON(path) {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error('JSON yuklab bo\'lmadi: '+path);
+      return res.json();
+    }
+
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+
+    (async () => {
+      const tests = await loadJSON('assets/tests.json');
+      const test = tests.find(t => t.id === id) || tests[0];
+      if (!test) return document.getElementById('testWrap').innerHTML = '<p>Test topilmadi</p>';
+
+      const total = (test.questions||[]).reduce((a,q)=>a+(q.points||1),0);
+      const form = document.createElement('form');
+      form.innerHTML = `
+        <div class="card"><div class="content">
+          <h2>${test.title}</h2>
+          <p class="muted">${test.description||''}</p>
+          <p class="muted">Jami ball: ${total}</p>
+        </div></div>
+        ${(test.questions||[]).map((q,qi)=>`
+          <div class="card"><div class="content">
+            <div class="muted">Ball: ${q.points||1}</div>
+            <h3>${qi+1}. ${q.text}</h3>
+            <div style="display:grid; gap:8px;">
+              ${(q.options||[]).map((o,oi)=>`
+                <label style="display:flex; gap:8px; align-items:center;">
+                  <input type="${q.type==='multi'?'checkbox':'radio'}" name="q${qi}" value="${oi}"/>
+                  <span>${o.text}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div></div>
+        `).join('')}
+        <button class="btn btn-primary" type="submit">Yakunlash</button>
+      `;
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        let score = 0;
+        (test.questions||[]).forEach((q,qi) => {
+          const inputs = Array.from(form.querySelectorAll(`[name="q${qi}"]`));
+          const chosen = inputs.filter(x => x.checked).map(x => +x.value);
+          const correctIdx = (q.options||[]).map((o,i)=>o.correct?i:null).filter(i=>i!==null);
+          const isCorrect = chosen.length === correctIdx.length && chosen.every(x => correctIdx.includes(x));
+          if (isCorrect) score += (q.points || 1);
+        });
+
+        const scoreDoc = {
+          userId: u.numericId ?? u.id ?? u.login,
+          name: u.name, class: u.class || '',
+          testId: test.id, testTitle: test.title, score, total,
+          createdAt: serverTimestamp()
+        };
+        await addDoc(collection(db, 'scores'), scoreDoc);
+
+        await runTransaction(db, async (tx) => {
+          const ref = doc(db, 'user_points', String(scoreDoc.userId));
+          const snap = await tx.get(ref);
+          const prev = snap.exists() ? snap.data() : { totalPoints: 0, name: u.name, class: u.class || '' };
+          tx.set(ref, { ...prev, totalPoints: (prev.totalPoints||0) + score, updatedAt: serverTimestamp(), numericId: scoreDoc.userId }, { merge: true });
+        });
+
+        alert(`Tabriklaymiz! Sizning balingiz: ${score} / ${total}`);
+        location.href = 'rating.html';
+      });
+
+      document.getElementById('testWrap').appendChild(form);
+    })();
+  </script>
+</body>
+</html>

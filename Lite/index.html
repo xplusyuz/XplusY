@@ -1,60 +1,110 @@
 <!doctype html>
 <html lang="uz">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MathCenter — Bosh sahifa</title>
-<link rel="icon" type="image/svg+xml" href="assets/pi-logo.svg">
-<link rel="stylesheet" href="assets/styles.css">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Bosh sahifa</title>
+  <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
-<header class="header-glass">
-  <div class="container row">
-    <div class="brand">
-      <img src="assets/pi-logo.svg" class="pi" alt="π">
-      <h2>MathCenter</h2>
+  <div id="header"></div>
+  <main class="container">
+    <section class="hero">
+      <h1>Bannerlar</h1>
+      <div id="banner-list" class="grid"></div>
+    </section>
+
+    <section style="margin-top: 20px;">
+      <h2>Testlar</h2>
+      <div id="test-grid" class="grid"></div>
+    </section>
+  </main>
+  <footer class="footer">© 2025 MathCenter — “π” brendi</footer>
+
+  <script type="module">
+    import './js/firebase-init.js';
+    
+function renderHeader(active = "home") {
+  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  const authBlock = user
+    ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
+       <span class="badge">Ism: ${user.name}</span>
+       <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
+    : `<a class="btn" href="login.html">Kirish</a>`;
+
+  return `
+  <header class="header">
+    <div class="header-inner container">
+      <div class="brand">
+        <div class="pi">π</div>
+        <div>MathCenter</div>
+      </div>
+      <nav class="nav">
+        <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
+        <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
+        <a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>
+      </nav>
+      <div class="auth">${authBlock}</div>
     </div>
-    <div class="sp"></div>
-    <a href="rating-firebase.html" class="btn ghost">🏆 Reyting</a>
-  </div>
-</header>
-
-<main class="container">
-  <section id="banner-section" class="mt"></section>
-  <section id="cards-section" class="mt"></section>
-</main>
-
-<footer class="footer">
-  <p>© 2025 MathCenter XplusY — O‘quv platformasi</p>
-</footer>
-
-<script>
-async function loadJSON(path){const r=await fetch(path);return await r.json();}
-function cardHTML(c){
-  return `<div class="card-tile">
-    <img src="${c.image||'assets/bg-pattern.svg'}" class="thumb">
-    <div class="content">
-      <h3>${c.title}</h3>
-      <a href="${c.link||'#'}" class="btn">Boshlash</a>
-    </div>
-  </div>`;
+  </header>`;
 }
-function bannerHTML(b){
-  return `<div class="banner" style="background-image:url('${b.image||'assets/bg-pattern.svg'}')">
-    <div class="overlay">
-      <h2>${b.title}</h2>
-      <p>${b.subtitle||''}</p>
-      ${b.link?`<a href="${b.link}" class="btn">Batafsil</a>`:''}
-    </div>
-  </div>`;
+
+function bindLogout() {
+  const btn = document.querySelector("#logoutBtn");
+  if (btn) {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("mc_user");
+      location.href = "index.html";
+    });
+  }
 }
-(async()=>{
-  const lite=await loadJSON("liteadmin.json").catch(()=>({cards:[],banners:[]}));
-  const banners=lite.banners?.filter(b=>b.active)!==false?lite.banners:[];
-  const cards=lite.cards?.filter(c=>c.active)!==false?lite.cards:[];
-  document.querySelector("#banner-section").innerHTML=banners.map(bannerHTML).join("");
-  document.querySelector("#cards-section").innerHTML=cards.map(cardHTML).join("");
-})();
-</script>
+
+    document.getElementById('header').innerHTML = renderHeader('home');
+    bindLogout();
+
+    async function loadJSON(path) {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error('JSON yuklab bo\'lmadi: ' + path);
+      return res.json();
+    }
+
+    function bannerCard(b) {
+      return `
+      <article class="banner">
+        <img src="${b.image}" alt="${b.title}">
+        <div class="copy">
+          <h2>${b.title}</h2>
+          <p>${b.subtitle || ''}</p>
+          <a class="btn btn-primary" href="${b.link}" target="_blank">Batafsil</a>
+        </div>
+      </article>`;
+    }
+
+    function testCard(t) {
+      const tags = (t.tags||[]).map(x=>`<span class='badge'>${x}</span>`).join('');
+      return `
+      <article class="card">
+        <img src="${t.image || 'https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450'}" alt="${t.title}">
+        <div class="content">
+          <h3>${t.title}</h3>
+          <div class="muted">Savollar: ${t.questions?.length || 0} • Maks ball: ${(t.questions||[]).reduce((a,q)=>a+(q.points||1),0)}</div>
+          <div class="tags">${tags}</div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <a class="btn btn-primary" href="test.html?id=${encodeURIComponent(t.id)}">Boshlash</a>
+            <a class="btn" href="#" onclick="alert(t.description||'Tavsif yo\'q')">Batafsil</a>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    (async () => {
+      const banners = await loadJSON('assets/banners.json').catch(()=>[]);
+      const tests = await loadJSON('assets/tests.json').catch(()=>[]);
+
+      document.getElementById('banner-list').innerHTML = banners.map(bannerCard).join('');
+      document.getElementById('test-grid').innerHTML = tests.map(testCard).join('');
+    })();
+  </script>
 </body>
 </html>

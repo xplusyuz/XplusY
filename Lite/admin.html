@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Admin</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+  <div id="header"></div>
+  <main class="container">
+    <div class="hero">
+      <h2>Super Admin Panel</h2>
+      <p class="muted">Bannerlar, testlar va foydalanuvchilar (users.json)ni boshqarish. O'zgartirishlardan so'ng “JSON-ni yuklab olish” tugmasi orqali fayllarni saqlab, hostingga almashtiring.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn" id="tabBanners">Bannerlar</button>
+        <button class="btn" id="tabTests">Testlar</button>
+        <button class="btn" id="tabUsers">Foydalanuvchilar</button>
+      </div>
+    </div>
+
+    <section id="panelBanners" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Bannerlar</h3>
+        <div>
+          <button class="btn" id="addBanner">Banner qo'shish</button>
+          <button class="btn btn-primary" id="saveBanners">JSON-ni yuklab olish</button>
+        </div>
+      </div>
+      <div id="bannersWrap" class="grid"></div>
+    </section>
+
+    <section id="panelTests" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Testlar</h3>
+        <div>
+          <button class="btn" id="addTest">Test qo'shish</button>
+          <button class="btn btn-primary" id="saveTests">JSON-ni yuklab olish</button>
+        </div>
+      </div>
+      <div id="testsWrap" class="grid"></div>
+    </section>
+
+    <section id="panelUsers" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Foydalanuvchilar</h3>
+        <div>
+          <button class="btn" id="addUser">Foydalanuvchi qo'shish</button>
+          <button class="btn btn-primary" id="saveUsers">JSON-ni yuklab olish</button>
+        </div>
+      </div>
+      <div id="usersWrap" class="grid"></div>
+    </section>
+  </main>
+  <footer class="footer">© 2025 MathCenter</footer>
+
+  <script type="module">
+    
+function renderHeader(active = "home") {
+  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  const authBlock = user
+    ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
+       <span class="badge">Ism: ${user.name}</span>
+       <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
+    : `<a class="btn" href="login.html">Kirish</a>`;
+
+  return `
+  <header class="header">
+    <div class="header-inner container">
+      <div class="brand">
+        <div class="pi">π</div>
+        <div>MathCenter</div>
+      </div>
+      <nav class="nav">
+        <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
+        <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
+        <a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>
+      </nav>
+      <div class="auth">${authBlock}</div>
+    </div>
+  </header>`;
+}
+
+function bindLogout() {
+  const btn = document.querySelector("#logoutBtn");
+  if (btn) {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("mc_user");
+      location.href = "index.html";
+    });
+  }
+}
+
+    document.getElementById('header').innerHTML = renderHeader('admin');
+    bindLogout();
+
+    function guard() {
+      const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
+      if (!u || (u.role !== 'admin' && u.role !== 'superadmin')) {
+        alert('Admin huquqi talab qilinadi');
+        location.href = 'login.html';
+      }
+    } guard();
+
+    async function load(path) { const r = await fetch(path); return r.ok ? r.json() : []; }
+    function dl(filename, content) {
+      const a = document.createElement('a');
+      const blob = new Blob([content], {type:'application/json'});
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
+
+    // Tabs
+    const tabs = {tabBanners:'panelBanners', tabTests:'panelTests', tabUsers:'panelUsers'};
+    for (const [btn, panel] of Object.entries(tabs)) {
+      document.getElementById(btn).addEventListener('click', () => {
+        for (const p of Object.values(tabs)) document.getElementById(p).style.display = 'none';
+        document.getElementById(panel).style.display = 'block';
+      });
+    }
+    document.getElementById('tabBanners').click();
+
+    // Renderers
+    function bannerEditor(b, i, arr) {
+      return `
+      <div class="card"><div class="content">
+        <label>Sarlavha<input value="${b.title||''}" data-k="title" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Matn<input value="${b.subtitle||''}" data-k="subtitle" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Rasm URL<input value="${b.image||''}" data-k="image" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Link<input value="${b.link||''}" data-k="link" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn" data-del="banner" data-i="${i}">O'chirish</button>
+        </div>
+      </div></div>`;
+    }
+
+    function testEditor(t, i) {
+      const qHtml = (t.questions||[]).map((q,qi)=>`
+        <details class="card" style="padding:0 0 10px 0;"><summary style="padding:12px 14px; cursor:pointer;">Savol #${qi+1} — ${q.type||'single'} (ball: ${q.points||1})</summary>
+          <div class="content">
+            <label>Matn<textarea data-k="text" data-i="${i}" data-qi="${qi}" style="width:100%; min-height:80px; padding:8px; border:1px solid #cbd5e1; border-radius:12px;">${q.text||''}</textarea></label>
+            <label>Turi (single|multi)<input data-k="type" data-i="${i}" data-qi="${qi}" value="${q.type||'single'}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+            <label>Ball<input type="number" data-k="points" data-i="${i}" data-qi="${qi}" value="${q.points||1}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+            <label>Variantlar (har biri alohida qatorda; to'g'ri variant(lar)ni * bilan belgilang)<textarea data-k="options" data-i="${i}" data-qi="${qi}" style="width:100%; min-height:80px; padding:8px; border:1px solid #cbd5e1; border-radius:12px;">${(q.options||[]).map(o=>o.correct?('*'+o.text):o.text).join('\n')}</textarea></label>
+            <button class="btn" data-del="q" data-i="${i}" data-qi="${qi}">Savolni o'chirish</button>
+          </div>
+        </details>
+      `).join('');
+
+      return `
+      <div class="card"><div class="content">
+        <label>ID<input value="${t.id||''}" data-k="id" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Nomi<input value="${t.title||''}" data-k="title" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Rasm URL<input value="${t.image||''}" data-k="image" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Tavsif<input value="${t.description||''}" data-k="description" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Taglar (vergul bilan)<input value="${(t.tags||[]).join(', ')}" data-k="tags" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn" data-add="q" data-i="${i}">Savol qo'shish</button>
+          <button class="btn" data-del="test" data-i="${i}">Testni o'chirish</button>
+        </div>
+        <div style="display:grid; gap:8px; margin-top:8px;">${qHtml}</div>
+      </div></div>`;
+    }
+
+    function userEditor(u, i) {
+      return `
+      <div class="card"><div class="content">
+        <label>Ism-Fam<input value="${u.name||''}" data-k="name" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Sinf<input value="${u.class||''}" data-k="class" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Login<input value="${u.login||''}" data-k="login" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Parol<input value="${u.password||''}" data-k="password" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Numeric ID<input value="${u.numericId||''}" data-k="numericId" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Rol (user|admin|superadmin)<input value="${u.role||'user'}" data-k="role" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn" data-del="user" data-i="${i}">O'chirish</button>
+        </div>
+      </div></div>`;
+    }
+
+    let banners = await load('assets/banners.json');
+    let tests = await load('assets/tests.json');
+    let users = await load('assets/users.json');
+
+    function rebindEditors() {
+      document.querySelectorAll('[data-k]').forEach(inp => {
+        inp.oninput = (e) => {
+          const k = inp.dataset.k;
+          const i = +inp.dataset.i;
+          if (inp.dataset.qi !== undefined) {
+            const qi = +inp.dataset.qi;
+            if (!tests[i].questions[qi]) return;
+            if (k === 'options') {
+              const lines = inp.value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+              tests[i].questions[qi].options = lines.map(line => ({ text: line.replace(/^\*/,'').trim(), correct: line.startsWith('*') }));
+            } else if (k === 'points') {
+              tests[i].questions[qi][k] = Number(inp.value || 1);
+            } else {
+              tests[i].questions[qi][k] = inp.value;
+            }
+          } else {
+            const target = (inp.closest('#testsWrap')) ? tests[i] : (inp.closest('#bannersWrap') ? banners[i] : users[i]);
+            if (k === 'tags') target[k] = inp.value.split(',').map(s=>s.trim()).filter(Boolean);
+            else target[k] = inp.value;
+          }
+        };
+      });
+
+      document.querySelectorAll('[data-del="banner"]').forEach(btn => btn.onclick = () => { banners.splice(+btn.dataset.i,1); draw(); });
+      document.querySelectorAll('[data-del="test"]').forEach(btn => btn.onclick = () => { tests.splice(+btn.dataset.i,1); draw(); });
+      document.querySelectorAll('[data-del="q"]').forEach(btn => btn.onclick = () => { tests[+btn.dataset.i].questions.splice(+btn.dataset.qi,1); draw(); });
+      document.querySelectorAll('[data-del="user"]').forEach(btn => btn.onclick = () => { users.splice(+btn.dataset.i,1); draw(); });
+
+      document.querySelectorAll('[data-add="q"]').forEach(btn => btn.onclick = () => {
+        const i = +btn.dataset.i;
+        tests[i].questions = tests[i].questions || [];
+        tests[i].questions.push({ text: '', type: 'single', points: 1, options: [{text:'Variant A', correct: true}, {text:'Variant B', correct:false}] });
+        draw();
+      });
+    }
+
+    function draw() {
+      document.getElementById('bannersWrap').innerHTML = banners.map(bannerEditor).join('');
+      document.getElementById('testsWrap').innerHTML = tests.map(testEditor).join('');
+      document.getElementById('usersWrap').innerHTML = users.map(userEditor).join('');
+      rebindEditors();
+    }
+    draw();
+
+    document.getElementById('addBanner').onclick = () => { banners.push({title:'Yangi banner', subtitle:'', image:'https://picsum.photos/seed/banner/1200/600', link:'#'}); draw(); };
+    document.getElementById('addTest').onclick = () => { tests.push({id: crypto.randomUUID().slice(0,8), title:'Yangi test', description:'', image:'', tags:['test'], questions:[]}); draw(); };
+    document.getElementById('addUser').onclick = () => { users.push({name:'Yangi foydalanuvchi', class:'', login:'user'+(users.length+1), password:'1234', numericId: 1000+users.length, role:'user'}); draw(); };
+
+    document.getElementById('saveBanners').onclick = () => dl('banners.json', JSON.stringify(banners, null, 2));
+    document.getElementById('saveTests').onclick = () => dl('tests.json', JSON.stringify(tests, null, 2));
+    document.getElementById('saveUsers').onclick = () => dl('users.json', JSON.stringify(users, null, 2));
+  </script>
+</body>
+</html>
