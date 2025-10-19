@@ -88,7 +88,20 @@ function bindLogout() {
     });
   }
 }
+
 document.getElementById('header').innerHTML = renderHeader('home');
+// add 'Natijalar' nav link for logged-in users
+try{
+  const u = JSON.parse(localStorage.getItem('mc_user')||'null');
+  if(u){
+    const nav = document.querySelector('.nav');
+    const a = document.createElement('a');
+    a.href = 'scores.html';
+    a.textContent = 'Natijalar';
+    nav.insertBefore(a, nav.children[1]);
+  }
+}catch(_){}
+
     bindLogout();
     fillPoints(db);
 
@@ -135,10 +148,58 @@ document.getElementById('header').innerHTML = renderHeader('home');
           <div class="tags">${tags}</div>
           <div style="display:flex; gap:8px; margin-top:8px;">
             ${primaryBtn}
-            <a class="btn" href="#" onclick="alert(t.description||'Tavsif yo\'q')">Batafsil</a>
+            <a class="btn" href="#" onclick='openDetails(t);return false;'>Batafsil</a>
           </div>
         </div>
       </article>`;
+    }
+
+    
+    // Modal helpers
+    const backdrop = document.getElementById('bestBackdrop');
+    const bm = document.getElementById('bestModal');
+    const bmTitle = document.getElementById('bmTitle');
+    const bmImage = document.getElementById('bmImage');
+    const bmDesc = document.getElementById('bmDesc');
+    const bmTimes = document.getElementById('bmTimes');
+    const bmCountdown = document.getElementById('bmCountdown');
+    const bmStartBtn = document.getElementById('bmStartBtn');
+    document.getElementById('bmClose').onclick = () => backdrop.style.display='none';
+
+    function openDetails(t){
+      bmTitle.textContent = t.title;
+      bmImage.src = t.image || 'https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450';
+      bmDesc.textContent = t.description || '';
+      const s = t.startAt ? new Date(t.startAt) : null;
+      const e = t.endAt ? new Date(t.endAt) : null;
+      bmTimes.textContent = (s?('Boshlanish: '+s.toLocaleString()+'  '):'') + (e?('• Tugash: '+e.toLocaleString()):'');
+      bmStartBtn.href = 'test.html?id='+encodeURIComponent(t.id);
+      backdrop.style.display='flex';
+
+      // live countdown
+      let tid;
+      function upd(){
+        const now = new Date();
+        const notStarted = s && now < s;
+        const finished = e && now > e;
+        if (notStarted){
+          const ms = s - now;
+          const hh = Math.floor(ms/3600000);
+          const mm = Math.floor((ms%3600000)/60000);
+          const ss = Math.floor((ms%60000)/1000);
+          bmCountdown.textContent = `Boshlanishiga: ${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+          bmStartBtn.classList.add('btn'); bmStartBtn.classList.remove('btn-primary'); bmStartBtn.setAttribute('disabled','');
+        } else if (finished){
+          bmCountdown.textContent = 'Muddati tugagan';
+          bmStartBtn.setAttribute('disabled','');
+        } else {
+          bmCountdown.textContent = 'Ochiq';
+          bmStartBtn.removeAttribute('disabled');
+          bmStartBtn.classList.add('btn-primary');
+        }
+        tid = setTimeout(upd, 1000);
+      }
+      upd();
     }
 
     (async () => {
@@ -149,5 +210,25 @@ document.getElementById('header').innerHTML = renderHeader('home');
       document.getElementById('test-grid').innerHTML = tests.map(testCard).join('');
     })();
   </script>
+
+  <div class="modal-backdrop" id="bestBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" id="bestModal">
+      <div class="head">
+        <strong id="bmTitle">Batafsil</strong>
+        <button class="close-x" id="bmClose">×</button>
+      </div>
+      <div class="body">
+        <img id="bmImage" src="" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;"/>
+        <div id="bmDesc" class="muted"></div>
+        <div id="bmTimes" class="muted"></div>
+        <div id="bmCountdown" class="badge"></div>
+      </div>
+      <div class="foot">
+        <a class="btn btn-primary" id="bmStartBtn" href="#">Boshlash</a>
+      </div>
+    </div>
+  </div>
 </body>
+</html>
+
 </html>
