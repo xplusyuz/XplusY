@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Reyting</title>
+  <meta name="color-scheme" content="light"/>
+  <style>
+:root{--green:#2E8B57;--green-700:#1F6B45;--bg:#f7faf8;--text:#1a1f1c;--muted:#6b7280;--card:#fff;--shadow:0 8px 24px rgba(0,0,0,.08);--radius:18px}
+*{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:var(--green);color:#fff;border:0;cursor:pointer;font-weight:600}
+.btn.ghost{background:#e9f5ef;color:var(--green)}
+header.nav{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #eee}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--green)}
+.brand .pi{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--green-700));display:grid;place-items:center;color:#fff;box-shadow:var(--shadow)}
+.stack{display:flex;align-items:center;gap:10px}.spacer{flex:1}
+label{font-size:13px;color:var(--muted)}
+input,select,textarea{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;outline:0}
+.hint{font-size:12px;color:var(--muted)}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#d1fae5,#a7f3d0);display:grid;place-items:center;font-weight:700;color:var(--green-700);overflow:hidden}
+.table{width:100%;border-collapse:separate;border-spacing:0 10px}
+.table th,.table td{text-align:left;padding:10px 12px;vertical-align:middle;background:#fff}
+.table tr td:first-child,.table tr th:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+.table tr td:last-child,.table tr th:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+
+  .title{display:flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+<header class="nav">
+  <div class="container stack">
+    <div class="brand"><div class="pi">π</div><div>Reyting</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="location.href='liteindex.html'">Bosh sahifa</button>
+  </div>
+</header>
+
+<main class="container" style="display:grid;gap:16px;margin-top:16px">
+  <section class="card" style="padding:16px">
+    <div class="title"><h3 style="margin:0">Umumiy reyting</h3><div class="hint">(ball.json bo'yicha)</div></div>
+    <table class="table" id="rt">
+      <thead><tr><th>O‘rin</th><th>Ism Familiya</th><th>Sinf</th><th>Login</th><th>Umumiy ball</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const $ = s=>document.querySelector(s);
+
+async function loadJSON(p){
+  const r = await fetch(p+'?_=' + Date.now());
+  if(!r.ok) throw new Error(p+' yuklanmadi');
+  return r.json();
+}
+
+(async function(){
+  try{
+    const [db, bal] = await Promise.all([loadJSON('liteadmin.json'), loadJSON('ball.json')]);
+    const users = db.users||[]; const sums = new Map();
+    (bal.results||[]).forEach(r=>{ sums.set(r.login, (sums.get(r.login)||0) + (Number(r.score)||0)); });
+    const rows = users.map(u=>({login:u.login, name:u.name, surname:u.surname, class:u.class, total: sums.get(u.login)||0}));
+    rows.sort((a,b)=>b.total - a.total);
+    const tb = document.querySelector('#rt tbody'); tb.innerHTML='';
+    rows.forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${i+1}</td><td>${r.name} ${r.surname}</td><td>${r.class}</td><td>${r.login}</td><td>${r.total}</td>`; tb.appendChild(tr); });
+  }catch(e){ alert('Ma\'lumotlarni yuklashda xatolik: '+e.message); }
+})();
+</script>
+</body>
+</html>

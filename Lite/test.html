@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MathCenter — Test</title>
+  <meta name="color-scheme" content="light"/>
+  <style>
+:root{--green:#2E8B57;--green-700:#1F6B45;--bg:#f7faf8;--text:#1a1f1c;--muted:#6b7280;--card:#fff;--shadow:0 8px 24px rgba(0,0,0,.08);--radius:18px}
+*{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:var(--green);color:#fff;border:0;cursor:pointer;font-weight:600}
+.btn.ghost{background:#e9f5ef;color:var(--green)}
+header.nav{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #eee}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--green)}
+.brand .pi{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--green),var(--green-700));display:grid;place-items:center;color:#fff;box-shadow:var(--shadow)}
+.stack{display:flex;align-items:center;gap:10px}.spacer{flex:1}
+label{font-size:13px;color:var(--muted)}
+input,select,textarea{width:100%;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;outline:0}
+.hint{font-size:12px;color:var(--muted)}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#d1fae5,#a7f3d0);display:grid;place-items:center;font-weight:700;color:var(--green-700);overflow:hidden}
+.table{width:100%;border-collapse:separate;border-spacing:0 10px}
+.table th,.table td{text-align:left;padding:10px 12px;vertical-align:middle;background:#fff}
+.table tr td:first-child,.table tr th:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+.table tr td:last-child,.table tr th:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+
+  .q{background:#fff;border-radius:18px;box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+  </style>
+</head>
+<body>
+<header class="nav">
+  <div class="container stack">
+    <div class="brand"><div class="pi">π</div><div>Test</div></div>
+    <div class="spacer"></div>
+    <div class="hint" id="timer">00:00</div>
+    <button class="btn ghost" onclick="location.href='liteindex.html'">Bosh sahifa</button>
+  </div>
+</header>
+
+<main class="container" style="display:grid;gap:16px;margin-top:16px">
+  <section id="info" class="card" style="padding:16px"></section>
+  <form id="paper"></form>
+  <div style="display:flex;gap:8px">
+    <button class="btn" id="btnSubmit" type="button">Topshirish</button>
+    <button class="btn ghost" id="btnExport" type="button" style="display:none">Natijani ball.json ga qo'shish (yuklab olish)</button>
+  </div>
+  <div id="resultBox" class="hint"></div>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const testId = params.get('id');
+const $ = s=>document.querySelector(s);
+const state = { me:null, test:null, seconds:0, answers:{} };
+
+function getSession(){ try{return JSON.parse(localStorage.getItem('lite.me'));}catch{return null;} }
+async function loadJSON(p){ const r=await fetch(p+'?_='+Date.now()); if(!r.ok) throw new Error(p+' yuklanmadi'); return r.json(); }
+
+function formatTime(s){ const m=Math.floor(s/60).toString().padStart(2,'0'); const ss=(s%60).toString().padStart(2,'0'); return m+':'+ss; }
+
+function startTimer(sec){ state.seconds=sec; document.getElementById('timer').textContent = formatTime(state.seconds); const iv=setInterval(()=>{ state.seconds--; document.getElementById('timer').textContent = formatTime(Math.max(0,state.seconds)); if(state.seconds<=0){ clearInterval(iv); grade(); } },1000); }
+
+function renderTest(){
+  const t = state.test; document.getElementById('info').innerHTML = `<h3 style="margin:0">${t.title}</h3><div class="hint">${t.description||''}</div>`;
+  const form = document.getElementById('paper'); form.innerHTML='';
+  t.questions.forEach((q,qi)=>{ const div=document.createElement('div'); div.className='q';
+    const opts = q.options.map((op,oi)=>`<label style="display:block;margin-top:6px"><input type="radio" name="q${qi}" value="${oi}"> ${String.fromCharCode(65+oi)}) ${op}</label>`).join('');
+    div.innerHTML = `<div><b>${qi+1}.</b> ${q.text}</div><div style="margin-top:6px">${opts}</div>`; form.appendChild(div);
+  });
+}
+
+function grade(){
+  const t=state.test; let score=0; let max=0;
+  t.questions.forEach((q,qi)=>{ max += Number(q.points)||t.perQuestionDefault||1; const chosen = Number((document.querySelector(`input[name="q${qi}"]:checked`)||{}).value); if(chosen===q.answerIndex) score += Number(q.points)||t.perQuestionDefault||1; });
+  document.getElementById('resultBox').innerHTML = `<b>Natija:</b> ${score} / ${max}`; document.getElementById('btnExport').style.display='inline-flex';
+  const now = new Date().toISOString();
+  state.lastResult = {login: state.me?.login||'unknown', testId: t.id, score, maxScore: max, when: now};
+}
+
+document.getElementById('btnSubmit').onclick = grade;
+
+document.getElementById('btnExport').onclick = async ()=>{
+  try{
+    const current = await loadJSON('ball.json');
+    (current.results ||= []).push(state.lastResult);
+    const blob = new Blob([JSON.stringify(current,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ball.json'; a.click(); URL.revokeObjectURL(a.href);
+  }catch(e){
+    const data = {results:[state.lastResult]};
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ball.json'; a.click(); URL.revokeObjectURL(a.href);
+  }
+};
+
+(async function init(){
+  state.me = getSession();
+  if(!state.me){ alert('Avval kirish qiling.'); location.href='liteindex.html'; return; }
+  const all = await loadJSON('test.json');
+  const t = (all.tests||[]).find(x=>x.id===testId);
+  if(!t){ alert('Test topilmadi.'); location.href='liteindex.html'; return; }
+  state.test = t; renderTest(); startTimer(t.durationSec||600);
+})();
+</script>
+</body>
+</html>
