@@ -22,15 +22,26 @@
   <footer class="footer">© 2025 MathCenter — “π” brendi</footer>
 
   <script type="module">
-    import './js/firebase-init.js';
+    import { db } from './js/firebase-init.js';
     
+
+function userRole() {
+  const u = JSON.parse(localStorage.getItem("mc_user") || "null");
+  return u ? (u.role || "user") : null;
+}
 function renderHeader(active = "home") {
   const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  const role = userRole();
   const authBlock = user
     ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
        <span class="badge">Ism: ${user.name}</span>
+       <span id="pointsBadge" class="badge" style="display:none"></span>
        <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
     : `<a class="btn" href="login.html">Kirish</a>`;
+
+  const adminLink = (role === 'admin' || role === 'superadmin')
+    ? `<a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>`
+    : ``;
 
   return `
   <header class="header">
@@ -42,11 +53,29 @@ function renderHeader(active = "home") {
       <nav class="nav">
         <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
         <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
-        <a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>
+        ${adminLink}
       </nav>
       <div class="auth">${authBlock}</div>
     </div>
   </header>`;
+}
+
+async function fillPoints(db) {
+  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  if (!user) return;
+  const id = String(user.numericId ?? user.id ?? user.login);
+  try {
+    const {{ doc, getDoc }} = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const ref = doc(db, 'user_points', id);
+    const snap = await getDoc(ref);
+    const badge = document.getElementById('pointsBadge');
+    if (snap.exists()) {
+      const pts = snap.data().totalPoints || 0;
+      if (badge) {{ badge.textContent = `Ball: ${pts}`; badge.style.display = 'inline-block'; }}
+    } else if (badge) {{ badge.textContent = `Ball: 0`; badge.style.display = 'inline-block'; }}
+  } catch (e) {
+    console.warn('fillPoints error', e);
+  }
 }
 
 function bindLogout() {
@@ -59,9 +88,9 @@ function bindLogout() {
     });
   }
 }
-
-    document.getElementById('header').innerHTML = renderHeader('home');
+document.getElementById('header').innerHTML = renderHeader('home');
     bindLogout();
+    fillPoints(db);
 
     async function loadJSON(path) {
       const res = await fetch(path);
@@ -82,7 +111,21 @@ function bindLogout() {
     }
 
     function testCard(t) {
-      const tags = (t.tags||[]).map(x=>`<span class='badge'>${x}</span>`).join('');
+      const tags = (t.tags||[]).map(x=>`<span class='badge'>${x}</span>`).join('') + (t.best?` <span class='badge'>BEST</span>`:'');
+            
+      const now = new Date();
+      const start = t.startAt ? new Date(t.startAt) : null;
+      const end = t.endAt ? new Date(t.endAt) : null;
+      const notStarted = start && now < start;
+      const finished = end && now > end;
+
+      let primaryBtn = `<a class="btn btn-primary" href="test.html?id=${encodeURIComponent(t.id)}">Boshlash</a>`;
+      if (notStarted) {
+        primaryBtn = `<button class="btn btn-primary" disabled>Tez orada (kuting)</button>`;
+      } else if (finished) {
+        primaryBtn = `<button class="btn" disabled>Muddati tugagan</button>`;
+      }
+
       return `
       <article class="card">
         <img src="${t.image || 'https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450'}" alt="${t.title}">
@@ -91,7 +134,7 @@ function bindLogout() {
           <div class="muted">Savollar: ${t.questions?.length || 0} • Maks ball: ${(t.questions||[]).reduce((a,q)=>a+(q.points||1),0)}</div>
           <div class="tags">${tags}</div>
           <div style="display:flex; gap:8px; margin-top:8px;">
-            <a class="btn btn-primary" href="test.html?id=${encodeURIComponent(t.id)}">Boshlash</a>
+            ${primaryBtn}
             <a class="btn" href="#" onclick="alert(t.description||'Tavsif yo\'q')">Batafsil</a>
           </div>
         </div>

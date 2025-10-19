@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MathCenter — Test</title>
   <link rel="stylesheet" href="css/style.css"/>
+  <script>
+  window.MathJax = { tex: { inlineMath: [['\\(','\\)'], ['$', '$']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
 </head>
 <body>
   <div id="header"></div>
@@ -20,6 +24,7 @@
     {header_component}
     document.getElementById('header').innerHTML = renderHeader();
     bindLogout();
+    fillPoints(db);
 
     const u = JSON.parse(localStorage.getItem('mc_user')||'null');
     if (!u) { alert('Test yechish uchun tizimga kiring'); location.href='login.html'; }
@@ -93,7 +98,34 @@
         location.href = 'rating.html';
       });
 
+      
+      // After render, typeset MathJax
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise();
+      }
+
       document.getElementById('testWrap').appendChild(form);
+
+      // Timer (durationSeconds)
+      let remaining = Number(test.durationSeconds||0);
+      let timerEl = null;
+      if (remaining > 0) {
+        const headerCard = document.createElement('div');
+        headerCard.className = 'card';
+        headerCard.innerHTML = `<div class="content"><strong>Timer:</strong> <span id="timerBox"></span></div>`;
+        document.getElementById('testWrap').appendChild(headerCard);
+        timerEl = headerCard.querySelector('#timerBox');
+        const tick = () => {
+          const m = Math.floor(remaining/60);
+          const s = remaining%60;
+          if (timerEl) timerEl.textContent = `${m}:${String(s).padStart(2,'0')}`;
+          if (remaining <= 0) { form.requestSubmit(); return; }
+          remaining -= 1;
+          setTimeout(tick, 1000);
+        };
+        tick();
+      }
+
     })();
   </script>
 </body>

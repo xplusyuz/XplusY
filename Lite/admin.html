@@ -49,6 +49,13 @@
           <button class="btn btn-primary" id="saveUsers">JSON-ni yuklab olish</button>
         </div>
       </div>
+      
+<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0;">
+  <input type="file" id="csvFile" accept=".csv" class="btn"/>
+  <button class="btn" id="importCsvBtn">CSV import</button>
+  <small class="muted">Format: name,class,login,password,numericId,role</small>
+</div>
+
       <div id="usersWrap" class="grid"></div>
     </section>
   </main>
@@ -56,13 +63,24 @@
 
   <script type="module">
     
+
+function userRole() {
+  const u = JSON.parse(localStorage.getItem("mc_user") || "null");
+  return u ? (u.role || "user") : null;
+}
 function renderHeader(active = "home") {
   const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  const role = userRole();
   const authBlock = user
     ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
        <span class="badge">Ism: ${user.name}</span>
+       <span id="pointsBadge" class="badge" style="display:none"></span>
        <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
     : `<a class="btn" href="login.html">Kirish</a>`;
+
+  const adminLink = (role === 'admin' || role === 'superadmin')
+    ? `<a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>`
+    : ``;
 
   return `
   <header class="header">
@@ -74,11 +92,29 @@ function renderHeader(active = "home") {
       <nav class="nav">
         <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
         <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
-        <a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>
+        ${adminLink}
       </nav>
       <div class="auth">${authBlock}</div>
     </div>
   </header>`;
+}
+
+async function fillPoints(db) {
+  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+  if (!user) return;
+  const id = String(user.numericId ?? user.id ?? user.login);
+  try {
+    const {{ doc, getDoc }} = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const ref = doc(db, 'user_points', id);
+    const snap = await getDoc(ref);
+    const badge = document.getElementById('pointsBadge');
+    if (snap.exists()) {
+      const pts = snap.data().totalPoints || 0;
+      if (badge) {{ badge.textContent = `Ball: ${pts}`; badge.style.display = 'inline-block'; }}
+    } else if (badge) {{ badge.textContent = `Ball: 0`; badge.style.display = 'inline-block'; }}
+  } catch (e) {
+    console.warn('fillPoints error', e);
+  }
 }
 
 function bindLogout() {
@@ -91,9 +127,9 @@ function bindLogout() {
     });
   }
 }
-
-    document.getElementById('header').innerHTML = renderHeader('admin');
+document.getElementById('header').innerHTML = renderHeader('admin');
     bindLogout();
+    fillPoints(db);
 
     function guard() {
       const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
@@ -202,7 +238,11 @@ function bindLogout() {
           } else {
             const target = (inp.closest('#testsWrap')) ? tests[i] : (inp.closest('#bannersWrap') ? banners[i] : users[i]);
             if (k === 'tags') target[k] = inp.value.split(',').map(s=>s.trim()).filter(Boolean);
+            else {
+            if (k==='best') target[k] = (String(inp.value).toLowerCase()==='true');
+            else if (k==='durationSeconds') target[k] = Number(inp.value||0);
             else target[k] = inp.value;
+          }
           }
         };
       });
