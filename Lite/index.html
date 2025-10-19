@@ -8,158 +8,179 @@
   <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
-  <div id="header"></div>
-  <main class="container">
+  <div class="container" style="padding-top:16px;">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="pi">π</div>
+          <div>MathCenter</div>
+        </div>
+        <nav class="nav">
+          <a class="active" href="index.html">Bosh sahifa</a>
+          <a href="rating.html">Reyting</a>
+          <a id="adminLink" href="admin.html" style="display:none">Admin</a>
+        </nav>
+        <div class="badges" id="authBox">
+          <a class="btn btn-ghost" href="login.html">Kirish</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero -->
     <section class="hero">
-      <h1>Bannerlar</h1>
-      <div id="banner-list" class="grid"></div>
+      <h1>Yangi avlod matematika platformasi</h1>
+      <p>Bannerlar, zamonaviy testlar va real vaqt reytingi. O‘quvchilar uchun qulay, administratorlar uchun kuchli boshqaruv.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#tests">Testlarni ko‘rish</a>
+        <a class="btn" href="#banners">Bannerlarni ko‘rish</a>
+      </div>
     </section>
 
-    <section style="margin-top: 20px;">
+    <!-- Banners -->
+    <div class="section-title" id="banners">
+      <h2>Bannerlar</h2>
+    </div>
+    <div id="banner-list" class="grid"></div>
+
+    <!-- Tests -->
+    <div class="section-title" id="tests">
       <h2>Testlar</h2>
-      <div id="test-grid" class="grid"></div>
-    </section>
-  </main>
-  <footer class="footer">© {{YEAR}} MathCenter — “π” brendi</footer>
+      <div class="kpis" id="filters"></div>
+    </div>
+    <div id="test-grid" class="grid"></div>
 
-  <script type="module">
-    import { db } from './js/firebase-init.js';
-    
-function userRole() {
-  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
-  return u ? (u.role || 'user') : null;
-}
-function renderHeader(active='') {
-  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
-  const role = userRole();
-  const auth = u
-    ? `<span class="badge">ID: ${u.numericId ?? u.id ?? u.login}</span>
-       <span class="badge">Ism: ${u.name}</span>
-       <span id="pointsBadge" class="badge" style="display:none"></span>
-       <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
-    : `<a class="btn" href="login.html">Kirish</a>`;
-  const adminLink = (role==='admin' || role==='superadmin') ? `<a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>` : '';
-  return `<header class="header"><div class="header-inner container">
-    <div class="brand"><div class="pi">π</div><div>MathCenter</div></div>
-    <nav class="nav">
-      <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
-      <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
-      ${adminLink}
-    </nav>
-    <div class="auth">${auth}</div>
-  </div></header>`;
-}
-async function fillPoints(db) {
-  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
-  if (!u) return;
-  const id = String(u.numericId ?? u.id ?? u.login);
-  const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-  const ref = doc(db, 'user_points', id);
-  const snap = await getDoc(ref);
-  const badge = document.getElementById('pointsBadge');
-  if (badge) {
-    const pts = snap.exists() ? (snap.data().totalPoints||0) : 0;
-    badge.textContent = 'Ball: ' + pts;
-    badge.style.display = 'inline-block';
-  }
-}
-function bindLogout() {
-  const btn = document.querySelector('#logoutBtn');
-  if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); localStorage.removeItem('mc_user'); location.href='index.html'; });
-}
+    <footer class="footer">© 2025 MathCenter — “π” brendi</footer>
+  </div>
 
-    document.getElementById('header').innerHTML = renderHeader('home');
-    bindLogout(); fillPoints(db);
-
-    // Modal for details
-    const backdrop = Object.assign(document.createElement('div'), {className:'modal-backdrop', id:'bestBackdrop'});
-    backdrop.innerHTML = `<div class="modal" role="dialog" aria-modal="true" id="bestModal">
-      <div class="head"><strong id="bmTitle">Batafsil</strong><button class="close-x" id="bmClose">×</button></div>
+  <!-- Modal -->
+  <div class="modal-backdrop" id="bestBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" id="bestModal">
+      <div class="head">
+        <strong id="bmTitle">Batafsil</strong>
+        <button class="close-x" id="bmClose">×</button>
+      </div>
       <div class="body">
-        <img id="bmImage" src="" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;"/>
+        <img id="bmImage" src="" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:14px;"/>
         <div id="bmDesc" class="muted"></div>
         <div id="bmTimes" class="muted"></div>
         <div id="bmCountdown" class="badge"></div>
       </div>
-      <div class="foot"><a class="btn btn-primary" id="bmStartBtn" href="#">Boshlash</a></div>
-    </div>`;
-    document.body.appendChild(backdrop);
-    document.getElementById('bmClose').onclick = ()=> backdrop.style.display='none';
+      <div class="foot">
+        <a class="btn btn-primary" id="bmStartBtn" href="#">Boshlash</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { db } from './js/firebase-init.js';
+
+    // --- Header auth / role & points ---
+    const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
+    const authBox = document.getElementById('authBox');
+    const adminLink = document.getElementById('adminLink');
+    if (u) {
+      authBox.innerHTML = `
+        <span class="badge">ID: ${u.numericId ?? u.id ?? u.login}</span>
+        <span class="badge">Ism: ${u.name}</span>
+        <span id="pointsBadge" class="badge">Ball: 0</span>
+        <a class="btn" id="logoutBtn" href="#">Chiqish</a>`;
+      if (u.role==='admin' || u.role==='superadmin') adminLink.style.display='inline-flex';
+      document.getElementById('logoutBtn').onclick = (e) => { e.preventDefault(); localStorage.removeItem('mc_user'); location.href='index.html'; };
+      try {
+        const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+        const id = String(u.numericId ?? u.id ?? u.login);
+        const snap = await getDoc(doc(db, 'user_points', id));
+        if (snap.exists()) document.getElementById('pointsBadge').textContent = 'Ball: ' + (snap.data().totalPoints||0);
+      } catch(_){}
+    }
+
+    // --- Modal logic ---
+    const backdrop = document.getElementById('bestBackdrop');
+    const bmTitle = document.getElementById('bmTitle');
+    const bmImage = document.getElementById('bmImage');
+    const bmDesc = document.getElementById('bmDesc');
+    const bmTimes = document.getElementById('bmTimes');
+    const bmCountdown = document.getElementById('bmCountdown');
+    const bmStartBtn = document.getElementById('bmStartBtn');
+    document.getElementById('bmClose').onclick = () => backdrop.style.display='none';
     function openDetails(t){
-      document.getElementById('bmTitle').textContent = t.title;
-      document.getElementById('bmImage').src = t.image || ('https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450');
-      document.getElementById('bmDesc').textContent = t.description || '';
+      bmTitle.textContent = t.title;
+      bmImage.src = t.image || ('https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450');
+      bmDesc.textContent = t.description || '';
       const s = t.startAt ? new Date(t.startAt) : null;
       const e = t.endAt ? new Date(t.endAt) : null;
-      document.getElementById('bmTimes').textContent = (s?('Boshlanish: '+s.toLocaleString()+'  '):'') + (e?('• Tugash: '+e.toLocaleString()):'');
-      document.getElementById('bmStartBtn').href = 'test.html?id='+encodeURIComponent(t.id);
+      bmTimes.textContent = (s?('Boshlanish: '+s.toLocaleString()+'  '):'') + (e?('• Tugash: '+e.toLocaleString()):'');
+      bmStartBtn.href = 'test.html?id='+encodeURIComponent(t.id);
       backdrop.style.display='flex';
       function upd(){
         const now = new Date();
         const notStarted = s && now < s;
         const finished = e && now > e;
-        const box = document.getElementById('bmCountdown');
         if (notStarted){
           const ms = s - now;
           const hh = Math.floor(ms/3600000);
           const mm = Math.floor((ms%3600000)/60000);
           const ss = Math.floor((ms%60000)/1000);
-          box.textContent = `Boshlanishiga: ${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
-          document.getElementById('bmStartBtn').setAttribute('disabled','');
+          bmCountdown.textContent = `Boshlanishiga: ${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+          bmStartBtn.setAttribute('disabled','');
         } else if (finished){
-          box.textContent = 'Muddati tugagan'; document.getElementById('bmStartBtn').setAttribute('disabled','');
-        } else { box.textContent = 'Ochiq'; document.getElementById('bmStartBtn').removeAttribute('disabled'); }
+          bmCountdown.textContent = 'Muddati tugagan';
+          bmStartBtn.setAttribute('disabled','');
+        } else {
+          bmCountdown.textContent = 'Ochiq';
+          bmStartBtn.removeAttribute('disabled');
+        }
         if (backdrop.style.display==='flex') setTimeout(upd, 1000);
-      } upd();
+      }
+      upd();
     }
+    window.openDetails = openDetails;
 
+    // --- Data loaders ---
     async function loadJSON(path) {
       const res = await fetch(path);
-      if (!res.ok) throw new Error('JSON yuklab bo\'lmadi: ' + path + ' ' + res.status);
+      if (!res.ok) throw new Error('JSON yuklab bo\\'lmadi: ' + path + ' ' + res.status);
       return res.json();
     }
 
     function bannerCard(b) {
-      return `<article class="banner">
+      return `<article class="banner-card">
         <img src="${b.image}" alt="${b.title}">
         <div class="copy">
-          <h2>${b.title}</h2>
+          <h3>${b.title}</h3>
           <p>${b.subtitle || ''}</p>
-          <a class="btn btn-primary" href="${b.link}" target="_blank">Batafsil</a>
+          <div class="actions"><a class="btn btn-primary" href="${b.link}" target="_blank">Batafsil</a></div>
         </div>
       </article>`;
     }
 
     function testCard(t) {
-      const tags = (t.tags||[]).map(x=>`<span class='badge'>${x}</span>`).join('') + (t.best?` <span class='badge'>BEST</span>`:'');
       const total = (t.questions||[]).reduce((a,q)=>a+(q.points||1),0);
+      const tags = (t.tags||[]).map(x=>`<span class='tag'>${x}</span>`).join('') + (t.best?` <span class='tag best'>BEST</span>`:'');
       const now = new Date(), s = t.startAt?new Date(t.startAt):null, e = t.endAt?new Date(t.endAt):null;
       const notStarted = s && now < s, finished = e && now > e;
       let primaryBtn = `<a class="btn btn-primary" href="test.html?id=${encodeURIComponent(t.id)}">Boshlash</a>`;
       if (notStarted) primaryBtn = `<button class="btn btn-primary" disabled>Tez orada</button>`;
       else if (finished) primaryBtn = `<button class="btn" disabled>Muddati tugagan</button>`;
-      return `<article class="card">
+      return `<article class="test-card">
         <img src="${t.image || ('https://picsum.photos/seed/'+encodeURIComponent(t.id)+'/800/450')}" alt="${t.title}">
         <div class="content">
-          <h3>${t.title}</h3>
-          <div class="muted">Savollar: ${(t.questions||[]).length} • Maks ball: ${total}</div>
+          <div class="title"><h3>${t.title}</h3><div class="kpis"><span class="chip">Savollar: ${(t.questions||[]).length}</span><span class="chip">Maks: ${total}</span></div></div>
           <div class="tags">${tags}</div>
-          <div style="display:flex; gap:8px; margin-top:8px;">
+          <div class="actions">
             ${primaryBtn}
-            <a class="btn" href="#" onclick='openDetails(t);return false;'>Batafsil</a>
+            <a class="btn btn-ghost" href="#" onclick='openDetails(t);return false;'>Batafsil</a>
           </div>
         </div>
       </article>`;
     }
 
     (async () => {
-      let banners = []; let tests = [];
-      try { banners = await loadJSON('assets/banners.json'); } catch(e){ console.warn(e); banners = []; }
-      try { tests = await loadJSON('assets/tests.json'); } catch(e){ console.warn(e); tests = []; }
-      document.getElementById('banner-list').innerHTML = banners.map(bannerCard).join('') || '<div class="muted">Banner yo\'q</div>';
-      // expose tests to window for details() on cards
-      window.tests = tests;
-      document.getElementById('test-grid').innerHTML = tests.map((t)=>{ window.t=t; return testCard(t); }).join('') || '<div class="muted">Testlar yo\'q</div>';
+      const banners = await loadJSON('assets/banners.json').catch(()=>[]);
+      const tests = await loadJSON('assets/tests.json').catch(()=>[]);
+      document.getElementById('banner-list').innerHTML = banners.map(bannerCard).join('') || '<div class="badge">Banner yo\\'q</div>';
+      document.getElementById('test-grid').innerHTML = tests.map(t=>{ window.t=t; return testCard(t); }).join('') || '<div class="badge">Testlar yo\\'q</div>';
     })();
   </script>
 </body>
