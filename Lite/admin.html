@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="uz">
 <head>
@@ -15,7 +16,8 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn" id="tabBanners">Bannerlar</button>
         <button class="btn" id="tabTests">Testlar</button>
-        <button class="btn" id="tabUsers">Foydalanuvchilar</button><button class="btn" id="tabScores">Scores</button>
+        <button class="btn" id="tabUsers">Foydalanuvchilar</button>
+        <button class="btn" id="tabScores">Scores</button>
       </div>
     </div>
 
@@ -49,8 +51,7 @@
           <button class="btn btn-primary" id="saveUsers">JSON-ni yuklab olish</button>
         </div>
       </div>
-      
-      <details class="card"><summary style="padding:12px 14px; cursor:pointer;">CSV import (ko'rsatish + mapping)</summary>
+      <details class="card"><summary style="padding:12px 14px; cursor:pointer;">CSV import (preview + mapping)</summary>
         <div class="content">
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0;">
             <input type="file" id="csvFile" accept=".csv" class="btn"/>
@@ -59,29 +60,16 @@
             <small class="muted">Kutilgan ustunlar: name, class, login, password, numericId, role</small>
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <div>
-              <label>name ← <input id="map_name" placeholder="name"/></label>
-            </div>
-            <div>
-              <label>class ← <input id="map_class" placeholder="class"/></label>
-            </div>
-            <div>
-              <label>login ← <input id="map_login" placeholder="login"/></label>
-            </div>
-            <div>
-              <label>password ← <input id="map_password" placeholder="password"/></label>
-            </div>
-            <div>
-              <label>numericId ← <input id="map_numericId" placeholder="numericId"/></label>
-            </div>
-            <div>
-              <label>role ← <input id="map_role" placeholder="role"/></label>
-            </div>
+            <div><label>name ← <input id="map_name" placeholder="name"/></label></div>
+            <div><label>class ← <input id="map_class" placeholder="class"/></label></div>
+            <div><label>login ← <input id="map_login" placeholder="login"/></label></div>
+            <div><label>password ← <input id="map_password" placeholder="password"/></label></div>
+            <div><label>numericId ← <input id="map_numericId" placeholder="numericId"/></label></div>
+            <div><label>role ← <input id="map_role" placeholder="role"/></label></div>
           </div>
           <div id="csvPreview" class="grid"></div>
         </div>
       </details>
-
       <div id="usersWrap" class="grid"></div>
     </section>
 
@@ -101,116 +89,74 @@
   <footer class="footer">© 2025 MathCenter</footer>
 
   <script type="module">
+    import { db } from './js/firebase-init.js';
     
-
 function userRole() {
-  const u = JSON.parse(localStorage.getItem("mc_user") || "null");
-  return u ? (u.role || "user") : null;
+  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
+  return u ? (u.role || 'user') : null;
 }
-function renderHeader(active = "home") {
-  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
+function renderHeader(active='') {
+  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
   const role = userRole();
-  const authBlock = user
-    ? `<span class="badge">ID: ${user.numericId ?? user.id}</span>
-       <span class="badge">Ism: ${user.name}</span>
+  const auth = u
+    ? `<span class="badge">ID: ${u.numericId ?? u.id ?? u.login}</span>
+       <span class="badge">Ism: ${u.name}</span>
        <span id="pointsBadge" class="badge" style="display:none"></span>
        <a class="btn" href="#" id="logoutBtn">Chiqish</a>`
     : `<a class="btn" href="login.html">Kirish</a>`;
-
-  const adminLink = (role === 'admin' || role === 'superadmin')
-    ? `<a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>`
-    : ``;
-
-  return `
-  <header class="header">
-    <div class="header-inner container">
-      <div class="brand">
-        <div class="pi">π</div>
-        <div>MathCenter</div>
-      </div>
-      <nav class="nav">
-        <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
-        <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
-        ${adminLink}
-      </nav>
-      <div class="auth">${authBlock}</div>
-    </div>
-  </header>`;
+  const adminLink = (role==='admin' || role==='superadmin') ? `<a class="${active==='admin'?'active':''}" href="admin.html">Admin</a>` : '';
+  return `<header class="header"><div class="header-inner container">
+    <div class="brand"><div class="pi">π</div><div>MathCenter</div></div>
+    <nav class="nav">
+      <a class="${active==='home'?'active':''}" href="index.html">Bosh sahifa</a>
+      <a class="${active==='rating'?'active':''}" href="rating.html">Reyting</a>
+      ${adminLink}
+    </nav>
+    <div class="auth">${auth}</div>
+  </div></header>`;
 }
-
 async function fillPoints(db) {
-  const user = JSON.parse(localStorage.getItem("mc_user") || "null");
-  if (!user) return;
-  const id = String(user.numericId ?? user.id ?? user.login);
-  try {
-    const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const ref = doc(db, 'user_points', id);
-    const snap = await getDoc(ref);
-    const badge = document.getElementById('pointsBadge');
-    if (snap.exists()) {
-      const pts = snap.data().totalPoints || 0;
-      if (badge) { badge.textContent = `Ball: ${pts}`; badge.style.display = 'inline-block'; }}
-    } else if (badge) { badge.textContent = `Ball: 0`; badge.style.display = 'inline-block'; }}
-  } catch (e) {
-    console.warn('fillPoints error', e);
+  const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
+  if (!u) return;
+  const id = String(u.numericId ?? u.id ?? u.login);
+  const { doc, getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+  const ref = doc(db, 'user_points', id);
+  const snap = await getDoc(ref);
+  const badge = document.getElementById('pointsBadge');
+  if (badge) {
+    const pts = snap.exists() ? (snap.data().totalPoints||0) : 0;
+    badge.textContent = 'Ball: ' + pts;
+    badge.style.display = 'inline-block';
   }
 }
-
 function bindLogout() {
-  const btn = document.querySelector("#logoutBtn");
-  if (btn) {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      localStorage.removeItem("mc_user");
-      location.href = "index.html";
-    });
-  }
+  const btn = document.querySelector('#logoutBtn');
+  if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); localStorage.removeItem('mc_user'); location.href='index.html'; });
 }
-document.getElementById('header').innerHTML = renderHeader('admin');
-    bindLogout();
-    fillPoints(db);
 
-    function guard() {
+    document.getElementById('header').innerHTML = renderHeader('admin');
+    bindLogout(); fillPoints(db);
+    function guard(){
       const u = JSON.parse(localStorage.getItem('mc_user') || 'null');
-      if (!u || (u.role !== 'admin' && u.role !== 'superadmin')) {
-        alert('Admin huquqi talab qilinadi');
-        location.href = 'login.html';
-      }
+      if (!u || (u.role!=='admin' && u.role!=='superadmin')) { alert('Admin huquqi talab qilinadi'); location.href='login.html'; }
     } guard();
 
     async function load(path) { const r = await fetch(path); return r.ok ? r.json() : []; }
-    function dl(filename, content) {
-      const a = document.createElement('a');
-      const blob = new Blob([content], {type:'application/json'});
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-    }
+    function dl(filename, content) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content],{type:'application/json'})); a.download = filename; a.click(); }
 
-    // Tabs
     const tabs = {tabBanners:'panelBanners', tabTests:'panelTests', tabUsers:'panelUsers', tabScores:'panelScores'};
-    for (const [btn, panel] of Object.entries(tabs)) {
-      document.getElementById(btn).addEventListener('click', () => {
-        for (const p of Object.values(tabs)) document.getElementById(p).style.display = 'none';
-        document.getElementById(panel).style.display = 'block';
-      });
-    }
+    for (const [btn, panel] of Object.entries(tabs)) document.getElementById(btn).onclick = ()=>{ for (const p of Object.values(tabs)) document.getElementById(p).style.display='none'; document.getElementById(panel).style.display='block'; };
     document.getElementById('tabBanners').click();
 
-    // Renderers
-    function bannerEditor(b, i, arr) {
-      return `
-      <div class="card"><div class="content">
+    function bannerEditor(b, i) {
+      return `<div class="card"><div class="content">
         <label>Sarlavha<input value="${b.title||''}" data-k="title" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Matn<input value="${b.subtitle||''}" data-k="subtitle" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Rasm URL<input value="${b.image||''}" data-k="image" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Link<input value="${b.link||''}" data-k="link" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <button class="btn" data-del="banner" data-i="${i}">O'chirish</button>
-        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;"><button class="btn" data-del="banner" data-i="${i}">O'chirish</button></div>
       </div></div>`;
     }
-
     function testEditor(t, i) {
       const qHtml = (t.questions||[]).map((q,qi)=>`
         <details class="card" style="padding:0 0 10px 0;"><summary style="padding:12px 14px; cursor:pointer;">Savol #${qi+1} — ${q.type||'single'} (ball: ${q.points||1})</summary>
@@ -218,19 +164,21 @@ document.getElementById('header').innerHTML = renderHeader('admin');
             <label>Matn<textarea data-k="text" data-i="${i}" data-qi="${qi}" style="width:100%; min-height:80px; padding:8px; border:1px solid #cbd5e1; border-radius:12px;">${q.text||''}</textarea></label>
             <label>Turi (single|multi)<input data-k="type" data-i="${i}" data-qi="${qi}" value="${q.type||'single'}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
             <label>Ball<input type="number" data-k="points" data-i="${i}" data-qi="${qi}" value="${q.points||1}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
-            <label>Variantlar (har biri alohida qatorda; to'g'ri variant(lar)ni * bilan belgilang)<textarea data-k="options" data-i="${i}" data-qi="${qi}" style="width:100%; min-height:80px; padding:8px; border:1px solid #cbd5e1; border-radius:12px;">${(q.options||[]).map(o=>o.correct?('*'+o.text):o.text).join('\n')}</textarea></label>
+            <label>Variantlar (* belgilangan to'g'ri):<textarea data-k="options" data-i="${i}" data-qi="${qi}" style="width:100%; min-height:80px; padding:8px; border:1px solid #cbd5e1; border-radius:12px;">${(q.options||[]).map(o=>o.correct?('*'+o.text):o.text).join('\n')}</textarea></label>
             <button class="btn" data-del="q" data-i="${i}" data-qi="${qi}">Savolni o'chirish</button>
           </div>
         </details>
       `).join('');
-
-      return `
-      <div class="card"><div class="content">
+      return `<div class="card"><div class="content">
         <label>ID<input value="${t.id||''}" data-k="id" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Nomi<input value="${t.title||''}" data-k="title" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Rasm URL<input value="${t.image||''}" data-k="image" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Tavsif<input value="${t.description||''}" data-k="description" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Taglar (vergul bilan)<input value="${(t.tags||[]).join(', ')}" data-k="tags" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>BEST (true/false)<input value="${String(t.best||false)}" data-k="best" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>StartAt (ISO)<input value="${t.startAt||''}" data-k="startAt" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>EndAt (ISO)<input value="${t.endAt||''}" data-k="endAt" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
+        <label>Vaqt limiti (sekund)<input type="number" value="${t.durationSeconds||0}" data-k="durationSeconds" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="btn" data-add="q" data-i="${i}">Savol qo'shish</button>
           <button class="btn" data-del="test" data-i="${i}">Testni o'chirish</button>
@@ -238,19 +186,15 @@ document.getElementById('header').innerHTML = renderHeader('admin');
         <div style="display:grid; gap:8px; margin-top:8px;">${qHtml}</div>
       </div></div>`;
     }
-
     function userEditor(u, i) {
-      return `
-      <div class="card"><div class="content">
+      return `<div class="card"><div class="content">
         <label>Ism-Fam<input value="${u.name||''}" data-k="name" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Sinf<input value="${u.class||''}" data-k="class" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Login<input value="${u.login||''}" data-k="login" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Parol<input value="${u.password||''}" data-k="password" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Numeric ID<input value="${u.numericId||''}" data-k="numericId" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
         <label>Rol (user|admin|superadmin)<input value="${u.role||'user'}" data-k="role" data-i="${i}" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:12px;"/></label>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <button class="btn" data-del="user" data-i="${i}">O'chirish</button>
-        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;"><button class="btn" data-del="user" data-i="${i}">O'chirish</button></div>
       </div></div>`;
     }
 
@@ -260,60 +204,56 @@ document.getElementById('header').innerHTML = renderHeader('admin');
 
     function rebindEditors() {
       document.querySelectorAll('[data-k]').forEach(inp => {
-        inp.oninput = (e) => {
-          const k = inp.dataset.k;
-          const i = +inp.dataset.i;
+        inp.oninput = () => {
+          const k = inp.dataset.k; const i = +inp.dataset.i;
           if (inp.dataset.qi !== undefined) {
             const qi = +inp.dataset.qi;
             if (!tests[i].questions[qi]) return;
             if (k === 'options') {
               const lines = inp.value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
               tests[i].questions[qi].options = lines.map(line => ({ text: line.replace(/^\*/,'').trim(), correct: line.startsWith('*') }));
-            } else if (k === 'points') {
-              tests[i].questions[qi][k] = Number(inp.value || 1);
-            } else {
-              tests[i].questions[qi][k] = inp.value;
-            }
+            } else if (k === 'points') { tests[i].questions[qi][k] = Number(inp.value || 1); }
+            else { tests[i].questions[qi][k] = inp.value; }
           } else {
             const target = (inp.closest('#testsWrap')) ? tests[i] : (inp.closest('#bannersWrap') ? banners[i] : users[i]);
             if (k === 'tags') target[k] = inp.value.split(',').map(s=>s.trim()).filter(Boolean);
-            else {
-            if (k==='best') target[k] = (String(inp.value).toLowerCase()==='true');
-            else if (k==='durationSeconds') target[k] = Number(inp.value||0);
+            else if (k === 'best') target[k] = (String(inp.value).toLowerCase()==='true');
+            else if (k === 'numericId' || k === 'durationSeconds') target[k] = Number(inp.value||0);
             else target[k] = inp.value;
-          }
           }
         };
       });
-
       document.querySelectorAll('[data-del="banner"]').forEach(btn => btn.onclick = () => { banners.splice(+btn.dataset.i,1); draw(); });
       document.querySelectorAll('[data-del="test"]').forEach(btn => btn.onclick = () => { tests.splice(+btn.dataset.i,1); draw(); });
       document.querySelectorAll('[data-del="q"]').forEach(btn => btn.onclick = () => { tests[+btn.dataset.i].questions.splice(+btn.dataset.qi,1); draw(); });
       document.querySelectorAll('[data-del="user"]').forEach(btn => btn.onclick = () => { users.splice(+btn.dataset.i,1); draw(); });
-
-      document.querySelectorAll('[data-add="q"]').forEach(btn => btn.onclick = () => {
-        const i = +btn.dataset.i;
-        tests[i].questions = tests[i].questions || [];
-        tests[i].questions.push({ text: '', type: 'single', points: 1, options: [{text:'Variant A', correct: true}, {text:'Variant B', correct:false}] });
-        draw();
-      });
+      document.querySelectorAll('[data-add="q"]').forEach(btn => btn.onclick = () => { const i = +btn.dataset.i; tests[i].questions = tests[i].questions || []; tests[i].questions.push({ text:'', type:'single', points:1, options:[{text:'Variant A', correct:true},{text:'Variant B', correct:false}] }); draw(); });
     }
-
     function draw() {
       document.getElementById('bannersWrap').innerHTML = banners.map(bannerEditor).join('');
       document.getElementById('testsWrap').innerHTML = tests.map(testEditor).join('');
       document.getElementById('usersWrap').innerHTML = users.map(userEditor).join('');
       rebindEditors();
-    }
-    draw();
+    } draw();
 
     document.getElementById('addBanner').onclick = () => { banners.push({title:'Yangi banner', subtitle:'', image:'https://picsum.photos/seed/banner/1200/600', link:'#'}); draw(); };
-    document.getElementById('addTest').onclick = () => { tests.push({id: crypto.randomUUID().slice(0,8), title:'Yangi test', description:'', image:'', tags:['test'], questions:[]}); draw(); };
+    document.getElementById('addTest').onclick = () => { tests.push({id: crypto.randomUUID().slice(0,8), title:'Yangi test', description:'', image:'', tags:['test'], best:false, durationSeconds:0, questions:[]}); draw(); };
     document.getElementById('addUser').onclick = () => { users.push({name:'Yangi foydalanuvchi', class:'', login:'user'+(users.length+1), password:'1234', numericId: 1000+users.length, role:'user'}); draw(); };
 
     document.getElementById('saveBanners').onclick = () => dl('banners.json', JSON.stringify(banners, null, 2));
     document.getElementById('saveTests').onclick = () => dl('tests.json', JSON.stringify(tests, null, 2));
     document.getElementById('saveUsers').onclick = () => dl('users.json', JSON.stringify(users, null, 2));
+
+    // CSV preview+mapping+import
+    let _csvRows = [];
+    function parseCSVwithHeader(text){ const lines = text.split(/\r?\n/).filter(x=>x.trim().length>0); if(!lines.length) return {header:[],rows:[]}; const header = lines[0].split(/[,;]\s*/).map(s=>s.trim()); const rows = lines.slice(1).map(line=> line.split(/[,;]\s*/).map(s=>s.trim())); return {header,rows}; }
+    function buildUsersFromMapped(header, rows, map){ const idx=(name)=> header.findIndex(h=>h.toLowerCase()===String(map[name]||name).toLowerCase()); const iName=idx('name'), iClass=idx('class'), iLogin=idx('login'), iPass=idx('password'), iNum=idx('numericId'), iRole=idx('role'); const out=[]; for(const r of rows){ out.push({ name:r[iName]||'', class:r[iClass]||'', login:r[iLogin]||'', password:r[iPass]||'1234', numericId:r[iNum]?Number(r[iNum]):(1000+users.length+out.length), role:r[iRole]||'user' }); } return out; }
+    document.getElementById('previewCsvBtn').onclick = async ()=>{ const f = document.getElementById('csvFile').files[0]; if(!f) return alert('CSV faylni tanlang'); const text = await f.text(); const {header,rows} = parseCSVwithHeader(text); _csvRows = {header,rows}; ['name','class','login','password','numericId','role'].forEach(k=>{ const el = document.getElementById('map_'+k); if(header.map(h=>h.toLowerCase()).includes(k)) el.value = k; }); const wrap = document.getElementById('csvPreview'); const html = rows.slice(0,6).map(r=>`<div class="card"><div class="content">${r.join(' | ')}</div></div>`).join(''); wrap.innerHTML = html || '<div class="muted">Hech narsa topilmadi</div>'; };
+    document.getElementById('importCsvBtn').onclick = ()=>{ if(!_csvRows.rows) return alert('Avval ko\'rsatib oling'); const map = { name:map_name.value||'name', class:map_class.value||'class', login:map_login.value||'login', password:map_password.value||'password', numericId:map_numericId.value||'numericId', role:map_role.value||'role' }; const newUsers = buildUsersFromMapped(_csvRows.header, _csvRows.rows, map); users.push(...newUsers); draw(); alert(newUsers.length + ' ta foydalanuvchi import qilindi'); };
+
+    // Scores tab
+    document.getElementById('loadScores').onclick = async () => { const { collection, getDocs, query, orderBy, limit } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"); const qref = query(collection(db,'scores'), orderBy('createdAt','desc'), limit(1000)); const snap = await getDocs(qref); const rows=[]; window._scoresCache=[]; snap.forEach(d=>{ const x=d.data(); const when = (x.createdAt && x.createdAt.toDate)? x.createdAt.toDate().toLocaleString() : ''; rows.push(`<tr><td>${when}</td><td>${x.name||x.userId}</td><td>${x.class||''}</td><td>${x.testTitle||x.testId}</td><td>${x.score}/${x.total}</td></tr>`); _scoresCache.push({when,user:x.name||x.userId,class:x.class||'',test:x.testTitle||x.testId,score:x.score,total:x.total}); }); document.querySelector('#scoresTbl tbody').innerHTML = rows.join('') || '<tr><td colspan="5" class="muted">Hali scores yo\'q</td></tr>'; };
+    document.getElementById('exportScoresCsv').onclick = ()=>{ const data=(window._scoresCache||[]).map(r=>({Sana:r.when,User:r.user,Class:r.class,Test:r.test,Score:`${r.score}/${r.total}`})); if(!data.length) return alert('Avval "Yuklash" ni bosing'); const cols=['Sana','User','Class','Test','Score']; const head=cols.join(','); const body=data.map(o=>cols.map(c=>`"${String(o[c]).replace(/"/g,'""')}"`).join(',')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([head+'\n'+body],{type:'text/csv'})); a.download='scores-export.csv'; a.click(); };
   </script>
 </body>
 </html>
