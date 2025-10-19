@@ -1,21 +1,32 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAnon() { return request.auth != null && request.auth.token.firebase.sign_in_provider == "anonymous"; }
-    match /scores/{docId} {
-      allow create: if isAnon();
-      allow read: if true;
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (uid == request.auth.uid || isAdmin());
+      allow write: if isSignedIn() && uid == request.auth.uid;
+    }
+
+    match /tests/{testId} {
+      allow read: if resource.data.isActive == true || isAdmin();
+      allow create, update, delete: if isAdmin();
+
+      match /questions/{qid} {
+        allow read: if get(/databases/$(database)/documents/tests/$(testId)).data.isActive == true || isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    match /attempts/{aid} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if true; // public leaderboard; change to isAdmin() for privacy
       allow update, delete: if false;
-    }
-    match /user_points/{uid} {
-      allow read: if true;
-      allow create, update: if isAnon();
-      allow delete: if false;
-    }
-    match /{document=**} {
-      allow read: if false;
-      allow write: if false;
     }
   }
 }
