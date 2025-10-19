@@ -1,6 +1,5 @@
-// runner.js with MathJax typeset and Firestore persistence
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-const { db, auth, signIn, logOut, collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc } = window.fb;
+const { db, auth, requireAuth, signIn, logOut, collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, doc, getDoc } = window.fb;
 
 const testCardsContainer = document.getElementById('testCardsContainer');
 const testCount = document.getElementById('testCount');
@@ -12,6 +11,7 @@ const uName = document.getElementById('uName');
 const testInterface = document.getElementById('testInterface');
 const testTitle = document.getElementById('testTitle');
 const questionText = document.getElementById('questionText');
+const attachContainer = document.getElementById('attachContainer');
 const optionsContainer = document.getElementById('optionsContainer');
 const progressBar = document.getElementById('progressBar');
 const progressText = document.getElementById('progressText');
@@ -26,18 +26,17 @@ let currentQuestionIndex = 0;
 let userAnswers = [];
 let timeLeft = 0;
 let timerInterval = null;
+let allowBacktracking = true;
+let randomizeQuestions = false;
+let randomizeOptions = false;
 
-onAuthStateChanged(auth, async (user) => {
+requireAuth(async (user)=>{
   currentUser = user;
   if (user) {
     authBtn.textContent = 'Chiqish';
-    authBtn.classList.remove('btn-light'); authBtn.classList.add('btn-outline-light');
     uAvatar.src = user.photoURL || ''; uName.textContent = user.displayName || user.email; userBox.classList.remove('d-none');
-  } else {
-    authBtn.textContent = 'Google bilan kirish';
-    authBtn.classList.add('btn-light'); authBtn.classList.remove('btn-outline-light');
-    userBox.classList.add('d-none');
   }
+  loadTests();
 });
 
 authBtn.addEventListener('click', async () => { if (currentUser) await logOut(); else await signIn(); });
@@ -58,6 +57,7 @@ function renderTestCards(tests){
   testCardsContainer.innerHTML=''; testCount.textContent = `${tests.length} ta test`;
   tests.forEach(test => {
     const col = document.createElement('div'); col.className='col-md-4';
+    const tags = (test.tags||[]).map(t=>`<span class="badge bg-info me-1 badge-pill">${t}</span>`).join('');
     col.innerHTML = `
       <div class="card test-card">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -66,6 +66,7 @@ function renderTestCards(tests){
         </div>
         <div class="card-body">
           <p class="card-text">${test.description || ''}</p>
+          <div class="mb-2">${tags}</div>
           <div class="d-flex justify-content-between text-muted">
             <span><i class="fas fa-question-circle me-1"></i>${test.questionCount} savol</span>
             <span><i class="fas fa-clock me-1"></i>${test.duration || 20} daqiqa</span>
@@ -82,11 +83,30 @@ function renderTestCards(tests){
 }
 function difficultyColor(d){ if(d==='Oson')return'success'; if(d==='Murakkab')return'danger'; return'warning'; }
 
+function shuffle(arr){ return arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]); }
+
 async function startTest(testId){
   const tDoc = await getDoc(doc(db, 'tests', testId)); if (!tDoc.exists()) return alert('Test topilmadi');
   const tData = { id: tDoc.id, ...tDoc.data() };
   const qSnap = await getDocs(collection(db, `tests/${testId}/questions`));
-  const questions = qSnap.docs.map(d=>({ id:d.id, ...d.data()})).sort((a,b)=>(a.order??0)-(b.order??0));
+  let questions = qSnap.docs.map(d=>({ id:d.id, ...d.data()})).sort((a,b)=>(a.order??0)-(b.order??0));
+
+  // Settings
+  allowBacktracking = tData.allowBacktracking !== false; // default true
+  randomizeQuestions = !!tData.randomizeQuestions;
+  randomizeOptions = !!tData.randomizeOptions;
+
+  if (randomizeQuestions) questions = shuffle(questions);
+  if (randomizeOptions) {
+    questions = questions.map(q=>{
+      const ops = q.options.map((opt,i)=>({opt, i}));
+      const shuffled = shuffle(ops);
+      const newOptions = shuffled.map(x=>x.opt);
+      const newCorrect = shuffled.findIndex(x=> x.i === q.correctIndex);
+      return { ...q, options:newOptions, correctIndex:newCorrect };
+    });
+  }
+
   currentTest = { ...tData, questions };
   currentQuestionIndex = 0; userAnswers = new Array(questions.length).fill(null);
   timeLeft = (currentTest.duration || 20) * 60;
@@ -98,7 +118,7 @@ function buildGrid(){
   qGrid.innerHTML='';
   currentTest.questions.forEach((_,i)=>{
     const b=document.createElement('button'); b.textContent=i+1;
-    b.addEventListener('click', ()=>{ currentQuestionIndex=i; showQuestion(i); });
+    b.addEventListener('click', ()=>{ if(!allowBacktracking && i>currentQuestionIndex){return;} currentQuestionIndex=i; showQuestion(i); });
     qGrid.appendChild(b);
   });
 }
@@ -110,8 +130,17 @@ function typeset(){ if (window.MathJax?.typesetPromise) window.MathJax.typesetPr
 
 function showQuestion(i){
   const q=currentTest.questions[i];
-  // Allow LaTeX in question and options
   questionText.innerHTML = q.text;
+  // attachments
+  attachContainer.innerHTML='';
+  if (q.imageUrl) {
+    const img = document.createElement('img'); img.src=q.imageUrl; img.alt='attachment'; img.className='attach-thumb'; attachContainer.appendChild(img);
+  }
+  if (q.pdfUrl) {
+    const a = document.createElement('a'); a.href=q.pdfUrl; a.target='_blank'; a.className='pdf-link';
+    a.innerHTML = `<i class="fa-regular fa-file-pdf"></i> PDF ni ochish`; attachContainer.appendChild(a);
+  }
+  // options
   optionsContainer.innerHTML='';
   q.options.forEach((opt,idx)=>{
     const el=document.createElement('div');
@@ -121,12 +150,12 @@ function showQuestion(i){
     optionsContainer.appendChild(el);
   });
   const pct=((i+1)/currentTest.questions.length)*100; progressBar.style.width=`${pct}%`; progressText.textContent=`${i+1}/${currentTest.questions.length}`;
-  prevBtn.disabled = i===0; nextBtn.textContent = i===currentTest.questions.length-1 ? 'Yakunlash' : 'Keyingi';
+  prevBtn.disabled = i===0 || !allowBacktracking; nextBtn.textContent = i===currentTest.questions.length-1 ? 'Yakunlash' : 'Keyingi';
   [...qGrid.children].forEach((b,idx)=>{ b.classList.toggle('active', idx===i); b.classList.toggle('answered', userAnswers[idx]!==null); });
   typeset();
 }
 function selectOption(idx){ userAnswers[currentQuestionIndex]=idx; showQuestion(currentQuestionIndex); }
-prevBtn.addEventListener('click', ()=>{ if(currentQuestionIndex>0){ currentQuestionIndex--; showQuestion(currentQuestionIndex); }});
+prevBtn.addEventListener('click', ()=>{ if(currentQuestionIndex>0 && allowBacktracking){ currentQuestionIndex--; showQuestion(currentQuestionIndex); }});
 nextBtn.addEventListener('click', ()=>{ if(currentQuestionIndex<currentTest.questions.length-1){ currentQuestionIndex++; showQuestion(currentQuestionIndex); } else { finishTest(); }});
 
 async function finishTest(){
@@ -138,7 +167,8 @@ async function finishTest(){
     await addDoc(collection(db, 'attempts'),{
       userId: auth.currentUser?.uid || null,
       userName: auth.currentUser?.displayName || auth.currentUser?.email || 'Anon',
-      testId: currentTest.id, testTitle: currentTest.title,
+      testId: currentTest.id, testTitle: currentTest.title, tags: currentTest.tags || [],
+      allowBacktracking, randomizeQuestions, randomizeOptions,
       answers: userAnswers, correctCount: correct, earnedPoints: earned, totalPoints: total, scorePercent,
       startedAt: serverTimestamp(), finishedAt: serverTimestamp()
     });
@@ -156,5 +186,3 @@ async function finishTest(){
     </div>`;
   document.getElementById('retryBtn').addEventListener('click', ()=> startTest(currentTest.id));
 }
-
-loadTests();

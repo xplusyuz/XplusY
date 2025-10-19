@@ -3,29 +3,29 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
-    function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
+    function isAdminEmail() { return isSignedIn() && request.auth.token.email == 'sohibjonmath@gmail.com'; }
 
     match /users/{uid} {
-      allow read: if isSignedIn() && (uid == request.auth.uid || isAdmin());
+      allow read: if isSignedIn() && (uid == request.auth.uid || isAdminEmail());
       allow write: if isSignedIn() && uid == request.auth.uid;
     }
 
     match /tests/{testId} {
-      allow read: if resource.data.isActive == true || isAdmin();
-      allow create, update, delete: if isAdmin();
+      // Everyone must be signed in to read tests
+      allow read: if isSignedIn() && (resource.data.isActive == true || isAdminEmail());
+      allow create, update, delete: if isAdminEmail();
 
       match /questions/{qid} {
-        allow read: if get(/databases/$(database)/documents/tests/$(testId)).data.isActive == true || isAdmin();
-        allow create, update, delete: if isAdmin();
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/tests/$(testId)).data.isActive == true || isAdminEmail());
+        allow create, update, delete: if isAdminEmail();
       }
     }
 
     match /attempts/{aid} {
+      // create only by the logged-in user for themselves
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow read: if true; // public leaderboard; change to isAdmin() for privacy
+      // signed-in users can read attempts for leaderboards (optional). For full privacy change to isAdminEmail().
+      allow read: if isSignedIn();
       allow update, delete: if false;
     }
   }
