@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="uz"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MathCenter — Reyting (Firestore)</title><meta name="color-scheme" content="dark"/>
+<link rel="stylesheet" href="assets/styles.css"/>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { firebaseConfig } from "./config.js";
+  const app = initializeApp(firebaseConfig);
+  window._db = getFirestore(app);
+</script>
+</head><body>
+<header class="nav">
+  <div class="container stack">
+    <div class="brand"><div class="pi">π</div><div>Reyting</div></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" onclick="location.href='liteindex.html'">Bosh sahifa</button>
+  </div>
+</header>
+
+<main class="container" style="display:grid;gap:16px;margin-top:16px">
+  <section class="card" style="padding:16px">
+    <div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">Umumiy reyting</h3><span class="badge">Firestore</span></div>
+    <table class="table" id="rt">
+      <thead><tr><th>O‘rin</th><th>Ism Familiya</th><th>Sinf</th><th>Login</th><th>Umumiy ball</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script type="module">
+import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+async function build(){
+  const tb = document.querySelector('#rt tbody'); tb.innerHTML='';
+  try{
+    const snap = await getDocs(collection(window._db,"results"));
+    const sums = new Map();
+    snap.forEach(d=>{ const x=d.data(); const key=x.login||'unknown'; const prev = sums.get(key) || {login:key,name:'',class:'',total:0}; prev.total += Number(x.score)||0; prev.name = x.name||prev.name; prev.class = x.class||prev.class; sums.set(key, prev); });
+    const rows = Array.from(sums.values()).sort((a,b)=>b.total-a.total);
+    rows.forEach((r,i)=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${i+1}</td><td>${r.name}</td><td>${r.class}</td><td>${r.login}</td><td>${r.total}</td>`; tb.appendChild(tr); });
+  }catch(e){ tb.innerHTML = `<tr><td colspan="5" class="hint">Firestore xatosi: ${e.message}</td></tr>`; }
+}
+build();
+</script>
+</body></html>
