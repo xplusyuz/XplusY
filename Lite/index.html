@@ -94,6 +94,7 @@
   <section class="board" id="board">
     <h3>Top 50 — Ball bo‘yicha</h3>
     <div id="boardList"></div>
+    <div id="boardPager" class="pager" style="margin:8px 0 0"></div>
   </section>
 
   <div class="chips" id="chips"></div>
@@ -169,9 +170,46 @@
       if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(u.name||user.displayName); }
     });
 
-    function renderBoard(list){
-      const root=document.getElementById('boardList');
-      if(!list.length){ root.innerHTML='<div class="sub">Hali yetarli ma\'lumot yo‘q</div>'; return; }
+    
+    const BOARD_PAGE_SIZE = 10;
+    let boardPage = 0;
+    let boardUsers = [];
+
+    function renderBoard(users){
+      if(users) boardUsers = users;
+      const list = boardUsers || [];
+      const root = document.getElementById('boardList');
+      const pager = document.getElementById('boardPager');
+      if(!list.length){
+        root.innerHTML='<div class="sub">Hali yetarli ma\'lumot yo‘q</div>';
+        pager.style.display = 'none';
+        return;
+      }
+      const totalPages = Math.ceil(list.length / BOARD_PAGE_SIZE);
+      boardPage = Math.max(0, Math.min(boardPage, totalPages - 1));
+      const start = boardPage * BOARD_PAGE_SIZE;
+      const pageUsers = list.slice(start, start + BOARD_PAGE_SIZE);
+
+      root.innerHTML = pageUsers.map((u,i)=>`
+        <div class="rank ${start+i<3?'top':''}">
+          <div class="medal">${start + i + 1}</div>
+          <div><b>${u.name||'Foydalanuvchi'}</b><div class="sub">ID: ${u.numericId||'—'}</div></div>
+          <div><b>${u.points||0}</b></div>
+        </div>
+      `).join('');
+
+      pager.style.display = totalPages > 1 ? 'flex' : 'none';
+      if(totalPages > 1){
+        pager.innerHTML = `
+          <button id="boardPrev" ${boardPage===0?'disabled':''}>Oldingi</button>
+          <div class="info">${boardPage+1} / ${totalPages}</div>
+          <button id="boardNext" ${boardPage>=totalPages-1?'disabled':''}>Keyingi</button>
+        `;
+        document.getElementById('boardPrev').onclick = ()=>{ if(boardPage>0){ boardPage--; renderBoard(); } };
+        document.getElementById('boardNext').onclick = ()=>{ if(boardPage<totalPages-1){ boardPage++; renderBoard(); } };
+      }
+    }
+    
       root.innerHTML = list.map((u,i)=>`
         <div class="rank ${i<3?'top':''}">
           <div class="medal">${i+1}</div>
