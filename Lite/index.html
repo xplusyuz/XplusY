@@ -183,7 +183,11 @@
     const qTop = query(collection(db,'users'), orderBy('points','desc'), limit(50));
     onSnapshot(qTop, (snap)=>{
       const arr = snap.docs.map(d=>d.data());
-      renderBoard(arr);
+      renderBoard(arr.map(u=>({
+  name: (u.name || u.displayName || (u.email ? u.email.split('@')[0] : 'Foydalanuvchi')),
+  numericId: u.numericId,
+  points: u.points
+})));
     }, (err)=>{ console.warn('Leaderboard read blocked:', err?.message||err); document.getElementById('boardList').innerHTML = '<div class=\"sub\">Leaderboard hozircha yopiq</div>'; });
 
     async function fetchContent(){
@@ -229,61 +233,68 @@
 
     const PAGESIZE = 8;
     const pageState = new Map();
-    function renderSections(root, filtered=false){
-      const wrap=document.getElementById('sections'); wrap.innerHTML='';
-      (root.sections||[]).forEach((sec,si)=>{
-        if(filtered && active.size){
-          const sTitle=sec.title.toLowerCase(); const ok=[...active].every(f=> sTitle.includes(f.toLowerCase()) || (f==='BSB'&&sTitle.includes('bsb')) || (f==='CHSB'&&sTitle.includes('chsb')));
-          if(!ok) return;
-        }
-        let items=sec.items||[];
-        if(filtered && active.size){
-          items = items.filter(it=>(it.tags||[]).some(tag=>[...active].some(f=>tag.toLowerCase().includes(f.toLowerCase()))));
-        }
-        if(!items.length) return;
-
-        const section = document.createElement('section'); section.className='sect';
-        section.innerHTML = `
-          <div class="frame">
-            <div class="framehead"><div class="dotcap"></div><h2>${sec.title}</h2></div>
-            <div class="grid" id="grid-${si}"></div>
-            <div class="pager" id="pager-${si}" style="display:none">
-              <button data-prev="${si}">Oldingi</button>
-              <div class="info" id="info-${si}"></div>
-              <button data-next="${si}">Keyingi</button>
-            </div>
-          </div>`;
-        wrap.appendChild(section);
-
-        const curPage = pageState.get(si) ?? 0;
-        const totalPages = Math.ceil(items.length / PAGESIZE);
-        visible.forEach(it=>{
-          const el=document.createElement('article'); el.className='card';
-          el.innerHTML=`
-            <div class="thumb"><img src="${it.image || 'https://placehold.co/800x450?text=LeaderMath'}" alt="${it.name}">${it.best?'<div class="badge">BEST</div>':''}</div>
-            <div class="body">
-              <h3 class="name">${it.name}</h3>
-              ${it.description?`<p class="desc">${it.description}</p>`:''}
-              <div class="tags">${(it.tags || []).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
-              <div class="actions">
-                <a class="btn" href="${it.link || '#'}" target="_blank" rel="noopener">Boshlash</a>
-                ${it.more?`<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Batafsil</a>`:''}
-              </div>
-            </div>`;
-          grid.appendChild(el);
-        });
-
-        const pager = section.querySelector('#pager-'+si);
-        if(totalPages > 1){
-          pager.style.display = 'flex';
-          section.querySelector('#info-'+si).textContent = `Sahifa ${curPage+1} / ${totalPages}`;
-          pager.querySelector(`[data-prev="${si}"]`).onclick = ()=>{ pageState.set(si, Math.max(0, curPage-1)); renderSections(root, filtered); };
-          pager.querySelector(`[data-next="${si}"]`).onclick = ()=>{ pageState.set(si, Math.min(totalPages-1, curPage+1)); renderSections(root, filtered); };
-        }
-      });
+    
+function renderSections(root, filtered=false){
+  const wrap=document.getElementById('sections'); wrap.innerHTML='';
+  (root.sections||[]).forEach((sec,si)=>{
+    if(filtered && active.size){
+      const sTitle=sec.title.toLowerCase();
+      const ok=[...active].every(f=> sTitle.includes(f.toLowerCase()) || (f==='BSB'&&sTitle.includes('bsb')) || (f==='CHSB'&&sTitle.includes('chsb')));
+      if(!ok) return;
     }
+    let items=sec.items||[];
+    if(filtered && active.size){
+      items = items.filter(it=>(it.tags||[]).some(tag=>[...active].some(f=>tag.toLowerCase().includes(f.toLowerCase()))));
+    }
+    if(!items.length) return;
 
-    async function fetchAndRender(){
+    const section = document.createElement('section'); section.className='sect';
+    section.innerHTML = `
+      <div class="frame">
+        <div class="framehead"><div class="dotcap"></div><h2>${sec.title}</h2></div>
+        <div class="grid" id="grid-${si}"></div>
+        <div class="pager" id="pager-${si}" style="display:none">
+          <button data-prev="${si}">Oldingi</button>
+          <div class="info" id="info-${si}"></div>
+          <button data-next="${si}">Keyingi</button>
+        </div>
+      </div>`;
+    wrap.appendChild(section);
+
+    const curPage = pageState.get(si) ?? 0;
+    const totalPages = Math.ceil(items.length / PAGESIZE);
+    const start = curPage * PAGESIZE;
+    const visible = items.slice(start, start + PAGESIZE);
+
+    const grid = section.querySelector('#grid-'+si);
+    visible.forEach(it=>{
+      const el=document.createElement('article'); el.className='card';
+      el.innerHTML=`
+        <div class="thumb"><img src="${it.image || 'https://placehold.co/800x450?text=LeaderMath'}" alt="${it.name}" onerror="this.onerror=null;this.src='https://placehold.co/800x450?text=LeaderMath';">${it.best?'<div class="badge">BEST</div>':''}</div>
+        <div class="body">
+          <h3 class="name">${it.name}</h3>
+          ${it.description?`<p class="desc">${it.description}</p>`:''}
+          <div class="tags">${(it.tags || []).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+          <div class="actions">
+            <a class="btn" href="${it.link || '#'}" target="_blank" rel="noopener">Boshlash</a>
+            ${it.more?`<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Batafsil</a>`:''}
+          </div>
+        </div>`;
+      grid.appendChild(el);
+    });
+
+    const pager = section.querySelector('#pager-'+si);
+    if (totalPages > 1) {
+      pager.style.display = 'flex';
+      section.querySelector('#info-'+si).textContent = `Sahifa ${curPage+1} / ${totalPages}`;
+      pager.querySelector(`[data-prev="${si}"]`).onclick = ()=>{ pageState.set(si, Math.max(0, curPage-1)); renderSections(root, filtered); };
+      pager.querySelector(`[data-next="${si}"]`).onclick = ()=>{ pageState.set(si, Math.min(totalPages-1, curPage+1)); renderSections(root, filtered); };
+    } else { pager.style.display='none'; }
+  });
+}
+
+
+async function fetchAndRender(){
       let data;
       try{ const snap = await getDoc(doc(db,'content','index')); data = snap.exists()? snap.data(): null; }catch(e){ data=null }
       if(!data){ const res=await fetch('./index.json',{cache:'no-store'}); data=await res.json(); }
