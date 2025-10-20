@@ -1,4 +1,4 @@
-const CACHE='lm-fb-v3_4';
+const CACHE='lm-fb-v3_4_1';
 const CORE=['./','./index.html','./index.json','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))}); self.skipWaiting();
 self.addEventListener('activate',e=>{self.clients && self.clients.claim && self.clients.claim(); e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>k!==CACHE&&caches.delete(k)))))});
