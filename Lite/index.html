@@ -79,7 +79,7 @@
     <div class="uinfo"><b id="uname">Mehmon</b><span class="sub" id="uid">ID: —</span></div>
     <div class="uvals">
       <div><b id="points">Ball: —</b></div>
-      <div><a href="#" id="signin" class="sub">Kirish</a> · <a href="#" id="signout" class="sub" style="display:none">Chiqish</a> · <a class="sub" href="./adminindex.html">Admin</a></div>
+      <div><a href="#" id="signin" class="sub">Kirish</a> · <a href="#" id="signout" class="sub" style="display:none">Chiqish</a> · <a class="sub" href="./adminindex.html" id="adminLink">Admin</a></div>
     </div>
   </section>
 
@@ -157,13 +157,67 @@
   el.signin.onclick = async(e)=>{ e.preventDefault(); try{ await signInWithPopup(auth, new GoogleAuthProvider()); }catch(err){ alert(err.message) } };
   el.signout.onclick = async(e)=>{ e.preventDefault(); await signOut(auth) };
 
+  
+  // ---- Admin link visibility (only owner email or role=admin) ----
+  function setAdminVisibility(uDoc, user){
+    const a = document.getElementById('adminLink');
+    const isOwner = (user?.email === 'sohibjonmath@gmail.com');
+    const isAdmin = (uDoc?.role === 'admin');
+    if(a){ a.style.display = (isOwner || isAdmin) ? 'inline' : 'none'; }
+  }
+
+  // ---- Name capture modal ----
+  const nameModal = document.getElementById('nameModal');
+  const mFirst = document.getElementById('mFirst');
+  const mLast  = document.getElementById('mLast');
+  const mCancel= document.getElementById('mCancel');
+  const mSave  = document.getElementById('mSave');
+
+  function openNameModal(prefill){
+    nameModal.style.display='flex';
+    mFirst.value = prefill?.first || '';
+    mLast.value  = prefill?.last  || '';
+  }
+  function closeNameModal(){ nameModal.style.display='none'; }
+
+  mCancel.onclick = closeNameModal;
+  mSave.onclick = async ()=>{
+    const first = mFirst.value.trim();
+    const last  = mLast.value.trim();
+    if(!first){ alert('Ism kiriting'); return; }
+    try{
+      const user = auth.currentUser;
+      if(!user) return;
+      const ref = doc(db,'users',user.uid);
+      await setDoc(ref, { name: `${first} ${last}`.trim() }, { merge:true });
+      closeNameModal();
+    }catch(err){
+      alert('Saqlashda xato: '+(err?.message||err));
+    }
+  };
+
   onAuthStateChanged(auth, async(user)=>{
     if(!user){ el.uname.textContent='Mehmon'; el.uid.textContent='ID: —'; el.points.textContent='Ball: —'; el.ava.textContent='LM'; el.signin.style.display='inline'; el.signout.style.display='none'; return; }
     el.signin.style.display='none'; el.signout.style.display='inline';
     const u = await ensureUser(user);
-    el.uname.textContent = u.name||user.displayName||'Foydalanuvchi';
+    // Admin link visibility
+    setAdminVisibility(u, user);
+
+    // Prompt for name if missing or weak
+    const weak = !u.name || !/\s/.test(u.name) || u.name.toLowerCase() === 'foydalanuvchi';
+    if(weak){
+      // Try to prefill from displayName
+      let first='', last='';
+      if(user.displayName){
+        const parts = user.displayName.trim().split(/\s+/);
+        first = parts[0]||''; last = parts.slice(1).join(' ');
+      }
+      openNameModal({first,last});
+    }
+el.uname.textContent = u.name||user.displayName||'Foydalanuvchi';
     el.uid.textContent = `ID: ${u.numericId||'—'}`;
     el.points.textContent = `Ball: ${u.points ?? 0}`;
+
     if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(u.name||user.displayName); }
   });
 
@@ -317,5 +371,28 @@
   }
   init();
 </script>
+
+  <!-- Name capture modal -->
+  <div id="nameModal" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:9999">
+    <div style="width:min(420px,92%);background:#fff;border-radius:14px;border:1px solid var(--frame);box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px">
+      <div style="font-weight:800;font-size:16px;margin-bottom:8px;color:#1F6B45">Ismingizni kiriting</div>
+      <div style="font-size:12px;color:#6b7c75;margin-bottom:10px">Yangi foydalanuvchilar uchun ism va familiya kerak. Keyin istalgan vaqtda o‘zgartirishingiz mumkin.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:12px;color:#6b7c75">Ism</div>
+          <input id="mFirst" placeholder="Ism" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px"/>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#6b7c75">Familiya</div>
+          <input id="mLast" placeholder="Familiya" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button id="mCancel" style="background:#eef6f1;border:1px solid var(--chip-b);border-radius:10px;padding:8px 12px">Bekor qilish</button>
+        <button id="mSave" style="background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:800">Saqlash</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
+
