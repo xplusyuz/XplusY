@@ -1,17 +1,24 @@
-LeaderMath — Super PWA + Admin
-=================================
-
+LeaderMath — Firebase Admin + PWA (Full)
+===============================================
 Fayllar:
-- index.html — mobil sayt (PWA, dark mode, filtr chiplari)
-- adminindex.html — kengaytirilgan admin (drag-and-drop, inline tahrir, export)
-- index.json — namunaviy kontent (bannerlar, bo‘limlar, kartalar)
+- index.html — PWA (Dark mode, dinamik chips, Firestore kontent o‘qish, Auth header, points helper)
+- adminindex.html — Admin panel (Google Auth, role guard, Realtime listener, CRUD, Firestorega saqlash)
+- index.json — Lokal fallback kontent
 - manifest.webmanifest — PWA manifesti
-- service-worker.js — oflayn keshlash
-- icons/ — PWA ikonlari (192, 512)
-- img/ — banner rasmlari (namuna)
+- service-worker.js — oflayn kesh
+- firestore.rules — Firestore xavfsizlik qoidalari
+- icons/, img/ — ikonlar va bannerlar
 
-Ishga tushirish:
-1) Barcha fayllarni HTTPS hostga yuklang (Netlify/GitHub Pages).
-2) adminindex.html orqali index.json yarating yoki tahrir qiling, so‘ng yuklab oling.
-3) index.html bilan bir papkaga qo‘ying — sayt avtomatik kontentni o‘qiydi.
-4) Telefoningizda saytni ochib, “Install” tugmasi orqali PWA sifatida o‘rnating.
+O‘rnatish:
+1) Firebase Console → Authentication → Google yoqing.
+2) Firestore → `users` kolleksiyasi: admin bo‘ladigan foydalanuvchi uchun `role: "admin"` maydonini qo‘ying.
+3) Firestore → Rules: shu repodagi `firestore.rules`ni qo‘ying (Publish).
+4) Fayllarni HTTPS hostga yuklang (Netlify/GitHub Pages).
+
+Ishlash tartibi:
+- Foydalanuvchi Google bilan kiradi → `users/{uid}` avtomatik yaratiladi.
+- `index.html` kontentni avval Firestoredan (`content/index` doc), bo‘lmasa lokal `index.json`dan o‘qiydi.
+- Admin panel: real-time bilan `content/index`ni kuzatadi; CRUD qilib `Save` bosganda Firestorega yozadi (faqat `role="admin"`).
+- Ball ++ misoli: brauzer konsolida `addPoints()` chaqirib ko‘rishingiz mumkin (prod uchun tugma qo‘shishingiz ham mumkin).
+
+Eslatma: Firebase config siz bergan loyihaga moslab kiritilgan.
