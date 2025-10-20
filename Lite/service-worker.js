@@ -1,7 +1,7 @@
-const CACHE='lm-fb-v2';
+const CACHE='lm-fb-v3';
 const CORE=['./','./index.html','./index.json','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>k!==CACHE&&caches.delete(k)))))});
+self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)))}); self.skipWaiting();
+self.addEventListener('activate',e=>{self.clients && self.clients.claim && self.clients.claim(); e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>k!==CACHE&&caches.delete(k)))))});
 self.addEventListener('fetch',e=>{
   const url=new URL(e.request.url);
   if(url.origin===location.origin){
