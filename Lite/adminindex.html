@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeaderMath — Admin (Super)</title>
+  <style>
+    :root{--brand:#2E8B57;--brand2:#1F6B45;--bg:#f7f9f8;--card:#fff;--muted:#64748b}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:var(--bg);color:#0f172a}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:12px 14px;font-weight:800;box-shadow:0 8px 20px #0002}
+    main{display:grid;grid-template-columns:1fr;gap:14px;padding:14px}
+    @media(min-width:1050px){main{grid-template-columns:360px 1fr}}
+    .card{background:var(--card);border:1px solid #e6efe9;border-radius:14px;padding:12px;box-shadow:0 10px 22px #0000000d}
+    h2{font-size:16px;margin:0 0 10px} label{font-size:12px;color:var(--muted)}
+    input,select,textarea{width:100%;padding:10px;border:1px solid #dbe7e1;border-radius:10px;margin:6px 0 10px;background:#fbfefd}
+    button{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer}
+    .ghost{background:#f0f7f3;color:#0b3d2a}
+    .list{display:grid;gap:10px}
+    .pill{display:inline-flex;gap:6px;align-items:center;background:#e9f5ef;border:1px solid #cfe9dc;padding:5px 8px;border-radius:999px;font-size:12px;margin:2px 6px 0 0}
+    .mini{font-size:12px;color:var(--muted)}
+    pre{background:#0b3d2a;color:#eafff2;padding:10px;border-radius:10px;overflow:auto;max-height:40vh}
+    .row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+    .dr{cursor:grab}.dragover{outline:2px dashed #2E8B57}
+    .item-actions{display:flex;gap:6px;margin-top:6px}
+    .tagbox{display:flex;gap:6px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <header>LeaderMath — adminindex.html (Super)</header>
+  <main>
+    <section class="card">
+      <h2>JSON yuklash / saqlash</h2>
+      <div class="row">
+        <input type="file" id="file" accept="application/json">
+        <button class="ghost" id="new">Yangi JSON</button>
+        <button id="save">index.json yuklab olish</button>
+      </div>
+      <div class="mini">Mavjud <b>index.json</b>ni yuklang yoki yangisini boshlang. O‘ng tomonda to‘liq ro‘yxat va inline tahrir bor.</div>
+    </section>
+
+    <section class="card">
+      <h2>Banner qo‘shish</h2>
+      <input id="bnTitle" placeholder="Sarlavha">
+      <input id="bnImg" placeholder="Rasm URL (./img/banner-1.jpg)">
+      <input id="bnLink" placeholder="Link (https://...)">
+      <div class="row">
+        <button id="addBanner">Qo‘shish</button>
+        <button class="ghost" id="clearBanner">Tozalash</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Bo‘lim (chorak) qo‘shish</h2>
+      <input id="sectName" placeholder="1-chorak BSBlar">
+      <div class="row">
+        <button id="addSection">Qo‘shish</button>
+        <button class="ghost" id="clearSection">Tozalash</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Karta (resurs) qo‘shish</h2>
+      <label>Qaysi bo‘limga?</label>
+      <select id="selSection"></select>
+      <input id="itName" placeholder="BSB 1.1 — Natural sonlar">
+      <textarea id="itDesc" rows="2" placeholder="Tavsif"></textarea>
+      <input id="itImg" placeholder="Rasm (URL)">
+      <input id="itLink" placeholder="Boshlash linki (https://...)">
+      <input id="itMore" placeholder="Batafsil link (ixtiyoriy)">
+      <input id="itTags" placeholder="Teglar: BSB, 1-chorak">
+      <div class="row">
+        <select id="itBest">
+          <option value="false">Oddiy</option>
+          <option value="true">BEST</option>
+        </select>
+        <button id="addItem">Qo‘shish</button>
+        <button class="ghost" id="clearItem">Tozalash</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>JSON ko‘rinishi</h2>
+      <pre id="out"></pre>
+      <div id="summary" class="mini"></div>
+    </section>
+
+    <section class="card">
+      <h2>Bannerlar & Bo‘limlar (drag-and-drop, inline tahrir)</h2>
+      <div id="bannersList" class="list"></div>
+      <hr/>
+      <div id="sectionsList" class="list"></div>
+    </section>
+  </main>
+
+  <script>
+    let data={banners:[],sections:[]};
+    const $=id=>document.getElementById(id);
+
+    function refreshSelect(){
+      $("selSection").innerHTML=data.sections.map((s,i)=>`<option value="${i}">${s.title}</option>`).join('');
+    }
+
+    function pretty(){
+      $("out").textContent=JSON.stringify(data,null,2);
+      $("summary").textContent=`Bannerlar: ${data.banners.length} ta • Bo‘limlar: ${data.sections.length} ta`;
+      refreshSelect();
+    }
+
+    function makeDraggable(el, ondrop){
+      el.draggable=true; el.classList.add('dr');
+      el.addEventListener('dragstart',e=>{ e.dataTransfer.setData('text/plain', el.dataset.index); });
+      el.addEventListener('dragover',e=>{ e.preventDefault(); el.classList.add('dragover'); });
+      el.addEventListener('dragleave',()=> el.classList.remove('dragover'));
+      el.addEventListener('drop',e=>{ e.preventDefault(); el.classList.remove('dragover'); const from=+e.dataTransfer.getData('text/plain'); const to=+el.dataset.index; ondrop(from,to); });
+    }
+
+    function renderBanners(){
+      const root=$("bannersList");
+      root.innerHTML = `<h3 style="margin:0 0 6px">Bannerlar</h3>` + data.banners.map((b,i)=>`
+        <div class="card" style="padding:8px" data-index="${i}">
+          <div><b>${i+1}. ${b.title||'Banner'}</b></div>
+          <div class="mini">${b.image||''}</div>
+          <div class="item-actions">
+            <button class="ghost" data-edit="${i}">Tahrirlash</button>
+            <button class="ghost" data-up="${i}">↑</button>
+            <button class="ghost" data-down="${i}">↓</button>
+            <button data-del="${i}" style="background:#b91c1c">O‘chirish</button>
+          </div>
+        </div>`).join('');
+      root.querySelectorAll('.card').forEach(el=> makeDraggable(el,(from,to)=>{
+        const item=data.banners.splice(from,1)[0]; data.banners.splice(to,0,item); renderBanners(); pretty();
+      }));
+      root.querySelectorAll('[data-edit]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.edit; const b=data.banners[i];
+        const title=prompt('Sarlavha:', b.title||'')??b.title;
+        const image=prompt('Rasm URL:', b.image||'')??b.image;
+        const link=prompt('Link:', b.link||'')??b.link;
+        data.banners[i]={title,image,link}; renderBanners(); pretty();
+      });
+      root.querySelectorAll('[data-up]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.up; if(i>0){ const t=data.banners[i]; data.banners[i]=data.banners[i-1]; data.banners[i-1]=t; renderBanners(); pretty(); }
+      });
+      root.querySelectorAll('[data-down]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.down; if(i<data.banners.length-1){ const t=data.banners[i]; data.banners[i]=data.banners[i+1]; data.banners[i+1]=t; renderBanners(); pretty(); }
+      });
+      root.querySelectorAll('[data-del]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.del; if(confirm('Banner o‘chirish?')){ data.banners.splice(i,1); renderBanners(); pretty(); }
+      });
+    }
+
+    function renderSections(){
+      const root=$("sectionsList");
+      root.innerHTML = `<h3 style="margin:0 0 6px">Bo‘limlar</h3>` + data.sections.map((s,i)=>`
+        <div class="card" style="padding:8px" data-index="${i}">
+          <div class="row" style="align-items:center">
+            <div style="font-weight:800">${i+1}. <span data-sect-title>${s.title}</span></div>
+            <button class="ghost" data-rename="${i}">Nomi</button>
+            <button class="ghost" data-up="${i}">↑</button>
+            <button class="ghost" data-down="${i}">↓</button>
+            <button data-del="${i}" style="background:#b91c1c">O‘chirish</button>
+          </div>
+          <div class="mini">${s.items.length} ta karta</div>
+          <div style="margin-top:8px" data-items></div>
+        </div>`).join('');
+
+      // Draggable section cards
+      root.querySelectorAll('.card').forEach(el=> makeDraggable(el,(from,to)=>{
+        const item=data.sections.splice(from,1)[0]; data.sections.splice(to,0,item); renderSections(); pretty();
+      }));
+
+      // Items list within each section
+      root.querySelectorAll('[data-items]').forEach((holder, idx)=>{
+        const items=data.sections[idx].items||[];
+        holder.innerHTML = items.map((it,j)=>`
+          <div class="card" style="padding:8px;margin-bottom:6px" data-index="${j}" data-parent="${idx}">
+            <div><b>${j+1}. ${it.name}</b> ${it.best?'<span class="pill">BEST</span>':''}</div>
+            <div class="mini">${(it.tags||[]).join(', ')}</div>
+            <div class="item-actions">
+              <button class="ghost" data-edit="${idx}:${j}">Tahrirlash</button>
+              <button class="ghost" data-up="${idx}:${j}">↑</button>
+              <button class="ghost" data-down="${idx}:${j}">↓</button>
+              <button data-del="${idx}:${j}" style="background:#b91c1c">O‘chirish</button>
+            </div>
+          </div>`).join('');
+
+        holder.querySelectorAll('.card').forEach(el=> makeDraggable(el,(from,to)=>{
+          const parent=+el.dataset.parent;
+          const item=data.sections[parent].items.splice(from,1)[0]; data.sections[parent].items.splice(to,0,item);
+          renderSections(); pretty();
+        }));
+      });
+
+      // Buttons
+      root.querySelectorAll('[data-rename]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.rename; const t=prompt('Bo‘lim nomi:', data.sections[i].title)||data.sections[i].title;
+        data.sections[i].title=t; renderSections(); pretty();
+      });
+      root.querySelectorAll('[data-up]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.up; if(i>0){ const t=data.sections[i]; data.sections[i]=data.sections[i-1]; data.sections[i-1]=t; renderSections(); pretty();}
+      });
+      root.querySelectorAll('[data-down]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.down; if(i<data.sections.length-1){ const t=data.sections[i]; data.sections[i]=data.sections[i+1]; data.sections[i+1]=t; renderSections(); pretty();}
+      });
+      root.querySelectorAll('[data-del]').forEach(btn=>btn.onclick=()=>{
+        const i=+btn.dataset.del; if(confirm('Bo‘limni o‘chirish?')){ data.sections.splice(i,1); renderSections(); pretty(); }
+      });
+
+      root.querySelectorAll('[data-edit]').forEach(btn=>btn.onclick=()=>{
+        const [si,ji]=btn.dataset.edit.split(':').map(Number);
+        const it=data.sections[si].items[ji];
+        const name=prompt('Nomi:', it.name)||it.name;
+        const description=prompt('Tavsif:', it.description||'')??it.description;
+        const image=prompt('Rasm URL:', it.image||'')??it.image;
+        const link=prompt('Boshlash linki:', it.link||'')??it.link;
+        const more=prompt('Batafsil link (ixtiyoriy):', it.more||'')??it.more;
+        const tags=(prompt('Teglar (vergul bilan):', (it.tags||[]).join(', '))||'').split(',').map(s=>s.trim()).filter(Boolean);
+        const best=confirm('BEST nishoni qo‘yilsinmi? (OK=Ha, Cancel=Yo‘q)');
+        data.sections[si].items[ji]={name,description,image,link,more:more||undefined,tags,best};
+        renderSections(); pretty();
+      });
+      root.querySelectorAll('[data-del]').forEach(btn=>{
+        if(btn.dataset.del.includes(':')){
+          btn.onclick=()=>{ const [si,ji]=btn.dataset.del.split(':').map(Number); if(confirm('Kartani o‘chirish?')){ data.sections[si].items.splice(ji,1); renderSections(); pretty(); } };
+        }
+      });
+      root.querySelectorAll('[data-up]').forEach(btn=>{
+        if(btn.dataset.up.includes(':')){
+          btn.onclick=()=>{ const [si,ji]=btn.dataset.up.split(':').map(Number); if(ji>0){ const arr=data.sections[si].items; const t=arr[ji]; arr[ji]=arr[ji-1]; arr[ji-1]=t; renderSections(); pretty(); } };
+        }
+      });
+      root.querySelectorAll('[data-down]').forEach(btn=>{
+        if(btn.dataset.down.includes(':')){
+          btn.onclick=()=>{ const [si,ji]=btn.dataset.down.split(':').map(Number); const arr=data.sections[si].items; if(ji<arr.length-1){ const t=arr[ji]; arr[ji]=arr[ji+1]; arr[ji+1]=t; renderSections(); pretty(); } };
+        }
+      });
+    }
+
+    function refreshAll(){ renderBanners(); renderSections(); pretty(); }
+
+    // File load
+    $("file").onchange = async e=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      try{ data = JSON.parse(await f.text()); if(!data.banners)data.banners=[]; if(!data.sections)data.sections=[]; refreshAll(); }
+      catch(err){ alert('JSON xato: '+err.message); }
+    };
+
+    // New
+    $("new").onclick=()=>{ data={banners:[],sections:[]}; refreshAll(); };
+
+    // Add banner
+    $("addBanner").onclick=()=>{
+      data.banners.push({title:$("bnTitle").value.trim(), image:$("bnImg").value.trim(), link:$("bnLink").value.trim()});
+      ["bnTitle","bnImg","bnLink"].forEach(i=>$(i).value=''); refreshAll();
+    };
+    $("clearBanner").onclick=()=>{ ["bnTitle","bnImg","bnLink"].forEach(i=>$(i).value=''); };
+
+    // Add section
+    $("addSection").onclick=()=>{
+      const t=$("sectName").value.trim(); if(!t) return alert('Bo‘lim nomi kerak');
+      data.sections.push({title:t,items:[]}); $("sectName").value=''; refreshAll();
+    };
+    $("clearSection").onclick=()=>{ $("sectName").value=''; };
+
+    // Add item
+    $("addItem").onclick=()=>{
+      const si=+$("selSection").value; if(Number.isNaN(si)) return alert('Avval bo‘lim qo‘shing');
+      const item={
+        name:$("itName").value.trim(),
+        description:$("itDesc").value.trim(),
+        image:$("itImg").value.trim(),
+        link:$("itLink").value.trim(),
+        more:$("itMore").value.trim()||undefined,
+        tags:$("itTags").value.split(',').map(s=>s.trim()).filter(Boolean),
+        best:$("itBest").value==='true'
+      };
+      if(!item.name||!item.link) return alert('Nomi va Boshlash linki shart');
+      data.sections[si].items.push(item);
+      ["itName","itDesc","itImg","itLink","itMore","itTags"].forEach(i=>$(i).value=''); $("itBest").value='false';
+      refreshAll();
+    };
+    $("clearItem").onclick=()=>{ ["itName","itDesc","itImg","itLink","itMore","itTags"].forEach(i=>$(i).value=''); $("itBest").value='false'; };
+
+    // Save
+    $("save").onclick=()=>{
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='index.json'; a.click(); URL.revokeObjectURL(a.href);
+    };
+
+    // Boot
+    refreshAll();
+  </script>
+</body>
+</html>
