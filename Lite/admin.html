@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeaderMath — Admin</title>
+  <meta name="color-scheme" content="dark light">
+  <style>
+    :root{ --brand:#2E8B57; --brand2:#1F6B45; --bg:#f6faf8; --card:#fff; --text:#0f172a; --muted:#6b7c75; --frame:#e3efe8; --chip:#e9f5ef; --chip-b:#cfe9dc; }
+    :root.dark{ --bg:#0b0f0e; --card:#0f1714; --text:#EAF7F0; --muted:#A8BBB3; --frame:#244b39; --chip:#0f221b; --chip-b:#2a5a45; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 12px;display:flex;align-items:center;gap:8px}
+    .spacer{flex:1} .btn{border:none;border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer}
+    .ghost{background:#ffffff22;color:#fff;border:1px solid #ffffff44}
+    .wrap{max-width:1080px;margin:0 auto;padding:14px}
+    h2{margin:22px 0 10px}
+    .panel{background:var(--card);border:1px dashed var(--frame);border-radius:14px;padding:12px;margin-bottom:12px}
+    label{font-size:12px;color:var(--muted)} input,textarea,select{width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px;background:transparent;color:inherit}
+    .grid{display:grid;gap:10px} .g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:1fr 1fr 1fr}
+    @media (max-width:720px){ .g2,.g3{grid-template-columns:1fr} }
+    table{width:100%;border-collapse:collapse} th,td{border-bottom:1px dashed var(--frame);padding:8px;vertical-align:top}
+    .tag{display:inline-block;background:var(--chip);border:1px solid var(--chip-b);padding:2px 8px;border-radius:999px;font-size:12px;margin:2px}
+    .danger{background:#9b1c1c;color:#fff;border:none}
+    .ok{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none}
+    .muted{color:var(--muted)}
+    .row{display:flex;gap:8px;align-items:center}
+    progress{width:100%}
+    .thumb{width:100%;max-width:360px;aspect-ratio:16/9;border:1px dashed var(--frame);border-radius:10px;object-fit:cover}
+  </style>
+</head>
+<body>
+  <header>
+    <strong>LeaderMath — Admin</strong>
+    <div class="spacer"></div>
+    <button id="theme" class="btn ghost">🌙 Tun</button>
+    <button id="signin" class="btn ghost">Google bilan kirish</button>
+    <button id="signout" class="btn ghost" style="display:none">Chiqish</button>
+  </header>
+
+  <div class="wrap">
+    <div id="guard" class="panel">
+      <div><b>Hali kirilmagansiz.</b> Faqat <code>sohibjonmath@gmail.com</code> yoki <code>users/{uid}.role = "admin"</code> kiradi.</div>
+    </div>
+
+    <!-- BANNERS -->
+    <section id="bannersSec" style="display:none">
+      <h2>Bannerlar</h2>
+      <div class="panel">
+        <div class="grid g3">
+          <div><label>Sarlavha</label><input id="banTitle" placeholder="Masalan: CHSB yangiliklar"></div>
+          <div><label>Rasm URL (16:9) — upload tugmasi orqali</label><input id="banImage" placeholder="https://.../banner.jpg"></div>
+          <div><label>Havola</label><input id="banLink" placeholder="https://..."></div>
+
+          <div><label>Rasm yuklash</label>
+            <input id="banFile" type="file" accept="image/*">
+            <progress id="banProg" value="0" max="100" style="display:none"></progress>
+            <img id="banPrev" class="thumb" style="display:none" alt="preview">
+          </div>
+          <div><label>Tartib (order)</label><input id="banOrder" type="number" value="1"></div>
+          <div><label>Aktiv?</label>
+            <select id="banActive"><option value="true">Ha</option><option value="false">Yo‘q</option></select>
+          </div>
+
+          <div style="grid-column:1/-1;display:flex;gap:8px">
+            <button id="banSave" class="btn ok">➕ Saqlash</button>
+            <button id="banReset" class="btn">↻ Tozalash</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Order</th><th>Banner</th><th>Havola</th><th>Aktiv</th><th>Amal</th></tr></thead>
+          <tbody id="banList"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SECTIONS -->
+    <section id="sectionsSec" style="display:none">
+      <h2>Bo‘limlar (Sections)</h2>
+      <div class="panel">
+        <div class="grid g3">
+          <div><label>Nomi</label><input id="secTitle" placeholder="Masalan: Testlar"></div>
+          <div><label>Tartib (order)</label><input id="secOrder" type="number" value="1"></div>
+          <div><label>Aktiv?</label><select id="secActive"><option value="true">Ha</option><option value="false">Yo‘q</option></select></div>
+          <div style="grid-column:1/-1;display:flex;gap:8px">
+            <button id="secSave" class="btn ok">➕ Saqlash</button>
+            <button id="secReset" class="btn">↻ Tozalash</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Order</th><th>Bo‘lim</th><th>Aktiv</th><th>Kartalar</th><th>Amal</th></tr></thead>
+          <tbody id="secList"></tbody>
+        </table>
+      </div>
+
+      <!-- ITEMS -->
+      <div id="itemsPanel" class="panel" style="display:none">
+        <h3 id="itemsTitle">Kartalar</h3>
+        <div class="grid g3">
+          <div><label>Nomi</label><input id="itName" placeholder="Masalan: Algebra 1-chorak"></div>
+          <div><label>Rasm URL (16:9)</label><input id="itImage" placeholder="https://.../800x450.png"></div>
+          <div>
+            <label>Rasm yuklash</label>
+            <input id="itFile" type="file" accept="image/*">
+            <progress id="itProg" value="0" max="100" style="display:none"></progress>
+            <img id="itPrev" class="thumb" style="display:none" alt="preview">
+          </div>
+          <div><label>Link (Boshlash)</label><input id="itLink" placeholder="https://..."></div>
+          <div><label>“Batafsil” Link</label><input id="itMore" placeholder="https://..."></div>
+          <div><label>Taglar (vergul bilan)</label><input id="itTags" placeholder="BSB, 1-chorak, test"></div>
+          <div><label>Best?</label><select id="itBest"><option value="false">Yo‘q</option><option value="true">Ha</option></select></div>
+          <div><label>Tartib (order)</label><input id="itOrder" type="number" value="1"></div>
+          <div><label>Aktiv?</label><select id="itActive"><option value="true">Ha</option><option value="false">Yo‘q</option></select></div>
+          <div style="grid-column:1/-1"><label>Tavsif</label><textarea id="itDesc" rows="2" placeholder="Qisqacha tavsif..."></textarea></div>
+          <div style="grid-column:1/-1;display:flex;gap:8px">
+            <button id="itSave" class="btn ok">➕ Saqlash</button>
+            <button id="itReset" class="btn">↻ Tozalash</button>
+          </div>
+        </div>
+        <div style="height:8px"></div>
+        <table>
+          <thead><tr><th>Order</th><th>Karta</th><th>Best</th><th>Aktiv</th><th>Amal</th></tr></thead>
+          <tbody id="itList"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+<script type="module">
+  const root=document.documentElement, themeBtn=document.getElementById('theme');
+  const setTheme = (m)=>{ root.classList.toggle('dark', m==='dark'); localStorage.setItem('lm-admin-theme', m) };
+  setTheme(localStorage.getItem('lm-admin-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
+  themeBtn.onclick=()=> setTheme(root.classList.contains('dark') ? 'light':'dark');
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, doc, addDoc, setDoc, getDoc, query, orderBy, onSnapshot, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getStorage, ref as sRef, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+  const cfg = {
+    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+    authDomain: "xplusy-760fa.firebaseapp.com",
+    projectId: "xplusy-760fa",
+    storageBucket: "xplusy-760fa.firebasestorage.app",
+    messagingSenderId: "992512966017",
+    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+    measurementId: "G-459PLJ7P7L"
+  };
+  const app = initializeApp(cfg);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+  await setPersistence(auth, browserLocalPersistence);
+
+  const signinBtn = document.getElementById('signin');
+  const signoutBtn = document.getElementById('signout');
+  const guard = document.getElementById('guard');
+  const bannersSec = document.getElementById('bannersSec');
+  const sectionsSec = document.getElementById('sectionsSec');
+  const provider = new GoogleAuthProvider();
+  signinBtn.onclick = async()=>{ try{ await signInWithPopup(auth, provider) }catch(e){ alert(e.message) } };
+  signoutBtn.onclick = async()=>{ await signOut(auth) };
+  const $ = (id)=>document.getElementById(id);
+
+  function allowAdmin(userDoc, user){
+    const owner = user?.email === 'sohibjonmath@gmail.com';
+    const isAdmin = userDoc?.role === 'admin';
+    return owner || isAdmin;
+  }
+
+  let editingBannerId=null, editingSectionId=null, editingItemId=null, currentItemsUnsub=null;
+
+  onAuthStateChanged(auth, async(user)=>{
+    if(!user){ guard.style.display=''; bannersSec.style.display='none'; sectionsSec.style.display='none'; signinBtn.style.display='inline-block'; signoutBtn.style.display='none'; return; }
+    signinBtn.style.display='none'; signoutBtn.style.display='inline-block';
+
+    const uref = doc(db, 'users', user.uid);
+    let udoc = (await getDoc(uref)).data();
+    if(!udoc){ await setDoc(uref, { name:user.displayName||'Foydalanuvchi', email:user.email||null, role:'user', createdAt:serverTimestamp() }, { merge:true }); udoc=(await getDoc(uref)).data(); }
+
+    if(!allowAdmin(udoc, user)){ guard.innerHTML="<b>Ruxsat yo‘q.</b> Bu sahifa faqat adminlar uchun."; return; }
+
+    guard.style.display='none'; bannersSec.style.display=''; sectionsSec.style.display='';
+    loadBanners(); loadSections();
+  });
+
+  function uploadFile(file, path, progEl, prevImg, urlInput){
+    if(!file) return;
+    const r = sRef(storage, path);
+    const task = uploadBytesResumable(r, file, { cacheControl: 'public,max-age=31536000' });
+    progEl.style.display='block'; prevImg.style.display='none';
+    task.on('state_changed', (snap)=>{
+      const p = Math.round((snap.bytesTransferred/snap.totalBytes)*100);
+      progEl.value=p;
+    }, (err)=>{ alert('Upload xato: '+err.message); progEl.style.display='none'; },
+    async()=>{
+      const url = await getDownloadURL(task.snapshot.ref);
+      urlInput.value = url;
+      prevImg.src = url; prevImg.style.display='block'; progEl.style.display='none';
+    });
+  }
+
+  const banTitle = $('banTitle'), banImage=$('banImage'), banLink=$('banLink'), banOrder=$('banOrder'), banActive=$('banActive');
+  const banFile=$('banFile'), banProg=$('banProg'), banPrev=$('banPrev');
+  $('banFile').addEventListener('change', e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    const id = editingBannerId || ('tmp_'+Date.now());
+    uploadFile(f, `images/banners/${id}`, banProg, banPrev, banImage);
+  });
+
+  $('banReset').onclick = ()=>{ editingBannerId=null; banTitle.value=''; banImage.value=''; banLink.value=''; banOrder.value='1'; banActive.value='true'; banPrev.style.display='none'; banProg.style.display='none'; banFile.value=''; };
+  $('banSave').onclick = async()=>{
+    const data = { title: banTitle.value.trim(), image: banImage.value.trim(), link: banLink.value.trim()||null, order:Number(banOrder.value||0), active: banActive.value==='true', updatedAt: serverTimestamp() };
+    try{
+      if(editingBannerId){ await setDoc(doc(db,'banners',editingBannerId), data, {merge:true}); }
+      else { const r = await addDoc(collection(db,'banners'), { ...data, createdAt: serverTimestamp() }); editingBannerId=r.id; }
+      $('banReset').click();
+    }catch(e){ alert('Banner saqlanmadi: '+e.message); }
+  };
+
+  function loadBanners(){
+    const list = $('banList');
+    onSnapshot(query(collection(db,'banners'), orderBy('order','asc')), (snap)=>{
+      list.innerHTML='';
+      snap.forEach(d=>{
+        const v=d.data();
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${v.order??''}</td>
+          <td><b>${v.title||'-'}</b><div class="muted">${v.image||''}</div></td>
+          <td><a href="${v.link||'#'}" target="_blank" rel="noopener">${v.link||''}</a></td>
+          <td>${v.active? '✅' : '—'}</td>
+          <td>
+            <button class="btn" data-edit="${d.id}">✎</button>
+            <button class="btn danger" data-del="${d.id}">🗑</button>
+          </td>`;
+        list.appendChild(tr);
+      });
+
+      list.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{
+        const id=b.getAttribute('data-edit');
+        const v=snap.docs.find(x=>x.id===id).data();
+        editingBannerId=id;
+        banTitle.value=v.title||''; banImage.value=v.image||''; banLink.value=v.link||''; banOrder.value=v.order??1; banActive.value=String(!!v.active);
+        if(v.image){ banPrev.src=v.image; banPrev.style.display='block'; } else banPrev.style.display='none';
+        window.scrollTo({top:0,behavior:'smooth'});
+      });
+      list.querySelectorAll('[data-del]').forEach(b=> b.onclick=async()=>{
+        const id=b.getAttribute('data-del');
+        if(confirm('O‘chirsinmi?')){ await deleteDoc(doc(db,'banners',id)); try{ await deleteObject(sRef(storage, `images/banners/${id}`)); }catch(_){} }
+      });
+    });
+  }
+
+  const secTitle=$('secTitle'), secOrder=$('secOrder'), secActive=$('secActive');
+  $('secReset').onclick = ()=>{ editingSectionId=null; secTitle.value=''; secOrder.value='1'; secActive.value='true'; hideItemsPanel(); };
+  $('secSave').onclick = async()=>{
+    const data = { title: secTitle.value.trim(), order:Number(secOrder.value||0), active: secActive.value==='true', updatedAt:serverTimestamp() };
+    try{
+      if(editingSectionId){ await setDoc(doc(db,'sections',editingSectionId), data, {merge:true}); }
+      else { const r = await addDoc(collection(db,'sections'), { ...data, createdAt:serverTimestamp() }); editingSectionId=r.id; }
+      $('secReset').click();
+    }catch(e){ alert('Section saqlanmadi: '+e.message); }
+  };
+
+  function loadSections(){
+    const list = $('secList');
+    onSnapshot(query(collection(db,'sections'), orderBy('order','asc')), (snap)=>{
+      list.innerHTML='';
+      snap.forEach(d=>{
+        const v=d.data();
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${v.order??''}</td>
+          <td><b>${v.title||'-'}</b></td>
+          <td>${v.active? '✅':'—'}</td>
+          <td><button class="btn" data-items="${d.id}">📦 Kartalar</button></td>
+          <td>
+            <button class="btn" data-edit="${d.id}">✎</button>
+            <button class="btn danger" data-del="${d.id}">🗑</button>
+          </td>`;
+        list.appendChild(tr);
+      });
+
+      list.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{
+        const id=b.getAttribute('data-edit');
+        const v=snap.docs.find(x=>x.id===id).data();
+        editingSectionId=id; secTitle.value=v.title||''; secOrder.value=v.order??1; secActive.value=String(!!v.active);
+        window.scrollTo({top:0,behavior:'smooth'});
+      });
+      list.querySelectorAll('[data-del]').forEach(b=> b.onclick=async()=>{
+        const id=b.getAttribute('data-del');
+        if(confirm('Bo‘limni o‘chirsinmi?')) await deleteDoc(doc(db,'sections',id));
+      });
+      list.querySelectorAll('[data-items]').forEach(b=> b.onclick=()=> openItemsPanel(b.getAttribute('data-items')));
+    });
+  }
+
+  const itemsPanel=$('itemsPanel'), itemsTitle=$('itemsTitle'), itList=$('itList');
+  const itName=$('itName'), itImage=$('itImage'), itLink=$('itLink'), itMore=$('itMore'), itTags=$('itTags'), itBest=$('itBest'), itOrder=$('itOrder'), itActive=$('itActive'), itDesc=$('itDesc');
+  const itFile=$('itFile'), itProg=$('itProg'), itPrev=$('itPrev');
+
+  function hideItemsPanel(){ itemsPanel.style.display='none'; if(currentItemsUnsub){ currentItemsUnsub(); currentItemsUnsub=null; } editingItemId=null; }
+  function openItemsPanel(sectionId){
+    itemsPanel.style.display=''; itemsTitle.textContent='Kartalar'; // sarlavha soddalashtirildi
+    editingSectionId = sectionId;
+    ['itName','itImage','itLink','itMore','itTags','itDesc'].forEach(id=>$(id).value=''); itBest.value='false'; itOrder.value=1; itActive.value='true'; editingItemId=null; itPrev.style.display='none'; itProg.style.display='none'; itFile.value='';
+
+    if(currentItemsUnsub) currentItemsUnsub();
+    currentItemsUnsub = onSnapshot(query(collection(db,'sections',sectionId,'items'), orderBy('order','asc')), (snap)=>{
+      itList.innerHTML='';
+      snap.forEach(d=>{
+        const v=d.data();
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${v.order??''}</td>
+          <td><b>${v.name||'-'}</b><div class="muted">${v.description||''}</div>
+          ${(v.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</td>
+          <td>${v.best? '⭐' : ''}</td>
+          <td>${v.active? '✅' : '—'}</td>
+          <td>
+            <button class="btn" data-edit="${d.id}">✎</button>
+            <button class="btn danger" data-del="${d.id}">🗑</button>
+          </td>`;
+        itList.appendChild(tr);
+      });
+
+      itList.querySelectorAll('[data-edit]').forEach(b=> b.onclick=()=>{
+        const id=b.getAttribute('data-edit');
+        const v=snap.docs.find(x=>x.id===id).data(); editingItemId=id;
+        itName.value=v.name||''; itImage.value=v.image||''; itLink.value=v.link||''; itMore.value=v.more||''; itDesc.value=v.description||'';
+        itTags.value=(v.tags||[]).join(', '); itBest.value=String(!!v.best); itOrder.value=v.order??1; itActive.value=String(!!v.active);
+        if(v.image){ itPrev.src=v.image; itPrev.style.display='block'; }
+        window.scrollTo({top:itemsPanel.offsetTop-20, behavior:'smooth'});
+      });
+      itList.querySelectorAll('[data-del]').forEach(b=> b.onclick=async()=>{
+        const id=b.getAttribute('data-del');
+        if(confirm('Kartani o‘chirsinmi?')){ await deleteDoc(doc(db,'sections',sectionId,'items',id)); try{ await deleteObject(sRef(storage, `images/items/${sectionId}/${id}`)); }catch(_){} }
+      });
+    });
+
+    itFile.onchange = (e)=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const itemId = editingItemId || ('tmp_'+Date.now());
+      uploadFile(f, `images/items/${sectionId}/${itemId}`, itProg, itPrev, itImage);
+    };
+  }
+
+  $('itReset').onclick = ()=>{ editingItemId=null; ['itName','itImage','itLink','itMore','itTags','itDesc'].forEach(id=>$(id).value=''); itBest.value='false'; itOrder.value=1; itActive.value='true'; itPrev.style.display='none'; itProg.style.display='none'; itFile.value=''; };
+  $('itSave').onclick = async()=>{
+    const sectionId = editingSectionId; if(!sectionId){ alert('Avval bo‘lim tanlang'); return; }
+    const data = {
+      name: itName.value.trim(), image: itImage.value.trim(), link: itLink.value.trim()||null, more: itMore.value.trim()||null,
+      description: itDesc.value.trim()||null, tags: itTags.value.split(',').map(s=>s.trim()).filter(Boolean),
+      best: itBest.value==='true', order:Number(itOrder.value||0), active: itActive.value==='true', updatedAt: serverTimestamp()
+    };
+    try{
+      if(editingItemId){ await setDoc(doc(db,'sections',sectionId,'items',editingItemId), data, {merge:true}); }
+      else{
+        const r = await addDoc(collection(db,'sections',sectionId,'items'), { ...data, createdAt:serverTimestamp() });
+        editingItemId=r.id;
+      }
+      $('itReset').click();
+    }catch(e){ alert('Karta saqlanmadi: '+e.message); }
+  };
+</script>
+</body>
+</html>
