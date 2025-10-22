@@ -55,6 +55,15 @@
     .qname{font-weight:700}
     .qpts{color:var(--muted);font-size:13px}
     .qtext{line-height:1.65}
+    .qimg{ margin:8px 0 4px; }
+    .qimg img{
+      max-width:100%;
+      height:auto;
+      display:block;
+      border-radius:12px;
+      border:1px solid #edf3ee;
+      box-shadow:0 6px 18px rgba(31,107,69,.06);
+    }
     .opts{display:grid;gap:10px}
     .opt{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start;padding:10px 12px;border:1px solid #edf3ee;border-radius:12px;background:#fbfdfc;transition:border-color .15s,box-shadow .15s,background .15s}
     .opt:hover{border-color:var(--green);box-shadow:0 0 0 4px var(--ring);background:#fff}
@@ -208,6 +217,24 @@
     let testData = null, currentIndex = 0, answers = [], timerId = null, timeLeftSec = 0, submitted = false, startedAt = new Date();
     let fb = null, currentUser = null;
 
+    /* === Rasm qidirish: 1.jpg -> 1.png fallback (keshni chetlab o'tish parametri bilan) === */
+    function resolveQuestionImageSrc(i) {
+      return new Promise((resolve) => {
+        const tryJpg = `./${i}.jpg`;
+        const tryPng = `./${i}.png`;
+
+        const img = new Image();
+        img.onload = () => resolve(tryJpg);
+        img.onerror = () => {
+          const img2 = new Image();
+          img2.onload = () => resolve(tryPng);
+          img2.onerror = () => resolve(null);
+          img2.src = tryPng + `?t=${Date.now()}`;
+        };
+        img.src = tryJpg + `?t=${Date.now()}`;
+      });
+    }
+
     /* ===================== ADAPTER: eski JSON -> yangi schema ===================== */
     function normalizeTestData(data){
       if(!data || !Array.isArray(data.questions)) return data;
@@ -321,6 +348,16 @@
       const qtext = document.createElement('div'); qtext.className='qtext';
       qtext.textContent = q.questionText || `Savol ${currentIndex+1}`;
 
+      // Rasm sloti
+      const qimgWrap = document.createElement('div');
+      qimgWrap.className = 'qimg hidden';
+      const qimg = document.createElement('img');
+      qimg.alt = `Savol ${currentIndex+1} rasmi`;
+      qimg.loading = 'lazy';
+      qimg.decoding = 'async';
+      qimgWrap.appendChild(qimg);
+
+      // Variantlar
       const opts = document.createElement('div'); opts.className='opts';
       const multi = isMulti(q); const nameAttr = `q_${currentIndex}`;
       const chosen = answers[currentIndex] || [];
@@ -331,15 +368,37 @@
         inp.type = multi ? 'checkbox' : 'radio'; inp.name=nameAttr; inp.value=String(j); inp.id=`${nameAttr}_${j}`;
         if(multi) inp.checked = chosen.includes(j); else inp.checked = chosen.length ? (chosen[0]===j) : false;
         inp.addEventListener('change', ()=>{
-          if(multi){ const prev = new Set(answers[currentIndex]||[]); if(inp.checked) prev.add(j); else prev.delete(j); answers[currentIndex]=Array.from(prev).sort((a,b)=>a-b); }
-          else { answers[currentIndex] = inp.checked ? [j] : []; }
+          if(multi){
+            const prev = new Set(answers[currentIndex]||[]);
+            if(inp.checked) prev.add(j); else prev.delete(j);
+            answers[currentIndex] = Array.from(prev).sort((a,b)=>a-b);
+          } else {
+            answers[currentIndex] = inp.checked ? [j] : [];
+          }
           refreshNavigator();
         });
-        const lbl = document.createElement('label'); lbl.setAttribute('for', inp.id); lbl.textContent = (typeof opt==='string'?opt:String(opt));
+        const lbl = document.createElement('label'); lbl.setAttribute('for', inp.id);
+        lbl.textContent = (typeof opt==='string'?opt:String(opt));
         row.appendChild(inp); row.appendChild(lbl); opts.appendChild(row);
       });
 
-      wrap.appendChild(head); wrap.appendChild(qtext); wrap.appendChild(opts);
+      // DOM joylashuvi
+      wrap.appendChild(head);
+      wrap.appendChild(qtext);
+      wrap.appendChild(qimgWrap);   // rasm matndan keyin
+      wrap.appendChild(opts);
+
+      // Rasmni topish (1-indeks)
+      const idx1 = currentIndex + 1;
+      const src = await resolveQuestionImageSrc(idx1);
+      if (src) {
+        qimg.src = src;
+        qimgWrap.classList.remove('hidden');
+      } else {
+        qimg.src = '';
+        qimgWrap.classList.add('hidden');
+      }
+
       await typeset(wrap);
     }
 
@@ -376,7 +435,6 @@
           }
         });
       } catch (e) {
-        // Transaction bo'lmasa ham, minimal merge bilan yaratib yuboramiz
         await setDoc(uref, { name: user.displayName || 'Foydalanuvchi', points: 0, createdAt: Date.now() }, { merge: true });
       }
     }
@@ -410,9 +468,7 @@
       if(!fb) fb = window.__firebase;
       if(fb?.auth?.currentUser){
         try{
-          // 🔴 YANGI: user doc’ni kafolatlash
-          await ensureUserDoc();
-
+          await ensureUserDoc(); // user doc kafolat
           await saveResultToFirebase({
             uid: fb.auth.currentUser.uid,
             testId: testData.id || (testData.title||'unknown').toLowerCase().replace(/\s+/g,'-'),
@@ -436,17 +492,12 @@
       const { db, serverTimestamp, addDoc, collection, increment, runTransaction, doc, setDoc, updateDoc } = fb;
 
       // results
-      try{
-        await addDoc(collection(db,'results'), {
-          uid, testId, score, total, percent,
-          startedAt: startedAt?.toISOString() || null,
-          finishedAt: finishedAt?.toISOString() || null,
-          createdAt: serverTimestamp()
-        });
-      }catch(e){
-        console.error('results addDoc failed:', e?.message||e);
-        throw e;
-      }
+      await addDoc(collection(db,'results'), {
+        uid, testId, score, total, percent,
+        startedAt: startedAt?.toISOString() || null,
+        finishedAt: finishedAt?.toISOString() || null,
+        createdAt: serverTimestamp()
+      });
 
       // users points inkrement
       const uref = doc(db,'users',uid);
@@ -460,13 +511,7 @@
           }
         });
       }catch(e){
-        // fallback
-        try{
-          await setDoc(uref, { points: score, updatedAt: serverTimestamp() }, { merge:true });
-        }catch(e2){
-          console.error('users points setDoc failed:', e2?.message||e2);
-          throw e2;
-        }
+        await setDoc(uref, { points: score, updatedAt: serverTimestamp() }, { merge:true });
       }
     }
 
@@ -506,7 +551,7 @@
           currentUser = user;
           authInfoEl.textContent = user ? `Kirish: ${user.displayName||user.email}` : 'Kirish: mehmon';
         });
-        // Sahifa yuklanganda darhol currentUser bo‘lsa — ko‘rsatib qo‘yamiz
+        // darhol mavjud bo‘lsa
         if (fb.auth.currentUser) {
           authResolved = true;
           const u = fb.auth.currentUser;
