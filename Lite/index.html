@@ -6,7 +6,7 @@
   <title>LeaderMath — Mobil (PWA)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <meta name="color-scheme" content="dark light"/>
-  <!-- PWA paths set relative so it works under /lite/ as well -->
+  <!-- PWA assets (relative so it works under /lite/ too) -->
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
   <style>
@@ -62,7 +62,7 @@
     .badge{position:absolute;top:8px;left:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
     .body{padding:12px}
     .name{font-size:15px;font-weight:800;margin:0 0 6px}
-    .desc{font-size:13px;color:var(--muted);line-height:1.4;margin:0 0 10px}
+    .desc{font-size:13px;color:#var(--muted);line-height:1.4;margin:0 0 10px}
     .tags{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
     .tag{font-size:11px;color:#0b3d2a;background:#e9f5ef;border:1px solid #cfe9dc;padding:5px 8px;border-radius:999px}
     .actions{display:flex;gap:8px}
@@ -84,6 +84,7 @@
   </style>
 </head>
 <body>
+  <!-- Appbar -->
   <header class="appbar">
     <div class="logo">L</div>
     <div><div class="title">LeaderMath</div><div class="sub">BSB / CHSB dars resurslari</div></div>
@@ -92,15 +93,17 @@
     <button id="installBtn" class="iconbtn" title="Ilova sifatida o‘rnatish">⬇️</button>
   </header>
 
+  <!-- User bar -->
   <section class="userbar" id="userbar">
     <div class="ava" id="ava">LM</div>
     <div class="uinfo"><b id="uname">Mehmon</b><span class="sub" id="uid">ID: —</span></div>
     <div class="uvals">
       <div><b id="points">Ball: —</b></div>
-      <div><a href="#" id="signin" class="sub">Kirish</a> · <a href="#" id="signout" class="sub" style="display:none">Chiqish</a> · <a class="sub" href="./adminindex.html" id="adminLink">Admin</a></div>
+      <div><a href="#" id="signin" class="sub">Kirish</a> · <a href="#" id="signout" class="sub" style="display:none">Chiqish</a> · <a class="sub" href="./admin.html" id="adminLink">Admin</a></div>
     </div>
   </section>
 
+  <!-- Leaderboard -->
   <section class="board" id="board">
     <h3>Top 50 — Ball bo‘yicha</h3>
     <div id="boardList"></div>
@@ -111,8 +114,10 @@
     </div>
   </section>
 
+  <!-- Chips -->
   <div class="chips" id="chips"></div>
 
+  <!-- Carousel -->
   <section class="carousel" id="carousel" style="margin-top:6px">
     <button class="cbtn left" aria-label="Oldingi" id="prev">‹</button>
     <div class="track" id="track"></div>
@@ -120,6 +125,7 @@
     <div class="dots" id="dots"></div>
   </section>
 
+  <!-- Sections -->
   <div class="container" style="padding:6px 12px 88px">
     <div id="sections"></div>
     <div style="height:24px"></div>
@@ -167,7 +173,7 @@
   // Firebase
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, collection, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, collection, query, orderBy, limit, getDocs, where } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const cfg = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -183,6 +189,7 @@
   const db = getFirestore(app);
   await setPersistence(auth, browserLocalPersistence);
 
+  // DOM refs
   const el = {
     uname: document.getElementById('uname'), uid: document.getElementById('uid'), points: document.getElementById('points'),
     ava: document.getElementById('ava'), signin: document.getElementById('signin'), signout: document.getElementById('signout'), adminLink: document.getElementById('adminLink')
@@ -206,23 +213,17 @@
     if(el.adminLink){ el.adminLink.style.display = (isOwner || isAdmin) ? 'inline' : 'none'; }
   }
 
-  // ---- Name capture modal ----
+  // Name modal
   const nameModal = document.getElementById('nameModal');
   const mFirst = document.getElementById('mFirst');
   const mLast  = document.getElementById('mLast');
   const mCancel= document.getElementById('mCancel');
   const mSave  = document.getElementById('mSave');
-
-  function openNameModal(prefill){
-    nameModal.style.display='flex';
-    mFirst.value = prefill?.first || '';
-    mLast.value  = prefill?.last  || '';
-  }
+  function openNameModal(prefill){ nameModal.style.display='flex'; mFirst.value=prefill?.first||''; mLast.value=prefill?.last||''; }
   function closeNameModal(){ nameModal.style.display='none'; }
   mCancel.onclick = closeNameModal;
   mSave.onclick = async ()=>{
-    const first = mFirst.value.trim();
-    const last  = mLast.value.trim();
+    const first = mFirst.value.trim(); const last  = mLast.value.trim();
     if(!first){ alert('Ism kiriting'); return; }
     try{
       const user = auth.currentUser; if(!user) return;
@@ -238,23 +239,18 @@
 
   onAuthStateChanged(auth, async(user)=>{
     if(!user){
-      el.uname.textContent='Mehmon'; el.uid.textContent='ID: —'; el.points.textContent='Ball: —'; el.ava.textContent='LM';
+      el.uname.textContent='Mehmon'; el.uid.textContent='ID: —'; el.points.textContent='Ball: —'; el.ava.textContent='LM'; el.ava.style.backgroundImage=''; el.ava.style.backgroundSize='';
       el.signin.style.display='inline'; el.signout.style.display='none'; if(el.adminLink) el.adminLink.style.display='none'; return;
     }
     el.signin.style.display='none'; el.signout.style.display='inline';
     const u = await ensureUser(user);
 
-    // Admin ko'rinishi
     setAdminVisibility(u, user);
 
-    // Prompt for name if weak/missing
     const weak = !u.name || !/\s/.test(u.name) || u.name.toLowerCase() === 'foydalanuvchi';
     if(weak){
       let first='', last='';
-      if(user.displayName){
-        const parts = user.displayName.trim().split(/\s+/);
-        first = parts[0]||''; last = parts.slice(1).join(' ');
-      }
+      if(user.displayName){ const parts = user.displayName.trim().split(/\s+/); first = parts[0]||''; last = parts.slice(1).join(' '); }
       openNameModal({first,last});
     }
 
@@ -264,7 +260,7 @@
     if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(u.name||user.displayName); }
   });
 
-  // Leaderboard — 10 per page, DESC
+  // Leaderboard — Top 50
   const BOARD_PAGE_SIZE = 10; let boardPage=0; let boardUsers=[];
   function drawBoard(){
     const root=document.getElementById('boardList'); const pager=document.getElementById('boardPager');
@@ -302,7 +298,7 @@
     const pager = document.getElementById('boardPager'); if(pager) pager.style.display='none';
   });
 
-  // Chips/carousel/sections
+  // Chips / Sections / Carousel
   const chipsEl=document.getElementById('chips'); let active=new Set();
   function dynamicChipsFrom(data){
     const set=new Set(['BSB','CHSB','1-chorak','2-chorak','3-chorak','4-chorak']);
@@ -393,12 +389,31 @@
     });
   }
 
-  async function fetchContent(){
+  // -------- Firestore content (matching admin.html data model) --------
+  async function fetchContentFromFirestore(){
+    const out = { banners: [], sections: [] };
     try{
-      const snap = await getDoc(doc(db,'content','index'));
-      if(snap.exists()) return snap.data();
-    }catch(err){}
-    const res = await fetch('./index.json',{cache:'no-store'}); return await res.json();
+      const bq = query(collection(db,'banners'), where('active','==',true), orderBy('order','asc'));
+      (await getDocs(bq)).forEach(d=> out.banners.push({ id:d.id, ...d.data() }));
+      const sq = query(collection(db,'sections'), where('active','==',true), orderBy('order','asc'));
+      const sdocs = await getDocs(sq);
+      for (const sd of sdocs.docs){
+        const s = { id: sd.id, ...sd.data(), items: [] };
+        const iq = query(collection(db,'sections', sd.id, 'items'), where('active','==',true), orderBy('order','asc'));
+        const idocs = await getDocs(iq);
+        idocs.forEach(it => s.items.push({ id: it.id, ...it.data() }));
+        s.items.sort((a,b)=>(b.best?1:0)-(a.best?1:0));
+        out.sections.push(s);
+      }
+    }catch(e){ console.warn('Firestore o‘qishda muammo:', e?.message||e); }
+    return out;
+  }
+
+  async function fetchContent(){
+    // Firestore first; fallback JSON (ixtiyoriy)
+    const data = await fetchContentFromFirestore();
+    if((data.banners?.length||0)+(data.sections?.length||0) > 0) return data;
+    try{ const res = await fetch('./index.json',{cache:'no-store'}); return await res.json(); } catch(e){ return { banners:[], sections:[] } }
   }
 
   async function init(){
