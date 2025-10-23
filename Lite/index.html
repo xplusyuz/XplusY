@@ -9,7 +9,6 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
   <style>
-    /* (Styling qismi asl fayldan olindi — o'zgartirish kiritilmadi) */
     :root{
       --brand:#2E8B57;--brand2:#1F6B45;
       --bg:#f6faf8;--text:#0f172a;--muted:#6b7c75;--card:#ffffff;
@@ -42,6 +41,7 @@
     .track{display:flex;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
     .slide{min-width:100%;aspect-ratio:16/9;position:relative}
     .slide img{width:100%;height:100%;object-fit:cover;display:block}
+    .slide .html-content{width:100%;height:100%;padding:20px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-radius:var(--radius);overflow:hidden;}
     .dots{position:absolute;inset:auto 0 8px;display:flex;justify-content:center;gap:6px}
     .dot{width:8px;height:8px;border-radius:10px;background:#1113}
     .dot.active{width:18px;background:#111}
@@ -67,6 +67,7 @@
     .actions{display:flex;gap:8px}
     .btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:12px 14px;font-weight:800;font-size:14px;cursor:pointer}
     .btn.ghost{background:#f0f7f3;color:#0b3d2a;border:1px solid var(--frame)}
+    .btn:disabled{opacity:0.6;cursor:not-allowed}
     .pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
     .pager button{background:#e9f5ef;border:1px solid #cfe9dc;color:#0b3d2a;border-radius:10px;padding:8px 10px;font-weight:700}
     .dark .iconbtn{ background:#ffffff22; color:#fff; border:1px solid #ffffff33 }
@@ -97,7 +98,7 @@
 
     /* Profile modal styles */
     .modal-mask{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);z-index:9999}
-    .modal{width:min(880px,94%);background:#fff;border-radius:14px;border:1px solid var(--frame);box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px;max-height:88vh;overflow:auto}
+    .modal{width:min(680px,94%);background:#fff;border-radius:14px;border:1px solid var(--frame);box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px}
     .modal h3{margin:0 0 8px;color:#1F6B45}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid1{display:grid;grid-template-columns:1fr;gap:10px}
@@ -111,6 +112,14 @@
     .req{color:#c62828}
     .dark .modal{background:#0f1714;border-color:var(--frame)}
     .dark .ctl input,.dark .ctl textarea{background:#0f1714;color:var(--text);border-color:var(--frame)}
+
+    /* Content modal styles */
+    .content-modal .modal{width:min(90%, 800px); max-height:85vh; overflow-y:auto}
+    .content-modal .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding-bottom:10px;border-bottom:1px dashed var(--frame)}
+    .content-modal .modal-title{margin:0;font-size:20px;font-weight:800;color:var(--brand2)}
+    .dark .content-modal .modal-title{color:#d6f2e6}
+    .content-modal .modal-body{padding:10px 0}
+    .timer{display:inline-block;background:var(--chip);border:1px solid var(--chip-b);padding:5px 10px;border-radius:10px;font-size:12px;font-weight:700;margin-left:10px}
   </style>
 </head>
 <body>
@@ -120,7 +129,7 @@
     <div><div class="title">LeaderMath</div><div class="sub">BSB / CHSB dars resurslari</div></div>
     <div class="spacer"></div>
     <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
-    <button id="installBtn" class="iconbtn" title="Ilova sifatida o‘rnatish">⬇️</button>
+    <button id="installBtn" class="iconbtn" title="Ilova sifatida o'rnatish">⬇️</button>
   </header>
 
   <!-- User bar -->
@@ -145,7 +154,7 @@
 
   <!-- Leaderboard -->
   <section class="board" id="board">
-    <h3>Top 50 — Ball bo‘yicha</h3>
+    <h3>Top 50 — Ball bo'ycha</h3>
     <div id="boardList"></div>
     <div id="boardPager" class="pager" style="display:none">
       <button id="boardPrev">Oldingi</button>
@@ -157,7 +166,7 @@
   <!-- Chips -->
   <div class="chips" id="chips"></div>
 
-  <!-- Carousel (banners as HTML snippets) -->
+  <!-- Carousel -->
   <section class="carousel" id="carousel" style="margin-top:6px">
     <button class="cbtn left" aria-label="Oldingi" id="prev">‹</button>
     <div class="track" id="track"></div>
@@ -174,7 +183,7 @@
   <!-- Profile (mandatory) modal -->
   <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
     <div class="modal">
-      <h3>Profil ma’lumotlari <span class="sub">— majburiy <span class="req">*</span></span></h3>
+      <h3>Profil ma'lumotlari <span class="sub">— majburiy <span class="req">*</span></span></h3>
       <div class="grid2">
         <div class="ctl"><label>Ism <span class="req">*</span></label><input id="pFirst" placeholder="Ism"></div>
         <div class="ctl"><label>Familiya <span class="req">*</span></label><input id="pLast" placeholder="Familiya"></div>
@@ -188,7 +197,7 @@
         <div class="ctl"><label>Email <span class="req">*</span></label><input id="pEmail" placeholder="email@example.com"></div>
       </div>
       <div class="grid1">
-        <div class="ctl"><label>Uy manzili <span class="req">*</span></label><textarea id="pAddress" rows="2" placeholder="Shahar/tuman, ko‘cha, uy ..."></textarea></div>
+        <div class="ctl"><label>Uy manzili <span class="req">*</span></label><textarea id="pAddress" rows="2" placeholder="Shahar/tuman, ko'cha, uy ..."></textarea></div>
       </div>
       <div class="row">
         <div class="danger" id="pError"></div>
@@ -199,14 +208,20 @@
     </div>
   </div>
 
-  <!-- Modal for showing item html (modalHtml type) -->
-  <div id="itemHtmlModal" class="modal-mask" aria-modal="true" role="dialog" style="display:none">
-    <div class="modal" id="itemHtmlContent">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <h3 id="itemHtmlTitle">Batafsil</h3>
-        <button id="closeItemHtml" class="iconbtn">✕</button>
+  <!-- Content modal -->
+  <div id="contentModal" class="modal-mask content-modal" aria-modal="true" role="dialog" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="contentModalTitle">Test</h3>
+        <span id="contentTimer" class="timer" style="display:none">00:00:00</span>
+        <button id="closeContentModal" class="iconbtn danger">✕</button>
       </div>
-      <div id="itemHtmlBody" style="min-height:200px"></div>
+      <div class="modal-body" id="contentModalBody"></div>
+      <div class="row" id="contentModalActions" style="display:none">
+        <div class="btns">
+          <button id="startTestBtn" class="btn">Testni boshlash</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -225,9 +240,9 @@
   let deferredPrompt; const installBtn=document.getElementById('installBtn');
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.style.display='inline-block';});
   installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.style.display='none';};
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js'); }
 
-  // ===== Firebase (Leaderboard / Auth kept as-is) =====
+  // ===== Firebase =====
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, collection, query, orderBy, limit, getDocs, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -246,7 +261,7 @@
   const db = getFirestore(app);
   await setPersistence(auth, browserLocalPersistence);
 
-  // ===== User bar & profile (kechagi koddan olindi) =====
+  // ===== User bar & profile =====
   const el = {
     uname: document.getElementById('uname'), uid: document.getElementById('uid'), points: document.getElementById('points'),
     ava: document.getElementById('ava'), signin: document.getElementById('signin'), signout: document.getElementById('signout'),
@@ -299,6 +314,7 @@
           role:'user',
           numericId:Math.floor(1000+Math.random()*9000),
           points:0,
+          // yangi maydonlar
           school:null, class:null, phone:null, address:null,
           createdAt:Date.now(), updatedAt: serverTimestamp()
         });
@@ -323,12 +339,14 @@
     const email = PM.email.value.trim();
     const address=PM.address.value.trim();
 
+    // minimal tekshiruv
     if(!first || !last || !school || !klass || !phone || !email || !address){
       PM.err.textContent = 'Barcha maydonlar majburiy.';
       return;
     }
-    if(!/^\+?\d[\d\s\-()]{7,}$/.test(phone)){ PM.err.textContent='Telefon raqamini to‘g‘ri kiriting.'; return; }
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ PM.err.textContent='Email noto‘g‘ri.'; return; }
+    // telefon va email juda sodda tekshiruv
+    if(!/^\+?\d[\d\s\-()]{7,}$/.test(phone)){ PM.err.textContent='Telefon raqamini to'g'ri kiriting.'; return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ PM.err.textContent='Email noto'g'ri.'; return; }
 
     try{
       const ref = doc(db,'users',user.uid);
@@ -338,6 +356,7 @@
         updatedAt: serverTimestamp()
       }, { merge:true });
 
+      // UI yangilash
       el.uname.textContent = `${first} ${last}`.trim();
       el.uschool.textContent = `Maktab: ${school}`;
       el.uclass.textContent = `Sinf: ${klass}`;
@@ -353,6 +372,7 @@
   el.signout.onclick = async(e)=>{ e.preventDefault(); await signOut(auth) };
   el.editProfile.onclick = (e)=>{ e.preventDefault();
     const u = auth.currentUser; if(!u) return;
+    // mavjud profile ni prefill
     openProfileModal({
       first: (el.uname.textContent||'').split(' ')[0]||'',
       last:  (el.uname.textContent||'').split(' ').slice(1).join(' '),
@@ -385,6 +405,7 @@
     if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(u.name||user.displayName); }
     el.editProfile.style.display='inline';
 
+    // majburiy to'ldirish
     if(!profileIsComplete(u)){
       openProfileModal({
         first, last,
@@ -441,30 +462,7 @@
     const pager = document.getElementById('boardPager'); if(pager) pager.style.display='none';
   });
 
-  // ===== New: fetch content from index.json (admin tomonidan yaratilgan) =====
-  async function fetchContentFromIndexJSON(){
-    try{
-      const res = await fetch('./index.json', {cache:'no-store'});
-      if(!res.ok) throw new Error('index.json topilmadi: ' + res.status);
-      const data = await res.json();
-      // Expected structure:
-      // { banners: [{ html: "<a>...</a>", order: 1, active: true }], sections: [{ title, order, active, items:[{ type, name, image, link, more, html, tags, best, order, active, startTime, endTime }] }] }
-      // normalize defaults
-      data.banners = (data.banners || []).filter(b=> b.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
-      data.sections = (data.sections || []).filter(s=> s.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
-      (data.sections||[]).forEach(sec=>{
-        sec.items = (sec.items||[]).filter(i=> i.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
-      });
-      return data;
-    }catch(e){
-      console.warn('index.json o‘qishda muammo:', e?.message||e);
-      return { banners: [], sections: [] };
-    }
-  }
-
-  async function fetchContent(){ return await fetchContentFromIndexJSON(); }
-
-  // ===== Chips / Carousel / Sections (yangilangan: banners HTML va modalHtml tiplari qo'llab-quvvatlanadi) =====
+  // ===== Chips / Carousel / Sections =====
   const chipsEl=document.getElementById('chips'); let active=new Set();
   function dynamicChipsFrom(data){
     const set=new Set(['BSB','CHSB','1-chorak','2-chorak','3-chorak','4-chorak']);
@@ -480,32 +478,131 @@
       renderSections(window.__data__, true);
     });
   }
-
+  
   function initCarousel(banners){
     const track=document.getElementById('track'), dots=document.getElementById('dots'), prev=document.getElementById('prev'), next=document.getElementById('next');
     if(!banners?.length){ document.getElementById('carousel').style.display='none'; return; }
-    // each banner contains html string — put into slide container
-    track.innerHTML = banners.map(b=>`<div class="slide">${b.html || ''}</div>`).join('');
+    
+    track.innerHTML=banners.map(b=>{
+      if(b.type === 'html') {
+        return `<div class="slide"><div class="html-content" style="background:${b.bgColor || 'linear-gradient(135deg, var(--brand), var(--brand2))'}; color:${b.textColor || 'white'}">${b.content}</div></div>`;
+      } else {
+        return `<a class="slide" href="${b.link||'#'}" target="_blank" rel="noopener"><img src="${b.image}" alt="${b.title||'Banner'}"/></a>`;
+      }
+    }).join('');
+    
     dots.innerHTML=banners.map((_,i)=>`<div class="dot${i===0?' active':''}"></div>`).join('');
-    let i=0,n=banners.length,auto;
-    const set=idx=>{ i=(idx+n)%n; track.style.transform=`translateX(-${i*100}%)`; [...dots.children].forEach((d,k)=>d.classList.toggle('active',k===i)); };
+    let i=0,n=banners.length,x=0,sx=0,drag=false,auto;
+    const set=idx=>{i=(idx+n)%n; track.style.transform=`translateX(-${i*100}%)`; [...dots.children].forEach((d,k)=>d.classList.toggle('active',k===i));};
     const play=()=>{clearInterval(auto);auto=setInterval(()=>set(i+1),3500)}; const stop=()=>clearInterval(auto);
     next.onclick=()=>{set(i+1);play()}; prev.onclick=()=>{set(i-1);play()};
-    // basic touch support
-    let drag=false, sx=0, x=0;
-    const onDown=(e)=>{ drag=true; sx=e.touches?e.touches[0].clientX:e.clientX; stop(); };
-    const onMove=(e)=>{ if(!drag) return; x=(e.touches?e.touches[0].clientX:e.clientX)-sx; track.style.transform=`translateX(calc(${-i*100}% + ${x}px))` };
-    const onUp=()=>{ if(!drag) return; drag=false; if(Math.abs(x)>50){ set(i + (x<0?1:-1)); } else set(i); x=0; play(); };
+    const onDown=e=>{drag=true;sx=e.touches?e.touches[0].clientX:e.clientX;stop()};
+    const onMove=e=>{if(!drag)return; x=(e.touches?e.touches[0].clientX:e.clientX)-sx;track.style.transform=`translateX(calc(${-i*100}% + ${x}px))`};
+    const onUp=()=>{if(!drag)return;drag=false; if(Math.abs(x)>50){set(i+(x<0?1:-1))}else set(i); x=0; play();};
     track.addEventListener('touchstart',onDown,{passive:true}); track.addEventListener('touchmove',onMove,{passive:true}); track.addEventListener('touchend',onUp);
     track.addEventListener('mousedown',onDown); window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
     set(0); play();
   }
-
+  
   const PAGESIZE = 8; const pageState = new Map();
-
-  // helper for time parsing (ISO strings or timestamps)
-  function parseTime(v){ if(!v) return null; const d = (typeof v === 'number') ? new Date(v) : new Date(v); return isNaN(d.getTime())?null:d; }
-
+  
+  // Content Modal Functions
+  const contentModal = document.getElementById('contentModal');
+  const contentModalTitle = document.getElementById('contentModalTitle');
+  const contentModalBody = document.getElementById('contentModalBody');
+  const contentModalActions = document.getElementById('contentModalActions');
+  const closeContentModal = document.getElementById('closeContentModal');
+  const startTestBtn = document.getElementById('startTestBtn');
+  const contentTimer = document.getElementById('contentTimer');
+  
+  let testTimer = null;
+  let testStartTime = null;
+  let testDuration = 0;
+  
+  closeContentModal.onclick = () => {
+    contentModal.style.display = 'none';
+    if (testTimer) {
+      clearInterval(testTimer);
+      testTimer = null;
+    }
+  };
+  
+  function formatTime(seconds) {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  
+  function startTestTimer(duration) {
+    testStartTime = Date.now();
+    testDuration = duration;
+    
+    contentTimer.style.display = 'inline-block';
+    contentTimer.textContent = formatTime(duration);
+    
+    testTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - testStartTime) / 1000);
+      const remaining = Math.max(0, duration - elapsed);
+      contentTimer.textContent = formatTime(remaining);
+      
+      if (remaining <= 0) {
+        clearInterval(testTimer);
+        contentTimer.textContent = "Vaqt tugadi!";
+        contentTimer.style.background = '#c62828';
+      }
+    }, 1000);
+  }
+  
+  function openContentModal(item) {
+    contentModalTitle.textContent = item.name;
+    contentModalBody.innerHTML = item.modalContent || item.description || 'Ma\'lumot mavjud emas.';
+    contentModalActions.style.display = 'none';
+    contentTimer.style.display = 'none';
+    contentTimer.style.background = '';
+    
+    // Agar test bo'lsa
+    if (item.type === 'timed' && item.duration) {
+      contentModalActions.style.display = 'flex';
+      startTestBtn.onclick = () => {
+        startTestTimer(item.duration);
+        contentModalActions.style.display = 'none';
+        // Testni boshlash logikasi
+      };
+    }
+    
+    contentModal.style.display = 'flex';
+  }
+  
+  function createActionButton(item) {
+    const now = new Date();
+    let startTime = null;
+    let endTime = null;
+    
+    if (item.startTime) startTime = new Date(item.startTime);
+    if (item.endTime) endTime = new Date(item.endTime);
+    
+    // Vaqt chegaralangan test
+    if (item.type === 'timed' && startTime && endTime) {
+      if (now < startTime) {
+        const startStr = startTime.toLocaleDateString('uz-UZ');
+        return `<button class="btn" disabled>Boshlanishi: ${startStr}</button>`;
+      } else if (now > endTime) {
+        return `<button class="btn" disabled>Yakunlangan</button>`;
+      } else {
+        return `<button class="btn modal-trigger" data-id="${item.id}">Boshlash</button>`;
+      }
+    }
+    
+    // Modal kontent
+    if (item.type === 'modal' && item.modalContent) {
+      return `<button class="btn modal-trigger" data-id="${item.id}">Batafsil</button>`;
+    }
+    
+    // Oddiy havola
+    return `<a class="btn" href="${item.link || '#'}" target="_blank" rel="noopener">Boshlash</a>`;
+  }
+  
   function renderSections(root, filtered=false){
     const wrap=document.getElementById('sections'); wrap.innerHTML='';
     (root.sections||[]).forEach((sec,si)=>{
@@ -540,28 +637,9 @@
       const grid = section.querySelector('#grid-'+si);
       visible.forEach(it=>{
         const el=document.createElement('article'); el.className='card';
-        // build actions depending on type
-        let startBtnHtml = '';
-        if(it.type === 'timed'){
-          const now = new Date();
-          const st = parseTime(it.startTime);
-          const en = parseTime(it.endTime);
-          let disabled = false;
-          let label = 'Boshlash';
-          if(st && now < st){ label = 'Boshlash (tezroq)'; disabled = true; } 
-          if(en && now > en){ label = 'Tugagan'; disabled = true; }
-          startBtnHtml = `<button class="btn" ${disabled? 'disabled' : ''} data-link="${it.link||'#'}" data-type="timed">${label}</button>`;
-        } else {
-          startBtnHtml = `<a class="btn" href="${it.link || '#'}" target="_blank" rel="noopener">Boshlash</a>`;
-        }
-
-        let moreHtml = '';
-        if(it.type === 'modalHtml'){
-          moreHtml = `<button class="btn ghost" data-html="${encodeURIComponent(it.html || '')}" data-title="${(it.name||'Batafsil')}">Batafsil</button>`;
-        } else if(it.more){
-          moreHtml = `<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Batafsil</a>`;
-        }
-
+        
+        const actionButton = createActionButton(it);
+        
         el.innerHTML=`
           <div class="thumb ${!it.image ? 'noimg' : ''}">
             ${it.image ? `<img src="${it.image}" alt="" loading="lazy" decoding="async"
@@ -574,11 +652,22 @@
             ${it.description?`<p class="desc">${it.description}</p>`:''}
             <div class="tags">${(it.tags || []).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
             <div class="actions">
-              ${startBtnHtml}
-              ${moreHtml}
+              ${actionButton}
+              ${it.more?`<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Qo'shimcha</a>`:''}
             </div>
           </div>`;
         grid.appendChild(el);
+      });
+
+      // Modal trigger event listeners
+      grid.querySelectorAll('.modal-trigger').forEach(btn => {
+        btn.onclick = () => {
+          const itemId = btn.dataset.id;
+          const item = items.find(i => i.id == itemId);
+          if (item) {
+            openContentModal(item);
+          }
+        };
       });
 
       const pager = section.querySelector('#pager-'+si);
@@ -589,45 +678,30 @@
         pager.querySelector(`[data-next="${si}"]`).onclick = ()=>{ pageState.set(si, Math.min(totalPages-1, curPage+1)); renderSections(root, filtered); };
       } else { pager.style.display='none'; }
     });
-
-    // Attach delegated listeners: timed buttons and modalHtml buttons
-    document.querySelectorAll('[data-type="timed"]').forEach(btn=>{
-      btn.onclick = (e)=>{
-        const link = btn.dataset.link || '#';
-        // if disabled attribute present, do nothing (or could open countdown)
-        if(btn.disabled) {
-          alert('Bu vazifa hali boshlanmadi yoki tugagan.');
-          return;
-        }
-        // bosilganda yangi ochish
-        window.open(link, '_blank', 'noopener');
-      };
-    });
-    document.querySelectorAll('[data-html]').forEach(btn=>{
-      btn.onclick = (e)=>{
-        const html = decodeURIComponent(btn.getAttribute('data-html')||'');
-        const title = btn.getAttribute('data-title')||'Batafsil';
-        const modal = document.getElementById('itemHtmlModal');
-        document.getElementById('itemHtmlTitle').textContent = title;
-        document.getElementById('itemHtmlBody').innerHTML = html;
-        modal.style.display = 'flex';
-      };
-    });
   }
 
-  // modal close
-  document.getElementById('closeItemHtml').onclick = ()=>{ document.getElementById('itemHtmlModal').style.display='none'; };
+  // ===== JSON Content Management =====
+  async function fetchContentFromJSON(){
+    try {
+      const response = await fetch('./data/index.json');
+      if (!response.ok) throw new Error('JSON fayl topilmadi');
+      return await response.json();
+    } catch (error) {
+      console.warn('JSON yuklanmadi, standart ma\'lumotlar ishlatiladi:', error);
+        ]
+      };
+    }
+  }
 
-  // ===== Init: load content from index.json =====
   async function init(){
-    const data = await fetchContent();
+    const data = await fetchContentFromJSON();
     window.__data__ = data;
     buildChipsFromData(data);
     initCarousel(data.banners||[]);
     renderSections(data);
   }
+  
   init();
-
 </script>
 </body>
 </html>
