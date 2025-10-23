@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rasm-Only Test — Admin (Math keypad, preview, fixed)</title>
+  <title>Rasm-Only Test — Admin (Math keypad + Sections)</title>
 
-  <!-- MathJax (LaTeX render) -->
+  <!-- MathJax -->
   <script>
     window.MathJax = {
       tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes: true, packages:{'[+]':['noerrors']} },
@@ -46,37 +46,29 @@
     .hr{height:1px;background:#eef4f0;margin:8px 0}
     .side{display:grid;gap:10px}
     .preview{border:1px dashed #dfeae3;border-radius:12px;padding:12px;background:#fbfdfc}
+    .warn{color:#b45309}
 
     /* Drawer keypad (bottom) */
-    .drawer{
-      position:fixed; left:0; right:0; bottom:0;
-      transform:translateY(100%); transition:transform .25s ease;
-      background:#fffffff2; backdrop-filter:saturate(1.2) blur(6px);
-      border-top:1px solid #dfeae3; box-shadow:0 -10px 24px rgba(31,107,69,.12);
-      padding:12px 14px; z-index:9999;
-    }
-    .drawer.open{ transform:translateY(0%) }
+    .drawer{position:fixed;left:0;right:0;bottom:0;transform:translateY(100%);transition:transform .25s ease;background:#fffffff2;backdrop-filter:saturate(1.2) blur(6px);border-top:1px solid #dfeae3;box-shadow:0 -10px 24px rgba(31,107,69,.12);padding:12px 14px;z-index:9999}
+    .drawer.open{transform:translateY(0%)}
     .drawer .rowbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
     .kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
-    .kbtn{
-      appearance:none; cursor:pointer;
-      padding:8px 10px; border:1px solid #dfeae3; background:#fff; border-radius:10px;
-      display:flex; align-items:center; justify-content:center; min-height:44px;
-      transition:box-shadow .15s, border-color .15s, background .15s;
-    }
-    .kbtn:hover{border-color:#b9dfc8; box-shadow:0 0 0 4px var(--ring); background:#fff}
-    .pin{display:flex; align-items:center; gap:8px}
+    .kbtn{appearance:none;cursor:pointer;padding:8px 10px;border:1px solid #dfeae3;background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;min-height:44px;transition:box-shadow .15s,border-color .15s,background .15s}
+    .kbtn:hover{border-color:#b9dfc8;box-shadow:0 0 0 4px var(--ring);background:#fff}
+    .pin{display:flex;align-items:center;gap:8px}
     .pin input{transform:translateY(1px)}
     .drawer .title{font-weight:700}
     .toolbar-note{font-size:12px;color:#64748b}
 
-    /* Collapse per-question */
-    .qbox.collapsed .row, .qbox.collapsed .side, .qbox.collapsed .preview, .qbox.collapsed .miniLocal { display:none }
+    .qbox.collapsed .row, .qbox.collapsed .side, .qbox.collapsed .preview, .qbox.collapsed .miniLocal {display:none}
+    .sec-row{display:grid;gap:10px;grid-template-columns:260px 1fr 1fr 1fr}
+    .sec-item{display:contents}
+    .sec-list{display:grid;gap:8px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1><span class="pi">π</span> Rasm-Only Test — Admin (Math klaviatura drawer)</h1>
+    <h1><span class="pi">π</span> Rasm-Only Test — Admin (Sections bilan)</h1>
 
     <!-- Test meta -->
     <div class="card grid">
@@ -85,13 +77,23 @@
         <div><label>Ta’rif</label><input id="desc" type="text" placeholder="Savol matnisiz, rasm + variantlar"></div>
         <div><label>Test turi</label><input id="type" type="text" value="aralash"></div>
         <div><label>Vaqt (daqiqada)</label><input id="dur" type="number" min="0" value="30"></div>
-        <div><label>Nechta savol (rasmlar soni)</label><input id="qcount" type="number" min="1" value="5"></div>
+        <div><label>Nechta savol (rasmlar soni)</label><input id="qcount" type="number" min="1" value="20"></div>
+      </div>
+
+      <!-- Sections editor -->
+      <div class="row">
+        <div>
+          <label>Nechta bo‘lim?</label>
+          <input id="secCount" type="number" min="0" value="2">
+          <div class="mini">0 bo‘lsa — <b>test.html</b> default bo‘limlar ishlaydi (1–12 Algebra, 13–N Geometriya).</div>
+        </div>
+        <div class="sec-list" id="secList"></div>
       </div>
 
       <div class="flex" style="align-items:center;justify-content:space-between">
         <div class="flex">
           <button class="btn" id="buildBtn">Savol shakllarini yarat</button>
-          <span class="muted">Rasmlar <b>1.jpg, 2.jpg, ...</b>. JSON faqat variant va javoblarni saqlaydi.</span>
+          <span class="muted">Rasmlar <b>1.jpg, 2.jpg, ...</b>.</span>
         </div>
         <div class="flex">
           <button class="btn flat" id="expandAll">Barchasini yoyish</button>
@@ -115,7 +117,7 @@
 
     <div class="card">
       <div class="help">
-        Variantlarni har satrga yozing (LaTeX ruxsat: <code>$...$</code>). Focus variant maydonida bo‘lsa klaviatura avtomatik ochiladi.
+        Variantlarni har satrga yozing. LaTeX: <code>$...$</code> bo‘lsa — to‘g‘ridan-to‘g‘ri; aks holda <code>x^{2}, \sqrt{...}, \frac{a}{b}</code> kabi yozuvlar avtomatik <em>inline</em> ko‘rinishda render bo‘ladi.
       </div>
     </div>
   </div>
@@ -135,12 +137,8 @@
     const $$ = s => Array.from(document.querySelectorAll(s));
     const typeset = async (el)=>{ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } };
 
-    // Escape helpers + auto-wrap to MathJax inline if needed
     function escapeHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function looksLikeTeX(s){
-      return /[\\^_{}]|\\(frac|sqrt|sum|int|log|ln|sin|cos|tan|vec|pi|le|ge|ne|pm|times|cdot|left|right)/.test(s);
-    }
-    // If line already has $...$ keep it; else if looks like TeX wrap with \(...\); else plain
+    function looksLikeTeX(s){ return /[\\^_{}]|\\(frac|sqrt|sum|int|log|ln|sin|cos|tan|vec|pi|le|ge|ne|pm|times|cdot|left|right)/.test(s); }
     function renderLineForMath(s){
       const hasDollar = /\$.*\$/.test(s);
       const safe = escapeHtml(s);
@@ -149,7 +147,7 @@
       return safe;
     }
 
-    // Insert template at caret; '▮' marker becomes caret position
+    // Caret insert with '▮' marker support
     function insertAtCursor(textarea, template){
       textarea.focus();
       const start = textarea.selectionStart ?? textarea.value.length;
@@ -166,15 +164,13 @@
       textarea.dispatchEvent(new Event('input', { bubbles:true }));
     }
 
-    // Drawer open/close
     function setDrawer(open){
       const d = $('#keypadDrawer');
       d.classList.toggle('open', open);
       d.setAttribute('aria-hidden', open ? 'false' : 'true');
     }
 
-    /* ========= Key definitions =========
-       Each key: show (TeX to render), insert (LaTeX template with '▮' marker) */
+    /* ========= Keypad ========= */
     const KEYS = [
       { show:'x^n',             insert:'^{▮}' },
       { show:'x_n',             insert:'_{▮}' },
@@ -199,34 +195,71 @@
       { show:'\\vec{v}',        insert:'\\vec{▮}' },
       { show:'\\left(\\right)', insert:'\\left(▮\\right)' },
       { show:'\\left[\\right]', insert:'\\left[▮\\right]' },
-      { show:'∞', insert:'\\infty' },        // Cheksizlik belgisi
-      { show:'∈', insert:'\\in' },           // Tegishli belgisi
-      { show:'∉', insert:'\\notin' },
       { show:'\\left\\{\\right\\}', insert:'\\left\\{▮\\right\\}' }
     ];
 
-    /* ========= Keypad ========= */
     function buildKeypad(){
       const grid = $('#keypadGrid'); grid.innerHTML = '';
       KEYS.forEach(k=>{
         const btn = document.createElement('button');
         btn.type='button'; btn.className='kbtn';
         btn.innerHTML = `$${k.show}$`;
-        // prevent stealing focus from textarea:
-        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('mousedown', e=>e.preventDefault()); // keep textarea focus
         btn.addEventListener('click', ()=>{
           const targetTA = ACTIVE_TEXTAREA || LAST_ACTIVE_TEXTAREA;
-          if(targetTA){
-            insertAtCursor(targetTA, k.insert);
-            targetTA.focus();
-          }
+          if(targetTA){ insertAtCursor(targetTA, k.insert); targetTA.focus(); }
         });
         grid.appendChild(btn);
       });
       typeset(grid);
     }
 
-    /* ========= Admin UI ========= */
+    /* ========= Sections editor ========= */
+    function rebuildSectionsUI(){
+      const secN = Math.max(0, Number($('#secCount').value||0));
+      const list = $('#secList'); list.innerHTML = '';
+      if(secN===0){
+        list.innerHTML = `<div class="mini warn">Bo‘limlar JSON’ga yozilmaydi (test.html default bo‘limlardan foydalanadi).</div>`;
+        return;
+      }
+      // header
+      const hdr = document.createElement('div');
+      hdr.className = 'sec-row';
+      hdr.innerHTML = `
+        <div><label>Bo‘lim nomi</label></div>
+        <div><label>Boshlanish (1-indeks)</label></div>
+        <div><label>Tugash</label></div>
+        <div><label>Izoh</label></div>`;
+      list.appendChild(hdr);
+
+      for(let i=0;i<secN;i++){
+        const row = document.createElement('div'); row.className='sec-row sec-item';
+        row.innerHTML = `
+          <input type="text" class="sec-name" placeholder="Masalan: Algebra">
+          <input type="number" min="1" class="sec-start" placeholder="1">
+          <input type="number" min="1" class="sec-end" placeholder="12">
+          <div class="mini">Qamrab olgan savollar diapazoni</div>`;
+        list.appendChild(row);
+      }
+    }
+
+    function collectSections(totalQ){
+      const n = Math.max(0, Number($('#secCount').value||0));
+      if(n===0) return [];
+      const names = $$('#secList .sec-name');
+      const starts = $$('#secList .sec-start');
+      const ends = $$('#secList .sec-end');
+      const out = [];
+      for(let i=0;i<n;i++){
+        const name = (names[i]?.value || `Bo‘lim ${i+1}`).trim();
+        const start = Math.max(1, Number(starts[i]?.value||1));
+        const end = Math.min(totalQ, Number(ends[i]?.value||totalQ));
+        if(start<=end) out.push({ name, start, end });
+      }
+      return out;
+    }
+
+    /* ========= Question template / logic ========= */
     function qTemplate(i){
       return `
       <div class="card qbox" data-index="${i}">
@@ -303,7 +336,7 @@
       const pv = qbox.querySelector('.pvOptions');
       const lines = (ta.value || '').split('\n').map(s=>s.trim()).filter(Boolean);
 
-      // answers list (MathJax labels)
+      // answers list — MathJax labels
       ansBox.innerHTML = '';
       lines.forEach((txt, idx)=>{
         const id = `q${qbox.dataset.index}_opt${idx}`;
@@ -323,7 +356,7 @@
         ansBox.appendChild(row);
       });
 
-      // preview list (MathJax too)
+      // preview list — MathJax
       pv.innerHTML = '';
       lines.forEach((txt, idx)=>{
         const line = document.createElement('div');
@@ -335,30 +368,23 @@
         inp.addEventListener('change', ()=>updatePreviewFlags(qbox));
       });
 
-      // render both areas
       typeset(ansBox);
       typeset(pv);
-
       updatePreviewFlags(qbox);
     }
 
     function attachQEvents(qbox){
       const ta = qbox.querySelector('.options');
-
-      // Focus: open drawer & set active textarea
       ta.addEventListener('focus', ()=>{
         ACTIVE_TEXTAREA = ta;
         LAST_ACTIVE_TEXTAREA = ta;
         setDrawer(true);
       });
       ta.addEventListener('blur', ()=>{
-        // do not nuke active textarea immediately; allow keypad click
         setTimeout(()=>{
           const ae = document.activeElement;
           const isOverDrawer = $('#keypadDrawer').contains(ae);
-          if(!$('#pinDrawer').checked && !isOverDrawer){
-            setDrawer(false);
-          }
+          if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
         }, 0);
       });
 
@@ -391,6 +417,7 @@
       const description = $('#desc').value || 'Rasm + variant';
       const type = $('#type').value || 'aralash';
       const durationMinutes = Number($('#dur').value||0);
+      const qcount = Math.max(1, Number($('#qcount').value||1));
 
       const questions = [];
       $$('#questionsArea .qbox').forEach(qbox=>{
@@ -404,7 +431,9 @@
         questions.push(q);
       });
 
-      return { title, description, type, durationMinutes, questions };
+      const sections = collectSections(qcount); // may be empty []
+
+      return { title, description, type, durationMinutes, sections, questions };
     }
 
     function download(filename, blob){
@@ -424,30 +453,24 @@
       });
     }
 
-    /* ========= Keypad & Global state ========= */
+    /* ========= Global keypad & init ========= */
     let ACTIVE_TEXTAREA = null;
-    let LAST_ACTIVE_TEXTAREA = null; // fallback
+    let LAST_ACTIVE_TEXTAREA = null;
 
     buildKeypad();
-
-    // Toggle drawer manually
     $('#toggleDrawer').addEventListener('click', ()=>{
       const open = !$('#keypadDrawer').classList.contains('open');
       setDrawer(open);
     });
+    $('#keypadGrid').addEventListener('mousedown', e=>e.preventDefault());
 
-    // Global focus tracker for any textarea
     document.addEventListener('focusin', (e)=>{
-      if(e.target && e.target.tagName === 'TEXTAREA'){
+      if(e.target && e.target.tagName==='TEXTAREA'){
         ACTIVE_TEXTAREA = e.target;
         LAST_ACTIVE_TEXTAREA = e.target;
       }
     });
 
-    // Keep focus when clicking keypad
-    $('#keypadGrid').addEventListener('mousedown', e => e.preventDefault());
-
-    /* ========= Init ========= */
     document.addEventListener('DOMContentLoaded', ()=>{
       $('#buildBtn').addEventListener('click', buildForms);
       $('#exportBtn').addEventListener('click', ()=>{
@@ -461,7 +484,9 @@
       });
       $('#expandAll').addEventListener('click', ()=>setAllCollapsed(false));
       $('#collapseAll').addEventListener('click', ()=>setAllCollapsed(true));
+      $('#secCount').addEventListener('input', rebuildSectionsUI);
 
+      rebuildSectionsUI();
       buildForms();
     });
   </script>
