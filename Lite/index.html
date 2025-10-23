@@ -123,7 +123,6 @@
   cursor: pointer;
 }
   </style>
-  <p>📱 PWA ilovamizni o‘rnatish uchun "Yuklash" tugmasini bosing — u sizni tashqi brauzerga yo‘naltiradi.</p>
 </head>
 <body>
   <!-- Appbar -->
@@ -132,7 +131,8 @@
     <div><div class="title">LeaderMath</div><div class="sub">BSB / CHSB dars resurslari</div></div>
     <div class="spacer"></div>
     <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
-    <button id="installBtn">📲 Saytni o‘rnatish</button>
+    <button id="openExternal" class="hide">🌐 Tashqi brauzerda ochish</button>
+      <button id="installBtn" class="hide">📲 PWA ni o‘rnatish</button>
   </header>
 
   <!-- User bar -->
@@ -619,13 +619,85 @@
   init();
 </script>
 <script>
-document.getElementById("installBtn").addEventListener("click", () => {
-  const url = "https://xplusy.netlify.app/lite"; // PWA manziling
-  window.open(url, "_blank"); // tashqi brauzerda ochadi
-});
-if (navigator.userAgent.includes("Telegram")) {
-  document.getElementById("installBtn").style.display = "block";
-}
+(function(){
+  const externalUrl = "https://xplusy.netlify.app/lite/?from=bot"; // PWA asosiy manzilingiz
+  const isTelegram = !!(window.Telegram && Telegram.WebApp) || /Telegram/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  let deferredPrompt = null;
+
+  const $ = sel => document.querySelector(sel);
+  const openExternalBtn = $("#openExternal");
+  const installBtn = $("#installBtn");
+  const hint = $("#hint");
+  const contextText = $("#contextText");
+
+  // 1) Telegram ichida bo'lsa: faqat "Tashqi brauzerda ochish" ko'rsatamiz
+  if (isTelegram) {
+    contextText.textContent = "Telegram ichidan keldingiz. Tashqi brauzerda ochib PWA ni o‘rnating.";
+    openExternalBtn.classList.remove("hide");
+    hint.classList.remove("hide");
+  }
+
+  // 2) Oddiy brauzerda bo'lsa: beforeinstallprompt bo'lsa "PWA o‘rnatish" tugmasini ko'rsatamiz
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Safari/iOS’da bu hodisa yo‘q — shuning uchun avtomatik aniqlash sifatida ishlatamiz
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isTelegram && !isStandalone) {
+      installBtn.classList.remove("hide");
+      hint.classList.add("hide");
+      contextText.textContent = "Brauzerdan keldingiz. 'PWA ni o‘rnatish' tugmasini bosing.";
+    }
+  });
+
+  // 3) Agar umuman beforeinstallprompt kelmasa — qo‘llab-quvvatlanmasligi mumkin
+  // Shunda faqat izoh ko‘rsatamiz (iOS/Safari’da qo‘lda 'Share → Add to Home Screen')
+  setTimeout(() => {
+    const unsupported = !deferredPrompt && !isTelegram && !isStandalone;
+    if (unsupported) {
+      hint.textContent = isMobile
+        ? "Sizning qurilmada avtomatik PWA banneri yo‘q. iOS’da 'Share → Add to Home Screen' orqali o‘rnating."
+        : "Bu brauzer 'Install' bannerini qo‘llamasligi mumkin. Chrome yoki Edge’da urinib ko‘ring.";
+      hint.classList.remove("hide");
+    }
+  }, 1500);
+
+  // 4) Tashqi brauzerga yo'naltirish va Telegram WebApp ni yopish
+  openExternalBtn.addEventListener('click', () => {
+    try { window.open(externalUrl, "_blank", "noopener,noreferrer"); } catch(e){}
+    // Telegram WebApp bo'lsa — oynani yopamiz
+    setTimeout(() => {
+      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.close) {
+        Telegram.WebApp.close();
+      } else {
+        // Ayrim webviewlarda window.close ishlashi mumkin
+        try { window.close(); } catch(e){}
+      }
+    }, 400);
+  });
+
+  // 5) Brauzer ichida real "Install" oqimi
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    // O'rnatish qabul qilinsa, ushbu tabni yopishga urinamiz
+    if (outcome === 'accepted') {
+      setTimeout(() => {
+        try { window.close(); } catch(e){}
+      }, 300);
+    }
+  });
+
+  // 6) O‘rnatish yakunlanganini brauzer bildirsa
+  window.addEventListener('appinstalled', () => {
+    // Agar shu tabni ochgan boshqa sahifa bo'lsa, yopish ishlashi mumkin
+    try { window.close(); } catch(e){}
+  });
+
+})();
 </script>
 </body>
 </html>
