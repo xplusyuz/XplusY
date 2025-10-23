@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MathCenter — Rasm-Only Test (Firebase + Bo‘limlar + Tahlil)</title>
+  <title>MathCenter — Rasm-Only Test (Firebase + Bo‘limlar + Tahlil + Random opts)</title>
 
   <!-- MathJax v3 -->
   <script>
@@ -68,11 +68,11 @@
     .navbtn{appearance:none;border:1px solid var(--outline);background:#fff;color:#0b3a25;border-radius:12px;padding:10px 0;cursor:pointer;font-weight:800;transition:.15s}
     .navbtn.current{background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;border-color:transparent}
     .navbtn.answered:not(.current){background:var(--ok-bg);border-color:var(--ok-bd)}
-    .navbtn.unanswered:not(.current){background:var(--red-bg);border-color:#f1c9c9;color:var(--red);box-shadow:0 0 0 3px var(--red-ring)}
+    .navbtn.unanswered:not(.current){background:var(--red-bg);border-color:#f1c9c9;color:#var(--red);box-shadow:0 0 0 3px var(--red-ring)}
 
     /* Result */
     .score{display:grid;gap:10px;padding:16px;border:1px dashed #cfe4d7;border-radius:14px;background:#f8fbf9}
-    .big{font-weight:800;font-size:22px;color:var(--green-dark)}
+    .big{font-weight:800;font-size:22px;color:#1F6B45}
     .kpi{display:flex;flex-wrap:wrap;gap:10px}
     .authbar{display:flex;gap:10px;align-items:center}
 
@@ -148,7 +148,7 @@
 
         <div class="divider"></div>
         <h3 style="margin:0 0 6px">Savollar tahlili</h3>
-        <div class="muted" style="margin-bottom:6px">Har bir savol bo‘yicha: bo‘lim, ball, tanlangan variant(lar), to‘g‘ri javob(lar), holat.</div>
+        <div class="muted" style="margin-bottom:6px">Bo‘lim, ball, tanlangan/to‘g‘ri variant(lar) va holat.</div>
         <div style="overflow:auto">
           <table class="analysis" id="analysisTable">
             <thead>
@@ -179,13 +179,11 @@
     <!-- Empty -->
     <section id="emptyCard" class="card hidden" style="text-align:center">
       <h3>Test topilmadi</h3>
-      <p class="muted">
-        Shu papkaga <code>test.json</code> qo‘ying yoki <code>localStorage['testData']</code>ga yozing.
-      </p>
+      <p class="muted">Shu papkaga <code>test.json</code> qo‘ying yoki <code>localStorage['testData']</code>ga yozing.</p>
     </section>
   </div>
 
-  <!-- Firebase (modular SDK) -->
+  <!-- Firebase -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -218,11 +216,8 @@
     const arraysEqualUnordered = (a,b)=>a.length===b.length && [...a].sort((x,y)=>x-y).every((v,i)=>v===[...b].sort((x,y)=>x-y)[i]);
     async function typeset(el){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } }
 
-    // MathJax ko‘rinishiga tayyorlash (admin versiyasidagi kabi)
     function escapeHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function looksLikeTeX(s){
-      return /[\\^_{}]|\\(frac|sqrt|sum|int|log|ln|sin|cos|tan|vec|pi|le|ge|ne|pm|times|cdot|left|right)/.test(s);
-    }
+    function looksLikeTeX(s){ return /[\\^_{}]|\\(frac|sqrt|sum|int|log|ln|sin|cos|tan|vec|pi|le|ge|ne|pm|times|cdot|left|right)/.test(s); }
     function renderLineForMath(s){
       const hasDollar = /\$.*\$/.test(s);
       const safe = escapeHtml(s);
@@ -231,9 +226,22 @@
       return safe;
     }
 
+    // Fisher–Yates shuffle
+    function shuffle(arr){
+      const a = arr.slice();
+      for(let i=a.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i],a[j]] = [a[j],a[i]];
+      }
+      return a;
+    }
+
     /* ===================== STATE ===================== */
     let testData = null, currentIndex = 0, answers = [], timerId = null, timeLeftSec = 0, submitted = false, startedAt = new Date();
     let fb = null, currentUser = null;
+
+    // NEW: per-question option order (array of arrays of ORIGINAL indices)
+    let optionOrders = [];
 
     /* ===================== RASMLAR ===================== */
     function resolveQuestionImageSrc(i) {
@@ -291,9 +299,7 @@
       $('#emptyCard').classList.remove('hidden');
     }
 
-    /* ===================== SECTIONS (bo‘limlar) ===================== */
-    // JSON’da bo‘lsa: sections: [{name:'Algebra', start:1, end:12}, ...]
-    // bo‘lmasa default: 1–12 Algebra, 13–N Geometriya
+    /* ===================== SECTIONS ===================== */
     function buildSections(){
       const n = testData.questions.length;
       if(Array.isArray(testData.sections) && testData.sections.length){
@@ -305,11 +311,10 @@
       }
       if(n<=12) return [{name:'Algebra', start:1, end:n}];
       return [
-        {name:'Algebra',   start:1, end:Math.min(12,n)},
+        {name:'Algebra',   start:1,  end:Math.min(12,n)},
         {name:'Geometriya',start:13, end:n}
       ];
     }
-
     function sectionOf(index1, sections){
       for(const s of sections){
         if(index1>=s.start && index1<=s.end) return s.name;
@@ -322,6 +327,7 @@
       if(!testData || !Array.isArray(testData.questions) || testData.questions.length===0){ showNoTest(); return; }
       const qn = testData.questions.length;
       answers = Array.from({length: qn}, ()=>[]);
+      optionOrders = Array.from({length: qn}, ()=>[]); // init
 
       $('#testTitle').textContent = testData.title || 'Rasm-Only Test';
       $('#testDesc').textContent = testData.description || 'Rasm + variant';
@@ -338,7 +344,7 @@
         timerId = setInterval(tick, 1000);
       } else { $('#metaTimer').classList.add('hidden'); }
 
-      // sections badge (optional quick view)
+      // section chips
       const sections = buildSections();
       const chips = sections.map(s=>`<span class="s-chip">${s.name}: ${s.start}–${s.end}</span>`).join(' ');
       const desc = document.createElement('div'); desc.className='muted'; desc.innerHTML = chips;
@@ -384,7 +390,7 @@
       $('#nextBtn').disabled = (currentIndex===testData.questions.length-1);
     }
 
-    /* ===================== RENDER Q ===================== */
+    /* ===================== RENDER (with RANDOM options) ===================== */
     async function renderCurrentQuestion(){
       const q = testData.questions[currentIndex];
       const wrap = $('#questionView'); wrap.innerHTML = '';
@@ -399,27 +405,34 @@
 
       const opts = document.createElement('div'); opts.className='opts';
       const multi = isMulti(q); const nameAttr = `q_${currentIndex}`;
-      const chosen = answers[currentIndex] || [];
+      const chosenOriginal = new Set(answers[currentIndex] || []); // store as ORIGINAL indices
 
-      (Array.isArray(q.options)?q.options:[]).forEach((opt,j)=>{
+      // Build order once per question (stable across navigation)
+      if(optionOrders[currentIndex].length === 0){
+        const origIdx = (q.options||[]).map((_,j)=>j);
+        optionOrders[currentIndex] = shuffle(origIdx);
+      }
+      const order = optionOrders[currentIndex]; // display order of ORIGINAL indices
+
+      order.forEach((origJ, dispJ)=>{
+        const text = (q.options && q.options[origJ]) ? q.options[origJ] : '';
         const row = document.createElement('div'); row.className='opt';
         const inp = document.createElement('input');
-        inp.type = multi ? 'checkbox' : 'radio'; inp.name=nameAttr; inp.value=String(j); inp.id=`${nameAttr}_${j}`;
-        if(multi) inp.checked = chosen.includes(j); else inp.checked = chosen.length ? (chosen[0]===j) : false;
+        inp.type = multi ? 'checkbox' : 'radio'; inp.name=nameAttr;
+        inp.value = String(origJ);         // store ORIGINAL index in value!
+        inp.id=`${nameAttr}_${dispJ}`;
+        inp.checked = multi ? chosenOriginal.has(origJ) : (chosenOriginal.has(origJ));
         inp.addEventListener('change', ()=>{
           if(multi){
-            const prev = new Set(answers[currentIndex]||[]);
-            if(inp.checked) prev.add(j); else prev.delete(j);
-            answers[currentIndex] = Array.from(prev).sort((a,b)=>a-b);
+            if(inp.checked) chosenOriginal.add(origJ); else chosenOriginal.delete(origJ);
+            answers[currentIndex] = Array.from(chosenOriginal).sort((a,b)=>a-b);
           } else {
-            answers[currentIndex] = inp.checked ? [j] : [];
+            answers[currentIndex] = inp.checked ? [origJ] : [];
           }
           refreshNavigator();
         });
         const lbl = document.createElement('label'); lbl.setAttribute('for', inp.id);
-        // <<< MathJax ko‘rinishi
-        const txt = (typeof opt==='string'?opt:String(opt));
-        lbl.innerHTML = `<span class="mj">${renderLineForMath(txt)}</span>`;
+        lbl.innerHTML = `<span class="mj">${renderLineForMath(String(text))}</span>`;
         row.appendChild(inp); row.appendChild(lbl); opts.appendChild(row);
       });
 
@@ -431,7 +444,7 @@
       const src = await resolveQuestionImageSrc(idx1);
       qimg.src = src || '';
 
-      await typeset(wrap); // variantlar ham render bo‘ladi
+      await typeset(wrap);
     }
 
     /* ===================== TIMER ===================== */
@@ -468,7 +481,7 @@
 
       await addDoc(collection(db,'results'), {
         uid, testId, score, total, percent,
-        sections: sectionsSummary, // [{name, gained, total, percent}]
+        sections: sectionsSummary,
         startedAt: startedAt?.toISOString() || null,
         finishedAt: finishedAt?.toISOString() || null,
         createdAt: serverTimestamp()
@@ -495,7 +508,7 @@
       sections.forEach(s=>{ sectionTotals[s.name]=0; sectionGained[s.name]=0; });
 
       let gained=0, correctCount=0;
-      const perQuestion = []; // for table
+      const perQuestion = [];
 
       testData.questions.forEach((q,i)=>{
         const pts=Number(q.points||1);
@@ -503,17 +516,12 @@
         const secName = sectionOf(idx1, sections);
         sectionTotals[secName]+=pts;
 
-        const chosen=answers[i]||[];
+        const chosen=answers[i]||[]; // already ORIGINAL indices
         const correct = isMulti(q) ? (q.correctIndices||[]) : [Number(q.correctIndex??-1)];
         const ok = isMulti(q) ? arraysEqualUnordered(chosen, correct) : (chosen.length===1 && chosen[0]===correct[0]);
         if(ok){ gained+=pts; correctCount++; sectionGained[secName]+=pts; }
 
-        perQuestion.push({
-          i: idx1,
-          section: secName,
-          points: pts,
-          chosen, correct, ok
-        });
+        perQuestion.push({ i: idx1, section: secName, points: pts, chosen, correct, ok });
       });
 
       const totalPts = sum(testData.questions.map(q=>Number(q.points||1)));
@@ -521,7 +529,6 @@
       const finishedAt = new Date(); const spentSec = Math.max(0,Math.round((finishedAt-startedAt)/1000));
       const tMM = Math.floor(spentSec/60), tSS = spentSec%60;
 
-      // UI fill
       $('#questionsCard').classList.add('hidden');
       $('#resultCard').classList.remove('hidden');
       $('#scoreText').textContent = `Natija: ${gained} / ${totalPts}`;
@@ -530,7 +537,6 @@
       $('#kpiTime').textContent = `Vaqt: ${pad2(tMM)}:${pad2(tSS)}`;
       $('#resultMsg').textContent = percent>=86 ? 'Ajoyib! 🔥' : percent>=70 ? 'Barakalla! 💪' : percent>=50 ? 'Yaxshi urinish. 🙂' : 'Mashqni ko‘paytiring. 📚';
 
-      // Section chips
       const sc = $('#sectionChips'); sc.innerHTML='';
       const sectionsSummary = sections.map(s=>{
         const tot = sectionTotals[s.name]||0;
@@ -543,12 +549,10 @@
         return { name:s.name, gained: win, total: tot, percent: prc };
       });
 
-      // Analysis table
       const tbody = $('#analysisTable tbody'); tbody.innerHTML='';
       perQuestion.forEach(row=>{
         const tr = document.createElement('tr');
         const td = (h)=>{ const x=document.createElement('td'); x.innerHTML=h; return x; };
-
         const chosenText = row.chosen.length ? row.chosen.map(n=>n+1).join(', ') : '<span class="muted">—</span>';
         const correctText = row.correct.length ? row.correct.map(n=>n+1).join(', ') : '<span class="muted">—</span>';
         tr.appendChild(td(String(row.i)));
@@ -560,7 +564,6 @@
         tbody.appendChild(tr);
       });
 
-      // Firebase save
       const infoEl = $('#kpiSaved'); const nameEl = $('#userName');
       if(!fb) fb = window.__firebase;
       if(fb?.auth?.currentUser){
@@ -594,8 +597,9 @@
         row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
       });
       document.querySelectorAll('#questionView input').forEach(inp=>{
-        const v=Number(inp.value); const row=inp.closest('.opt');
-        if(correct.includes(v)){
+        const orig = Number(inp.value); // ORIGINAL index stored in value
+        const row=inp.closest('.opt');
+        if(correct.includes(orig)){
           row.style.borderColor='rgba(46,139,87,.55)';
           row.style.boxShadow='0 0 0 4px rgba(46,139,87,.18)';
           row.style.background='#f3fbf6';
