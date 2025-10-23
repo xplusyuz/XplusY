@@ -3,12 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rasm-Only Test — Admin</title>
+  <title>Rasm-Only Test — Admin (Math Keypad + Preview)</title>
+
+  <!-- MathJax (LaTeX render) -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes: true, packages:{'[+]':['noerrors']} },
+      options: { renderActions: { addMenu: [] } }, loader: { load: ['[tex]/noerrors'] }
+    };
+  </script>
+  <script id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
   <style>
-    :root{--g:#2E8B57;--gd:#1F6B45;--bd:#e9f2ec}
+    :root{--g:#2E8B57;--gd:#1F6B45;--bd:#e9f2ec;--muted:#64748b;--ring:rgba(46,139,87,.18)}
+    *{box-sizing:border-box}
     body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f6faf8;color:#0f172a}
-    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
-    h1{display:flex;align-items:center;gap:10px}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    h1{display:flex;align-items:center;gap:10px;margin:0 0 16px}
     .pi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--g),var(--gd));color:#fff;font-weight:800}
     .grid{display:grid;gap:12px}
     .card{background:#fff;border:1px solid var(--bd);border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(31,107,69,.06)}
@@ -17,20 +29,36 @@
     input[type="text"],input[type="number"],textarea,select{
       width:100%;padding:10px 12px;border:1px solid #dfeae3;border-radius:10px;background:#fbfdfc
     }
-    textarea{min-height:84px;resize:vertical}
-    .qbox{border:1px dashed #cfe4d7;border-radius:14px;padding:12px;display:grid;gap:10px}
+    textarea{min-height:92px;resize:vertical}
+    .qbox{border:1px dashed #cfe4d7;border-radius:14px;padding:12px;display:grid;gap:12px}
     .btn{appearance:none;border:none;border-radius:12px;padding:10px 14px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--g),var(--gd));cursor:pointer}
     .btn.ghost{background:#fff;color:#1F6B45;border:1px solid #cfe4d7}
     .btn.danger{background:linear-gradient(135deg,#d32f2f,#b71c1c)}
-    .muted{color:#64748b;font-size:13px}
+    .btn.flat{background:#f8fbf9;color:#1F6B45;border:1px solid #cfe4d7}
+    .muted{color:var(--muted);font-size:13px}
     .flex{display:flex;gap:10px;flex-wrap:wrap}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px}
+    .kbtn{appearance:none;border:1px solid #dfeae3;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13px}
+    .kbtn:focus{outline:none;box-shadow:0 0 0 4px var(--ring);border-color:#b9dfc8}
+    .side{display:grid;gap:10px}
+    .preview{border:1px dashed #dfeae3;border-radius:12px;padding:12px;background:#fbfdfc}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:#f1f8f4;border:1px solid #dfeae3;border-radius:999px;padding:6px 10px;font-size:12px}
+    .ok{color:#1F6B45}
+    .bad{color:#b71c1c}
+    .answers .opt{display:flex;align-items:center;gap:8px}
+    .answers .opt input{transform:translateY(2px)}
+    .hr{height:1px;background:#eef4f0;margin:8px 0}
     .tag{padding:6px 10px;border-radius:999px;border:1px solid #dfeae3;background:#fff;font-size:12px}
+    .qhead{display:flex;justify-content:space-between;align-items:center}
+    .mini{font-size:12px;color:#64748b}
+    .help{font-size:12px;color:#6b7280}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1><span class="pi">π</span> Rasm-Only Test — Admin</h1>
+    <h1><span class="pi">π</span> Rasm-Only Test — Admin (Math klaviatura bilan)</h1>
 
+    <!-- Test meta -->
     <div class="card grid">
       <div class="row">
         <div>
@@ -54,41 +82,116 @@
           <input id="qcount" type="number" min="1" value="5">
         </div>
       </div>
-      <div class="flex">
-        <button class="btn" id="buildBtn">Savol shakllarini yarat</button>
-        <span class="muted">Rasmlar nomi <b>1.jpg, 2.jpg, ...</b> bo‘ladi. JSON faqat variantlar va javoblarni saqlaydi.</span>
+
+      <!-- Global Math keypad (insert into focused textarea) -->
+      <div>
+        <div class="mini" style="margin-bottom:6px">Math klaviatura (fokus bo‘lgan textarea ichiga qo‘shadi)</div>
+        <div class="toolbar" id="globalToolbar"></div>
+      </div>
+
+      <div class="flex" style="align-items:center;justify-content:space-between">
+        <div class="flex">
+          <button class="btn" id="buildBtn">Savol shakllarini yarat</button>
+          <span class="muted">Rasmlar <b>1.jpg, 2.jpg, ...</b>. JSON faqat variant va javoblarni saqlaydi.</span>
+        </div>
+        <div class="flex">
+          <button class="btn flat" id="expandAll">Barchasini yoyish</button>
+          <button class="btn flat" id="collapseAll">Barchasini yig‘ish</button>
+        </div>
       </div>
     </div>
 
+    <!-- Questions -->
     <div id="questionsArea" class="grid"></div>
 
+    <!-- Footer actions -->
     <div class="card flex" style="justify-content:space-between;align-items:center">
       <div class="flex">
         <button class="btn" id="exportBtn">Export JSON</button>
         <button class="btn ghost" id="previewBtn">Preview (test.html)</button>
       </div>
-      <div class="muted">“Preview” — localStorage’ga yozadi va <code>test.html</code>ni ochadi.</div>
+      <div class="muted">“Preview” — <code>localStorage['testData']</code>ga yozadi va <code>test.html</code>ni ochadi.</div>
     </div>
 
     <div class="card">
-      <div class="muted">
-        <b>Ko‘rsatmalar:</b> har savol uchun <span class="tag">ball</span>,
-        <span class="tag">variantlar (har satr — bitta)</span>, va
-        <span class="tag">javob turi</span> tanlang. Bir javobli bo‘lsa — radio; ko‘p javobli bo‘lsa — checkbox’lardan tanlang.
+      <div class="help">
+        <b>Qo‘llanma:</b> variantlarni har satrga yozing (LaTeX ruxsat: <code>$...$</code>). “Javob turi”ga ko‘ra pastda
+        to‘g‘ri javoblarni tanlang. O‘ng tomonda **jonli preview** ko‘rinadi (to‘g‘ri javoblar ✓ bilan belgilanadi).
       </div>
     </div>
   </div>
 
   <script>
+    /* ===== Utilities ===== */
     const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
+    const typeset = async (el)=>{ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } };
 
+    // Cursor-joyiga snippet qo'yish (template ichida '▮' markerni qoldiramiz)
+    function insertAtCursor(textarea, template){
+      textarea.focus();
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end   = textarea.selectionEnd ?? textarea.value.length;
+      const before = textarea.value.slice(0,start);
+      const after  = textarea.value.slice(end);
+      const full   = before + template + after;
+      textarea.value = full;
+
+      const markerIndex = (before + template).indexOf('▮');
+      let pos = markerIndex >= 0 ? markerIndex : (start + template.length);
+      // marker belgisi bo'lsa, uni olib tashlab caret’ni shu joyga qo'yamiz
+      if(markerIndex >= 0){
+        textarea.value = full.replace('▮','');
+      }
+      textarea.setSelectionRange(pos, pos);
+      textarea.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+
+    // Math keypad tugmalari
+    const KEYS = [
+      {t:'x^n',     s:'^{▮}'},                {t:'x_n',      s:'_{▮}'},
+      {t:'\\sqrt{}',s:'\\sqrt{▮}'},           {t:'\\sqrt[n]{}',s:'\\sqrt[▮]{ }'},
+      {t:'\\frac{}{}',s:'\\frac{▮}{ }'},      {t:'\\log',    s:'\\log_{▮}()'},
+      {t:'\\ln',    s:'\\ln(▮)'},             {t:'\\exp',    s:'e^{▮}'},
+      {t:'\\sin',   s:'\\sin(▮)'},            {t:'\\cos',    s:'\\cos(▮)'},     {t:'\\tan', s:'\\tan(▮)'},
+      {t:'π',       s:'\\pi'},                {t:'·',        s:'\\cdot'},       {t:'×', s:'\\times'},
+      {t:'≤',       s:'\\le'},                {t:'≥',        s:'\\ge'},         {t:'≠', s:'\\ne'},
+      {t:'≈',       s:'\\approx'},            {t:'±',        s:'\\pm'},
+      {t:'∑',       s:'\\sum_{i=1}^{▮}'},     {t:'∫',        s:'\\int_{▮}^{ }'},
+      {t:'\\vec{}', s:'\\vec{▮}'},            {t:'(| |)',    s:'\\left(▮\\right)'},
+      {t:'[| |]',   s:'\\left[▮\\right]'},    {t:'{| |}',    s:'\\left\\{▮\\right\\}'}
+    ];
+
+    let ACTIVE_TEXTAREA = null;
+    function makeToolbar(container){
+      KEYS.forEach(k=>{
+        const b = document.createElement('button');
+        b.className='kbtn';
+        b.type='button';
+        b.textContent = k.t;
+        b.title = k.s;
+        b.addEventListener('click', ()=>{
+          if(!ACTIVE_TEXTAREA) return;
+          insertAtCursor(ACTIVE_TEXTAREA, k.s);
+        });
+        container.appendChild(b);
+      });
+    }
+
+    /* ===== Question template ===== */
     function qTemplate(i){
       return `
       <div class="card qbox" data-index="${i}">
-        <div class="flex" style="justify-content:space-between;align-items:center">
-          <div class="muted"><b>#${i}</b> — rasm fayli: <code>${i}.jpg</code> (yoki <code>${i}.png</code>)</div>
-          <button class="btn danger" onclick="this.closest('.qbox').remove()">O‘chirish</button>
+        <div class="qhead">
+          <div class="flex" style="align-items:center">
+            <div class="badge">#${i} — rasm: <code>${i}.jpg</code> / <code>${i}.png</code></div>
+          </div>
+          <div class="flex">
+            <button class="btn flat miniBtn" data-minitoggle>Yig‘ish</button>
+            <button class="btn danger" data-remove>O‘chirish</button>
+          </div>
         </div>
+
         <div class="row">
           <div>
             <label>Ball (#${i})</label>
@@ -102,39 +205,144 @@
             </select>
           </div>
         </div>
+
+        <!-- Local Math keypad -->
         <div>
-          <label>Variantlar (har satr — bitta)</label>
-          <textarea class="options" placeholder="A varianti&#10;B varianti&#10;C varianti&#10;D varianti"></textarea>
+          <div class="mini" style="margin-bottom:6px">Math klaviatura (shu savol variantlari uchun)</div>
+          <div class="toolbar localTB"></div>
         </div>
-        <div class="answrap">
-          <label>To‘g‘ri javob(lar)</label>
-          <div class="answers"></div>
-          <div class="muted">Variantlar maydonini to‘ldirgach — quyidagi ro‘yxat avtomatik yangilanadi.</div>
+
+        <div class="row">
+          <div class="side">
+            <div>
+              <label>Variantlar (har satr — bitta, LaTeX uchun $ ... $)</label>
+              <textarea class="options" placeholder="A varianti&#10;B varianti&#10;$x^2-1$&#10;$\\sqrt{a^2+b^2}$"></textarea>
+            </div>
+            <div>
+              <label>To‘g‘ri javob(lar)</label>
+              <div class="answers"></div>
+              <div class="mini">Variantlar o‘zgarganda ro‘yxat yangilanadi.</div>
+            </div>
+          </div>
+
+          <div class="side">
+            <label>Jonli preview</label>
+            <div class="preview">
+              <div class="mini">Savol #${i} — rasm (matn yo‘q):</div>
+              <div style="margin:6px 0 10px;padding:8px;border:1px solid #eef4f0;border-radius:10px;background:#fff">
+                <em>${i}.jpg/png bu yerda ko‘rsatiladi (test.html sahifasida).</em>
+              </div>
+              <div class="hr"></div>
+              <div class="mini">Variantlar:</div>
+              <div class="pvOptions"></div>
+              <div class="hr"></div>
+              <div class="mini">To‘g‘ri javoblar belgisi: <span class="ok">✓</span></div>
+            </div>
+          </div>
         </div>
       </div>`;
     }
 
-    function rebuildAnswerPickers(container){
-      const ta = container.querySelector('.options');
-      const modeSel = container.querySelector('.mode');
-      const ansBox = container.querySelector('.answers');
+    /* ===== Build dynamic UI & logic ===== */
+    function rebuildAnswerPickers(qbox){
+      const ta = qbox.querySelector('.options');
+      const modeSel = qbox.querySelector('.mode');
+      const ansBox = qbox.querySelector('.answers');
+      const pv = qbox.querySelector('.pvOptions');
+
       const lines = (ta.value || '').split('\n').map(s=>s.trim()).filter(Boolean);
+
+      // 1) Answer inputs
       ansBox.innerHTML = '';
       lines.forEach((txt, idx)=>{
-        const id = `q${container.dataset.index}_opt${idx}`;
+        const id = `q${qbox.dataset.index}_opt${idx}`;
         const inp = document.createElement('input');
         inp.type = (modeSel.value==='multi') ? 'checkbox' : 'radio';
-        inp.name = `ans_${container.dataset.index}`;
+        inp.name = `ans_${qbox.dataset.index}`;
         inp.value = String(idx);
         inp.id = id;
+
         const lab = document.createElement('label');
         lab.setAttribute('for', id);
         lab.textContent = `${idx+1}) ${txt}`;
+
         const row = document.createElement('div');
-        row.className = 'flex';
+        row.className = 'answers opt';
         row.appendChild(inp); row.appendChild(lab);
         ansBox.appendChild(row);
       });
+
+      // 2) Preview options (MathJax render)
+      pv.innerHTML = '';
+      lines.forEach((txt, idx)=>{
+        const line = document.createElement('div');
+        line.innerHTML = `${idx+1}) ${escapeHtmlForPreview(txt)} <span class="flag"></span>`;
+        pv.appendChild(line);
+      });
+
+      // tie change to preview flags
+      ansBox.querySelectorAll('input').forEach(inp=>{
+        inp.addEventListener('change', ()=>updatePreviewFlags(qbox));
+      });
+
+      updatePreviewFlags(qbox);
+      typeset(pv);
+    }
+
+    // highlight correct in preview
+    function updatePreviewFlags(qbox){
+      const mode = qbox.querySelector('.mode').value;
+      const selected = [...qbox.querySelectorAll('.answers input:checked')].map(i=>Number(i.value));
+      const pv = qbox.querySelector('.pvOptions');
+      [...pv.children].forEach((node, idx)=>{
+        const flag = node.querySelector('.flag');
+        if((mode==='multi' && selected.includes(idx)) || (mode==='single' && selected[0]===idx)){
+          flag.textContent = ' ✓';
+          flag.className = 'flag ok';
+        } else {
+          flag.textContent = '';
+          flag.className = 'flag';
+        }
+      });
+    }
+
+    function escapeHtmlForPreview(t){
+      // allow $...$ for MathJax; escape only HTML
+      return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function attachQEvents(qbox){
+      // local keypad
+      const localTB = qbox.querySelector('.localTB');
+      makeToolbar(localTB);
+
+      // focus tracking for textarea
+      const ta = qbox.querySelector('.options');
+      ta.addEventListener('focus', ()=>{ ACTIVE_TEXTAREA = ta; });
+      ta.addEventListener('blur',  ()=>{ ACTIVE_TEXTAREA = null; });
+
+      // react to inputs
+      ta.addEventListener('input', ()=>rebuildAnswerPickers(qbox));
+      qbox.querySelector('.mode').addEventListener('change', ()=>{
+        rebuildAnswerPickers(qbox);
+      });
+
+      // remove
+      qbox.querySelector('[data-remove]').addEventListener('click', ()=>{
+        qbox.remove();
+      });
+
+      // mini toggle
+      qbox.querySelector('[data-minitoggle]').addEventListener('click', (e)=>{
+        const collapsed = qbox.classList.toggle('collapsed');
+        e.target.textContent = collapsed ? 'Yoyish' : 'Yig‘ish';
+        // collapse body exept header
+        qbox.querySelectorAll('.row, .toolbar, .side, .preview').forEach(el=>{
+          el.style.display = collapsed ? 'none' : '';
+        });
+      });
+
+      rebuildAnswerPickers(qbox);
     }
 
     function buildForms(){
@@ -143,15 +351,10 @@
       for(let i=1;i<=n;i++){
         const box = document.createElement('div');
         box.innerHTML = qTemplate(i);
-        area.appendChild(box.firstElementChild);
+        const el = box.firstElementChild;
+        area.appendChild(el);
+        attachQEvents(el);
       }
-      // listeners
-      area.querySelectorAll('.qbox').forEach(box=>{
-        const ta = box.querySelector('.options');
-        const mode = box.querySelector('.mode');
-        ta.addEventListener('input', ()=>rebuildAnswerPickers(box));
-        mode.addEventListener('change', ()=>rebuildAnswerPickers(box));
-      });
     }
 
     function collectJson(){
@@ -161,13 +364,13 @@
       const durationMinutes = Number($('#dur').value||0);
 
       const questions = [];
-      document.querySelectorAll('.qbox').forEach(box=>{
-        const points = Math.max(1, Number(box.querySelector('.points').value||1));
-        const mode = box.querySelector('.mode').value;
-        const opts = (box.querySelector('.options').value||'')
+      $$('#questionsArea .qbox').forEach(qbox=>{
+        const points = Math.max(1, Number(qbox.querySelector('.points').value||1));
+        const mode = qbox.querySelector('.mode').value;
+        const opts = (qbox.querySelector('.options').value||'')
           .split('\n').map(s=>s.trim()).filter(Boolean);
 
-        const selected = [...box.querySelectorAll('.answers input:checked')].map(i=>Number(i.value));
+        const selected = [...qbox.querySelectorAll('.answers input:checked')].map(i=>Number(i.value));
         const q = { points, options: opts };
 
         if(mode==='multi'){
@@ -189,20 +392,45 @@
       setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
     }
 
-    // events
-    document.getElementById('buildBtn').addEventListener('click', buildForms);
-    document.getElementById('exportBtn').addEventListener('click', ()=>{
-      const data = collectJson();
-      download('test.json', new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
-    });
-    document.getElementById('previewBtn').addEventListener('click', ()=>{
-      const data = collectJson();
-      localStorage.setItem('testData', JSON.stringify(data));
-      window.location.href = 'test.html';
-    });
+    // Expand/collapse helpers
+    function setAllCollapsed(state){
+      $$('#questionsArea .qbox').forEach(qb=>{
+        const btn = qb.querySelector('[data-minitoggle]');
+        const collapsedNow = qb.classList.contains('collapsed');
+        if(state && !collapsedNow){ btn.click(); }
+        if(!state && collapsedNow){ btn.click(); }
+      });
+    }
 
-    // init
-    buildForms();
+    /* ===== Init ===== */
+    document.addEventListener('DOMContentLoaded', ()=>{
+      // global toolbar
+      makeToolbar($('#globalToolbar'));
+
+      // global focus tracker for ANY textarea so global toolbar works
+      document.addEventListener('focusin', (e)=>{
+        if(e.target && e.target.tagName==='TEXTAREA') ACTIVE_TEXTAREA = e.target;
+      });
+      document.addEventListener('focusout', (e)=>{
+        if(e.target && e.target===ACTIVE_TEXTAREA) ACTIVE_TEXTAREA = null;
+      });
+
+      $('#buildBtn').addEventListener('click', buildForms);
+      $('#exportBtn').addEventListener('click', ()=>{
+        const data = collectJson();
+        download('test.json', new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
+      });
+      $('#previewBtn').addEventListener('click', ()=>{
+        const data = collectJson();
+        localStorage.setItem('testData', JSON.stringify(data));
+        window.location.href = 'test.html';
+      });
+
+      $('#expandAll').addEventListener('click', ()=>setAllCollapsed(false));
+      $('#collapseAll').addEventListener('click', ()=>setAllCollapsed(true));
+
+      buildForms();
+    });
   </script>
 </body>
 </html>
