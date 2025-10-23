@@ -9,6 +9,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
   <style>
+    /* (Styling qismi asl fayldan olindi — o'zgartirish kiritilmadi) */
     :root{
       --brand:#2E8B57;--brand2:#1F6B45;
       --bg:#f6faf8;--text:#0f172a;--muted:#6b7c75;--card:#ffffff;
@@ -96,7 +97,7 @@
 
     /* Profile modal styles */
     .modal-mask{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.4);z-index:9999}
-    .modal{width:min(680px,94%);background:#fff;border-radius:14px;border:1px solid var(--frame);box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px}
+    .modal{width:min(880px,94%);background:#fff;border-radius:14px;border:1px solid var(--frame);box-shadow:0 20px 60px rgba(0,0,0,.25);padding:14px;max-height:88vh;overflow:auto}
     .modal h3{margin:0 0 8px;color:#1F6B45}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid1{display:grid;grid-template-columns:1fr;gap:10px}
@@ -156,7 +157,7 @@
   <!-- Chips -->
   <div class="chips" id="chips"></div>
 
-  <!-- Carousel -->
+  <!-- Carousel (banners as HTML snippets) -->
   <section class="carousel" id="carousel" style="margin-top:6px">
     <button class="cbtn left" aria-label="Oldingi" id="prev">‹</button>
     <div class="track" id="track"></div>
@@ -198,6 +199,17 @@
     </div>
   </div>
 
+  <!-- Modal for showing item html (modalHtml type) -->
+  <div id="itemHtmlModal" class="modal-mask" aria-modal="true" role="dialog" style="display:none">
+    <div class="modal" id="itemHtmlContent">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 id="itemHtmlTitle">Batafsil</h3>
+        <button id="closeItemHtml" class="iconbtn">✕</button>
+      </div>
+      <div id="itemHtmlBody" style="min-height:200px"></div>
+    </div>
+  </div>
+
 <script type="module">
   // ===== Theme + PWA =====
   const root=document.documentElement, themeBtn=document.getElementById('themeBtn'), THEME_KEY='lm-theme';
@@ -213,9 +225,9 @@
   let deferredPrompt; const installBtn=document.getElementById('installBtn');
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.style.display='inline-block';});
   installBtn.onclick=async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installBtn.style.display='none';};
-  if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js'); }
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js').catch(()=>{}); }
 
-  // ===== Firebase =====
+  // ===== Firebase (Leaderboard / Auth kept as-is) =====
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, collection, query, orderBy, limit, getDocs, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -234,7 +246,7 @@
   const db = getFirestore(app);
   await setPersistence(auth, browserLocalPersistence);
 
-  // ===== User bar & profile =====
+  // ===== User bar & profile (kechagi koddan olindi) =====
   const el = {
     uname: document.getElementById('uname'), uid: document.getElementById('uid'), points: document.getElementById('points'),
     ava: document.getElementById('ava'), signin: document.getElementById('signin'), signout: document.getElementById('signout'),
@@ -287,7 +299,6 @@
           role:'user',
           numericId:Math.floor(1000+Math.random()*9000),
           points:0,
-          // yangi maydonlar
           school:null, class:null, phone:null, address:null,
           createdAt:Date.now(), updatedAt: serverTimestamp()
         });
@@ -312,12 +323,10 @@
     const email = PM.email.value.trim();
     const address=PM.address.value.trim();
 
-    // minimal tekshiruv
     if(!first || !last || !school || !klass || !phone || !email || !address){
       PM.err.textContent = 'Barcha maydonlar majburiy.';
       return;
     }
-    // telefon va email juda sodda tekshiruv
     if(!/^\+?\d[\d\s\-()]{7,}$/.test(phone)){ PM.err.textContent='Telefon raqamini to‘g‘ri kiriting.'; return; }
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ PM.err.textContent='Email noto‘g‘ri.'; return; }
 
@@ -329,7 +338,6 @@
         updatedAt: serverTimestamp()
       }, { merge:true });
 
-      // UI yangilash
       el.uname.textContent = `${first} ${last}`.trim();
       el.uschool.textContent = `Maktab: ${school}`;
       el.uclass.textContent = `Sinf: ${klass}`;
@@ -345,7 +353,6 @@
   el.signout.onclick = async(e)=>{ e.preventDefault(); await signOut(auth) };
   el.editProfile.onclick = (e)=>{ e.preventDefault();
     const u = auth.currentUser; if(!u) return;
-    // mavjud profile ni prefill
     openProfileModal({
       first: (el.uname.textContent||'').split(' ')[0]||'',
       last:  (el.uname.textContent||'').split(' ').slice(1).join(' '),
@@ -378,7 +385,6 @@
     if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(u.name||user.displayName); }
     el.editProfile.style.display='inline';
 
-    // majburiy to'ldirish
     if(!profileIsComplete(u)){
       openProfileModal({
         first, last,
@@ -435,7 +441,30 @@
     const pager = document.getElementById('boardPager'); if(pager) pager.style.display='none';
   });
 
-  // ===== Chips / Carousel / Sections =====
+  // ===== New: fetch content from index.json (admin tomonidan yaratilgan) =====
+  async function fetchContentFromIndexJSON(){
+    try{
+      const res = await fetch('./index.json', {cache:'no-store'});
+      if(!res.ok) throw new Error('index.json topilmadi: ' + res.status);
+      const data = await res.json();
+      // Expected structure:
+      // { banners: [{ html: "<a>...</a>", order: 1, active: true }], sections: [{ title, order, active, items:[{ type, name, image, link, more, html, tags, best, order, active, startTime, endTime }] }] }
+      // normalize defaults
+      data.banners = (data.banners || []).filter(b=> b.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
+      data.sections = (data.sections || []).filter(s=> s.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
+      (data.sections||[]).forEach(sec=>{
+        sec.items = (sec.items||[]).filter(i=> i.active !== false).sort((a,b)=>(a.order||0)-(b.order||0));
+      });
+      return data;
+    }catch(e){
+      console.warn('index.json o‘qishda muammo:', e?.message||e);
+      return { banners: [], sections: [] };
+    }
+  }
+
+  async function fetchContent(){ return await fetchContentFromIndexJSON(); }
+
+  // ===== Chips / Carousel / Sections (yangilangan: banners HTML va modalHtml tiplari qo'llab-quvvatlanadi) =====
   const chipsEl=document.getElementById('chips'); let active=new Set();
   function dynamicChipsFrom(data){
     const set=new Set(['BSB','CHSB','1-chorak','2-chorak','3-chorak','4-chorak']);
@@ -451,23 +480,32 @@
       renderSections(window.__data__, true);
     });
   }
+
   function initCarousel(banners){
     const track=document.getElementById('track'), dots=document.getElementById('dots'), prev=document.getElementById('prev'), next=document.getElementById('next');
     if(!banners?.length){ document.getElementById('carousel').style.display='none'; return; }
-    track.innerHTML=banners.map(b=>`<a class="slide" href="${b.link||'#'}" target="_blank" rel="noopener"><img src="${b.image}" alt="${b.title||'Banner'}"/></a>`).join('');
+    // each banner contains html string — put into slide container
+    track.innerHTML = banners.map(b=>`<div class="slide">${b.html || ''}</div>`).join('');
     dots.innerHTML=banners.map((_,i)=>`<div class="dot${i===0?' active':''}"></div>`).join('');
-    let i=0,n=banners.length,x=0,sx=0,drag=false,auto;
-    const set=idx=>{i=(idx+n)%n; track.style.transform=`translateX(-${i*100}%)`; [...dots.children].forEach((d,k)=>d.classList.toggle('active',k===i));};
+    let i=0,n=banners.length,auto;
+    const set=idx=>{ i=(idx+n)%n; track.style.transform=`translateX(-${i*100}%)`; [...dots.children].forEach((d,k)=>d.classList.toggle('active',k===i)); };
     const play=()=>{clearInterval(auto);auto=setInterval(()=>set(i+1),3500)}; const stop=()=>clearInterval(auto);
     next.onclick=()=>{set(i+1);play()}; prev.onclick=()=>{set(i-1);play()};
-    const onDown=e=>{drag=true;sx=e.touches?e.touches[0].clientX:e.clientX;stop()};
-    const onMove=e=>{if(!drag)return; x=(e.touches?e.touches[0].clientX:e.clientX)-sx;track.style.transform=`translateX(calc(${-i*100}% + ${x}px))`};
-    const onUp=()=>{if(!drag)return;drag=false; if(Math.abs(x)>50){set(i+(x<0?1:-1))}else set(i); x=0; play();};
+    // basic touch support
+    let drag=false, sx=0, x=0;
+    const onDown=(e)=>{ drag=true; sx=e.touches?e.touches[0].clientX:e.clientX; stop(); };
+    const onMove=(e)=>{ if(!drag) return; x=(e.touches?e.touches[0].clientX:e.clientX)-sx; track.style.transform=`translateX(calc(${-i*100}% + ${x}px))` };
+    const onUp=()=>{ if(!drag) return; drag=false; if(Math.abs(x)>50){ set(i + (x<0?1:-1)); } else set(i); x=0; play(); };
     track.addEventListener('touchstart',onDown,{passive:true}); track.addEventListener('touchmove',onMove,{passive:true}); track.addEventListener('touchend',onUp);
     track.addEventListener('mousedown',onDown); window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
     set(0); play();
   }
+
   const PAGESIZE = 8; const pageState = new Map();
+
+  // helper for time parsing (ISO strings or timestamps)
+  function parseTime(v){ if(!v) return null; const d = (typeof v === 'number') ? new Date(v) : new Date(v); return isNaN(d.getTime())?null:d; }
+
   function renderSections(root, filtered=false){
     const wrap=document.getElementById('sections'); wrap.innerHTML='';
     (root.sections||[]).forEach((sec,si)=>{
@@ -502,6 +540,28 @@
       const grid = section.querySelector('#grid-'+si);
       visible.forEach(it=>{
         const el=document.createElement('article'); el.className='card';
+        // build actions depending on type
+        let startBtnHtml = '';
+        if(it.type === 'timed'){
+          const now = new Date();
+          const st = parseTime(it.startTime);
+          const en = parseTime(it.endTime);
+          let disabled = false;
+          let label = 'Boshlash';
+          if(st && now < st){ label = 'Boshlash (tezroq)'; disabled = true; } 
+          if(en && now > en){ label = 'Tugagan'; disabled = true; }
+          startBtnHtml = `<button class="btn" ${disabled? 'disabled' : ''} data-link="${it.link||'#'}" data-type="timed">${label}</button>`;
+        } else {
+          startBtnHtml = `<a class="btn" href="${it.link || '#'}" target="_blank" rel="noopener">Boshlash</a>`;
+        }
+
+        let moreHtml = '';
+        if(it.type === 'modalHtml'){
+          moreHtml = `<button class="btn ghost" data-html="${encodeURIComponent(it.html || '')}" data-title="${(it.name||'Batafsil')}">Batafsil</button>`;
+        } else if(it.more){
+          moreHtml = `<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Batafsil</a>`;
+        }
+
         el.innerHTML=`
           <div class="thumb ${!it.image ? 'noimg' : ''}">
             ${it.image ? `<img src="${it.image}" alt="" loading="lazy" decoding="async"
@@ -514,8 +574,8 @@
             ${it.description?`<p class="desc">${it.description}</p>`:''}
             <div class="tags">${(it.tags || []).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
             <div class="actions">
-              <a class="btn" href="${it.link || '#'}" target="_blank" rel="noopener">Boshlash</a>
-              ${it.more?`<a class="btn ghost" href="${it.more}" target="_blank" rel="noopener">Batafsil</a>`:''}
+              ${startBtnHtml}
+              ${moreHtml}
             </div>
           </div>`;
         grid.appendChild(el);
@@ -529,44 +589,45 @@
         pager.querySelector(`[data-next="${si}"]`).onclick = ()=>{ pageState.set(si, Math.min(totalPages-1, curPage+1)); renderSections(root, filtered); };
       } else { pager.style.display='none'; }
     });
+
+    // Attach delegated listeners: timed buttons and modalHtml buttons
+    document.querySelectorAll('[data-type="timed"]').forEach(btn=>{
+      btn.onclick = (e)=>{
+        const link = btn.dataset.link || '#';
+        // if disabled attribute present, do nothing (or could open countdown)
+        if(btn.disabled) {
+          alert('Bu vazifa hali boshlanmadi yoki tugagan.');
+          return;
+        }
+        // bosilganda yangi ochish
+        window.open(link, '_blank', 'noopener');
+      };
+    });
+    document.querySelectorAll('[data-html]').forEach(btn=>{
+      btn.onclick = (e)=>{
+        const html = decodeURIComponent(btn.getAttribute('data-html')||'');
+        const title = btn.getAttribute('data-title')||'Batafsil';
+        const modal = document.getElementById('itemHtmlModal');
+        document.getElementById('itemHtmlTitle').textContent = title;
+        document.getElementById('itemHtmlBody').innerHTML = html;
+        modal.style.display = 'flex';
+      };
+    });
   }
 
-  // ===== Firestore content =====
-  async function fetchContentFromFirestore(){
-    const out = { banners: [], sections: [] };
-    try{
-      const bq = query(collection(db,'banners'), where('active','==',true));
-      (await getDocs(bq)).forEach(d=> out.banners.push({ id:d.id, ...d.data() }));
-      out.banners.sort((a,b)=>(a.order??0)-(b.order??0));
+  // modal close
+  document.getElementById('closeItemHtml').onclick = ()=>{ document.getElementById('itemHtmlModal').style.display='none'; };
 
-      const sq = query(collection(db,'sections'), where('active','==',true));
-      const sdocs = await getDocs(sq);
-      const sections = [];
-      for (const sd of sdocs.docs){
-        const s = { id: sd.id, ...sd.data(), items: [] };
-        const iq = query(collection(db,'sections', sd.id, 'items'), where('active','==',true));
-        const idocs = await getDocs(iq);
-        idocs.forEach(it => s.items.push({ id: it.id, ...it.data() }));
-
-        s.items.sort((a,b)=>(a.order??0)-(b.order??0));
-        s.items.sort((a,b)=> (b.best?1:0)-(a.best?1:0));
-
-        sections.push(s);
-      }
-      sections.sort((a,b)=>(a.order??0)-(b.order??0));
-      out.sections = sections;
-    }catch(e){ console.warn('Firestore o‘qishda muammo:', e?.message||e); }
-    return out;
-  }
-
-  async function fetchContent(){ return await fetchContentFromFirestore(); }
+  // ===== Init: load content from index.json =====
   async function init(){
-    const data = await fetchContent(); window.__data__=data;
+    const data = await fetchContent();
+    window.__data__ = data;
     buildChipsFromData(data);
     initCarousel(data.banners||[]);
     renderSections(data);
   }
   init();
+
 </script>
 </body>
 </html>
