@@ -219,7 +219,7 @@
   // ===== Firebase =====
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, doc, getDoc, setDoc, onSnapshot, runTransaction, collection, query, orderBy, limit, getDocs, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, orderBy, limit, getDocs, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const cfg = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -233,7 +233,15 @@
   const app = initializeApp(cfg);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  await setPersistence(auth, browserLocalPersistence);
+  
+  // Persistence ni async funksiya ichida ishlatish
+  (async function initAuth() {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+    } catch (err) {
+      console.error('Auth persistence error:', err);
+    }
+  })();
 
   // ===== User bar & profile =====
   const el = {
@@ -278,22 +286,20 @@
 
   async function ensureUser(u){
     const ref=doc(db,'users',u.uid);
-    await runTransaction(db, async(tx)=>{
-      const snap = await tx.get(ref);
-      if(!snap.exists()){
-        tx.set(ref,{
-          name: u.displayName||'Foydalanuvchi',
-          email: u.email||null,
-          photoURL: u.photoURL||null,
-          role:'user',
-          numericId:Math.floor(1000+Math.random()*9000),
-          points:0,
-          // yangi maydonlar
-          school:null, class:null, phone:null, address:null,
-          createdAt:Date.now(), updatedAt: serverTimestamp()
-        });
-      }
-    });
+    const snap = await getDoc(ref);
+    
+    if(!snap.exists()){
+      await setDoc(ref,{
+        name: u.displayName||'Foydalanuvchi',
+        email: u.email||null,
+        photoURL: u.photoURL||null,
+        role:'user',
+        numericId:Math.floor(1000+Math.random()*9000),
+        points:0,
+        school:null, class:null, phone:null, address:null,
+        createdAt:Date.now(), updatedAt: serverTimestamp()
+      });
+    }
     return (await getDoc(ref)).data();
   }
 
@@ -319,8 +325,8 @@
       return;
     }
     // telefon va email juda sodda tekshiruv
-    if(!/^\+?\d[\d\s\-()]{7,}$/.test(phone)){ PM.err.textContent='Telefon raqamini to'g'ri kiriting.'; return; }
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ PM.err.textContent='Email noto'g'ri.'; return; }
+    if(!/^\+?\d[\d\s\-()]{7,}$/.test(phone)){ PM.err.textContent='Telefon raqamini to\'g\'ri kiriting.'; return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ PM.err.textContent='Email noto\'g\'ri.'; return; }
 
     try{
       const ref = doc(db,'users',user.uid);

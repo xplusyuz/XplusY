@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rasm-Only Test — Admin (Math keypad + Sections)</title>
+  <title>Rasm-Only Test — Admin (Math keypad + Sections + Import)</title>
 
   <!-- MathJax -->
   <script>
@@ -48,7 +48,7 @@
     .preview{border:1px dashed #dfeae3;border-radius:12px;padding:12px;background:#fbfdfc}
     .warn{color:#b45309}
 
-    /* Drawer keypad (bottom) */
+    /* Drawer keypad */
     .drawer{position:fixed;left:0;right:0;bottom:0;transform:translateY(100%);transition:transform .25s ease;background:#fffffff2;backdrop-filter:saturate(1.2) blur(6px);border-top:1px solid #dfeae3;box-shadow:0 -10px 24px rgba(31,107,69,.12);padding:12px 14px;z-index:9999}
     .drawer.open{transform:translateY(0%)}
     .drawer .rowbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -68,7 +68,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1><span class="pi">π</span> Rasm-Only Test — Admin (Sections bilan)</h1>
+    <h1><span class="pi">π</span> Rasm-Only Test — Admin (Sections + Import)</h1>
 
     <!-- Test meta -->
     <div class="card grid">
@@ -85,15 +85,19 @@
         <div>
           <label>Nechta bo‘lim?</label>
           <input id="secCount" type="number" min="0" value="2">
-          <div class="mini">0 bo‘lsa — <b>test.html</b> default bo‘limlar ishlaydi (1–12 Algebra, 13–N Geometriya).</div>
+          <div class="mini">0 bo‘lsa — <b>test.html</b> default bo‘limlardan foydalanadi.</div>
         </div>
         <div class="sec-list" id="secList"></div>
       </div>
 
+      <!-- Import/Export/Preview -->
       <div class="flex" style="align-items:center;justify-content:space-between">
-        <div class="flex">
+        <div class="flex" style="gap:8px">
           <button class="btn" id="buildBtn">Savol shakllarini yarat</button>
-          <span class="muted">Rasmlar <b>1.jpg, 2.jpg, ...</b>.</span>
+          <button class="btn flat" id="importBtn">Import JSON (fayldan)</button>
+          <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+          <button class="btn flat" id="importLS">Import (localStorage)</button>
+          <button class="btn flat" id="importTestJson">Import (test.json)</button>
         </div>
         <div class="flex">
           <button class="btn flat" id="expandAll">Barchasini yoyish</button>
@@ -117,12 +121,12 @@
 
     <div class="card">
       <div class="help">
-        Variantlarni har satrga yozing. LaTeX: <code>$...$</code> bo‘lsa — to‘g‘ridan-to‘g‘ri; aks holda <code>x^{2}, \sqrt{...}, \frac{a}{b}</code> kabi yozuvlar avtomatik <em>inline</em> ko‘rinishda render bo‘ladi.
+        Variantlarni har satrga yozing. LaTeX: <code>$...$</code> bo‘lsa — to‘g‘ridan-to‘g‘ri; aks holda <code>x^{2}, \sqrt{...}, \frac{a}{b}</code> kabi yozuvlar avtomatik render bo‘ladi.
       </div>
     </div>
   </div>
 
-  <!-- BOTTOM DRAWER KEYPAD -->
+  <!-- Drawer keypad -->
   <div id="keypadDrawer" class="drawer" aria-hidden="true">
     <div class="rowbar">
       <div class="title">Math klaviatura</div>
@@ -147,7 +151,7 @@
       return safe;
     }
 
-    // Caret insert with '▮' marker support
+    // Caret insert with '▮' marker
     function insertAtCursor(textarea, template){
       textarea.focus();
       const start = textarea.selectionStart ?? textarea.value.length;
@@ -222,7 +226,6 @@
         list.innerHTML = `<div class="mini warn">Bo‘limlar JSON’ga yozilmaydi (test.html default bo‘limlardan foydalanadi).</div>`;
         return;
       }
-      // header
       const hdr = document.createElement('div');
       hdr.className = 'sec-row';
       hdr.innerHTML = `
@@ -412,6 +415,7 @@
       }
     }
 
+    /* ========= Export / Import / Preview ========= */
     function collectJson(){
       const title = $('#title').value || 'Rasm-Only Test';
       const description = $('#desc').value || 'Rasm + variant';
@@ -431,7 +435,7 @@
         questions.push(q);
       });
 
-      const sections = collectSections(qcount); // may be empty []
+      const sections = collectSections(qcount); // [] if none
 
       return { title, description, type, durationMinutes, sections, questions };
     }
@@ -451,6 +455,102 @@
         if(state && !collapsed){ btn.click(); }
         if(!state && collapsed){ btn.click(); }
       });
+    }
+
+    // ==== NEW: Import helpers ====
+    function normalizeImported(data){
+      if(!data || !Array.isArray(data.questions)) throw new Error('JSON format xato: questions topilmadi');
+      // eski fieldlarni moslashtirish
+      if(data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
+      data.title = data.title || 'Rasm-Only Test';
+      data.description = data.description || 'Rasm + variant';
+      data.type = data.type || 'aralash';
+      data.questions = data.questions.map(q=>{
+        const qq = {...q};
+        if(typeof qq.correctOption==='number' && qq.correctIndex===undefined) qq.correctIndex = Number(qq.correctOption);
+        qq.points = Number(qq.points||1);
+        return qq;
+      });
+      if(!Array.isArray(data.sections)) data.sections = [];
+      return data;
+    }
+
+    function applyTestData(data){
+      const d = normalizeImported(data);
+
+      // meta
+      $('#title').value = d.title || '';
+      $('#desc').value = d.description || '';
+      $('#type').value = d.type || 'aralash';
+      $('#dur').value = Number(d.durationMinutes||0);
+
+      // sections UI
+      $('#secCount').value = (d.sections && d.sections.length) ? d.sections.length : 0;
+      rebuildSectionsUI();
+      if(d.sections && d.sections.length){
+        const names = $$('#secList .sec-name');
+        const starts = $$('#secList .sec-start');
+        const ends = $$('#secList .sec-end');
+        d.sections.forEach((s, i)=>{
+          if(names[i]) names[i].value = s.name || `Bo‘lim ${i+1}`;
+          if(starts[i]) starts[i].value = s.start ?? '';
+          if(ends[i]) ends[i].value = s.end ?? '';
+        });
+      }
+
+      // questions
+      $('#qcount').value = d.questions.length;
+      buildForms();
+
+      // fill each qbox
+      $$('#questionsArea .qbox').forEach((qbox, idx)=>{
+        const q = d.questions[idx];
+        if(!q) return;
+        qbox.querySelector('.points').value = Number(q.points||1);
+        qbox.querySelector('.mode').value = Array.isArray(q.correctIndices) ? 'multi' : 'single';
+        // options text
+        const ta = qbox.querySelector('.options');
+        ta.value = (q.options||[]).join('\n');
+        rebuildAnswerPickers(qbox);
+        // select correct(s)
+        if(Array.isArray(q.correctIndices)){
+          q.correctIndices.forEach(ci=>{
+            const inp = qbox.querySelector(`.answers input[value="${ci}"]`);
+            if(inp){ inp.checked = true; }
+          });
+        }else{
+          const ci = Number(q.correctIndex ?? -1);
+          const inp = qbox.querySelector(`.answers input[value="${ci}"]`);
+          if(inp){ inp.checked = true; }
+        }
+        updatePreviewFlags(qbox);
+      });
+
+      // render previews (MathJax)
+      typeset($('#questionsArea'));
+    }
+
+    async function importFromFile(file){
+      const text = await file.text();
+      const json = JSON.parse(text);
+      applyTestData(json);
+    }
+
+    async function importFromLocalStorage(){
+      const raw = localStorage.getItem('testData');
+      if(!raw){ alert("localStorage['testData'] topilmadi."); return; }
+      applyTestData(JSON.parse(raw));
+    }
+
+    async function importFromTestJson(){
+      try{
+        const r = await fetch('test.json', { cache: 'no-store' });
+        if(!r.ok) throw new Error('test.json o‘qilmadi');
+        const data = await r.json();
+        applyTestData(data);
+      }catch(e){
+        alert('test.json o‘qishda xatolik: ' + e.message);
+      }
     }
 
     /* ========= Global keypad & init ========= */
@@ -484,6 +584,18 @@
       });
       $('#expandAll').addEventListener('click', ()=>setAllCollapsed(false));
       $('#collapseAll').addEventListener('click', ()=>setAllCollapsed(true));
+
+      // Import hooks
+      $('#importBtn').addEventListener('click', ()=>$('#importFile').click());
+      $('#importFile').addEventListener('change', (e)=>{
+        const file = e.target.files?.[0];
+        if(file) importFromFile(file);
+        e.target.value = '';
+      });
+      $('#importLS').addEventListener('click', importFromLocalStorage);
+      $('#importTestJson').addEventListener('click', importFromTestJson);
+
+      // Sections
       $('#secCount').addEventListener('input', rebuildSectionsUI);
 
       rebuildSectionsUI();
