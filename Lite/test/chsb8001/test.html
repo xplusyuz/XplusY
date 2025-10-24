@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MathCenter — Rasm-Only Test (Firebase + Bo‘limlar + Tahlil + Random opts)</title>
+
+  <!-- MathJax v3 -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes:true, packages:{'[+]':['noerrors']} },
+      options: { renderActions: { addMenu: [] } }, loader: { load: ['[tex]/noerrors'] }
+    };
+  </script>
+  <script id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    :root{
+      --green:#2E8B57; --green-dark:#1F6B45;
+      --red:#c62828; --red-bg:#fff2f2; --red-ring:rgba(198,40,40,.18);
+      --ok-bg:#f3fbf6; --ok-bd:#cfe4d7; --bg:#f7faf8; --card:#fff; --text:#0f172a; --muted:#475569; --outline:#e6efe8; --ring:rgba(46,139,87,.25);
+      --chip:#ffffffc9;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:linear-gradient(180deg,#f1f8f4 0%,#f7faf8 100%)}
+    .wrap{max-width:980px;margin:26px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid var(--outline);border-radius:18px;padding:18px;box-shadow:0 8px 24px rgba(31,107,69,.06)}
+    .header{background:radial-gradient(1200px 600px at -10% -10%, #e8f5ee, transparent 60%), radial-gradient(1200px 600px at 110% -10%, #e3f3ec, transparent 60%); display:grid;gap:10px}
+    .title{display:flex;align-items:center;gap:12px;font-weight:700;font-size:22px}
+    .pi{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;font-weight:800;box-shadow:0 6px 18px rgba(46,139,87,.35)}
+    .sub{color:var(--muted);font-size:14px}
+    .meta{display:flex;flex-wrap:wrap;gap:10px;color:#0b3a25;font-size:13px}
+    .chip{border:1px solid #d8e9df;background:var(--chip);padding:8px 10px;border-radius:999px;font-variant-numeric:tabular-nums}
+    .timer.warn{color:#a15b00;border-color:#f5d7b4;background:#fff9f0}
+    .timer.crit{color:#a11212;border-color:#f2c6c6;background:#fff4f4}
+
+    .qwrap{display:grid;gap:12px}
+    .qhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+    .qname{font-weight:700}
+    .qpts{color:var(--muted);font-size:13px}
+
+    .qimg{ margin:8px 0 4px; }
+    .qimg img{ max-width:100%;height:auto;display:block;border-radius:12px;border:1px solid #edf3ee;box-shadow:0 6px 18px rgba(31,107,69,.06) }
+
+    .opts{display:grid;gap:10px}
+    .opt{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start;padding:10px 12px;border:1px solid #edf3ee;border-radius:12px;background:#fbfdfc;transition:border-color .15s,box-shadow .15s,background .15s}
+    .opt:hover{border-color:var(--green);box-shadow:0 0 0 4px var(--ring);background:#fff}
+    .opt input{transform:translateY(2px)}
+    .opt label .mj{display:inline-block}
+
+    .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-top:16px}
+    .btn{appearance:none;border:none;cursor:pointer;padding:12px 16px;border-radius:12px;font-weight:700;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;box-shadow:0 10px 24px rgba(46,139,87,.35)}
+    .btn.secondary{background:#fff;color:#1F6B45;border:1px solid #cfe4d7;box-shadow:none}
+    .btn.warn{background:linear-gradient(135deg,#e65100,#bf360c)}
+    .btn.ghost{background:#fff;color:#0b3a25;border:1px dashed #cfe4d7}
+
+    .hidden{display:none !important}
+    .muted{color:var(--muted);font-size:14px}
+    .divider{height:1px;background:#edf3ee;margin:8px 0}
+
+    /* Navigator */
+    .navwrap{margin-top:16px}
+    .navlegend{display:flex;gap:12px;align-items:center;color:#64748b;font-size:13px;margin-bottom:8px}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .navgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:10px}
+    .navbtn{appearance:none;border:1px solid var(--outline);background:#fff;color:#0b3a25;border-radius:12px;padding:10px 0;cursor:pointer;font-weight:800;transition:.15s}
+    .navbtn.current{background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;border-color:transparent}
+    .navbtn.answered:not(.current){background:var(--ok-bg);border-color:var(--ok-bd)}
+    .navbtn.unanswered:not(.current){background:var(--red-bg);border-color:#f1c9c9;color:#var(--red);box-shadow:0 0 0 3px var(--red-ring)}
+
+    /* Result */
+    .score{display:grid;gap:10px;padding:16px;border:1px dashed #cfe4d7;border-radius:14px;background:#f8fbf9}
+    .big{font-weight:800;font-size:22px;color:#1F6B45}
+    .kpi{display:flex;flex-wrap:wrap;gap:10px}
+    .authbar{display:flex;gap:10px;align-items:center}
+
+    /* Sections chips */
+    .sections{display:flex;flex-wrap:wrap;gap:8px}
+    .s-chip{border:1px solid #dfeae3;background:#fff;border-radius:999px;padding:6px 10px;font-size:12px}
+
+    /* Analysis table */
+    table.analysis{width:100%;border-collapse:collapse;font-size:14px}
+    .analysis th,.analysis td{border:1px solid #edf3ee;padding:8px;vertical-align:top}
+    .analysis th{background:#f6faf8;text-align:left}
+    .analysis .ok{color:#1F6B45;font-weight:700}
+    .analysis .bad{color:#b71c1c;font-weight:700}
+    .pill{display:inline-block;border-radius:999px;border:1px solid #dfeae3;background:#fff;padding:2px 8px;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- Header -->
+    <section class="header card">
+      <div class="title">
+        <div class="pi">π</div>
+        <div id="testTitle">Rasm-Only Test</div>
+      </div>
+      <div id="testDesc" class="sub">Savol matnisiz: rasm + variantlar.</div>
+      <div class="meta">
+        <div id="metaCount" class="chip">Savollar: —</div>
+        <div id="metaPoints" class="chip">Umumiy ball: —</div>
+        <div id="metaType" class="chip">—</div>
+        <div id="metaTimer" class="chip timer hidden">00:00</div>
+        <div id="authInfo" class="chip">Kirish: tekshirilmoqda…</div>
+      </div>
+    </section>
+
+    <!-- One-by-one Question View -->
+    <section id="questionsCard" class="card">
+      <div id="questionView" class="qwrap"></div>
+
+      <div class="navwrap">
+        <div class="navlegend">
+          <span class="dot" style="background:var(--red)"></span> qizil — yechilmagan
+          <span class="dot" style="background:var(--green)"></span> yashil — yechilgan
+          <span class="dot" style="background:linear-gradient(135deg,var(--green),var(--green-dark))"></span> current
+        </div>
+        <div id="navgrid" class="navgrid"></div>
+      </div>
+
+      <div class="actions">
+        <div style="display:flex; gap:8px;">
+          <button id="prevBtn" class="btn secondary">⬅️ Oldingi</button>
+          <button id="nextBtn" class="btn secondary">Keyingi ➡️</button>
+        </div>
+        <button id="submitBtn" class="btn warn">Testni yakunlash</button>
+      </div>
+      <div class="muted" style="margin-top:6px;">Raqamga bosib savolga o‘ting.</div>
+    </section>
+
+    <!-- Results -->
+    <section id="resultCard" class="card hidden">
+      <div class="score">
+        <div class="big" id="scoreText">Natija: 0 / 0</div>
+        <div class="kpi">
+          <div id="kpiPercent" class="chip">Foiz: 0%</div>
+          <div id="kpiCorrect" class="chip">To‘g‘ri: 0 / 0</div>
+          <div id="kpiTime" class="chip">Vaqt: —</div>
+          <div id="kpiSaved" class="chip">Saqlash: —</div>
+        </div>
+
+        <div id="sectionChips" class="sections"></div>
+
+        <div class="divider"></div>
+        <div id="resultMsg" class="muted">Zo‘r ish!</div>
+
+        <div class="divider"></div>
+        <h3 style="margin:0 0 6px">Savollar tahlili</h3>
+        <div class="muted" style="margin-bottom:6px">Bo‘lim, ball, tanlangan/to‘g‘ri variant(lar) va holat.</div>
+        <div style="overflow:auto">
+          <table class="analysis" id="analysisTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Bo‘lim</th>
+                <th>Ball</th>
+                <th>Tanlangan</th>
+                <th>To‘g‘ri</th>
+                <th>Holat</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="divider"></div>
+        <div class="actions">
+          <div class="authbar"><span id="userName" class="muted"></span></div>
+          <div style="display:flex; gap:8px; margin-left:auto;">
+            <button class="btn secondary" onclick="location.reload()">Qayta boshlash</button>
+            <button class="btn" id="reviewBtn">To‘g‘ri javoblarni ko‘rish</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Empty -->
+    <section id="emptyCard" class="card hidden" style="text-align:center">
+      <h3>Test topilmadi</h3>
+      <p class="muted">Shu papkaga <code>test.json</code> qo‘ying yoki <code>localStorage['testData']</code>ga yozing.</p>
+    </section>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, updateDoc, runTransaction, serverTimestamp, collection, addDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+    await setPersistence(auth, browserLocalPersistence);
+
+    window.__firebase = { app, auth, db, onAuthStateChanged, serverTimestamp, addDoc, collection, increment, runTransaction, doc, setDoc, updateDoc };
+  </script>
+
+  <script>
+/* ========= SETTINGS ========= */
+const TEST_ID = 'CHSB-2025-demo';   // test ID'ingiz
+const SCALE  = 100;                  // yuzdan birgacha: 2 xonali aniqlik
+
+/* ========= HELPERS ========= */
+const $ = (s, el=document)=>el.querySelector(s);
+
+// Sizda allaqachon bor deb qabul qilamiz:
+function isMulti(q){ return Array.isArray(q.correctIndices); }
+
+/* ========= AUTH GATE ========= */
+let fb=null, currentUser=null, startedAt=null, testData=null, currentIndex=0;
+
+document.addEventListener('DOMContentLoaded', () => {
+  const authInfoEl = $('#authInfo');
+  let authResolved = false;
+
+  setTimeout(()=>{ if(!authResolved) authInfoEl.textContent='Kirish: mehmon'; }, 3000);
+
+  if (window.__firebase?.onAuthStateChanged){
+    fb = window.__firebase;
+
+    fb.onAuthStateChanged(fb.auth, (user)=>{
+      authResolved = true;
+      currentUser = user;
+
+      authInfoEl.textContent = user
+        ? `Kirish: ${user.displayName || user.email}`
+        : 'Kirish: mehmon';
+
+      if (user){
+        startAppAfterAuth();
+      } else {
+        blockAppForGuests();
+      }
+    });
+
+    if (fb.auth.currentUser){
+      authResolved = true;
+      currentUser = fb.auth.currentUser;
+      authInfoEl.textContent = `Kirish: ${currentUser.displayName || currentUser.email}`;
+      startAppAfterAuth();
+    }
+  } else {
+    authInfoEl.textContent='Kirish: mehmon';
+    blockAppForGuests();
+  }
+});
+
+function blockAppForGuests(){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; background:rgba(0,0,0,.6); color:#fff;
+    display:flex; align-items:center; justify-content:center; z-index:9999; padding:24px; text-align:center;
+  `;
+  overlay.innerHTML = `
+    <div style="background:#0f1714; border:1px solid #2E8B57; padding:24px; border-radius:16px; max-width:520px;">
+      <h2 style="margin:0 0 12px">Kirish talab qilinadi</h2>
+      <p style="margin:0 0 20px; opacity:.9">Ushbu sahifadan foydalanish uchun hisobingizga kiring.</p>
+      <button id="goLogin" style="padding:10px 16px; border-radius:10px; border:1px solid #2E8B57; background:#2E8B57; color:#fff; cursor:pointer;">
+        Kirish sahifasiga o‘tish
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  $('#goLogin', overlay).addEventListener('click', ()=>{ window.location.href='/login.html'; });
+}
+
+async function startAppAfterAuth(){
+  startedAt = new Date();
+  await loadTestData();         // mavjud funksiyangiz (testData ni to‘ldiradi)
+  // Agar sizga boshlang‘ich renderlar kerak bo‘lsa shu yerda chaqiring
+}
+
+/* ========= RENDER: TO‘G‘RI JAVOBNI KO‘RSATISH (sizde bor edi) ========= */
+function revealCorrect(){
+  $('#resultCard').classList.add('hidden');
+  $('#questionsCard').classList.remove('hidden');
+  const q = testData.questions[currentIndex]; 
+  const multi = isMulti(q);
+  const correct = multi ? (q.correctIndices||[]) : [Number(q.correctIndex ?? -1)];
+
+  document.querySelectorAll('#questionView .opt').forEach(row=>{
+    row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
+  });
+  document.querySelectorAll('#questionView input').forEach(inp=>{
+    const orig = Number(inp.value); // ORIGINAL index stored in value
+    const row = inp.closest('.opt');
+    if (correct.includes(orig)){
+      row.style.borderColor='rgba(46,139,87,.55)';
+      row.style.boxShadow='0 0 0 4px rgba(46,139,87,.18)';
+      row.style.background='#f3fbf6';
+    }
+  });
+}
+
+/* ========= FIXED-POINT (ANIQ) HISOBLASH ========= */
+/** q.points: masalan 1, 1.5, 0.25 ... (2 xonali) bo‘lishi mumkin */
+function toIntPoints(x){ return Math.round(Number(x) * SCALE); }  // 1.23 → 123
+
+function isAnswerCorrect(q, userAnswer){
+  // userAnswer: single -> number (index), multi -> number[] (indexlar)
+  if (isMulti(q)){
+    const correct = (q.correctIndices||[]).slice().sort((a,b)=>a-b);
+    const ans = (Array.isArray(userAnswer)? userAnswer: []).slice().sort((a,b)=>a-b);
+    if (ans.length !== correct.length) return false;
+    for (let i=0;i<correct.length;i++) if (ans[i]!==correct[i]) return false;
+    return true;
+  } else {
+    return Number(userAnswer) === Number(q.correctIndex ?? -1);
+  }
+}
+
+function computeScoreInt(questions, userAnswers){
+  // userAnswers[i] -> single: number, multi: number[] (original indexlar)
+  let totalInt = 0;
+  for (let i=0;i<questions.length;i++){
+    const q = questions[i];
+    const ok = isAnswerCorrect(q, userAnswers[i]);
+    const ptsInt = toIntPoints(q.points ?? 1);   // default 1.00
+    if (ok) totalInt += ptsInt;
+  }
+  return totalInt; // butun (fixed)
+}
+
+function formatPoints(totalInt, fractionDigits=2){
+  return (totalInt / SCALE).toFixed(fractionDigits); // ekranga chiqarish
+}
+
+/* ========= FIRESTORE: BIRINCHI URINISHNI YOZISH (CREATE-ONLY) ========= */
+async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
+  if (!fb || !fb.db || !currentUser) throw new Error('Auth yoki Firestore yo‘q');
+  const uid = currentUser.uid;
+  const docId = `${testId}_${uid}`;
+  const ref = fb.doc(fb.db, 'results', docId);
+
+  await fb.runTransaction(fb.db, async (tx)=>{
+    const snap = await fb.getDoc(ref);
+    if (snap.exists()){
+      // Allaqachon bor — qayta yozmaymiz
+      return;
+    }
+    tx.set(ref, {
+      uid, testId,
+      pointsInt: totalInt,
+      scale: SCALE,
+      points: totalInt / SCALE,     // o‘qishda qulay
+      durationSec,
+      startedAt: startedAt ? fb.Timestamp.fromDate(startedAt) : null,
+      createdAt: fb.serverTimestamp(),
+      meta,                         // xohlasangiz guruh/tag va boshqalar
+    });
+  });
+}
+
+/* ========= TESTNI YAKUNLASH (CALL THIS WHEN USER SUBMITS) ========= */
+// userAnswers formatini o‘zingizning UIingizga moslang:
+//   - single: tanlangan input.value original index (number)
+//   - multi: tanlanganlar original indexlar massivi
+async function onSubmitResults(userAnswers){
+  // 1) hisoblash (aniq)
+  const totalInt = computeScoreInt(testData.questions, userAnswers);
+  const shown = formatPoints(totalInt, 2); // masalan "80.00"
+  $('#finalScore').textContent = shown;    // UI da ko‘rsatish bo‘limingiz
+
+  // 2) faqat birinchi urinishni saqlash
+  const durationSec = Math.max(0, Math.round((Date.now() - (startedAt?.getTime()||Date.now()))/1000));
+  try{
+    await saveResultOnce({ testId: TEST_ID, totalInt, durationSec, meta:{} });
+  } catch(e){
+    // Agar qoidalar qayta yozishga ruxsat bermasa (retriable emas) — jim qolamiz
+    console.warn('saveResultOnce:', e);
+  }
+
+  // 3) natija/analitika ko‘rinishlari…
+  $('#questionsCard').classList.add('hidden');
+  $('#resultCard').classList.remove('hidden');
+}
+
+/* ========= MISOL: SUBMIT TUGMASI UCHUN BOG‘LASH ========= */
+// document.querySelector('#submitBtn').addEventListener('click', ()=>{
+//   const userAnswers = collectAnswersFromUI(); // o‘zingizning funksiyangiz
+//   onSubmitResults(userAnswers);
+// });
+
+</script>
+</body>
+</html>
