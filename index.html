@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>LeaderMath — PWA (Decile Stars 0.5→5 + Profile Stars)</title>
+  <title>LeaderMath — PWA (Decile Stars 0.5→5 + Faceted Diamond + Profile Stars)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
@@ -54,7 +54,7 @@
       -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
     }
 
-    /* Leaderboard (Gruppali + Pager) */
+    /* Leaderboard */
     .board{background:var(--card);border:1px solid var(--frame);border-radius:16px;margin:10px 12px;padding:12px;border:none}
     .board h3{margin:0 0 8px;font-size:16px}
     .group{border:none;border-radius:14px;overflow:hidden;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.06)}
@@ -81,16 +81,16 @@
     @keyframes pulse-glow{0%{filter:drop-shadow(0 0 0 rgba(255,200,0,.0))}100%{filter:drop-shadow(0 0 8px rgba(255,200,0,.55))}}
     .m1,.m2,.m3{animation:pulse-glow 1.6s ease-in-out infinite alternate}
 
-    /* Stars/Diamonds (SVG; per-tier gradientlar) */
+    /* Stars / Diamonds */
     .stars{display:inline-flex;gap:3px;vertical-align:middle}
     .tier-bronze .stars{--s:16}
     .tier-silver .stars{--s:17}
     .tier-gold .stars{--s:18}
     .tier-emerald .stars{--s:20}
-    .tier-diamond .stars{--s:22}
+    .tier-diamond .stars{--s:24} /* diamond larger */
     .stars svg{width:calc(var(--s)*1px);height:calc(var(--s)*1px)}
 
-    /* Pager controls */
+    /* Pager */
     .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
     .pager .pbtn{background:var(--chip);border:1px solid var(--frame);border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer}
     .pager .pbtn[disabled]{opacity:.5;cursor:not-allowed}
@@ -126,17 +126,7 @@
     .meta{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:10px;align-items:center}
     .countdown{font-weight:800}
 
-    /* Modal */
-    .modal-mask{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:999}
-    .modal{width:min(840px,94%);max-height:90vh;overflow:auto;background:var(--card);border-radius:14px;border:1px solid var(--frame-strong);box-shadow:0 24px 64px rgba(0,0,0,.35);padding:16px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-    .ctl label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
-    .ctl input,.ctl textarea,.ctl select{width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px;font:inherit;background:var(--card);color:var(--text)}
-    .row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-    .danger{color:#c62828;font-size:12px}
-
-    /* --- Diamond shine & TOP-3 glow --- */
+    /* Diamond shine & TOP-3 glow */
     .tier-diamond .stars{ position:relative; overflow:visible }
     .tier-diamond .stars::after{
       content:""; position:absolute; top:-25%; bottom:-25%; left:-30%;
@@ -194,7 +184,7 @@
   <!-- Banners -->
   <section id="banners"></section>
 
-  <!-- Leaderboard (BANNER va CARDS orasida) -->
+  <!-- Leaderboard -->
   <section class="board grad-border glass" id="board">
     <h3>Top 50 — Ball bo‘yicha (o‘ntalik pager)</h3>
     <div class="pager">
@@ -315,8 +305,12 @@
     return `${h}:${m}:${ss}`;
   };
   const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  function fmtPoints(v){
+    const n = Number(v)||0;
+    return n.toLocaleString('uz-UZ',{maximumFractionDigits:1});
+  }
 
-  // Cards (12 talik limit/bo‘limlik)
+  // Cards (demo loader)
   function computeState(it, now){
     const t=it.type||'open';
     const start=toMs(it.startAt), end=toMs(it.endAt);
@@ -368,9 +362,17 @@
       wrap.appendChild(grid);
     });
   }
+  async function initContent(){
+    try{
+      const r=await fetch('./index.json',{cache:'no-store'});
+      const data=await r.json();
+      el.banners.innerHTML=(data.banners||[]).map(b=>`<div class="banner grad-border glass">${b.html||''}</div>`).join('');
+      renderCards(data);
+    }catch(e){ console.error(e); }
+  }
+  initContent();
 
-  // ==== Leaderboard: o‘ntalik pager + 0.5→5.0 formulasi ====
-  // Diapazonlar TOPdan pastga: 1–10 (diamond), 11–20 (emerald), 21–30 (gold), 31–40 (silver), 41–50 (bronze)
+  // ===== Leaderboard: o‘ntalik pager + 0.5→5.0 =====
   const GROUPS = [
     {label:'10–1 (Diamond)',  start:1,  end:10, tier:'diamond', grad:['#9FE3FF','#39B6FF','#0077FF']},
     {label:'20–11 (Emerald)', start:11, end:20, tier:'emerald', grad:['#8FE3B0','#2E8B57','#1F6B45']},
@@ -378,30 +380,55 @@
     {label:'40–31 (Silver)',  start:31, end:40, tier:'silver',  grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
     {label:'50–41 (Bronze)',  start:41, end:50, tier:'bronze',  grad:['#C69462','#9A6B3F','#7C4F2E']}
   ];
-  let CURRENT_DECILE = 0; // 0..4  (0 = Top-10)
+  let CURRENT_DECILE = 0;
 
-  // SVG generator: 'diamond' (Top-10) yoki 'star' (boshqalar)
+  // Faceted Diamond / Star SVG
   function iconSVG(shape, fillPct, colors){
     const [c1,c2,c3]=colors;
     const gid = 'g'+Math.random().toString(36).slice(2,8);
     const cid = 'c'+Math.random().toString(36).slice(2,8);
-    const path = shape==='diamond'
-      ? 'M12 2 L22 12 L12 22 L2 12 Z'
-      : 'M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z';
+
+    if(shape !== 'diamond'){
+      const pathStar = 'M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z';
+      return `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="${gid}" x1="0" x2="1">
+            <stop offset="0%" stop-color="${c1}"/><stop offset="50%" stop-color="${c2}"/><stop offset="100%" stop-color="${c3}"/>
+          </linearGradient>
+          <clipPath id="${cid}"><rect x="0" y="0" width="${fillPct}%" height="100%"/></clipPath>
+        </defs>
+        <path d="${pathStar}" fill="#d0dbd5"/>
+        <path d="${pathStar}" fill="url(#${gid})" clip-path="url(#${cid})"/>
+      </svg>`;
+    }
+
+    // Faceted diamond
     return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <defs>
         <linearGradient id="${gid}" x1="0" x2="1">
-          <stop offset="0%" stop-color="${c1}"/>
-          <stop offset="50%" stop-color="${c2}"/>
-          <stop offset="100%" stop-color="${c3}"/>
+          <stop offset="0%" stop-color="${c1}"/><stop offset="50%" stop-color="${c2}"/><stop offset="100%" stop-color="${c3}"/>
         </linearGradient>
-        <clipPath id="${cid}">
-          <rect x="0" y="0" width="${fillPct}%" height="100%"></rect>
-        </clipPath>
+        <clipPath id="${cid}"><rect x="0" y="0" width="${fillPct}%" height="100%"/></clipPath>
       </defs>
-      <path d="${path}" fill="#d0dbd5"></path>
-      <path d="${path}" fill="url(#${gid})" clip-path="url(#${cid})"></path>
+
+      <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="#cfe8ff"/>
+      <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="url(#${gid})" clip-path="url(#${cid})"/>
+
+      <polygon points="6,8.5 9,4.7 12,4.7 9.6,8.5" fill="rgba(255,255,255,.35)"/>
+      <polygon points="12,4.7 15,4.7 18,8.5 14.4,8.5" fill="rgba(255,255,255,.25)"/>
+
+      <polygon points="6,8.5 9.6,8.5 12,12.2 8.4,12.2" fill="rgba(255,255,255,.18)"/>
+      <polygon points="18,8.5 14.4,8.5 12,12.2 15.6,12.2" fill="rgba(255,255,255,.12)"/>
+      <polygon points="9.6,8.5 14.4,8.5 12,12.2" fill="rgba(255,255,255,.22)"/>
+
+      <polygon points="8.4,12.2 12,22 12,12.2" fill="rgba(255,255,255,.2)"/>
+      <polygon points="15.6,12.2 12,22 12,12.2" fill="rgba(255,255,255,.16)"/>
+
+      <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="none" stroke="rgba(255,255,255,.6)" stroke-width=".8"/>
+      <path d="M6 8.5 L9 4.7 L15 4.7 L18 8.5" fill="none" stroke="rgba(255,255,255,.55)" stroke-width=".7"/>
+      <path d="M6 8.5 L12 12.2 L18 8.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width=".7"/>
     </svg>`;
   }
   function renderStars(count, tier){
@@ -421,7 +448,6 @@
     if(!g){ el.boardList.innerHTML='<div class="desc">Hali ma’lumot yo‘q</div>'; return; }
     const arr = users.slice(0,50);
     const rows=[];
-    // O‘ntalik ichida 10→1 bo‘yicha 0.5 qadam (rank g.end bo‘lsa 0.5, g.start bo‘lsa 5.0)
     const posInDecile = (rank)=> (g.end - rank + 1);      // 10chi=1 ... 1chi=10
     const starsForRank = (rank)=> 0.5 * posInDecile(rank); // 0.5 .. 5.0
 
@@ -441,7 +467,7 @@
             <div class="desc">${escapeHtml(u.region||'—')} · ${escapeHtml(u.district||'—')} · ${escapeHtml(u.school||'—')}</div>
           </div>
           <div style="text-align:right">
-            <div><b>${Number(u.points)||0}</b></div>
+            <div><b>${fmtPoints(u.points)}</b></div>
             ${renderStars(stars, g.tier)}
           </div>
         </div>
@@ -461,7 +487,7 @@
     el.decileNext.disabled = (decileIndex>=GROUPS.length-1);
   }
 
-  // Foydalanuvchi avatar va Ball yonida yulduz/olmos ko‘rsatish (o‘ntalik 0.5→5.0)
+  // Foydalanuvchi ism va Ball yonida daraja ko‘rsatish
   function computeUserTierStars(sortedUsers, currentUid){
     const idx = sortedUsers.findIndex(u => (u.uid||u.id||u.userId) === currentUid);
     if(idx === -1) { el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; return; }
@@ -476,7 +502,7 @@
     el.userStarsPts.innerHTML = html;  // Ball chipi ichida
   }
 
-  // Auth + profil + leaderboard (live)
+  // Live auth + leaderboard
   let latestUsers = [];
   let currentUserId = null;
 
@@ -497,7 +523,7 @@
     el.uregion.textContent = 'Viloyat: '+(u.region || '—');
     el.udistrict.textContent = 'Tuman: '+(u.district || '—');
     el.uschool.textContent = 'Maktab: '+(u.school || '—');
-    el.points.textContent = 'Ball: '+(Number(u.points)||0);
+    el.points.textContent = 'Ball: '+ fmtPoints(u.points);
     if(user.photoURL){ el.ava.innerHTML='<img src="'+user.photoURL+'" alt="ava">'; }
     else { el.ava.textContent = initials(el.uname.textContent); }
     el.editProfile.style.display='inline';
@@ -505,7 +531,6 @@
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
-      // Chizish va foydalanuvchi yulduzlarini yangilash
       drawDecile(latestUsers, CURRENT_DECILE);
       computeUserTierStars(latestUsers, currentUserId);
     }, (err)=>{
@@ -515,7 +540,7 @@
     });
   });
 
-  // Pager handlers
+  // Pager
   el.decilePrev.onclick = ()=>{ if(CURRENT_DECILE>0){ CURRENT_DECILE--; drawDecile(latestUsers, CURRENT_DECILE); } };
   el.decileNext.onclick = ()=>{ if(CURRENT_DECILE<GROUPS.length-1){ CURRENT_DECILE++; drawDecile(latestUsers, CURRENT_DECILE); } };
 </script>
