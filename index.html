@@ -56,52 +56,125 @@
   </section>
 
   <script type="module">
-    // Theme + SW
-    const themeBtn=document.getElementById('themeBtn'); const key='lm-theme';
-    const setTheme=m=>{document.documentElement.classList.toggle('dark',m==='dark');localStorage.setItem(key,m);themeBtn.textContent=m==='dark'?'☀️':'🌙'};
-    setTheme(localStorage.getItem(key)||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
-    themeBtn.onclick=()=>setTheme(document.documentElement.classList.contains('dark')?'light':'dark');
-    if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js'); }
+  // Theme + SW
+  const themeBtn=document.getElementById('themeBtn'); const key='lm-theme';
+  const setTheme=m=>{document.documentElement.classList.toggle('dark',m==='dark');localStorage.setItem(key,m);themeBtn.textContent=m==='dark'?'☀️':'🌙'};
+  setTheme(localStorage.getItem(key)||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
+  themeBtn.onclick=()=>setTheme(document.documentElement.classList.contains('dark')?'light':'dark');
+  if('serviceWorker' in navigator){ navigator.serviceWorker.register('./service-worker.js'); }
 
-    // Auth (centralized)
-    import { auth, signOut } from "./lib/firebase.client.js";
-    import { watchAuth } from "./lib/auth-guard.js";
+  // ===== Auth (centralized)
+  import { auth, db, signOut } from "./lib/firebase.client.js";
+  import { watchAuth } from "./lib/auth-guard.js";
+  import {
+    doc, getDoc, setDoc, runTransaction,
+    collection, query, orderBy, limit, onSnapshot
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    const el = {
-      uname: document.getElementById('uname'),
-      uid: document.getElementById('uid'),
-      points: document.getElementById('points'),
-      uschool: document.getElementById('uschool'),
-      uclass: document.getElementById('uclass'),
-      ava: document.getElementById('ava'),
-      signin: document.getElementById('signin'),
-      signout: document.getElementById('signout')
-    };
-    function initials(n){ if(!n) return 'LM'; const p=n.trim().split(/\s+/); return (p[0]?.[0]||'L')+(p[1]?.[0]||'M'); }
+  const el = {
+    uname: document.getElementById('uname'),
+    uid: document.getElementById('uid'),
+    points: document.getElementById('points'),
+    uschool: document.getElementById('uschool'),
+    uclass: document.getElementById('uclass'),
+    ava: document.getElementById('ava'),
+    signin: document.getElementById('signin'),
+    signout: document.getElementById('signout'),
+    boardList: document.getElementById('boardList')
+  };
+  const initials = n => { if(!n) return 'LM'; const p=n.trim().split(/\s+/); return (p[0]?.[0]||'L')+(p[1]?.[0]||'M'); };
 
-    el.signin.addEventListener('click',(e)=>{
-      e.preventDefault();
-      const ret = encodeURIComponent(location.pathname + location.search + location.hash);
-      location.href = `./login.html?return=${ret}`;
-    });
-    el.signout.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      await signOut(auth);
-      const ret = encodeURIComponent('./index.html');
-      location.href = `./login.html?return=${ret}`;
-    });
+  // Login/Logout tugmalari
+  el.signin.addEventListener('click',(e)=>{
+    e.preventDefault();
+    const ret = encodeURIComponent(location.pathname + location.search + location.hash);
+    location.href = `./login.html?return=${ret}`;
+  });
+  el.signout.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    await signOut(auth);
+    const ret = encodeURIComponent('./index.html');
+    location.href = `./login.html?return=${ret}`;
+  });
 
-    watchAuth((user)=>{
-      if(!user){
-        el.uname.textContent='Mehmon'; el.uid.textContent='ID: —'; el.points.textContent='Ball: —';
-        el.uschool.textContent='—'; el.uclass.textContent='—'; el.ava.textContent='LM'; el.signin.style.display='inline'; el.signout.style.display='none';
-        return;
+  // Foydalanuvchi hujjatini mavjud qilamiz (birinchi kirishda)
+  async function ensureUserDoc(user) {
+    const ref = doc(db, 'users', user.uid);
+    await runTransaction(db, async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) {
+        tx.set(ref, {
+          name: user.displayName || (user.email ? user.email.split('@')[0] : 'Foydalanuvchi'),
+          email: user.email || null,
+          photoURL: user.photoURL || null,
+          role: 'user',
+          numericId: Math.floor(1000 + Math.random() * 9000),
+          points: 0,
+          school: null, class: null,
+          createdAt: Date.now()
+        });
       }
-      el.signin.style.display='none'; el.signout.style.display='inline';
-      el.uname.textContent = user.displayName || (user.email?.split('@')[0] ?? 'Foydalanuvchi');
-      el.uid.textContent = 'ID: —'; el.points.textContent='Ball: —'; el.uschool.textContent='Maktab: —'; el.uclass.textContent='Sinf: —';
-      if(user.photoURL){ el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; } else { el.ava.textContent = initials(el.uname.textContent); }
     });
-  </script>
+    return (await getDoc(ref)).data();
+  }
+
+  // Leaderboard render
+  function renderBoard(users) {
+    if (!users?.length) {
+      el.boardList.innerHTML = `<div class="sub">Hali ma'lumot yo‘q</div>`;
+      return;
+    }
+    el.boardList.innerHTML = users.map((u,i)=>`
+      <div class="rank">
+        <div>${i+1}</div>
+        <div>
+          <b>${u.name || 'Foydalanuvchi'}</b>
+          <div class="sub">ID: ${u.numericId || '—'}</div>
+          <div class="sub">${u.school ? 'Maktab: '+u.school : 'Maktab: —'} · ${u.class ? 'Sinf: '+u.class : 'Sinf: —'}</div>
+        </div>
+        <div><b>${Number(u.points)||0}</b></div>
+      </div>
+    `).join('');
+  }
+
+  // Auth holatini kuzatish + leaderboard o‘qish
+  let unsubBoard = null;
+  watchAuth(async (user)=>{
+    if (!user) {
+      // mehmon UI
+      el.uname.textContent='Mehmon'; el.uid.textContent='ID: —'; el.points.textContent='Ball: —';
+      el.uschool.textContent='—'; el.uclass.textContent='—'; el.ava.textContent='LM';
+      el.signin.style.display='inline'; el.signout.style.display='none';
+      if (unsubBoard) { unsubBoard(); unsubBoard = null; }
+      // leaderboard hammaga ochiq bo‘lsa ham, xohlasangiz mehmon holatida ham tinglab turishingiz mumkin
+      // bu misolda faqat kirilganida tinglaymiz
+      el.boardList.innerHTML = `<div class="sub">Kirishdan so‘ng ko‘rinadi</div>`;
+      return;
+    }
+
+    el.signin.style.display='none'; el.signout.style.display='inline';
+
+    const uDoc = await ensureUserDoc(user);
+    el.uname.textContent = uDoc.name || user.displayName || (user.email?.split('@')[0] ?? 'Foydalanuvchi');
+    el.uid.textContent = 'ID: ' + (uDoc.numericId || '—');
+    el.points.textContent = 'Ball: ' + (Number(uDoc.points) || 0);
+    el.uschool.textContent = uDoc.school ? ('Maktab: '+uDoc.school) : 'Maktab: —';
+    el.uclass.textContent  = uDoc.class  ? ('Sinf: '+uDoc.class)   : 'Sinf: —';
+    if (user.photoURL) { el.ava.style.backgroundImage=`url(${user.photoURL})`; el.ava.style.backgroundSize='cover'; el.ava.textContent=''; }
+    else { el.ava.textContent = initials(el.uname.textContent); }
+
+    // Leaderboard tinglash (Top 50)
+    if (unsubBoard) unsubBoard();
+    const qUsers = query(collection(db,'users'), orderBy('points','desc'), limit(50));
+    unsubBoard = onSnapshot(qUsers, (snap)=>{
+      const arr = snap.docs.map(d=>d.data()).sort((a,b)=> (Number(b.points)||0)-(Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
+      renderBoard(arr);
+    }, (err)=>{
+      console.error('Leaderboard read error:', err);
+      el.boardList.innerHTML = '<div class="sub">Leaderboard hozircha yopiq</div>';
+    });
+  });
+</script>
+
 </body>
 </html>
