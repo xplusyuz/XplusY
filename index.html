@@ -81,7 +81,7 @@
     @keyframes pulse-glow{0%{filter:drop-shadow(0 0 0 rgba(255,200,0,.0))}100%{filter:drop-shadow(0 0 8px rgba(255,200,0,.55))}}
     .m1,.m2,.m3{animation:pulse-glow 1.6s ease-in-out infinite alternate}
 
-    /* Stars (SVG; per-tier gradientlar) */
+    /* Stars/Diamonds (SVG; per-tier gradientlar) */
     .stars{display:inline-flex;gap:3px;vertical-align:middle}
     .tier-bronze .stars{--s:16}
     .tier-silver .stars{--s:17}
@@ -161,7 +161,10 @@
       </div>
     </div>
     <div class="uvals">
-      <div class="chip"><b id="points">Ball: —</b></div>
+      <div class="chip">
+        <b id="points">Ball: —</b>
+        <span id="userStarsPts" class="ustars"></span>
+      </div>
       <div style="margin-top:6px;font-size:12px">
         <a href="#" id="signin" class="link">Kirish</a> ·
         <a href="#" id="editProfile" class="link" style="display:none">Profil</a> ·
@@ -239,7 +242,8 @@
     banners: document.getElementById('banners'), sections: document.getElementById('sections'),
     boardList: document.getElementById('boardList'),
     decilePrev: document.getElementById('decilePrev'), decileNext: document.getElementById('decileNext'), decileInfo: document.getElementById('decileInfo'),
-    userTierStars: document.getElementById('userTierStars')
+    userTierStars: document.getElementById('userTierStars'),
+    userStarsPts: document.getElementById('userStarsPts')
   };
 
   // Profile modal els
@@ -358,46 +362,51 @@
   }
   initContent();
 
-  // ==== Leaderboard: o‘ntalik pager + per-tier yulduzlar ====
+  // ==== Leaderboard: o‘ntalik pager + per-tier yulduz/olmos ====
   // TOP dan boshlanadigan tartib (10–1 → 20–11 → 30–21 → 40–31 → 50–41)
-const GROUPS = [
-  {label:'Diamond guruh',  start:1,  end:10, tier:'diamond', base:4.5, grad:['#9FE3FF','#39B6FF','#0077FF']},
-  {label:'20–11', start:11, end:20, tier:'emerald', base:3.5, grad:['#8FE3B0','#2E8B57','#1F6B45']},
-  {label:'30–21', start:21, end:30, tier:'gold',    base:2.5, grad:['#FFE082','#FFC107','#FF8F00']},
-  {label:'40–31', start:31, end:40, tier:'silver',  base:1.5, grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
-  {label:'50–41', start:41, end:50, tier:'bronze',  base:0.5, grad:['#C69462','#9A6B3F','#7C4F2E']}
-];
+  const GROUPS = [
+    {label:'Diamond guruh',  start:1,  end:10, tier:'diamond', grad:['#9FE3FF','#39B6FF','#0077FF']},
+    {label:'20–11', start:11, end:20, tier:'emerald', grad:['#8FE3B0','#2E8B57','#1F6B45']},
+    {label:'30–21', start:21, end:30, tier:'gold',    grad:['#FFE082','#FFC107','#FF8F00']},
+    {label:'40–31', start:31, end:40, tier:'silver',  grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
+    {label:'50–41', start:41, end:50, tier:'bronze',  grad:['#C69462','#9A6B3F','#7C4F2E']}
+  ];
   let CURRENT_DECILE = 0; // 0..4
 
-  function starSVG(fillPct, colors){
+  // SVG generator: 'diamond' (Top-10) yoki 'star' (boshqa o‘ntaliklar)
+  function iconSVG(shape, fillPct, colors){
     const [c1,c2,c3]=colors;
-    const id = 'g'+Math.random().toString(36).slice(2,8);
-    const idClip = 'c'+Math.random().toString(36).slice(2,8);
+    const gid = 'g'+Math.random().toString(36).slice(2,8);
+    const cid = 'c'+Math.random().toString(36).slice(2,8);
+    const path = shape==='diamond'
+      ? 'M12 2 L22 12 L12 22 L2 12 Z'
+      : 'M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z';
     return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <defs>
-        <linearGradient id="${id}" x1="0" x2="1">
+        <linearGradient id="${gid}" x1="0" x2="1">
           <stop offset="0%" stop-color="${c1}"/>
           <stop offset="50%" stop-color="${c2}"/>
           <stop offset="100%" stop-color="${c3}"/>
         </linearGradient>
-        <clipPath id="${idClip}">
+        <clipPath id="${cid}">
           <rect x="0" y="0" width="${fillPct}%" height="100%"></rect>
         </clipPath>
       </defs>
-      <path d="M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z"
-        fill="#d0dbd5"></path>
-      <path d="M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z"
-        fill="url(#${id})" clip-path="url(#${idClip})"></path>
+      <path d="${path}" fill="#d0dbd5"></path>
+      <path d="${path}" fill="url(#${gid})" clip-path="url(#${cid})"></path>
     </svg>`;
   }
   function renderStars(count, tier){
     const g = GROUPS.find(x=>x.tier===tier) || GROUPS[0];
+    const shape = (tier==='diamond') ? 'diamond' : 'star';
     const full = Math.floor(count);
     const half = (count - full >= 0.5) ? 1 : 0;
     const empty = 5 - full - half;
-    const fullStar = starSVG(100, g.grad), halfStar = starSVG(50, g.grad), emptyStar = starSVG(0, g.grad);
-    return `<span class="stars">${Array.from({length: full}).map(()=>fullStar).join('')}${half ? halfStar : ''}${Array.from({length: empty}).map(()=>emptyStar).join('')}</span>`;
+    const fullIcon = iconSVG(shape, 100, g.grad);
+    const halfIcon = iconSVG(shape, 50,  g.grad);
+    const emptyIcon= iconSVG(shape, 0,   g.grad);
+    return `<span class="stars">${Array.from({length: full}).map(()=>fullIcon).join('')}${half?halfIcon:''}${Array.from({length: empty}).map(()=>emptyIcon).join('')}</span>`;
   }
 
   function drawDecile(users, decileIndex){
@@ -405,6 +414,9 @@ const GROUPS = [
     if(!g){ el.boardList.innerHTML='<div class="desc">Hali ma’lumot yo‘q</div>'; return; }
     const arr = users.slice(0,50);
     const rows=[];
+    const posInDecile = (rank)=> (g.end - rank + 1);      // 10chi=1 ... 1chi=10
+    const starsForRank = (rank)=> 0.5 * posInDecile(rank); // 0.5 .. 5.0
+
     for(let r=g.start; r<=g.end; r++){
       const u = arr[r-1]; if(!u) continue;
       const rank=r;
@@ -412,8 +424,7 @@ const GROUPS = [
       const leftBadge = isTop3
         ? `<span class="medal ${rank===1?'m1':rank===2?'m2':'m3'}">${rank===1?'🏆':rank===2?'🥈':'🥉'}</span>`
         : `<span class="rnk">#${rank}</span>`;
-      const bonus = (r===g.start)?0.5:0;                 // o‘ntalikda birinchi +½
-      const stars = (rank===1)?5 : g.base + bonus;       // 1-o‘rin 5 ta
+      const stars = starsForRank(rank);
       rows.push(`
         <div class="rank grad-border glass tier-${g.tier}">
           <div>${leftBadge}</div>
@@ -432,7 +443,7 @@ const GROUPS = [
       <div class="group grad-border glass">
         <div class="groupHead tier-${g.tier}">
           <span class="tier-badge">${g.label}</span>
-          <span class="legend">${renderStars(g.base + 0.5, g.tier)}</span>
+          <span class="legend">${renderStars(3, g.tier)}</span>
         </div>
         <div class="groupBody">${rows.join('')}</div>
       </div>
@@ -442,19 +453,18 @@ const GROUPS = [
     el.decileNext.disabled = (decileIndex>=GROUPS.length-1);
   }
 
-  // Foydalanuvchi avatar yonida yulduz ko‘rsatish
+  // Foydalanuvchi avatar/ball yonida yulduz/olmos ko‘rsatish
   function computeUserTierStars(sortedUsers, currentUid){
     const idx = sortedUsers.findIndex(u => (u.uid||u.id||u.userId) === currentUid);
-    if(idx === -1) { el.userTierStars.innerHTML=''; return; }
+    if(idx === -1) { el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; return; }
     const rank = idx + 1;
-    let tier = 'bronze', stars = 0.5;
-    if(rank<=10){ tier='diamond'; stars=4.5; if(rank===1) stars=5; }
-    else if(rank<=20){ tier='emerald'; stars=3.5; if(rank===11) stars=4.0; }
-    else if(rank<=30){ tier='gold'; stars=2.5; if(rank===21) stars=3.0; }
-    else if(rank<=40){ tier='silver'; stars=1.5; if(rank===31) stars=2.0; }
-    else if(rank<=50){ tier='bronze'; stars=0.5; if(rank===41) stars=1.0; }
-    else { el.userTierStars.innerHTML=''; return; }
-    el.userTierStars.innerHTML = renderStars(stars, tier);
+    const g = GROUPS.find(gr => rank>=gr.start && rank<=gr.end);
+    if(!g){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; return; }
+
+    const stars = 0.5 * (g.end - rank + 1); // 0.5..5.0
+    const html = renderStars(stars, g.tier);
+    el.userTierStars.innerHTML = html; // ism yonida
+    el.userStarsPts.innerHTML = html;  // Ball chipi ichida
   }
 
   // Auth + profil + leaderboard (live)
@@ -466,7 +476,7 @@ const GROUPS = [
       el.uname.childNodes[0].nodeValue='Mehmon ';
       el.uid.textContent='ID: —'; el.uregion.textContent='Viloyat: —'; el.udistrict.textContent='Tuman: —'; el.uschool.textContent='Maktab: —'; el.points.textContent='Ball: —';
       el.ava.textContent='LM'; el.ava.style.backgroundImage=''; el.signin.style.display='inline'; el.signout.style.display='none'; el.editProfile.style.display='none';
-      el.userTierStars.innerHTML='';
+      el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML='';
       currentUserId = null;
       return;
     }
@@ -484,7 +494,6 @@ const GROUPS = [
     el.editProfile.style.display='inline';
 
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
-      // doc.id ni ham saqlaymiz (uid uchun)
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
       drawDecile(latestUsers, CURRENT_DECILE);
@@ -498,7 +507,6 @@ const GROUPS = [
   // Pager handlers
   el.decilePrev.onclick = ()=>{ if(CURRENT_DECILE>0){ CURRENT_DECILE--; drawDecile(latestUsers, CURRENT_DECILE); } };
   el.decileNext.onclick = ()=>{ if(CURRENT_DECILE<GROUPS.length-1){ CURRENT_DECILE++; drawDecile(latestUsers, CURRENT_DECILE); } };
-
 </script>
 </body>
 </html>
