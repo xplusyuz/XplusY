@@ -210,7 +210,7 @@
 <script>
 /* ========= SETTINGS ========= */
 const TEST_ID = 'CHSB-2025-demo';
-const SCALE   = 100; // yuzdan birgacha aniqlik (1.23 -> 123)
+const SCALE   = 100; // 1.23 → 123 (yuzdan birgacha aniqlik)
 
 /* ========= HELPERS ========= */
 const $ = (s, el=document)=>el.querySelector(s);
@@ -218,7 +218,8 @@ function isMulti(q){ return Array.isArray(q.correctIndices); }
 
 /* ========= GLOBALS ========= */
 let fb=null, currentUser=null, startedAt=null, testData=null, currentIndex=0;
-let guestOverlay=null; // blok overlay
+let guardOverlay=null; // blok overlay
+let userDocUnsub=null; // users/{uid} snapshot listerner
 
 document.addEventListener('DOMContentLoaded', () => {
   const authInfoEl = $('#authInfo');
@@ -229,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.__firebase?.onAuthStateChanged){
     fb = window.__firebase;
 
+    // 🔄 Auth holatini avtomatik kuzatamiz
     fb.onAuthStateChanged(fb.auth, (user)=>{
       authResolved = true;
       currentUser = user;
@@ -236,67 +238,88 @@ document.addEventListener('DOMContentLoaded', () => {
         ? `Kirish: ${user.displayName || user.email}`
         : 'Kirish: mehmon';
 
+      // Har safar user o'zgarsa, users/{uid} ga qayta yozilishlarni kuzatamiz
+      detachUserDocListener();
       if (user){
-        // ✅ Kirilgan — blokni olib tashlab, testni yuklash
-        removeGuestOverlay();
-        startAppAfterAuth();
+        watchUserDocAndGate(user.uid);
       } else {
-        // ❌ Kirilmagan — testni yuklamaymiz, UI blok
-        showGuestOverlay();   // HECH QAYSI YERGA YO‘NALTIRMAYDI
-        // Eslatma: bu yerda loadTestData() CHAQIRILMAYDI
+        // user yo'q — blok
+        showGuardOverlay('Kirish talab qilinadi', 'Ushbu sahifadan foydalanish uchun hisobingizga kiring.');
       }
     });
 
-    // agar allaqachon login bo‘lgan bo‘lsa
+    // Agar sessiya allaqachon bor bo‘lsa
     if (fb.auth.currentUser){
       authResolved = true;
       currentUser = fb.auth.currentUser;
       authInfoEl.textContent = `Kirish: ${currentUser.displayName || currentUser.email}`;
-      removeGuestOverlay();
-      startAppAfterAuth();
+      watchUserDocAndGate(currentUser.uid);
     }
   } else {
-    // Firebase yo‘q — mehmon sifatida blok
+    // Firebase mavjud emas — blok
     authInfoEl.textContent='Kirish: mehmon';
-    showGuestOverlay();
+    showGuardOverlay('Xatolik', 'Firebase topilmadi. Ilovani to‘g‘ri yuklang.');
   }
 });
 
-/* ========= BLOK OVERLAY (REDIRECTSIZ) ========= */
-function showGuestOverlay(){
-  if (guestOverlay) return;
-  guestOverlay = document.createElement('div');
-  guestOverlay.setAttribute('aria-live','polite');
-  guestOverlay.style.cssText = `
-    position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff;
-    display:flex; align-items:center; justify-content:center; z-index:9999; padding:24px; text-align:center;
-    backdrop-filter:saturate(1.2) blur(2px);
-  `;
-  guestOverlay.innerHTML = `
-    <div style="background:#0f1714; border:1px solid #2E8B57; padding:22px; border-radius:16px; max-width:560px;">
-      <h2 style="margin:0 0 10px">Kirish talab qilinadi</h2>
-      <p style="margin:0; opacity:.9">
-        Ushbu sahifadan foydalanish uchun hisobingizga kiring.
-        <br>(Kirish sahifasiga o‘zingiz o‘ting yoki ilovangizning ichki kirish tugmasidan foydalaning.)
-      </p>
-    </div>`;
-  document.body.appendChild(guestOverlay);
+/* ========= users/{uid} ni kuzatish va ruxsat berish logikasi ========= */
+function watchUserDocAndGate(uid){
+  if (!fb?.db) {
+    showGuardOverlay('Xatolik', 'Firestore ulanmaganga o‘xshaydi.');
+    return;
+  }
+  const ref = fb.doc(fb.db, 'users', uid);
 
-  // Interaktivlarni o‘chirib qo‘yish (ixtiyoriy, xavfsizlik uchun)
+  // 🔄 Avtomatik yangilanish: users/{uid} mavjud bo‘lsa → och, bo‘lmasa → blok
+  userDocUnsub = fb.onSnapshot(ref, (snap)=>{
+    if (snap.exists()){
+      removeGuardOverlay();
+      startAppAfterAuthorized(); // faqat shu yerda test yuklanadi
+    } else {
+      showGuardOverlay('Ruxsat yo‘q', 'Hisobingiz ro‘yxatda topilmadi (users/uid). Administrator bilan bog‘laning.');
+    }
+  }, (err)=>{
+    console.warn('users/{uid} snapshot error:', err);
+    showGuardOverlay('Xatolik', 'Foydalanuvchi ma’lumotini o‘qishda xatolik.');
+  });
+}
+
+function detachUserDocListener(){
+  if (typeof userDocUnsub === 'function'){
+    userDocUnsub();
+    userDocUnsub = null;
+  }
+}
+
+/* ========= BLOK OVERLAY (redirectsiz) ========= */
+function showGuardOverlay(title, body){
+  if (!guardOverlay){
+    guardOverlay = document.createElement('div');
+    guardOverlay.setAttribute('aria-live','polite');
+    guardOverlay.style.cssText = `
+      position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff;
+      display:flex; align-items:center; justify-content:center; z-index:9999; padding:24px; text-align:center;
+      backdrop-filter:saturate(1.2) blur(2px);
+    `;
+    document.body.appendChild(guardOverlay);
+  }
+  guardOverlay.innerHTML = `
+    <div style="background:#0f1714; border:1px solid #2E8B57; padding:22px; border-radius:16px; max-width:560px;">
+      <h2 style="margin:0 0 10px">${title}</h2>
+      <p style="margin:0; opacity:.9">${body}</p>
+    </div>`;
   disableTestInteractions(true);
 }
 
-function removeGuestOverlay(){
-  if (guestOverlay){
-    guestOverlay.remove();
-    guestOverlay=null;
+function removeGuardOverlay(){
+  if (guardOverlay){
+    guardOverlay.remove();
+    guardOverlay=null;
   }
   disableTestInteractions(false);
 }
 
-/* UI interaktivlarini yoqib/o‘chirish (submit, variant tanlash va h.k.) */
 function disableTestInteractions(block){
-  // Sizning sahifangizdagi asosiy konteyner id/classlarini moslang:
   const root = $('#questionsCard') || document.body;
   if (!root) return;
   root.querySelectorAll('button, input, select, textarea, a').forEach(el=>{
@@ -304,7 +327,7 @@ function disableTestInteractions(block){
       el.setAttribute('data-prev-tabindex', el.getAttribute('tabindex') ?? '');
       el.setAttribute('tabindex','-1');
       el.setAttribute('aria-disabled','true');
-      el.disabled = (typeof el.disabled==='boolean') ? true : el.disabled;
+      if ('disabled' in el) el.disabled = true;
     } else {
       const prev = el.getAttribute('data-prev-tabindex');
       if (prev !== null){
@@ -312,20 +335,22 @@ function disableTestInteractions(block){
         el.removeAttribute('data-prev-tabindex');
       }
       el.removeAttribute('aria-disabled');
-      if (typeof el.disabled==='boolean') el.disabled = false;
+      if ('disabled' in el) el.disabled = false;
     }
   });
 }
 
-/* ========= START AFTER AUTH ========= */
-async function startAppAfterAuth(){
-  startedAt = new Date();
-  await loadTestData(); // sizdagi mavjud funksiya (testData ni to‘ldiradi)
-  // Kerak bo‘lsa boshlang‘ich render:
-  // renderQuestion(0) va h.k.
+/* ========= START AFTER AUTHORIZED (user doc mavjud bo‘lsa) ========= */
+async function startAppAfterAuthorized(){
+  if (!startedAt){ startedAt = new Date(); }
+  if (!testData){
+    await loadTestData(); // sizdagi mavjud funksiya testData ni to‘ldiradi
+    // kerak bo‘lsa dastlabki render
+    // renderQuestion(0);
+  }
 }
 
-/* ========= TO‘G‘RI JAVOBNI CHIZISH (mavjud kod) ========= */
+/* ========= TO‘G‘RI JAVOBNI CHIZISH (sizda bor edi) ========= */
 function revealCorrect(){
   $('#resultCard').classList.add('hidden');
   $('#questionsCard').classList.remove('hidden');
@@ -348,7 +373,7 @@ function revealCorrect(){
 }
 
 /* ========= ANIQLIK: FIXED-POINT (2 xonali) ========= */
-function toIntPoints(x){ return Math.round(Number(x) * SCALE); }  // 1.23 → 123
+function toIntPoints(x){ return Math.round(Number(x) * SCALE); } // 1.23 → 123
 
 function isAnswerCorrect(q, userAnswer){
   if (isMulti(q)){
@@ -377,7 +402,7 @@ function formatPoints(totalInt, fractionDigits=2){
   return (totalInt / SCALE).toFixed(fractionDigits);
 }
 
-/* ========= FIRESTORE: BIRINCHI URINISHGINA YOZILSIN ========= */
+/* ========= FIRESTORE: FAQAT BIRINCHI URINISHNI YOZISH ========= */
 async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
   if (!fb || !fb.db || !currentUser) throw new Error('Auth yoki Firestore yo‘q');
   const uid = currentUser.uid;
@@ -386,10 +411,7 @@ async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
 
   await fb.runTransaction(fb.db, async (tx)=>{
     const snap = await fb.getDoc(ref);
-    if (snap.exists()){
-      // allaqachon bor — yangilamaymiz
-      return;
-    }
+    if (snap.exists()){ return; } // allaqachon bor — yangilamaymiz
     tx.set(ref, {
       uid, testId,
       pointsInt: totalInt,
@@ -403,13 +425,11 @@ async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
   });
 }
 
-/* ========= SUBMIT HANDLER (auth guard bilan) ========= */
+/* ========= SUBMIT HANDLER (avtorizatsiya guard bilan) ========= */
 async function onSubmitResults(userAnswers){
-  // 🔒 Auth guard — redirect yo‘q, faqat ogohlantiramiz
-  if (!currentUser){
-    showGuestOverlay();
-    // xohlasangiz toast:
-    console.warn('Kirish talab qilinadi.');
+  // 👇 Faqat user ham, uning users/{uid} hujjati ham bo‘lganda ishlaydi
+  if (!currentUser || guardOverlay){
+    showGuardOverlay('Ruxsat yo‘q', 'Kirish yoki ro‘yxatga kiritish talab qilinadi.');
     return;
   }
 
@@ -431,5 +451,6 @@ async function onSubmitResults(userAnswers){
 //   onSubmitResults(userAnswers);
 // });
 </script>
+
 </body>
 </html>
