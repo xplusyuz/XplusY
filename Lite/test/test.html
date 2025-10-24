@@ -208,431 +208,190 @@
   </script>
 
   <script>
-    /* ===================== UTIL ===================== */
-    const $ = s => document.querySelector(s);
-    const sum = a => a.reduce((x,y)=>x+y,0);
-    const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
-    const isMulti = q => Array.isArray(q.correctIndices);
-    const arraysEqualUnordered = (a,b)=>a.length===b.length && [...a].sort((x,y)=>x-y).every((v,i)=>v===[...b].sort((x,y)=>x-y)[i]);
-    async function typeset(el){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } }
+/* ========= SETTINGS ========= */
+const TEST_ID = 'CHSB-2025-demo';   // test ID'ingiz
+const SCALE  = 100;                  // yuzdan birgacha: 2 xonali aniqlik
 
-    function escapeHtml(t){ return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function looksLikeTeX(s){ return /[\\^_{}]|\\(frac|sqrt|sum|int|log|ln|sin|cos|tan|vec|pi|le|ge|ne|pm|times|cdot|left|right)/.test(s); }
-    function renderLineForMath(s){
-      const hasDollar = /\$.*\$/.test(s);
-      const safe = escapeHtml(s);
-      if(hasDollar) return safe;
-      if(looksLikeTeX(s)) return '\\(' + safe + '\\)';
-      return safe;
-    }
+/* ========= HELPERS ========= */
+const $ = (s, el=document)=>el.querySelector(s);
 
-    // Fisher–Yates shuffle
-    function shuffle(arr){
-      const a = arr.slice();
-      for(let i=a.length-1;i>0;i--){
-        const j = Math.floor(Math.random()*(i+1));
-        [a[i],a[j]] = [a[j],a[i]];
-      }
-      return a;
-    }
+// Sizda allaqachon bor deb qabul qilamiz:
+function isMulti(q){ return Array.isArray(q.correctIndices); }
 
-    /* ===================== STATE ===================== */
-    let testData = null, currentIndex = 0, answers = [], timerId = null, timeLeftSec = 0, submitted = false, startedAt = new Date();
-    let fb = null, currentUser = null;
+/* ========= AUTH GATE ========= */
+let fb=null, currentUser=null, startedAt=null, testData=null, currentIndex=0;
 
-    // NEW: per-question option order (array of arrays of ORIGINAL indices)
-    let optionOrders = [];
+document.addEventListener('DOMContentLoaded', () => {
+  const authInfoEl = $('#authInfo');
+  let authResolved = false;
 
-    /* ===================== RASMLAR ===================== */
-    function resolveQuestionImageSrc(i) {
-      return new Promise((resolve) => {
-        const tryJpg = `./${i}.jpg`;
-        const tryPng = `./${i}.png`;
-        const img = new Image();
-        img.onload = () => resolve(tryJpg);
-        img.onerror = () => {
-          const img2 = new Image();
-          img2.onload = () => resolve(tryPng);
-          img2.onerror = () => resolve(null);
-          img2.src = tryPng + `?t=${Date.now()}`;
-        };
-        img.src = tryJpg + `?t=${Date.now()}`;
-      });
-    }
+  setTimeout(()=>{ if(!authResolved) authInfoEl.textContent='Kirish: mehmon'; }, 3000);
 
-    /* ===================== ADAPTER ===================== */
-    function normalizeTestData(data){
-      if(!data || !Array.isArray(data.questions)) return data;
-      if (data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
-      data.title = data.title || 'Rasm-Only Test';
-      data.description = data.description || 'Rasm + variant';
-      data.type = data.type || 'aralash';
-      data.questions = data.questions.map(q=>{
-        const qq = {...q};
-        qq.points = Number(qq.points || 1);
-        return qq;
-      });
-      return data;
-    }
+  if (window.__firebase?.onAuthStateChanged){
+    fb = window.__firebase;
 
-    /* ===================== LOAD TEST ===================== */
-    async function loadTestData(){
-      const stored = localStorage.getItem('testData');
-      if(stored){
-        try{ testData = normalizeTestData(JSON.parse(stored)); initTest(); return; }
-        catch(e){ console.error('localStorage parse xato:', e); }
-      }
-      try{
-        const r = await fetch('test.json', { cache: 'no-store' });
-        if(!r.ok) throw new Error('test.json o‘qilmadi');
-        testData = normalizeTestData(await r.json());
-        initTest();
-      }catch(e){
-        console.warn(e);
-        showNoTest();
-      }
-    }
+    fb.onAuthStateChanged(fb.auth, (user)=>{
+      authResolved = true;
+      currentUser = user;
 
-    function showNoTest(){
-      $('#questionsCard').classList.add('hidden');
-      $('#resultCard').classList.add('hidden');
-      $('#emptyCard').classList.remove('hidden');
-    }
+      authInfoEl.textContent = user
+        ? `Kirish: ${user.displayName || user.email}`
+        : 'Kirish: mehmon';
 
-    /* ===================== SECTIONS ===================== */
-    function buildSections(){
-      const n = testData.questions.length;
-      if(Array.isArray(testData.sections) && testData.sections.length){
-        return testData.sections.map(s=>({
-          name: s.name || 'Bo‘lim',
-          start: Math.max(1, Number(s.start||1)),
-          end: Math.min(n, Number(s.end||n))
-        }));
-      }
-      if(n<=12) return [{name:'Algebra', start:1, end:n}];
-      return [
-        {name:'Algebra',   start:1,  end:Math.min(12,n)},
-        {name:'Geometriya',start:13, end:n}
-      ];
-    }
-    function sectionOf(index1, sections){
-      for(const s of sections){
-        if(index1>=s.start && index1<=s.end) return s.name;
-      }
-      return '—';
-    }
-
-    /* ===================== INIT ===================== */
-    function initTest(){
-      if(!testData || !Array.isArray(testData.questions) || testData.questions.length===0){ showNoTest(); return; }
-      const qn = testData.questions.length;
-      answers = Array.from({length: qn}, ()=>[]);
-      optionOrders = Array.from({length: qn}, ()=>[]); // init
-
-      $('#testTitle').textContent = testData.title || 'Rasm-Only Test';
-      $('#testDesc').textContent = testData.description || 'Rasm + variant';
-      $('#metaCount').textContent = `Savollar: ${qn}`;
-      const totalPts = testData.questions.map(q=>Number(q.points||1)).reduce((a,b)=>a+b,0);
-      $('#metaPoints').textContent = `Umumiy ball: ${totalPts}`;
-      $('#metaType').textContent = (testData.type || 'aralash').toUpperCase();
-
-      const minutes = Number(testData.durationMinutes || 0);
-      if(minutes>0){
-        timeLeftSec = Math.round(minutes*60);
-        $('#metaTimer').classList.remove('hidden');
-        updateTimerBadge();
-        timerId = setInterval(tick, 1000);
-      } else { $('#metaTimer').classList.add('hidden'); }
-
-      // section chips
-      const sections = buildSections();
-      const chips = sections.map(s=>`<span class="s-chip">${s.name}: ${s.start}–${s.end}</span>`).join(' ');
-      const desc = document.createElement('div'); desc.className='muted'; desc.innerHTML = chips;
-      $('.header').appendChild(desc);
-
-      buildNavigator();
-      $('#prevBtn').onclick = ()=>gotoQuestion(currentIndex-1);
-      $('#nextBtn').onclick = ()=>gotoQuestion(currentIndex+1);
-      $('#submitBtn').onclick = onSubmit;
-      $('#reviewBtn').onclick = revealCorrect;
-
-      gotoQuestion(0);
-    }
-
-    /* ===================== NAVIGATOR ===================== */
-    function buildNavigator(){
-      const grid = $('#navgrid'); grid.innerHTML = '';
-      testData.questions.forEach((_,i)=>{
-        const b = document.createElement('button');
-        b.className = 'navbtn'; b.textContent = i+1; b.id = `navbtn-${i}`;
-        b.addEventListener('click', ()=>gotoQuestion(i));
-        grid.appendChild(b);
-      });
-      refreshNavigator();
-    }
-    function refreshNavigator(){
-      testData.questions.forEach((_,i)=>{
-        const b = document.getElementById(`navbtn-${i}`); if(!b) return;
-        const ans = (answers[i] && answers[i].length>0);
-        b.classList.toggle('current', i===currentIndex);
-        b.classList.toggle('answered', ans);
-        b.classList.toggle('unanswered', !ans);
-      });
-    }
-
-    async function gotoQuestion(i){
-      const n = testData.questions.length;
-      if(i<0) i=0; if(i>=n) i=n-1;
-      currentIndex = i;
-      await renderCurrentQuestion();
-      refreshNavigator();
-      $('#prevBtn').disabled = (currentIndex===0);
-      $('#nextBtn').disabled = (currentIndex===testData.questions.length-1);
-    }
-
-    /* ===================== RENDER (with RANDOM options) ===================== */
-    async function renderCurrentQuestion(){
-      const q = testData.questions[currentIndex];
-      const wrap = $('#questionView'); wrap.innerHTML = '';
-
-      const head = document.createElement('div'); head.className='qhead';
-      head.appendChild(Object.assign(document.createElement('div'), {className:'qname', textContent:`#${currentIndex+1}`}));
-      head.appendChild(Object.assign(document.createElement('div'), {className:'qpts',  textContent:`${q.points||1} ball`}));
-
-      const qimgWrap = document.createElement('div'); qimgWrap.className = 'qimg';
-      const qimg = document.createElement('img'); qimg.alt = `Savol ${currentIndex+1} rasmi`; qimg.loading='lazy'; qimg.decoding='async';
-      qimgWrap.appendChild(qimg);
-
-      const opts = document.createElement('div'); opts.className='opts';
-      const multi = isMulti(q); const nameAttr = `q_${currentIndex}`;
-      const chosenOriginal = new Set(answers[currentIndex] || []); // store as ORIGINAL indices
-
-      // Build order once per question (stable across navigation)
-      if(optionOrders[currentIndex].length === 0){
-        const origIdx = (q.options||[]).map((_,j)=>j);
-        optionOrders[currentIndex] = shuffle(origIdx);
-      }
-      const order = optionOrders[currentIndex]; // display order of ORIGINAL indices
-
-      order.forEach((origJ, dispJ)=>{
-        const text = (q.options && q.options[origJ]) ? q.options[origJ] : '';
-        const row = document.createElement('div'); row.className='opt';
-        const inp = document.createElement('input');
-        inp.type = multi ? 'checkbox' : 'radio'; inp.name=nameAttr;
-        inp.value = String(origJ);         // store ORIGINAL index in value!
-        inp.id=`${nameAttr}_${dispJ}`;
-        inp.checked = multi ? chosenOriginal.has(origJ) : (chosenOriginal.has(origJ));
-        inp.addEventListener('change', ()=>{
-          if(multi){
-            if(inp.checked) chosenOriginal.add(origJ); else chosenOriginal.delete(origJ);
-            answers[currentIndex] = Array.from(chosenOriginal).sort((a,b)=>a-b);
-          } else {
-            answers[currentIndex] = inp.checked ? [origJ] : [];
-          }
-          refreshNavigator();
-        });
-        const lbl = document.createElement('label'); lbl.setAttribute('for', inp.id);
-        lbl.innerHTML = `<span class="mj">${renderLineForMath(String(text))}</span>`;
-        row.appendChild(inp); row.appendChild(lbl); opts.appendChild(row);
-      });
-
-      wrap.appendChild(head);
-      wrap.appendChild(qimgWrap);
-      wrap.appendChild(opts);
-
-      const idx1 = currentIndex + 1;
-      const src = await resolveQuestionImageSrc(idx1);
-      qimg.src = src || '';
-
-      await typeset(wrap);
-    }
-
-    /* ===================== TIMER ===================== */
-    function tick(){ if(submitted){ clearInterval(timerId); return; } timeLeftSec--; updateTimerBadge(); if(timeLeftSec<=0){ clearInterval(timerId); onSubmit(); } }
-    function updateTimerBadge(){
-      const b = $('#metaTimer'); const m = Math.max(0,Math.floor(timeLeftSec/60)); const s = Math.max(0,timeLeftSec%60);
-      b.textContent = `${pad2(m)}:${pad2(s)}`;
-      b.classList.toggle('warn', timeLeftSec<=180 && timeLeftSec>60);
-      b.classList.toggle('crit', timeLeftSec<=60);
-    }
-
-    /* ===================== FIREBASE HELPERS ===================== */
-    async function ensureUserDoc() {
-      if(!fb) fb = window.__firebase;
-      const { db, runTransaction, doc, setDoc } = fb;
-      const user = fb.auth.currentUser;
-      if (!user) return;
-      const uref = doc(db, 'users', user.uid);
-      try {
-        await runTransaction(db, async (tx) => {
-          const snap = await tx.get(uref);
-          if (!snap.exists()) {
-            tx.set(uref, { name: user.displayName || 'Foydalanuvchi', email: user.email || null, points: 0, createdAt: Date.now() });
-          }
-        });
-      } catch (e) {
-        await setDoc(uref, { name: user.displayName || 'Foydalanuvchi', points: 0, createdAt: Date.now() }, { merge: true });
-      }
-    }
-
-    async function saveResultToFirebase(payload){
-      const { db, serverTimestamp, addDoc, collection, increment, runTransaction, doc, setDoc } = fb;
-      const { uid, score, total, percent, startedAt, finishedAt, testId, sectionsSummary } = payload;
-
-      await addDoc(collection(db,'results'), {
-        uid, testId, score, total, percent,
-        sections: sectionsSummary,
-        startedAt: startedAt?.toISOString() || null,
-        finishedAt: finishedAt?.toISOString() || null,
-        createdAt: serverTimestamp()
-      });
-
-      const uref = doc(db,'users',uid);
-      try{
-        await runTransaction(db, async (tx)=>{
-          const snap = await tx.get(uref);
-          if(!snap.exists()){ tx.set(uref, { points: score, updatedAt: serverTimestamp() }, { merge:true }); }
-          else { tx.update(uref, { points: increment(score), updatedAt: serverTimestamp() }); }
-        });
-      }catch(e){
-        await setDoc(uref, { points: score, updatedAt: serverTimestamp() }, { merge:true });
-      }
-    }
-
-    /* ===================== SUBMIT / ANALYSIS ===================== */
-    async function onSubmit(){
-      if(submitted) return; submitted = true;
-
-      const sections = buildSections();
-      const sectionTotals = {}; const sectionGained = {};
-      sections.forEach(s=>{ sectionTotals[s.name]=0; sectionGained[s.name]=0; });
-
-      let gained=0, correctCount=0;
-      const perQuestion = [];
-
-      testData.questions.forEach((q,i)=>{
-        const pts=Number(q.points||1);
-        const idx1=i+1;
-        const secName = sectionOf(idx1, sections);
-        sectionTotals[secName]+=pts;
-
-        const chosen=answers[i]||[]; // already ORIGINAL indices
-        const correct = isMulti(q) ? (q.correctIndices||[]) : [Number(q.correctIndex??-1)];
-        const ok = isMulti(q) ? arraysEqualUnordered(chosen, correct) : (chosen.length===1 && chosen[0]===correct[0]);
-        if(ok){ gained+=pts; correctCount++; sectionGained[secName]+=pts; }
-
-        perQuestion.push({ i: idx1, section: secName, points: pts, chosen, correct, ok });
-      });
-
-      const totalPts = sum(testData.questions.map(q=>Number(q.points||1)));
-      const percent = totalPts ? Math.round((gained/totalPts)*100) : 0;
-      const finishedAt = new Date(); const spentSec = Math.max(0,Math.round((finishedAt-startedAt)/1000));
-      const tMM = Math.floor(spentSec/60), tSS = spentSec%60;
-
-      $('#questionsCard').classList.add('hidden');
-      $('#resultCard').classList.remove('hidden');
-      $('#scoreText').textContent = `Natija: ${gained} / ${totalPts}`;
-      $('#kpiPercent').textContent = `Foiz: ${percent}%`;
-      $('#kpiCorrect').textContent = `To‘g‘ri: ${correctCount} ta / ${testData.questions.length} ta`;
-      $('#kpiTime').textContent = `Vaqt: ${pad2(tMM)}:${pad2(tSS)}`;
-      $('#resultMsg').textContent = percent>=86 ? 'Ajoyib! 🔥' : percent>=70 ? 'Barakalla! 💪' : percent>=50 ? 'Yaxshi urinish. 🙂' : 'Mashqni ko‘paytiring. 📚';
-
-      const sc = $('#sectionChips'); sc.innerHTML='';
-      const sectionsSummary = sections.map(s=>{
-        const tot = sectionTotals[s.name]||0;
-        const win = sectionGained[s.name]||0;
-        const prc = tot? Math.round((win/tot)*100) : 0;
-        const div = document.createElement('span');
-        div.className='s-chip';
-        div.textContent = `${s.name}: ${win} / ${tot} (${prc}%)`;
-        sc.appendChild(div);
-        return { name:s.name, gained: win, total: tot, percent: prc };
-      });
-
-      const tbody = $('#analysisTable tbody'); tbody.innerHTML='';
-      perQuestion.forEach(row=>{
-        const tr = document.createElement('tr');
-        const td = (h)=>{ const x=document.createElement('td'); x.innerHTML=h; return x; };
-        const chosenText = row.chosen.length ? row.chosen.map(n=>n+1).join(', ') : '<span class="muted">—</span>';
-        const correctText = row.correct.length ? row.correct.map(n=>n+1).join(', ') : '<span class="muted">—</span>';
-        tr.appendChild(td(String(row.i)));
-        tr.appendChild(td(`<span class="pill">${row.section}</span>`));
-        tr.appendChild(td(String(row.points)));
-        tr.appendChild(td(chosenText));
-        tr.appendChild(td(correctText));
-        tr.appendChild(td(row.ok? '<span class="ok">to‘g‘ri</span>' : '<span class="bad">noto‘g‘ri</span>'));
-        tbody.appendChild(tr);
-      });
-
-      const infoEl = $('#kpiSaved'); const nameEl = $('#userName');
-      if(!fb) fb = window.__firebase;
-      if(fb?.auth?.currentUser){
-        try{
-          await ensureUserDoc();
-          await saveResultToFirebase({
-            uid: fb.auth.currentUser.uid,
-            testId: testData.id || (testData.title||'unknown').toLowerCase().replace(/\s+/g,'-'),
-            score: gained, total: totalPts, percent, startedAt, finishedAt,
-            sectionsSummary
-          });
-          infoEl.textContent = 'Saqlash: ✅ Ball saqlandi!';
-          nameEl.textContent = `👤 ${fb.auth.currentUser.displayName || fb.auth.currentUser.email}`;
-        }catch(e){
-          console.error('save failed:', e);
-          infoEl.textContent = 'Saqlash: ❌ Xatolik';
-          nameEl.textContent = `👤 ${fb.auth.currentUser.displayName || fb.auth.currentUser.email}`;
-        }
+      if (user){
+        startAppAfterAuth();
       } else {
-        infoEl.textContent = 'Saqlash: ❌ Faqat kirgan foydalanuvchilar uchun';
-        nameEl.textContent = '👤 Mehmon';
+        blockAppForGuests();
       }
-    }
-
-    function revealCorrect(){
-      $('#resultCard').classList.add('hidden');
-      $('#questionsCard').classList.remove('hidden');
-      const q=testData.questions[currentIndex]; const multi=isMulti(q);
-      const correct = multi?(q.correctIndices||[]):[Number(q.correctIndex??-1)];
-      document.querySelectorAll('#questionView .opt').forEach(row=>{
-        row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
-      });
-      document.querySelectorAll('#questionView input').forEach(inp=>{
-        const orig = Number(inp.value); // ORIGINAL index stored in value
-        const row=inp.closest('.opt');
-        if(correct.includes(orig)){
-          row.style.borderColor='rgba(46,139,87,.55)';
-          row.style.boxShadow='0 0 0 4px rgba(46,139,87,.18)';
-          row.style.background='#f3fbf6';
-        }
-      });
-    }
-
-    /* ===================== AUTH BANNER ===================== */
-    document.addEventListener('DOMContentLoaded', ()=>{
-      const authInfoEl = $('#authInfo');
-      let authResolved = false;
-
-      setTimeout(()=>{ if(!authResolved) authInfoEl.textContent='Kirish: mehmon'; }, 3000);
-
-      if(window.__firebase?.onAuthStateChanged){
-        fb = window.__firebase;
-        fb.onAuthStateChanged(fb.auth, (user)=>{
-          authResolved = true;
-          currentUser = user;
-          authInfoEl.textContent = user ? `Kirish: ${user.displayName||user.email}` : 'Kirish: mehmon';
-        });
-        if (fb.auth.currentUser) {
-          authResolved = true;
-          const u = fb.auth.currentUser;
-          authInfoEl.textContent = `Kirish: ${u.displayName || u.email}`;
-        }
-      } else {
-        authInfoEl.textContent='Kirish: mehmon';
-      }
-
-      startedAt = new Date();
-      loadTestData();
     });
-  </script>
+
+    if (fb.auth.currentUser){
+      authResolved = true;
+      currentUser = fb.auth.currentUser;
+      authInfoEl.textContent = `Kirish: ${currentUser.displayName || currentUser.email}`;
+      startAppAfterAuth();
+    }
+  } else {
+    authInfoEl.textContent='Kirish: mehmon';
+    blockAppForGuests();
+  }
+});
+
+function blockAppForGuests(){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed; inset:0; background:rgba(0,0,0,.6); color:#fff;
+    display:flex; align-items:center; justify-content:center; z-index:9999; padding:24px; text-align:center;
+  `;
+  overlay.innerHTML = `
+    <div style="background:#0f1714; border:1px solid #2E8B57; padding:24px; border-radius:16px; max-width:520px;">
+      <h2 style="margin:0 0 12px">Kirish talab qilinadi</h2>
+      <p style="margin:0 0 20px; opacity:.9">Ushbu sahifadan foydalanish uchun hisobingizga kiring.</p>
+      <button id="goLogin" style="padding:10px 16px; border-radius:10px; border:1px solid #2E8B57; background:#2E8B57; color:#fff; cursor:pointer;">
+        Kirish sahifasiga o‘tish
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  $('#goLogin', overlay).addEventListener('click', ()=>{ window.location.href='/login.html'; });
+}
+
+async function startAppAfterAuth(){
+  startedAt = new Date();
+  await loadTestData();         // mavjud funksiyangiz (testData ni to‘ldiradi)
+  // Agar sizga boshlang‘ich renderlar kerak bo‘lsa shu yerda chaqiring
+}
+
+/* ========= RENDER: TO‘G‘RI JAVOBNI KO‘RSATISH (sizde bor edi) ========= */
+function revealCorrect(){
+  $('#resultCard').classList.add('hidden');
+  $('#questionsCard').classList.remove('hidden');
+  const q = testData.questions[currentIndex]; 
+  const multi = isMulti(q);
+  const correct = multi ? (q.correctIndices||[]) : [Number(q.correctIndex ?? -1)];
+
+  document.querySelectorAll('#questionView .opt').forEach(row=>{
+    row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
+  });
+  document.querySelectorAll('#questionView input').forEach(inp=>{
+    const orig = Number(inp.value); // ORIGINAL index stored in value
+    const row = inp.closest('.opt');
+    if (correct.includes(orig)){
+      row.style.borderColor='rgba(46,139,87,.55)';
+      row.style.boxShadow='0 0 0 4px rgba(46,139,87,.18)';
+      row.style.background='#f3fbf6';
+    }
+  });
+}
+
+/* ========= FIXED-POINT (ANIQ) HISOBLASH ========= */
+/** q.points: masalan 1, 1.5, 0.25 ... (2 xonali) bo‘lishi mumkin */
+function toIntPoints(x){ return Math.round(Number(x) * SCALE); }  // 1.23 → 123
+
+function isAnswerCorrect(q, userAnswer){
+  // userAnswer: single -> number (index), multi -> number[] (indexlar)
+  if (isMulti(q)){
+    const correct = (q.correctIndices||[]).slice().sort((a,b)=>a-b);
+    const ans = (Array.isArray(userAnswer)? userAnswer: []).slice().sort((a,b)=>a-b);
+    if (ans.length !== correct.length) return false;
+    for (let i=0;i<correct.length;i++) if (ans[i]!==correct[i]) return false;
+    return true;
+  } else {
+    return Number(userAnswer) === Number(q.correctIndex ?? -1);
+  }
+}
+
+function computeScoreInt(questions, userAnswers){
+  // userAnswers[i] -> single: number, multi: number[] (original indexlar)
+  let totalInt = 0;
+  for (let i=0;i<questions.length;i++){
+    const q = questions[i];
+    const ok = isAnswerCorrect(q, userAnswers[i]);
+    const ptsInt = toIntPoints(q.points ?? 1);   // default 1.00
+    if (ok) totalInt += ptsInt;
+  }
+  return totalInt; // butun (fixed)
+}
+
+function formatPoints(totalInt, fractionDigits=2){
+  return (totalInt / SCALE).toFixed(fractionDigits); // ekranga chiqarish
+}
+
+/* ========= FIRESTORE: BIRINCHI URINISHNI YOZISH (CREATE-ONLY) ========= */
+async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
+  if (!fb || !fb.db || !currentUser) throw new Error('Auth yoki Firestore yo‘q');
+  const uid = currentUser.uid;
+  const docId = `${testId}_${uid}`;
+  const ref = fb.doc(fb.db, 'results', docId);
+
+  await fb.runTransaction(fb.db, async (tx)=>{
+    const snap = await fb.getDoc(ref);
+    if (snap.exists()){
+      // Allaqachon bor — qayta yozmaymiz
+      return;
+    }
+    tx.set(ref, {
+      uid, testId,
+      pointsInt: totalInt,
+      scale: SCALE,
+      points: totalInt / SCALE,     // o‘qishda qulay
+      durationSec,
+      startedAt: startedAt ? fb.Timestamp.fromDate(startedAt) : null,
+      createdAt: fb.serverTimestamp(),
+      meta,                         // xohlasangiz guruh/tag va boshqalar
+    });
+  });
+}
+
+/* ========= TESTNI YAKUNLASH (CALL THIS WHEN USER SUBMITS) ========= */
+// userAnswers formatini o‘zingizning UIingizga moslang:
+//   - single: tanlangan input.value original index (number)
+//   - multi: tanlanganlar original indexlar massivi
+async function onSubmitResults(userAnswers){
+  // 1) hisoblash (aniq)
+  const totalInt = computeScoreInt(testData.questions, userAnswers);
+  const shown = formatPoints(totalInt, 2); // masalan "80.00"
+  $('#finalScore').textContent = shown;    // UI da ko‘rsatish bo‘limingiz
+
+  // 2) faqat birinchi urinishni saqlash
+  const durationSec = Math.max(0, Math.round((Date.now() - (startedAt?.getTime()||Date.now()))/1000));
+  try{
+    await saveResultOnce({ testId: TEST_ID, totalInt, durationSec, meta:{} });
+  } catch(e){
+    // Agar qoidalar qayta yozishga ruxsat bermasa (retriable emas) — jim qolamiz
+    console.warn('saveResultOnce:', e);
+  }
+
+  // 3) natija/analitika ko‘rinishlari…
+  $('#questionsCard').classList.add('hidden');
+  $('#resultCard').classList.remove('hidden');
+}
+
+/* ========= MISOL: SUBMIT TUGMASI UCHUN BOG‘LASH ========= */
+// document.querySelector('#submitBtn').addEventListener('click', ()=>{
+//   const userAnswers = collectAnswersFromUI(); // o‘zingizning funksiyangiz
+//   onSubmitResults(userAnswers);
+// });
+
+</script>
 </body>
 </html>
