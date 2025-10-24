@@ -20,6 +20,7 @@
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .modal-open{overflow:hidden} /* modal ochilganda scroll blok */
 
     /* Appbar */
     .appbar{position:sticky;top:0;z-index:90;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
@@ -201,7 +202,7 @@
   </div>
 
   <!-- Profile modal -->
-  <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
+  <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog" style="display:none">
     <div class="modal">
       <h3>Profil ma’lumotlari (majburiy)</h3>
       <div class="grid2">
@@ -269,21 +270,37 @@
     close: document.getElementById('pClose'),
   };
   function openProfileModal(pref={}){
-    PM.first.value=pref.first||''; PM.last.value=pref.last||''; PM.region.value=pref.region||''; PM.district.value=pref.district||''; PM.school.value=pref.school||''; PM.klass.value=pref.klass||''; PM.phone.value=pref.phone||''; PM.err.textContent='';
+    PM.first.value=pref.first||''; PM.last.value=pref.last||'';
+    PM.region.value=pref.region||''; PM.district.value=pref.district||'';
+    PM.school.value=pref.school||''; PM.klass.value=pref.klass||'';
+    PM.phone.value=pref.phone||''; PM.err.textContent='';
     PM.mask.style.display='flex';
+    document.body.classList.add('modal-open');
   }
-  function closeProfileModal(){ PM.mask.style.display='none'; }
+  function closeProfileModal(){
+    PM.mask.style.display='none';
+    document.body.classList.remove('modal-open');
+  }
   PM.close.onclick = closeProfileModal;
 
   function initials(n){ if(!n) return 'LM'; const p=n.trim().split(/\s+/); return (p[0]?.[0]||'L')+(p[1]?.[0]||'M'); }
-  function profileIsComplete(u){ return !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.class && u.phone); }
+  function profileIsComplete(u){
+    return !!(u && u.name && /\s/.test(u.name) &&
+      u.region && u.district && u.school && u.class && u.phone);
+  }
 
   el.signin.onclick=(e)=>{ e.preventDefault(); const ret = encodeURIComponent(location.pathname + location.search + location.hash); location.href = `./login.html?return=${ret}`; };
   el.signout.onclick=async (e)=>{ e.preventDefault(); await signOut(auth); const ret=encodeURIComponent('./index.html'); location.href=`./login.html?return=${ret}`; };
   el.editProfile.onclick=(e)=>{
     e.preventDefault();
     const nm = el.uname.textContent.trim().split(/\s+/,2);
-    openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:el.uregion.textContent.replace(/^Viloyat:\s*/,'')||'', district:el.udistrict.textContent.replace(/^Tuman:\s*/,'')||'', school:el.uschool.textContent.replace(/^Maktab:\s*/,'')||'', klass:'', phone:'' });
+    openProfileModal({
+      first:nm[0]||'', last:nm[1]||'',
+      region:el.uregion.textContent.replace(/^Viloyat:\s*/,'')||'',
+      district:el.udistrict.textContent.replace(/^Tuman:\s*/,'')||'',
+      school:el.uschool.textContent.replace(/^Maktab:\s*/,'')||'',
+      klass:'', phone:''
+    });
   };
 
   async function ensureUser(user){
@@ -305,10 +322,7 @@
     return `${h}:${m}:${ss}`;
   };
   const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  function fmtPoints(v){
-    const n = Number(v)||0;
-    return n.toLocaleString('uz-UZ',{maximumFractionDigits:1});
-  }
+  function fmtPoints(v){ const n = Number(v)||0; return n.toLocaleString('uz-UZ',{maximumFractionDigits:1}); }
 
   // Cards (demo loader)
   function computeState(it, now){
@@ -506,6 +520,40 @@
   let latestUsers = [];
   let currentUserId = null;
 
+  // --- Modal saqlash (Firestore) ---
+  PM.save.onclick = async () => {
+    PM.err.textContent = '';
+    const first  = PM.first.value.trim();
+    const last   = PM.last.value.trim();
+    const region = PM.region.value.trim();
+    const district = PM.district.value.trim();
+    const school = PM.school.value.trim();
+    const klass  = PM.klass.value.trim();
+    const phone  = PM.phone.value.trim();
+
+    if(!first || !last || !region || !district || !school || !klass || !phone){
+      PM.err.textContent = 'Barcha maydonlar majburiy.';
+      return;
+    }
+
+    const name = `${first} ${last}`;
+    try{
+      const ref = doc(db,'users', currentUserId);
+      await setDoc(ref, { name, region, district, school, class: klass, phone }, { merge: true });
+
+      el.uname.childNodes[0].nodeValue = name + ' ';
+      el.uregion.textContent  = 'Viloyat: ' + region;
+      el.udistrict.textContent= 'Tuman: '  + district;
+      el.uschool.textContent  = 'Maktab: ' + school;
+
+      localStorage.setItem(`lm-profile-seen:${currentUserId}`, '1'); // qayta majburlama
+      closeProfileModal();
+    }catch(e){
+      console.error('profile save error', e);
+      PM.err.textContent = 'Saqlashda xatolik. Internetni tekshiring.';
+    }
+  };
+
   watchAuth(async (user)=>{
     if(!user){
       el.uname.childNodes[0].nodeValue='Mehmon ';
@@ -527,6 +575,21 @@
     if(user.photoURL){ el.ava.innerHTML='<img src="'+user.photoURL+'" alt="ava">'; }
     else { el.ava.textContent = initials(el.uname.textContent); }
     el.editProfile.style.display='inline';
+
+    // Profil modalini faqat kerak bo‘lsa ochamiz
+    const seenKey = `lm-profile-seen:${currentUserId}`;
+    if(!profileIsComplete(u) && !localStorage.getItem(seenKey)){
+      const nm = (u.name||'').trim().split(/\s+/,2);
+      openProfileModal({
+        first: nm[0] || '',
+        last:  nm[1] || '',
+        region: u.region || '',
+        district: u.district || '',
+        school: u.school || '',
+        klass:  u.class  || '',
+        phone:  u.phone  || ''
+      });
+    }
 
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
