@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>LeaderMath — PWA (Premium + Decile Pager)</title>
+  <title>LeaderMath — PWA (Decile Stars 0.5→5 + Profile Stars)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
@@ -135,6 +135,24 @@
     .ctl input,.ctl textarea,.ctl select{width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px;font:inherit;background:var(--card);color:var(--text)}
     .row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
     .danger{color:#c62828;font-size:12px}
+
+    /* --- Diamond shine & TOP-3 glow --- */
+    .tier-diamond .stars{ position:relative; overflow:visible }
+    .tier-diamond .stars::after{
+      content:""; position:absolute; top:-25%; bottom:-25%; left:-30%;
+      width:40%; transform:skewX(-20deg);
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+      filter:blur(0.5px); pointer-events:none; animation:shineSweep 2.8s ease-in-out infinite;
+    }
+    @keyframes shineSweep{ 0%{left:-30%;opacity:0} 8%{opacity:.9} 60%{left:110%;opacity:0} 100%{left:110%;opacity:0} }
+    .tier-diamond .stars svg{ filter:drop-shadow(0 0 6px rgba(57,182,255,.45)); animation:diamondTwinkle 2.2s ease-in-out infinite alternate; }
+    @keyframes diamondTwinkle{ 0%{ transform:scale(1); opacity:.95 } 100%{ transform:scale(1.03); opacity:1 } }
+    .rank.top-1{ box-shadow:0 10px 28px rgba(255,215,0,.35), 0 0 24px rgba(255,215,0,.22) inset; animation:crownPulseGold 1.8s ease-in-out infinite; }
+    .rank.top-2{ box-shadow:0 10px 28px rgba(150,180,210,.35), 0 0 24px rgba(180,200,220,.20) inset; animation:crownPulseSilver 1.9s ease-in-out infinite; }
+    .rank.top-3{ box-shadow:0 10px 28px rgba(198,148,98,.35), 0 0 24px rgba(198,148,98,.20) inset; animation:crownPulseBronze 2.0s ease-in-out infinite; }
+    @keyframes crownPulseGold{ 0%{transform:scale(1)} 100%{transform:scale(1.01)} }
+    @keyframes crownPulseSilver{ 0%{transform:scale(1)} 100%{transform:scale(1.009)} }
+    @keyframes crownPulseBronze{ 0%{transform:scale(1)} 100%{transform:scale(1.008)} }
   </style>
 </head>
 <body>
@@ -181,7 +199,7 @@
     <h3>Top 50 — Ball bo‘yicha (o‘ntalik pager)</h3>
     <div class="pager">
       <button id="decilePrev" class="pbtn">⬅️ Oldingi (10)</button>
-      <div class="pinfo" id="decileInfo">50–41</div>
+      <div class="pinfo" id="decileInfo">10–1 (Diamond)</div>
       <button id="decileNext" class="pbtn">Keyingi (10) ➡️</button>
     </div>
     <div id="boardList"></div>
@@ -351,29 +369,18 @@
     });
   }
 
-  // Load banners + cards
-  async function initContent(){
-    try{
-      const r=await fetch('./index.json',{cache:'no-store'});
-      const data=await r.json();
-      el.banners.innerHTML=(data.banners||[]).map(b=>`<div class="banner grad-border glass">${b.html||''}</div>`).join('');
-      renderCards(data);
-    }catch(e){ console.error(e); }
-  }
-  initContent();
-
-  // ==== Leaderboard: o‘ntalik pager + per-tier yulduz/olmos ====
-  // TOP dan boshlanadigan tartib (10–1 → 20–11 → 30–21 → 40–31 → 50–41)
+  // ==== Leaderboard: o‘ntalik pager + 0.5→5.0 formulasi ====
+  // Diapazonlar TOPdan pastga: 1–10 (diamond), 11–20 (emerald), 21–30 (gold), 31–40 (silver), 41–50 (bronze)
   const GROUPS = [
-    {label:'Diamond guruh',  start:1,  end:10, tier:'diamond', grad:['#9FE3FF','#39B6FF','#0077FF']},
-    {label:'20–11', start:11, end:20, tier:'emerald', grad:['#8FE3B0','#2E8B57','#1F6B45']},
-    {label:'30–21', start:21, end:30, tier:'gold',    grad:['#FFE082','#FFC107','#FF8F00']},
-    {label:'40–31', start:31, end:40, tier:'silver',  grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
-    {label:'50–41', start:41, end:50, tier:'bronze',  grad:['#C69462','#9A6B3F','#7C4F2E']}
+    {label:'10–1 (Diamond)',  start:1,  end:10, tier:'diamond', grad:['#9FE3FF','#39B6FF','#0077FF']},
+    {label:'20–11 (Emerald)', start:11, end:20, tier:'emerald', grad:['#8FE3B0','#2E8B57','#1F6B45']},
+    {label:'30–21 (Gold)',    start:21, end:30, tier:'gold',    grad:['#FFE082','#FFC107','#FF8F00']},
+    {label:'40–31 (Silver)',  start:31, end:40, tier:'silver',  grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
+    {label:'50–41 (Bronze)',  start:41, end:50, tier:'bronze',  grad:['#C69462','#9A6B3F','#7C4F2E']}
   ];
-  let CURRENT_DECILE = 0; // 0..4
+  let CURRENT_DECILE = 0; // 0..4  (0 = Top-10)
 
-  // SVG generator: 'diamond' (Top-10) yoki 'star' (boshqa o‘ntaliklar)
+  // SVG generator: 'diamond' (Top-10) yoki 'star' (boshqalar)
   function iconSVG(shape, fillPct, colors){
     const [c1,c2,c3]=colors;
     const gid = 'g'+Math.random().toString(36).slice(2,8);
@@ -414,6 +421,7 @@
     if(!g){ el.boardList.innerHTML='<div class="desc">Hali ma’lumot yo‘q</div>'; return; }
     const arr = users.slice(0,50);
     const rows=[];
+    // O‘ntalik ichida 10→1 bo‘yicha 0.5 qadam (rank g.end bo‘lsa 0.5, g.start bo‘lsa 5.0)
     const posInDecile = (rank)=> (g.end - rank + 1);      // 10chi=1 ... 1chi=10
     const starsForRank = (rank)=> 0.5 * posInDecile(rank); // 0.5 .. 5.0
 
@@ -426,7 +434,7 @@
         : `<span class="rnk">#${rank}</span>`;
       const stars = starsForRank(rank);
       rows.push(`
-        <div class="rank grad-border glass tier-${g.tier}">
+        <div class="rank grad-border glass tier-${g.tier} ${isTop3 ? ('top-'+rank) : ''}">
           <div>${leftBadge}</div>
           <div>
             <b>${escapeHtml(u.name||'Foydalanuvchi')}</b>
@@ -453,12 +461,13 @@
     el.decileNext.disabled = (decileIndex>=GROUPS.length-1);
   }
 
-  // Foydalanuvchi avatar/ball yonida yulduz/olmos ko‘rsatish
+  // Foydalanuvchi avatar va Ball yonida yulduz/olmos ko‘rsatish (o‘ntalik 0.5→5.0)
   function computeUserTierStars(sortedUsers, currentUid){
     const idx = sortedUsers.findIndex(u => (u.uid||u.id||u.userId) === currentUid);
     if(idx === -1) { el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; return; }
     const rank = idx + 1;
-    const g = GROUPS.find(gr => rank>=gr.start && rank<=gr.end);
+    let g = null;
+    for(const gr of GROUPS){ if(rank>=gr.start && rank<=gr.end){ g=gr; break; } }
     if(!g){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; return; }
 
     const stars = 0.5 * (g.end - rank + 1); // 0.5..5.0
@@ -496,11 +505,13 @@
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
+      // Chizish va foydalanuvchi yulduzlarini yangilash
       drawDecile(latestUsers, CURRENT_DECILE);
       computeUserTierStars(latestUsers, currentUserId);
     }, (err)=>{
       console.error('board error',err);
       el.boardList.innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>';
+      el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML='';
     });
   });
 
