@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeaderMath — Admin (index.json Builder)</title>
+  <style>
+    :root{ --brand:#2E8B57; --brand2:#1F6B45; --bg:#f6faf8; --card:#fff; --text:#0f172a; --muted:#6b7c75; --frame:#e3efe8; }
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:12px 14px;font-weight:900}
+    .wrap{max-width:1100px;margin:14px auto;padding:0 12px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .btn{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
+    .btn.ghost{background:#fff;color:#1F6B45;border:1px solid var(--frame)}
+    .card{background:var(--card);border:1px solid var(--frame);border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 8px 24px #0001}
+    h2{margin:8px 0 6px}
+    h3{margin:8px 0}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+    input,textarea,select{width:100%;padding:10px;border:1px solid var(--frame);border-radius:10px;font:inherit;background:var(--card);color:var(--text)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .sec-head{display:flex;align-items:center;gap:8px;justify-content:space-between}
+    .tag{background:#e9f5ef;border:1px solid #cfe9dc;border-radius:999px;padding:6px 10px;font-size:12px}
+    .warn{color:#c62828;font-size:12px}
+    pre{background:#0f1a14;color:#d9ffe8;border-radius:12px;padding:12px;overflow:auto}
+    .small{font-size:12px;color:var(--muted)}
+    .tools{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+<header>LeaderMath — index.json Builder (Banner · Bo‘lim · Card · 12-limit · ↑↓ tartiblash)</header>
+<div class="wrap">
+
+  <!-- Global tools -->
+  <div class="card">
+    <div class="tools">
+      <button id="addBanner" class="btn">➕ Banner qo‘shish</button>
+      <button id="addSection" class="btn">➕ Bo‘lim qo‘shish</button>
+      <button id="sortAZ" class="btn ghost">A→Z bo‘yicha bo‘limlarni tartibla</button>
+      <input type="file" id="importFile" accept=".json" class="btn ghost" style="padding:8px"/>
+      <button id="exportJson" class="btn">⬇️ Export (index.json)</button>
+    </div>
+    <div class="small" style="margin-top:6px">Draft holati avtomatik <b>LocalStorage</b>ga saqlanadi.</div>
+  </div>
+
+  <!-- Banners -->
+  <div class="card">
+    <h2>Banners</h2>
+    <div id="banners"></div>
+  </div>
+
+  <!-- Sections -->
+  <div class="card">
+    <h2>Bo‘limlar</h2>
+    <div id="sections"></div>
+  </div>
+
+  <!-- JSON preview -->
+  <div class="card">
+    <h2>JSON ko‘rinishi</h2>
+    <pre id="preview" style="min-height:160px"></pre>
+  </div>
+</div>
+
+<script>
+const DRAFT_KEY='lm-admin-draft';
+
+// State
+let data = { banners: [], sections: [] };
+
+// Utils
+const $=(s,p=document)=>p.querySelector(s);
+const $$=(s,p=document)=>Array.from(p.querySelectorAll(s));
+const saveDraft=()=>localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+const loadDraft=()=>{ const s=localStorage.getItem(DRAFT_KEY); if(s){ try{ data=JSON.parse(s)||data; }catch{} } };
+const render=()=>{ renderBanners(); renderSections(); renderPreview(); saveDraft(); };
+const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+function renderPreview(){
+  $('#preview').textContent = JSON.stringify(data, null, 2);
+}
+
+/* BANNERS */
+function renderBanners(){
+  const root = $('#banners'); root.innerHTML='';
+  data.banners.forEach((b,i)=>{
+    const box = document.createElement('div'); box.className='card';
+    box.innerHTML = `
+      <div class="grid2">
+        <div style="grid-column:1/-1">
+          <label>Banner HTML</label>
+          <textarea rows="4" data-k="html">${b.html||''}</textarea>
+        </div>
+      </div>
+      <div class="tools" style="margin-top:8px">
+        <button class="btn ghost" data-act="up">↑</button>
+        <button class="btn ghost" data-act="down">↓</button>
+        <button class="btn" data-act="del">🗑 O‘chirish</button>
+      </div>
+    `;
+    box.addEventListener('input', e=>{
+      if(e.target.matches('textarea[data-k="html"]')){ data.banners[i].html=e.target.value; renderPreview(); saveDraft(); }
+    });
+    box.addEventListener('click', e=>{
+      if(e.target.dataset.act==='up' && i>0){ [data.banners[i-1],data.banners[i]]=[data.banners[i],data.banners[i-1]]; render(); }
+      if(e.target.dataset.act==='down' && i<data.banners.length-1){ [data.banners[i+1],data.banners[i]]=[data.banners[i],data.banners[i+1]]; render(); }
+      if(e.target.dataset.act==='del'){ data.banners.splice(i,1); render(); }
+    });
+    root.appendChild(box);
+  });
+}
+$('#addBanner').onclick=()=>{ data.banners.push({ html:'<div style="padding:22px"><b>Yangi Banner</b></div>' }); render(); };
+
+/* SECTIONS */
+function renderSections(){
+  const root = $('#sections'); root.innerHTML='';
+  data.sections.forEach((sec,si)=>{
+    const wrap = document.createElement('div'); wrap.className='card';
+    wrap.innerHTML = `
+      <div class="sec-head">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tag">Bo‘lim #${si+1}</span>
+          <input style="min-width:240px" placeholder="Bo‘lim nomi" value="${escapeHtml(sec.title||'')}" data-k="title">
+        </div>
+        <div class="tools">
+          <button class="btn ghost" data-act="sup">↑</button>
+          <button class="btn ghost" data-act="sdown">↓</button>
+          <button class="btn" data-act="sdel">🗑</button>
+          <button class="btn" data-act="addItem">➕ Card</button>
+        </div>
+      </div>
+      <div class="small">Har bo‘limdan maksimum 12 ta card ko‘rsatiladi.</div>
+      <div class="items"></div>
+      <div class="warn" data-warn style="display:${(sec.items?.length||0)>12?'block':'none'}">Diqqat: 12 tadan oshib ketdi! Export paytida ortiqchalari cheklanadi.</div>
+    `;
+    // events
+    wrap.addEventListener('input', e=>{
+      if(e.target.matches('input[data-k="title"]')){ data.sections[si].title=e.target.value; renderPreview(); saveDraft(); }
+    });
+    wrap.addEventListener('click', e=>{
+      const a=e.target.dataset.act;
+      if(a==='sup' && si>0){ [data.sections[si-1],data.sections[si]]=[data.sections[si],data.sections[si-1]]; render(); }
+      if(a==='sdown' && si<data.sections.length-1){ [data.sections[si+1],data.sections[si]]=[data.sections[si],data.sections[si+1]]; render(); }
+      if(a==='sdel'){ data.sections.splice(si,1); render(); }
+      if(a==='addItem'){
+        data.sections[si].items = data.sections[si].items || [];
+        data.sections[si].items.push({ name:'Yangi test', description:'', link:'#', best:false, type:'open', startAt:'', endAt:'' });
+        render();
+      }
+    });
+
+    // items
+    const itemsEl = wrap.querySelector('.items');
+    (sec.items||[]).forEach((it,ii)=>{
+      const itCard = document.createElement('div'); itCard.className='card';
+      itCard.innerHTML = `
+        <div class="grid3">
+          <div><label>Nomi</label><input data-k="name" value="${escapeHtml(it.name||'')}"></div>
+          <div><label>Link</label><input data-k="link" value="${escapeHtml(it.link||'')}"></div>
+          <div><label>BEST?</label>
+            <select data-k="best">
+              <option value="false"${it.best?'':' selected'}>Yo‘q</option>
+              <option value="true"${it.best?' selected':''}>Ha</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:8px">
+          <div><label>Type</label>
+            <select data-k="type">
+              <option value="open"${(it.type||'open')==='open'?' selected':''}>open</option>
+              <option value="coming_soon"${it.type==='coming_soon'?' selected':''}>coming_soon</option>
+              <option value="window"${it.type==='window'?' selected':''}>window</option>
+            </select>
+          </div>
+          <div><label>StartAt (iso)</label><input data-k="startAt" type="datetime-local" value="${it.startAt?toLocal(it.startAt):''}"></div>
+          <div><label>EndAt (iso)</label><input data-k="endAt" type="datetime-local" value="${it.endAt?toLocal(it.endAt):''}"></div>
+        </div>
+        <div style="margin-top:8px">
+          <label>Tavsif</label>
+          <textarea rows="2" data-k="description">${escapeHtml(it.description||'')}</textarea>
+        </div>
+        <div class="tools" style="margin-top:8px">
+          <button class="btn ghost" data-iact="up">↑</button>
+          <button class="btn ghost" data-iact="down">↓</button>
+          <button class="btn" data-iact="del">🗑</button>
+        </div>
+      `;
+      function upd(k,val){
+        const secItems = data.sections[si].items;
+        if(k==='best') val = (val==='true');
+        secItems[ii][k]=val;
+        renderPreview(); saveDraft();
+      }
+      itCard.addEventListener('input', e=>{
+        const k=e.target.dataset.k; if(!k) return;
+        const v=e.target.value;
+        if(k==='startAt'||k==='endAt'){ upd(k, fromLocal(v)); } else upd(k,v);
+      });
+      itCard.addEventListener('click', e=>{
+        const a=e.target.dataset.iact;
+        const arr=data.sections[si].items;
+        if(a==='up' && ii>0){ [arr[ii-1],arr[ii]]=[arr[ii],arr[ii-1]]; render(); }
+        if(a==='down' && ii<arr.length-1){ [arr[ii+1],arr[ii]]=[arr[ii],arr[ii+1]]; render(); }
+        if(a==='del'){ arr.splice(ii,1); render(); }
+      });
+      itemsEl.appendChild(itCard);
+    });
+    root.appendChild(wrap);
+    // warn toggle
+    wrap.querySelector('[data-warn]').style.display = (sec.items?.length||0)>12?'block':'none';
+  });
+}
+
+function toLocal(iso){
+  try{ const d=new Date(iso); const z=new Date(d.getTime()-d.getTimezoneOffset()*60000); return z.toISOString().slice(0,16); }catch{return '';}
+}
+function fromLocal(localStr){
+  if(!localStr) return '';
+  try{ const d=new Date(localStr); return d.toISOString(); }catch{return '';}
+}
+
+$('#addSection').onclick=()=>{ data.sections.push({ title:'Yangi bo‘lim', items:[] }); render(); };
+$('#sortAZ').onclick=()=>{ data.sections.sort((a,b)=> (a.title||'').localeCompare(b.title||'')); render(); };
+
+// Import / Export
+$('#importFile').onchange=async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  const txt=await f.text();
+  try{ data=JSON.parse(txt)||data; render(); }
+  catch(err){ alert('JSON xatolik: '+err?.message); }
+};
+$('#exportJson').onclick=()=>{
+  // 12-limitni kesib tashlaymiz
+  const clean = {
+    banners: data.banners.map(b=>({ html:String(b.html||'') })),
+    sections: (data.sections||[]).map(s=>({ title:s.title||'', items:(s.items||[]).slice(0,12).map(i=>({
+      name:i.name||'', description:i.description||'', link:i.link||'#', best:!!i.best,
+      type:i.type||'open', startAt:i.startAt||'', endAt:i.endAt||''
+    })) }))
+  };
+  const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='index.json'; a.click();
+};
+
+// Init
+loadDraft();
+render();
+</script>
+</body>
+</html>
