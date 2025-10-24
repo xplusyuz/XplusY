@@ -207,19 +207,18 @@
     window.__firebase = { app, auth, db, onAuthStateChanged, serverTimestamp, addDoc, collection, increment, runTransaction, doc, setDoc, updateDoc };
   </script>
 
-  <script>
+<script>
 /* ========= SETTINGS ========= */
-const TEST_ID = 'CHSB-2025-demo';   // test ID'ingiz
-const SCALE  = 100;                  // yuzdan birgacha: 2 xonali aniqlik
+const TEST_ID = 'CHSB-2025-demo';
+const SCALE   = 100; // yuzdan birgacha aniqlik (1.23 -> 123)
 
 /* ========= HELPERS ========= */
 const $ = (s, el=document)=>el.querySelector(s);
-
-// Sizda allaqachon bor deb qabul qilamiz:
 function isMulti(q){ return Array.isArray(q.correctIndices); }
 
-/* ========= AUTH GATE ========= */
+/* ========= GLOBALS ========= */
 let fb=null, currentUser=null, startedAt=null, testData=null, currentIndex=0;
+let guestOverlay=null; // blok overlay
 
 document.addEventListener('DOMContentLoaded', () => {
   const authInfoEl = $('#authInfo');
@@ -233,59 +232,104 @@ document.addEventListener('DOMContentLoaded', () => {
     fb.onAuthStateChanged(fb.auth, (user)=>{
       authResolved = true;
       currentUser = user;
-
       authInfoEl.textContent = user
         ? `Kirish: ${user.displayName || user.email}`
         : 'Kirish: mehmon';
 
       if (user){
+        // ✅ Kirilgan — blokni olib tashlab, testni yuklash
+        removeGuestOverlay();
         startAppAfterAuth();
       } else {
-        blockAppForGuests();
+        // ❌ Kirilmagan — testni yuklamaymiz, UI blok
+        showGuestOverlay();   // HECH QAYSI YERGA YO‘NALTIRMAYDI
+        // Eslatma: bu yerda loadTestData() CHAQIRILMAYDI
       }
     });
 
+    // agar allaqachon login bo‘lgan bo‘lsa
     if (fb.auth.currentUser){
       authResolved = true;
       currentUser = fb.auth.currentUser;
       authInfoEl.textContent = `Kirish: ${currentUser.displayName || currentUser.email}`;
+      removeGuestOverlay();
       startAppAfterAuth();
     }
   } else {
+    // Firebase yo‘q — mehmon sifatida blok
     authInfoEl.textContent='Kirish: mehmon';
-    blockAppForGuests();
+    showGuestOverlay();
   }
 });
 
-function blockAppForGuests(){
-  const overlay = document.createElement('div');
-  overlay.style.cssText = `
-    position:fixed; inset:0; background:rgba(0,0,0,.6); color:#fff;
+/* ========= BLOK OVERLAY (REDIRECTSIZ) ========= */
+function showGuestOverlay(){
+  if (guestOverlay) return;
+  guestOverlay = document.createElement('div');
+  guestOverlay.setAttribute('aria-live','polite');
+  guestOverlay.style.cssText = `
+    position:fixed; inset:0; background:rgba(0,0,0,.55); color:#fff;
     display:flex; align-items:center; justify-content:center; z-index:9999; padding:24px; text-align:center;
+    backdrop-filter:saturate(1.2) blur(2px);
   `;
-  overlay.innerHTML = `
-    <div style="background:#0f1714; border:1px solid #2E8B57; padding:24px; border-radius:16px; max-width:520px;">
-      <h2 style="margin:0 0 12px">Kirish talab qilinadi</h2>
-      <p style="margin:0 0 20px; opacity:.9">Ushbu sahifadan foydalanish uchun hisobingizga kiring.</p>
-      <button id="goLogin" style="padding:10px 16px; border-radius:10px; border:1px solid #2E8B57; background:#2E8B57; color:#fff; cursor:pointer;">
-        Kirish sahifasiga o‘tish
-      </button>
+  guestOverlay.innerHTML = `
+    <div style="background:#0f1714; border:1px solid #2E8B57; padding:22px; border-radius:16px; max-width:560px;">
+      <h2 style="margin:0 0 10px">Kirish talab qilinadi</h2>
+      <p style="margin:0; opacity:.9">
+        Ushbu sahifadan foydalanish uchun hisobingizga kiring.
+        <br>(Kirish sahifasiga o‘zingiz o‘ting yoki ilovangizning ichki kirish tugmasidan foydalaning.)
+      </p>
     </div>`;
-  document.body.appendChild(overlay);
-  $('#goLogin', overlay).addEventListener('click', ()=>{ window.location.href='/login.html'; });
+  document.body.appendChild(guestOverlay);
+
+  // Interaktivlarni o‘chirib qo‘yish (ixtiyoriy, xavfsizlik uchun)
+  disableTestInteractions(true);
 }
 
+function removeGuestOverlay(){
+  if (guestOverlay){
+    guestOverlay.remove();
+    guestOverlay=null;
+  }
+  disableTestInteractions(false);
+}
+
+/* UI interaktivlarini yoqib/o‘chirish (submit, variant tanlash va h.k.) */
+function disableTestInteractions(block){
+  // Sizning sahifangizdagi asosiy konteyner id/classlarini moslang:
+  const root = $('#questionsCard') || document.body;
+  if (!root) return;
+  root.querySelectorAll('button, input, select, textarea, a').forEach(el=>{
+    if (block){
+      el.setAttribute('data-prev-tabindex', el.getAttribute('tabindex') ?? '');
+      el.setAttribute('tabindex','-1');
+      el.setAttribute('aria-disabled','true');
+      el.disabled = (typeof el.disabled==='boolean') ? true : el.disabled;
+    } else {
+      const prev = el.getAttribute('data-prev-tabindex');
+      if (prev !== null){
+        if (prev==='') el.removeAttribute('tabindex'); else el.setAttribute('tabindex', prev);
+        el.removeAttribute('data-prev-tabindex');
+      }
+      el.removeAttribute('aria-disabled');
+      if (typeof el.disabled==='boolean') el.disabled = false;
+    }
+  });
+}
+
+/* ========= START AFTER AUTH ========= */
 async function startAppAfterAuth(){
   startedAt = new Date();
-  await loadTestData();         // mavjud funksiyangiz (testData ni to‘ldiradi)
-  // Agar sizga boshlang‘ich renderlar kerak bo‘lsa shu yerda chaqiring
+  await loadTestData(); // sizdagi mavjud funksiya (testData ni to‘ldiradi)
+  // Kerak bo‘lsa boshlang‘ich render:
+  // renderQuestion(0) va h.k.
 }
 
-/* ========= RENDER: TO‘G‘RI JAVOBNI KO‘RSATISH (sizde bor edi) ========= */
+/* ========= TO‘G‘RI JAVOBNI CHIZISH (mavjud kod) ========= */
 function revealCorrect(){
   $('#resultCard').classList.add('hidden');
   $('#questionsCard').classList.remove('hidden');
-  const q = testData.questions[currentIndex]; 
+  const q = testData.questions[currentIndex];
   const multi = isMulti(q);
   const correct = multi ? (q.correctIndices||[]) : [Number(q.correctIndex ?? -1)];
 
@@ -293,7 +337,7 @@ function revealCorrect(){
     row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
   });
   document.querySelectorAll('#questionView input').forEach(inp=>{
-    const orig = Number(inp.value); // ORIGINAL index stored in value
+    const orig = Number(inp.value);
     const row = inp.closest('.opt');
     if (correct.includes(orig)){
       row.style.borderColor='rgba(46,139,87,.55)';
@@ -303,12 +347,10 @@ function revealCorrect(){
   });
 }
 
-/* ========= FIXED-POINT (ANIQ) HISOBLASH ========= */
-/** q.points: masalan 1, 1.5, 0.25 ... (2 xonali) bo‘lishi mumkin */
+/* ========= ANIQLIK: FIXED-POINT (2 xonali) ========= */
 function toIntPoints(x){ return Math.round(Number(x) * SCALE); }  // 1.23 → 123
 
 function isAnswerCorrect(q, userAnswer){
-  // userAnswer: single -> number (index), multi -> number[] (indexlar)
   if (isMulti(q)){
     const correct = (q.correctIndices||[]).slice().sort((a,b)=>a-b);
     const ans = (Array.isArray(userAnswer)? userAnswer: []).slice().sort((a,b)=>a-b);
@@ -321,22 +363,21 @@ function isAnswerCorrect(q, userAnswer){
 }
 
 function computeScoreInt(questions, userAnswers){
-  // userAnswers[i] -> single: number, multi: number[] (original indexlar)
   let totalInt = 0;
   for (let i=0;i<questions.length;i++){
     const q = questions[i];
     const ok = isAnswerCorrect(q, userAnswers[i]);
-    const ptsInt = toIntPoints(q.points ?? 1);   // default 1.00
+    const ptsInt = toIntPoints(q.points ?? 1);
     if (ok) totalInt += ptsInt;
   }
-  return totalInt; // butun (fixed)
+  return totalInt; // butun
 }
 
 function formatPoints(totalInt, fractionDigits=2){
-  return (totalInt / SCALE).toFixed(fractionDigits); // ekranga chiqarish
+  return (totalInt / SCALE).toFixed(fractionDigits);
 }
 
-/* ========= FIRESTORE: BIRINCHI URINISHNI YOZISH (CREATE-ONLY) ========= */
+/* ========= FIRESTORE: BIRINCHI URINISHGINA YOZILSIN ========= */
 async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
   if (!fb || !fb.db || !currentUser) throw new Error('Auth yoki Firestore yo‘q');
   const uid = currentUser.uid;
@@ -346,52 +387,49 @@ async function saveResultOnce({ testId, totalInt, durationSec, meta={} }){
   await fb.runTransaction(fb.db, async (tx)=>{
     const snap = await fb.getDoc(ref);
     if (snap.exists()){
-      // Allaqachon bor — qayta yozmaymiz
+      // allaqachon bor — yangilamaymiz
       return;
     }
     tx.set(ref, {
       uid, testId,
       pointsInt: totalInt,
       scale: SCALE,
-      points: totalInt / SCALE,     // o‘qishda qulay
+      points: totalInt / SCALE,
       durationSec,
       startedAt: startedAt ? fb.Timestamp.fromDate(startedAt) : null,
       createdAt: fb.serverTimestamp(),
-      meta,                         // xohlasangiz guruh/tag va boshqalar
+      meta,
     });
   });
 }
 
-/* ========= TESTNI YAKUNLASH (CALL THIS WHEN USER SUBMITS) ========= */
-// userAnswers formatini o‘zingizning UIingizga moslang:
-//   - single: tanlangan input.value original index (number)
-//   - multi: tanlanganlar original indexlar massivi
+/* ========= SUBMIT HANDLER (auth guard bilan) ========= */
 async function onSubmitResults(userAnswers){
-  // 1) hisoblash (aniq)
-  const totalInt = computeScoreInt(testData.questions, userAnswers);
-  const shown = formatPoints(totalInt, 2); // masalan "80.00"
-  $('#finalScore').textContent = shown;    // UI da ko‘rsatish bo‘limingiz
+  // 🔒 Auth guard — redirect yo‘q, faqat ogohlantiramiz
+  if (!currentUser){
+    showGuestOverlay();
+    // xohlasangiz toast:
+    console.warn('Kirish talab qilinadi.');
+    return;
+  }
 
-  // 2) faqat birinchi urinishni saqlash
+  const totalInt = computeScoreInt(testData.questions, userAnswers);
+  $('#finalScore').textContent = formatPoints(totalInt, 2);
+
   const durationSec = Math.max(0, Math.round((Date.now() - (startedAt?.getTime()||Date.now()))/1000));
   try{
     await saveResultOnce({ testId: TEST_ID, totalInt, durationSec, meta:{} });
-  } catch(e){
-    // Agar qoidalar qayta yozishga ruxsat bermasa (retriable emas) — jim qolamiz
-    console.warn('saveResultOnce:', e);
-  }
+  } catch(e){ console.warn('saveResultOnce:', e); }
 
-  // 3) natija/analitika ko‘rinishlari…
   $('#questionsCard').classList.add('hidden');
   $('#resultCard').classList.remove('hidden');
 }
 
-/* ========= MISOL: SUBMIT TUGMASI UCHUN BOG‘LASH ========= */
-// document.querySelector('#submitBtn').addEventListener('click', ()=>{
-//   const userAnswers = collectAnswersFromUI(); // o‘zingizning funksiyangiz
+/* ========= MISOL: SUBMIT tugmasiga ulash ========= */
+// $('#submitBtn')?.addEventListener('click', ()=>{
+//   const userAnswers = collectAnswersFromUI(); // o'zingizning funksiyangiz
 //   onSubmitResults(userAnswers);
 // });
-
 </script>
 </body>
 </html>
