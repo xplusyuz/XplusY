@@ -173,6 +173,20 @@
     const functions = getFunctions(app);
     const submitTestResult = httpsCallable(functions, "submitTestResult");
 
+    /* === TESTDAGI KABI KIRISH-GUARD (majburiy login) === */
+    const requireAuthQuick = () => new Promise((resolve) => {
+      const stop = onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          // login sahifangizga yo'naltiramiz
+          const next = encodeURIComponent(location.pathname + location.search + location.hash);
+          location.replace(`/login.html?next=${next}`);
+        } else {
+          stop();
+          resolve(user);
+        }
+      });
+    });
+
     /* === UTIL === */
     const $ = s=>document.querySelector(s);
     const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
@@ -204,7 +218,10 @@
     let spentSeconds = 0;
     const currentTestId = new URLSearchParams(location.search).get('id') || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
-    // Load current user and points
+    // Kirishni MAJBURIY talab qilamiz — keyin appni yuklaymiz
+    await requireAuthQuick();
+
+    // Header: foydalanuvchi va points chip
     onAuthStateChanged(auth, async (user)=>{
       $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon';
       if (user) {
@@ -367,7 +384,7 @@
     function bumpPointsChipLocally(delta){
       const el = $('#pointsChip');
       if(!el) return;
-      const m = /(-?\\d+(\\.\\d+)?)$/.exec(el.textContent||'');
+      const m = /(-?\d+(\.\d+)?)$/.exec(el.textContent||'');
       const prev = m ? Number(m[1]) : 0;
       el.textContent = `Ball: ${fmt(prev + delta)}`;
     }
@@ -508,7 +525,8 @@
       document.querySelector('#againBtn').onclick = ()=>{ document.querySelector('#resultCard').classList.add('hidden'); document.querySelector('#questionsCard').classList.remove('hidden'); renderQuestion(); };
     }
 
-    boot();
+    // Guarddan o'tgach appni ishga tushiramiz
+    await boot();
   </script>
 </body>
 </html>
