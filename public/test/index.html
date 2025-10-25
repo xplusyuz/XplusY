@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>LeaderMath — Test</title>
 
+  <!-- MathJax -->
   <script>
     window.MathJax = {
       tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes:true, packages:{'[+]':['noerrors']} },
@@ -151,7 +152,7 @@
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
     import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
-    // TODO: o'zingizning Firebase configingizni qo'ying:
+    /* ====== Firebase config (o'zingiznikini qo'ying) ====== */
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -162,28 +163,20 @@
     };
 
     const app = initializeApp(firebaseConfig);
-    // App Check (reCAPTCHA v3 kalitini qo'ying)
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider("YOUR_RECAPTCHA_V3_KEY"),
-      isTokenAutoRefreshEnabled: true
-    });
+    initializeAppCheck(app, { provider: new ReCaptchaV3Provider("YOUR_RECAPTCHA_V3_KEY"), isTokenAutoRefreshEnabled: true });
 
     const auth = getAuth(app);
     const db = getFirestore(app);
     const functions = getFunctions(app);
     const submitTestResult = httpsCallable(functions, "submitTestResult");
 
-    /* === TESTDAGI KABI KIRISH-GUARD (majburiy login) === */
+    /* === Auth guard (majburiy login) === */
     const requireAuthQuick = () => new Promise((resolve) => {
       const stop = onAuthStateChanged(auth, (user) => {
         if (!user) {
-          // login sahifangizga yo'naltiramiz
           const next = encodeURIComponent(location.pathname + location.search + location.hash);
           location.replace(`/login.html?next=${next}`);
-        } else {
-          stop();
-          resolve(user);
-        }
+        } else { stop(); resolve(user); }
       });
     });
 
@@ -209,7 +202,64 @@
     const wrapTeX = (s)=> needsWrap(s) ? `\\(${s}\\)` : s;
     const typeset = async (el)=>{ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} };
 
-    /* STATE */
+    /* === RENDER HELPERS (barqaror) === */
+    function renderSectionStats(sectionAgg){
+      const root = document.querySelector('#sectionStats');
+      root.innerHTML = '';
+      if(!sectionAgg || sectionAgg.size===0){ root.textContent = "Ma’lumot yo‘q"; return; }
+      const grid = document.createElement('div'); grid.className = 'stats-grid';
+      [...sectionAgg.entries()].forEach(([name, a])=>{
+        const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
+        const card = document.createElement('div'); card.className = 'stat';
+        card.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${name}</div>
+          <div style="color:#667a72;font-size:12px">Savollar: ${a.q}</div>
+          <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> ball · <b>${pct}%</b> to‘g‘ri</div>`;
+        grid.appendChild(card);
+      });
+      root.appendChild(grid);
+    }
+
+    function renderDetail(perQuestion){
+      const root = document.querySelector('#detailTable');
+      root.innerHTML = '';
+      if(!perQuestion || !perQuestion.length){ root.textContent = "Ma’lumot yo‘q"; return; }
+
+      const wrapper = document.createElement('div');
+      const table = document.createElement('table'); table.className='tbl';
+      table.innerHTML = `
+        <thead class="rowbox">
+          <tr>
+            <th style="border-top-left-radius:12px">#</th>
+            <th>Bo‘lim</th>
+            <th>Savol</th>
+            <th>Tanlangan</th>
+            <th>To‘g‘ri javob(lar)</th>
+            <th style="text-align:right;border-top-right-radius:12px">Ball</th>
+          </tr>
+        </thead>
+        <tbody id="detailBody"></tbody>`;
+      wrapper.appendChild(table);
+
+      const body = table.querySelector('#detailBody');
+      perQuestion.forEach(row=>{
+        const pickedDisp = row.picked.length ? row.picked.map(x=>x+1).join(', ') : '—';
+        const correctDisp = row.correct.map(x=>x+1).join(', ');
+        const tr = document.createElement('tr'); tr.className='rowbox';
+        tr.innerHTML = `
+          <td style="width:40px">${row.i+1}</td>
+          <td><span class="sect">${row.section}</span></td>
+          <td style="max-width:360px">${wrapTeX(row.text||'')}</td>
+          <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
+          <td>${correctDisp}</td>
+          <td style="text-align:right"><b>${row.ok?fmt(row.pts):0}</b>/<b>${fmt(row.pts)}</b></td>`;
+        body.appendChild(tr);
+      });
+      root.appendChild(wrapper);
+      typeset(root);
+    }
+
+    /* === STATE === */
     let testData = null;
     let currentIndex = 0;
     let answers = [];
@@ -218,10 +268,8 @@
     let spentSeconds = 0;
     const currentTestId = new URLSearchParams(location.search).get('id') || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
-    // Kirishni MAJBURIY talab qilamiz — keyin appni yuklaymiz
+    /* === Auth + header === */
     await requireAuthQuick();
-
-    // Header: foydalanuvchi va points chip
     onAuthStateChanged(auth, async (user)=>{
       $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon';
       if (user) {
@@ -233,6 +281,7 @@
       }
     });
 
+    /* === Test yuklash === */
     function applySectionRanges(data){
       if(!Array.isArray(data.questions)) return;
       if(Array.isArray(data.sections)){
@@ -245,7 +294,6 @@
       }
       data.questions.forEach(q=>{ if(!q.section) q.section = 'Umumiy'; });
     }
-
     function normalizeTestData(data){
       if(!data || !Array.isArray(data.questions)) return data;
       data.title = data.title || 'Test';
@@ -255,7 +303,6 @@
       applySectionRanges(data);
       return data;
     }
-
     async function loadTestData(){
       const stored = localStorage.getItem('testData');
       if(stored){ try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{} }
@@ -276,6 +323,7 @@
       testData.questions.forEach(q=>{ const idxs = [...Array(q.options.length).keys()]; q._perm = shuffle(idxs); });
     }
 
+    /* === UI: dots === */
     function buildNavDots(){
       const n = testData.questions.length;
       const root = $('#navDots'); root.innerHTML='';
@@ -286,8 +334,7 @@
         b.addEventListener('click', ()=>{ currentIndex=i; renderQuestion(); });
         root.appendChild(b);
       }
-      refreshDotsState();
-      highlightDot(0);
+      refreshDotsState(); highlightDot(0);
     }
     function highlightDot(i){ [...document.querySelectorAll('.dot')].forEach((el,idx)=> el.classList.toggle('active', idx===i)); }
     function refreshDotsState(){
@@ -298,6 +345,7 @@
       });
     }
 
+    /* === Savol renderi === */
     function resolveImageSrc(idx1){
       const q = testData.questions[idx1-1] || {};
       const tryJpg = `./${idx1}.jpg`, tryPng = `./${idx1}.png`;
@@ -313,7 +361,6 @@
         img.src = tryJpg + `?t=${Date.now()}`;
       });
     }
-
     function renderQuestion(){
       const q = testData.questions[currentIndex];
       $('#qIndex').textContent = String(currentIndex+1);
@@ -349,6 +396,7 @@
       typeset($('#questionsCard'));
     }
 
+    /* === Timer === */
     function startTimerIfNeeded(){
       const minutes = Number(testData.durationMinutes || 0);
       const both = (txt,show)=>{ $('#metaTimer').textContent=txt; $('#qTimer').textContent=txt; $('#metaTimer').classList.toggle('hidden',!show); $('#qTimer').classList.toggle('hidden',!show); };
@@ -363,6 +411,7 @@
       }, 1000);
     }
 
+    /* === Scoring === */
     function computeTotals(){
       let total=0, max=0;
       const perQuestion=[];
@@ -389,12 +438,15 @@
       el.textContent = `Ball: ${fmt(prev + delta)}`;
     }
 
+    /* === Finish === */
     async function onFinish(){
       if(timerId){ clearInterval(timerId); timerId=null; }
       if(startedAt){ const now=new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
       const { total, max, perQuestion, sectionAgg } = computeTotals();
+
       $('#questionsCard').classList.add('hidden');
       $('#resultCard').classList.remove('hidden');
+
       $('#scoreTotal').textContent = fmt(total);
       $('#scoreMax').textContent = fmt(max);
       $('#scoreNote').textContent = `To‘g‘ri: ${perQuestion.filter(x=>x.ok).length} ta / ${perQuestion.length} ta`;
@@ -404,50 +456,11 @@
       $('#stPct').textContent = (max? Math.round((total/max)*100):0) + '%';
       $('#stPoints').textContent = `${fmt(total)}/${fmt(max)}`;
 
-      // sections
-      const container = document.createElement('div'); container.className = 'stats-grid';
-      [...sectionAgg.entries()].forEach(([name, a])=>{
-        const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
-        const card = document.createElement('div'); card.className = 'stat';
-        card.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${name}</div>
-          <div style="color:#667a72;font-size:12px">Savollar: ${a.q}</div>
-          <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> ball · <b>${pct}%</b> to‘g‘ri</div>`;
-        container.appendChild(card);
-      });
-      const rootSec = document.querySelector('#sectionStats'); rootSec.innerHTML=''; rootSec.appendChild(container);
+      // ✅ Barqaror rendererlar
+      renderSectionStats(sectionAgg);
+      renderDetail(perQuestion);
 
-      // detail
-      const wrapper = document.createElement('div');
-      const table = document.createElement('table'); table.className='tbl';
-      table.innerHTML = `<thead class="rowbox">
-          <tr>
-            <th style="border-top-left-radius:12px">#</th>
-            <th>Bo‘lim</th>
-            <th>Savol</th>
-            <th>Tanlangan</th>
-            <th>To‘g‘ri javob(lar)</th>
-            <th style="text-align:right;border-top-right-radius:12px">Ball</th>
-          </tr>
-        </thead><tbody id="detailBody"></tbody>`;
-      wrapper.appendChild(table);
-      const body = table.querySelector('#detailBody');
-
-      perQuestion.forEach(row=>{
-        const tr = document.createElement('tr'); tr.className='rowbox';
-        const pickedDisp = row.picked.length? row.picked.map(x=>x+1).join(', ') : '—';
-        const correctDisp = row.correct.map(x=>x+1).join(', ');
-        tr.innerHTML = `<td style="width:40px">${row.i+1}</td>
-          <td><span class="sect">${row.section}</span></td>
-          <td style="max-width:360px">${wrapTeX(row.text||'')}</td>
-          <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
-          <td>${correctDisp}</td>
-          <td style="text-align:right"><b>${row.ok?fmt(row.pts):0}</b>/<b>${fmt(row.pts)}</b></td>`;
-        body.appendChild(tr);
-      });
-      const root = document.querySelector('#detailTable');
-      root.innerHTML=''; root.appendChild(wrapper);
-      typeset(root);
-
+      // Ballni serverga yuborish
       const user = auth.currentUser;
       const notice = document.createElement('div');
       notice.id = 'ballNotice';
@@ -493,10 +506,14 @@
       document.querySelector('#resultCard').appendChild(notice);
     }
 
+    /* === Boot === */
     async function boot(){
       await loadTestData();
       if(!testData || !testData.questions?.length){
-        document.querySelector('#introCard').classList.add('hidden'); document.querySelector('#questionsCard').classList.add('hidden'); document.querySelector('#emptyCard').classList.remove('hidden'); return;
+        document.querySelector('#introCard').classList.add('hidden');
+        document.querySelector('#questionsCard').classList.add('hidden');
+        document.querySelector('#emptyCard').classList.remove('hidden');
+        return;
       }
       document.querySelector('#testTitle').textContent = testData.title || 'Test';
       document.querySelector('#testDesc').textContent = testData.description || '';
@@ -516,7 +533,8 @@
 
       document.querySelector('#startBtn').onclick = ()=>{
         startedAt = new Date(); spentSeconds = 0;
-        document.querySelector('#introCard').classList.add('hidden'); document.querySelector('#questionsCard').classList.remove('hidden');
+        document.querySelector('#introCard').classList.add('hidden');
+        document.querySelector('#questionsCard').classList.remove('hidden');
         renderQuestion(); startTimerIfNeeded();
       };
       document.querySelector('#prevBtn').onclick = ()=>{ if(currentIndex>0){ currentIndex--; renderQuestion(); } };
@@ -525,7 +543,6 @@
       document.querySelector('#againBtn').onclick = ()=>{ document.querySelector('#resultCard').classList.add('hidden'); document.querySelector('#questionsCard').classList.remove('hidden'); renderQuestion(); };
     }
 
-    // Guarddan o'tgach appni ishga tushiramiz
     await boot();
   </script>
 </body>
