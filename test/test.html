@@ -29,20 +29,15 @@
     .btn.ghost{background:#fff;color:var(--brand)}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .hidden{display:none!important}
-
-    /* Question UI */
     .qtext{font-size:18px;margin-bottom:10px}
-    .opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #edf3ee;border-radius:12px;background:#fbfdfc;margin:8px 0;
-      transition: box-shadow .2s ease, background .2s ease, border-color .2s ease;}
+    .opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #edf3ee;border-radius:12px;background:#fbfdfc;margin:8px 0;transition: box-shadow .2s ease, background .2s ease, border-color .2s ease;}
     .opt:hover{border-color:var(--brand);box-shadow:0 0 0 4px rgba(46,139,87,.15);background:#fff}
     .navdots{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
     .dot{width:36px;height:36px;border-radius:10px;border:1px solid var(--frame);display:grid;place-items:center;background:#fff;cursor:pointer}
     .dot.active{border-color:var(--brand);box-shadow:0 0 0 3px rgba(46,139,87,.15)}
     .score{font-size:20px;font-weight:800}
     .ok{color:#1F6B45} .bad{color:#b91c1c}
-    #qImage{width:min(860px,100%);max-height:80vh;display:block;margin:10px auto;border-radius:12px;border:1px solid #edf3ee;
-      box-shadow:0 6px 18px rgba(31,107,69,.06);-webkit-user-drag:none;user-select:none}
-
+    #qImage{width:min(860px,100%);max-height:80vh;display:block;margin:10px auto;border-radius:12px;border:1px solid #edf3ee;box-shadow:0 6px 18px rgba(31,107,69,.06);-webkit-user-drag:none;user-select:none}
     .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
     .stat{border:1px solid var(--frame);border-radius:12px;padding:10px}
     .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
@@ -50,7 +45,6 @@
     .tbl td,.tbl th{padding:8px 10px;background:#fff}
     .rowbox{border:1px solid var(--frame);border-radius:12px;overflow:hidden}
     .sect{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border:1px solid var(--frame);border-radius:999px;background:#f8fcfa;font-size:12px;color:#0b3a25}
-
     @media print { body{display:none} }
   </style>
 </head>
@@ -94,6 +88,7 @@
       <div class="row" style="justify-content:space-between">
         <div><b id="qIndex">1</b>/<span id="qTotal">—</span> <span id="qSect" class="sect"></span></div>
         <div class="row">
+          <span id="qTimer" class="chip hidden">00:00</span>
           <button id="prevBtn" class="btn ghost">← Oldingi</button>
           <button id="nextBtn" class="btn">Keyingi →</button>
         </div>
@@ -126,7 +121,6 @@
         </div>
       </div>
 
-      <!-- Umumiy statistika -->
       <div class="stats-grid" style="margin-top:12px">
         <div class="stat"><div style="color:var(--muted);font-size:12px">To‘g‘ri javoblar</div><div style="font-weight:800;font-size:20px" id="stCorrect">0</div></div>
         <div class="stat"><div style="color:var(--muted);font-size:12px">Noto‘g‘ri javoblar</div><div style="font-weight:800;font-size:20px" id="stWrong">0</div></div>
@@ -134,13 +128,11 @@
         <div class="stat"><div style="color:var(--muted);font-size:12px">Umumiy ball</div><div style="font-weight:800;font-size:20px" id="stPoints">0</div></div>
       </div>
 
-      <!-- Bo‘limlar kesimida -->
       <div class="card" style="margin:14px 0">
         <h3 style="margin:0 0 8px">Bo‘limlar kesimida natija</h3>
         <div id="sectionStats"></div>
       </div>
 
-      <!-- Savolma-savol tahlil -->
       <div class="card" style="margin:14px 0">
         <h3 style="margin:0 0 8px">Javoblar tahlili</h3>
         <div id="detailTable"></div>
@@ -154,111 +146,108 @@
   </main>
 
   <script type="module">
-    /* ================= CENTER LOGIN SYSTEM IMPORTS ================= */
     import { auth, db, onAuthStateChanged } from "/lib/firebase.client.js";
     import { requireAuth } from "/lib/auth-guard.js";
-    import {
-      doc, runTransaction, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    /* ================= BASIC UTIL ================= */
     const $ = s=>document.querySelector(s);
     const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
     const sum = a => a.reduce((x,y)=>x+y,0);
     const isMulti = q => Array.isArray(q.correctIndices);
     const normalize = arr => Array.from(new Set((arr||[]).map(Number))).sort((a,b)=>a-b);
     const arraysEqual = (a,b)=> a.length===b.length && a.every((v,i)=>v===b[i]);
-    const shuffle = (arr)=>{
-      const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-      return a;
+    const shuffle = (arr)=>{ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+    const fmt = (x)=>{ const r = Math.round((+x + Number.EPSILON)*100)/100; return (Math.abs(r)%1===0)? String(Math.trunc(r)) : String(r); };
+
+    // MathJax tayyor bo‘lishini kafolatlash
+    const mjReady = ()=> new Promise(res=>{
+      const check=()=> (window.MathJax && window.MathJax.typesetPromise) ? res() : setTimeout(check,30);
+      check();
+    });
+    const needsWrap = (s)=>{
+      if(typeof s!=='string') return false;
+      if (s.includes('$') || s.includes('\\(') || s.includes('\\[')) return false;
+      return /\\frac|\\sqrt|\\sum|\\int|\\pi|\\alpha|\\beta|\\gamma|\\le|\\ge|\\cdot|\\times/.test(s);
     };
+    const wrapTeX = (s)=> needsWrap(s) ? `\\(${s}\\)` : s;
+    const typeset = async (el)=>{ await mjReady(); try{ await window.MathJax.typesetPromise([el]); }catch{} };
 
-    async function typeset(el){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } }
-
-    // Disable right-click / drag / some hotkeys
     document.addEventListener('contextmenu', e=> e.preventDefault());
     document.addEventListener('dragstart', e=> e.preventDefault());
-    document.addEventListener('keydown', (e)=>{
-      const k = (e.key||'').toLowerCase();
-      if ((e.ctrlKey||e.metaKey) && ['s','p','u'].includes(k)) e.preventDefault();
-    });
+    document.addEventListener('keydown', (e)=>{ const k=(e.key||'').toLowerCase(); if((e.ctrlKey||e.metaKey)&&['s','p','u'].includes(k)) e.preventDefault(); });
 
-    /* ================ STATE ================ */
     let testData = null;
     let currentIndex = 0;
-    let answers = [];         // each: ORIGINAL indices
+    let answers = [];
     let startedAt = null;
     let timeLeftSec = 0, timerId = null;
     let spentSeconds = 0;
-    const currentTestId = new URLSearchParams(location.search).get('id') ||
-                          (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
+    const currentTestId = new URLSearchParams(location.search).get('id') || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
-    /* ================ AUTH GUARD ================ */
     await requireAuth();
+    onAuthStateChanged(auth, (user)=>{ $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon'; });
 
-    onAuthStateChanged(auth, (user)=>{
-      $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon';
-    });
+    function applySectionRanges(data){
+      if(!Array.isArray(data.questions)) return;
+      if(Array.isArray(data.sections)){
+        data.sections.forEach(sec=>{
+          const name = sec.name || 'Umumiy';
+          const s = Math.max(1, Number(sec.start||1));
+          const e = Math.min(data.questions.length, Number(sec.end||data.questions.length));
+          for(let i=s-1;i<e;i++){ data.questions[i].section = data.questions[i].section || name; }
+        });
+      }
+      // default bo'lim nomi
+      data.questions.forEach(q=>{ if(!q.section) q.section = 'Umumiy'; });
+    }
 
-    /* ================ LOAD TEST ================ */
     function normalizeTestData(data){
       if(!data || !Array.isArray(data.questions)) return data;
       data.title = data.title || 'Test';
       data.description = data.description || 'Rasm + variantlar';
-      data.questions = data.questions.map(q=>({
-        ...q,
-        points: Number(q.points || 1),
-        section: q.section || q.group || 'Umumiy'
-      }));
+      data.questions = data.questions.map(q=>({ ...q, points: Number(q.points || 1) }));
       if (data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
+      applySectionRanges(data);
       return data;
     }
+
     async function loadTestData(){
       const stored = localStorage.getItem('testData');
-      if(stored){
-        try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{}
-      }
+      if(stored){ try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{} }
       try{
         const r = await fetch('./test.json',{cache:'no-store'});
         if(!r.ok) throw new Error('no test.json');
         testData = normalizeTestData(await r.json());
       }catch{
         testData = {
-          title: 'Demo test',
-          description: 'Fallback ma’lumotlar',
-          durationMinutes: 1,
+          title: 'Demo test', description: 'Fallback ma’lumotlar', durationMinutes: 1,
           questions: [
             { section:'Algebra', text: "1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1 },
-            { section:'Sonlar nazariyasi', text: "2) Ko‘p tanlov: tub son(lar)ni belgilang.", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
-            { section:'Geometriya', text: "3) Nisbatni toping (rasmga qarang).", image:"https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Geometric_figure_square.svg/512px-Geometric_figure_square.svg.png", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
+            { section:'Sonlar nazariyasi', text: "2) \(\\text{Tub son(lar)}\)", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
+            { section:'Geometriya', text: "3) Nisbatni toping.", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
           ]
         };
       }
 
-      // Har bir savol uchun variantlar tartibini tasodifiylashtirish
+      // variantlarni random qilish
       testData.questions.forEach(q=>{
         const idxs = [...Array(q.options.length).keys()];
         const perm = shuffle(idxs);
-        q._perm = perm; // display order -> original index
-        // renderda opt matni uchun display tartibini ishlatamiz, ammo <input value> NI ORIGINAL indeks sifatida qo'yamiz
+        q._perm = perm;
       });
     }
 
-    /* ================ UI INIT ================ */
     function buildNavDots(){
       const n = testData.questions.length;
       const root = $('#navDots'); root.innerHTML='';
       for(let i=0;i<n;i++){
-        const b=document.createElement('button');
-        b.className='dot'; b.textContent = i+1;
+        const b=document.createElement('button'); b.className='dot'; b.textContent = i+1;
         b.addEventListener('click', ()=>{ currentIndex=i; renderQuestion(); });
         root.appendChild(b);
       }
       highlightDot(0);
     }
-    function highlightDot(i){
-      [...document.querySelectorAll('.dot')].forEach((el,idx)=> el.classList.toggle('active', idx===i));
-    }
+    function highlightDot(i){ [...document.querySelectorAll('.dot')].forEach((el,idx)=> el.classList.toggle('active', idx===i)); }
 
     function resolveImageSrc(idx1){
       const q = testData.questions[idx1-1] || {};
@@ -280,7 +269,7 @@
       const q = testData.questions[currentIndex];
       $('#qIndex').textContent = String(currentIndex+1);
       $('#qTotal').textContent = String(testData.questions.length);
-      $('#qText').innerHTML = q.text || '';
+      $('#qText').innerHTML = wrapTeX(q.text || '');
       $('#qSect').textContent = q.section || 'Umumiy';
       $('#opts').innerHTML = '';
 
@@ -288,61 +277,46 @@
       const nameAttr = `q${currentIndex}` + (multi?'[]':'');
       const chosen = new Set(answers[currentIndex] || []);
 
-      // variantlarni tasodifiy tartibda chiqarish, input value = ORIGINAL indeks
       const order = q._perm && q._perm.length===q.options.length ? q._perm : [...Array(q.options.length).keys()];
-      order.forEach((origIndex, dispIdx)=>{
+      order.forEach((origIndex)=>{
         const row = document.createElement('label'); row.className='opt';
         const inp = document.createElement('input');
         inp.type = multi ? 'checkbox' : 'radio';
         inp.name = nameAttr;
-        inp.value = String(origIndex); // ORIGINAL index
+        inp.value = String(origIndex);
         inp.checked = chosen.has(origIndex);
         inp.addEventListener('change', ()=>{
-          if(multi){
-            if(inp.checked) chosen.add(origIndex); else chosen.delete(origIndex);
-            answers[currentIndex] = normalize([...chosen]);
-          } else {
-            answers[currentIndex] = inp.checked ? [origIndex] : [];
-          }
+          if(multi){ if(inp.checked) chosen.add(origIndex); else chosen.delete(origIndex); answers[currentIndex] = normalize([...chosen]); }
+          else { answers[currentIndex] = inp.checked ? [origIndex] : []; }
         });
-        const span = document.createElement('span'); span.innerHTML = q.options[origIndex];
+        const span = document.createElement('span'); span.innerHTML = wrapTeX(q.options[origIndex]);
         row.appendChild(inp); row.appendChild(span);
         $('#opts').appendChild(row);
       });
 
       resolveImageSrc(currentIndex+1).then(src=>{ $('#qImage').src = src; });
-
       highlightDot(currentIndex);
-      if (window.MathJax?.typesetPromise) typeset($('#questionsCard'));
+      typeset($('#questionsCard'));
     }
 
-    /* ================ TIMER ================= */
     function startTimerIfNeeded(){
       const minutes = Number(testData.durationMinutes || 0);
-      if(!minutes){
-        $('#metaTimer').classList.add('hidden');
-        return;
-      }
+      const both = (txt,show)=>{ $('#metaTimer').textContent=txt; $('#qTimer').textContent=txt; $('#metaTimer').classList.toggle('hidden',!show); $('#qTimer').classList.toggle('hidden',!show); };
+      if(!minutes){ both('00:00', false); return; }
       timeLeftSec = Math.round(minutes*60);
-      $('#metaTimer').classList.remove('hidden');
-      const upd=()=>{
-        const m=Math.max(0,Math.floor(timeLeftSec/60)), s=Math.max(0,timeLeftSec%60);
-        $('#metaTimer').textContent = `${pad2(m)}:${pad2(s)}`;
-      };
-      upd();
+      both(`${pad2(Math.floor(timeLeftSec/60))}:${pad2(timeLeftSec%60)}`, true);
       timerId = setInterval(()=>{
         timeLeftSec--; spentSeconds++;
-        upd();
+        const m=Math.max(0,Math.floor(timeLeftSec/60)), s=Math.max(0,timeLeftSec%60);
+        both(`${pad2(m)}:${pad2(s)}`, true);
         if(timeLeftSec<=0){ clearInterval(timerId); onFinish(); }
       }, 1000);
     }
 
-    /* ================ SCORING ================= */
     function computeTotals(){
       let total=0, max=0;
       const perQuestion=[];
-      const sectionAgg = new Map(); // name -> {q:count, ok:count, pts:earned, ptsMax:max}
-
+      const sectionAgg = new Map();
       testData.questions.forEach((q,i)=>{
         const sect = q.section || 'Umumiy';
         const pts = Number(q.points||1); max+=pts;
@@ -350,54 +324,37 @@
         const correct = isMulti(q) ? normalize(q.correctIndices||[]) : [Number(q.correctIndex??-1)];
         const ok = isMulti(q) ? arraysEqual(picked, correct) : (picked.length===1 && picked[0]===correct[0]);
         if(ok) total+=pts;
-
         if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
-        const a = sectionAgg.get(sect);
-        a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
-
+        const a = sectionAgg.get(sect); a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
         perQuestion.push({i, section:sect, pts, ok, picked, correct, text:q.text, options:q.options});
       });
       return { total, max, perQuestion, sectionAgg };
     }
 
-    /* ================ SAVE FIRST RESULT ONLY ================= */
     async function saveFirstResultOnly({testId, uid, total, max, detail}){
       const ref = doc(db, 'results', testId, 'users', uid);
       return runTransaction(db, async (tx)=>{
         const snap = await tx.get(ref);
-        if (snap.exists()){
-          return { skipped:true, already:snap.data() };
-        }
-        tx.set(ref, {
-          uid, testId,
-          firstTotal: total, max,
-          detail,
-          createdAt: serverTimestamp(),
-          spentSeconds
-        });
+        if (snap.exists()) return { skipped:true, already:snap.data() };
+        tx.set(ref, { uid, testId, firstTotal: total, max, detail, createdAt: serverTimestamp(), spentSeconds });
         return { skipped:false };
       });
     }
 
-    /* ================ RENDER SECTION STATS ================= */
     function renderSectionStats(sectionAgg){
-      const container = document.createElement('div');
-      container.className = 'stats-grid';
+      const container = document.createElement('div'); container.className = 'stats-grid';
       [...sectionAgg.entries()].forEach(([name, a])=>{
         const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
-        const card = document.createElement('div');
-        card.className = 'stat';
+        const card = document.createElement('div'); card.className = 'stat';
         card.innerHTML = `
           <div style="font-weight:700;margin-bottom:4px">${name}</div>
           <div style="color:var(--muted);font-size:12px">Savollar: ${a.q}</div>
-          <div style="margin-top:6px"><b>${a.pts}</b>/<b>${a.ptsMax}</b> ball · <b>${pct}%</b> to‘g‘ri</div>
-        `;
+          <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> ball · <b>${pct}%</b> to‘g‘ri</div>`;
         container.appendChild(card);
       });
       const root = $('#sectionStats'); root.innerHTML=''; root.appendChild(container);
     }
 
-    /* ================ RENDER DETAIL TABLE ================= */
     function renderDetail(perQuestion){
       const wrapper = document.createElement('div');
       const table = document.createElement('table'); table.className='tbl';
@@ -412,8 +369,7 @@
             <th style="text-align:right;border-top-right-radius:12px">Ball</th>
           </tr>
         </thead>
-        <tbody id="detailBody"></tbody>
-      `;
+        <tbody id="detailBody"></tbody>`;
       wrapper.appendChild(table);
       const body = table.querySelector('#detailBody');
 
@@ -424,91 +380,63 @@
         tr.innerHTML = `
           <td style="width:40px">${row.i+1}</td>
           <td><span class="sect">${row.section}</span></td>
-          <td style="max-width:360px">${row.text||''}</td>
+          <td style="max-width:360px">${wrapTeX(row.text||'')}</td>
           <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
           <td>${correctDisp}</td>
-          <td style="text-align:right"><b>${row.ok?row.pts:0}</b>/<b>${row.pts}</b></td>
-        `;
+          <td style="text-align:right"><b>${row.ok?fmt(row.pts):0}</b>/<b>${fmt(row.pts)}</b></td>`;
         body.appendChild(tr);
       });
 
       const root = $('#detailTable');
       root.innerHTML=''; root.appendChild(wrapper);
-      if (window.MathJax?.typesetPromise) typeset(root); // savol matnlari LaTeX bo'lsa tiplansin
+      typeset(root);
     }
 
-    /* ================ FINISH ================= */
     async function onFinish(){
       if(timerId){ clearInterval(timerId); timerId=null; }
-      // agar vaqt cheklanmagan bo'lsa ham umumiy sarflangan vaqtni hisoblaymiz
-      if(startedAt){ const now = new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
-
+      if(startedAt){ const now=new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
       const { total, max, perQuestion, sectionAgg } = computeTotals();
       $('#questionsCard').classList.add('hidden');
       $('#resultCard').classList.remove('hidden');
-      $('#scoreTotal').textContent = String(total);
-      $('#scoreMax').textContent = String(max);
+      $('#scoreTotal').textContent = fmt(total);
+      $('#scoreMax').textContent = fmt(max);
       $('#scoreNote').textContent = `To‘g‘ri: ${perQuestion.filter(x=>x.ok).length} ta / ${perQuestion.length} ta`;
       $('#timeNote').textContent = `Sarflangan vaqt: ${pad2(Math.floor(spentSeconds/60))}:${pad2(spentSeconds%60)}`;
-
-      // umumiy statistika
       $('#stCorrect').textContent = String(perQuestion.filter(x=>x.ok).length);
       $('#stWrong').textContent = String(perQuestion.length - perQuestion.filter(x=>x.ok).length);
-      $('#stPct').textContent = (max? Math.round(total/max*100):0) + '%';
-      $('#stPoints').textContent = `${total}/${max}`;
-
+      $('#stPct').textContent = (max? Math.round((total/max)*100):0) + '%';
+      $('#stPoints').textContent = `${fmt(total)}/${fmt(max)}`;
       renderSectionStats(sectionAgg);
       renderDetail(perQuestion);
 
       const user = auth.currentUser;
       if(user){
-        try{
-          const res = await saveFirstResultOnly({
-            testId: (testData.id || currentTestId),
-            uid: user.uid,
-            total, max, detail: perQuestion
-          });
-          console.log(res.skipped ? 'Oldin saqlangan — bu urinish yozilmadi' : 'Birinchi natija saqlandi');
-        }catch(e){ console.error('save error:', e); }
+        try{ await saveFirstResultOnly({ testId:(testData.id||currentTestId), uid:user.uid, total, max, detail: perQuestion }); }
+        catch(e){ console.error('save error:', e); }
       }
     }
 
-    /* ================ BOOTSTRAP ================= */
     async function boot(){
       await loadTestData();
       if(!testData || !testData.questions?.length){
-        $('#introCard').classList.add('hidden');
-        $('#questionsCard').classList.add('hidden');
-        $('#emptyCard').classList.remove('hidden');
-        return;
+        $('#introCard').classList.add('hidden'); $('#questionsCard').classList.add('hidden'); $('#emptyCard').classList.remove('hidden'); return;
       }
       $('#testTitle').textContent = testData.title || 'Test';
       $('#testDesc').textContent = testData.description || '';
       $('#metaCount').textContent = `Savollar: ${testData.questions.length}`;
-      $('#metaPoints').textContent = `Umumiy ball: ${sum(testData.questions.map(q=>q.points))}`;
-
+      $('#metaPoints').textContent = `Umumiy ball: ${fmt(sum(testData.questions.map(q=>q.points)))}`;
       answers = Array.from({length:testData.questions.length}, ()=>[]);
-
       buildNavDots();
 
-      // events
       $('#startBtn').onclick = ()=>{
-        startedAt = new Date();
-        spentSeconds = 0;
-        $('#introCard').classList.add('hidden');
-        $('#questionsCard').classList.remove('hidden');
-        renderQuestion();
-        startTimerIfNeeded();
+        startedAt = new Date(); spentSeconds = 0;
+        $('#introCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden');
+        renderQuestion(); startTimerIfNeeded();
       };
       $('#prevBtn').onclick = ()=>{ if(currentIndex>0){ currentIndex--; renderQuestion(); } };
       $('#nextBtn').onclick = ()=>{ if(currentIndex<testData.questions.length-1){ currentIndex++; renderQuestion(); } };
       $('#finishBtn').onclick = onFinish;
-      $('#againBtn').onclick = ()=>{
-        $('#resultCard').classList.add('hidden');
-        $('#questionsCard').classList.remove('hidden');
-        // MathJax qayta ishlashi uchun
-        renderQuestion();
-      };
+      $('#againBtn').onclick = ()=>{ $('#resultCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden'); renderQuestion(); };
     }
 
     boot();
