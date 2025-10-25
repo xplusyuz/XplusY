@@ -287,7 +287,7 @@
         b.textContent = i+1;
         b.addEventListener('click', ()=>{ currentIndex=i; renderQuestion(); });
         root.appendChild(b);
-      }
+      });
       refreshDotsState();
       highlightDot(0);
     }
@@ -403,18 +403,30 @@
       return { total, max, perQuestion, sectionAgg };
     }
 
-    /* Firestore: faqat bir marta yozish (transaction) + ball maydoni */
+    /* Firestore: faqat bir marta yozish + eski yozuvda ball bo'lmasa patch qilish */
     async function saveFirstResultOnly({testCode, uid, total, max, detail}){
       const ref = doc(db, 'results', testCode, 'users', uid);
       return runTransaction(db, async (tx)=>{
         const snap = await tx.get(ref);
-        if (snap.exists()) return { skipped:true, already:snap.data() };
+
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          if (typeof data.ball !== 'number') {
+            const patchedBall = Number(
+              (typeof total === 'number' ? total : data.firstTotal) || 0
+            );
+            tx.update(ref, { ball: patchedBall });
+            return { skipped:true, patched:true, ball: patchedBall };
+          }
+          return { skipped:true, patched:false, already:data };
+        }
+
         tx.set(ref, {
           uid,
           testCode,
           testId: testData.id || currentTestId,
           title: testData.title || '',
-          ball: Number(total || 0),           // to‘plagan ball (YANGI)
+          ball: Number(total || 0),           // to‘plagan ball
           firstTotal: Number(total || 0),     // moslik uchun qoldirildi
           max: Number(max || 0),
           percent: (max ? Math.round((total / max) * 100) : 0),
@@ -422,7 +434,7 @@
           createdAt: serverTimestamp(),
           spentSeconds: Number(spentSeconds || 0)
         });
-        return { skipped:false };
+        return { skipped:false, patched:false, ball: Number(total||0) };
       });
     }
 
@@ -522,10 +534,12 @@
             total, max,
             detail: safeDetail
           });
-          if(res?.skipped){
-            showSaveStatus(`Oldin saqlangan (#${currentTestCode}) — qayta yozilmadi`, 'warn');
-          }else{
-            showSaveStatus(`Saqlandi (#${currentTestCode})`, 'good');
+          if(res?.patched){
+            showSaveStatus(`Eski yozuvga ball qo‘shildi (ball=${res.ball})`, 'good');
+          } else if(res?.skipped){
+            showSaveStatus('Oldin saqlangan (ball bor) — qayta yozilmadi', 'warn');
+          } else {
+            showSaveStatus(`Saqlandi (ball=${res.ball})`, 'good');
           }
         }catch(e){
           console.error('save error:', e);
