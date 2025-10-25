@@ -48,7 +48,7 @@
     .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
     .stat{border:1px solid var(--frame);border-radius:12px;padding:10px}
     .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
-    .tbl th{font-weight:700;text-align:left;color:var(--muted);font-size:14px}
+    .tbl th{font-weight:700;text-align:left;color:#64748b;font-size:14px}
     .tbl td,.tbl th{padding:8px 10px;background:#fff}
     .rowbox{border:1px solid var(--frame);border-radius:12px;overflow:hidden}
     .sect{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border:1px solid var(--frame);border-radius:999px;background:#f8fcfa;font-size:12px;color:#0b3a25}
@@ -131,7 +131,7 @@
         </div>
         <div class="row">
           <span id="saveStatus" class="chip hidden"></span>
-          <a href="https://ixplusy.netlify.app/index" class="btn ghost">HOME</a>
+          <a href="https://xplusy.netlify.app/index" class="btn ghost">HOME</a>
           <button id="againBtn" class="btn ghost">Savollarga qaytish</button>
         </div>
       </div>
@@ -389,7 +389,6 @@
         if(ok) total+=pts;
         if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
         const a = sectionAgg.get(sect); a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
-        // SANITIZED row (Firestore undefined bo‘lmasin)
         perQuestion.push({
           i,
           section: sect,
@@ -404,7 +403,7 @@
       return { total, max, perQuestion, sectionAgg };
     }
 
-    /* Firestore: natijani TEST KODI bo‘yicha faqat bir marta yozish */
+    /* Firestore: faqat bir marta yozish (transaction) + ball maydoni */
     async function saveFirstResultOnly({testCode, uid, total, max, detail}){
       const ref = doc(db, 'results', testCode, 'users', uid);
       return runTransaction(db, async (tx)=>{
@@ -415,11 +414,13 @@
           testCode,
           testId: testData.id || currentTestId,
           title: testData.title || '',
-          firstTotal: Number(total||0),
-          max: Number(max||0),
+          ball: Number(total || 0),           // to‘plagan ball (YANGI)
+          firstTotal: Number(total || 0),     // moslik uchun qoldirildi
+          max: Number(max || 0),
+          percent: (max ? Math.round((total / max) * 100) : 0),
           detail: Array.isArray(detail) ? detail : [],
           createdAt: serverTimestamp(),
-          spentSeconds: Number(spentSeconds||0)
+          spentSeconds: Number(spentSeconds || 0)
         });
         return { skipped:false };
       });
@@ -496,7 +497,7 @@
       renderSectionStats(sectionAgg);
       renderDetail(perQuestion);
 
-      // SANITIZE detail (Firestore undefined bo‘lmasin)
+      // SANITIZE detail
       const safeDetail = perQuestion.map(row => ({
         i: row.i,
         section: row.section || 'Umumiy',
