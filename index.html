@@ -29,7 +29,7 @@
     .spacer{flex:1}
     .iconbtn{background:#ffffff22;border:1px solid #ffffff33;color:#fff;border-radius:12px;padding:8px 10px;font-weight:700;cursor:pointer}
 
-    /* USER BAR — responsive grid */
+    /* USER BAR */
     .userbar{
       background:var(--card);border:1px solid var(--frame);border-radius:14px;margin:10px 12px;padding:12px;
       display:grid;grid-template-columns:56px 1fr auto;grid-template-areas:
@@ -72,7 +72,7 @@
       -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
     }
 
-    /* ==== TAG FILTERLAR ==== */
+    /* ==== FILTERLAR ==== */
     .filters{margin:10px 12px;padding:10px;background:var(--card);border:1px solid var(--frame);
       border-radius:14px;box-shadow:0 8px 18px rgba(0,0,0,.06)}
     .filters h4{margin:0 0 8px;font-size:14px;opacity:.75}
@@ -80,7 +80,6 @@
     .chip.filter{cursor:pointer;background:var(--chip);border:1px solid var(--chip-b)}
     .chip.filter[aria-pressed="true"]{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:#0000;color:#fff}
     .chip.sm{font-size:11px;padding:5px 8px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b)}
-    .card .tagline{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 
     /* Leaderboard */
     .board{background:var(--card);border:1px solid var(--frame);border-radius:16px;margin:10px 12px;padding:12px;border:none}
@@ -213,15 +212,6 @@
   <!-- Banners -->
   <section id="banners"></section>
 
-  <!-- FILTERS -->
-  <section class="filters grad-border glass" id="filters">
-    <h4>Katta teglar (bo‘limlar) bo‘yicha:</h4>
-    <div id="mainTags" class="chips"></div>
-    <div style="height:10px"></div>
-    <h4>Kichik teglar (kartalar ichida):</h4>
-    <div id="subTags" class="chips"></div>
-  </section>
-
   <!-- Leaderboard -->
   <section class="board grad-border glass" id="board">
     <h3>Top 50 — Ball bo‘yicha (o‘ntalik pager)</h3>
@@ -231,6 +221,12 @@
       <button id="decileNext" class="pbtn">Keyingi (10) ➡️</button>
     </div>
     <div id="boardList"></div>
+  </section>
+
+  <!-- GLOBAL MAIN TAGS (Top 50 dan pastda, bo‘limlardan yuqorida) -->
+  <section class="filters grad-border glass" id="filtersMain">
+    <h4>Katta teglar (bo‘limlar) bo‘yicha:</h4>
+    <div id="mainTags" class="chips"></div>
   </section>
 
   <!-- Sections (cards) -->
@@ -292,7 +288,7 @@
     boardList: document.getElementById('boardList'),
     decilePrev: document.getElementById('decilePrev'), decileNext: document.getElementById('decileNext'), decileInfo: document.getElementById('decileInfo'),
     userTierStars: document.getElementById('userTierStars'), userStarsPts: document.getElementById('userStarsPts'),
-    mainTags: document.getElementById('mainTags'), subTags: document.getElementById('subTags')
+    mainTags: document.getElementById('mainTags')
   };
 
   // ---- Modal helpers
@@ -326,8 +322,10 @@
   const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   function fmtPoints(v){ const n = Number(v)||0; return n.toLocaleString('uz-UZ',{maximumFractionDigits:1}); }
 
-  // ==== FILTR STATE ====
-  let FILTER = { main: null, subs: new Set() };
+  // ==== GLOBAL FILTR STATE ====
+  let FILTER = { main: null }; // faqat katta teg
+  const SECTION_FILTERS = new Map(); // har bo'lim uchun: key -> Set(sub-tags)
+
   const byText = (txt)=> document.createTextNode(txt);
   function chipEl(label, pressed=false, onClick=()=>{}, extraClass=''){
     const b=document.createElement('button');
@@ -338,40 +336,28 @@
     b.onclick=()=> onClick(b);
     return b;
   }
-  function collectTags(data){
-    const main=new Set(), sub=new Set();
-    (data.sections||[]).forEach(sec=>{
-      if(sec.tag) main.add(String(sec.tag));
-      (sec.items||[]).forEach(it=> (it.tags||[]).forEach(t=> sub.add(String(t))));
-    });
-    return { main:[...main].sort(), subs:[...sub].sort() };
+
+  function collectMainTags(data){
+    const main=new Set();
+    (data.sections||[]).forEach(sec=>{ if(sec.tag) main.add(String(sec.tag)); });
+    return [...main].sort();
   }
+  function getSecKey(sec){ return (sec.title||'')+'__'+(sec.tag||''); }
+
   function renderMainChips(tags){
     const wrap=el.mainTags; wrap.innerHTML='';
     wrap.appendChild(chipEl('Hammasi', FILTER.main===null, ()=>{
       FILTER.main=null; renderAll();
     }));
     tags.forEach(t=>{
-      wrap.appendChild(chipEl(t, FILTER.main===t, (btn)=>{
+      wrap.appendChild(chipEl(t, FILTER.main===t, ()=>{
         FILTER.main = (FILTER.main===t? null : t);
         renderAll();
       }));
     });
   }
-  function renderSubChips(tags){
-    const wrap=el.subTags; wrap.innerHTML='';
-    tags.forEach(t=>{
-      const pressed=FILTER.subs.has(t);
-      wrap.appendChild(chipEl(t, pressed, (btn)=>{
-        const isOn = btn.getAttribute('aria-pressed')==='true';
-        if(isOn){ FILTER.subs.delete(t); btn.setAttribute('aria-pressed','false'); }
-        else   { FILTER.subs.add(t);     btn.setAttribute('aria-pressed','true');  }
-        renderAll();
-      }));
-    });
-  }
 
-  // ---- Cards (with filtering)
+  // ---- Cards (with per-section subfilters)
   function computeState(it, now){
     const t=it.type||'open', start=toMs(it.startAt), end=toMs(it.endAt);
     if(t==='open') return {status:'open'};
@@ -379,71 +365,115 @@
     if(t==='window'){ if(!start||!end) return {status:'open'}; if(now<start) return {status:'locked_until', left:start-now}; if(now<=end) return {status:'open'}; return {status:'closed'}; }
     return {status:'open'};
   }
+
+  function sectionTags(sec){
+    const s=new Set();
+    (sec.items||[]).forEach(it=> (it.tags||[]).forEach(t=> s.add(String(t))));
+    return [...s].sort();
+  }
+
+  function renderSection(sec){
+    const key = getSecKey(sec);
+    if(!SECTION_FILTERS.has(key)) SECTION_FILTERS.set(key, new Set());
+    const subSel = SECTION_FILTERS.get(key);
+
+    // sarlavha
+    const title=document.createElement('h3');
+    title.style.margin='10px 6px'; title.style.fontSize='15px'; title.style.opacity='.8';
+    title.innerHTML = escapeHtml(sec.title||'Bo‘lim') + (sec.tag ? ` — <span style="font-weight:600;opacity:.9">${escapeHtml(sec.tag)}</span>` : '');
+
+    // bo'lim ichidagi sub-tag chiplar
+    const subWrap=document.createElement('section');
+    subWrap.className='filters grad-border glass';
+    subWrap.innerHTML = `<h4>Bu bo‘lim uchun kichik teglar:</h4><div class="chips"></div>`;
+    const chipsRow = subWrap.querySelector('.chips');
+
+    const tags = sectionTags(sec);
+    if(tags.length===0){
+      chipsRow.innerHTML = `<span class="chip sm" style="opacity:.7">Teglar yo‘q</span>`;
+    }else{
+      // Reset
+      chipsRow.appendChild(chipEl('Reset', subSel.size===0, ()=>{
+        subSel.clear(); renderAll();
+      }, 'sm'));
+      // tags
+      tags.forEach(t=>{
+        const pressed = subSel.has(t);
+        chipsRow.appendChild(chipEl(t, pressed, (btn)=>{
+          const on = btn.getAttribute('aria-pressed')==='true';
+          if(on){ subSel.delete(t); btn.setAttribute('aria-pressed','false'); }
+          else { subSel.add(t); btn.setAttribute('aria-pressed','true'); }
+          renderAll();
+        }, 'sm'));
+      });
+    }
+
+    // grid
+    const grid=document.createElement('div'); grid.className='grid';
+
+    // filter items by section subSel (ANY)
+    let items = (sec.items||[]);
+    if(subSel.size>0){
+      const want=[...subSel];
+      items = items.filter(it=>{
+        const tags=(it.tags||[]).map(String);
+        return want.some(t=> tags.includes(t));
+      });
+    }
+
+    items.forEach(it=>{
+      const card=document.createElement('article'); card.className='card grad-border glass';
+      const best=it.best?'<div class="badge">BEST</div>':'';
+      const slug=(it.name||'').replace(/\W+/g,'-');
+      card.innerHTML=`
+        <div class="thumb"><div style="font-weight:900;opacity:.75">${escapeHtml(it.name||'')}</div>${best}</div>
+        <div class="body">
+          <h3 class="name">${escapeHtml(it.name||'')}</h3>
+          ${it.description?`<p class="desc">${escapeHtml(it.description)}</p>`:''}
+          <div class="actions">
+            <a class="btn" id="start-${slug}">Boshlash</a>
+            <button class="btn ghost" disabled id="info-${slug}">Info</button>
+          </div>
+          <div class="meta">
+            <span class="countdown" data-id="${slug}"></span>
+          </div>
+          <div class="chips" style="margin-top:8px">
+            ${(it.tags||[]).map(t=> `<span class="chip sm">${escapeHtml(String(t))}</span>`).join('')}
+          </div>
+        </div>`;
+
+      const startBtn=card.querySelector(`#start-${slug}`);
+      const cdEl=card.querySelector(`[data-id="${slug}"]`);
+      const tick=()=>{ const st=computeState(it,Date.now());
+        if(st.status==='open'){ startBtn.removeAttribute('disabled'); startBtn.setAttribute('href', it.link||'#'); cdEl.textContent=''; }
+        else if(st.status==='soon'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tez orada'; }
+        else if(st.status==='locked_until'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Qolgan vaqt: '+fmt(st.left); }
+        else { startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tugadi'; }
+      };
+      tick(); setInterval(tick,1000); grid.appendChild(card);
+    });
+
+    // bo'lim blokini qaytarish
+    const frag=document.createDocumentFragment();
+    frag.appendChild(title);
+    frag.appendChild(subWrap);
+    if(items.length===0){
+      const empty=document.createElement('div');
+      empty.className='desc'; empty.style.margin='0 6px 10px'; empty.style.opacity='.7';
+      empty.textContent='Bu bo‘lim uchun tanlangan teg(lar) bo‘yicha ma’lumot topilmadi.';
+      frag.appendChild(empty);
+    }
+    frag.appendChild(grid);
+    return frag;
+  }
+
   function renderCards(data){
     const wrap=el.sections; wrap.innerHTML='';
 
+    // main tag bo'yicha bo'lim filtri
     const sections = (data.sections||[]).filter(sec=>{
       if(!FILTER.main) return true;
       return (sec.tag && String(sec.tag)===FILTER.main);
-    });
-
-    sections.forEach(sec=>{
-      const title=document.createElement('h3');
-      title.style.margin='10px 6px'; title.style.fontSize='15px'; title.style.opacity='.8';
-      title.innerHTML = escapeHtml(sec.title||'Bo‘lim') + (sec.tag ? ` — <span style="font-weight:600;opacity:.9">${escapeHtml(sec.tag)}</span>` : '');
-      wrap.appendChild(title);
-
-      const grid=document.createElement('div'); grid.className='grid';
-
-      let items = (sec.items||[]);
-      if(FILTER.subs.size>0){
-        const want=[...FILTER.subs];
-        items = items.filter(it=>{
-          const tags = (it.tags||[]).map(String);
-          return want.some(t=> tags.includes(t)); // ANY mantiq
-        });
-      }
-
-      items.forEach(it=>{
-        const card=document.createElement('article'); card.className='card grad-border glass';
-        const best=it.best?'<div class="badge">BEST</div>':'';
-        const slug=(it.name||'').replace(/\W+/g,'-');
-        card.innerHTML=`
-          <div class="thumb"><div style="font-weight:900;opacity:.75">${escapeHtml(it.name||'')}</div>${best}</div>
-          <div class="body">
-            <h3 class="name">${escapeHtml(it.name||'')}</h3>
-            ${it.description?`<p class="desc">${escapeHtml(it.description)}</p>`:''}
-            <div class="actions">
-              <a class="btn" id="start-${slug}">Boshlash</a>
-              <button class="btn ghost" disabled id="info-${slug}">Info</button>
-            </div>
-            <div class="meta">
-              <span class="countdown" data-id="${slug}"></span>
-            </div>
-            <div class="tagline">
-              ${(it.tags||[]).map(t=> `<span class="chip sm">${escapeHtml(String(t))}</span>`).join('')}
-            </div>
-          </div>`;
-
-        const startBtn=card.querySelector(`#start-${slug}`);
-        const cdEl=card.querySelector(`[data-id="${slug}"]`);
-        const tick=()=>{ const st=computeState(it,Date.now());
-          if(st.status==='open'){ startBtn.removeAttribute('disabled'); startBtn.setAttribute('href', it.link||'#'); cdEl.textContent=''; }
-          else if(st.status==='soon'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tez orada'; }
-          else if(st.status==='locked_until'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Qolgan vaqt: '+fmt(st.left); }
-          else { startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tugadi'; }
-        };
-        tick(); setInterval(tick,1000); grid.appendChild(card);
-      });
-
-      if(items.length===0){
-        const empty=document.createElement('div');
-        empty.className='desc'; empty.style.margin='0 6px 10px'; empty.style.opacity='.7';
-        empty.textContent='Bu bo‘lim uchun tanlangan teg(lar) bo‘yicha ma’lumot topilmadi.';
-        wrap.appendChild(empty);
-      }
-
-      wrap.appendChild(grid);
     });
 
     if(sections.length===0){
@@ -451,7 +481,12 @@
       empty.className='desc'; empty.style.margin='10px 6px'; empty.style.opacity='.75';
       empty.textContent='Tanlangan katta teg bo‘yicha bo‘lim topilmadi.';
       wrap.appendChild(empty);
+      return;
     }
+
+    sections.forEach(sec=>{
+      wrap.appendChild(renderSection(sec));
+    });
   }
 
   (async function initContent(){
@@ -462,10 +497,9 @@
       // Banners
       el.banners.innerHTML=(data.banners||[]).map(b=>`<div class="banner grad-border glass">${b.html||''}</div>`).join('');
 
-      // Teglar
-      const { main, subs } = collectTags(data);
-      renderMainChips(main);
-      renderSubChips(subs);
+      // Main tags (global)
+      const mains = collectMainTags(data);
+      renderMainChips(mains);
 
       // Dastlabki render
       window.__LM_DATA=data;
@@ -478,7 +512,7 @@
     renderCards(window.__LM_DATA);
   }
 
-  // ---- Leaderboard groups
+  // ---- Leaderboard groups (o'zgarmagan)
   const GROUPS=[
     {label:'10–1 (Diamond)',start:1,end:10,tier:'diamond',grad:['#9FE3FF','#39B6FF','#0077FF']},
     {label:'20–11 (Emerald)',start:11,end:20,tier:'emerald',grad:['#8FE3B0','#2E8B57','#1F6B45']},
@@ -626,8 +660,8 @@
   });
 
   // Pager
-  el.decilePrev.onclick=()=>{ if(CURRENT_DECILE>0){ CURRENT_DECILE--; drawDecile(latestUsers,CURRENT_DECILE); } };
-  el.decileNext.onclick=()=>{ if(CURRENT_DECILE<GROUPS.length-1){ CURRENT_DECILE++; drawDecile(latestUsers,CURRENT_DECILE); } };
+  document.getElementById('decilePrev').onclick=()=>{ if(CURRENT_DECILE>0){ CURRENT_DECILE--; drawDecile(latestUsers,CURRENT_DECILE); } };
+  document.getElementById('decileNext').onclick=()=>{ if(CURRENT_DECILE<GROUPS.length-1){ CURRENT_DECILE++; drawDecile(latestUsers,CURRENT_DECILE); } };
 </script>
 </body>
 </html>
