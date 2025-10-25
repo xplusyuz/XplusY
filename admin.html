@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>LeaderMath — Admin (index.json Builder)</title>
   <style>
-    :root{ --brand:#2E8B57; --brand2:#1F6B45; --bg:#f6faf8; --card:#fff; --text:#0f172a; --muted:#6b7c75; --frame:#e3efe8; }
+    :root{ --brand:#2E8B57; --brand2:#1F6B45; --bg:#f6faf8; --card:#fff; --text:#0f172a; --muted:#6b7c75; --frame:#e3efe8; --chip:#e9f5ef; --chip-b:#cfe9dc; }
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:12px 14px;font-weight:900}
     .wrap{max-width:1100px;margin:14px auto;padding:0 12px}
@@ -20,15 +20,26 @@
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
     .sec-head{display:flex;align-items:center;gap:8px;justify-content:space-between}
-    .tag{background:#e9f5ef;border:1px solid #cfe9dc;border-radius:999px;padding:6px 10px;font-size:12px}
+    .tagpill{background:var(--chip);border:1px solid var(--chip-b);border-radius:999px;padding:6px 10px;font-size:12px}
     .warn{color:#c62828;font-size:12px}
     pre{background:#0f1a14;color:#d9ffe8;border-radius:12px;padding:12px;overflow:auto}
     .small{font-size:12px;color:var(--muted)}
     .tools{display:flex;gap:8px;flex-wrap:wrap}
+
+    /* Tag editor */
+    .tags{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--chip-b);border-radius:999px;padding:6px 10px;font-size:12px}
+    .chip b{font-weight:700}
+    .chip button{all:unset;cursor:pointer;padding:0 4px;border-radius:6px}
+    .chip button:hover{background:#0001}
+    .tag-input{min-width:160px;flex:1;display:flex}
+    .tag-input input{width:100%}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
   </style>
 </head>
 <body>
-<header>LeaderMath — index.json Builder (Banner · Bo‘lim · Card · 12-limit · ↑↓ tartiblash)</header>
+<header>LeaderMath — index.json Builder (Banner · Bo‘lim + <span class="mono">tag</span> · Card + <span class="mono">tags[]</span> · 12-limit · ↑↓ tartiblash)</header>
 <div class="wrap">
 
   <!-- Global tools -->
@@ -58,12 +69,13 @@
   <!-- JSON preview -->
   <div class="card">
     <h2>JSON ko‘rinishi</h2>
-    <pre id="preview" style="min-height:160px"></pre>
+    <pre id="preview" style="min-height:200px"></pre>
+    <div class="hint">Tuzilma: <code class="mono">{"banners":[{"html":""}], "sections":[{"title":"","tag":"BSB","items":[{"name":"","tags":["algebra","9-sinf"]}]}]}</code></div>
   </div>
 </div>
 
 <script>
-const DRAFT_KEY='lm-admin-draft';
+const DRAFT_KEY='lm-admin-draft-v2'; // v2 — tag qo'shilgan versiya
 
 // State
 let data = { banners: [], sections: [] };
@@ -78,6 +90,45 @@ const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&l
 
 function renderPreview(){
   $('#preview').textContent = JSON.stringify(data, null, 2);
+}
+
+/* ---------- Tag helpers (chip editor) ---------- */
+function ensureArray(a){ return Array.isArray(a)? a : (a? [String(a)] : []); }
+function normTag(t){ return String(t||'').trim().replace(/\s+/g,' ').slice(0,40); } // 40 belgidan oshirma
+function addTag(arr, t){
+  const v=normTag(t); if(!v) return false;
+  if(!arr.includes(v)) { arr.push(v); return true; }
+  return false;
+}
+function removeTag(arr, t){
+  const i=arr.indexOf(t); if(i>-1) arr.splice(i,1);
+}
+
+/* chip editor UI */
+function chipsUI(container, arrRef, onChanged){
+  container.innerHTML='';
+  const row=document.createElement('div'); row.className='tags';
+  // chips
+  arrRef.forEach(tag=>{
+    const chip=document.createElement('span'); chip.className='chip';
+    chip.innerHTML=`<b>${escapeHtml(tag)}</b> <button title="O'chirish" aria-label="O'chirish">✕</button>`;
+    chip.querySelector('button').onclick=()=>{ removeTag(arrRef, tag); onChanged(); };
+    row.appendChild(chip);
+  });
+  // input
+  const wrap=document.createElement('span'); wrap.className='tag-input';
+  const input=document.createElement('input'); input.placeholder='Teg kiriting va Enter bosin';
+  input.onkeydown=(e)=>{
+    if(e.key==='Enter' || e.key===',' ){
+      e.preventDefault();
+      const v=input.value.replace(/,+$/,'');
+      if(addTag(arrRef, v)){ onChanged(); }
+      input.value='';
+    }
+  };
+  wrap.appendChild(input);
+  row.appendChild(wrap);
+  container.appendChild(row);
 }
 
 /* BANNERS */
@@ -115,12 +166,17 @@ $('#addBanner').onclick=()=>{ data.banners.push({ html:'<div style="padding:22px
 function renderSections(){
   const root = $('#sections'); root.innerHTML='';
   data.sections.forEach((sec,si)=>{
+    // normalize fields
+    sec.items = sec.items || [];
+    // UI
     const wrap = document.createElement('div'); wrap.className='card';
     wrap.innerHTML = `
       <div class="sec-head">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="tag">Bo‘lim #${si+1}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="tagpill">Bo‘lim #${si+1}</span>
           <input style="min-width:240px" placeholder="Bo‘lim nomi" value="${escapeHtml(sec.title||'')}" data-k="title">
+          <span class="tagpill">Katta teg:</span>
+          <input style="min-width:160px" placeholder="masalan: BSB" value="${escapeHtml(sec.tag||'')}" data-k="tag">
         </div>
         <div class="tools">
           <button class="btn ghost" data-act="sup">↑</button>
@@ -129,13 +185,16 @@ function renderSections(){
           <button class="btn" data-act="addItem">➕ Card</button>
         </div>
       </div>
-      <div class="small">Har bo‘limdan maksimum 12 ta card ko‘rsatiladi.</div>
+      <div class="small">Har bo‘limdan maksimum 12 ta card ko‘rsatiladi. Katta teg — <code class="mono">section.tag</code>.</div>
       <div class="items"></div>
       <div class="warn" data-warn style="display:${(sec.items?.length||0)>12?'block':'none'}">Diqqat: 12 tadan oshib ketdi! Export paytida ortiqchalari cheklanadi.</div>
     `;
-    // events
+    // events: section head
     wrap.addEventListener('input', e=>{
-      if(e.target.matches('input[data-k="title"]')){ data.sections[si].title=e.target.value; renderPreview(); saveDraft(); }
+      const k=e.target.dataset.k; if(!k) return;
+      if(k==='title'){ data.sections[si].title=e.target.value; }
+      if(k==='tag'){ data.sections[si].tag=e.target.value.trim(); }
+      renderPreview(); saveDraft();
     });
     wrap.addEventListener('click', e=>{
       const a=e.target.dataset.act;
@@ -144,7 +203,10 @@ function renderSections(){
       if(a==='sdel'){ data.sections.splice(si,1); render(); }
       if(a==='addItem'){
         data.sections[si].items = data.sections[si].items || [];
-        data.sections[si].items.push({ name:'Yangi test', description:'', link:'#', best:false, type:'open', startAt:'', endAt:'' });
+        data.sections[si].items.push({
+          name:'Yangi test', description:'', link:'#', best:false,
+          type:'open', startAt:'', endAt:'', tags:[]
+        });
         render();
       }
     });
@@ -152,6 +214,7 @@ function renderSections(){
     // items
     const itemsEl = wrap.querySelector('.items');
     (sec.items||[]).forEach((it,ii)=>{
+      it.tags = ensureArray(it.tags);
       const itCard = document.createElement('div'); itCard.className='card';
       itCard.innerHTML = `
         <div class="grid3">
@@ -175,16 +238,30 @@ function renderSections(){
           <div><label>StartAt (iso)</label><input data-k="startAt" type="datetime-local" value="${it.startAt?toLocal(it.startAt):''}"></div>
           <div><label>EndAt (iso)</label><input data-k="endAt" type="datetime-local" value="${it.endAt?toLocal(it.endAt):''}"></div>
         </div>
+
         <div style="margin-top:8px">
           <label>Tavsif</label>
           <textarea rows="2" data-k="description">${escapeHtml(it.description||'')}</textarea>
         </div>
-        <div class="tools" style="margin-top:8px">
+
+        <div style="margin-top:10px">
+          <label>Kichik teglar (kartaga): <span class="small">(Enter yoki vergul bilan qo‘shing)</span></label>
+          <div class="tags" data-tags></div>
+        </div>
+
+        <div class="tools" style="margin-top:10px">
           <button class="btn ghost" data-iact="up">↑</button>
           <button class="btn ghost" data-iact="down">↓</button>
           <button class="btn" data-iact="del">🗑</button>
         </div>
       `;
+
+      // Tag editor mount
+      const tagsHost = itCard.querySelector('[data-tags]');
+      function tagsChanged(){ renderPreview(); saveDraft(); chipsUI(tagsHost, it.tags, tagsChanged); }
+      chipsUI(tagsHost, it.tags, tagsChanged);
+
+      // field updates
       function upd(k,val){
         const secItems = data.sections[si].items;
         if(k==='best') val = (val==='true');
@@ -219,24 +296,46 @@ function fromLocal(localStr){
   try{ const d=new Date(localStr); return d.toISOString(); }catch{return '';}
 }
 
-$('#addSection').onclick=()=>{ data.sections.push({ title:'Yangi bo‘lim', items:[] }); render(); };
+$('#addSection').onclick=()=>{ data.sections.push({ title:'Yangi bo‘lim', tag:'', items:[] }); render(); };
 $('#sortAZ').onclick=()=>{ data.sections.sort((a,b)=> (a.title||'').localeCompare(b.title||'')); render(); };
 
-// Import / Export
+/* -------- Import / Export (tag-aware) -------- */
 $('#importFile').onchange=async (e)=>{
   const f=e.target.files?.[0]; if(!f) return;
   const txt=await f.text();
-  try{ data=JSON.parse(txt)||data; render(); }
-  catch(err){ alert('JSON xatolik: '+err?.message); }
+  try{
+    const incoming=JSON.parse(txt)||{};
+    // normalize import to expected structure
+    data = {
+      banners: (incoming.banners||[]).map(b=>({ html:String(b.html||'') })),
+      sections: (incoming.sections||[]).map(s=>({
+        title: s.title||'',
+        tag: s.tag? String(s.tag) : '',                 // << section tag
+        items: (s.items||[]).map(i=>({
+          name: i.name||'', description:i.description||'', link:i.link||'#', best: !!i.best,
+          type: i.type||'open', startAt: i.startAt||'', endAt: i.endAt||'',
+          tags: Array.isArray(i.tags) ? i.tags.map(String) : []  // << item tags[]
+        }))
+      }))
+    };
+    render();
+  }
+  catch(err){ alert('JSON xatolik: '+(err?.message||err)); }
 };
+
 $('#exportJson').onclick=()=>{
-  // 12-limitni kesib tashlaymiz
+  // 12-limitni kesib tashlaymiz + taglar bilan
   const clean = {
     banners: data.banners.map(b=>({ html:String(b.html||'') })),
-    sections: (data.sections||[]).map(s=>({ title:s.title||'', items:(s.items||[]).slice(0,12).map(i=>({
-      name:i.name||'', description:i.description||'', link:i.link||'#', best:!!i.best,
-      type:i.type||'open', startAt:i.startAt||'', endAt:i.endAt||''
-    })) }))
+    sections: (data.sections||[]).map(s=>({
+      title: s.title||'',
+      tag: s.tag? String(s.tag) : '', // << katta tag export
+      items: (s.items||[]).slice(0,12).map(i=>({
+        name:i.name||'', description:i.description||'', link:i.link||'#', best:!!i.best,
+        type:i.type||'open', startAt:i.startAt||'', endAt:i.endAt||'',
+        tags: ensureArray(i.tags).map(String) // << kichik taglar export
+      }))
+    }))
   };
   const blob=new Blob([JSON.stringify(clean,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='index.json'; a.click();
