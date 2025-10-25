@@ -24,7 +24,7 @@
     .card{background:var(--card);border:1px solid var(--frame);border-radius:var(--radius);box-shadow:0 10px 28px #00000010}
     .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px;border-bottom:1px solid var(--frame)}
     .tool-input{display:flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--chipb);border-radius:12px;padding:8px 10px}
-    .tool-input input{border:none;outline:none;background:transparent;font:inherit;min-width:200px}
+    .tool-input input{border:none;outline:none;background:transparent;font:inherit;min-width:220px}
     .tool-sel{border:1px solid var(--frame);border-radius:12px;padding:8px 10px;background:#fff}
     .tbl{width:100%;border-collapse:separate;border-spacing:0 8px;padding:12px}
     .tbl thead th{font-size:12px;color:var(--muted);text-align:left;padding:0 10px}
@@ -55,6 +55,16 @@
     .bad{color:var(--danger);font-size:12px;margin-right:auto}
     /* 403 */
     .forbid{max-width:680px;margin:40px auto;padding:18px}
+    @media (max-width:900px){
+      .row{grid-template-columns:90px 1.2fr 1fr .8fr .8fr .6fr .6fr .6fr .5fr}
+    }
+    @media (max-width:720px){
+      .toolbar{gap:8px}
+      .tool-input input{min-width:160px}
+      .row{grid-template-columns:70px 1.3fr .8fr .8fr .7fr .7fr .7fr .6fr}
+      .row > :nth-child(4){display:none} /* Maktabni yashirish */
+      .row > :nth-child(9){grid-column:1/-1}
+    }
   </style>
 </head>
 <body>
@@ -65,6 +75,7 @@
       <div class="small" style="opacity:.9">Foydalanuvchilar boshqaruvi</div>
     </div>
     <div class="sp"></div>
+    <a class="btn ghost" href="./index.html">🏠 Bosh sahifa</a>
     <button id="btnExport" class="btn pri" title="Ko‘rinayotgan ma’lumotlarni CSVga chiqarish">📥 Export CSV</button>
     <button id="btnSignOut" class="btn ghost">Chiqish</button>
   </header>
@@ -75,7 +86,7 @@
       <h3>⛔ Kirish taqiqlangan</h3>
       <p class="mut">Ushbu sahifaga faqat <b>sohibjonmath@gamil.com</b> foydalanuvchisi kira oladi.</p>
       <p class="mut">Agar xato deb o‘ylasangiz, administratorga murojaat qiling.</p>
-      <div style="margin-top:10px"><a id="toHome" class="pill" href="./index.html">Bosh sahifa</a></div>
+      <div style="margin-top:10px"><a class="pill" href="./index.html">Bosh sahifa</a></div>
     </section>
 
     <!-- ADMIN PANEL -->
@@ -103,7 +114,6 @@
           <div class="right">Ball</div><div>Badge</div><div>Rol</div><div class="right">Amal</div>
         </div>
         <div id="list">
-          <!-- skeletons -->
           <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
         </div>
       </div>
@@ -148,11 +158,15 @@
   </div>
 
   <script type="module">
-    // ===== Firebase (mavjud modul fayllaringizga mos)
+    // ===== Firebase
     import { auth, db, signOut } from './lib/firebase.client.js';
-    import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, startAfter, getDocs, onSnapshot, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { doc, setDoc, collection, query, orderBy, limit, startAfter, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { requireAdminEmail } from './lib/auth-guard.js';
 
-    const ADMIN_EMAIL = 'sohibjonmath@gamil.com'; // foydalanuvchi yozgan aniq domen
+    // Eslatma: aynan siz so'ragan domen — gamil.com
+    const ADMIN_EMAIL = 'sohibjonmath@gamil.com';
+
+    // ===== Elements
     const els = {
       adminPanel: document.getElementById('adminPanel'),
       forbidden: document.getElementById('forbidden'),
@@ -182,20 +196,22 @@
       f_close: document.getElementById('f_close'),
     };
 
-    // ===== Access gate
-    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    onAuthStateChanged(auth, async (user)=>{
-      if(!user || (user.email||'').toLowerCase()!==ADMIN_EMAIL){
-        els.forbidden.style.display='block';
-        els.adminPanel.style.display='none';
-        return;
-      }
-      els.forbidden.style.display='none';
-      els.adminPanel.style.display='block';
-      initAdmin();
+    // ===== Guard (majburiy login + email cheklovi)
+    function showForbidden(){ els.forbidden.style.display='block'; els.adminPanel.style.display='none'; }
+    function showAdmin(){ els.forbidden.style.display='none'; els.adminPanel.style.display='block'; }
+
+    requireAdminEmail(auth, {
+      allowedEmail: ADMIN_EMAIL,
+      loginPath: './login.html',
+      onAllowed: () => { showAdmin(); initAdmin(); },
+      onForbidden: () => { showForbidden(); }
     });
 
-    els.btnSignOut.onclick=async ()=>{ await signOut(auth); location.href='./login.html?return='+encodeURIComponent('./index.html'); };
+    // ===== Sign out
+    els.btnSignOut.onclick = async ()=>{
+      await signOut(auth);
+      location.href = './login.html?return=' + encodeURIComponent('./index.html');
+    };
 
     // ===== Helpers
     const fmt=(n)=> (Number(n)||0).toLocaleString('uz-UZ',{maximumFractionDigits:1});
@@ -203,16 +219,17 @@
     const star = (p=100)=>`<svg viewBox="0 0 24 24"><defs><linearGradient id="g${Math.random().toString(36).slice(2,7)}" x1="0" x2="1"><stop offset="0%" stop-color="#8FE3B0"/><stop offset="50%" stop-color="#2E8B57"/><stop offset="100%" stop-color="#39B6FF"/></linearGradient><clipPath id="c${Math.random().toString(36).slice(2,7)}"><rect x="0" y="0" width="${p}%" height="100%"/></clipPath></defs><path d="M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z" fill="#d0dbd5"></path><path d="M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z" fill="url(#g1)" clip-path="url(#c1)"></path></svg>`;
     const stars5 = (score)=>{ const full=Math.floor(score), half=(score-full>=.5)?1:0, empty=5-full-half; return `<span class="stars">${'x'.repeat(full).split('').map(()=>star(100)).join('')}${half?star(50):''}${'x'.repeat(empty).split('').map(()=>star(0)).join('')}</span>`; };
 
-    // ===== Data & pagination
+    // ===== State
     let page = { size: 100, sort: 'points_desc', q: '', cursors: [], lastDoc: null, cache: [], cacheAllCount: 0 };
     let editingId = null;
 
+    // ===== UI
     function skeleton(n=6){
       els.list.innerHTML = Array.from({length:n}).map(()=>`<div class="skeleton"></div>`).join('');
     }
 
     async function countAllUsers() {
-      // Agar count aggregation yoqilgan bo‘lsa yaxshi; bu yerda oddiy taxmin — birinchi 1000 ni olib hisoblaymiz:
+      // Eng sodda usul: 1000 tagacha tez sanash
       try{
         const qs = query(collection(db,'users'), orderBy('points','desc'), limit(1000));
         const snap = await getDocs(qs);
@@ -261,18 +278,16 @@
       const arr = filtered(page.cache);
       if(arr.length===0){ els.list.innerHTML='<div class="row"><div class="mut">Hech narsa topilmadi</div></div>'; return; }
       els.list.innerHTML = arr.map(u=>{
-        const badge = (()=>{
-          // taxminiy 0.5..5 yulduz
-          let tier='bronze', idx=999; // rank bilmasak pointsga ko‘ra faraz qilamiz
-          const st = (Number(u.points)||0);
-          if(st>=200) tier='diamond';
-          else if(st>=120) tier='emerald';
-          else if(st>=70) tier='gold';
-          else if(st>=30) tier='silver';
-          else tier='bronze';
-          const score = tier==='diamond'?5: tier==='emerald'?4: tier==='gold'?3: tier==='silver'?2:1;
-          return stars5(score);
+        const tier = (()=>{
+          const st = Number(u.points||0);
+          if(st>=200) return 'diamond';
+          if(st>=120) return 'emerald';
+          if(st>=70)  return 'gold';
+          if(st>=30)  return 'silver';
+          return 'bronze';
         })();
+        const score = tier==='diamond'?5: tier==='emerald'?4: tier==='gold'?3: tier==='silver'?2:1;
+
         return `
         <div class="row">
           <div><span class="chip2">#${esc(u.numericId??'—')}</span></div>
@@ -284,21 +299,24 @@
           <div>${esc(u.school||'—')}</div>
           <div>${esc(u.class||'—')}</div>
           <div class="right"><b>${fmt(u.points)}</b></div>
-          <div>${badge}</div>
+          <div>${stars5(score)}</div>
           <div><span class="chip2">${esc(u.role||'user')}</span></div>
           <div class="actions">
             <button class="pill" data-edit="${u.id}">Tahrirlash</button>
           </div>
         </div>`;
       }).join('');
-      // bind edit
+
+      // Edit qo‘llash
       els.list.querySelectorAll('[data-edit]').forEach(btn=>{
-        btn.onclick=()=>openEdit(arr.find(x=>x.id===btn.dataset.edit));
+        const user = page.cache.find(x=>x.id===btn.dataset.edit);
+        btn.onclick=()=>openEdit(user);
       });
     }
 
     // ===== Edit modal
     function openEdit(u){
+      if(!u) return;
       editingId = u.id;
       els.f_name.value = u.name || '';
       els.f_role.value = u.role || 'user';
@@ -336,31 +354,34 @@
       };
       try{
         await setDoc(ref, payload, { merge:true });
-        // optimistik yangilash
         const i = page.cache.findIndex(x=>x.id===editingId);
         if(i>-1) page.cache[i] = { ...page.cache[i], ...payload };
         render();
         closeEdit();
       }catch(e){
         console.error(e);
-        els.f_err.textContent = 'Saqlashda xatolik. Internetni tekshiring yoki ruxsatlarni tekshiring.';
+        els.f_err.textContent = 'Saqlashda xatolik. Internetni yoki ruxsatlarni tekshiring.';
       }
     };
 
     // ===== Handlers
-    els.q.oninput = ()=>{ page.q = els.q.value; render(); };
+    // Debounce qidiruv
+    let t=null;
+    els.q.addEventListener('input', ()=>{
+      clearTimeout(t);
+      t=setTimeout(()=>{ page.q=els.q.value; render(); }, 180);
+    });
     els.sortSel.onchange = ()=>{ page.sort = els.sortSel.value; page.cursors=[]; page.lastDoc=null; loadPage(false); };
     els.pageSize.onchange = ()=>{ page.size = Number(els.pageSize.value||100); page.cursors=[]; page.lastDoc=null; loadPage(false); };
     els.next.onclick = ()=> loadPage(true);
     els.prev.onclick = async ()=>{
-      // oddiy: qayta yuklab bir sahifa oldingi boshlanishiga o‘tamiz
-      page.cursors.pop(); // joriyni tashlaymiz
-      const cursor = page.cursors.pop(); // oldingi
+      page.cursors.pop();
+      const cursor = page.cursors.pop();
       page.lastDoc = cursor || null;
       await loadPage(false);
     };
 
-    // ===== Export CSV (ko‘rinayotgan ro‘yxat)
+    // ===== Export CSV
     els.btnExport.onclick = ()=>{
       const rows = filtered(page.cache).map(u=>[
         u.id, u.numericId??'', (u.name||'').replaceAll(',',' '), u.email||'',
