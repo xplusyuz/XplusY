@@ -92,100 +92,197 @@
     </div>
   </div>
 
-  <script type="module">
-    import { auth, db, signOut } from "./lib/firebase.client.js";
-    import { collection, getDocs, doc, setDoc, orderBy, query, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { requireAdminEmail } from "./lib/auth-guard.js";
+<script type="module">
+  // Firebase modullaringiz
+  import { auth, db, signOut } from "./lib/firebase.client.js";
+  import {
+    collection, getDocs, doc, setDoc,
+    orderBy, query, limit, startAfter
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-    const ADMIN_EMAIL = "sohibjonmath@gamil.com";
-    const els = {
-      adminPanel: document.getElementById("adminPanel"),
-      forbidden: document.getElementById("forbidden"),
-      btnSignOut: document.getElementById("btnSignOut"),
-      btnExport: document.getElementById("btnExport"),
-      q: document.getElementById("q"),
-      list: document.getElementById("list"),
-      f_name: document.getElementById("f_name"),
-      f_points: document.getElementById("f_points"),
-      f_role: document.getElementById("f_role"),
-      f_save: document.getElementById("f_save"),
-      f_close: document.getElementById("f_close"),
-      f_err: document.getElementById("f_err"),
-      mask: document.getElementById("mask"),
-      countAll: document.getElementById("countAll")
-    };
+  // *** MUHIM: ayni mavjud guard API bilan ishlaymiz ***
+  import { requireAuth } from "./lib/auth-guard.js";
 
-    let cache = [], editId = null;
+  // Faqat shu email egasiga ruxsat
+  const ADMIN_EMAIL = "sohibjonmath@gamil.com";
 
-    // 🔒 Admin guard
-    requireAdminEmail(auth, {
-      allowedEmail: ADMIN_EMAIL,
-      loginPath: "./login.html",
-      onAllowed: ()=>{ showAdmin(); initAdmin(); },
-      onForbidden: ()=>{ showForbidden(); }
+  // Elementlar
+  const els = {
+    adminPanel: document.getElementById("adminPanel"),
+    forbidden: document.getElementById("forbidden"),
+    btnSignOut: document.getElementById("btnSignOut"),
+    btnExport: document.getElementById("btnExport"),
+    q: document.getElementById("q"),
+    list: document.getElementById("list"),
+    countAll: document.getElementById("countAll"),
+    // modal
+    mask: document.getElementById("mask"),
+    f_name: document.getElementById("f_name"),
+    f_points: document.getElementById("f_points"),
+    f_role: document.getElementById("f_role"),
+    f_save: document.getElementById("f_save"),
+    f_close: document.getElementById("f_close"),
+    f_err: document.getElementById("f_err"),
+  };
+
+  function showAdmin(){ els.adminPanel.style.display='block'; els.forbidden.style.display='none'; }
+  function showForbidden(){ els.adminPanel.style.display='none'; els.forbidden.style.display='block'; }
+
+  // --- Kirish va admin email tekshiruvi (EXPORT muammosiz) ---
+  (async ()=>{
+    const me = await requireAuth({ loginPath: "./login.html" }); // majburiy login
+    const myEmail = (me.email || "").toLowerCase();
+    if (myEmail !== ADMIN_EMAIL) { showForbidden(); return; } // 403
+    showAdmin();
+    await initAdmin();
+  })();
+
+  // Chiqish
+  els.btnSignOut.onclick = async ()=>{
+    await signOut(auth);
+    location.href = './login.html?return=' + encodeURIComponent('./index.html');
+  };
+
+  // ======== Firestore yuklash + sahifalash ========
+  let cache = [];
+  let lastDoc = null;
+  const PAGE_SIZE = 200; // xohlasangiz 500/1000
+
+  async function fetchPage(next=false){
+    const base = query(
+      collection(db, 'users'),
+      orderBy('points', 'desc'),
+      limit(PAGE_SIZE)
+    );
+    const qRef = next && lastDoc ? query(base, startAfter(lastDoc)) : base;
+    const snap = await getDocs(qRef);
+    if (snap.docs.length) lastDoc = snap.docs[snap.docs.length-1];
+    return snap.docs.map(d=>({ id: d.id, ...d.data() }));
+  }
+
+  async function initAdmin(){
+    // birinchi sahifa
+    cache = await fetchPage(false);
+    els.countAll.textContent = cache.length.toString();
+    render();
+
+    // xohlasangiz avtomatik 2-sahifani ham yuklab qo‘yish:
+    // const more = await fetchPage(true); cache = [...cache, ...more]; els.countAll.textContent = cache.length; render();
+  }
+
+  // ======== Render / qidiruv ========
+  function fmt(n){ return (Number(n)||0).toLocaleString('uz-UZ',{maximumFractionDigits:1}); }
+  function esc(s){ return String(s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+  function render(){
+    const term = (els.q?.value||'').trim().toLowerCase();
+    const arr = term
+      ? cache.filter(u => (`${u.name||''} ${u.email||''} ${u.region||''} ${u.district||''} ${u.school||''} ${u.class||''}`).toLowerCase().includes(term))
+      : cache;
+
+    if(arr.length===0){
+      els.list.innerHTML = '<div class="row"><div class="mut">Hech narsa topilmadi</div></div>';
+      return;
+    }
+
+    els.list.innerHTML = arr.map(u => `
+      <div class="row">
+        <div><span class="chip2">#${esc(u.numericId ?? '—')}</span></div>
+        <div>
+          <div style="font-weight:800">${esc(u.name || '—')}</div>
+          <div class="mut small">${esc(u.email || '')}</div>
+        </div>
+        <div><div>${esc(u.region || '—')}</div><div class="mut small">${esc(u.district || '')}</div></div>
+        <div>${esc(u.school || '—')}</div>
+        <div>${esc(u.class || '—')}</div>
+        <div class="right"><b>${fmt(u.points)}</b></div>
+        <div><span class="chip2">${esc(u.role || 'user')}</span></div>
+        <div class="actions">
+          <button class="pill" data-edit="${u.id}">Tahrirlash</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Edit bog‘lash
+    els.list.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.onclick = ()=> openEdit(btn.dataset.edit);
     });
+  }
 
-    function showAdmin(){ els.adminPanel.style.display='block'; els.forbidden.style.display='none'; }
-    function showForbidden(){ els.adminPanel.style.display='none'; els.forbidden.style.display='block'; }
+  // Qidiruv
+  if(els.q) {
+    let t=null;
+    els.q.addEventListener('input', ()=>{
+      clearTimeout(t);
+      t=setTimeout(()=>render(), 160);
+    });
+  }
 
-    els.btnSignOut.onclick = async ()=>{ await signOut(auth); location.href='./login.html?return='+encodeURIComponent('./index.html'); };
+  // ======== Tahrirlash ========
+  let editId = null;
 
-    async function initAdmin(){
-      const qRef = query(collection(db,'users'), orderBy('points','desc'), limit(1000));
-      const snap = await getDocs(qRef);
-      cache = snap.docs.map(d=>({id:d.id,...d.data()}));
-      els.countAll.textContent = cache.length;
+  function openEdit(id){
+    const u = cache.find(x=>x.id===id); if(!u) return;
+    editId = id;
+    els.f_name.value = u.name || '';
+    els.f_points.value = Number(u.points || 0);
+    els.f_role.value = u.role || 'user';
+    els.f_err.textContent = '';
+    els.mask.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+  els.f_close.onclick = ()=>{
+    els.mask.style.display = 'none';
+    document.body.style.overflow = '';
+    editId = null;
+  };
+
+  els.f_save.onclick = async ()=>{
+    if(!editId) return;
+    const ref = doc(db, 'users', editId);
+    const payload = {
+      name: els.f_name.value.trim(),
+      points: Number(els.f_points.value || 0),
+      role: els.f_role.value
+    };
+    try{
+      await setDoc(ref, payload, { merge: true });
+      // optimistik yangilash
+      const i = cache.findIndex(x=>x.id===editId);
+      if(i>-1) cache[i] = { ...cache[i], ...payload };
       render();
+      els.mask.style.display = 'none';
+      document.body.style.overflow = '';
+      editId = null;
+    }catch(e){
+      console.error(e);
+      els.f_err.textContent = 'Saqlashda xatolik. Ruxsatlar yoki internetni tekshiring.';
     }
+  };
 
-    function render(){
-      const term = els.q.value.trim().toLowerCase();
-      const arr = term? cache.filter(u=>(`${u.name} ${u.region} ${u.email}`||'').toLowerCase().includes(term)): cache;
-      els.list.innerHTML = arr.map(u=>`
-        <div class="row">
-          <div><span class="chip2">#${u.numericId||'—'}</span></div>
-          <div><b>${u.name||'—'}</b><div class="mut small">${u.email||''}</div></div>
-          <div>${u.region||'—'}</div>
-          <div>${u.school||'—'}</div>
-          <div>${u.class||'—'}</div>
-          <div class="right"><b>${u.points||0}</b></div>
-          <div><span class="chip2">${u.role||'user'}</span></div>
-          <div class="actions"><button class="pill" data-id="${u.id}">Tahrirlash</button></div>
-        </div>`).join('');
-      els.list.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>openEdit(b.dataset.id));
-    }
+  // ======== CSV eksport (ko‘rinayotgan ro‘yxat) ========
+  els.btnExport.onclick = ()=>{
+    const term = (els.q?.value||'').trim().toLowerCase();
+    const arr = term
+      ? cache.filter(u => (`${u.name||''} ${u.email||''} ${u.region||''} ${u.district||''} ${u.school||''} ${u.class||''}`).toLowerCase().includes(term))
+      : cache;
 
-    els.q.oninput=()=>render();
+    const head = ['docId','numericId','name','email','region','district','school','class','phone','points','role','createdAt'];
+    const rows = arr.map(u => [
+      u.id, u.numericId ?? '', (u.name||'').replaceAll(',',' '), u.email||'',
+      u.region||'', u.district||'', u.school||'', u.class||'', u.phone||'',
+      Number(u.points||0), u.role||'user', u.createdAt||''
+    ]);
+    const csv = [head, ...rows]
+      .map(r=>r.map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(','))
+      .join('\n');
 
-    function openEdit(id){
-      const u = cache.find(x=>x.id===id); if(!u) return;
-      editId=id;
-      els.f_name.value=u.name||'';
-      els.f_points.value=u.points||0;
-      els.f_role.value=u.role||'user';
-      els.mask.style.display='flex';
-    }
-    els.f_close.onclick=()=>els.mask.style.display='none';
-    els.f_save.onclick=async()=>{
-      if(!editId) return;
-      const ref=doc(db,'users',editId);
-      const payload={ name:els.f_name.value.trim(), points:Number(els.f_points.value||0), role:els.f_role.value };
-      try{
-        await setDoc(ref,payload,{merge:true});
-        const i=cache.findIndex(x=>x.id===editId);
-        if(i>-1) cache[i]={...cache[i],...payload};
-        render(); els.mask.style.display='none';
-      }catch(e){ els.f_err.textContent='Saqlashda xatolik'; }
-    };
-
-    els.btnExport.onclick=()=>{
-      const head=['id','name','email','region','school','class','points','role'];
-      const csv=[head,...cache.map(u=>[u.id,u.name,u.email,u.region,u.school,u.class,u.points,u.role])]
-        .map(r=>r.map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-      const url=URL.createObjectURL(blob);const a=document.createElement('a');
-      a.href=url;a.download='users.csv';a.click();URL.revokeObjectURL(url);
-    };
-  </script>
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'users_export.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+</script>
 </body>
 </html>
