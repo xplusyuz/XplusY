@@ -41,7 +41,7 @@
       .userbar{
         grid-template-columns:56px 1fr;grid-template-areas:
           "ava name"
-          "ava meta"
+          "ava mstats"
           "chip chip";
       }
     }
@@ -87,7 +87,7 @@
     .group{border:none;border-radius:14px;overflow:hidden;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.06)}
     .board .group + .group{margin-top:14px}
     .groupBody{padding:12px}
-    .groupHead{position:relative;border:none;border-radius:14px;padding:14px 16px;color:#063a27;font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .groupHead{position:relative;border:none;border-radius:14px;padding:14px 16px;color:var(--muted);font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:10px}
     .dark .groupHead{color:#c7ffe7}
     .groupHead.tier-bronze{background:linear-gradient(135deg,#fff1e6,#ffd9c2)}
     .groupHead.tier-silver{background:linear-gradient(135deg,#f4f7fb,#dfe7f4)}
@@ -168,6 +168,16 @@
     .danger{color:#c62828;font-size:12px;margin-right:auto}
     .btn-ghost{background:#ffffff; border:1px solid var(--frame); border-radius:12px; padding:9px 12px; cursor:pointer}
     .btn-solid{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer}
+
+    /* === MOBILE USER CHIPS === */
+    .mstats{display:none;margin-top:6px;gap:6px;flex-wrap:wrap}
+    .mchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:6px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b);font-size:12px;line-height:1;white-space:nowrap}
+    .mchip .txt{display:inline-block;max-width:180px;text-overflow:ellipsis;overflow:hidden}
+    @media(max-width:560px){
+      .uinfo .meta{display:none}
+      .mstats{display:flex}
+      .mchip .txt{max-width:120px}
+    }
   </style>
 </head>
 <body>
@@ -186,6 +196,11 @@
       <b id="uname">Mehmon
         <span id="userTierStars" class="ustars"></span>
       </b>
+
+      <!-- Mobil uchun chiplar -->
+      <div class="mstats" id="mstats"></div>
+
+      <!-- Desktop meta -->
       <div class="meta">
         <span id="uid">ID: —</span> ·
         <span id="uregion">Viloyat: —</span> ·
@@ -288,7 +303,8 @@
     boardList: document.getElementById('boardList'),
     decilePrev: document.getElementById('decilePrev'), decileNext: document.getElementById('decileNext'), decileInfo: document.getElementById('decileInfo'),
     userTierStars: document.getElementById('userTierStars'), userStarsPts: document.getElementById('userStarsPts'),
-    mainTags: document.getElementById('mainTags')
+    mainTags: document.getElementById('mainTags'),
+    mstats: document.getElementById('mstats')
   };
 
   // ---- Modal helpers
@@ -512,7 +528,7 @@
     renderCards(window.__LM_DATA);
   }
 
-  // ---- Leaderboard groups (o'zgarmagan)
+  // ---- Leaderboard groups
   const GROUPS=[
     {label:'10–1 (Diamond)',start:1,end:10,tier:'diamond',grad:['#9FE3FF','#39B6FF','#0077FF']},
     {label:'20–11 (Emerald)',start:11,end:20,tier:'emerald',grad:['#8FE3B0','#2E8B57','#1F6B45']},
@@ -555,19 +571,44 @@
     el.decileInfo.textContent=g.label; el.decilePrev.disabled=(ix<=0); el.decileNext.disabled=(ix>=GROUPS.length-1);
   }
 
-  // ---- Rank + stars to userbar
+  // ---- Rank + stars to userbar (desktop) + mobile chips
   const TIER_NAME = { diamond:'Olmos', emerald:'Zumrad', gold:'Oltin', silver:'Kumush', bronze:'Bronza' };
+
   function updateUserbarRank(sorted,currentUid){
     const idx=sorted.findIndex(u=>(u.uid||u.id||u.userId)===currentUid);
-    if(idx===-1){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —'; return; }
+    if(idx===-1){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —'; renderMobileUserChips(); return; }
     const rank=idx+1; let g=null; for(const gr of GROUPS){ if(rank>=gr.start&&rank<=gr.end){ g=gr; break; } }
-    if(!g){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —'; return; }
+    if(!g){ el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —'; renderMobileUserChips({rank}); return; }
     const stars=0.5*(g.end-rank+1);
     const html=renderStars(stars,g.tier);
     el.userTierStars.innerHTML=html;   // ism yonida
     el.userStarsPts.innerHTML=html;    // ball chipida
     el.urank.textContent = `O‘rin: #${rank}`;
     el.utier.textContent = `Daraja: ${TIER_NAME[g.tier]} ${stars.toFixed(1)}/5`;
+
+    // mobil chiplar
+    renderMobileUserChips({
+      school: CURRENT_PROFILE?.school || null,
+      klass: CURRENT_PROFILE?.class || null,
+      points: CURRENT_PROFILE?.points ?? null,
+      rank,
+      tier: g.tier
+    });
+  }
+
+  // === MOBILE CHIPS ===
+  function renderMobileUserChips({school, klass, points, rank, tier} = {}){
+    const host = el.mstats; if(!host) return;
+    const chips = [];
+    if(school) chips.push({emoji:'🏫', text:String(school)});
+    if(klass)  chips.push({emoji:'🎒', text:String(klass)});
+    if(points!=null) chips.push({emoji:'⭐', text:(Number(points)||0).toLocaleString('uz-UZ')});
+    if(rank!=null) chips.push({emoji:'🏅', text:'#'+rank});
+    if(tier){
+      const tn = TIER_NAME[tier] || tier;
+      chips.push({emoji:'💎', text:tn});
+    }
+    host.innerHTML = chips.map(c=>`<span class="mchip"><span>${c.emoji}</span><span class="txt">${escapeHtml(c.text)}</span></span>`).join('');
   }
 
   // ---- Auth + profile/live listeners
@@ -586,7 +627,12 @@
       el.uname.childNodes[0].nodeValue=name+' ';
       el.uregion.textContent='Viloyat: '+region; el.udistrict.textContent='Tuman: '+district; el.uschool.textContent='Maktab: '+school; el.uclass.textContent='Sinf: '+klass;
       CURRENT_PROFILE={...(CURRENT_PROFILE||{}),name,region,district,school,class:klass,phone};
-      localStorage.setItem(`lm-profile-seen:${currentUserId}`,'1'); closeProfileModal();
+      localStorage.setItem(`lm-profile-seen:${currentUserId}`,'1'); renderMobileUserChips({
+        school, klass, points: CURRENT_PROFILE?.points ?? null,
+        rank: (el.urank.textContent.match(/#(\d+)/)?.[1])||null,
+        tier: (el.utier.textContent.toLowerCase().includes('olmos') && 'diamond') || null
+      });
+      closeProfileModal();
     }catch(e){ console.error('profile save error',e); PM.err.textContent='Saqlashda xatolik. Internetni tekshiring.'; }
   };
 
@@ -621,13 +667,29 @@
       el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —'; el.points.textContent='Ball: —';
       el.ava.textContent='LM'; el.ava.style.backgroundImage=''; el.signin.style.display='inline-flex'; el.signout.style.display='none'; el.editProfile.style.display='none';
       el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; currentUserId=null; CURRENT_PROFILE=null;
+      renderMobileUserChips(); // clear
       if(isModalVisible()) closeProfileModal();
       return;
     }
     el.signin.style.display='none'; el.signout.style.display='inline'; currentUserId=user.uid;
 
     // live listener for own profile
-    onSnapshot(doc(db,'users',currentUserId),(snap)=>{ CURRENT_PROFILE = snap.exists()?snap.data():null; if(CURRENT_PROFILE?.class) el.uclass.textContent='Sinf: '+CURRENT_PROFILE.class; });
+    onSnapshot(doc(db,'users',currentUserId),(snap)=>{
+      CURRENT_PROFILE = snap.exists()?snap.data():null;
+      if(CURRENT_PROFILE?.class) el.uclass.textContent='Sinf: '+CURRENT_PROFILE.class;
+      // profil o'zgarsa mobil chiplarni yangilab turamiz
+      renderMobileUserChips({
+        school: CURRENT_PROFILE?.school || null,
+        klass: CURRENT_PROFILE?.class || null,
+        points: CURRENT_PROFILE?.points ?? null,
+        rank: (el.urank.textContent.match(/#(\d+)/)?.[1]) ? Number(el.urank.textContent.match(/#(\d+)/)[1]) : null,
+        tier: (el.utier.textContent.includes('Olmos') && 'diamond') ||
+              (el.utier.textContent.includes('Zumrad') && 'emerald') ||
+              (el.utier.textContent.includes('Oltin') && 'gold') ||
+              (el.utier.textContent.includes('Kumush') && 'silver') ||
+              (el.utier.textContent.includes('Bronza') && 'bronze') || null
+      });
+    });
 
     const u=await ensureUser(user);
     CURRENT_PROFILE=u;
@@ -651,11 +713,12 @@
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) ? (Number(b.points)||0) - (Number(a.points)||0) : (a.numericId??0)-(b.numericId??0));
       drawDecile(latestUsers, CURRENT_DECILE);
-      updateUserbarRank(latestUsers, currentUserId);
+      updateUserbarRank(latestUsers, currentUserId); // desktop + mobile chips ichida ham chaqiriladi
     }, (err)=>{
       console.error('board error',err);
       el.boardList.innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>';
       el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML=''; el.urank.textContent='O‘rin: —'; el.utier.textContent='Daraja: —';
+      renderMobileUserChips(); // clear
     });
   });
 

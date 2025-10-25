@@ -24,8 +24,11 @@
     .brand{display:flex;gap:10px;align-items:center}
     .pi{width:36px;height:36px;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;display:grid;place-items:center;font-weight:900}
     .chip{border:1px solid #d8e9df;background:#f4fbf7;padding:6px 10px;border-radius:999px}
+    .chip.good{background:#e8f5ee;border-color:#c7ead6;color:#0f5132}
+    .chip.warn{background:#fff4e5;border-color:#ffe0b2;color:#8a4b03}
+    .chip.bad{ background:#fdecea;border-color:#f5c2c7;color:#842029}
     .card{background:#fff;border:1px solid var(--frame);border-radius:16px;padding:16px;margin:16px 0;box-shadow:0 8px 24px rgba(20,40,30,.06)}
-    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--brand);background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;cursor:pointer;font-weight:700}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--brand);background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;cursor:pointer;font-weight:700;text-decoration:none;display:inline-block}
     .btn.ghost{background:#fff;color:var(--brand)}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .hidden{display:none!important}
@@ -65,6 +68,8 @@
       </div>
       <div class="row">
         <span id="authInfo" class="chip">Kirish: aniqlanmoqda…</span>
+        <span id="saveStatusTop" class="chip hidden"></span>
+        <a href="https://ixplusy.netlify.app/index" class="btn ghost" id="homeBtn">HOME</a>
       </div>
     </div>
   </header>
@@ -125,6 +130,8 @@
           <div id="timeNote" style="color:var(--muted);margin-top:4px"></div>
         </div>
         <div class="row">
+          <span id="saveStatus" class="chip hidden"></span>
+          <a href="https://ixplusy.netlify.app/index" class="btn ghost">HOME</a>
           <button id="againBtn" class="btn ghost">Savollarga qaytish</button>
         </div>
       </div>
@@ -166,9 +173,20 @@
     const isMulti = q => Array.isArray(q.correctIndices);
     const normalize = arr => Array.from(new Set((arr||[]).map(Number))).sort((a,b)=>a-b);
     const arraysEqual = (a,b)=> a.length===b.length && a.every((v,i)=>v===b[i]);
-    const shuffle = (arr)=>{ const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j]]; } return a; }; // (note: not used directly; we’ll custom shuffle below)
     const fmt = (x)=>{ const r = Math.round((+x + Number.EPSILON)*100)/100; return (Math.abs(r)%1===0)? String(Math.trunc(r)) : String(r); };
     const slug = s => (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+
+    /* Status chip helper */
+    function showSaveStatus(msg, kind='good'){
+      const el1 = document.getElementById('saveStatus');
+      const el2 = document.getElementById('saveStatusTop');
+      [el1, el2].forEach(el=>{
+        if(!el) return;
+        el.textContent = msg;
+        el.classList.remove('hidden','good','bad','warn');
+        el.classList.add(kind);
+      });
+    }
 
     /* MathJax ready + auto-wrap */
     const mjReady = ()=> new Promise(res=>{
@@ -200,7 +218,7 @@
     const rawIdFromUrl = url.get('id');
     let currentTestId = rawIdFromUrl || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
-    // Test kodi — URL ?code= ; bo‘lmasa JSONdagi "code" ; bo‘lmasa slug
+    // Test kodi — URL ?code= ; bo‘lmasa JSON "code" ; bo‘lmasa slug
     let currentTestCode = url.get('code') || null;
 
     /* Auth */
@@ -251,10 +269,9 @@
           ]
         });
       }
-      // variantlarni random qilish uchun har savolga tasodifiy permutatsiya
+      // variantlarni random qilish (Fisher–Yates)
       testData.questions.forEach(q=>{
         const idxs = [...Array(q.options.length).keys()];
-        // Fisher–Yates
         for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idxs[i],idxs[j]]=[idxs[j],idxs[i]]; }
         q._perm = idxs;
       });
@@ -464,6 +481,7 @@
     async function onFinish(){
       if(timerId){ clearInterval(timerId); timerId=null; }
       if(startedAt){ const now=new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
+
       const { total, max, perQuestion, sectionAgg } = computeTotals();
       $('#questionsCard').classList.add('hidden');
       $('#resultCard').classList.remove('hidden');
@@ -478,8 +496,6 @@
       renderSectionStats(sectionAgg);
       renderDetail(perQuestion);
 
-      const user = auth.currentUser;
-
       // SANITIZE detail (Firestore undefined bo‘lmasin)
       const safeDetail = perQuestion.map(row => ({
         i: row.i,
@@ -492,9 +508,28 @@
         options: Array.isArray(row.options) ? row.options.map(v => String(v ?? '')) : []
       }));
 
-      if(user && currentTestCode){
-        try{ await saveFirstResultOnly({ testCode: currentTestCode, uid: user.uid, total, max, detail: safeDetail }); }
-        catch(e){ console.error('save error:', e); }
+      const user = auth.currentUser;
+      if(!currentTestCode){
+        showSaveStatus('Kod topilmadi — natija saqlanmadi', 'warn');
+      } else if(!user){
+        showSaveStatus('Kirmagansiz — natija saqlanmadi', 'warn');
+      } else {
+        try{
+          const res = await saveFirstResultOnly({
+            testCode: currentTestCode,
+            uid: user.uid,
+            total, max,
+            detail: safeDetail
+          });
+          if(res?.skipped){
+            showSaveStatus(`Oldin saqlangan (#${currentTestCode}) — qayta yozilmadi`, 'warn');
+          }else{
+            showSaveStatus(`Saqlandi (#${currentTestCode})`, 'good');
+          }
+        }catch(e){
+          console.error('save error:', e);
+          showSaveStatus('Saqlashda xatolik: ' + (e?.message || e), 'bad');
+        }
       }
     }
 
