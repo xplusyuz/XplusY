@@ -43,6 +43,14 @@
     #qImage{width:min(860px,100%);max-height:80vh;display:block;margin:10px auto;border-radius:12px;border:1px solid #edf3ee;
       box-shadow:0 6px 18px rgba(31,107,69,.06);-webkit-user-drag:none;user-select:none}
 
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+    .stat{border:1px solid var(--frame);border-radius:12px;padding:10px}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .tbl th{font-weight:700;text-align:left;color:var(--muted);font-size:14px}
+    .tbl td,.tbl th{padding:8px 10px;background:#fff}
+    .rowbox{border:1px solid var(--frame);border-radius:12px;overflow:hidden}
+    .sect{display:inline-block;margin:0 6px 6px 0;padding:4px 8px;border:1px solid var(--frame);border-radius:999px;background:#f8fcfa;font-size:12px;color:#0b3a25}
+
     @media print { body{display:none} }
   </style>
 </head>
@@ -84,7 +92,7 @@
     <!-- Questions -->
     <section id="questionsCard" class="card hidden">
       <div class="row" style="justify-content:space-between">
-        <div><b id="qIndex">1</b>/<span id="qTotal">—</span></div>
+        <div><b id="qIndex">1</b>/<span id="qTotal">—</span> <span id="qSect" class="sect"></span></div>
         <div class="row">
           <button id="prevBtn" class="btn ghost">← Oldingi</button>
           <button id="nextBtn" class="btn">Keyingi →</button>
@@ -100,7 +108,6 @@
       <div class="row" style="justify-content:space-between;margin-top:8px">
         <div id="navDots" class="navdots"></div>
         <div class="row">
-          <button id="revealBtn" class="btn ghost">To‘g‘ri javob(lar)ni ko‘rsat</button>
           <button id="finishBtn" class="btn">Yakunlash</button>
         </div>
       </div>
@@ -112,12 +119,32 @@
         <div>
           <div class="score">Natija: <span id="scoreTotal">0</span>/<span id="scoreMax">0</span></div>
           <div id="scoreNote" style="color:var(--muted);margin-top:6px"></div>
+          <div id="timeNote" style="color:var(--muted);margin-top:4px"></div>
         </div>
         <div class="row">
           <button id="againBtn" class="btn ghost">Savollarga qaytish</button>
         </div>
       </div>
-      <div id="detailTable" style="margin-top:10px"></div>
+
+      <!-- Umumiy statistika -->
+      <div class="stats-grid" style="margin-top:12px">
+        <div class="stat"><div style="color:var(--muted);font-size:12px">To‘g‘ri javoblar</div><div style="font-weight:800;font-size:20px" id="stCorrect">0</div></div>
+        <div class="stat"><div style="color:var(--muted);font-size:12px">Noto‘g‘ri javoblar</div><div style="font-weight:800;font-size:20px" id="stWrong">0</div></div>
+        <div class="stat"><div style="color:var(--muted);font-size:12px">Foiz</div><div style="font-weight:800;font-size:20px" id="stPct">0%</div></div>
+        <div class="stat"><div style="color:var(--muted);font-size:12px">Umumiy ball</div><div style="font-weight:800;font-size:20px" id="stPoints">0</div></div>
+      </div>
+
+      <!-- Bo‘limlar kesimida -->
+      <div class="card" style="margin:14px 0">
+        <h3 style="margin:0 0 8px">Bo‘limlar kesimida natija</h3>
+        <div id="sectionStats"></div>
+      </div>
+
+      <!-- Savolma-savol tahlil -->
+      <div class="card" style="margin:14px 0">
+        <h3 style="margin:0 0 8px">Javoblar tahlili</h3>
+        <div id="detailTable"></div>
+      </div>
     </section>
 
     <section id="emptyCard" class="card hidden" style="text-align:center">
@@ -141,6 +168,10 @@
     const isMulti = q => Array.isArray(q.correctIndices);
     const normalize = arr => Array.from(new Set((arr||[]).map(Number))).sort((a,b)=>a-b);
     const arraysEqual = (a,b)=> a.length===b.length && a.every((v,i)=>v===b[i]);
+    const shuffle = (arr)=>{
+      const a = arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+      return a;
+    };
 
     async function typeset(el){ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } }
 
@@ -158,14 +189,13 @@
     let answers = [];         // each: ORIGINAL indices
     let startedAt = null;
     let timeLeftSec = 0, timerId = null;
+    let spentSeconds = 0;
     const currentTestId = new URLSearchParams(location.search).get('id') ||
                           (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
     /* ================ AUTH GUARD ================ */
-    // Redirects to login.html if not signed in
     await requireAuth();
 
-    // Show user in header
     onAuthStateChanged(auth, (user)=>{
       $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon';
     });
@@ -175,7 +205,11 @@
       if(!data || !Array.isArray(data.questions)) return data;
       data.title = data.title || 'Test';
       data.description = data.description || 'Rasm + variantlar';
-      data.questions = data.questions.map(q=>({ ...q, points: Number(q.points || 1) }));
+      data.questions = data.questions.map(q=>({
+        ...q,
+        points: Number(q.points || 1),
+        section: q.section || q.group || 'Umumiy'
+      }));
       if (data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
       return data;
     }
@@ -192,13 +226,22 @@
         testData = {
           title: 'Demo test',
           description: 'Fallback ma’lumotlar',
+          durationMinutes: 1,
           questions: [
-            { text: "1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1 },
-            { text: "2) Ko‘p tanlov: tub son(lar)ni belgilang.", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
-            { text: "3) Nisbatni toping (rasmga qarang).", image:"https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Geometric_figure_square.svg/512px-Geometric_figure_square.svg.png", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
+            { section:'Algebra', text: "1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1 },
+            { section:'Sonlar nazariyasi', text: "2) Ko‘p tanlov: tub son(lar)ni belgilang.", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
+            { section:'Geometriya', text: "3) Nisbatni toping (rasmga qarang).", image:"https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Geometric_figure_square.svg/512px-Geometric_figure_square.svg.png", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
           ]
         };
       }
+
+      // Har bir savol uchun variantlar tartibini tasodifiylashtirish
+      testData.questions.forEach(q=>{
+        const idxs = [...Array(q.options.length).keys()];
+        const perm = shuffle(idxs);
+        q._perm = perm; // display order -> original index
+        // renderda opt matni uchun display tartibini ishlatamiz, ammo <input value> NI ORIGINAL indeks sifatida qo'yamiz
+      });
     }
 
     /* ================ UI INIT ================ */
@@ -218,7 +261,6 @@
     }
 
     function resolveImageSrc(idx1){
-      // Try local 1.jpg -> 1.png else q.image
       const q = testData.questions[idx1-1] || {};
       const tryJpg = `./${idx1}.jpg`, tryPng = `./${idx1}.png`;
       return new Promise(res=>{
@@ -239,28 +281,31 @@
       $('#qIndex').textContent = String(currentIndex+1);
       $('#qTotal').textContent = String(testData.questions.length);
       $('#qText').innerHTML = q.text || '';
+      $('#qSect').textContent = q.section || 'Umumiy';
       $('#opts').innerHTML = '';
 
       const multi = isMulti(q);
       const nameAttr = `q${currentIndex}` + (multi?'[]':'');
       const chosen = new Set(answers[currentIndex] || []);
 
-      q.options.forEach((opt, i)=>{
+      // variantlarni tasodifiy tartibda chiqarish, input value = ORIGINAL indeks
+      const order = q._perm && q._perm.length===q.options.length ? q._perm : [...Array(q.options.length).keys()];
+      order.forEach((origIndex, dispIdx)=>{
         const row = document.createElement('label'); row.className='opt';
         const inp = document.createElement('input');
         inp.type = multi ? 'checkbox' : 'radio';
         inp.name = nameAttr;
-        inp.value = String(i); // ORIGINAL index
-        inp.checked = chosen.has(i);
+        inp.value = String(origIndex); // ORIGINAL index
+        inp.checked = chosen.has(origIndex);
         inp.addEventListener('change', ()=>{
           if(multi){
-            if(inp.checked) chosen.add(i); else chosen.delete(i);
+            if(inp.checked) chosen.add(origIndex); else chosen.delete(origIndex);
             answers[currentIndex] = normalize([...chosen]);
           } else {
-            answers[currentIndex] = inp.checked ? [i] : [];
+            answers[currentIndex] = inp.checked ? [origIndex] : [];
           }
         });
-        const span = document.createElement('span'); span.innerHTML = opt;
+        const span = document.createElement('span'); span.innerHTML = q.options[origIndex];
         row.appendChild(inp); row.appendChild(span);
         $('#opts').appendChild(row);
       });
@@ -274,7 +319,10 @@
     /* ================ TIMER ================= */
     function startTimerIfNeeded(){
       const minutes = Number(testData.durationMinutes || 0);
-      if(!minutes){ $('#metaTimer').classList.add('hidden'); return; }
+      if(!minutes){
+        $('#metaTimer').classList.add('hidden');
+        return;
+      }
       timeLeftSec = Math.round(minutes*60);
       $('#metaTimer').classList.remove('hidden');
       const upd=()=>{
@@ -283,7 +331,8 @@
       };
       upd();
       timerId = setInterval(()=>{
-        timeLeftSec--; upd();
+        timeLeftSec--; spentSeconds++;
+        upd();
         if(timeLeftSec<=0){ clearInterval(timerId); onFinish(); }
       }, 1000);
     }
@@ -292,15 +341,23 @@
     function computeTotals(){
       let total=0, max=0;
       const perQuestion=[];
+      const sectionAgg = new Map(); // name -> {q:count, ok:count, pts:earned, ptsMax:max}
+
       testData.questions.forEach((q,i)=>{
+        const sect = q.section || 'Umumiy';
         const pts = Number(q.points||1); max+=pts;
         const picked = normalize(answers[i] || []);
         const correct = isMulti(q) ? normalize(q.correctIndices||[]) : [Number(q.correctIndex??-1)];
         const ok = isMulti(q) ? arraysEqual(picked, correct) : (picked.length===1 && picked[0]===correct[0]);
         if(ok) total+=pts;
-        perQuestion.push({i, pts, ok, picked, correct});
+
+        if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
+        const a = sectionAgg.get(sect);
+        a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
+
+        perQuestion.push({i, section:sect, pts, ok, picked, correct, text:q.text, options:q.options});
       });
-      return { total, max, perQuestion };
+      return { total, max, perQuestion, sectionAgg };
     }
 
     /* ================ SAVE FIRST RESULT ONLY ================= */
@@ -315,36 +372,94 @@
           uid, testId,
           firstTotal: total, max,
           detail,
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          spentSeconds
         });
         return { skipped:false };
       });
     }
 
+    /* ================ RENDER SECTION STATS ================= */
+    function renderSectionStats(sectionAgg){
+      const container = document.createElement('div');
+      container.className = 'stats-grid';
+      [...sectionAgg.entries()].forEach(([name, a])=>{
+        const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
+        const card = document.createElement('div');
+        card.className = 'stat';
+        card.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${name}</div>
+          <div style="color:var(--muted);font-size:12px">Savollar: ${a.q}</div>
+          <div style="margin-top:6px"><b>${a.pts}</b>/<b>${a.ptsMax}</b> ball · <b>${pct}%</b> to‘g‘ri</div>
+        `;
+        container.appendChild(card);
+      });
+      const root = $('#sectionStats'); root.innerHTML=''; root.appendChild(container);
+    }
+
+    /* ================ RENDER DETAIL TABLE ================= */
+    function renderDetail(perQuestion){
+      const wrapper = document.createElement('div');
+      const table = document.createElement('table'); table.className='tbl';
+      table.innerHTML = `
+        <thead class="rowbox">
+          <tr>
+            <th style="border-top-left-radius:12px">#</th>
+            <th>Bo‘lim</th>
+            <th>Savol</th>
+            <th>Tanlangan</th>
+            <th>To‘g‘ri javob(lar)</th>
+            <th style="text-align:right;border-top-right-radius:12px">Ball</th>
+          </tr>
+        </thead>
+        <tbody id="detailBody"></tbody>
+      `;
+      wrapper.appendChild(table);
+      const body = table.querySelector('#detailBody');
+
+      perQuestion.forEach(row=>{
+        const tr = document.createElement('tr'); tr.className='rowbox';
+        const pickedDisp = row.picked.length? row.picked.map(x=>x+1).join(', ') : '—';
+        const correctDisp = row.correct.map(x=>x+1).join(', ');
+        tr.innerHTML = `
+          <td style="width:40px">${row.i+1}</td>
+          <td><span class="sect">${row.section}</span></td>
+          <td style="max-width:360px">${row.text||''}</td>
+          <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
+          <td>${correctDisp}</td>
+          <td style="text-align:right"><b>${row.ok?row.pts:0}</b>/<b>${row.pts}</b></td>
+        `;
+        body.appendChild(tr);
+      });
+
+      const root = $('#detailTable');
+      root.innerHTML=''; root.appendChild(wrapper);
+      if (window.MathJax?.typesetPromise) typeset(root); // savol matnlari LaTeX bo'lsa tiplansin
+    }
+
     /* ================ FINISH ================= */
     async function onFinish(){
-      const { total, max, perQuestion } = computeTotals();
+      if(timerId){ clearInterval(timerId); timerId=null; }
+      // agar vaqt cheklanmagan bo'lsa ham umumiy sarflangan vaqtni hisoblaymiz
+      if(startedAt){ const now = new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
+
+      const { total, max, perQuestion, sectionAgg } = computeTotals();
       $('#questionsCard').classList.add('hidden');
       $('#resultCard').classList.remove('hidden');
       $('#scoreTotal').textContent = String(total);
       $('#scoreMax').textContent = String(max);
       $('#scoreNote').textContent = `To‘g‘ri: ${perQuestion.filter(x=>x.ok).length} ta / ${perQuestion.length} ta`;
+      $('#timeNote').textContent = `Sarflangan vaqt: ${pad2(Math.floor(spentSeconds/60))}:${pad2(spentSeconds%60)}`;
 
-      // detail list
-      const tbl = document.createElement('div'); tbl.style.marginTop='8px';
-      perQuestion.forEach(row=>{
-        const el = document.createElement('div');
-        el.style.border='1px solid var(--frame)'; el.style.borderRadius='12px';
-        el.style.padding='10px'; el.style.margin='6px 0';
-        el.innerHTML = `
-          <div><b>${row.i+1}-savol</b> — <span class="${row.ok?'ok':'bad'}">${row.ok?'to‘g‘ri':'noto‘g‘ri'}</span> (<b>${row.pts}</b> ball)</div>
-          <div style="color:var(--muted)">tanlangan: [${row.picked.map(x=>x+1).join(', ')||'—'}] · to‘g‘ri: [${row.correct.map(x=>x+1).join(', ')}]</div>
-        `;
-        tbl.appendChild(el);
-      });
-      $('#detailTable').innerHTML=''; $('#detailTable').appendChild(tbl);
+      // umumiy statistika
+      $('#stCorrect').textContent = String(perQuestion.filter(x=>x.ok).length);
+      $('#stWrong').textContent = String(perQuestion.length - perQuestion.filter(x=>x.ok).length);
+      $('#stPct').textContent = (max? Math.round(total/max*100):0) + '%';
+      $('#stPoints').textContent = `${total}/${max}`;
 
-      // save once
+      renderSectionStats(sectionAgg);
+      renderDetail(perQuestion);
+
       const user = auth.currentUser;
       if(user){
         try{
@@ -358,29 +473,8 @@
       }
     }
 
-    /* ================ REVEAL CORRECT ================= */
-    function revealCorrect(){
-      $('#resultCard').classList.add('hidden');
-      $('#questionsCard').classList.remove('hidden');
-      const q=testData.questions[currentIndex]; const multi=isMulti(q);
-      const correct = multi?(q.correctIndices||[]):[Number(q.correctIndex??-1)];
-      document.querySelectorAll('#opts .opt').forEach(row=>{
-        row.style.borderColor='#edf3ee'; row.style.boxShadow='none'; row.style.background='#fbfdfc';
-      });
-      document.querySelectorAll('#opts input').forEach(inp=>{
-        const orig = Number(inp.value);
-        const row=inp.closest('.opt');
-        if(correct.includes(orig)){
-          row.style.borderColor='rgba(46,139,87,.55)';
-          row.style.boxShadow='0 0 0 4px rgba(46,139,87,.18)';
-          row.style.background='#f3fbf6';
-        }
-      });
-    }
-
     /* ================ BOOTSTRAP ================= */
     async function boot(){
-      // data
       await loadTestData();
       if(!testData || !testData.questions?.length){
         $('#introCard').classList.add('hidden');
@@ -388,21 +482,19 @@
         $('#emptyCard').classList.remove('hidden');
         return;
       }
-      // header meta
       $('#testTitle').textContent = testData.title || 'Test';
       $('#testDesc').textContent = testData.description || '';
       $('#metaCount').textContent = `Savollar: ${testData.questions.length}`;
       $('#metaPoints').textContent = `Umumiy ball: ${sum(testData.questions.map(q=>q.points))}`;
 
-      // answers init
       answers = Array.from({length:testData.questions.length}, ()=>[]);
 
-      // nav
       buildNavDots();
 
       // events
       $('#startBtn').onclick = ()=>{
         startedAt = new Date();
+        spentSeconds = 0;
         $('#introCard').classList.add('hidden');
         $('#questionsCard').classList.remove('hidden');
         renderQuestion();
@@ -414,8 +506,9 @@
       $('#againBtn').onclick = ()=>{
         $('#resultCard').classList.add('hidden');
         $('#questionsCard').classList.remove('hidden');
+        // MathJax qayta ishlashi uchun
+        renderQuestion();
       };
-      $('#revealBtn').onclick = revealCorrect;
     }
 
     boot();
