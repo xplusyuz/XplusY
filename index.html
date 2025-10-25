@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>LeaderMath — PWA (Decile Stars 0.5→5 + Faceted Diamond + Profile Stars)</title>
+  <title>LeaderMath — PWA (Decile Stars + Faceted Diamond + Profile)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico">
@@ -20,7 +20,7 @@
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .modal-open{overflow:hidden} /* modal ochilganda scroll blok */
+    .modal-open{overflow:hidden} /* faqat modal ochiq bo'lganda */
 
     /* Appbar */
     .appbar{position:sticky;top:0;z-index:90;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
@@ -88,7 +88,7 @@
     .tier-silver .stars{--s:17}
     .tier-gold .stars{--s:18}
     .tier-emerald .stars{--s:20}
-    .tier-diamond .stars{--s:24} /* diamond larger */
+    .tier-diamond .stars{--s:24}
     .stars svg{width:calc(var(--s)*1px);height:calc(var(--s)*1px)}
 
     /* Pager */
@@ -202,33 +202,34 @@
   </div>
 
   <!-- Profile modal -->
-  <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog" style="display:none">
-    <div class="modal">
+  <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:999">
+    <div class="modal" style="width:min(840px,94%);max-height:90vh;overflow:auto;background:var(--card);border-radius:14px;border:1px solid var(--frame-strong);box-shadow:0 24px 64px rgba(0,0,0,.35);padding:16px">
       <h3>Profil ma’lumotlari (majburiy)</h3>
-      <div class="grid2">
+      <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="ctl"><label>Ism *</label><input id="pFirst"></div>
         <div class="ctl"><label>Familiya *</label><input id="pLast"></div>
       </div>
-      <div class="grid3">
+      <div class="grid3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div class="ctl"><label>Viloyat *</label><input id="pRegion" placeholder="Namangan"></div>
         <div class="ctl"><label>Tuman/Shahar *</label><input id="pDistrict" placeholder="Yangiqo‘rg‘on"></div>
         <div class="ctl"><label>Maktab nomi *</label><input id="pSchool" placeholder="1-maktab"></div>
       </div>
-      <div class="grid2">
+      <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="ctl"><label>Sinf *</label><input id="pClass" placeholder="9-A"></div>
         <div class="ctl"><label>Telefon *</label><input id="pPhone" placeholder="+998 XX XXX XX XX"></div>
       </div>
-      <div class="row">
-        <div class="danger" id="pError"></div>
-        <div style="display:flex;gap:8px">
-          <button id="pSave" class="iconbtn" style="background:linear-gradient(135deg,var(--brand),var(--brand2));border:none">Saqlash</button>
-          <button id="pClose" class="iconbtn">Yopish</button>
-        </div>
+      <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <div class="danger" id="pError" style="color:#c62828;font-size:12px;margin-right:auto"></div>
+        <button id="pSave" class="iconbtn" style="background:linear-gradient(135deg,var(--brand),var(--brand2));border:none;color:#fff">Saqlash</button>
+        <button id="pClose" class="iconbtn">Yopish</button>
       </div>
     </div>
   </div>
 
 <script type="module">
+  // --- Safety: har bir reloadda scrollni ochib qo'yamiz
+  document.body.classList.remove('modal-open');
+
   // Theme
   const root=document.documentElement, themeBtn=document.getElementById('themeBtn'), THEME_KEY='lm-theme';
   const setTheme=m=>{root.classList.toggle('dark',m==='dark');localStorage.setItem(THEME_KEY,m);themeBtn.textContent=m==='dark'?'☀️':'🌙'};
@@ -269,6 +270,8 @@
     save: document.getElementById('pSave'),
     close: document.getElementById('pClose'),
   };
+
+  function isModalVisible(){ return PM.mask && getComputedStyle(PM.mask).display !== 'none'; }
   function openProfileModal(pref={}){
     PM.first.value=pref.first||''; PM.last.value=pref.last||'';
     PM.region.value=pref.region||''; PM.district.value=pref.district||'';
@@ -283,10 +286,18 @@
   }
   PM.close.onclick = closeProfileModal;
 
+  // Modal ko'rinishini kuzatamiz (sync)
+  const mo = new MutationObserver(()=>{
+    if(isModalVisible()) document.body.classList.add('modal-open');
+    else document.body.classList.remove('modal-open');
+  });
+  mo.observe(PM.mask, { attributes:true, attributeFilter:['style','class'] });
+  // ESC bilan yopish
+  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && isModalVisible()) closeProfileModal(); });
+
   function initials(n){ if(!n) return 'LM'; const p=n.trim().split(/\s+/); return (p[0]?.[0]||'L')+(p[1]?.[0]||'M'); }
   function profileIsComplete(u){
-    return !!(u && u.name && /\s/.test(u.name) &&
-      u.region && u.district && u.school && u.class && u.phone);
+    return !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.class && u.phone);
   }
 
   el.signin.onclick=(e)=>{ e.preventDefault(); const ret = encodeURIComponent(location.pathname + location.search + location.hash); location.href = `./login.html?return=${ret}`; };
@@ -346,7 +357,7 @@
       wrap.appendChild(title);
 
       const grid=document.createElement('div'); grid.className='grid';
-      (sec.items||[]).slice(0,12).forEach(it=>{
+      (sec.items||[]).forEach(it=>{
         const card=document.createElement('article'); card.className='card grad-border glass';
         const best=it.best?'<div class="badge">BEST</div>':'';
         const slug = (it.name||'').replace(/\W+/g,'-');
@@ -386,7 +397,7 @@
   }
   initContent();
 
-  // ===== Leaderboard: o‘ntalik pager + 0.5→5.0 =====
+  // ===== Leaderboard (o'ntalik) =====
   const GROUPS = [
     {label:'10–1 (Diamond)',  start:1,  end:10, tier:'diamond', grad:['#9FE3FF','#39B6FF','#0077FF']},
     {label:'20–11 (Emerald)', start:11, end:20, tier:'emerald', grad:['#8FE3B0','#2E8B57','#1F6B45']},
@@ -396,7 +407,7 @@
   ];
   let CURRENT_DECILE = 0;
 
-  // Faceted Diamond / Star SVG
+  // Iconlar
   function iconSVG(shape, fillPct, colors){
     const [c1,c2,c3]=colors;
     const gid = 'g'+Math.random().toString(36).slice(2,8);
@@ -416,7 +427,6 @@
         <path d="${pathStar}" fill="url(#${gid})" clip-path="url(#${cid})"/>
       </svg>`;
     }
-
     // Faceted diamond
     return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -426,20 +436,15 @@
         </linearGradient>
         <clipPath id="${cid}"><rect x="0" y="0" width="${fillPct}%" height="100%"/></clipPath>
       </defs>
-
       <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="#cfe8ff"/>
       <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="url(#${gid})" clip-path="url(#${cid})"/>
-
       <polygon points="6,8.5 9,4.7 12,4.7 9.6,8.5" fill="rgba(255,255,255,.35)"/>
       <polygon points="12,4.7 15,4.7 18,8.5 14.4,8.5" fill="rgba(255,255,255,.25)"/>
-
       <polygon points="6,8.5 9.6,8.5 12,12.2 8.4,12.2" fill="rgba(255,255,255,.18)"/>
       <polygon points="18,8.5 14.4,8.5 12,12.2 15.6,12.2" fill="rgba(255,255,255,.12)"/>
       <polygon points="9.6,8.5 14.4,8.5 12,12.2" fill="rgba(255,255,255,.22)"/>
-
       <polygon points="8.4,12.2 12,22 12,12.2" fill="rgba(255,255,255,.2)"/>
       <polygon points="15.6,12.2 12,22 12,12.2" fill="rgba(255,255,255,.16)"/>
-
       <path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="none" stroke="rgba(255,255,255,.6)" stroke-width=".8"/>
       <path d="M6 8.5 L9 4.7 L15 4.7 L18 8.5" fill="none" stroke="rgba(255,255,255,.55)" stroke-width=".7"/>
       <path d="M6 8.5 L12 12.2 L18 8.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width=".7"/>
@@ -467,8 +472,7 @@
 
     for(let r=g.start; r<=g.end; r++){
       const u = arr[r-1]; if(!u) continue;
-      const rank=r;
-      const isTop3 = rank<=3;
+      const rank=r; const isTop3 = rank<=3;
       const leftBadge = isTop3
         ? `<span class="medal ${rank===1?'m1':rank===2?'m2':'m3'}">${rank===1?'🏆':rank===2?'🥈':'🥉'}</span>`
         : `<span class="rnk">#${rank}</span>`;
@@ -513,14 +517,14 @@
     const stars = 0.5 * (g.end - rank + 1); // 0.5..5.0
     const html = renderStars(stars, g.tier);
     el.userTierStars.innerHTML = html; // ism yonida
-    el.userStarsPts.innerHTML = html;  // Ball chipi ichida
+    el.userStarsPts.innerHTML = html;  // Ball chipida
   }
 
   // Live auth + leaderboard
   let latestUsers = [];
   let currentUserId = null;
 
-  // --- Modal saqlash (Firestore) ---
+  // Saqlash (Firestore)
   PM.save.onclick = async () => {
     PM.err.textContent = '';
     const first  = PM.first.value.trim();
@@ -546,7 +550,7 @@
       el.udistrict.textContent= 'Tuman: '  + district;
       el.uschool.textContent  = 'Maktab: ' + school;
 
-      localStorage.setItem(`lm-profile-seen:${currentUserId}`, '1'); // qayta majburlama
+      localStorage.setItem(`lm-profile-seen:${currentUserId}`, '1');
       closeProfileModal();
     }catch(e){
       console.error('profile save error', e);
@@ -561,6 +565,7 @@
       el.ava.textContent='LM'; el.ava.style.backgroundImage=''; el.signin.style.display='inline'; el.signout.style.display='none'; el.editProfile.style.display='none';
       el.userTierStars.innerHTML=''; el.userStarsPts.innerHTML='';
       currentUserId = null;
+      if(isModalVisible()) closeProfileModal();
       return;
     }
     el.signin.style.display='none'; el.signout.style.display='inline';
@@ -576,7 +581,7 @@
     else { el.ava.textContent = initials(el.uname.textContent); }
     el.editProfile.style.display='inline';
 
-    // Profil modalini faqat kerak bo‘lsa ochamiz
+    // Modalni faqat zarur bo'lsa ochamiz; aks holda yopib qo'yamiz
     const seenKey = `lm-profile-seen:${currentUserId}`;
     if(!profileIsComplete(u) && !localStorage.getItem(seenKey)){
       const nm = (u.name||'').trim().split(/\s+/,2);
@@ -589,6 +594,8 @@
         klass:  u.class  || '',
         phone:  u.phone  || ''
       });
+    }else{
+      if(isModalVisible()) closeProfileModal();
     }
 
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
@@ -606,9 +613,6 @@
   // Pager
   el.decilePrev.onclick = ()=>{ if(CURRENT_DECILE>0){ CURRENT_DECILE--; drawDecile(latestUsers, CURRENT_DECILE); } };
   el.decileNext.onclick = ()=>{ if(CURRENT_DECILE<GROUPS.length-1){ CURRENT_DECILE++; drawDecile(latestUsers, CURRENT_DECILE); } };
-  if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./service-worker.js');
-}
 </script>
 </body>
 </html>
