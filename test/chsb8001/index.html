@@ -33,7 +33,6 @@
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .hidden{display:none!important}
 
-    /* Savol UI */
     .qtext{font-size:18px;margin-bottom:10px}
     .opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #edf3ee;border-radius:12px;background:#fbfdfc;margin:8px 0;transition: box-shadow .2s ease, background .2s ease, border-color .2s ease;}
     .opt:hover{border-color:var(--brand);box-shadow:0 0 0 4px rgba(46,139,87,.15);background:#fff}
@@ -161,443 +160,478 @@
   </main>
 
   <script type="module">
-  /* Firebase importlari */
-  import { auth, db, onAuthStateChanged } from "/lib/firebase.client.js";
-  import { requireAuth } from "/lib/auth-guard.js";
-  import { doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    /* Firebase importlari */
+    import { auth, db, onAuthStateChanged } from "/lib/firebase.client.js";
+    import { requireAuth } from "/lib/auth-guard.js";
+    import { doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-  /* === UTIL === */
-  const $ = s=>document.querySelector(s);
-  const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
-  const sum = a => a.reduce((x,y)=>x+y,0);
-  const isMulti = q => Array.isArray(q.correctIndices);
-  const normalize = arr => Array.from(new Set((arr||[]).map(Number))).sort((a,b)=>a-b);
-  const arraysEqual = (a,b)=> a.length===b.length && a.every((v,i)=>v===b[i]);
-  const fmt = (x)=>{ const r = Math.round((+x + Number.EPSILON)*100)/100; return (Math.abs(r)%1===0)? String(Math.trunc(r)) : String(r); };
-  const slug = s => (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    /* === UTIL === */
+    const $ = s=>document.querySelector(s);
+    const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
+    const sum = a => a.reduce((x,y)=>x+y,0);
+    const isMulti = q => Array.isArray(q.correctIndices);
+    const normalize = arr => Array.from(new Set((arr||[]).map(Number))).sort((a,b)=>a-b);
+    const arraysEqual = (a,b)=> a.length===b.length && a.every((v,i)=>v===b[i]);
+    const fmt = (x)=>{ const r = Math.round((+x + Number.EPSILON)*100)/100; return (Math.abs(r)%1===0)? String(Math.trunc(r)) : String(r); };
+    const slug = s => (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
 
-  /* Status chip helper */
-  function showSaveStatus(msg, kind='good'){
-    const el1 = document.getElementById('saveStatus');
-    const el2 = document.getElementById('saveStatusTop');
-    [el1, el2].forEach(el=>{
-      if(!el) return;
-      el.textContent = msg;
-      el.classList.remove('hidden','good','bad','warn');
-      el.classList.add(kind);
-    });
-  }
-
-  /* MathJax ready + auto-wrap (regexsiz) */
-  const mjReady = ()=> new Promise(res=>{
-    const wait=()=> (window.MathJax && window.MathJax.typesetPromise) ? res() : setTimeout(wait,30);
-    wait();
-  });
-  const TEX_TOKENS = ['\\frac','\\sqrt','\\sum','\\int','\\pi','\\alpha','\\beta','\\gamma','\\le','\\ge','\\cdot','\\times','\\circ','\\angle','\\deg','\\binom','\\pm','\\infty','\\ln','\\log','\\sin','\\cos','\\tan','\\lim','\\to','\\rightarrow','\\vec','\\hat','\\bar','\\over','\\mathbf','\\mathbb','^','_'];
-  function looksLikeTeX(s){
-    if (typeof s !== 'string') return false;
-    if (s.includes('$') || s.includes('\\(') || s.includes('\\[')) return false;
-    for (const t of TEX_TOKENS){ if (s.indexOf(t) !== -1) return true; }
-    return false;
-  }
-  const wrapTeX = s => looksLikeTeX(s) ? `\\(${s}\\)` : s;
-  const typeset = async (el)=>{ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} };
-
-  /* UX cheklovlar */
-  document.addEventListener('contextmenu', e=> e.preventDefault());
-  document.addEventListener('dragstart', e=> e.preventDefault());
-  document.addEventListener('keydown', (e)=>{ const k=(e.key||'').toLowerCase(); if((e.ctrlKey||e.metaKey)&&['s','p','u'].includes(k)) e.preventDefault(); });
-
-  /* STATE */
-  let testData = null;
-  let currentIndex = 0;
-  let answers = []; // each: ORIGINAL indices
-  let startedAt = null;
-  let timeLeftSec = 0, timerId = null;
-  let spentSeconds = 0;
-
-  const url = new URLSearchParams(location.search);
-  const rawIdFromUrl = url.get('id');
-  let currentTestId = rawIdFromUrl || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
-
-  // Test kodi — URL ?code= ; bo‘lmasa JSON "code" ; bo‘lmasa slug
-  let currentTestCode = url.get('code') || null;
-
-  /* Auth (syntax error bo‘lsa shu yerga kelmas edi) */
-  await requireAuth();
-  onAuthStateChanged(auth, (user)=>{
-    $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon';
-  });
-
-  /* Sections diapazonlarini savollarga qo‘llash */
-  function applySectionRanges(data){
-    if(!Array.isArray(data.questions)) return;
-    if(Array.isArray(data.sections)){
-      data.sections.forEach(sec=>{
-        const name = sec.name || 'Umumiy';
-        const s = Math.max(1, Number(sec.start||1));
-        const e = Math.min(data.questions.length, Number(sec.end||data.questions.length));
-        for(let i=s-1;i<e;i++){ data.questions[i].section = data.questions[i].section || name; }
+    /* Status chip helper */
+    function showSaveStatus(msg, kind='good'){
+      const el1 = document.getElementById('saveStatus');
+      const el2 = document.getElementById('saveStatusTop');
+      [el1, el2].forEach(el=>{
+        if(!el) return;
+        el.textContent = msg;
+        el.classList.remove('hidden','good','bad','warn');
+        el.classList.add(kind);
       });
     }
-    data.questions.forEach(q=>{ if(!q.section) q.section = 'Umumiy'; });
-  }
 
-  function normalizeTestData(data){
-    if(!data || !Array.isArray(data.questions)) return data;
-    data.title = data.title || 'Test';
-    data.description = data.description || 'Rasm + variantlar';
-    data.questions = data.questions.map(q=>({ ...q, points: Number(q.points || 1) }));
-    if (data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
-    applySectionRanges(data);
-    data.id = data.id || slug(data.title);
-    data.code = data.code || slug(data.title);
-    return data;
-  }
-
-  async function loadTestData(){
-    const stored = localStorage.getItem('testData');
-    if(stored){ try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{} }
-    try{
-      const r = await fetch('./test.json',{cache:'no-store'});
-      if(!r.ok) throw new Error('no test.json');
-      testData = normalizeTestData(await r.json());
-    }catch{
-      // fallback
-      testData = normalizeTestData({
-        title: 'Demo test', description: 'Fallback ma’lumotlar', durationMinutes: 1, code: 'demo-001',
-        questions: [
-          { section:'Algebra', text: "1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1 },
-          { section:'Sonlar nazariyasi', text: "2) \\(\\text{Tub son(lar)}\\)", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
-          { section:'Geometriya', text: "3) Nisbatni toping.", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
-        ]
-      });
+    /* MathJax ready + auto-wrap (regexsiz) */
+    const mjReady = ()=> new Promise(res=>{
+      const wait=()=> (window.MathJax && window.MathJax.typesetPromise) ? res() : setTimeout(wait,30);
+      wait();
+    });
+    const TEX_TOKENS = ['\\frac','\\sqrt','\\sum','\\int','\\pi','\\alpha','\\beta','\\gamma','\\le','\\ge','\\cdot','\\times','\\circ','\\angle','\\deg','\\binom','\\pm','\\infty','\\ln','\\log','\\sin','\\cos','\\tan','\\lim','\\to','\\rightarrow','\\vec','\\hat','\\bar','\\over','\\mathbf','\\mathbb','^','_'];
+    function looksLikeTeX(s){
+      if (typeof s !== 'string') return false;
+      if (s.includes('$') || s.includes('\\(') || s.includes('\\[')) return false;
+      for (const t of TEX_TOKENS){ if (s.indexOf(t) !== -1) return true; }
+      return false;
     }
-    // variantlarni random qilish (Fisher–Yates)
-    testData.questions.forEach(q=>{
-      const idxs = [...Array(q.options.length).keys()];
-      for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idxs[i],idxs[j]]=[idxs[j],idxs[i]]; }
-      q._perm = idxs;
-    });
-  }
+    const wrapTeX = s => looksLikeTeX(s) ? `\\(${s}\\)` : s;
+    const typeset = async (el)=>{ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} };
 
-  /* Nav dots */
-  function buildNavDots(){
-    const n = testData.questions.length;
-    const root = $('#navDots'); root.innerHTML='';
-    for(let i=0;i<n;i++){
-      const b=document.createElement('button');
-      b.className='dot'; b.dataset.idx = String(i);
-      b.textContent = i+1;
-      b.addEventListener('click', ()=>{ currentIndex=i; renderQuestion(); });
-      root.appendChild(b);
-    }
-    refreshDotsState();
-    highlightDot(0);
-  }
-  function highlightDot(i){
-    [...document.querySelectorAll('.dot')].forEach((el,idx)=> el.classList.toggle('active', idx===i));
-  }
-  function refreshDotsState(){
-    [...document.querySelectorAll('.dot')].forEach((el)=>{
-      const i = Number(el.dataset.idx);
-      const hasAns = (answers[i] && answers[i].length>0);
-      el.classList.toggle('answered', !!hasAns);
-    });
-  }
+    /* UX cheklovlar */
+    document.addEventListener('contextmenu', e=> e.preventDefault());
+    document.addEventListener('dragstart', e=> e.preventDefault());
+    document.addEventListener('keydown', (e)=>{ const k=(e.key||'').toLowerCase(); if((e.ctrlKey||e.metaKey)&&['s','p','u'].includes(k)) e.preventDefault(); });
 
-  // Rasmni topish: jpg → png → jpeg → webp → q.image
-  async function resolveImageSrc(idx1){
-    const q = testData.questions[idx1-1] || {};
-    const candidates = [
-      `./${idx1}.jpg`,
-      `./${idx1}.png`,
-      `./${idx1}.jpeg`,
-      `./${idx1}.webp`,
-      q.image || ''
-    ].filter(Boolean);
+    /* STATE */
+    let testData = null;
+    let currentIndex = 0;
+    let answers = []; // each: ORIGINAL indices
+    let startedAt = null;
+    let timeLeftSec = 0, timerId = null;
+    let spentSeconds = 0;
 
-    for (const url of candidates) {
-      const ok = await new Promise(r=>{
-        const img = new Image();
-        img.onload = ()=>r(true);
-        img.onerror = ()=>r(false);
-        img.src = url + (url.includes('?') ? '' : `?t=${Date.now()}`);
-      });
-      if (ok) return url;
-    }
-    return '';
-  }
+    const url = new URLSearchParams(location.search);
+    const rawIdFromUrl = url.get('id');
+    let currentTestId = rawIdFromUrl || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 
-  function renderQuestion(){
-    const q = testData.questions[currentIndex];
-    $('#qIndex').textContent = String(currentIndex+1);
-    $('#qTotal').textContent = String(testData.questions.length);
-    $('#qText').innerHTML = wrapTeX(q.text || '');
-    $('#qSect').textContent = q.section || 'Umumiy';
-    $('#opts').innerHTML = '';
+    // Test kodi — URL ?code= ; bo‘lmasa JSON "code" ; bo‘lmasa slug
+    let currentTestCode = url.get('code') || null;
 
-    const multi = isMulti(q);
-    const nameAttr = `q${currentIndex}` + (multi?'[]':'');
-    const chosen = new Set(answers[currentIndex] || []);
+    /* Auth */
+    await requireAuth();
+    onAuthStateChanged(auth, (user)=>{ $('#authInfo').textContent = user ? `Kirish: ${user.displayName || user.email}` : 'Kirish: mehmon'; });
 
-    const order = q._perm && q._perm.length===q.options.length ? q._perm : [...Array(q.options.length).keys()];
-    order.forEach((origIndex)=>{
-      const row = document.createElement('label'); row.className='opt';
-      const inp = document.createElement('input');
-      inp.type = multi ? 'checkbox' : 'radio';
-      inp.name = nameAttr;
-      inp.value = String(origIndex);
-      inp.checked = chosen.has(origIndex);
-      inp.addEventListener('change', ()=>{
-        if(multi){ if(inp.checked) chosen.add(origIndex); else chosen.delete(origIndex); answers[currentIndex] = normalize([...chosen]); }
-        else { answers[currentIndex] = inp.checked ? [origIndex] : []; }
-        refreshDotsState();
-      });
-      const span = document.createElement('span'); span.innerHTML = wrapTeX(q.options[origIndex]);
-      row.appendChild(inp); row.appendChild(span);
-      $('#opts').appendChild(row);
-    });
-
-    resolveImageSrc(currentIndex+1).then(src=>{ $('#qImage').src = src; });
-    highlightDot(currentIndex);
-    typeset($('#questionsCard'));
-  }
-
-  /* Timer */
-  function startTimerIfNeeded(){
-    const minutes = Number(testData.durationMinutes || 0);
-    const both = (txt,show)=>{ $('#metaTimer').textContent=txt; $('#qTimer').textContent=txt; $('#metaTimer').classList.toggle('hidden',!show); $('#qTimer').classList.toggle('hidden',!show); };
-    if(!minutes){ both('00:00', false); return; }
-    timeLeftSec = Math.round(minutes*60);
-    both(`${pad2(Math.floor(timeLeftSec/60))}:${pad2(timeLeftSec%60)}`, true);
-    timerId = setInterval(()=>{
-      timeLeftSec--; spentSeconds++;
-      const m=Math.max(0,Math.floor(timeLeftSec/60)), s=Math.max(0,timeLeftSec%60);
-      both(`${pad2(m)}:${pad2(s)}`, true);
-      if(timeLeftSec<=0){ clearInterval(timerId); onFinish(); }
-    }, 1000);
-  }
-
-  /* Scoring */
-  function computeTotals(){
-    let total=0, max=0;
-    const perQuestion=[];
-    const sectionAgg = new Map();
-    testData.questions.forEach((q,i)=>{
-      const sect = q.section || 'Umumiy';
-      const pts = Number(q.points||1); max+=pts;
-      const picked = normalize(answers[i] || []);
-      const correct = isMulti(q) ? normalize(q.correctIndices||[]) : [Number(q.correctIndex??-1)];
-      const ok = isMulti(q) ? arraysEqual(picked, correct) : (picked.length===1 && picked[0]===correct[0]);
-      if(ok) total+=pts;
-      if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
-      const a = sectionAgg.get(sect); a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
-      perQuestion.push({
-        i,
-        section: sect,
-        pts: Number(pts||0),
-        ok: !!ok,
-        picked: Array.isArray(picked)? picked : [],
-        correct: Array.isArray(correct)? correct : [],
-        text: String(q.text || ''),
-        options: Array.isArray(q.options) ? q.options.map(v=>String(v ?? '')) : []
-      });
-    });
-    return { total, max, perQuestion, sectionAgg };
-  }
-
-  /* Firestore: faqat bir marta + ball patch */
-  async function saveFirstResultOnly({testCode, uid, total, max, detail}){
-    const ref = doc(db, 'results', testCode, 'users', uid);
-    return runTransaction(db, async (tx)=>{
-      const snap = await tx.get(ref);
-
-      if (snap.exists()) {
-        const data = snap.data() || {};
-        if (typeof data.ball !== 'number') {
-          const patchedBall = Number(
-            (typeof total === 'number' ? total : data.firstTotal) || 0
-          );
-          tx.update(ref, { ball: patchedBall });
-          return { skipped:true, patched:true, ball: patchedBall };
-        }
-        return { skipped:true, patched:false, already:data };
-      }
-
-      tx.set(ref, {
-        uid,
-        testCode,
-        testId: testData.id || currentTestId,
-        title: testData.title || '',
-        ball: Number(total || 0),
-        firstTotal: Number(total || 0),
-        max: Number(max || 0),
-        percent: (max ? Math.round((total / max) * 100) : 0),
-        detail: Array.isArray(detail) ? detail : [],
-        createdAt: serverTimestamp(),
-        spentSeconds: Number(spentSeconds || 0)
-      });
-      return { skipped:false, patched:false, ball: Number(total||0) };
-    });
-  }
-
-  /* Tahlil rendererlar */
-  function renderSectionStats(sectionAgg){
-    const container = document.createElement('div'); container.className = 'stats-grid';
-    [...sectionAgg.entries()].forEach(([name, a])=>{
-      const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
-      const card = document.createElement('div'); card.className = 'stat';
-      card.innerHTML = `
-        <div style="font-weight:700;margin-bottom:4px">${name}</div>
-        <div style="color:var(--muted);font-size:12px">Savollar: ${a.q}</div>
-        <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> ball · <b>${pct}%</b> to‘g‘ri</div>`;
-      container.appendChild(card);
-    });
-    const root = $('#sectionStats'); root.innerHTML=''; root.appendChild(container);
-  }
-
-  function renderDetail(perQuestion){
-    const wrapper = document.createElement('div');
-    const table = document.createElement('table'); table.className='tbl';
-    table.innerHTML = `
-      <thead class="rowbox">
-        <tr>
-          <th style="border-top-left-radius:12px">#</th>
-          <th>Bo‘lim</th>
-          <th>Savol</th>
-          <th>Tanlangan</th>
-          <th>To‘g‘ri javob(lar)</th>
-          <th style="text-align:right;border-top-right-radius:12px">Ball</th>
-        </tr>
-      </thead>
-      <tbody id="detailBody"></tbody>`;
-    wrapper.appendChild(table);
-    const body = table.querySelector('#detailBody');
-
-    perQuestion.forEach(row=>{
-      const pickedDisp = row.picked.length? row.picked.map(x=>x+1).join(', ') : '—';
-      const correctDisp = row.correct.map(x=>x+1).join(', ');
-      const tr = document.createElement('tr'); tr.className='rowbox';
-      tr.innerHTML = `
-        <td style="width:40px">${row.i+1}</td>
-        <td><span class="sect">${row.section}</span></td>
-        <td style="max-width:360px">${wrapTeX(row.text||'')}</td>
-        <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
-        <td>${correctDisp}</td>
-        <td style="text-align:right"><b>${row.ok?fmt(row.pts):0}</b>/<b>${fmt(row.pts)}</b></td>`;
-      body.appendChild(tr);
-    });
-
-    const root = $('#detailTable');
-    root.innerHTML=''; root.appendChild(wrapper);
-    typeset(root);
-  }
-
-  /* Finish */
-  async function onFinish(){
-    if(timerId){ clearInterval(timerId); timerId=null; }
-    if(startedAt){ const now=new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
-
-    const { total, max, perQuestion, sectionAgg } = computeTotals();
-    $('#questionsCard').classList.add('hidden');
-    $('#resultCard').classList.remove('hidden');
-    $('#scoreTotal').textContent = fmt(total);
-    $('#scoreMax').textContent = fmt(max);
-    $('#scoreNote').textContent = `To‘g‘ri: ${perQuestion.filter(x=>x.ok).length} ta / ${perQuestion.length} ta`;
-    $('#timeNote').textContent = `Sarflangan vaqt: ${pad2(Math.floor(spentSeconds/60))}:${pad2(spentSeconds%60)}`;
-    $('#stCorrect').textContent = String(perQuestion.filter(x=>x.ok).length);
-    $('#stWrong').textContent = String(perQuestion.length - perQuestion.filter(x=>x.ok).length);
-    $('#stPct').textContent = (max? Math.round((total/max)*100):0) + '%';
-    $('#stPoints').textContent = `${fmt(total)}/${fmt(max)}`;
-    renderSectionStats(sectionAgg);
-    renderDetail(perQuestion);
-
-    // SANITIZE detail
-    const safeDetail = perQuestion.map(row => ({
-      i: row.i,
-      section: row.section || 'Umumiy',
-      pts: Number(row.pts || 0),
-      ok: !!row.ok,
-      picked: Array.isArray(row.picked) ? row.picked : [],
-      correct: Array.isArray(row.correct) ? row.correct : [],
-      text: String(row.text || ''),
-      options: Array.isArray(row.options) ? row.options.map(v => String(v ?? '')) : []
-    }));
-
-    const user = auth.currentUser;
-    if(!currentTestCode){
-      showSaveStatus('Kod topilmadi — natija saqlanmadi', 'warn');
-    } else if(!user){
-      showSaveStatus('Kirmagansiz — natija saqlanmadi', 'warn');
-    } else {
-      try{
-        const res = await saveFirstResultOnly({
-          testCode: currentTestCode,
-          uid: user.uid,
-          total, max,
-          detail: safeDetail
+    /* Sections diapazonlarini savollarga qo‘llash */
+    function applySectionRanges(data){
+      if(!Array.isArray(data.questions)) return;
+      if(Array.isArray(data.sections)){
+        data.sections.forEach(sec=>{
+          const name = sec.name || 'Umumiy';
+          const s = Math.max(1, Number(sec.start||1));
+          const e = Math.min(data.questions.length, Number(sec.end||data.questions.length));
+          for(let i=s-1;i<e;i++){ data.questions[i].section = data.questions[i].section || name; }
         });
-        if(res?.patched){
-          showSaveStatus(`Eski yozuvga ball qo‘shildi (ball=${res.ball})`, 'good');
-        } else if(res?.skipped){
-          showSaveStatus('Oldin saqlangan (ball bor) — qayta yozilmadi', 'warn');
-        } else {
-          showSaveStatus(`Saqlandi (ball=${res.ball})`, 'good');
+      }
+      data.questions.forEach(q=>{ if(!q.section) q.section = 'Umumiy'; });
+    }
+
+    function normalizeTestData(data){
+      if(!data || !Array.isArray(data.questions)) return data;
+      data.title = data.title || 'Test';
+      data.description = data.description || 'Rasm + variantlar';
+      data.questions = data.questions.map(q=>({ ...q, points: Number(q.points || 1) }));
+      if (data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
+      applySectionRanges(data);
+      data.id = data.id || slug(data.title);
+      data.code = data.code || slug(data.title);
+      return data;
+    }
+
+    async function loadTestData(){
+      const stored = localStorage.getItem('testData');
+      if(stored){ try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{} }
+      try{
+        const r = await fetch('./test.json',{cache:'no-store'});
+        if(!r.ok) throw new Error('no test.json');
+        testData = normalizeTestData(await r.json());
+      }catch{
+        // fallback
+        testData = normalizeTestData({
+          title: 'Demo test', description: 'Fallback ma’lumotlar', durationMinutes: 1, code: 'demo-001',
+          questions: [
+            { section:'Algebra', text: "1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1 },
+            { section:'Sonlar nazariyasi', text: "2) \\(\\text{Tub son(lar)}\\)", options:["2","4","5","9"], correctIndices:[0,2], points:2 },
+            { section:'Geometriya', text: "3) Nisbatni toping.", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1 }
+          ]
+        });
+      }
+      // variantlarni random qilish (Fisher–Yates)
+      testData.questions.forEach(q=>{
+        const idxs = [...Array(q.options.length).keys()];
+        for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idxs[i],idxs[j]]=[idxs[j],idxs[i]]; }
+        q._perm = idxs;
+      });
+    }
+
+    /* Nav dots */
+    function buildNavDots(){
+      const n = testData.questions.length;
+      const root = $('#navDots'); root.innerHTML='';
+      for(let i=0;i<n;i++){
+        const b=document.createElement('button');
+        b.className='dot'; b.dataset.idx = String(i);
+        b.textContent = i+1;
+        b.addEventListener('click', ()=>{ currentIndex=i; renderQuestion(); });
+        root.appendChild(b);
+      });
+      refreshDotsState();
+      highlightDot(0);
+    }
+    function highlightDot(i){
+      [...document.querySelectorAll('.dot')].forEach((el,idx)=> el.classList.toggle('active', idx===i));
+    }
+    function refreshDotsState(){
+      [...document.querySelectorAll('.dot')].forEach((el)=>{
+        const i = Number(el.dataset.idx);
+        const hasAns = (answers[i] && answers[i].length>0);
+        el.classList.toggle('answered', !!hasAns);
+      });
+    }
+
+    // Rasmni topish: jpg → png → jpeg → webp → q.image
+    async function resolveImageSrc(idx1){
+      const q = testData.questions[idx1-1] || {};
+      const candidates = [
+        `./${idx1}.jpg`,
+        `./${idx1}.png`,
+        `./${idx1}.jpeg`,
+        `./${idx1}.webp`,
+        q.image || ''
+      ].filter(Boolean);
+
+      for (const url of candidates) {
+        const ok = await new Promise(r=>{
+          const img = new Image();
+          img.onload = ()=>r(true);
+          img.onerror = ()=>r(false);
+          img.src = url + (url.includes('?') ? '' : `?t=${Date.now()}`);
+        });
+        if (ok) return url;
+      }
+      return '';
+    }
+
+    function renderQuestion(){
+      const q = testData.questions[currentIndex];
+      $('#qIndex').textContent = String(currentIndex+1);
+      $('#qTotal').textContent = String(testData.questions.length);
+      $('#qText').innerHTML = wrapTeX(q.text || '');
+      $('#qSect').textContent = q.section || 'Umumiy';
+      $('#opts').innerHTML = '';
+
+      const multi = isMulti(q);
+      const nameAttr = `q${currentIndex}` + (multi?'[]':'');
+      const chosen = new Set(answers[currentIndex] || []);
+
+      const order = q._perm && q._perm.length===q.options.length ? q._perm : [...Array(q.options.length).keys()];
+      order.forEach((origIndex)=>{
+        const row = document.createElement('label'); row.className='opt';
+        const inp = document.createElement('input');
+        inp.type = multi ? 'checkbox' : 'radio';
+        inp.name = nameAttr;
+        inp.value = String(origIndex);
+        inp.checked = chosen.has(origIndex);
+        inp.addEventListener('change', ()=>{
+          if(multi){ if(inp.checked) chosen.add(origIndex); else chosen.delete(origIndex); answers[currentIndex] = normalize([...chosen]); }
+          else { answers[currentIndex] = inp.checked ? [origIndex] : []; }
+          refreshDotsState();
+        });
+        const span = document.createElement('span'); span.innerHTML = wrapTeX(q.options[origIndex]);
+        row.appendChild(inp); row.appendChild(span);
+        $('#opts').appendChild(row);
+      });
+
+      resolveImageSrc(currentIndex+1).then(src=>{ $('#qImage').src = src; });
+      highlightDot(currentIndex);
+      typeset($('#questionsCard'));
+    }
+
+    /* Timer */
+    function startTimerIfNeeded(){
+      const minutes = Number(testData.durationMinutes || 0);
+      const both = (txt,show)=>{ $('#metaTimer').textContent=txt; $('#qTimer').textContent=txt; $('#metaTimer').classList.toggle('hidden',!show); $('#qTimer').classList.toggle('hidden',!show); };
+      if(!minutes){ both('00:00', false); return; }
+      timeLeftSec = Math.round(minutes*60);
+      both(`${pad2(Math.floor(timeLeftSec/60))}:${pad2(timeLeftSec%60)}`, true);
+      timerId = setInterval(()=>{
+        timeLeftSec--; spentSeconds++;
+        const m=Math.max(0,Math.floor(timeLeftSec/60)), s=Math.max(0,timeLeftSec%60);
+        both(`${pad2(m)}:${pad2(s)}`, true);
+        if(timeLeftSec<=0){ clearInterval(timerId); onFinish(); }
+      }, 1000);
+    }
+
+    /* Scoring */
+    function computeTotals(){
+      let total=0, max=0;
+      const perQuestion=[];
+      const sectionAgg = new Map();
+      testData.questions.forEach((q,i)=>{
+        const sect = q.section || 'Umumiy';
+        const pts = Number(q.points||1); max+=pts;
+        const picked = normalize(answers[i] || []);
+        const correct = isMulti(q) ? normalize(q.correctIndices||[]) : [Number(q.correctIndex??-1)];
+        const ok = isMulti(q) ? arraysEqual(picked, correct) : (picked.length===1 && picked[0]===correct[0]);
+        if(ok) total+=pts;
+        if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
+        const a = sectionAgg.get(sect); a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
+        perQuestion.push({
+          i,
+          section: sect,
+          pts: Number(pts||0),
+          ok: !!ok,
+          picked: Array.isArray(picked)? picked : [],
+          correct: Array.isArray(correct)? correct : [],
+          text: String(q.text || ''),
+          options: Array.isArray(q.options) ? q.options.map(v=>String(v ?? '')) : []
+        });
+      });
+      return { total, max, perQuestion, sectionAgg };
+    }
+
+    /* points ga qo'shish – dublikatdan himoyalangan */
+    async function addPointsOnce({ uid, testCode, delta }) {
+      if (!uid || !testCode) return { skipped: true };
+      const add = Number(delta || 0);
+      if (!(add > 0)) return { skipped: true };
+
+      const markRef = doc(db, 'points_marks', uid, 'tests', testCode);
+      const totalRef = doc(db, 'points', uid);
+
+      return runTransaction(db, async (tx) => {
+        const markSnap = await tx.get(markRef);
+        if (markSnap.exists()) {
+          return { skipped: true }; // allaqachon qo'shilgan
         }
-      }catch(e){
-        console.error('save error:', e);
-        showSaveStatus('Saqlashda xatolik: ' + (e?.message || e), 'bad');
+        const totalSnap = await tx.get(totalRef);
+        const cur = totalSnap.exists() ? Number(totalSnap.data()?.points || 0) : 0;
+        const next = cur + add;
+
+        tx.set(totalRef, { points: next }, { merge: true });
+        tx.set(markRef, { added: add, testCode, at: serverTimestamp() });
+
+        return { skipped: false, added: add, total: next };
+      });
+    }
+
+    /* Firestore: faqat bir marta yozish + eski yozuvda ball yo'q/0 bo'lsa patch */
+    async function saveFirstResultOnly({testCode, uid, total, max, detail}){
+      const ref = doc(db, 'results', testCode, 'users', uid);
+      return runTransaction(db, async (tx)=>{
+        const snap = await tx.get(ref);
+        const computedBall = Number(total || 0);
+
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          const hasValidBall = (typeof data.ball === 'number' && data.ball > 0);
+
+          if (!hasValidBall) {
+            const fromFirstTotal = (typeof data.firstTotal === 'number') ? data.firstTotal : 0;
+            const patched = Number(isFinite(computedBall) && computedBall > 0 ? computedBall : fromFirstTotal);
+            tx.update(ref, { ball: patched });
+            return { skipped:true, patched:true, ball: patched };
+          }
+          return { skipped:true, patched:false, already:data };
+        }
+
+        tx.set(ref, {
+          uid,
+          testCode,
+          testId: testData.id || currentTestId,
+          title: testData.title || '',
+          ball: computedBall,
+          firstTotal: computedBall,
+          max: Number(max || 0),
+          percent: (max ? Math.round((computedBall / max) * 100) : 0),
+          detail: Array.isArray(detail) ? detail : [],
+          createdAt: serverTimestamp(),
+          spentSeconds: Number(spentSeconds || 0)
+        });
+        return { skipped:false, patched:false, ball: computedBall };
+      });
+    }
+
+    /* Tahlil rendererlar */
+    function renderSectionStats(sectionAgg){
+      const container = document.createElement('div'); container.className = 'stats-grid';
+      [...sectionAgg.entries()].forEach(([name, a])=>{
+        const pct = a.q ? Math.round((a.ok/a.q)*100) : 0;
+        const card = document.createElement('div'); card.className = 'stat';
+        card.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${name}</div>
+          <div style="color:var(--muted);font-size:12px">Savollar: ${a.q}</div>
+          <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> ball · <b>${pct}%</b> to‘g‘ri</div>`;
+        container.appendChild(card);
+      });
+      const root = $('#sectionStats'); root.innerHTML=''; root.appendChild(container);
+    }
+
+    function renderDetail(perQuestion){
+      const wrapper = document.createElement('div');
+      const table = document.createElement('table'); table.className='tbl';
+      table.innerHTML = `
+        <thead class="rowbox">
+          <tr>
+            <th style="border-top-left-radius:12px">#</th>
+            <th>Bo‘lim</th>
+            <th>Savol</th>
+            <th>Tanlangan</th>
+            <th>To‘g‘ri javob(lar)</th>
+            <th style="text-align:right;border-top-right-radius:12px">Ball</th>
+          </tr>
+        </thead>
+        <tbody id="detailBody"></tbody>`;
+      wrapper.appendChild(table);
+      const body = table.querySelector('#detailBody');
+
+      perQuestion.forEach(row=>{
+        const pickedDisp = row.picked.length? row.picked.map(x=>x+1).join(', ') : '—';
+        const correctDisp = row.correct.map(x=>x+1).join(', ');
+        const tr = document.createElement('tr'); tr.className='rowbox';
+        tr.innerHTML = `
+          <td style="width:40px">${row.i+1}</td>
+          <td><span class="sect">${row.section}</span></td>
+          <td style="max-width:360px">${wrapTeX(row.text||'')}</td>
+          <td>${pickedDisp} ${row.ok?'<span class="ok">✓</span>':'<span class="bad">✗</span>'}</td>
+          <td>${correctDisp}</td>
+          <td style="text-align:right"><b>${row.ok?fmt(row.pts):0}</b>/<b>${fmt(row.pts)}</b></td>`;
+        body.appendChild(tr);
+      });
+
+      const root = $('#detailTable');
+      root.innerHTML=''; root.appendChild(wrapper);
+      typeset(root);
+    }
+
+    /* Finish */
+    async function onFinish(){
+      if(timerId){ clearInterval(timerId); timerId=null; }
+      if(startedAt){ const now=new Date(); spentSeconds = Math.max(spentSeconds, Math.floor((now - startedAt)/1000)); }
+
+      const { total, max, perQuestion, sectionAgg } = computeTotals();
+      $('#questionsCard').classList.add('hidden');
+      $('#resultCard').classList.remove('hidden');
+      $('#scoreTotal').textContent = fmt(total);
+      $('#scoreMax').textContent = fmt(max);
+      $('#scoreNote').textContent = `To‘g‘ri: ${perQuestion.filter(x=>x.ok).length} ta / ${perQuestion.length} ta`;
+      $('#timeNote').textContent = `Sarflangan vaqt: ${pad2(Math.floor(spentSeconds/60))}:${pad2(spentSeconds%60)}`;
+      $('#stCorrect').textContent = String(perQuestion.filter(x=>x.ok).length);
+      $('#stWrong').textContent = String(perQuestion.length - perQuestion.filter(x=>x.ok).length);
+      $('#stPct').textContent = (max? Math.round((total/max)*100):0) + '%';
+      $('#stPoints').textContent = `${fmt(total)}/${fmt(max)}`;
+      renderSectionStats(sectionAgg);
+      renderDetail(perQuestion);
+
+      // SANITIZE detail
+      const safeDetail = perQuestion.map(row => ({
+        i: row.i, section: row.section || 'Umumiy',
+        pts: Number(row.pts || 0), ok: !!row.ok,
+        picked: Array.isArray(row.picked) ? row.picked : [],
+        correct: Array.isArray(row.correct) ? row.correct : [],
+        text: String(row.text || ''),
+        options: Array.isArray(row.options) ? row.options.map(v => String(v ?? '')) : []
+      }));
+
+      const user = auth.currentUser;
+      if(!currentTestCode){
+        showSaveStatus('Kod topilmadi — natija saqlanmadi', 'warn');
+      } else if(!user){
+        showSaveStatus('Kirmagansiz — natija saqlanmadi', 'warn');
+      } else {
+        try{
+          const res = await saveFirstResultOnly({
+            testCode: currentTestCode, uid: user.uid,
+            total, max, detail: safeDetail
+          });
+
+          // points ga qo'shish: yangi yozuv YOKI ball patch bo'lsa
+          if (!res?.skipped || res?.patched) {
+            try {
+              const p = await addPointsOnce({
+                uid: user.uid,
+                testCode: currentTestCode,
+                delta: res.ball
+              });
+              if (!p.skipped) {
+                showSaveStatus(`Saqlandi (ball=${res.ball}) · Points +${p.added} → ${p.total}`, 'good');
+              } else {
+                showSaveStatus(`Saqlandi (ball=${res.ball}) · Points o'zgarmadi`, 'good');
+              }
+            } catch (e) {
+              console.error('points add error:', e);
+              showSaveStatus(`Saqlandi (ball=${res.ball}), lekin points qo'shilmadi: ${e?.message||e}`, 'warn');
+            }
+          } else {
+            showSaveStatus('Oldin saqlangan (ball bor) — qayta yozilmadi', 'warn');
+          }
+
+        }catch(e){
+          console.error('save error:', e);
+          showSaveStatus('Saqlashda xatolik: ' + (e?.message || e), 'bad');
+        }
       }
     }
-  }
 
-  /* Boot */
-  async function boot(){
-    await loadTestData();
-    if(!testData || !testData.questions?.length){
-      $('#introCard').classList.add('hidden'); $('#questionsCard').classList.add('hidden'); $('#emptyCard').classList.remove('hidden'); return;
+    /* Boot */
+    async function boot(){
+      await loadTestData();
+      if(!testData || !testData.questions?.length){
+        $('#introCard').classList.add('hidden'); $('#questionsCard').classList.add('hidden'); $('#emptyCard').classList.remove('hidden'); return;
+      }
+
+      // Test ID & CODE
+      currentTestId = rawIdFromUrl || testData.id || currentTestId;
+      currentTestCode = currentTestCode || testData.code || currentTestId;
+
+      // UI: title + code chip + <title>
+      $('#testTitle').textContent = testData.title || 'Test';
+      const codeChip = $('#codeChip');
+      if(currentTestCode){
+        codeChip.textContent = `Kod: ${currentTestCode}`;
+        codeChip.classList.remove('hidden');
+      } else {
+        codeChip.classList.add('hidden');
+      }
+      document.title = `${testData.title || 'Test'} — ${currentTestCode ? ('#'+currentTestCode) : ''} | LeaderMath`;
+
+      $('#testDesc').textContent = testData.description || '';
+      $('#metaCount').textContent = `Savollar: ${testData.questions.length}`;
+      $('#metaPoints').textContent = `Umumiy ball: ${fmt(sum(testData.questions.map(q=>q.points)))}`;
+
+      const minutes = Number(testData.durationMinutes || 0);
+      if (minutes > 0) { $('#metaTimer').textContent = `${pad2(minutes)}:00`; $('#metaTimer').classList.remove('hidden'); }
+      else { $('#metaTimer').classList.add('hidden'); }
+
+      answers = Array.from({length:testData.questions.length}, ()=>[]);
+      buildNavDots();
+
+      $('#startBtn').onclick = ()=>{
+        startedAt = new Date(); spentSeconds = 0;
+        $('#introCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden');
+        renderQuestion(); startTimerIfNeeded();
+      };
+      $('#prevBtn').onclick = ()=>{ if(currentIndex>0){ currentIndex--; renderQuestion(); } };
+      $('#nextBtn').onclick = ()=>{ if(currentIndex<testData.questions.length-1){ currentIndex++; renderQuestion(); } };
+      $('#finishBtn').onclick = onFinish;
+      $('#againBtn').onclick = ()=>{ $('#resultCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden'); renderQuestion(); };
     }
 
-    // Test ID & CODE
-    const rawId = rawIdFromUrl || testData.id || currentTestId;
-    currentTestId = rawId;
-    currentTestCode = currentTestCode || testData.code || rawId;
-
-    // UI: title + code chip + <title>
-    $('#testTitle').textContent = testData.title || 'Test';
-    const codeChip = $('#codeChip');
-    if(currentTestCode){
-      codeChip.textContent = `Kod: ${currentTestCode}`;
-      codeChip.classList.remove('hidden');
-    } else {
-      codeChip.classList.add('hidden');
-    }
-    document.title = `${testData.title || 'Test'} — ${currentTestCode ? ('#'+currentTestCode) : ''} | LeaderMath`;
-
-    $('#testDesc').textContent = testData.description || '';
-    $('#metaCount').textContent = `Savollar: ${testData.questions.length}`;
-    $('#metaPoints').textContent = `Umumiy ball: ${fmt(sum(testData.questions.map(q=>q.points)))}`;
-
-    const minutes = Number(testData.durationMinutes || 0);
-    if (minutes > 0) { $('#metaTimer').textContent = `${pad2(minutes)}:00`; $('#metaTimer').classList.remove('hidden'); }
-    else { $('#metaTimer').classList.add('hidden'); }
-
-    answers = Array.from({length:testData.questions.length}, ()=>[]);
-    buildNavDots();
-
-    $('#startBtn').onclick = ()=>{
-      startedAt = new Date(); spentSeconds = 0;
-      $('#introCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden');
-      renderQuestion(); startTimerIfNeeded();
-    };
-    $('#prevBtn').onclick = ()=>{ if(currentIndex>0){ currentIndex--; renderQuestion(); } };
-    $('#nextBtn').onclick = ()=>{ if(currentIndex<testData.questions.length-1){ currentIndex++; renderQuestion(); } };
-    $('#finishBtn').onclick = onFinish;
-    $('#againBtn').onclick = ()=>{ $('#resultCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden'); renderQuestion(); };
-  }
-
-  boot();
-</script>
+    boot();
+  </script>
 </body>
 </html>
