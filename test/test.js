@@ -130,26 +130,44 @@ function closeEnoughNumeric(a,b,tol){ return Math.abs(+a - +b) <= (+tol||0); }
 /* ------- Mathlive + minimal keyboard ------- */
 let mathliveReady=false;
 async function ensureMathlive(){
-  if(mathliveReady){ return; }
+  if(mathliveReady) return;
   await import('https://unpkg.com/mathlive?module');
 
-  // Minimal layoutlar
   window.mathVirtualKeyboard.layouts = [
     {
-      label: 'ƒ',
-      id: 'ops',
-      rows: [
+      label:'ƒ',
+      id:'ops',
+      rows:[
+        // π e a b c x y
         [ {latex:'\\pi'},{latex:'e'},{insert:'a'},{insert:'b'},{insert:'c'},{insert:'x'},{insert:'y'} ],
-        [ {latex:'\\sqrt{x}',insert:'\\sqrt{▦}'},{latex:'x^2',insert:'^{2}'},
-          {latex:'\\sin',insert:'\\sin(▦)'},{latex:'\\sin^{-1}',insert:'\\sin^{-1}(▦)'},
-          {latex:'\\cos',insert:'\\cos(▦)'},{latex:'\\cos^{-1}',insert:'\\cos^{-1}(▦)'} ],
-        [ {latex:'\\tan',insert:'\\tan(▦)'},{latex:'\\tan^{-1}',insert:'\\tan^{-1}(▦)'},
-          {latex:'\\log',insert:'\\log(▦)'},{latex:'\\ln',insert:'\\ln(▦)'},
-          {insert:'('},{insert:')'},{insert:','} ],
-        [ {label:'◀',command:'moveToPreviousChar'},
-          {label:'▶',command:'moveToNextChar'},
-          {label:'⌫',command:'deleteBackward'},
-          {label:'↵',command:'insertNewline'} ]
+
+        // √  ⁿ√  x²  sin sin⁻¹ cos cos⁻¹
+        [
+          { latex:'\\sqrt{x}', insert:'\\sqrt{▦}' },
+          { latex:'ⁿ√x', insert:'\\sqrt[▦]{x}' },
+          { latex:'x²', insert:'^{2}' },
+          { latex:'\\sin', insert:'\\sin(▦)' },
+          { latex:'\\sin^{-1}', insert:'\\sin^{-1}(▦)' },
+          { latex:'\\cos', insert:'\\cos(▦)' },
+          { latex:'\\cos^{-1}', insert:'\\cos^{-1}(▦)' }
+        ],
+
+        // tan tan⁻¹ log₍ₐ₎x ln ( ) ,
+        [
+          { latex:'\\tan', insert:'\\tan(▦)' },
+          { latex:'\\tan^{-1}', insert:'\\tan^{-1}(▦)' },
+          { latex:'logₐx', insert:'\\log_{▦}(x)' },
+          { latex:'ln', insert:'\\ln(▦)' },
+          { insert:'(' }, { insert:')' }, { insert:',' }
+        ],
+
+        // navigatsiya tugmalari
+        [
+          { label:'◀', command:'moveToPreviousChar' },
+          { label:'▶', command:'moveToNextChar' },
+          { label:'⌫', command:'deleteBackward' },
+          { label:'↵', command:'insertNewline' }
+        ]
       ]
     },
     {
@@ -163,6 +181,7 @@ async function ensureMathlive(){
       ]
     }
   ];
+
   mathliveReady=true;
 }
 
