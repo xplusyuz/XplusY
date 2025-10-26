@@ -31,8 +31,8 @@ let currentTestId = rawIdFromUrl || (location.pathname.split('/').pop().replace(
 let currentTestCode = params.get('code') || null;
 
 /* ========= Status chips ========= */
-function showTop(msg, kind='good'){ const c=$("#saveStatusTop"); c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
-function showSave(msg, kind='good'){ const c=$("#saveStatus"); c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
+function showTop(msg, kind='good'){ const c=$("#saveStatusTop"); if(!c) return; c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
+function showSave(msg, kind='good'){ const c=$("#saveStatus"); if(!c) return; c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
 
 /* ========= Availability / Duration helpers ========= */
 function parseISO(s){ try{ return s ? new Date(s) : null; }catch{ return null; } }
@@ -168,7 +168,7 @@ function renderQuestion(){
     ta.addEventListener('input', ()=>{ answers[currentIndex] = [ta.value]; refreshDots(); });
 
     const tog=document.createElement('button'); tog.type='button'; tog.className='btn ghost keypad-toggle'; tog.textContent='Math klaviatura';
-    tog.addEventListener('click', ()=> setDrawer(!$('#keypadDrawer').classList.contains('open'), ta));
+    tog.addEventListener('click', ()=> setDrawer(!document.getElementById('keypadDrawer')?.classList.contains('open'), ta));
 
     wrap.appendChild(ta); wrap.appendChild(tog); $("#opts").appendChild(wrap);
   } else {
@@ -245,12 +245,12 @@ function computeTotals(){
       const A = q.answer || {};
       let match=false;
 
-      // 1) exact-strings (whitespace-insensitive, case-insensitive)
+      // exact-strings (whitespace-insensitive, case-insensitive)
       const accepted = Array.isArray(A.accept) ? A.accept : [];
       const normRaw = normStr(raw);
       for(const patt of accepted){ if(normStr(patt)===normRaw){ match=true; break; } }
 
-      // 2) numeric check
+      // numeric check
       if(!match && A.numeric && typeof A.numeric.value!=='undefined'){
         const v = parseFloat(raw);
         if(isFinite(v)){ match = closeEnoughNumeric(v, A.numeric.value, A.numeric.tol ?? 0); }
@@ -386,8 +386,9 @@ const KEYS = [
   { show:'\\left[\\right]', ins:'\\left[▮\\right]' },
   { show:'\\left\\{\\right\\}', ins:'\\left\\{▮\\right\\}' }
 ];
+
 function ensureDrawer(){
-  if($('#keypadDrawer')) return;
+  if(document.getElementById('keypadDrawer')) return;
   const div=document.createElement('div');
   div.id='keypadDrawer'; div.className='drawer'; div.setAttribute('aria-hidden','true');
   div.innerHTML=`
@@ -398,7 +399,7 @@ function ensureDrawer(){
     <div id="keypadGrid" class="kgrid"></div>`;
   document.body.appendChild(div);
 
-  const grid=$('#keypadGrid'); grid.innerHTML='';
+  const grid=document.getElementById('keypadGrid'); grid.innerHTML='';
   KEYS.forEach(k=>{
     const btn=document.createElement('button'); btn.type='button'; btn.className='kbtn'; btn.innerHTML='$'+k.show+'$';
     btn.addEventListener('mousedown', e=>e.preventDefault());
@@ -410,19 +411,45 @@ function ensureDrawer(){
   });
   typeset(grid);
 }
+
 function setDrawer(open, focusTA){
   ensureDrawer();
-  const d=$('#keypadDrawer'); d.classList.toggle('open',open);
-  d.setAttribute('aria-hidden', open?'false':'true');
-  if(open && focusTA){ LAST_OPEN_TA = focusTA; }
+  const d = document.getElementById('keypadDrawer');
+  d.classList.toggle('open', !!open);
+  d.setAttribute('aria-hidden', open ? 'false' : 'true');
+  if (open && focusTA) { LAST_OPEN_TA = focusTA; }
 }
+
 let ACTIVE_TA=null, LAST_OPEN_TA=null;
-document.addEventListener('focusin', e=>{ if(e.target && e.target.tagName==='TEXTAREA'){ ACTIVE_TA=e.target; LAST_OPEN_TA=e.target; }});
-document.addEventListener('click', e=>{
-  if(!$('#keypadDrawer')) return;
-  const inside = $('#keypadDrawer').contains(e.target) || (e.target.classList && e.target.classList.contains('keypad-toggle'));
-  if(!inside && !$('#pinDrawer')?.checked){ setDrawer(false); }
+document.addEventListener('focusin', (e)=>{ if(e.target && e.target.tagName==='TEXTAREA'){ ACTIVE_TA=e.target; LAST_OPEN_TA=e.target; }});
+
+// Yopish uchun barqaror handler (pointerdown)
+function closeDrawerIfOutside(e){
+  const drawer = document.getElementById('keypadDrawer');
+  if (!drawer || !drawer.classList.contains('open')) return;
+  const t = e.target;
+  const isElem = t && t.nodeType === 1;
+  const insideDrawer = isElem && drawer.contains(t);
+  const onToggleBtn = isElem && t.closest && t.closest('.keypad-toggle');
+  const pin = document.getElementById('pinDrawer');
+  const pinned = !!(pin && pin.checked);
+  if (!insideDrawer && !onToggleBtn && !pinned) setDrawer(false);
+}
+document.addEventListener('pointerdown', closeDrawerIfOutside);
+
+// Focusdan chiqishda qo‘shimcha yopish
+document.addEventListener('focusout', ()=>{
+  const drawer = document.getElementById('keypadDrawer');
+  const pin = document.getElementById('pinDrawer');
+  if (drawer && drawer.classList.contains('open') && !(pin && pin.checked)) {
+    setTimeout(()=> {
+      const ae = document.activeElement;
+      const stillInside = ae && ae.nodeType === 1 && drawer.contains(ae);
+      if (!stillInside) setDrawer(false);
+    }, 0);
+  }
 });
+
 function insertAtCursor(textarea, template){
   textarea.focus();
   const start = textarea.selectionStart ?? textarea.value.length;
@@ -466,7 +493,6 @@ async function boot(){
     $('#resultCard').classList.add('hidden');
     showTop(av.openMsg || 'Hozir test yopiq', 'warn');
   } else {
-    // taymerni introda ko‘rsatib turamiz
     const m = Math.floor((av.effectiveDurationSec||0)/60);
     if(m>0){ $('#metaTimer').textContent = `${pad2(m)}:00`; $('#metaTimer').classList.remove('hidden'); }
     else { $('#metaTimer').classList.add('hidden'); }
@@ -491,7 +517,6 @@ async function boot(){
   $('#finishBtn').onclick= onFinish;
   $('#againBtn').onclick = ()=>{ $('#resultCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden'); renderQuestion(); };
 
-  // Show intro
   $('#introCard').classList.remove('hidden');
 }
 
