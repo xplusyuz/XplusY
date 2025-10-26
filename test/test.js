@@ -1,10 +1,10 @@
 /* ============================
-   LeaderMath — Test (full)
+   LeaderMath — Test (full, minimal keyboard)
    - 3 tur: single / multi / open (Mathlive)
    - Availability (always | clip | full)
    - Global timer + hard end window
    - Points: faqat 1-urinishda users/{uid}.points ga qo‘shish
-     (users/{uid}/solved/{testCode} belgisi bilan). Results yozmaydi.
+     (users/{uid}/solved/{testCode} hujjati bilan).
    ============================ */
 
 import { auth, db, onAuthStateChanged } from "/lib/firebase.client.js";
@@ -76,7 +76,7 @@ function normalizeTestData(d){
   d.title=d.title||'Test'; d.description=d.description||'Rasm + variantlar';
   d.id=d.id||slug(d.title); d.code=d.code||slug(d.title);
   d.questions=d.questions.map(q=>{
-    const type=q.type || (Array.isArray(q.correctIndices)?'multi':'single');
+    const type=q.type || (Array.isArray(q.correctIndices)?'multi': (q.answer?'open':'single'));
     return { ...q, type, points:Number(q.points||1) };
   });
   applySectionRanges(d); return d;
@@ -127,29 +127,63 @@ async function resolveImageSrc(idx1){
 function normStr(s){ return (s||'').toString().replace(/\s+/g,'').replace(/\\ /g,'').toLowerCase(); }
 function closeEnoughNumeric(a,b,tol){ return Math.abs(+a - +b) <= (+tol||0); }
 
-/* ------- Mathlive loader ------- */
+/* ------- Mathlive + minimal keyboard ------- */
 let mathliveReady=false;
-async function ensureMathlive(){ if(mathliveReady) return; await import("https://unpkg.com/mathlive?module"); mathliveReady=true; }
+async function ensureMathlive(){
+  if(mathliveReady){ return; }
+  await import('https://unpkg.com/mathlive?module');
 
-/* ------- Render: open (soddalashtirilgan, katta oyna) ------- */
+  // Minimal layoutlar
+  window.mathVirtualKeyboard.layouts = [
+    {
+      label: 'ƒ',
+      id: 'ops',
+      rows: [
+        [ {latex:'\\pi'},{latex:'e'},{insert:'a'},{insert:'b'},{insert:'c'},{insert:'x'},{insert:'y'} ],
+        [ {latex:'\\sqrt{x}',insert:'\\sqrt{▦}'},{latex:'x^2',insert:'^{2}'},
+          {latex:'\\sin',insert:'\\sin(▦)'},{latex:'\\sin^{-1}',insert:'\\sin^{-1}(▦)'},
+          {latex:'\\cos',insert:'\\cos(▦)'},{latex:'\\cos^{-1}',insert:'\\cos^{-1}(▦)'} ],
+        [ {latex:'\\tan',insert:'\\tan(▦)'},{latex:'\\tan^{-1}',insert:'\\tan^{-1}(▦)'},
+          {latex:'\\log',insert:'\\log(▦)'},{latex:'\\ln',insert:'\\ln(▦)'},
+          {insert:'('},{insert:')'},{insert:','} ],
+        [ {label:'◀',command:'moveToPreviousChar'},
+          {label:'▶',command:'moveToNextChar'},
+          {label:'⌫',command:'deleteBackward'},
+          {label:'↵',command:'insertNewline'} ]
+      ]
+    },
+    {
+      label:'123',
+      id:'num',
+      rows:[
+        [ {insert:'7'},{insert:'8'},{insert:'9'},{latex:'\\times'},{latex:'\\div'} ],
+        [ {insert:'4'},{insert:'5'},{insert:'6'},{insert:'+'},{insert:'-'} ],
+        [ {insert:'1'},{insert:'2'},{insert:'3'},{insert:'.'},{label:'⌫',command:'deleteBackward'} ],
+        [ {insert:'('},{insert:')'},{insert:'0'},{label:'◀',command:'moveToPreviousChar'},{label:'▶',command:'moveToNextChar'},{label:'↵',command:'insertNewline'} ]
+      ]
+    }
+  ];
+  mathliveReady=true;
+}
+
+/* ------- Render: open (katta oyna, minimal keyboard) ------- */
 function renderOpenWithMathlive(q){
   const wrap=document.createElement('div'); wrap.className='math-open-wrap';
 
   const hint=document.createElement('div'); hint.className='mini';
-  hint.textContent="Javobni bu yerga yozing (fokusda klaviatura ochiladi)";
+  hint.textContent="Javobni yozing (fokusda klaviatura ochiladi)";
   wrap.appendChild(hint);
 
   /** @type {any} */
   const mf=document.createElement('math-field');
   mf.setAttribute('virtual-keyboard-mode','onfocus');
+  mf.setAttribute('virtual-keyboard-layout','ops');      // start tab
   mf.setAttribute('virtual-keyboard-theme','apple');
-  mf.setAttribute('smart-fence','true');
-  mf.setAttribute('inline-shortcuts','true');
   mf.options={
     virtualKeyboardMode:'onfocus',
-    virtualKeyboardLayout:'advanced',
-    smartFence:true,
-    inlineShortcuts:{ sqrt:'\\sqrt{▦}', pi:'\\pi', sin:'\\sin', cos:'\\cos', tan:'\\tan', log:'\\log', ln:'\\ln' }
+    virtualKeyboardLayout:'ops',
+    virtualKeyboardSwitchLayout:'num',
+    smartFence:true
   };
 
   const prev=(answers[currentIndex]?.[0]??'').toString();
@@ -379,7 +413,7 @@ async function boot(){
   $('#startBtn').onclick = async ()=>{
     const conf=computeEffectiveTiming({ availability:testData.availability, durationMinutes:testData.durationMinutes });
     if(!conf.canStart){ showTop(conf.openMsg||'Hozir test yopiq','warn'); return; }
-    await ensureMathlive();
+    await ensureMathlive();                     // klaviatura tayyor
     startedAt=new Date(); spentSeconds=0;
     $('#introCard').classList.add('hidden'); $('#questionsCard').classList.remove('hidden');
     renderQuestion(); startTimer(conf.effectiveDurationSec, conf.hardEnd);
