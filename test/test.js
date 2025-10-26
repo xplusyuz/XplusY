@@ -1,11 +1,20 @@
-/* ========= Imports ========= */
+/* ============================
+   LeaderMath — Test (full)
+   - 3 tur: single / multi / open (Mathlive)
+   - Availability (always | clip | full)
+   - Timer
+   - First-solve only: users/{uid}.points += score
+     (users/{uid}/solved/{testCode} mark bilan)
+   ============================ */
+
+/* ===== Imports ===== */
 import { auth, db, onAuthStateChanged } from "/lib/firebase.client.js";
 import { requireAuth } from "/lib/auth-guard.js";
 import {
   doc, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-/* ========= Utils ========= */
+/* ===== Utils ===== */
 const $ = s => document.querySelector(s);
 const pad2 = n => String(Math.max(0,n)).padStart(2,'0');
 const sum = a => (Array.isArray(a)?a:[]).reduce((x,y)=>x + (+y||0), 0);
@@ -26,7 +35,7 @@ const wrapTeX = s => looksLikeTeX(s) ? `\\(${s}\\)` : s;
 const mjReady = ()=> new Promise(res=>{ const w=()=> (window.MathJax&&window.MathJax.typesetPromise)?res():setTimeout(w,30); w(); });
 async function typeset(el){ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} }
 
-/* ========= State ========= */
+/* ===== State ===== */
 let testData=null, answers=[], currentIndex=0, startedAt=null, spentSeconds=0;
 let timerId=null, timeLeftSec=0, effectiveEnd=null;
 const params = new URLSearchParams(location.search);
@@ -34,11 +43,11 @@ const rawIdFromUrl = params.get('id');
 let currentTestId = rawIdFromUrl || (location.pathname.split('/').pop().replace(/\..*$/,'') || 'test');
 let currentTestCode = params.get('code') || null;
 
-/* ========= Status chips ========= */
+/* Status chips */
 function showTop(msg, kind='good'){ const c=$("#saveStatusTop"); if(!c) return; c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
 function showSave(msg, kind='good'){ const c=$("#saveStatus"); if(!c) return; c.textContent=msg; c.classList.remove('hidden','good','bad','warn'); c.classList.add(kind); }
 
-/* ========= Availability / Duration helpers ========= */
+/* ===== Availability / Duration ===== */
 function parseISO(s){ try{ return s ? new Date(s) : null; }catch{ return null; } }
 function minutesToSec(m){ const n=Number(m||0); return Math.max(0, Math.round(n*60)); }
 
@@ -59,11 +68,10 @@ function computeEffectiveTiming({availability, durationMinutes}){
   }
 
   if(now < start){
-    return { canStart:false, openMsg:`Test ${start.toLocaleTimeString().slice(0,5)} da ochiladi`, effectiveDurationSec:0, hardEnd:end };
+    return { canStart:false, openMsg:`Test ${start.toLocaleString()}` + ' da ochiladi', effectiveDurationSec:0, hardEnd:end };
   }
-
   if(now >= end){
-    return { canStart:false, openMsg:`Test yopilgan (${end.toLocaleTimeString().slice(0,5)}).`, effectiveDurationSec:0, hardEnd:end };
+    return { canStart:false, openMsg:`Test yopilgan (${end.toLocaleString()}).`, effectiveDurationSec:0, hardEnd:end };
   }
 
   if(latePolicy==='full'){
@@ -74,7 +82,7 @@ function computeEffectiveTiming({availability, durationMinutes}){
   }
 }
 
-/* ========= Test loader ========= */
+/* ===== Test loader ===== */
 function applySectionRanges(data){
   if(!Array.isArray(data.questions)) return;
   if(Array.isArray(data.sections)){
@@ -113,7 +121,7 @@ async function loadTestData(){
       questions:[
         { type:'single', text:'$2+2$?', options:['3','4','5'], correctIndex:1, points:1, section:'Algebra' },
         { type:'multi',  text:'Tub(lar)?', options:['2','4','5','9'], correctIndices:[0,2], points:2, section:'Algebra' },
-        { type:'open',   text:'$\\sqrt{a^2+b^2}$ ni yozing (LaTeX)', answer:{accept:['\\sqrt{a^2+b^2}']}, points:2, section:'Algebra' }
+        { type:'open',   text:'$\\sqrt{a^2+b^2}$ ni yozing (LaTeX yoki tugmalardan)', answer:{accept:['\\sqrt{a^2+b^2}']}, points:2, section:'Algebra' }
       ]
     });
   }
@@ -122,7 +130,7 @@ async function loadTestData(){
   });
 }
 
-/* ========= UI: dots, render ========= */
+/* ===== UI: dots, render ===== */
 function buildNavDots(){
   const n=testData.questions.length, root=$("#navDots"); root.innerHTML='';
   for(let i=0;i<n;i++){
@@ -145,22 +153,83 @@ async function resolveImageSrc(idx1){
   return '';
 }
 
-/* Open-answer helpers + live preview */
+/* ===== Open helpers ===== */
 function normStr(s){ return (s||'').toString().replace(/\s+/g,'').replace(/\\ /g,'').toLowerCase(); }
 function closeEnoughNumeric(a,b,tol){ return Math.abs(+a - +b) <= (+tol || 0); }
-function updateOpenPreview(textarea, previewBox){
-  const raw = (textarea.value || "").trim();
-  if (!raw) {
-    previewBox.innerHTML = `<em class="muted">Yozayotgan javobingiz shu yerda ko‘rinadi (LaTeX yoki son)…</em>`;
-    return;
-  }
-  const wrapped = looksLikeTeX(raw) ? `\\(${raw}\\)` : raw;
-  previewBox.textContent = "";
-  previewBox.innerHTML = wrapped;
-  typeset(previewBox);
+
+/* ===== Mathlive loader ===== */
+let mathliveReady = false;
+async function ensureMathlive(){
+  if(mathliveReady) return;
+  await import("https://unpkg.com/mathlive?module");
+  mathliveReady = true;
 }
 
-function renderQuestion(){
+/* ===== Render question ===== */
+function renderOpenWithMathlive(q) {
+  const wrap = document.createElement('div');
+
+  const lab = document.createElement('div');
+  lab.className = 'mini';
+  lab.textContent = "Javobni kiriting (pastdagi tugmalardan foydalaning):";
+  wrap.appendChild(lab);
+
+  /** @type {any} */
+  const mf = document.createElement('math-field');
+  // yaxshi UX
+  mf.setAttribute('virtual-keyboard-mode', 'onfocus');
+  mf.setAttribute('virtual-keyboard-theme', 'apple');
+  mf.setAttribute('smart-fence', 'true');
+  mf.setAttribute('inline-shortcuts', 'true');
+  mf.options = {
+    virtualKeyboardMode: 'onfocus',
+    virtualKeyboardLayout: 'advanced',
+    smartFence: true,
+    inlineShortcuts: {
+      'sqrt': '\\sqrt{▦}', 'pi':'\\pi', 'sin':'\\sin', 'cos':'\\cos', 'tan':'\\tan',
+      'log': '\\log', 'ln':'\\ln'
+    }
+  };
+
+  // Oldingi javobni tiklash
+  const prev = (answers[currentIndex]?.[0] ?? '').toString();
+  if (prev) mf.setValue(prev, { format: 'latex' });
+
+  mf.addEventListener('input', ()=>{
+    answers[currentIndex] = [ mf.getValue('latex') ];
+    refreshDots();
+  });
+
+  wrap.appendChild(mf);
+
+  // Qo'shimcha kichik toolbar
+  const bar = document.createElement('div');
+  bar.className = 'mf-toolbar';
+  bar.innerHTML = `
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:6px">
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="\\frac{▦}{ }">a/b</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="\\sqrt{▦}">√</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="\\sqrt[▦]{ }">ⁿ√</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="\\log_{▦}{ }">logₐ( )</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="\\ln">ln</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="^{}">x^n</button>
+      <button type="button" class="btn ghost" data-cmd="insert" data-latex="_{}">x_n</button>
+      <button type="button" class="btn ghost" data-cmd="vk">Klaviatura</button>
+      <button type="button" class="btn" data-cmd="clear">Tozalash</button>
+    </div>`;
+  bar.addEventListener('click',(e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    const cmd = btn.dataset.cmd;
+    if(cmd==='vk'){ mf.executeCommand('toggleVirtualKeyboard'); mf.focus(); }
+    else if(cmd==='clear'){ mf.setValue('',{format:'latex'}); mf.focus(); mf.dispatchEvent(new Event('input')); }
+    else if(cmd==='insert'){ const latex=btn.dataset.latex||''; mf.insert(latex); mf.focus(); mf.dispatchEvent(new Event('input')); }
+  });
+  wrap.appendChild(bar);
+
+  $("#opts").appendChild(wrap);
+}
+
+async function renderQuestion(){
   const q=testData.questions[currentIndex];
   $("#qIndex").textContent=String(currentIndex+1);
   $("#qTotal").textContent=String(testData.questions.length);
@@ -169,35 +238,8 @@ function renderQuestion(){
   $("#opts").innerHTML='';
 
   if(q.type==='open'){
-    // open answer UI + PREVIEW
-    const wrap=document.createElement('div'); wrap.className='open-wrap';
-
-    const lab=document.createElement('div'); lab.className='mini'; lab.textContent="Jonli ko‘rinish:";
-    const preview=document.createElement('div'); preview.className='open-preview';
-    preview.style.cssText="border:1px dashed #dfeae3;border-radius:10px;padding:10px;background:#fbfdfc;margin:6px 0 10px;min-height:42px";
-
-    const ta=document.createElement('textarea'); ta.className='open-input'; ta.placeholder="Javobni yozing (LaTeX yoki son)…";
-    ta.style.cssText="width:100%;padding:10px 12px;border:1px solid #dfeae3;border-radius:10px;background:#fff";
-    const prev = answers[currentIndex]?.[0] ?? '';
-    if (typeof prev === 'string') ta.value = prev;
-
-    const tog=document.createElement('button'); tog.type='button'; tog.className='btn ghost keypad-toggle'; tog.textContent='Math klaviatura';
-    tog.style.marginTop="8px";
-    tog.addEventListener('click', ()=> setDrawer(!document.getElementById('keypadDrawer')?.classList.contains('open'), ta));
-
-    ta.addEventListener('input', ()=>{
-      answers[currentIndex] = [ta.value];
-      refreshDots();
-      updateOpenPreview(ta, preview);
-    });
-
-    updateOpenPreview(ta, preview);
-
-    wrap.appendChild(lab);
-    wrap.appendChild(preview);
-    wrap.appendChild(ta);
-    wrap.appendChild(tog);
-    $("#opts").appendChild(wrap);
+    await ensureMathlive();
+    renderOpenWithMathlive(q);
   } else {
     const multi = (q.type==='multi');
     const chosen = new Set(answers[currentIndex] || []);
@@ -224,7 +266,7 @@ function renderQuestion(){
   highlightDot(currentIndex);
 }
 
-/* ========= Timer ========= */
+/* ===== Timer ===== */
 function startTimer(effectiveDurationSec, hardEnd){
   if(timerId){ clearInterval(timerId); timerId=null; }
   timeLeftSec = Math.max(0, Math.floor(effectiveDurationSec||0));
@@ -245,7 +287,7 @@ function startTimer(effectiveDurationSec, hardEnd){
   }, 1000);
 }
 
-/* ========= Scoring ========= */
+/* ===== Scoring ===== */
 function computeTotals(){
   let total=0, max=0; const perQuestion=[]; const sectionAgg=new Map();
 
@@ -266,21 +308,21 @@ function computeTotals(){
       perQuestion.push({ i, section:sect, pts, ok, picked, correct, text:q.text, options:q.options });
     }
     else {
-      const raw = (answers[i]?.[0] ?? '').toString();
+      const rawLatex = (answers[i]?.[0] ?? '').toString();
       const A = q.answer || {};
       let match=false;
 
       const accepted = Array.isArray(A.accept) ? A.accept : [];
-      const normRaw = normStr(raw);
+      const normRaw = normStr(rawLatex);
       for(const patt of accepted){ if(normStr(patt)===normRaw){ match=true; break; } }
 
       if(!match && A.numeric && typeof A.numeric.value!=='undefined'){
-        const v = parseFloat(raw);
+        const v = parseFloat(rawLatex);
         if(isFinite(v)){ match = closeEnoughNumeric(v, A.numeric.value, A.numeric.tol ?? 0); }
       }
 
       ok = !!match;
-      perQuestion.push({ i, section:sect, pts, ok, picked:[raw], correct:accepted, text:q.text, options:[] });
+      perQuestion.push({ i, section:sect, pts, ok, picked:[rawLatex], correct:accepted, text:q.text, options:[] });
     }
 
     if(ok) total += pts;
@@ -291,7 +333,7 @@ function computeTotals(){
   return { total, max, perQuestion, sectionAgg };
 }
 
-/* ========= Only-once points (users/{uid}.points) ========= */
+/* ===== First-solve only points ===== */
 async function addPointsIfFirstSolve({ uid, testCode, delta }) {
   const userRef = doc(db, 'users', uid);
   const markRef = doc(db, 'users', uid, 'solved', testCode);
@@ -312,7 +354,7 @@ async function addPointsIfFirstSolve({ uid, testCode, delta }) {
   });
 }
 
-/* ========= Render: sections & detail ========= */
+/* ===== Render: sections & detail ===== */
 function renderSectionStats(sectionAgg){
   const grid=document.createElement('div'); grid.className='stats-grid';
   for(const [name,a] of sectionAgg.entries()){
@@ -333,7 +375,9 @@ function renderDetail(rows){
   const body=table.querySelector('#detailBody');
 
   rows.forEach(r=>{
-    const pickedDisp = (r.picked && r.picked.length) ? (r.text && r.options.length===0 ? (r.picked[0]||'—') : r.picked.map(x=>x+1).join(', ')) : '—';
+    const pickedDisp = (r.picked && r.picked.length)
+      ? (r.options.length===0 ? (r.picked[0]||'—') : r.picked.map(x=>x+1).join(', '))
+      : '—';
     const correctDisp = r.options.length ? r.correct.map(x=>x+1).join(', ') : (Array.isArray(r.correct)? r.correct.join(' | ') : '');
     const tr=document.createElement('tr'); tr.className='rowbox';
     tr.innerHTML = `
@@ -350,7 +394,7 @@ function renderDetail(rows){
   typeset($("#detailTable"));
 }
 
-/* ========= Finish ========= */
+/* ===== Finish ===== */
 async function onFinish(){
   if(timerId){ clearInterval(timerId); timerId=null; }
   if(startedAt){ const now=new Date(); spentSeconds=Math.max(spentSeconds, Math.floor((now-startedAt)/1000)); }
@@ -383,111 +427,7 @@ async function onFinish(){
   }
 }
 
-/* ========= Math keypad (drawer) ========= */
-const KEYS = [
-  { show:'x^n',             ins:'^{▮}' },
-  { show:'x_n',             ins:'_{▮}' },
-  { show:'\\sqrt{}',        ins:'\\sqrt{▮}' },
-  { show:'\\sqrt[n]{}',     ins:'\\sqrt[▮]{ }' },
-  { show:'\\frac{a}{b}',    ins:'\\frac{▮}{ }' },
-  { show:'\\log_a()',       ins:'\\log_{▮}()' },
-  { show:'\\ln()',          ins:'\\ln(▮)' },
-  { show:'e^{x}',           ins:'e^{▮}' },
-  { show:'\\sin()',         ins:'\\sin(▮)' },
-  { show:'\\cos()',         ins:'\\cos(▮)' },
-  { show:'\\tan()',         ins:'\\tan(▮)' },
-  { show:'\\pi',            ins:'\\pi' },
-  { show:'\\cdot',          ins:'\\cdot' },
-  { show:'\\times',         ins:'\\times' },
-  { show:'\\le',            ins:'\\le' },
-  { show:'\\ge',            ins:'\\ge' },
-  { show:'\\ne',            ins:'\\ne' },
-  { show:'\\pm',            ins:'\\pm' },
-  { show:'\\sum_{i=1}^{n}', ins:'\\sum_{i=1}^{▮}' },
-  { show:'\\int',           ins:'\\int_{▮}^{ }' },
-  { show:'\\left(\\right)', ins:'\\left(▮\\right)' },
-  { show:'\\left[\\right]', ins:'\\left[▮\\right]' },
-  { show:'\\left\\{\\right\\}', ins:'\\left\\{▮\\right\\}' }
-];
-
-function ensureDrawer(){
-  if(document.getElementById('keypadDrawer')) return;
-  const div=document.createElement('div');
-  div.id='keypadDrawer'; div.className='drawer'; div.setAttribute('aria-hidden','true');
-  div.innerHTML=`
-    <div class="rowbar">
-      <div class="title">Math klaviatura</div>
-      <div class="pin"><input type="checkbox" id="pinDrawer"><label for="pinDrawer" class="muted">Doim ochiq</label></div>
-    </div>
-    <div id="keypadGrid" class="kgrid"></div>`;
-  document.body.appendChild(div);
-
-  const grid=document.getElementById('keypadGrid'); grid.innerHTML='';
-  KEYS.forEach(k=>{
-    const btn=document.createElement('button'); btn.type='button'; btn.className='kbtn'; btn.innerHTML='$'+k.show+'$';
-    btn.addEventListener('mousedown', e=>e.preventDefault());
-    btn.addEventListener('click', ()=>{
-      const ta=LAST_OPEN_TA||ACTIVE_TA; if(!ta) return;
-      insertAtCursor(ta, k.ins); 
-      ta.dispatchEvent(new Event('input',{bubbles:true}));
-    });
-    grid.appendChild(btn);
-  });
-  typeset(grid);
-}
-
-function setDrawer(open, focusTA){
-  ensureDrawer();
-  const d = document.getElementById('keypadDrawer');
-  d.classList.toggle('open', !!open);
-  d.setAttribute('aria-hidden', open ? 'false' : 'true');
-  if (open && focusTA) { LAST_OPEN_TA = focusTA; }
-}
-
-let ACTIVE_TA=null, LAST_OPEN_TA=null;
-document.addEventListener('focusin', (e)=>{ if(e.target && e.target.tagName==='TEXTAREA'){ ACTIVE_TA=e.target; LAST_OPEN_TA=e.target; }});
-
-// Barqaror yopish
-function closeDrawerIfOutside(e){
-  const drawer = document.getElementById('keypadDrawer');
-  if (!drawer || !drawer.classList.contains('open')) return;
-  const t = e.target;
-  const isElem = t && t.nodeType === 1;
-  const insideDrawer = isElem && drawer.contains(t);
-  const onToggleBtn = isElem && t.closest && t.closest('.keypad-toggle');
-  const pin = document.getElementById('pinDrawer');
-  const pinned = !!(pin && pin.checked);
-  if (!insideDrawer && !onToggleBtn && !pinned) setDrawer(false);
-}
-document.addEventListener('pointerdown', closeDrawerIfOutside);
-
-document.addEventListener('focusout', ()=>{
-  const drawer = document.getElementById('keypadDrawer');
-  const pin = document.getElementById('pinDrawer');
-  if (drawer && drawer.classList.contains('open') && !(pin && pin.checked)) {
-    setTimeout(()=> {
-      const ae = document.activeElement;
-      const stillInside = ae && ae.nodeType === 1 && drawer.contains(ae);
-      if (!stillInside) setDrawer(false);
-    }, 0);
-  }
-});
-
-function insertAtCursor(textarea, template){
-  textarea.focus();
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end   = textarea.selectionEnd   ?? textarea.value.length;
-  const before= textarea.value.slice(0,start);
-  const after = textarea.value.slice(end);
-  let out = before + template + after;
-  const markerPos = (before + template).indexOf('▮');
-  if(markerPos>=0){ out = out.replace('▮',''); }
-  textarea.value = out;
-  const pos = markerPos>=0 ? markerPos : (start + template.length);
-  textarea.setSelectionRange(pos,pos);
-}
-
-/* ========= Auth & Boot ========= */
+/* ===== Auth & Boot ===== */
 await requireAuth();
 onAuthStateChanged(auth, (user)=>{ $('#authInfo').textContent = user ? `Kirish: ${user.displayName||user.email}` : 'Kirish: mehmon'; });
 
@@ -524,9 +464,12 @@ async function boot(){
   answers = Array.from({length:testData.questions.length}, ()=>[]);
   buildNavDots();
 
-  $('#startBtn').onclick = ()=>{
+  $('#startBtn').onclick = async ()=>{
     const conf = computeEffectiveTiming({ availability: testData.availability, durationMinutes: testData.durationMinutes });
     if(!conf.canStart){ showTop(conf.openMsg || 'Hozir test yopiq', 'warn'); return; }
+
+    // Mathlive ni oldindan yuklab qo‘yamiz (open savollar bo‘lishi mumkin)
+    await ensureMathlive();
 
     startedAt=new Date(); spentSeconds=0;
     $('#introCard').classList.add('hidden');
