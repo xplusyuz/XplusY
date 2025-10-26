@@ -457,3 +457,71 @@ watchAuth(async (user) => {
 // Pager
 document.getElementById('decilePrev').onclick = () => { if (CURRENT_DECILE > 0) { CURRENT_DECILE--; drawDecile(latestUsers, CURRENT_DECILE); } };
 document.getElementById('decileNext').onclick = () => { if (CURRENT_DECILE < GROUPS.length - 1) { CURRENT_DECILE++; drawDecile(latestUsers, CURRENT_DECILE); } };
+// --- USER MENU: avatar bosilganda popover ochish/yopish va kontent to‘ldirish
+const userbar = document.getElementById('userbar');
+const userMenu = document.getElementById('userMenu');
+
+function buildUserMenu(){
+  const name = (CURRENT_PROFILE?.name || el.uname.textContent || 'Foydalanuvchi').trim();
+  const region = CURRENT_PROFILE?.region || '—';
+  const district = CURRENT_PROFILE?.district || '—';
+  const school = CURRENT_PROFILE?.school || '—';
+  const klass = CURRENT_PROFILE?.class || '—';
+  const uid = (el.uid.textContent || '').replace(/^ID:\s*/,'') || '—';
+
+  userMenu.innerHTML = `
+    <div class="um-head">
+      <div class="um-ava">${(el.ava.querySelector('img')) ? '<img src="'+el.ava.querySelector('img').src+'" style="width:100%;height:100%;object-fit:cover" />' : (name.split(/\s+/).map(s=>s[0]).slice(0,2).join('') || 'LM')}</div>
+      <div>
+        <div class="um-name">${name}</div>
+        <div class="um-sub">ID: ${uid}</div>
+      </div>
+    </div>
+
+    <div class="um-grid">
+      <div class="um-item"><b>Viloyat</b>${region}</div>
+      <div class="um-item"><b>Tuman/Shahar</b>${district}</div>
+      <div class="um-item"><b>Maktab</b>${school}</div>
+      <div class="um-item"><b>Sinf</b>${klass}</div>
+    </div>
+
+    <div class="um-actions">
+      <button id="umProfile" class="um-btn">📝 Profil</button>
+      <button id="umLogout" class="um-btn ghost">↩️ Chiqish</button>
+    </div>
+  `;
+
+  // Tugmalarni mavjud handlerlarga bog‘lash:
+  const umProfile = document.getElementById('umProfile');
+  const umLogout  = document.getElementById('umLogout');
+  umProfile.onclick = (e)=>{ e.preventDefault(); el.editProfile.click(); closeUserMenu(); };
+  umLogout.onclick  = (e)=>{ e.preventDefault(); el.signout.click(); closeUserMenu(); };
+}
+
+function openUserMenu(){
+  buildUserMenu();
+  userbar.classList.add('menu-open');
+  userMenu.setAttribute('aria-hidden','false');
+}
+function closeUserMenu(){
+  userbar.classList.remove('menu-open');
+  userMenu.setAttribute('aria-hidden','true');
+}
+function toggleUserMenu(){
+  if(userbar.classList.contains('menu-open')) closeUserMenu(); else openUserMenu();
+}
+
+// Avatar trigger
+el.ava.addEventListener('click', (e)=>{ e.stopPropagation(); toggleUserMenu(); });
+
+// Outside click to close
+document.addEventListener('click', (e)=>{
+  if(!userbar.classList.contains('menu-open')) return;
+  if(!userMenu.contains(e.target) && e.target !== el.ava) closeUserMenu();
+});
+
+// ESC to close
+window.addEventListener('keydown',(e)=>{ if(e.key==='Escape') closeUserMenu(); });
+
+// Auth snapshotlarda profil o‘zgarsa menyuni yangilaymiz
+// (mavjud onSnapshot ichida renderMobileUserChips chaqirgan joydan keyin qo‘ying)
