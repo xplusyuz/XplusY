@@ -17,7 +17,11 @@ const slug = s => (s||"").toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|
 
 /* MathJax helpers */
 const TEX_NEEDLES = ['\\frac','\\sqrt','\\sum','\\int','\\log','\\ln','\\sin','\\cos','\\tan','\\vec','\\pi','\\le','\\ge','\\ne','\\pm','\\cdot','\\times','\\left','\\right','^','_','\\alpha','\\beta','\\gamma'];
-function looksLikeTeX(s){ if(!s) return false; if(s.includes('$')||s.includes('\\(')||s.includes('\\[')) return false; return TEX_NEEDLES.some(k=>s.indexOf(k)!==-1); }
+function looksLikeTeX(s){
+  if(!s) return false;
+  if(s.includes('$') || s.includes('\\(') || s.includes('\\[')) return false;
+  return TEX_NEEDLES.some(k=>s.indexOf(k)!==-1);
+}
 const wrapTeX = s => looksLikeTeX(s) ? `\\(${s}\\)` : s;
 const mjReady = ()=> new Promise(res=>{ const w=()=> (window.MathJax&&window.MathJax.typesetPromise)?res():setTimeout(w,30); w(); });
 async function typeset(el){ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} }
@@ -38,13 +42,12 @@ function showSave(msg, kind='good'){ const c=$("#saveStatus"); if(!c) return; c.
 function parseISO(s){ try{ return s ? new Date(s) : null; }catch{ return null; } }
 function minutesToSec(m){ const n=Number(m||0); return Math.max(0, Math.round(n*60)); }
 
-/** Window nazorati + kech kirish siyosati */
 function computeEffectiveTiming({availability, durationMinutes}){
   const now = new Date();
   const dur = minutesToSec(durationMinutes||0);
 
   if(!availability || availability.mode==='always'){
-    return { canStart: true, openMsg: null, startDelaySec: 0, effectiveDurationSec: dur, hardEnd: null };
+    return { canStart: true, openMsg: null, effectiveDurationSec: dur, hardEnd: null };
   }
 
   const start = parseISO(availability.startAt);
@@ -52,27 +55,22 @@ function computeEffectiveTiming({availability, durationMinutes}){
   const latePolicy = availability.latePolicy || 'clip'; // 'clip' | 'full'
 
   if(!start || !end || end <= start){
-    // noto‘g‘ri sozlangan — xavfsiz holat: ochiq
-    return { canStart:true, openMsg:null, startDelaySec:0, effectiveDurationSec:dur, hardEnd:null };
+    return { canStart:true, openMsg:null, effectiveDurationSec:dur, hardEnd:null };
   }
 
   if(now < start){
-    const diff = Math.max(0, Math.floor((start-now)/1000));
-    return { canStart:false, openMsg:`Test ${pad2(start.getHours())}:${pad2(start.getMinutes())} da ochiladi`, startDelaySec:diff, effectiveDurationSec:0, hardEnd:end };
+    return { canStart:false, openMsg:`Test ${start.toLocaleTimeString().slice(0,5)} da ochiladi`, effectiveDurationSec:0, hardEnd:end };
   }
 
   if(now >= end){
-    return { canStart:false, openMsg:`Test yopilgan (${pad2(end.getHours())}:${pad2(end.getMinutes())}).`, startDelaySec:0, effectiveDurationSec:0, hardEnd:end };
+    return { canStart:false, openMsg:`Test yopilgan (${end.toLocaleTimeString().slice(0,5)}).`, effectiveDurationSec:0, hardEnd:end };
   }
 
-  // Ochiq oynada
   if(latePolicy==='full'){
-    // to‘liq 40 daqiqa, ammo endan keyin majburan tugaydi
-    return { canStart:true, openMsg:null, startDelaySec:0, effectiveDurationSec:dur, hardEnd:end };
+    return { canStart:true, openMsg:null, effectiveDurationSec:dur, hardEnd:end };
   }else{
-    // 'clip': end - now
     const remain = Math.max(0, Math.floor((end - now)/1000));
-    return { canStart:true, openMsg:null, startDelaySec:0, effectiveDurationSec:Math.min(dur, remain), hardEnd:end };
+    return { canStart:true, openMsg:null, effectiveDurationSec:Math.min(dur, remain), hardEnd:end };
   }
 }
 
@@ -147,9 +145,20 @@ async function resolveImageSrc(idx1){
   return '';
 }
 
-/* Open-answer helpers */
+/* Open-answer helpers + live preview */
 function normStr(s){ return (s||'').toString().replace(/\s+/g,'').replace(/\\ /g,'').toLowerCase(); }
 function closeEnoughNumeric(a,b,tol){ return Math.abs(+a - +b) <= (+tol || 0); }
+function updateOpenPreview(textarea, previewBox){
+  const raw = (textarea.value || "").trim();
+  if (!raw) {
+    previewBox.innerHTML = `<em class="muted">Yozayotgan javobingiz shu yerda ko‘rinadi (LaTeX yoki son)…</em>`;
+    return;
+  }
+  const wrapped = looksLikeTeX(raw) ? `\\(${raw}\\)` : raw;
+  previewBox.textContent = "";
+  previewBox.innerHTML = wrapped;
+  typeset(previewBox);
+}
 
 function renderQuestion(){
   const q=testData.questions[currentIndex];
@@ -160,17 +169,35 @@ function renderQuestion(){
   $("#opts").innerHTML='';
 
   if(q.type==='open'){
-    // open answer UI
+    // open answer UI + PREVIEW
     const wrap=document.createElement('div'); wrap.className='open-wrap';
+
+    const lab=document.createElement('div'); lab.className='mini'; lab.textContent="Jonli ko‘rinish:";
+    const preview=document.createElement('div'); preview.className='open-preview';
+    preview.style.cssText="border:1px dashed #dfeae3;border-radius:10px;padding:10px;background:#fbfdfc;margin:6px 0 10px;min-height:42px";
+
     const ta=document.createElement('textarea'); ta.className='open-input'; ta.placeholder="Javobni yozing (LaTeX yoki son)…";
+    ta.style.cssText="width:100%;padding:10px 12px;border:1px solid #dfeae3;border-radius:10px;background:#fff";
     const prev = answers[currentIndex]?.[0] ?? '';
-    ta.value = typeof prev === 'string' ? prev : '';
-    ta.addEventListener('input', ()=>{ answers[currentIndex] = [ta.value]; refreshDots(); });
+    if (typeof prev === 'string') ta.value = prev;
 
     const tog=document.createElement('button'); tog.type='button'; tog.className='btn ghost keypad-toggle'; tog.textContent='Math klaviatura';
+    tog.style.marginTop="8px";
     tog.addEventListener('click', ()=> setDrawer(!document.getElementById('keypadDrawer')?.classList.contains('open'), ta));
 
-    wrap.appendChild(ta); wrap.appendChild(tog); $("#opts").appendChild(wrap);
+    ta.addEventListener('input', ()=>{
+      answers[currentIndex] = [ta.value];
+      refreshDots();
+      updateOpenPreview(ta, preview);
+    });
+
+    updateOpenPreview(ta, preview);
+
+    wrap.appendChild(lab);
+    wrap.appendChild(preview);
+    wrap.appendChild(ta);
+    wrap.appendChild(tog);
+    $("#opts").appendChild(wrap);
   } else {
     const multi = (q.type==='multi');
     const chosen = new Set(answers[currentIndex] || []);
@@ -208,9 +235,7 @@ function startTimer(effectiveDurationSec, hardEnd){
   both(`${pad2(Math.floor(timeLeftSec/60))}:${pad2(timeLeftSec%60)}`, true);
   timerId=setInterval(()=>{
     const now = new Date();
-    if(effectiveEnd && now >= effectiveEnd){ // oynadan tashqariga chiqdi
-      clearInterval(timerId); timerId=null; onFinish(); return;
-    }
+    if(effectiveEnd && now >= effectiveEnd){ clearInterval(timerId); timerId=null; onFinish(); return; }
 
     timeLeftSec--; spentSeconds++;
     if(timeLeftSec <= 0){ clearInterval(timerId); timerId=null; onFinish(); return; }
@@ -240,17 +265,15 @@ function computeTotals(){
       ok = arraysEqual(picked, correct);
       perQuestion.push({ i, section:sect, pts, ok, picked, correct, text:q.text, options:q.options });
     }
-    else { // open
+    else {
       const raw = (answers[i]?.[0] ?? '').toString();
       const A = q.answer || {};
       let match=false;
 
-      // exact-strings (whitespace-insensitive, case-insensitive)
       const accepted = Array.isArray(A.accept) ? A.accept : [];
       const normRaw = normStr(raw);
       for(const patt of accepted){ if(normStr(patt)===normRaw){ match=true; break; } }
 
-      // numeric check
       if(!match && A.numeric && typeof A.numeric.value!=='undefined'){
         const v = parseFloat(raw);
         if(isFinite(v)){ match = closeEnoughNumeric(v, A.numeric.value, A.numeric.tol ?? 0); }
@@ -405,7 +428,8 @@ function ensureDrawer(){
     btn.addEventListener('mousedown', e=>e.preventDefault());
     btn.addEventListener('click', ()=>{
       const ta=LAST_OPEN_TA||ACTIVE_TA; if(!ta) return;
-      insertAtCursor(ta, k.ins); ta.focus(); ta.dispatchEvent(new Event('input',{bubbles:true}));
+      insertAtCursor(ta, k.ins); 
+      ta.dispatchEvent(new Event('input',{bubbles:true}));
     });
     grid.appendChild(btn);
   });
@@ -423,7 +447,7 @@ function setDrawer(open, focusTA){
 let ACTIVE_TA=null, LAST_OPEN_TA=null;
 document.addEventListener('focusin', (e)=>{ if(e.target && e.target.tagName==='TEXTAREA'){ ACTIVE_TA=e.target; LAST_OPEN_TA=e.target; }});
 
-// Yopish uchun barqaror handler (pointerdown)
+// Barqaror yopish
 function closeDrawerIfOutside(e){
   const drawer = document.getElementById('keypadDrawer');
   if (!drawer || !drawer.classList.contains('open')) return;
@@ -437,7 +461,6 @@ function closeDrawerIfOutside(e){
 }
 document.addEventListener('pointerdown', closeDrawerIfOutside);
 
-// Focusdan chiqishda qo‘shimcha yopish
 document.addEventListener('focusout', ()=>{
   const drawer = document.getElementById('keypadDrawer');
   const pin = document.getElementById('pinDrawer');
@@ -464,7 +487,7 @@ function insertAtCursor(textarea, template){
   textarea.setSelectionRange(pos,pos);
 }
 
-/* ========= Boot ========= */
+/* ========= Auth & Boot ========= */
 await requireAuth();
 onAuthStateChanged(auth, (user)=>{ $('#authInfo').textContent = user ? `Kirish: ${user.displayName||user.email}` : 'Kirish: mehmon'; });
 
