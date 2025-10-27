@@ -340,3 +340,6 @@ async function boot(){
   $("#againBtn").onclick  = ()=>{ $("#resultCard").classList.add("hidden"); $("#questionsCard").classList.remove("hidden"); renderQuestion(); };
 }
 boot();
+.test-content img {
+  display: none !important;
+}
