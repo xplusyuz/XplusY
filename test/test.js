@@ -351,6 +351,3 @@ document.addEventListener('keydown', e => {
     (e.ctrlKey && e.key === "S")
   ) e.preventDefault();
 });
-
-// 3. Agar rasm ko‘rsatishni istamasangiz:
-document.querySelectorAll('img').forEach(img => img.remove());
