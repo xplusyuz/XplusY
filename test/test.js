@@ -377,3 +377,10 @@ window.addEventListener('load', ()=>{
     img.addEventListener('dragstart', e => e.preventDefault());
   });
 });
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('dragstart', e => { if (e.target.tagName==='IMG') e.preventDefault(); });
+window.addEventListener('load', ()=> {
+  document.querySelectorAll('img').forEach(img=>{
+    img.setAttribute('draggable','false');
+  });
+});
