@@ -20,6 +20,35 @@
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+
+    /* -------- AUTH GUARD -------- */
+    /* FOUC'ni oldini olish: auth tekshiruvi tugaguncha app yopiq, gate ko'rinadi */
+    html.auth-checking #app{display:none}
+    html.auth-checking #authGate{display:flex}
+
+    /* Kirilmagan foydalanuvchi uchun to'siq (gate) */
+    #authGate{
+      position:fixed; inset:0; z-index:9999; display:none;
+      align-items:center; justify-content:center; padding:24px;
+      background:linear-gradient(135deg, rgba(14,21,18,.85), rgba(31,107,69,.85));
+      backdrop-filter: blur(10px);
+    }
+    #authCard{
+      width:min(560px,96vw);
+      background:var(--card);
+      border:1px solid var(--frame-strong);
+      border-radius:18px;
+      padding:20px;
+      box-shadow:0 24px 64px rgba(0,0,0,.35);
+    }
+    #authCard h2{ margin:0 0 6px; font-size:22px }
+    #authCard p{ margin:0 0 14px; color:var(--muted) }
+    .auth-row{ display:flex; gap:10px; justify-content:flex-end; margin-top:8px }
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}
+    .btn.ghost{background:#fff;color:#1F6B45;border:1px solid var(--frame)}
+    .meta-why{ font-size:12px; color:var(--muted) }
+
+    /* Ichki UI */
     .glass{background:rgba(255,255,255,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
     .dark .glass{background:rgba(20,32,24,.55)}
     .grad-border{position:relative}
@@ -139,9 +168,7 @@
     .name{font-size:16px;font-weight:900;margin:0 0 6px}
     .desc{font-size:13px;color:var(--muted);margin:0 0 10px}
     .actions{display:flex;gap:8px}
-    .btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
-    .btn.ghost{background:#fff;color:#1F6B45;border:1px solid var(--frame)}
     .meta{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:10px;align-items:center}
     .countdown{font-weight:800}
 
@@ -157,103 +184,118 @@
     @media(max-width:560px){ .grid2,.grid3{grid-template-columns:1fr} }
     .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
     .danger{color:#c62828;font-size:12px;margin-right:auto}
-	body:not(.dark) .uc-pill b {
-  color: #000; /* kunduzgi rejimda qora */
-}
+
+    /* Kunduzgi rejimda ball qora rangda (faqat chipdagi <b> uchun) */
+    body:not(.dark) .uc-pill b { color:#000; }
   </style>
 </head>
 <body>
-  <!-- Appbar -->
-  <header class="appbar">
-    <div class="logo"><img src="./icon-512.png" alt="LeaderMath Logo"></div>
-    <div>
-      <div class="title">LeaderMath</div>
-      <div class="sub">BSB / CHSB / ONLINE OLIMPIADA / DTM / dars-resurslar</div>
-    </div>
-    <div class="spacer"></div>
-    <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
-
-    <!-- Compact UserChip -->
-    <div class="uc-chip" id="ucChip" aria-haspopup="dialog" aria-expanded="false">
-      <div class="uc-ava" id="ucAva">LM</div>
-      <div class="uc-pill"><span class="uc-pill-label">⭐</span><b id="ucPointsVal">—</b></div>
-      <button class="uc-more" id="ucMore" aria-label="Profil">⋯</button>
-    </div>
-  </header>
-
-  <!-- User Popover -->
-  <div class="uc-popover-mask" id="ucMask"></div>
-  <div class="uc-popover grad-border glass" id="ucPopover" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="uc-pop-head">
-      <div class="uc-ava lg" id="ucAvaLg">LM</div>
-      <div class="uc-namebox">
-        <div class="uc-fullname" id="ucName">Foydalanuvchi</div>
-        <div class="uc-sub" id="ucNumeric">ID: —</div>
+  <!-- ===== AUTH GATE (Kirilmagan foydalanuvchilar uchun) ===== -->
+  <div id="authGate">
+    <div id="authCard" class="grad-border glass">
+      <h2>Davom etish uchun kirish talab qilinadi</h2>
+      <p>LeaderMath resurslaridan foydalanish uchun Google orqali tizimga kiring.</p>
+      <div class="meta-why">🔒 Siz kirgunga qadar asosiy kontent ko‘rsatilmaydi.</div>
+      <div class="auth-row">
+        <a id="goLogin" class="btn">🔑 Kirish</a>
       </div>
-    </div>
-
-    <div class="uc-grid">
-      <div class="uc-kv"><div class="k">Viloyat</div><div class="v" id="ucRegion">—</div></div>
-      <div class="uc-kv"><div class="k">Tuman</div><div class="v" id="ucDistrict">—</div></div>
-      <div class="uc-kv"><div class="k">Maktab</div><div class="v" id="ucSchool">—</div></div>
-      <div class="uc-kv"><div class="k">Sinf</div><div class="v" id="ucClass">—</div></div>
-    </div>
-
-    <div class="uc-actions">
-      <button class="btn-primary" id="ucOpenProfile">📝 Profil</button>
-      <button class="btn-ghost" id="ucSignOut">⬅️ Chiqish</button>
     </div>
   </div>
 
-  <!-- Banners -->
-  <section id="banners" class="banner grad-border glass">
-    <h1>CHSB & BSB sinovlari oldidan shunday tayyorgarlik qiling!</h1>
-    <p>Platformada mavzulashtirilgan testlar, tezkor mashqlar va batafsil izohlar — hammasi bir joyda.</p>
-  </section>
+  <!-- ===== APP (faqat kirgandan keyin ko'rsatiladi) ===== -->
+  <div id="app">
+    <!-- Appbar -->
+    <header class="appbar">
+      <div class="logo"><img src="./icon-512.png" alt="LeaderMath Logo"></div>
+      <div>
+        <div class="title">LeaderMath</div>
+        <div class="sub">BSB / CHSB / ONLINE OLIMPIADA / DTM / dars-resurslar</div>
+      </div>
+      <div class="spacer"></div>
+      <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
 
-  <!-- Leaderboard -->
-  <section class="board grad-border glass" id="board">
-    <h3>Top 50 — Ball bo‘yicha (o‘ntalik pager)</h3>
-    <div class="pager">
-      <button id="decilePrev" class="pbtn">⬅️ Oldingi (10)</button>
-      <div class="pinfo" id="decileInfo">10–1 (Diamond)</div>
-      <button id="decileNext" class="pbtn">Keyingi (10) ➡️</button>
+      <!-- Compact UserChip -->
+      <div class="uc-chip" id="ucChip" aria-haspopup="dialog" aria-expanded="false">
+        <div class="uc-ava" id="ucAva">LM</div>
+        <div class="uc-pill"><span class="uc-pill-label">⭐</span><b id="ucPointsVal">—</b></div>
+        <button class="uc-more" id="ucMore" aria-label="Profil">⋯</button>
+      </div>
+    </header>
+
+    <!-- User Popover -->
+    <div class="uc-popover-mask" id="ucMask"></div>
+    <div class="uc-popover grad-border glass" id="ucPopover" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="uc-pop-head">
+        <div class="uc-ava lg" id="ucAvaLg">LM</div>
+        <div class="uc-namebox">
+          <div class="uc-fullname" id="ucName">Foydalanuvchi</div>
+          <div class="uc-sub" id="ucNumeric">ID: —</div>
+        </div>
+      </div>
+
+      <div class="uc-grid">
+        <div class="uc-kv"><div class="k">Viloyat</div><div class="v" id="ucRegion">—</div></div>
+        <div class="uc-kv"><div class="k">Tuman</div><div class="v" id="ucDistrict">—</div></div>
+        <div class="uc-kv"><div class="k">Maktab</div><div class="v" id="ucSchool">—</div></div>
+        <div class="uc-kv"><div class="k">Sinf</div><div class="v" id="ucClass">—</div></div>
+      </div>
+
+      <div class="uc-actions">
+        <button class="btn-primary" id="ucOpenProfile">📝 Profil</button>
+        <button class="btn-ghost" id="ucSignOut">⬅️ Chiqish</button>
+      </div>
     </div>
-    <div id="boardList"></div>
-  </section>
 
-  <!-- GLOBAL MAIN TAGS -->
-  <section class="filters grad-border glass" id="filtersMain">
-    <h4>Katta teglar (bo‘limlar) bo‘yicha:</h4>
-    <div id="mainTags" class="chips"></div>
-  </section>
+    <!-- Banners -->
+    <section id="banners" class="banner grad-border glass">
+      <h1>CHSB & BSB sinovlari oldidan shunday tayyorgarlik qiling!</h1>
+      <p>Platformada mavzulashtirilgan testlar, tezkor mashqlar va batafsil izohlar — hammasi bir joyda.</p>
+    </section>
 
-  <!-- Sections -->
-  <div class="container">
-    <div id="sections"></div>
-  </div>
+    <!-- Leaderboard -->
+    <section class="board grad-border glass" id="board">
+      <h3>Top 50 — Ball bo‘yicha (o‘ntalik pager)</h3>
+      <div class="pager">
+        <button id="decilePrev" class="pbtn">⬅️ Oldingi (10)</button>
+        <div class="pinfo" id="decileInfo">10–1 (Diamond)</div>
+        <button id="decileNext" class="pbtn">Keyingi (10) ➡️</button>
+      </div>
+      <div id="boardList"></div>
+    </section>
 
-  <!-- Profile modal (majburiy) -->
-  <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
-    <div class="modal">
-      <h3>Profil ma’lumotlari (majburiy)</h3>
-      <div class="grid2">
-        <div class="ctl"><label>Ism *</label><input id="pFirst"></div>
-        <div class="ctl"><label>Familiya *</label><input id="pLast"></div>
-      </div>
-      <div class="grid3">
-        <div class="ctl"><label>Viloyat *</label><input id="pRegion" placeholder="Namangan"></div>
-        <div class="ctl"><label>Tuman/Shahar *</label><input id="pDistrict" placeholder="Yangiqo‘rg‘on"></div>
-        <div class="ctl"><label>Maktab nomi *</label><input id="pSchool" placeholder="1-maktab"></div>
-      </div>
-      <div class="grid2">
-        <div class="ctl"><label>Sinf *</label><input id="pClass" placeholder="9-A"></div>
-        <div class="ctl"><label>Telefon *</label><input id="pPhone" placeholder="+998 XX XXX XX XX"></div>
-      </div>
-      <div class="row">
-        <div class="danger" id="pError"></div>
-        <button id="pSave" class="btn-primary">Saqlash</button>
-        <button id="pClose" class="btn-ghost">Yopish</button>
+    <!-- GLOBAL MAIN TAGS -->
+    <section class="filters grad-border glass" id="filtersMain">
+      <h4>Katta teglar (bo‘limlar) bo‘yicha:</h4>
+      <div id="mainTags" class="chips"></div>
+    </section>
+
+    <!-- Sections -->
+    <div class="container">
+      <div id="sections"></div>
+    </div>
+
+    <!-- Profile modal (majburiy) -->
+    <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
+      <div class="modal">
+        <h3>Profil ma’lumotlari (majburiy)</h3>
+        <div class="grid2">
+          <div class="ctl"><label>Ism *</label><input id="pFirst"></div>
+          <div class="ctl"><label>Familiya *</label><input id="pLast"></div>
+        </div>
+        <div class="grid3">
+          <div class="ctl"><label>Viloyat *</label><input id="pRegion" placeholder="Namangan"></div>
+          <div class="ctl"><label>Tuman/Shahar *</label><input id="pDistrict" placeholder="Yangiqo‘rg‘on"></div>
+          <div class="ctl"><label>Maktab nomi *</label><input id="pSchool" placeholder="1-maktab"></div>
+        </div>
+        <div class="grid2">
+          <div class="ctl"><label>Sinf *</label><input id="pClass" placeholder="9-A"></div>
+          <div class="ctl"><label>Telefon *</label><input id="pPhone" placeholder="+998 XX XXX XX XX"></div>
+        </div>
+        <div class="row">
+          <div class="danger" id="pError"></div>
+          <button id="pSave" class="btn">Saqlash</button>
+          <button id="pClose" class="btn ghost">Yopish</button>
+        </div>
       </div>
     </div>
   </div>
@@ -267,6 +309,16 @@
   import { watchAuth } from './lib/auth-guard.js';
   import { doc, getDoc, setDoc, runTransaction, collection, query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+  // ==== AUTH GUARD ====
+  const html = document.documentElement;
+  html.classList.add('auth-checking'); // tekshiruv vaqtida App yopiq
+  const gate = document.getElementById('authGate');
+  const app  = document.getElementById('app');
+  const goLogin = document.getElementById('goLogin');
+  // Login tugmasi: qaytish manzilini qo'shib yuboramiz
+  const ret = encodeURIComponent(location.pathname.replace(/\\/g,'/') + location.search);
+  goLogin.href = `./login.html?return=${ret}`;
+
   // ==== THEME ====
   const root=document.documentElement, themeBtn=document.getElementById('themeBtn'), THEME_KEY='lm-theme';
   const setTheme=m=>{root.classList.toggle('dark',m==='dark');localStorage.setItem(THEME_KEY,m);themeBtn.textContent=m==='dark'?'☀️':'🌙'};
@@ -275,19 +327,16 @@
 
   // ==== ELEMENTS ====
   const el={
-    // chip/popover
     chip:document.getElementById('ucChip'), ava:document.getElementById('ucAva'), avaLg:document.getElementById('ucAvaLg'),
     pointsVal:document.getElementById('ucPointsVal'), stars:document.getElementById('ucStars'),
     more:document.getElementById('ucMore'), mask:document.getElementById('ucMask'), pop:document.getElementById('ucPopover'),
     name:document.getElementById('ucName'), numeric:document.getElementById('ucNumeric'),
     region:document.getElementById('ucRegion'), district:document.getElementById('ucDistrict'), school:document.getElementById('ucSchool'), klass:document.getElementById('ucClass'),
     openProfile:document.getElementById('ucOpenProfile'), signOutBtn:document.getElementById('ucSignOut'),
-    // sections/filters/board
     banners:document.getElementById('banners'), sections:document.getElementById('sections'),
     mainTags:document.getElementById('mainTags'),
     boardList:document.getElementById('boardList'), decilePrev:document.getElementById('decilePrev'),
     decileNext:document.getElementById('decileNext'), decileInfo:document.getElementById('decileInfo'),
-    // modal
     PM:{
       mask:document.getElementById('profileModal'),
       first:document.getElementById('pFirst'), last:document.getElementById('pLast'),
@@ -307,7 +356,7 @@
   function fmtPoints(v){ const n = Number(v)||0; return n.toLocaleString('uz-UZ',{maximumFractionDigits:1}); }
   function setAvatar(txtOrUrl){ const set=n=>{ if(txtOrUrl && /^https?:/.test(txtOrUrl)) n.innerHTML=`<img src="${txtOrUrl}" alt="ava">`; else n.textContent=(txtOrUrl||'LM').slice(0,2).toUpperCase(); }; set(el.ava); set(el.avaLg); }
 
-  // Stars for tiers
+  // Stars (icons) helper
   function starSVG(fillPct,colors=['#9FE3FF','#39B6FF','#0077FF'],shape='star'){
     const [c1,c2,c3]=colors, gid='g'+Math.random().toString(36).slice(2,8), cid='c'+Math.random().toString(36).slice(2,8);
     if(shape!=='diamond'){
@@ -334,7 +383,7 @@
   // ==== POPUP ====
   function openPop(){ el.mask.style.display='block'; el.pop.style.display='block'; el.chip.setAttribute('aria-expanded','true'); }
   function closePop(){ el.mask.style.display='none'; el.pop.style.display='none'; el.chip.setAttribute('aria-expanded','false'); }
-  el.more.addEventListener('click',e=>{e.stopPropagation();openPop();});
+  document.getElementById('ucMore').addEventListener('click',e=>{e.stopPropagation();openPop();});
   el.mask.addEventListener('click',closePop);
   document.addEventListener('click',e=>{ if(!el.pop.contains(e.target) && !el.chip.contains(e.target)) closePop(); });
   window.addEventListener('keydown',e=>{ if(e.key==='Escape') closePop(); });
@@ -364,7 +413,6 @@
     b.appendChild(byText(label)); b.onclick=()=> onClick(b);
     return b;
   }
-
   function collectMainTags(data){
     const main=new Set(); (data.sections||[]).forEach(sec=>{ if(sec.tag) main.add(String(sec.tag)); });
     return [...main].sort();
@@ -478,7 +526,7 @@
     try{
       const r=await fetch('./index.json',{cache:'no-store'});
       const data=await r.json();
-      el.banners.innerHTML=(data.banners||[]).map(b=>`<div class="banner grad-border glass">${b.html||''}</div>`).join('');
+      document.getElementById('banners').innerHTML=(data.banners||[]).map(b=>`<div class="banner grad-border glass">${b.html||''}</div>`).join('');
       const mains=collectMainTags(data); renderMainChips(mains);
       window.__LM_DATA=data; renderCards(data);
     }catch(e){ console.error(e); }
@@ -489,7 +537,7 @@
   let CURRENT_DECILE=0, latestUsers=[];
   function drawDecile(users,ix){
     const g=GROUPS[ix]; if(!g){ el.boardList.innerHTML='<div class="desc">Hali ma’lumot yo‘q</div>'; return; }
-    const arr=users.slice(0,50), rows=[], starsFor=(rank)=>0.5*(g.end-rank+1);
+    const arr=users.slice(0,50), rows=[];
     for(let r=g.start;r<=g.end;r++){
       const u=arr[r-1]; if(!u) continue; const isTop3=r<=3;
       const left=isTop3?`<span class="medal ${r===1?'m1':r===2?'m2':'m3'}">${r===1?'🏆':r===2?'🥈':'🥉'}</span>`:`<span class="rnk">#${r}</span>`;
@@ -512,7 +560,13 @@
   let currentUserId=null, CURRENT_PROFILE=null;
   function profileIsComplete(u){ return !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.class && u.phone); }
 
-  PM.save.onclick=async ()=>{
+  // Auth guard: foydalanuvchi yo'q bo'lsa — appni yopamiz, gate ochiq qoladi.
+  function showApp(){ gate.style.display='none'; app.style.display='block'; html.classList.remove('auth-checking'); }
+  function lockToLogin(){ app.style.display='none'; gate.style.display='flex'; html.classList.remove('auth-checking'); }
+
+  // Profil saqlash
+  el.PM.save.onclick=async ()=>{
+    const PM = el.PM;
     PM.err.textContent='';
     const first=PM.first.value.trim(), last=PM.last.value.trim(),
           region=PM.r.value.trim(), district=PM.d.value.trim(),
@@ -524,7 +578,7 @@
       await setDoc(ref,{name,region,district,school,class:klass,phone},{merge:true});
       CURRENT_PROFILE={...(CURRENT_PROFILE||{}),name,region,district,school,class:klass,phone};
       closeProfileModal();
-      fillChip(CURRENT_PROFILE); // refresh UI
+      fillChip(CURRENT_PROFILE);
     }catch(e){ console.error('profile save error',e); PM.err.textContent='Saqlashda xatolik. Internetni tekshiring.'; }
   };
 
@@ -541,9 +595,9 @@
   el.openProfile.onclick=(e)=>{ e.preventDefault(); closePop();
     const u=CURRENT_PROFILE||{};
     const nm=(u.name||'').trim().split(/\s+/,2);
-    openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone:u.phone||'' });
+    openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school=u.school||'', klass=u.class||'', phone=u.phone||'' });
   };
-  el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); location.href='./login.html?return='+encodeURIComponent('./index.html'); };
+  el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); lockToLogin(); };
 
   async function ensureUser(user){
     const ref=doc(db,'users',user.uid);
@@ -557,45 +611,53 @@
   }
 
   function resetChip(){
-    setAvatar('LM'); el.pointsVal.textContent='—'; el.stars.innerHTML='';
+    el.ava.textContent='LM'; el.avaLg.textContent='LM'; el.pointsVal.textContent='—';
     el.name.textContent='Mehmon'; el.numeric.textContent='ID: —';
     el.region.textContent='—'; el.district.textContent='—'; el.school.textContent='—'; el.klass.textContent='—';
   }
 
+  // MUHIM: Auth holatini kuzatamiz va UI'ni shunga qarab bloklaymiz
   watchAuth(async(user)=>{
-    if(!user){ resetChip(); currentUserId=null; CURRENT_PROFILE=null; return; }
+    if(!user){
+      currentUserId=null; CURRENT_PROFILE=null; resetChip();
+      lockToLogin(); // kontentni yopamiz va kirish oynasini ko'rsatamiz
+      return;
+    }
     currentUserId=user.uid;
     const u=await ensureUser(user); CURRENT_PROFILE=u;
     setAvatar(user.photoURL||initials(u.name||user.email));
     fillChip(u);
+    showApp(); // endi appni ochamiz
 
-    // Show profile modal if incomplete (once)
+    // Profil to'ldirilmagan bo'lsa — majburiy modal
     const seenKey=`lm-profile-seen:${currentUserId}`;
     if(!profileIsComplete(u) && !localStorage.getItem(seenKey)){
       const nm=(u.name||'').trim().split(/\s+/,2);
-      openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone:u.phone||'' });
+      openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone=u.phone||'' });
       localStorage.setItem(seenKey,'1');
     }
 
-    // Live leaderboard + my rank
+    // Live leaderboard
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
       drawDecile(latestUsers, CURRENT_DECILE);
       updateMyRank(latestUsers, currentUserId);
-    }, (err)=>{ console.error('board error',err); el.boardList.innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>'; el.stars.innerHTML=''; });
+    }, (err)=>{ console.error('board error',err); document.getElementById('boardList').innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>'; });
   });
 
   function updateMyRank(sorted,currentUid){
     const idx=sorted.findIndex(u=>(u.uid||u.id)===currentUid);
-    if(idx===-1){ el.stars.innerHTML=''; return; }
+    if(idx===-1){ return; }
     const rank=idx+1; let g=null; for(const gr of GROUPS){ if(rank>=gr.start&&rank<=gr.end){ g=gr; break; } }
-    if(!g){ el.stars.innerHTML=''; return; }
+    if(!g){ return; }
     const stars=0.5*(g.end-rank+1);
-    el.stars.innerHTML = renderStars(stars,g.tier);
-    // Qo'shimcha matnni popoverga chiqarish (istasa)
+    // Chip yonida yulduzchalarni ko'rsatishni xohlasangiz id="ucStars" joyini qo'shib ishlating
     el.numeric.title = `O‘rin: #${rank} · Daraja: ${TIER_NAME[g.tier]} ${stars.toFixed(1)}/5`;
   }
+
+  // Sahifa yuklanganda auth-checking holatida ekanligimizni belgiladik
+  // watchAuth buni showApp()/lockToLogin() orqali olib tashlaydi
 </script>
 </body>
 </html>
