@@ -22,11 +22,9 @@
     html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
 
     /* -------- AUTH GUARD -------- */
-    /* FOUC'ni oldini olish: auth tekshiruvi tugaguncha app yopiq, gate ko'rinadi */
     html.auth-checking #app{display:none}
     html.auth-checking #authGate{display:flex}
 
-    /* Kirilmagan foydalanuvchi uchun to'siq (gate) */
     #authGate{
       position:fixed; inset:0; z-index:9999; display:none;
       align-items:center; justify-content:center; padding:24px;
@@ -45,7 +43,7 @@
     #authCard p{ margin:0 0 14px; color:var(--muted) }
     .auth-row{ display:flex; gap:10px; justify-content:flex-end; margin-top:8px }
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border:none;border-radius:12px;padding:10px 14px;font-weight:800;cursor:pointer;text-decoration:none}
-    .btn.ghost{background:#fff;color:#1F6B45;border:1px solid var(--frame)}
+    .btn.ghost{background:#fff;color:var(--brand2);border:1px solid var(--frame)}
     .meta-why{ font-size:12px; color:var(--muted) }
 
     /* Ichki UI */
@@ -185,12 +183,12 @@
     .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
     .danger{color:#c62828;font-size:12px;margin-right:auto}
 
-    /* Kunduzgi rejimda ball qora rangda (faqat chipdagi <b> uchun) */
+    /* Kunduzgi rejimda ball qora rangda */
     body:not(.dark) .uc-pill b { color:#000; }
   </style>
 </head>
 <body>
-  <!-- ===== AUTH GATE (Kirilmagan foydalanuvchilar uchun) ===== -->
+  <!-- ===== AUTH GATE ===== -->
   <div id="authGate">
     <div id="authCard" class="grad-border glass">
       <h2>Davom etish uchun kirish talab qilinadi</h2>
@@ -202,7 +200,7 @@
     </div>
   </div>
 
-  <!-- ===== APP (faqat kirgandan keyin ko'rsatiladi) ===== -->
+  <!-- ===== APP (faqat kirgandan keyin) ===== -->
   <div id="app">
     <!-- Appbar -->
     <header class="appbar">
@@ -214,10 +212,11 @@
       <div class="spacer"></div>
       <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
 
-      <!-- Compact UserChip -->
+      <!-- UserChip -->
       <div class="uc-chip" id="ucChip" aria-haspopup="dialog" aria-expanded="false">
         <div class="uc-ava" id="ucAva">LM</div>
         <div class="uc-pill"><span class="uc-pill-label">⭐</span><b id="ucPointsVal">—</b></div>
+        <div class="uc-stars" id="ucStars"></div>
         <button class="uc-more" id="ucMore" aria-label="Profil">⋯</button>
       </div>
     </header>
@@ -311,11 +310,10 @@
 
   // ==== AUTH GUARD ====
   const html = document.documentElement;
-  html.classList.add('auth-checking'); // tekshiruv vaqtida App yopiq
+  html.classList.add('auth-checking'); // tekshiruv vaqtida app yopiq
   const gate = document.getElementById('authGate');
   const app  = document.getElementById('app');
   const goLogin = document.getElementById('goLogin');
-  // Login tugmasi: qaytish manzilini qo'shib yuboramiz
   const ret = encodeURIComponent(location.pathname.replace(/\\/g,'/') + location.search);
   goLogin.href = `./login.html?return=${ret}`;
 
@@ -356,7 +354,7 @@
   function fmtPoints(v){ const n = Number(v)||0; return n.toLocaleString('uz-UZ',{maximumFractionDigits:1}); }
   function setAvatar(txtOrUrl){ const set=n=>{ if(txtOrUrl && /^https?:/.test(txtOrUrl)) n.innerHTML=`<img src="${txtOrUrl}" alt="ava">`; else n.textContent=(txtOrUrl||'LM').slice(0,2).toUpperCase(); }; set(el.ava); set(el.avaLg); }
 
-  // Stars (icons) helper
+  // Yulduz/olmos SVG
   function starSVG(fillPct,colors=['#9FE3FF','#39B6FF','#0077FF'],shape='star'){
     const [c1,c2,c3]=colors, gid='g'+Math.random().toString(36).slice(2,8), cid='c'+Math.random().toString(36).slice(2,8);
     if(shape!=='diamond'){
@@ -560,7 +558,6 @@
   let currentUserId=null, CURRENT_PROFILE=null;
   function profileIsComplete(u){ return !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.class && u.phone); }
 
-  // Auth guard: foydalanuvchi yo'q bo'lsa — appni yopamiz, gate ochiq qoladi.
   function showApp(){ gate.style.display='none'; app.style.display='block'; html.classList.remove('auth-checking'); }
   function lockToLogin(){ app.style.display='none'; gate.style.display='flex'; html.classList.remove('auth-checking'); }
 
@@ -595,7 +592,15 @@
   el.openProfile.onclick=(e)=>{ e.preventDefault(); closePop();
     const u=CURRENT_PROFILE||{};
     const nm=(u.name||'').trim().split(/\s+/,2);
-    openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school=u.school||'', klass=u.class||'', phone=u.phone||'' });
+    openProfileModal({
+      first: nm[0] || '',
+      last: nm[1] || '',
+      region: u.region || '',
+      district: u.district || '',
+      school: u.school || '',      // ✅ TUZATILDI
+      klass: u.class || '',
+      phone: u.phone || ''
+    });
   };
   el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); lockToLogin(); };
 
@@ -611,53 +616,48 @@
   }
 
   function resetChip(){
-    el.ava.textContent='LM'; el.avaLg.textContent='LM'; el.pointsVal.textContent='—';
+    setAvatar('LM'); el.pointsVal.textContent='—';
+    if (el.stars) el.stars.innerHTML='';
     el.name.textContent='Mehmon'; el.numeric.textContent='ID: —';
     el.region.textContent='—'; el.district.textContent='—'; el.school.textContent='—'; el.klass.textContent='—';
   }
 
-  // MUHIM: Auth holatini kuzatamiz va UI'ni shunga qarab bloklaymiz
   watchAuth(async(user)=>{
     if(!user){
       currentUserId=null; CURRENT_PROFILE=null; resetChip();
-      lockToLogin(); // kontentni yopamiz va kirish oynasini ko'rsatamiz
+      lockToLogin();
       return;
     }
     currentUserId=user.uid;
     const u=await ensureUser(user); CURRENT_PROFILE=u;
     setAvatar(user.photoURL||initials(u.name||user.email));
     fillChip(u);
-    showApp(); // endi appni ochamiz
+    showApp();
 
-    // Profil to'ldirilmagan bo'lsa — majburiy modal
     const seenKey=`lm-profile-seen:${currentUserId}`;
     if(!profileIsComplete(u) && !localStorage.getItem(seenKey)){
       const nm=(u.name||'').trim().split(/\s+/,2);
-      openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone=u.phone||'' });
+      openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone:u.phone||'' });
       localStorage.setItem(seenKey,'1');
     }
 
-    // Live leaderboard
     onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
       latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
         .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
       drawDecile(latestUsers, CURRENT_DECILE);
       updateMyRank(latestUsers, currentUserId);
-    }, (err)=>{ console.error('board error',err); document.getElementById('boardList').innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>'; });
+    }, (err)=>{ console.error('board error',err); el.boardList.innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>'; if (el.stars) el.stars.innerHTML=''; });
   });
 
   function updateMyRank(sorted,currentUid){
     const idx=sorted.findIndex(u=>(u.uid||u.id)===currentUid);
-    if(idx===-1){ return; }
+    if(idx===-1){ if (el.stars) el.stars.innerHTML=''; return; }
     const rank=idx+1; let g=null; for(const gr of GROUPS){ if(rank>=gr.start&&rank<=gr.end){ g=gr; break; } }
-    if(!g){ return; }
+    if(!g){ if (el.stars) el.stars.innerHTML=''; return; }
     const stars=0.5*(g.end-rank+1);
-    // Chip yonida yulduzchalarni ko'rsatishni xohlasangiz id="ucStars" joyini qo'shib ishlating
+    if (el.stars) el.stars.innerHTML = renderStars(stars,g.tier);
     el.numeric.title = `O‘rin: #${rank} · Daraja: ${TIER_NAME[g.tier]} ${stars.toFixed(1)}/5`;
   }
-
-  // Sahifa yuklanganda auth-checking holatida ekanligimizni belgiladik
-  // watchAuth buni showApp()/lockToLogin() orqali olib tashlaydi
 </script>
 </body>
 </html>
