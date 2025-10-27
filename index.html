@@ -176,19 +176,16 @@
     .modal{width:min(840px,94%);max-height:90vh;overflow:auto;background:var(--card);border-radius:18px;border:1px solid var(--frame-strong);box-shadow:0 24px 64px rgba(0,0,0,.35);padding:18px;background-image: radial-gradient(1200px 600px at 10% -20%, rgba(46,139,87,.08), transparent 55%), radial-gradient(1200px 600px at 110% 120%, rgba(57,182,255,.08), transparent 55%);}
     .ctl label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
     .ctl input,.ctl textarea,.ctl select{width:100%;padding:11px 12px;border:1px solid var(--frame);border-radius:12px;font:inherit;background:var(--card);color:var(--text);outline:none;transition:border .15s, box-shadow .15s}
-    .ctl input:focus{ border-color:var(--ring); box-shadow:0 0 0 4px color-mix(in srgb, var(--ring) 25%, transparent) }
+    .ctl input:focus,.ctl select:focus{ border-color:var(--ring); box-shadow:0 0 0 4px color-mix(in srgb, var(--ring) 25%, transparent) }
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
     @media(max-width:560px){ .grid2,.grid3{grid-template-columns:1fr} }
     .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
     .danger{color:#c62828;font-size:12px;margin-right:auto}
 
-    /* Kunduzgi rejimda ball qora rangda */
+    /* Light rejimda ball qora */
     body:not(.dark) .uc-pill b { color:#000; }
-	.chip.filter[aria-pressed="true"]{
-  background:linear-gradient(135deg,var(--brand),var(--brand2));
-  border-color:#0000;color:#fff;
-}
+    .chip.filter[aria-pressed="true"]{ background:linear-gradient(135deg,var(--brand),var(--brand2)); border-color:#0000;color:#fff; }
   </style>
 </head>
 <body>
@@ -240,7 +237,7 @@
         <div class="uc-kv"><div class="k">Tuman</div><div class="v" id="ucDistrict">—</div></div>
         <div class="uc-kv"><div class="k">Maktab</div><div class="v" id="ucSchool">—</div></div>
         <div class="uc-kv"><div class="k">Sinf</div><div class="v" id="ucClass">—</div></div>
-		<div class="uc-kv"><div class="k">Telefon nomer</div><div class="v" id="ucPhone">—</div></div>
+        <div class="uc-kv"><div class="k">Telefon</div><div class="v" id="ucPhone">—</div></div>
       </div>
 
       <div class="uc-actions">
@@ -281,19 +278,64 @@
     <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
       <div class="modal">
         <h3>Profil ma’lumotlari (majburiy)</h3>
+
         <div class="grid2">
-          <div class="ctl"><label>Ism *</label><input id="pFirst"></div>
-          <div class="ctl"><label>Familiya *</label><input id="pLast"></div>
+          <div class="ctl">
+            <label>Ism *</label>
+            <input id="pFirst" autocomplete="given-name">
+          </div>
+          <div class="ctl">
+            <label>Familiya *</label>
+            <input id="pLast" autocomplete="family-name">
+          </div>
         </div>
+
         <div class="grid3">
-          <div class="ctl"><label>Viloyat *</label><input id="pRegion" placeholder="Namangan"></div>
-          <div class="ctl"><label>Tuman/Shahar *</label><input id="pDistrict" placeholder="Yangiqo‘rg‘on"></div>
-          <div class="ctl"><label>Maktab nomi *</label><input id="pSchool" placeholder="1-maktab"></div>
+          <div class="ctl">
+            <label>Roli *</label>
+            <select id="pRole">
+              <option value="student">O‘quvchi</option>
+              <option value="teacher">O‘qituvchi</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <label>Viloyat *</label>
+            <select id="pRegion"></select>
+          </div>
+          <div class="ctl">
+            <label>Tuman/Shahar *</label>
+            <select id="pDistrict"></select>
+          </div>
         </div>
+
+        <div class="grid3">
+          <div class="ctl">
+            <label>Maktab nomi *</label>
+            <input id="pSchool" placeholder="1-maktab">
+          </div>
+
+          <!-- SINF — faqat o‘quvchi uchun -->
+          <div class="ctl" id="pGradeWrap">
+            <label>Sinf (sinf raqami) *</label>
+            <select id="pGrade"></select>
+          </div>
+          <div class="ctl" id="pLetterWrap">
+            <label>Sinf (harfi) *</label>
+            <select id="pLetter"></select>
+          </div>
+        </div>
+
         <div class="grid2">
-          <div class="ctl"><label>Sinf *</label><input id="pClass" placeholder="9-A"></div>
-          <div class="ctl"><label>Telefon *</label><input id="pPhone" placeholder="+998 XX XXX XX XX"></div>
+          <div class="ctl">
+            <label>Telefon *</label>
+            <input id="pPhone" placeholder="+998 XX XXX XX XX" autocomplete="tel">
+          </div>
+          <div class="ctl">
+            <label>&nbsp;</label>
+            <div class="desc" style="opacity:.7;padding:12px">Rasmiylashtirish uchun barcha * belgilangan maydonlar majburiy.</div>
+          </div>
         </div>
+
         <div class="row">
           <div class="danger" id="pError"></div>
           <button id="pSave" class="btn">Saqlash</button>
@@ -342,8 +384,11 @@
     PM:{
       mask:document.getElementById('profileModal'),
       first:document.getElementById('pFirst'), last:document.getElementById('pLast'),
-      r:document.getElementById('pRegion'), d:document.getElementById('pDistrict'),
-      s:document.getElementById('pSchool'), c:document.getElementById('pClass'),
+      role:document.getElementById('pRole'),
+      rSel:document.getElementById('pRegion'), dSel:document.getElementById('pDistrict'),
+      s:document.getElementById('pSchool'),
+      gradeWrap:document.getElementById('pGradeWrap'), letterWrap:document.getElementById('pLetterWrap'),
+      grade:document.getElementById('pGrade'), letter:document.getElementById('pLetter'),
       ph:document.getElementById('pPhone'), err:document.getElementById('pError'),
       save:document.getElementById('pSave'), close:document.getElementById('pClose')
     }
@@ -368,13 +413,14 @@
     return `<svg viewBox="0 0 24 24"><defs><linearGradient id="${gid}" x1="0" x2="1"><stop offset="0%" stop-color="${c1}"/><stop offset="50%" stop-color="${c2}"/><stop offset="100%" stop-color="${c3}"/></linearGradient><clipPath id="${cid}"><rect x="0" y="0" width="${fillPct}%" height="100%"/></clipPath></defs><path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="#cfe8ff"/><path d="M12 2 L20.5 8.5 L12 22 L3.5 8.5 Z" fill="url(#${gid})" clip-path="url(#${cid})"/></svg>`;
   }
   const GROUPS = [
-  {label:'💎 Diamond League',start:1,end:10,tier:'diamond',grad:['#9FE3FF','#39B6FF','#0077FF']},
-  {label:'💚 Emerald League',start:11,end:20,tier:'emerald',grad:['#8FE3B0','#2E8B57','#1F6B45']},
-  {label:'🥇 Gold League',start:21,end:30,tier:'gold',grad:['#FFE082','#FFC107','#FF8F00']},
-  {label:'🥈 Silver League',start:31,end:40,tier:'silver',grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
-  {label:'🥉 Bronze League',start:41,end:50,tier:'bronze',grad:['#C69462','#9A6B3F','#7C4F2E']}
-];
+    {label:'💎 Diamond League',start:1,end:10,tier:'diamond',grad:['#9FE3FF','#39B6FF','#0077FF']},
+    {label:'💚 Emerald League',start:11,end:20,tier:'emerald',grad:['#8FE3B0','#2E8B57','#1F6B45']},
+    {label:'🥇 Gold League',start:21,end:30,tier:'gold',grad:['#FFE082','#FFC107','#FF8F00']},
+    {label:'🥈 Silver League',start:31,end:40,tier:'silver',grad:['#DDE3EC','#BFC6D4','#9AA6B2']},
+    {label:'🥉 Bronze League',start:41,end:50,tier:'bronze',grad:['#C69462','#9A6B3F','#7C4F2E']}
+  ];
   const TIER_NAME={diamond:'Olmos',emerald:'Zumrad',gold:'Oltin',silver:'Kumush',bronze:'Bronza'};
+
   function renderStars(count,tier){
     const g=GROUPS.find(x=>x.tier===tier)||GROUPS[0], shape=(tier==='diamond')?'diamond':'star';
     const full=Math.floor(count), half=(count-full>=0.5)?1:0, empty=5-full-half;
@@ -390,20 +436,66 @@
   document.addEventListener('click',e=>{ if(!el.pop.contains(e.target) && !el.chip.contains(e.target)) closePop(); });
   window.addEventListener('keydown',e=>{ if(e.key==='Escape') closePop(); });
 
-  // ==== PROFILE MODAL HELPERS ====
-  const PM = el.PM;
-  const isModalVisible=()=> PM.mask && getComputedStyle(PM.mask).display!=='none';
-  function openProfileModal(pref={}){
-    PM.first.value=pref.first||''; PM.last.value=pref.last||'';
-    PM.r.value=pref.region||''; PM.d.value=pref.district||''; PM.s.value=pref.school||'';
-    PM.c.value=pref.klass||''; PM.ph.value=pref.phone||''; PM.err.textContent='';
-    PM.mask.style.display='flex'; document.body.classList.add('modal-open');
-  }
-  function closeProfileModal(){ PM.mask.style.display='none'; document.body.classList.remove('modal-open'); }
-  PM.close.onclick=closeProfileModal;
-  window.addEventListener('keydown',e=>{ if(e.key==='Escape'&&isModalVisible()) closeProfileModal(); });
+  // ====== REGION.JSON yuklash va selectlarni to‘ldirish ======
+  let REGION_DATA = { regions: [] };
 
-  // ==== FILTER STATE ====
+  async function loadRegions(){
+    try{
+      const res = await fetch('./region.json', {cache:'no-store'});
+      REGION_DATA = await res.json();
+    }catch(e){
+      console.error('region.json yuklashda xato', e);
+      REGION_DATA = { regions: [] };
+    }
+  }
+  function fillRegionSelect(selectedName=''){
+    const opts = REGION_DATA.regions.map(r=>`<option value="${r.name}">${r.name}</option>`);
+    el.PM.rSel.innerHTML = `<option value="" disabled ${selectedName?'':'selected'}>— tanlang —</option>` + opts.join('');
+    if(selectedName){
+      const found = REGION_DATA.regions.find(r=>r.name===selectedName);
+      el.PM.rSel.value = found ? selectedName : '';
+    }
+    // region tayyor bo‘lsa tumanni ham to‘ldiramiz
+    fillDistrictSelect(el.PM.rSel.value || '');
+  }
+  function fillDistrictSelect(regionName, selectedDistrict=''){
+    const reg = REGION_DATA.regions.find(r=>r.name===regionName);
+    const dlist = reg ? reg.districts : [];
+    const opts = dlist.map(d=>`<option value="${d}">${d}</option>`);
+    el.PM.dSel.innerHTML = `<option value="" disabled ${selectedDistrict?'':'selected'}>— tanlang —</option>` + opts.join('');
+    if(selectedDistrict && dlist.includes(selectedDistrict)){
+      el.PM.dSel.value = selectedDistrict;
+    }
+  }
+
+  // ====== SINF selectlari ======
+  const GRADE_LIST = Array.from({length:11}, (_,i)=>String(i+1)); // 1–11
+  const LETTER_LIST = ['A','B','V','G','D','E','J']; // kerak bo‘lsa kengaytirasiz
+  function fillClassSelects(klass){
+    // klass "9-A" ko‘rinishida bo‘lishi mumkin
+    let grade='', letter='';
+    if(klass && /\d+\s*-\s*[A-Za-zА-ЯЁЎҚҒҲ]/.test(klass)){
+      const m = klass.match(/(\d+)\s*-\s*([A-Za-zА-ЯЁЎҚҒҲ])/);
+      grade = m?.[1] || ''; letter = m?.[2]?.toUpperCase() || '';
+    }
+    el.PM.grade.innerHTML = `<option value="" disabled ${grade?'':'selected'}>—</option>` + GRADE_LIST.map(g=>`<option value="${g}">${g}</option>`).join('');
+    el.PM.letter.innerHTML = `<option value="" disabled ${letter?'':'selected'}>—</option>` + LETTER_LIST.map(l=>`<option value="${l}">${l}</option>`).join('');
+    if(grade) el.PM.grade.value = grade;
+    if(letter) el.PM.letter.value = letter.toUpperCase();
+  }
+  function currentClassFromSelects(){
+    const g = el.PM.grade.value;
+    const l = el.PM.letter.value;
+    if(!g || !l) return '';
+    return `${g}-${l}`;
+  }
+
+  function setClassVisible(visible){
+    el.PM.gradeWrap.style.display = visible ? '' : 'none';
+    el.PM.letterWrap.style.display = visible ? '' : 'none';
+  }
+
+  // ==== FILTER STATE (cards) ====
   let FILTER = { main: null };
   const SECTION_FILTERS = new Map();
   const getSecKey = s => (s.title||'')+'__'+(s.tag||'');
@@ -518,24 +610,21 @@
     sections.forEach(sec=> wrap.appendChild(renderSection(sec)));
   }
   function renderMainChips(tags){
-  const wrap = el.mainTags;
-  wrap.innerHTML = '';
-
-  const make = (label, isOn, value) => {
-    const b = chipEl(label, isOn, () => {
-      FILTER.main = value;           // holatni o'zgartiramiz
-      // 🔄 aria-pressed ni barcha chiplarda yangilaymiz
-      [...wrap.querySelectorAll('.chip.filter')].forEach(btn => {
-        btn.setAttribute('aria-pressed', btn === b ? 'true' : 'false');
+    const wrap = el.mainTags;
+    wrap.innerHTML = '';
+    const make = (label, isOn, value) => {
+      const b = chipEl(label, isOn, () => {
+        FILTER.main = value;
+        [...wrap.querySelectorAll('.chip.filter')].forEach(btn => {
+          btn.setAttribute('aria-pressed', btn === b ? 'true' : 'false');
+        });
+        renderAll();
       });
-      renderAll();                   // kartalarni qayta chizamiz
-    });
-    wrap.appendChild(b);
-  };
-
-  make('Hammasi', FILTER.main === null, null);
-  tags.forEach(t => make(t, FILTER.main === t, t));
-}
+      wrap.appendChild(b);
+    };
+    make('Hammasi', FILTER.main === null, null);
+    tags.forEach(t => make(t, FILTER.main === t, t));
+  }
 
   // ==== CONTENT INIT ====
   (async function initContent(){
@@ -558,13 +647,13 @@
       const u=arr[r-1]; if(!u) continue; const isTop3=r<=3;
       const left=isTop3?`<span class="medal ${r===1?'m1':r===2?'m2':'m3'}">${r===1?'🏆':r===2?'🥈':'🥉'}</span>`:`<span class="rnk">#${r}</span>`;
       rows.push(`<div class="rank grad-border glass tier-${g.tier} ${isTop3?('top-'+r):''}">
-  <div>${left}</div>
-  <div>
-    <b>${escapeHtml(u.name || 'Foydalanuvchi')}</b>
-    <div class="desc">${escapeHtml(u.class || '—')} · ${escapeHtml(u.school || '—')}</div>
-  </div>
-  <div style="text-align:right"><b>${fmtPoints(u.points)}</b></div>
-</div>`);
+        <div>${left}</div>
+        <div>
+          <b>${escapeHtml(u.name || 'Foydalanuvchi')}</b>
+          <div class="desc">${escapeHtml(u.class || '—')} · ${escapeHtml(u.school || '—')}</div>
+        </div>
+        <div style="text-align:right"><b>${fmtPoints(u.points)}</b></div>
+      </div>`);
     }
     el.boardList.innerHTML=`<div class="group grad-border glass"><div class="groupHead tier-${g.tier}"><span class="tier-badge">${g.label}</span><span class="stars">${renderStars(3,g.tier)}</span></div><div class="groupBody">${rows.join('')}</div></div>`;
     el.decileInfo.textContent=g.label; el.decilePrev.disabled=(ix<=0); el.decileNext.disabled=(ix>=GROUPS.length-1);
@@ -574,24 +663,81 @@
 
   // ==== AUTH + LIVE ====
   let currentUserId=null, CURRENT_PROFILE=null;
-  function profileIsComplete(u){ return !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.class && u.phone); }
+
+  function profileIsComplete(u){
+    // O‘qituvchi uchun sinf majburiy emas
+    const must = !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.phone && u.role);
+    if(!must) return false;
+    if(u.role === 'teacher') return true;
+    return !!u.class; // o‘quvchi bo‘lsa sinf shart
+  }
 
   function showApp(){ gate.style.display='none'; app.style.display='block'; html.classList.remove('auth-checking'); }
   function lockToLogin(){ app.style.display='none'; gate.style.display='flex'; html.classList.remove('auth-checking'); }
 
+  // ---- Profile modal helpers ----
+  const PM = el.PM;
+  const isModalVisible=()=> PM.mask && getComputedStyle(PM.mask).display!=='none';
+
+  function openProfileModal(pref={}){
+    PM.first.value=pref.first||''; PM.last.value=pref.last||'';
+    PM.s.value=pref.school||''; PM.ph.value=pref.phone||'';
+    PM.err.textContent='';
+    // Role
+    PM.role.value = (pref.role==='teacher' || pref.role==='student') ? pref.role : 'student';
+    setClassVisible(PM.role.value==='student');
+
+    // Regions (after region.json loaded)
+    fillRegionSelect(pref.region||'');
+    fillDistrictSelect(pref.region||'', pref.district||'');
+
+    // Class
+    fillClassSelects(pref.klass||'');
+
+    PM.mask.style.display='flex'; document.body.classList.add('modal-open');
+  }
+  function closeProfileModal(){ PM.mask.style.display='none'; document.body.classList.remove('modal-open'); }
+  PM.close.onclick=closeProfileModal;
+  window.addEventListener('keydown',e=>{ if(e.key==='Escape'&&isModalVisible()) closeProfileModal(); });
+
+  // Role change: sinfni ko‘rsat/yashir
+  PM.role.addEventListener('change', ()=>{
+    const isStudent = PM.role.value==='student';
+    setClassVisible(isStudent);
+  });
+
+  // Region change -> districts yangilanadi
+  PM.rSel.addEventListener('change', ()=>{
+    fillDistrictSelect(PM.rSel.value, '');
+  });
+
   // Profil saqlash
   el.PM.save.onclick=async ()=>{
-    const PM = el.PM;
     PM.err.textContent='';
-    const first=PM.first.value.trim(), last=PM.last.value.trim(),
-          region=PM.r.value.trim(), district=PM.d.value.trim(),
-          school=PM.s.value.trim(), klass=PM.c.value.trim(), phone=PM.ph.value.trim();
-    if(!first||!last||!region||!district||!school||!klass||!phone){ PM.err.textContent='Barcha maydonlar majburiy.'; return; }
+
+    const first=PM.first.value.trim(), last=PM.last.value.trim();
+    const role = PM.role.value || 'student';
+    const region=PM.rSel.value || ''; const district=PM.dSel.value || '';
+    const school=PM.s.value.trim(); const phone=PM.ph.value.trim();
+    const klass = role==='teacher' ? '' : currentClassFromSelects();
+
+    // Validatsiya
+    if(!first||!last||!role||!region||!district||!school||!phone){
+      PM.err.textContent='Barcha maydonlar majburiy (o‘qituvchi uchun sinf majburiy emas).'; return;
+    }
+    if(role==='student' && !klass){
+      PM.err.textContent='Sinfni to‘liq tanlang (raqam va harf).'; return;
+    }
+
     const name=`${first} ${last}`;
     try{
       const ref=doc(db,'users',currentUserId);
-      await setDoc(ref,{name,region,district,school,class:klass,phone},{merge:true});
-      CURRENT_PROFILE={...(CURRENT_PROFILE||{}),name,region,district,school,class:klass,phone};
+      await setDoc(ref,{
+        name, role, region, district, school,
+        class: (role==='teacher' ? null : klass),
+        phone
+      },{merge:true});
+      CURRENT_PROFILE={...(CURRENT_PROFILE||{}),name,role,region,district,school,class:(role==='teacher'?null:klass),phone};
       closeProfileModal();
       fillChip(CURRENT_PROFILE);
     }catch(e){ console.error('profile save error',e); PM.err.textContent='Saqlashda xatolik. Internetni tekshiring.'; }
@@ -603,10 +749,10 @@
     el.region.textContent=u?.region || '—';
     el.district.textContent=u?.district || '—';
     el.school.textContent=u?.school || '—';
-    el.klass.textContent=u?.class || '—';
+    el.klass.textContent=u?.class || (u?.role==='teacher' ? '— (o‘qituvchi)' : '—');
     el.pointsVal.textContent=fmtPoints(u?.points ?? 0);
-	const phoneEl = document.getElementById('ucPhone');
-  if (phoneEl) phoneEl.textContent = u?.phone || '—';
+    const phoneEl = document.getElementById('ucPhone');
+    if (phoneEl) phoneEl.textContent = u?.phone || '—';
   }
 
   el.openProfile.onclick=(e)=>{ e.preventDefault(); closePop();
@@ -615,9 +761,10 @@
     openProfileModal({
       first: nm[0] || '',
       last: nm[1] || '',
+      role: u.role || 'student',
       region: u.region || '',
       district: u.district || '',
-      school: u.school || '',      // ✅ TUZATILDI
+      school: u.school || '',
       klass: u.class || '',
       phone: u.phone || ''
     });
@@ -629,7 +776,13 @@
     await runTransaction(db, async(tx)=>{
       const snap=await tx.get(ref);
       if(!snap.exists()){
-        tx.set(ref,{ name:user.displayName|| (user.email?user.email.split('@')[0]:'Foydalanuvchi'), email:user.email||null, photoURL:user.photoURL||null, role:'user', numericId:Math.floor(1000+Math.random()*9000), points:0, region:null, district:null, school:null, class:null, phone:null, createdAt:Date.now() });
+        tx.set(ref,{
+          name:user.displayName|| (user.email?user.email.split('@')[0]:'Foydalanuvchi'),
+          email:user.email||null, photoURL:user.photoURL||null,
+          role:'student', // default
+          numericId:Math.floor(1000+Math.random()*9000),
+          points:0, region:null, district:null, school:null, class:null, phone:null, createdAt:Date.now()
+        });
       }
     });
     const data=(await getDoc(ref)).data(); return data;
@@ -642,6 +795,7 @@
     el.region.textContent='—'; el.district.textContent='—'; el.school.textContent='—'; el.klass.textContent='—';
   }
 
+  // ---- Auth watcher ----
   watchAuth(async(user)=>{
     if(!user){
       currentUserId=null; CURRENT_PROFILE=null; resetChip();
@@ -649,6 +803,10 @@
       return;
     }
     currentUserId=user.uid;
+
+    // region.json tayyorlab qo‘yamiz
+    await loadRegions();
+
     const u=await ensureUser(user); CURRENT_PROFILE=u;
     setAvatar(user.photoURL||initials(u.name||user.email));
     fillChip(u);
@@ -657,7 +815,12 @@
     const seenKey=`lm-profile-seen:${currentUserId}`;
     if(!profileIsComplete(u) && !localStorage.getItem(seenKey)){
       const nm=(u.name||'').trim().split(/\s+/,2);
-      openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:u.region||'', district:u.district||'', school:u.school||'', klass:u.class||'', phone:u.phone||'' });
+      openProfileModal({
+        first:nm[0]||'', last:nm[1]||'',
+        role: u.role || 'student',
+        region:u.region||'', district:u.district||'',
+        school:u.school||'', klass:u.class||'', phone:u.phone||''
+      });
       localStorage.setItem(seenKey,'1');
     }
 
