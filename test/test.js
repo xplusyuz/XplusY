@@ -340,6 +340,17 @@ async function boot(){
   $("#againBtn").onclick  = ()=>{ $("#resultCard").classList.add("hidden"); $("#questionsCard").classList.remove("hidden"); renderQuestion(); };
 }
 boot();
-.test-content img {
-  display: none !important;
-}
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+// 2. Klaviatura orqali man etilgan tugmalar
+document.addEventListener('keydown', e => {
+  if (
+    e.key === "F12" ||
+    (e.ctrlKey && e.shiftKey && ["I","J","C"].includes(e.key)) ||
+    (e.ctrlKey && e.key === "U") ||
+    (e.ctrlKey && e.key === "S")
+  ) e.preventDefault();
+});
+
+// 3. Agar rasm ko‘rsatishni istamasangiz:
+document.querySelectorAll('img').forEach(img => img.remove());
