@@ -1,5 +1,5 @@
 /* ===========================
-   LeaderMath — app.js (ESM)
+   LeaderMath — index.js (ESM)
    =========================== */
 
 if ('serviceWorker' in navigator) {
@@ -50,11 +50,7 @@ const el={
     gradeWrap:document.getElementById('pGradeWrap'), grade:document.getElementById('pGrade'),
     ph:document.getElementById('pPhone'), err:document.getElementById('pError'),
     save:document.getElementById('pSave'), close:document.getElementById('pClose')
-  },
-  // Info modal elements
-  infoMask: document.getElementById('infoModal'),
-  infoBox:  document.getElementById('infoContent'),
-  infoClose:document.getElementById('infoClose'),
+  }
 };
 
 /* ==== UTIL ==== */
@@ -86,7 +82,6 @@ let FILTER = { main: null };
 /* ==== Sections ==== */
 const SECTION_FILTERS = new Map();
 const getSecKey = s => (s.title||'')+'__'+(s.tag||'');
-
 function chipEl(label, pressed=false, onClick=()=>{}, extraClass=''){
   const b=document.createElement('button');
   b.className='chip '+extraClass; b.type='button';
@@ -108,42 +103,16 @@ function computeState(it, now){
   if(t==='window'){ if(!start||!end) return {status:'open'}; if(now<start) return {status:'locked_until', left:start-now}; if(now<=end) return {status:'open'}; return {status:'closed'}; }
   return {status:'open'};
 }
-
-/* === Info modal helpers === */
-function openInfo(html){
-  if(!el.infoMask || !el.infoBox) return;
-  el.infoBox.innerHTML = html || '<div style="opacity:.7">Ma’lumot kiritilmagan</div>';
-  el.infoMask.style.display='flex';
-  document.body.classList.add('modal-open');
-
-  const hide=()=>{
-    el.infoMask.style.display='none';
-    document.body.classList.remove('modal-open');
-    el.infoClose && el.infoClose.removeEventListener('click', hide);
-    el.infoMask && el.infoMask.removeEventListener('click', onMask);
-    window.removeEventListener('keydown', onEsc);
-  };
-  const onMask=(e)=>{ if(e.target===el.infoMask) hide(); };
-  const onEsc=(e)=>{ if(e.key==='Escape') hide(); };
-
-  el.infoClose && el.infoClose.addEventListener('click', hide);
-  el.infoMask && el.infoMask.addEventListener('click', onMask);
-  window.addEventListener('keydown', onEsc);
-}
-
 function renderSection(sec){
   const key = getSecKey(sec);
   if(!SECTION_FILTERS.has(key)) SECTION_FILTERS.set(key,new Set());
   const subSel=SECTION_FILTERS.get(key);
-
   const title=document.createElement('h3');
   title.style.margin='10px 6px'; title.style.fontSize='15px'; title.style.opacity='.8';
   title.innerHTML = escapeHtml(sec.title||'Bo‘lim') + (sec.tag ? ` — <span style="font-weight:600;opacity:.9">${escapeHtml(sec.tag)}</span>` : '');
-
   const subWrap=document.createElement('section'); subWrap.className='filters grad-border glass';
   subWrap.innerHTML = `<h4>Bu bo‘lim uchun kichik teglar:</h4><div class="chips"></div>`;
   const chipsRow = subWrap.querySelector('.chips');
-
   const tags = sectionTags(sec);
   if(tags.length===0){ chipsRow.innerHTML = `<span class="chip sm" style="opacity:.7">Teglar yo‘q</span>`; }
   else{
@@ -158,7 +127,6 @@ function renderSection(sec){
       }, 'sm'));
     });
   }
-
   const grid=document.createElement('div'); grid.className='grid';
   let items=(sec.items||[]);
   if(subSel.size>0){
@@ -168,12 +136,10 @@ function renderSection(sec){
       return want.some(t=> tags.includes(t));
     });
   }
-
   items.forEach(it=>{
     const card=document.createElement('article'); card.className='card grad-border glass';
     const best=it.best?'<div class="badge">BEST</div>':'';
     const slug=(it.name||'').replace(/\W+/g,'-');
-
     card.innerHTML=`
       <div class="thumb"><div style="font-weight:900;opacity:.75">${escapeHtml(it.name||'')}</div>${best}</div>
       <div class="body">
@@ -188,39 +154,23 @@ function renderSection(sec){
           ${(it.tags||[]).map(t=> `<span class="chip sm">${escapeHtml(String(t))}</span>`).join('')}
         </div>
       </div>`;
-
     const startBtn=card.querySelector(`#start-${slug}`);
     const cdEl=card.querySelector(`[data-id="${slug}"]`);
-
-    // Start button (window/soon/closed) holati
     const tick=()=>{ const st=computeState(it,Date.now());
       if(st.status==='open'){ startBtn.removeAttribute('disabled'); startBtn.setAttribute('href', it.link||'#'); cdEl.textContent=''; }
       else if(st.status==='soon'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tez orada'; }
       else if(st.status==='locked_until'){ startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Qolgan vaqt: '+fmtTime(st.left); }
       else { startBtn.setAttribute('disabled','1'); startBtn.removeAttribute('href'); cdEl.textContent='Tugadi'; }
     };
-    tick(); setInterval(tick,1000);
-
-    // INFO button hookup (NEW)
-    const infoBtn = card.querySelector(`#info-${slug}`);
-    if (infoBtn) {
-      infoBtn.removeAttribute('disabled');
-      infoBtn.addEventListener('click', () => openInfo(it.html || it.description));
-    }
-
-    grid.appendChild(card);
+    tick(); setInterval(tick,1000); grid.appendChild(card);
   });
-
   const frag=document.createDocumentFragment();
   frag.appendChild(title); frag.appendChild(subWrap);
-
   if(items.length===0){
     const empty=document.createElement('div'); empty.className='desc'; empty.style.margin='0 6px 10px'; empty.style.opacity='.7'; empty.textContent='Bu bo‘lim uchun tanlangan teg(lar) bo‘yicha ma’lumot topilmadi.'; frag.appendChild(empty);
   }
-  frag.appendChild(grid);
-  return frag;
+  frag.appendChild(grid); return frag;
 }
-
 function renderCards(data){
   const wrap=document.getElementById('sections'); if(!wrap) return;
   wrap.innerHTML='';
@@ -230,12 +180,11 @@ function renderCards(data){
 }
 
 /* ---- TOP CHIPS ---- */
-function chipElTop(label, on, cb){ const b=chipEl(label,on,cb); return b; }
 function renderMainChips(tags){
   const wrap = document.getElementById('mainTags'); if(!wrap) return;
   wrap.innerHTML = '';
 
-  const mk = (label, on, cb)=>{ const b=chipElTop(label,on,cb); wrap.appendChild(b); };
+  const mk = (label, on, cb)=>{ const b=chipEl(label,on,cb); wrap.appendChild(b); };
 
   mk('📰 Bannerlar', TOP_VIEW==='banners', ()=>{ TOP_VIEW='banners'; FILTER.main=null; updateTopVisibility(); syncPressed(); });
   mk('🏆 League', TOP_VIEW==='league', ()=>{ TOP_VIEW='league'; FILTER.main=null; updateTopVisibility(); syncPressed(); });
@@ -495,9 +444,11 @@ watchAuth(async(user)=>{
     localStorage.setItem(seenKey,'1');
   }
 
-  onSnapshot(query(collection(db,'users'), orderBy('points','desc'), limit(100)), (snap)=>{
-    latestUsers = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }))
-      .sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
+  onSnapshot(query(collection(db,'users'), orderBy('points','asc'), limit(100)), (snap)=>{
+    // Tartib: ko‘tarilish uchun “asc”? Agar pastdan yuqoriga kerak bo‘lsa, o‘zgartiring:
+    const docs = snap.docs.map(d=>({ id:d.id, uid:d.id, ...d.data() }));
+    // Yuz % to‘g‘ri tartib: points desc, so‘ng numericId asc
+    latestUsers = docs.sort((a,b)=> (Number(b.points)||0) - (Number(a.points)||0) || (a.numericId??0)-(b.numericId??0));
     drawDecile(latestUsers, CURRENT_DECILE);
   }, (err)=>{ console.error('board error',err); if(el.boardList) el.boardList.innerHTML='<div class="desc">Leaderboard hozircha yopiq</div>'; });
 });
@@ -509,9 +460,9 @@ if (el.openProfile) el.openProfile.onclick=(e)=>{
   const nm=(u.name||'').trim().split(/\s+/,2);
   openProfileModal({
     first:nm[0]||'', last:nm[1]||'',
-    role:u.role||'student',
-    region:u.region||'', district:u.district||'',
-    school:u.school||'', klass:u.class||'', phone:u.phone||''
+    role=u.role||'student',
+    region=u.region||'', district=u.district||'',
+    school=u.school||'', klass=u.class||'', phone=u.phone||''
   });
 };
 if (el.signOutBtn) el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); lockToLogin(); };
