@@ -464,7 +464,6 @@ openProfileModal({
   klass: u.class || '',
   phone: u.phone || ''
 });
-};
 if (el.signOutBtn) el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); lockToLogin(); };
 
 /* ===== BOOT + SECURITY ===== */
