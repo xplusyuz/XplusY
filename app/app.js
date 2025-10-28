@@ -454,16 +454,16 @@ watchAuth(async(user)=>{
 });
 
 /* Popover actions */
-if (el.openProfile) el.openProfile.onclick=(e)=>{
-  e.preventDefault(); closePop();
-  const u=CURRENT_PROFILE||{};
-  const nm=(u.name||'').trim().split(/\s+/,2);
-  openProfileModal({
-    first:nm[0]||'', last:nm[1]||'',
-    role=u.role||'student',
-    region=u.region||'', district=u.district||'',
-    school=u.school||'', klass=u.class||'', phone=u.phone||''
-  });
+openProfileModal({
+  first: nm[0] || '',
+  last: nm[1] || '',
+  role: u.role || 'student',
+  region: u.region || '',
+  district: u.district || '',
+  school: u.school || '',
+  klass: u.class || '',
+  phone: u.phone || ''
+});
 };
 if (el.signOutBtn) el.signOutBtn.onclick=async(e)=>{ e.preventDefault(); await signOut(auth); closePop(); lockToLogin(); };
 
