@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeaderMath — Admin (Lite)</title>
+  <style>
+    :root{ --g:#2E8B57; --bd:#e6f1ea; --tx:#0f172a; --card:#fff }
+    body{margin:0;background:#f6faf8;color:var(--tx);font:15px/1.5 Inter,system-ui}
+    header{position:sticky;top:0;background:linear-gradient(135deg,var(--g),#1F6B45);color:#fff;padding:10px 12px;display:flex;gap:10px;align-items:center}
+    .wrap{max-width:1100px;margin:14px auto;padding:0 12px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.05);padding:12px;margin-bottom:12px}
+    h2{margin:6px 0 10px;font-size:18px}
+    label{font-size:12px;opacity:.75}
+    input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:10px;font:inherit}
+    .btn{padding:9px 12px;border-radius:10px;border:1px solid var(--bd);background:#fff;cursor:pointer;font-weight:800}
+    .btn.primary{background:linear-gradient(135deg,var(--g),#1F6B45);color:#fff;border-color:#0000}
+    .list li{border:1px dashed var(--bd);border-radius:10px;padding:8px 10px;margin:6px 0}
+    .muted{opacity:.7}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    pre{white-space:pre-wrap;background:#0b1b15;color:#ddffef;padding:12px;border-radius:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <strong>LeaderMath — Admin (Lite)</strong>
+    <button id="btnImport" class="btn">Import JSON</button>
+    <button id="btnExport" class="btn primary">Export JSON</button>
+    <input id="file" type="file" accept="application/json" hidden>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <h2>Banner guruhlari</h2>
+      <div class="row">
+        <input id="bgTag" placeholder="Masalan: CHSB">
+        <button id="bgAdd" class="btn">Guruh qo‘shish</button>
+      </div>
+      <ul id="bgList" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Bo‘limlar</h2>
+      <div class="grid">
+        <div>
+          <label>Bo‘lim sarlavhasi</label>
+          <input id="secTitle" placeholder="Masalan: Matematika testlar">
+        </div>
+        <div>
+          <label>Katta teg</label>
+          <input id="secTag" placeholder="Masalan: Algebra">
+        </div>
+      </div>
+      <div class="row"><button id="secAdd" class="btn">Bo‘lim qo‘shish</button></div>
+      <ul id="secList" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Tanlangan bo‘limga Card qo‘shish</h2>
+      <div class="grid">
+        <div><label>Nomi</label><input id="cName"></div>
+        <div><label>Tavsif</label><input id="cDesc"></div>
+        <div><label>Rasm URL (ixtiyoriy)</label><input id="cImg"></div>
+        <div>
+          <label>Tur</label>
+          <select id="cType">
+            <option value="open">open</option>
+            <option value="coming_soon">coming_soon</option>
+            <option value="window">window</option>
+          </select>
+        </div>
+        <div><label>StartAt</label><input id="cStart" type="datetime-local"></div>
+        <div><label>EndAt</label><input id="cEnd" type="datetime-local"></div>
+        <div><label>Taglar (vergul bilan)</label><input id="cTags" placeholder="Algebra, Demo"></div>
+      </div>
+      <div class="row"><button id="cAdd" class="btn">Card qo‘shish (oxirgi bo‘limga)</button></div>
+      <p class="muted">Keyin tugmalarni card ichida alohida qo‘shasiz (quyida).</p>
+    </div>
+
+    <div class="card">
+      <h2>Card tugmalari (oxirgi cardga)</h2>
+      <div class="grid">
+        <div>
+          <label>Tugma turi</label>
+          <select id="bKind">
+            <option value="link">link</option>
+            <option value="modal">modal</option>
+          </select>
+        </div>
+        <div><label>Label</label><input id="bLabel" placeholder="Boshlash / Ko‘rsatma"></div>
+        <div><label>Href (link uchun)</label><input id="bHref" placeholder="./test.html?id=..."></div>
+        <div><label>HTML (modal uchun)</label><textarea id="bHtml" rows="4" placeholder="<div>...</div>"></textarea></div>
+      </div>
+      <div class="row"><button id="bAdd" class="btn">Tugma qo‘shish</button></div>
+      <pre id="live" class="muted"></pre>
+    </div>
+  </div>
+
+<script>
+let DATA={ bannerGroups:[], sections:[] };
+
+const $=s=>document.querySelector(s);
+function refreshUI(){
+  // Banner groups
+  const bgList=$('#bgList'); bgList.innerHTML='';
+  DATA.bannerGroups.forEach((g,gi)=>{
+    const li=document.createElement('li'); li.innerHTML=`
+      <div><b>${g.tag||'—'}</b></div>
+      <div class="row">
+        <input placeholder="HTML" id="h${gi}" style="flex:1 1 auto">
+        <input placeholder="durationMs (5000)" id="d${gi}" type="number" min="1000" step="500" style="width:160px">
+        <button class="btn" id="add${gi}">Banner qo‘shish</button>
+      </div>
+      <div class="muted">Jami: ${(g.items||[]).length} ta</div>
+    `;
+    bgList.appendChild(li);
+    li.querySelector(`#add${gi}`).onclick=()=>{
+      const html=li.querySelector(`#h${gi}`).value.trim(); const ms=Number(li.querySelector(`#d${gi}`).value||5000);
+      if(!html) return; (g.items||(g.items=[])).push({html:html, durationMs:ms}); refreshUI();
+    };
+  });
+
+  // Sections
+  const sList=$('#secList'); sList.innerHTML='';
+  DATA.sections.forEach((s,si)=>{
+    const li=document.createElement('li'); li.innerHTML=`
+      <div><b>${s.title}</b> — <span class="muted">${s.tag||''}</span></div>
+      <div class="muted">Cardlar: ${(s.items||[]).length} ta</div>
+    `;
+    sList.appendChild(li);
+  });
+
+  $('#live').textContent = JSON.stringify(DATA, null, 2);
+}
+
+/* Banner group add */
+$('#bgAdd').onclick=()=>{ const tag=$('#bgTag').value.trim(); if(!tag) return;
+  DATA.bannerGroups.push({tag, items:[]}); $('#bgTag').value=''; refreshUI(); };
+
+/* Section add */
+$('#secAdd').onclick=()=>{ const title=$('#secTitle').value.trim(), tag=$('#secTag').value.trim();
+  if(!title) return; DATA.sections.push({title, tag, items:[]}); $('#secTitle').value=''; $('#secTag').value=''; refreshUI(); };
+
+/* Card add (to last section) */
+$('#cAdd').onclick=()=>{
+  if(!DATA.sections.length) return alert('Avval bo‘lim qo‘shing.');
+  const s=DATA.sections[DATA.sections.length-1];
+  const it={
+    name: $('#cName').value.trim(),
+    description: $('#cDesc').value.trim(),
+    image: $('#cImg').value.trim()||undefined,
+    type: $('#cType').value,
+    startAt: $('#cStart').value? new Date($('#cStart').value).toISOString(): undefined,
+    endAt: $('#cEnd').value? new Date($('#cEnd').value).toISOString(): undefined,
+    tags: $('#cTags').value.split(',').map(x=>x.trim()).filter(Boolean),
+    buttons: []
+  };
+  if(!it.name) return alert('Card nomi kerak');
+  s.items.push(it);
+  ['#cName','#cDesc','#cImg','#cTags','#cStart','#cEnd'].forEach(sel=>$(sel).value=''); $('#cType').value='open';
+  refreshUI();
+};
+
+/* Button add (to last card of last section) */
+$('#bAdd').onclick=()=>{
+  if(!DATA.sections.length) return alert('Avval bo‘lim qo‘shing.');
+  const s=DATA.sections[DATA.sections.length-1]; if(!(s.items||[]).length) return alert('Avval card qo‘shing.');
+  const it=s.items[s.items.length-1];
+  const btn={ kind: $('#bKind').value, label: $('#bLabel').value.trim() };
+  if(btn.kind==='link'){ btn.href=$('#bHref').value.trim(); if(!btn.href) return alert('Href kerak.'); }
+  else { btn.html=$('#bHtml').value; if(!btn.html) return alert('HTML kerak.'); }
+  it.buttons = it.buttons || []; it.buttons.push(btn);
+  ['#bLabel','#bHref','#bHtml'].forEach(sel=>$(sel).value=''); refreshUI();
+};
+
+/* Import/Export */
+$('#btnImport').onclick=()=> $('#file').click();
+$('#file').onchange=e=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  const r=new FileReader(); r.onload=()=>{ try{ DATA=JSON.parse(r.result); refreshUI(); }catch{ alert('JSON xato'); } }; r.readAsText(f);
+};
+$('#btnExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='index.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+
+refreshUI();
+</script>
+</body>
+</html>
