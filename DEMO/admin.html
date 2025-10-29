@@ -6,8 +6,6 @@
 <title>LeaderMath Admin — Premium Glass Panel (Pro)</title>
 <meta name="theme-color" content="#2E8B57">
 <link rel="icon" href="./favicon.png">
-<!-- XLSX for Excel import/export -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --brand:#2E8B57;--brand2:#1F6B45;
@@ -61,9 +59,14 @@ textarea{min-height:80px;resize:vertical;}
 }
 .handle{cursor:grab;font-size:18px;user-select:none}
 .small{font-size:12px;opacity:.75}
+
+/* JSON PREVIEW - FIXED */
 pre{
   background:#0b1b15;color:#d8ffe8;font-size:12.5px;padding:12px;
-  border-radius:12px;overflow:auto;max-height:420px
+  border-radius:12px;overflow:auto;max-height:420px;
+  max-width:100%; /* Yangi qo'shildi - gorizontal scroll uchun */
+  white-space:pre-wrap; /* Yangi qo'shildi - uzun qatorlarni qayta qurish */
+  word-break:break-all; /* Yangi qo'shildi - uzun so'zlarni buzish */
 }
 .dark pre{background:#13261f;color:#d8ffe8}
 
@@ -99,15 +102,10 @@ pre{
 <header>
   <h1>LeaderMath — Admin Panel (Pro)</h1>
   <div class="actions">
-    <button id="importXlsx" class="btn ghost">Import XLSX</button>
-    <button id="exportXlsx" class="btn primary">Export XLSX</button>
-    <button id="importCsv" class="btn ghost">Import CSV</button>
-    <button id="exportCsv" class="btn line">Export CSV</button>
-    <button id="exportJson" class="btn line">Export JSON</button>
+    <button id="importJson" class="btn ghost">Import JSON</button>
+    <button id="exportJson" class="btn primary">Export JSON</button>
     <span id="themeToggle">🌙</span>
-    <input id="fileXlsx" type="file" accept=".xlsx" hidden>
-    <input id="fileCsvBanners" type="file" accept=".csv" hidden>
-    <input id="fileCsvSections" type="file" accept=".csv" hidden>
+    <input id="fileJson" type="file" accept=".json" hidden>
   </div>
 </header>
 
@@ -119,23 +117,23 @@ pre{
       <h2>🎬 Banner Guruhlari (Story)</h2>
       <div class="row">
         <input id="bgTag" placeholder="Masalan: CHSB">
-        <button id="bgAdd" class="btn">➕ Guruh qo‘shish</button>
+        <button id="bgAdd" class="btn">➕ Guruh qo'shish</button>
       </div>
       <div id="bgList" class="list"></div>
     </div>
 
     <!-- Sections -->
     <div class="card">
-      <h2>📚 Bo‘limlar & Card’lar</h2>
+      <h2>📚 Bo'limlar & Card'lar</h2>
       <div class="row">
-        <input id="secTitle" placeholder="Bo‘lim sarlavhasi (Masalan: Matematika testlar)">
+        <input id="secTitle" placeholder="Bo'lim sarlavhasi (Masalan: Matematika testlar)">
         <input id="secTag" placeholder="Katta teg (Masalan: Algebra)">
-        <button id="secAdd" class="btn">➕ Bo‘lim qo‘shish</button>
+        <button id="secAdd" class="btn">➕ Bo'lim qo'shish</button>
       </div>
       <div id="secList" class="list"></div>
 
       <!-- Card form -->
-      <div class="row"><strong>Oxirgi tanlangan bo‘limga card qo‘shish</strong></div>
+      <div class="row"><strong>Oxirgi tanlangan bo'limga card qo'shish</strong></div>
       <div class="row">
         <input id="cName" placeholder="Card nomi">
         <input id="cDesc" placeholder="Tavsif">
@@ -154,24 +152,24 @@ pre{
         <input id="cTags" placeholder="Teglar (vergul bilan)">
       </div>
       <div class="row">
-        <button id="cAdd" class="btn">➕ Card qo‘shish</button>
+        <button id="cAdd" class="btn">➕ Card qo'shish</button>
       </div>
 
       <!-- Buttons to card -->
-      <div class="row"><strong>Oxirgi card’ga tugma qo‘shish</strong></div>
+      <div class="row"><strong>Oxirgi card'ga tugma qo'shish</strong></div>
       <div class="row">
         <select id="bKind">
           <option value="link">link</option>
           <option value="modal">modal</option>
         </select>
-        <input id="bLabel" placeholder="Label (Boshlash / Ko‘rsatma)">
+        <input id="bLabel" placeholder="Label (Boshlash / Ko'rsatma)">
       </div>
       <div class="row">
         <input id="bHref" placeholder="Href (link uchun)">
         <textarea id="bHtml" placeholder="HTML (modal uchun)"></textarea>
       </div>
       <div class="row">
-        <button id="bAdd" class="btn">➕ Tugma qo‘shish</button>
+        <button id="bAdd" class="btn">➕ Tugma qo'shish</button>
       </div>
     </div>
 
@@ -186,7 +184,7 @@ pre{
   <div class="rightCol">
     <div class="card">
       <h2>👁️ Live Preview — Banner (Story)</h2>
-      <div class="row small">“Tanlangan guruh” tugmasini bosing → story ishlaydi</div>
+      <div class="row small">"Tanlangan guruh" tugmasini bosing → story ishlaydi</div>
       <div id="bannerPreview" class="previewArea">
         <div class="story">
           <div class="story-progress" id="bpProg"></div>
@@ -221,7 +219,7 @@ pre{
         </div>
         <iframe id="htmlFrame" sandbox="allow-forms allow-scripts allow-same-origin" style="width:100%;height:min(70vh,700px);border:0;background:#fff"></iframe>
         <div style="padding:10px;border-top:1px solid var(--frame);display:flex;justify-content:flex-end;gap:8px">
-          <button id="copyModalHtml" class="btn">HTML’ni nusxalash</button>
+          <button id="copyModalHtml" class="btn">HTML'ni nusxalash</button>
         </div>
       </div>
     </div>
@@ -238,8 +236,8 @@ pre{
    STATE
 ========================= */
 let DATA={ bannerGroups:[], sections:[] };
-let lastSectionIndex = -1;  // oxirgi tahrirlangan bo‘lim
-let lastCardIndex = -1;     // oxirgi tahrirlangan card (shu bo‘lim ichida)
+let lastSectionIndex = -1;  // oxirgi tahrirlangan bo'lim
+let lastCardIndex = -1;     // oxirgi tahrirlangan card (shu bo'lim ichida)
 
 /* =========================
    HELPERS
@@ -251,35 +249,6 @@ function fmt(obj){ return JSON.stringify(obj,null,2); }
 function download(filename, text, mime='text/plain'){
   const blob = new Blob([text], {type:mime});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
-}
-function parseCSV(text){
-  // juda oddiy CSV parser ("" qo‘shtirnoqni qisman qo‘llab-quvvatlaydi)
-  const rows=[]; let i=0, cur='', inQ=false; const push=()=>{ rows.at(-1).push(cur); cur=''; };
-  rows.push([]);
-  for(;i<text.length;i++){
-    const c=text[i], n=text[i+1];
-    if(inQ){
-      if(c=='"' && n=='"'){ cur+='"'; i++; continue; }
-      if(c=='"'){ inQ=false; continue; }
-      cur+=c; continue;
-    }else{
-      if(c=='"'){ inQ=true; continue; }
-      if(c==','){ push(); continue; }
-      if(c=='\n'){ push(); rows.push([]); continue; }
-      if(c=='\r') continue;
-      cur+=c;
-    }
-  }
-  push();
-  // remove last empty row if present
-  if(rows.at(-1).length===1 && rows.at(-1)[0]==='') rows.pop();
-  return rows;
-}
-function toCSV(rows){
-  return rows.map(r=> r.map(v=>{
-    const s=String(v??'');
-    return (s.includes(',')||s.includes('"')||s.includes('\n'))?('"'+s.replace(/"/g,'""')+'"'):s;
-  }).join(',')).join('\n');
 }
 
 /* =========================
@@ -301,7 +270,7 @@ function renderBannerList(){
         <div class="row" style="margin-top:6px">
           <input placeholder="Banner HTML" id="bhtml${gi}">
           <input placeholder="durationMs (5000)" id="bdur${gi}" type="number" min="500" step="100">
-          <button class="btn" id="badd${gi}">➕ Banner qo‘shish</button>
+          <button class="btn" id="badd${gi}">➕ Banner qo'shish</button>
           <button class="btn line" id="bprev${gi}">▶️ Tanlab preview</button>
         </div>
         <div class="list" id="bitems${gi}"></div>
@@ -312,7 +281,7 @@ function renderBannerList(){
     `;
     wrap.appendChild(item);
 
-    // bannerlar ro‘yxati (drag)
+    // bannerlar ro'yxati (drag)
     const list = item.querySelector(`#bitems${gi}`);
     (g.items||[]).forEach((it,bi)=>{
       const row=document.createElement('div'); row.className='item'; row.draggable=true; row.dataset.type='bitem'; row.dataset.bg=gi; row.dataset.index=bi;
@@ -325,7 +294,7 @@ function renderBannerList(){
       list.appendChild(row);
     });
 
-    // qo‘shish
+    // qo'shish
     item.querySelector(`#badd${gi}`).onclick=()=>{
       const html=item.querySelector(`#bhtml${gi}`).value.trim();
       const ms=Number(item.querySelector(`#bdur${gi}`).value||5000);
@@ -336,9 +305,9 @@ function renderBannerList(){
     // tanlab preview
     item.querySelector(`#bprev${gi}`).onclick=()=> mountBannerPreview(g);
 
-    // guruhni o‘chirish
+    // guruhni o'chirish
     item.querySelector(`#bdel${gi}`).onclick=()=>{
-      if(!confirm('Guruhni o‘chirish?'))return;
+      if(!confirm('Guruhni o'chirish?'))return;
       DATA.bannerGroups.splice(gi,1);
       renderBannerList(); refreshPreview();
     };
@@ -391,7 +360,7 @@ function renderSections(){
         <div><b>${escapeHtml(s.title||'—')}</b> — <i>${escapeHtml(s.tag||'')}</i> <span class="small">(${(s.items||[]).length} card)</span></div>
         <div class="row" style="margin-top:6px">
           <button class="btn line" id="sel${si}">🎯 Tanlash</button>
-          <button class="btn" id="ren${si}">✏️ Nomini o‘zgartir</button>
+          <button class="btn" id="ren${si}">✏️ Nomini o'zgartir</button>
         </div>
         <div class="list" id="cards${si}"></div>
       </div>
@@ -417,14 +386,14 @@ function renderSections(){
     });
 
     // actions
-    item.querySelector(`#sel${si}`).onclick=()=>{ lastSectionIndex=si; lastCardIndex=-1; alert('Tanlandi: '+(s.title||'Bo‘lim')); };
+    item.querySelector(`#sel${si}`).onclick=()=>{ lastSectionIndex=si; lastCardIndex=-1; alert('Tanlandi: '+(s.title||'Bo'lim')); };
     item.querySelector(`#ren${si}`).onclick=()=>{
-      const nt=prompt('Bo‘lim sarlavhasi', s.title||''); if(nt!=null) s.title=nt;
+      const nt=prompt('Bo'lim sarlavhasi', s.title||''); if(nt!=null) s.title=nt;
       const tg=prompt('Katta teg', s.tag||''); if(tg!=null) s.tag=tg;
       renderSections(); refreshPreview();
     };
     item.querySelector(`#sdel${si}`).onclick=()=>{
-      if(!confirm('Bo‘limni o‘chirish?'))return;
+      if(!confirm('Bo'limni o'chirish?'))return;
       DATA.sections.splice(si,1);
       if(lastSectionIndex===si){ lastSectionIndex=-1; lastCardIndex=-1; }
       renderSections(); refreshPreview();
@@ -436,7 +405,7 @@ function renderSections(){
       const row=e.target.closest('.item'); const ci=Number(row.dataset.index);
       const card=s.items[ci];
       if(btn.dataset.act==='del'){
-        if(!confirm('Cardni o‘chirish?'))return; s.items.splice(ci,1);
+        if(!confirm('Cardni o'chirish?'))return; s.items.splice(ci,1);
         renderSections(); refreshPreview();
       }else if(btn.dataset.act==='edit'){
         editCardPrompt(card, ()=>{ renderSections(); refreshPreview(); });
@@ -488,7 +457,7 @@ function bindDrag(container, onSwap, {selector='.item', scope='global'}={}){
 function mountBannerPreview(group){
   const track=$('#bpTrack'), prog=$('#bpProg');
   track.innerHTML=''; prog.innerHTML='';
-  if(!group || !group.items || !group.items.length){ track.innerHTML='<div class="story-slide"><h3 style="margin:0">Banner yo‘q</h3></div>'; return; }
+  if(!group || !group.items || !group.items.length){ track.innerHTML='<div class="story-slide"><h3 style="margin:0">Banner yo'q</h3></div>'; return; }
   group.items.forEach(it=>{
     const s=document.createElement('div'); s.className='story-slide'; s.innerHTML=it.html||''; track.appendChild(s);
     const b=document.createElement('div'); b.className='story-bar'; b.innerHTML='<span></span>'; prog.appendChild(b);
@@ -563,8 +532,8 @@ function editCardPrompt(card, onDone){
   const type=prompt('Tur (open/coming_soon/window)',card.type||'open'); if(type==null) return;
   let startAt=card.startAt||'', endAt=card.endAt||'';
   if(type==='window'){
-    startAt=prompt('startAt (ISO yoki bo‘sh)', startAt||'')||undefined;
-    endAt=prompt('endAt (ISO yoki bo‘sh)', endAt||'')||undefined;
+    startAt=prompt('startAt (ISO yoki bo'sh)', startAt||'')||undefined;
+    endAt=prompt('endAt (ISO yoki bo'sh)', endAt||'')||undefined;
   }else{ startAt=undefined; endAt=undefined; }
   const tags=prompt('Teglar (vergul bilan)', (card.tags||[]).join(', '));
   card.name=name; card.description=desc; card.image=img||undefined; card.type=type;
@@ -579,12 +548,12 @@ $('#bgAdd').onclick=()=>{ const tag=$('#bgTag').value.trim(); if(!tag) return al
   DATA.bannerGroups.push({tag,items:[]}); $('#bgTag').value=''; renderBannerList(); refreshPreview();
 };
 $('#secAdd').onclick=()=>{ const t=$('#secTitle').value.trim(),g=$('#secTag').value.trim();
-  if(!t) return alert('Bo‘lim sarlavhasi kerak');
+  if(!t) return alert('Bo'lim sarlavhasi kerak');
   DATA.sections.push({title:t, tag:g, items:[]}); lastSectionIndex = DATA.sections.length-1; lastCardIndex=-1;
   $('#secTitle').value=''; $('#secTag').value=''; renderSections(); refreshPreview();
 };
 $('#cAdd').onclick=()=>{
-  if(lastSectionIndex<0) return alert('Avval bo‘lim tanlang yoki qo‘shing (🎯 Tanlash).');
+  if(lastSectionIndex<0) return alert('Avval bo'lim tanlang yoki qo'shing (🎯 Tanlash).');
   const s=DATA.sections[lastSectionIndex];
   const it={
     name:$('#cName').value.trim(),
@@ -602,8 +571,8 @@ $('#cAdd').onclick=()=>{
   renderSections(); refreshPreview(); previewCard(it);
 };
 $('#bAdd').onclick=()=>{
-  if(lastSectionIndex<0) return alert('Bo‘lim tanlang');
-  const s=DATA.sections[lastSectionIndex]; if(!s.items.length) return alert('Avval card qo‘shing');
+  if(lastSectionIndex<0) return alert('Bo'lim tanlang');
+  const s=DATA.sections[lastSectionIndex]; if(!s.items.length) return alert('Avval card qo'shing');
   const c=s.items[lastCardIndex>=0?lastCardIndex:s.items.length-1];
   const btn={kind:$('#bKind').value, label:$('#bLabel').value.trim()};
   if(btn.kind==='link'){ btn.href=$('#bHref').value.trim(); if(!btn.href) return alert('Href kerak'); }
@@ -623,188 +592,32 @@ $('#themeToggle').onclick=()=> setTheme(root.classList.contains('dark')?'light':
 $('#toTop').onclick=()=> window.scrollTo({top:0,behavior:'smooth'});
 
 /* =========================
-   EXPORT — JSON/XLSX/CSV
+   EXPORT — JSON
 ========================= */
 $('#exportJson').onclick=()=> download('index.json', fmt(DATA), 'application/json');
 
-$('#exportXlsx').onclick=()=>{
-  const wb = XLSX.utils.book_new();
-
-  // Banners sheet
-  // cols: tag, idx, durationMs, html
-  const rowsB = [['tag','idx','durationMs','html']];
-  DATA.bannerGroups.forEach(bg=>{
-    (bg.items||[]).forEach((it,i)=>{
-      rowsB.push([bg.tag||'', i+1, Number(it.durationMs||0), it.html||'']);
-    });
-  });
-  const wsB = XLSX.utils.aoa_to_sheet(rowsB);
-  XLSX.utils.book_append_sheet(wb, wsB, 'Banners');
-
-  // Sections sheet
-  // cols: sectionTitle, sectionTag, cardIndex, name, description, image, type, startAt, endAt, tags (|), buttonsJSON
-  const rowsS = [['sectionTitle','sectionTag','cardIndex','name','description','image','type','startAt','endAt','tags','buttons']];
-  DATA.sections.forEach(sec=>{
-    (sec.items||[]).forEach((c,ci)=>{
-      rowsS.push([
-        sec.title||'', sec.tag||'', ci+1, c.name||'', c.description||'', c.image||'',
-        c.type||'open', c.startAt||'', c.endAt||'',
-        (c.tags||[]).join('|'),
-        JSON.stringify(c.buttons||[])
-      ]);
-    });
-    // agar bo‘lim bo‘sh bo‘lsa ham bir qator chiqsin
-    if(!(sec.items||[]).length){
-      rowsS.push([sec.title||'', sec.tag||'', '', '', '', '', '', '', '', '', '[]']);
-    }
-  });
-  const wsS = XLSX.utils.aoa_to_sheet(rowsS);
-  XLSX.utils.book_append_sheet(wb, wsS, 'Sections');
-
-  XLSX.writeFile(wb, 'leader-index.xlsx');
-};
-
-$('#exportCsv').onclick=()=>{
-  // banners.csv
-  const rowsB=[['tag','idx','durationMs','html']];
-  DATA.bannerGroups.forEach(bg=>{
-    (bg.items||[]).forEach((it,i)=>{
-      rowsB.push([bg.tag||'', i+1, Number(it.durationMs||0), it.html||'']);
-    });
-  });
-  download('banners.csv', toCSV(rowsB), 'text/csv');
-
-  // sections.csv
-  const rowsS=[['sectionTitle','sectionTag','cardIndex','name','description','image','type','startAt','endAt','tags','buttons']];
-  DATA.sections.forEach(sec=>{
-    (sec.items||[]).forEach((c,ci)=>{
-      rowsS.push([
-        sec.title||'', sec.tag||'', ci+1, c.name||'', c.description||'', c.image||'',
-        c.type||'open', c.startAt||'', c.endAt||'',
-        (c.tags||[]).join('|'),
-        JSON.stringify(c.buttons||[])
-      ]);
-    });
-    if(!(sec.items||[]).length){
-      rowsS.push([sec.title||'', sec.tag||'', '', '', '', '', '', '', '', '', '[]']);
-    }
-  });
-  download('sections.csv', toCSV(rowsS), 'text/csv');
-};
-
 /* =========================
-   IMPORT — XLSX/CSV
+   IMPORT — JSON
 ========================= */
-$('#importXlsx').onclick=()=> $('#fileXlsx').click();
-$('#fileXlsx').onchange = (e)=>{
+$('#importJson').onclick=()=> $('#fileJson').click();
+$('#fileJson').onchange = (e)=>{
   const f=e.target.files?.[0]; if(!f) return;
   const reader=new FileReader();
   reader.onload=()=>{
-    const wb = XLSX.read(reader.result, {type:'array'});
-    const bSheet = wb.Sheets['Banners'];
-    const sSheet = wb.Sheets['Sections'];
-    if(!bSheet || !sSheet){ alert('Banners va Sections varaq(lar)i topilmadi'); return; }
-
-    // parse Banners
-    const B = XLSX.utils.sheet_to_json(bSheet, {header:1}); // AOA
-    const banners = B.slice(1).filter(r=>r.length>0);
-    const bgMap = new Map(); // tag -> items[]
-    banners.forEach(r=>{
-      const tag = String(r[0]||'').trim(); if(!tag) return;
-      const dur = Number(r[2]||0); const html= String(r[3]||'');
-      if(!bgMap.has(tag)) bgMap.set(tag, []);
-      bgMap.get(tag).push({durationMs:dur||5000, html});
-    });
-    const bannerGroups = [...bgMap.entries()].map(([tag,items])=>({tag,items}));
-
-    // parse Sections
-    const S = XLSX.utils.sheet_to_json(sSheet, {header:1});
-    const secRows = S.slice(1).filter(r=>r.length>0);
-    const secMap = new Map(); // key:title|tag -> {title,tag,items:[]}
-    secRows.forEach(r=>{
-      const st=String(r[0]||'').trim(), tg=String(r[1]||'').trim();
-      const name=String(r[3]||'').trim(); const desc=String(r[4]||'').trim();
-      const image=String(r[5]||'').trim(); const type=String(r[6]||'open').trim();
-      const startAt=String(r[7]||'').trim()||undefined;
-      const endAt=String(r[8]||'').trim()||undefined;
-      const tags=String(r[9]||'').split('|').map(x=>x.trim()).filter(Boolean);
-      let buttons=[];
-      try{ buttons = JSON.parse(String(r[10]||'[]')); }catch{ buttons=[]; }
-
-      const key=`${st}|${tg}`;
-      if(!secMap.has(key)) secMap.set(key, {title:st, tag:tg, items:[]});
-      if(name){ secMap.get(key).items.push({name, description:desc, image: image||undefined, type, startAt, endAt, tags, buttons}); }
-    });
-    const sections = [...secMap.values()];
-
-    DATA = { bannerGroups, sections };
-    lastSectionIndex = sections.length? 0 : -1; lastCardIndex=-1;
-    renderBannerList(); renderSections(); refreshPreview();
-    alert('XLSX import qabul qilindi ✅');
+    try {
+      const jsonData = JSON.parse(reader.result);
+      DATA = jsonData;
+      lastSectionIndex = DATA.sections.length ? 0 : -1;
+      lastCardIndex = -1;
+      renderBannerList(); 
+      renderSections(); 
+      refreshPreview();
+      alert('JSON import qabul qilindi ✅');
+    } catch(err) {
+      alert('JSON faylini o‘qishda xato: ' + err.message);
+    }
   };
-  reader.readAsArrayBuffer(f);
-};
-
-$('#importCsv').onclick=()=>{
-  // ikki dialog: banners.csv va sections.csv
-  if(!confirm('Avval banners.csv faylni tanlaysiz, keyin sections.csv faylni. Davom etamizmi?')) return;
-  $('#fileCsvBanners').click();
-};
-$('#fileCsvBanners').onchange=(e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{
-    try{
-      const text=r.result; const rows=parseCSV(text);
-      const header=rows.shift()||[];
-      const idxTag=header.indexOf('tag'), idxDur=header.indexOf('durationMs'), idxHtml=header.indexOf('html');
-      const map=new Map();
-      rows.forEach(r=>{
-        const tag=(r[idxTag]||'').trim(); if(!tag) return;
-        const d=Number(r[idxDur]||5000); const h=(r[idxHtml]||'');
-        if(!map.has(tag)) map.set(tag,[]);
-        map.get(tag).push({durationMs:d||5000, html:h});
-      });
-      const BG=[...map.entries()].map(([tag,items])=>({tag,items}));
-      // temporarily stash banners, then ask for sections.csv
-      window.__TMP_BG = BG;
-      $('#fileCsvSections').click();
-    }catch(err){ alert('banners.csv parse xato'); }
-  };
-  r.readAsText(f);
-};
-$('#fileCsvSections').onchange=(e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{
-    try{
-      const text=r.result; const rows=parseCSV(text);
-      const header=rows.shift()||[];
-      const col = name=> header.indexOf(name);
-      const C={
-        st: col('sectionTitle'), tg: col('sectionTag'), nm: col('name'), ds: col('description'),
-        img: col('image'), tp: col('type'), sa: col('startAt'), ea: col('endAt'), tgs: col('tags'), btn: col('buttons')
-      };
-      const map=new Map();
-      rows.forEach(r=>{
-        const st=(r[C.st]||'').trim(), tg=(r[C.tg]||'').trim();
-        const name=(r[C.nm]||'').trim();
-        const desc=(r[C.ds]||'').trim(); const image=(r[C.img]||'').trim(); const type=(r[C.tp]||'open').trim();
-        const startAt=(r[C.sa]||'').trim()||undefined; const endAt=(r[C.ea]||'').trim()||undefined;
-        const tags=(r[C.tgs]||'').split('|').map(x=>x.trim()).filter(Boolean);
-        let buttons=[]; try{ buttons=JSON.parse(r[C.btn]||'[]'); }catch{}
-        const key=`${st}|${tg}`;
-        if(!map.has(key)) map.set(key, {title:st, tag:tg, items:[]});
-        if(name){ map.get(key).items.push({name, description:desc, image:image||undefined, type, startAt, endAt, tags, buttons}); }
-      });
-      const sections=[...map.values()];
-      DATA = { bannerGroups: (window.__TMP_BG||[]), sections };
-      delete window.__TMP_BG;
-      renderBannerList(); renderSections(); refreshPreview();
-      alert('CSV import qabul qilindi ✅');
-    }catch(err){ alert('sections.csv parse xato'); }
-  };
-  r.readAsText(f);
+  reader.readAsText(f);
 };
 
 /* =========================
