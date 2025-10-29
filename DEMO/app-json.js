@@ -1,7 +1,5 @@
-// app.js — JSON/home.json dan o'qiydigan versiya
-
+// app-json.js — reads from ./JSON/home.json
 const state = { cms: null, secIndex: 0, bannerIndex: 0, bannerTimer: null, bannerSpeed: 3500 };
-
 const $ = (q, root = document) => root.querySelector(q);
 
 document.getElementById("toggleTheme").onclick = () => {
@@ -14,11 +12,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 async function loadCMS() {
   try {
-    const res = await fetch("./JSON/home.json");
+    const res = await fetch("./JSON/home.json", { cache: "no-store" });
     state.cms = await res.json();
     renderAll();
   } catch (e) {
-    console.error("JSON o‘qishda xato:", e);
+    console.error("home.json o'qishda xato:", e);
     alert("home.json topilmadi yoki xato.");
   }
 }
@@ -30,23 +28,18 @@ function renderAll() {
   renderCards();
 }
 
-// ==== Big Chips ====
 function renderBigChips() {
   const el = document.getElementById("bigChips");
   el.innerHTML = "";
-  state.cms.sections.forEach((s, idx) => {
+  (state.cms.sections || []).forEach((s, idx) => {
     const a = document.createElement("button");
     a.className = "big-chip" + (idx === state.secIndex ? " active" : "");
     a.innerHTML = `<span class="dot"></span>${s.title}`;
-    a.onclick = () => {
-      state.secIndex = idx;
-      renderAll();
-    };
+    a.onclick = () => { state.secIndex = idx; renderAll(); };
     el.appendChild(a);
   });
 }
 
-// ==== Modal Chips ====
 function renderModChips() {
   const box = document.getElementById("modChips");
   box.innerHTML = "";
@@ -60,7 +53,6 @@ function renderModChips() {
   });
 }
 
-// ==== Banner Carousel ====
 function renderBanners() {
   const track = document.getElementById("bannerTrack");
   const prog = document.getElementById("bannerProgress");
@@ -128,7 +120,6 @@ function updateBannerUI() {
   });
 }
 
-// ==== Cards ====
 function renderCards() {
   const grid = document.getElementById("cards");
   grid.innerHTML = "";
@@ -184,7 +175,6 @@ function createCard(c) {
   return card;
 }
 
-// ==== Modal HTML ====
 function openHtml(htmlId, title = "Modal") {
   const snip = findHtml(htmlId);
   if (!snip) return;
