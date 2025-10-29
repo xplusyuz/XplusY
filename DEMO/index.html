@@ -3,49 +3,1334 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>LeaderMath — JSON CMS (FS)</title>
-  <meta name="theme-color" content="#2E8B57"/>
+  <title>LeaderMath — Premium Glass PWA</title>
+  <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
+  <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.png">
-  <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app-json.js"></script>
+  <style>
+:root{
+  --brand:#2E8B57;--brand2:#1F6B45;
+  --bg:#f4f8f6;--text:#0d1b14;--muted:#375c4c;--card:#ffffff;
+  --frame:#d8e7dd;--frame-strong:#b7d6c5;--chip:#eaf6f0;--chip-b:#cfe7db;
+  --radius:16px; --ring:#8ad1b1;
+}
+:root.dark{
+  --bg:#0e1512; --text:#EAF7EE; --muted:#A5C7B4; --card:#142018;
+  --frame:#244b39; --frame-strong:#2f6b52; --chip:#132a20; --chip-b:#2a5742; --ring:#2fbf7d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+
+/* -------- AUTH GUARD -------- */
+html.auth-checking #app{display:none}
+html.auth-checking #authGate{display:flex}
+
+#authGate{
+  position:fixed; inset:0; z-index:9999; display:none;
+  align-items:center; justify-content:center; padding:24px;
+  background:linear-gradient(135deg, rgba(14,21,18,.85), rgba(31,107,69,.85));
+  backdrop-filter: blur(10px);
+}
+#authCard{
+  width:min(560px,96vw);
+  background:var(--card);
+  border:1px solid var(--frame-strong);
+  border-radius:18px;
+  padding:20px;
+  box-shadow:0 24px 64px rgba(0,0,0,.35);
+}
+#authCard h2{ margin:0 0 6px; font-size:22px }
+#authCard p{ margin:0 0 14px; color:var(--muted) }
+.auth-row{ display:flex; gap:10px; justify-content:flex-end; margin-top:8px }
+
+/* ====== PREMIUM GLASS BUTTONS ====== */
+.btn{
+  position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:10px 14px; border:none; border-radius:12px; cursor:pointer; text-decoration:none;
+  font-weight:800; color:#fff; isolation:isolate;
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
+  box-shadow:0 6px 18px rgba(46,139,87,.25), inset 0 0 0 1px #ffffff22;
+  transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  backdrop-filter:saturate(120%);
+}
+.btn::before{
+  content:""; position:absolute; inset:0; border-radius:inherit; z-index:-1;
+  background:radial-gradient(120% 120% at -10% -10%, rgba(255,255,255,.55), transparent 40%),
+             radial-gradient(120% 120% at 110% 110%, rgba(255,255,255,.18), transparent 55%);
+  opacity:.9; pointer-events:none;
+}
+.btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(46,139,87,.32), inset 0 0 0 1px #ffffff33 }
+.btn:active{ transform:translateY(0); filter:saturate(1.05) }
+.btn:focus-visible{ outline:none; box-shadow:0 0 0 4px color-mix(in srgb, var(--ring) 30%, transparent), 0 10px 28px rgba(46,139,87,.32) }
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+
+/* Ghost (glass) button */
+.btn.ghost{
+  background:linear-gradient(180deg,#fff,#f5faf7);
+  color:var(--brand2);
+  border:1px solid var(--frame);
+  box-shadow:0 4px 12px rgba(0,0,0,.06);
+}
+.dark .btn.ghost{
+  background:linear-gradient(180deg,#1a2a21,#17261f);
+  color:#c8f0dc; border-color:#2a5742;
+}
+.btn.ghost:hover{ box-shadow:0 8px 20px rgba(0,0,0,.12) }
+
+/* Ichki UI */
+.glass{background:rgba(255,255,255,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.dark .glass{background:rgba(20,32,24,.55)}
+.grad-border{position:relative}
+.grad-border::before{
+  content:""; position:absolute; inset:0; padding:1px; border-radius:14px;
+  background:linear-gradient(135deg, #9ce8c0, #2E8B57 40%, #39B6FF);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
+}
+
+/* Appbar */
+.appbar{position:sticky;top:0;z-index:90;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.logo{width:60px;height:60px;border-radius:14px;background:#fff2;display:grid;place-items:center;font-weight:800;overflow:hidden}
+.logo img{width:100%;height:100%;object-fit:contain}
+.title{font-weight:800;font-size:18px}
+.sub{font-size:12px;opacity:.9}
+.spacer{flex:1}
+.iconbtn{background:#ffffff22;border:1px solid #ffffff33;color:#fff;border-radius:12px;padding:8px 10px;font-weight:700;cursor:pointer}
+
+/* MOBILE header tweaks */
+@media (max-width:600px){
+  .logo{width:60px;height:60px;border-radius:10px}
+  .title{font-size:16px}
+  .sub{font-size:10px}
+  .uc-chip{scale:.9}
+}
+
+/* === Compact User Chip === */
+.uc-chip{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--frame);border-radius:20px;padding:6px 8px 6px 6px;box-shadow:0 10px 24px rgba(0,0,0,.1);transition:.15s ease}
+.uc-chip:hover{transform:translateY(-1px);box-shadow:0 16px 36px rgba(0,0,0,.12)}
+.uc-ava{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;font-weight:900;display:grid;place-items:center;overflow:hidden;box-shadow:inset 0 0 0 2px #ffffff22}
+.uc-ava img{width:100%;height:100%;object-fit:cover}
+.uc-more{width:32px;height:32px;border-radius:10px;border:1px solid #ffffff44;background:#ffffff22;cursor:pointer;display:grid;place-items:center;font-size:20px;font-weight:900;color:#fff}
+
+/* === Popover === */
+.uc-popover-mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:998}
+.uc-popover{
+  position:fixed;right:14px;top:84px;z-index:999;width:min(520px,94vw);
+  background:var(--card);border:1px solid var(--frame-strong);
+  border-radius:18px;padding:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);
+  display:none;
+  background-image:
+    radial-gradient(1200px 600px at 10% -20%, rgba(46,139,87,.08), transparent 55%),
+    radial-gradient(1200px 600px at 110% 120%, rgba(57,182,255,.08), transparent 55%);
+}
+.uc-pop-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.uc-ava.lg{width:56px;height:56px}
+.uc-namebox .uc-fullname{font-weight:900;font-size:18px}
+.uc-namebox .uc-sub{color:var(--muted);font-size:12px}
+.uc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 12px}
+@media(max-width:560px){.uc-grid{grid-template-columns:1fr}}
+.uc-kv{background:var(--chip);border:1px solid var(--chip-b);border-radius:12px;padding:10px 12px}
+.uc-kv .k{font-size:12px;color:var(--muted);margin-bottom:4px}
+.uc-kv .v{font-weight:700}
+.uc-actions{display:flex;gap:10px;justify-content:flex-end}
+.btn-primary{padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;font-weight:800;cursor:pointer}
+.btn-ghost{padding:10px 14px;border:1px solid var(--frame);border-radius:12px;background:#fff;cursor:pointer}
+.dark .uc-chip{background:rgba(20,32,24,.65)}
+.dark .uc-popover{background:rgba(20,32,24,.85)}
+
+/* Filters (TOP) */
+.filters{margin:10px 12px;padding:10px;background:var(--card);border:1px solid var(--frame);border-radius:14px;box-shadow:0 8px 18px rgba(0,0,0,.06)}
+.filters h4{margin:0 0 8px;font-size:14px;opacity:.75}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b);font-size:12px;cursor:pointer}
+.chip[aria-pressed="true"]{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:#0000;color:#fff}
+.chip.sm{font-size:11px;padding:5px 8px}
+
+/* === STORY (banner) === */
+.storyWrap{margin:14px 12px;border-radius:18px;overflow:hidden;border:1px solid var(--frame);box-shadow:0 8px 22px rgba(0,0,0,.08);background:linear-gradient(135deg,#f0fff6,#e7f6ee)}
+.dark .storyWrap{background:linear-gradient(135deg,#122019,#0f1714)}
+.story{position:relative;overflow:hidden}
+.story-track{display:flex;will-change:transform;transition:transform .25s ease}
+.story-slide{min-width:100%;padding:20px}
+.story-progress{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:6px}
+.story-bar{flex:1;height:4px;background:#ffffff66;border-radius:999px;overflow:hidden}
+.story-bar>span{display:block;height:100%;width:0;background:#fff}
+
+/* === New Premium Card === */
+.container{padding:6px 12px 90px}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:560px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){.grid{grid-template-columns:repeat(3,1fr)}}
+
+.ucard{position:relative;border-radius:16px;overflow:hidden;border:1px solid var(--frame);box-shadow:0 12px 32px rgba(0,0,0,.08);background:var(--card);transition:.18s}
+.ucard:hover{transform:translateY(-3px);box-shadow:0 18px 44px rgba(0,0,0,.14)}
+.ucard .media{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#e9f5ef,#f6fbf8);display:grid;place-items:center}
+.dark .ucard .media{background:linear-gradient(135deg,#122019,#0f1714)}
+.ucard .media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ucard .media .titleBig{position:relative;font-size:28px;font-weight:1000;letter-spacing:.2px;text-align:center;color:#fff;text-shadow:0 12px 32px rgba(0,0,0,.55), 0 0 2px rgba(0,0,0,.35)}
+.ucard .veil{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#fff;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.55));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.ucard .veil .badge{display:inline-flex;gap:8px;border:1px solid #ffffff66;background:#ffffff22;color:#fff;border-radius:999px;padding:6px 10px;font-weight:900}
+.ucard .body{padding:12px}
+.ucard .name{font-size:16px;font-weight:900;margin:0 0 6px}
+.ucard .desc{font-size:13px;color:var(--muted);margin:0 0 10px}
+.ucard .actions{display:flex;flex-wrap:wrap;gap:8px}
+.ucard .meta{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:10px;align-items:center}
+.ucard .chipline{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ucard .chipline .chip{background:var(--chip);border-color:var(--chip-b)}
+
+/* PREMIUM MODAL for HTML preview buttons */
+.modal-mask {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, rgba(14,21,18,.35), rgba(31,107,69,.35));
+  display: none; align-items: center; justify-content: center; z-index: 1000;
+  padding: 20px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.modal {
+  background: rgba(255,255,255,.58);
+  border: 1px solid var(--frame-strong);
+  border-radius: 18px; box-shadow: 0 24px 64px rgba(0,0,0,.35);
+  padding: 0; width: min(900px, 96vw); max-height: 90vh; overflow: hidden;
+  animation: glassPop .22s ease-out;
+  backdrop-filter: saturate(140%) blur(16px); -webkit-backdrop-filter: saturate(140%) blur(16px);
+}
+.dark .modal{ background: rgba(20,32,24,.78) }
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--frame)}
+.modal-body{background:#fff}
+.modal-foot{padding:10px;border-top:1px solid var(--frame);display:flex;justify-content:flex-end;gap:8px}
+@keyframes glassPop{ from{transform:translateY(8px) scale(.98); opacity:0} to{transform:translateY(0) scale(1); opacity:1} }
+
+/* Leaderboard (saqlandi) */
+.board{background:var(--card);border:1px solid var(--frame);border-radius:16px;margin:10px 12px;padding:12px;border:none}
+.board h3{margin:0 0 8px;font-size:16px}
+.group{border:none;border-radius:14px;overflow:hidden;margin:10px 0;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+.groupBody{padding:12px}
+.groupHead{border:none;border-radius:14px;padding:14px 16px;color:var(--muted);font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dark .groupHead{color:#c7ffe7}
+.groupHead.tier-bronze{background:linear-gradient(135deg,#fff1e6,#ffd9c2)}
+.groupHead.tier-silver{background:linear-gradient(135deg,#f4f7fb,#dfe7f4)}
+.groupHead.tier-gold{background:linear-gradient(135deg,#fff4cc,#ffe48a)}
+.groupHead.tier-emerald{background:linear-gradient(135deg,#e3f8ee,#c9f1df)}
+.groupHead.tier-diamond{background:linear-gradient(135deg,#e8f8ff,#d8f1ff)}
+.tier-badge{font-weight:900;padding:6px 10px;border-radius:999px;border:1px solid var(--frame);background:rgba(255,255,255,.4)}
+.rank{display:grid;grid-template-columns:54px 1fr auto;gap:12px;align-items:center;padding:10px;border-radius:12px;border:1px solid var(--frame);margin-bottom:8px;background:var(--card);box-shadow:0 2px 6px rgba(0,0,0,.04);transition:.2s;border:none;position:relative}
+.rank:hover{transform:scale(1.02);box-shadow:0 10px 28px rgba(46,139,87,.28)}
+.rnk{font-weight:900;background:var(--chip);border:1px solid var(--frame);padding:6px 10px;border-radius:10px}
+.m1,.m2,.m3{display:inline-block;width:40px;text-align:center;animation:pulse 1.8s ease-in-out infinite alternate}
+@keyframes pulse{0%{filter:drop-shadow(0 0 0 rgba(255,200,0,.0))}100%{filter:drop-shadow(0 0 8px rgba(255,200,0,.35))}}
+.stars{display:inline-flex;gap:3px;vertical-align:middle}
+.tier-bronze .stars{--s:16}.tier-silver .stars{--s:17}.tier-gold .stars{--s:18}.tier-emerald .stars{--s:20}.tier-diamond .stars{--s:24}
+.stars svg{width:calc(var(--s)*1px);height:calc(var(--s)*1px)}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
+.pbtn{background:var(--chip);border:1px solid var(--frame);border-radius:10px;padding:8px 12px;font-weight:800;cursor:pointer}
+.pbtn[disabled]{opacity:.5;cursor:not-allowed}
+.pinfo{font-size:12px;color:var(--muted)}
+
+/* Form controls */
+.ctl {margin-bottom: 10px;}
+.ctl label {display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px;}
+.ctl input, .ctl select {width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--frame); background: var(--card); color: var(--text); font-size: 14px;}
+.hidden {display: none !important;}
+.linklike {cursor: pointer; color: var(--brand2); text-decoration: underline; font-size: 12px;}
+  </style>
 </head>
 <body>
-<header>
-  <div class="row">
-    <div class="logo">LM</div>
-    <div class="title">LeaderMath — JSON/Home.json dan o'qish</div>
-    <div class="spacer"></div>
-    <button class="btn" id="toggleTheme">🌗</button>
-  </div>
-</header>
-
-<section class="wrap">
-  <div class="badge">Fayl: <code>JSON/home.json</code> dan o‘qilmoqda</div>
-  <div id="bigChips" class="big-chips"></div>
-  <div id="modChips" class="mod-chips"></div>
-
-  <div class="card">
-    <div class="banner-wrap">
-      <div class="progress" id="bannerProgress"></div>
-      <div class="banner-track" id="bannerTrack"></div>
-      <div class="banner-nav">
-        <button id="prevBanner" aria-label="Oldingi banner"></button>
-        <button id="nextBanner" aria-label="Keyingi banner"></button>
+  <!-- ===== AUTH GATE ===== -->
+  <div id="authGate">
+    <div id="authCard" class="grad-border glass">
+      <h2>Davom etish uchun kirish talab qilinadi</h2>
+      <p>LeaderMath resurslaridan foydalanish uchun Google orqali tizimga kiring.</p>
+      <div class="meta-why">🔒 Siz kirgunga qadar asosiy kontent ko‘rsatilmaydi.</div>
+      <div class="auth-row">
+        <a id="goLogin" class="btn">🔑 Kirish</a>
       </div>
     </div>
   </div>
 
-  <div class="cards" id="cards"></div>
-</section>
+  <!-- ===== APP ===== -->
+  <div id="app">
+    <header class="appbar">
+      <div class="logo"><img src="./icon-512.png" alt="LeaderMath Logo"></div>
+      <div>
+        <div class="title">LeaderMath</div>
+        <div class="sub">BSB / CHSB / ONLINE OLIMPIADA / DTM / dars-resurslar</div>
+      </div>
+      <div class="spacer"></div>
+      <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
+      <div class="uc-chip" id="ucChip" aria-haspopup="dialog" aria-expanded="false">
+        <div class="uc-ava" id="ucAva">LM</div>
+        <div class="uc-pill"><span class="uc-pill-label">⭐</span><b id="ucPointsVal">—</b></div>
+        <button class="uc-more" id="ucMore" aria-label="Profil">⋯</button>
+      </div>
+    </header>
 
-<dialog class="modal" id="htmlModal">
-  <header>
-    <strong id="modalTitle">Modal</strong>
-    <button class="btn x" onclick="document.getElementById('htmlModal').close()">Yopish ✕</button>
-  </header>
-  <div class="content">
-    <div id="modalHtml" class="html"></div>
+    <!-- Popover -->
+    <div class="uc-popover-mask" id="ucMask"></div>
+    <div class="uc-popover grad-border glass" id="ucPopover" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="uc-pop-head">
+        <div class="uc-ava lg" id="ucAvaLg">LM</div>
+        <div class="uc-namebox">
+          <div class="uc-fullname" id="ucName">Foydalanuvchi</div>
+          <div class="uc-sub" id="ucNumeric">ID: —</div>
+        </div>
+      </div>
+      <div class="uc-grid">
+        <div class="uc-kv"><div class="k">Viloyat</div><div class="v" id="ucRegion">—</div></div>
+        <div class="uc-kv"><div class="k">Tuman</div><div class="v" id="ucDistrict">—</div></div>
+        <div class="uc-kv"><div class="k">Maktab</div><div class="v" id="ucSchool">—</div></div>
+        <div class="uc-kv"><div class="k">Sinf</div><div class="v" id="ucClass">—</div></div>
+        <div class="uc-kv"><div class="k">Telefon</div><div class="v" id="ucPhone">—</div></div>
+      </div>
+      <div class="uc-actions">
+        <button class="btn-primary" id="ucOpenProfile">📝 Profil</button>
+        <button class="btn-ghost" id="ucSignOut">⬅️ Chiqish</button>
+      </div>
+    </div>
+
+    <!-- TOP FILTERS -->
+    <section class="filters grad-border glass" id="filtersMain">
+      <h4>BO‘LIMLAR / KO‘RINISHLAR:</h4>
+      <div id="mainTags" class="chips"></div>
+    </section>
+
+    <!-- Story (Banner groups) -->
+    <section id="storyWrap" class="storyWrap grad-border glass" style="display:none">
+      <div style="padding:10px 10px 0"><div id="bannerGroupChips" class="chips"></div></div>
+      <div class="story" id="story">
+        <div class="story-progress" id="storyProg"></div>
+        <div class="story-track" id="storyTrack"></div>
+      </div>
+    </section>
+
+    <!-- Leaderboard -->
+    <section class="board grad-border glass" id="board" style="display:none">
+      <h3>League</h3>
+      <div class="pager">
+        <button id="decilePrev" class="pbtn">⬅️ Oldingi (10)</button>
+        <div class="pinfo" id="decileInfo">10–1 (Diamond)</div>
+        <button id="decileNext" class="pbtn">Keyingi (10) ➡️</button>
+      </div>
+      <div id="boardList"></div>
+    </section>
+
+    <div class="container"><div id="sections"></div></div>
+
+    <!-- Profile modal (saqlangan oqim) -->
+    <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
+      <div class="modal glass grad-border">
+        <div class="modal-head">
+          <b>Profil ma’lumotlari (majburiy)</b>
+          <button id="pClose" class="btn ghost">Yopish</button>
+        </div>
+        <div class="modal-body" style="padding:14px">
+          <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+            <div class="ctl"><label>Ism *</label><input id="pFirst" autocomplete="given-name"></div>
+            <div class="ctl"><label>Familiya *</label><input id="pLast" autocomplete="family-name"></div>
+          </div>
+          <div class="grid3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px">
+            <div class="ctl"><label>Roli *</label>
+              <select id="pRole"><option value="student">O‘quvchi</option><option value="teacher">O‘qituvchi</option></select>
+            </div>
+            <div class="ctl"><label>Viloyat *</label><select id="pRegion"></select></div>
+            <div class="ctl"><label>Tuman/Shahar *</label><select id="pDistrict"></select></div>
+          </div>
+          <div class="grid3" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px">
+            <div class="ctl">
+              <label>Maktab *</label>
+              <div class="inline-actions" style="display:flex;gap:8px;align-items:center">
+                <select id="pSchoolSel" style="flex:1 1 auto"></select>
+                <span id="schoolToggle" class="linklike" style="cursor:pointer;color:var(--brand2);text-decoration:underline">Ro‘yxatda yo‘q</span>
+              </div>
+              <input id="pSchoolCustom" class="hidden" placeholder="Maktab nomini kiriting">
+            </div>
+            <div class="ctl" id="pGradeWrap"><label>Sinf *</label><select id="pGrade"></select></div>
+            <div class="ctl"><label>Telefon *</label><input id="pPhone" placeholder="+998 XX XXX XX XX" autocomplete="tel"></div>
+          </div>
+          <div class="row" style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+            <div class="danger" id="pError" style="flex:1;color:#c62828;font-size:12px;display:flex;align-items:center"></div>
+            <button id="pSave" class="btn">Saqlash</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HTML modal viewer (card modal button) -->
+    <div id="htmlModal" class="modal-mask" aria-modal="true" role="dialog">
+      <div class="modal grad-border glass">
+        <div class="modal-head">
+          <b>Modal kontent</b>
+          <button id="closeHtmlModal" class="btn ghost">Yopish</button>
+        </div>
+        <iframe id="htmlFrame" sandbox="allow-forms allow-scripts allow-same-origin" class="modal-body" style="width:100%;height:min(72vh,720px);border:0;background:#fff"></iframe>
+        <div class="modal-foot">
+          <button id="copyHtmlBtn" class="btn">HTML'ni nusxalash</button>
+        </div>
+      </div>
+    </div>
   </div>
-</dialog>
+
+<script type="module">
+/* ===========================
+   LeaderMath — index.js (ESM)
+   =========================== */
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js');
+}
+
+/* ---- Firebase (ESM) ---- */
+// Agar Firebase fayllari mavjud bo'lsa:
+// import { auth, db, signOut } from './lib/firebase.client.js';
+// import { watchAuth } from './lib/auth-guard.js';
+
+// Agar Firebase mavjud bo'lmasa, mock qilamiz:
+let auth = { currentUser: null };
+let db = {};
+const signOut = () => Promise.resolve();
+const watchAuth = (callback) => { 
+  // Mock auth - keyin haqiqiy autentifikatsiya bilan almashtiriladi
+  setTimeout(() => callback({ 
+    uid: 'test-user-123', 
+    displayName: 'Test Foydalanuvchi', 
+    email: 'test@example.com',
+    photoURL: null 
+  }), 1000);
+};
+
+// Firestore funksiyalari (mock)
+const doc = () => ({});
+const getDoc = () => Promise.resolve({ data: () => ({}) });
+const setDoc = () => Promise.resolve();
+const runTransaction = () => Promise.resolve();
+const collection = () => ({});
+const query = () => ({});
+const orderBy = () => ({});
+const limit = () => ({});
+const onSnapshot = () => (() => {}); // unsubscribe funksiyasi
+
+/* ==== AUTH GUARD ==== */
+const html = document.documentElement;
+html.classList.add('auth-checking');
+const gate = document.getElementById('authGate');
+const app = document.getElementById('app');
+const goLogin = document.getElementById('goLogin');
+const ret = encodeURIComponent(location.pathname.replace(/\\/g, '/') + location.search);
+if (goLogin) goLogin.href = `./login.html?return=${ret}`;
+
+/* ==== THEME ==== */
+const root = document.documentElement, themeBtn = document.getElementById('themeBtn'), THEME_KEY = 'lm-theme';
+const setTheme = m => {
+  root.classList.toggle('dark', m === 'dark');
+  localStorage.setItem(THEME_KEY, m);
+  if (themeBtn) themeBtn.textContent = m === 'dark' ? '☀️' : '🌙';
+};
+setTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+if (themeBtn) themeBtn.onclick = () => setTheme(root.classList.contains('dark') ? 'light' : 'dark');
+
+/* ==== EL ==== */
+const el = {
+  chip: document.getElementById('ucChip'),
+  ava: document.getElementById('ucAva'),
+  avaLg: document.getElementById('ucAvaLg'),
+  pointsVal: document.getElementById('ucPointsVal'),
+  more: document.getElementById('ucMore'),
+  mask: document.getElementById('ucMask'),
+  pop: document.getElementById('ucPopover'),
+  name: document.getElementById('ucName'),
+  numeric: document.getElementById('ucNumeric'),
+  region: document.getElementById('ucRegion'),
+  district: document.getElementById('ucDistrict'),
+  school: document.getElementById('ucSchool'),
+  klass: document.getElementById('ucClass'),
+  openProfile: document.getElementById('ucOpenProfile'),
+  signOutBtn: document.getElementById('ucSignOut'),
+  sections: document.getElementById('sections'),
+  mainTags: document.getElementById('mainTags'),
+  // story
+  storyWrap: document.getElementById('storyWrap'),
+  story: document.getElementById('story'),
+  storyProg: document.getElementById('storyProg'),
+  storyTrack: document.getElementById('storyTrack'),
+  bannerChips: document.getElementById('bannerGroupChips'),
+  // board
+  board: document.getElementById('board'),
+  boardList: document.getElementById('boardList'),
+  decilePrev: document.getElementById('decilePrev'),
+  decileNext: document.getElementById('decileNext'),
+  decileInfo: document.getElementById('decileInfo'),
+  // profile modal
+  PM: {
+    mask: document.getElementById('profileModal'),
+    first: document.getElementById('pFirst'),
+    last: document.getElementById('pLast'),
+    role: document.getElementById('pRole'),
+    rSel: document.getElementById('pRegion'),
+    dSel: document.getElementById('pDistrict'),
+    schoolSel: document.getElementById('pSchoolSel'),
+    schoolCustom: document.getElementById('pSchoolCustom'),
+    schoolToggle: document.getElementById('schoolToggle'),
+    gradeWrap: document.getElementById('pGradeWrap'),
+    grade: document.getElementById('pGrade'),
+    ph: document.getElementById('pPhone'),
+    err: document.getElementById('pError'),
+    save: document.getElementById('pSave'),
+    close: document.getElementById('pClose')
+  },
+  // html modal
+  htmlModal: document.getElementById('htmlModal'),
+  htmlFrame: document.getElementById('htmlFrame'),
+  closeHtmlModal: document.getElementById('closeHtmlModal'),
+  copyHtmlBtn: document.getElementById('copyHtmlBtn')
+};
+
+/* ==== UTIL ==== */
+const toMs = v => v ? (new Date(v)).getTime() : null;
+const fmtTime = (ms) => {
+  if (ms <= 0) return '00:00:00';
+  const s = Math.floor(ms / 1000);
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${ss}`;
+};
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const initials = n => n ? (n.trim().split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase()) : 'LM';
+function fmtPoints(v) { const n = Number(v) || 0; return n.toLocaleString('uz-UZ', { maximumFractionDigits: 1 }); }
+function setAvatar(txtOrUrl) {
+  const set = n => {
+    if (!n) return;
+    if (txtOrUrl && /^https?:/.test(txtOrUrl)) n.innerHTML = `<img src="${txtOrUrl}" alt="ava">`;
+    else n.textContent = (txtOrUrl || 'LM').slice(0, 2).toUpperCase();
+  };
+  set(el.ava);
+  set(el.avaLg);
+}
+
+/* ==== App view mode ==== */
+let MODE = 'story'; // 'story' | 'league' | <main section tag>
+let ACTIVE_BANNER_TAG = null;
+
+/* ==== Data state ==== */
+let APP_DATA = { bannerGroups: [], sections: [] };
+
+/* ==== TOP CHIPS ==== */
+function chipEl(label, pressed = false, onClick = () => { }, extraClass = '') {
+  const b = document.createElement('button');
+  b.className = 'chip ' + extraClass;
+  b.type = 'button';
+  b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  b.appendChild(document.createTextNode(label));
+  b.onclick = () => onClick(b);
+  return b;
+}
+
+function collectSectionTags(data) {
+  const s = new Set();
+  (data.sections || []).forEach(sec => { if (sec.tag) s.add(String(sec.tag)); });
+  return [...s].sort();
+}
+
+function renderMainChips() {
+  const wrap = el.mainTags;
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  // two static modes
+  wrap.appendChild(chipEl('🎬 Bannerlar', MODE === 'story', () => { MODE = 'story'; updateVisibility(); }));
+  wrap.appendChild(chipEl('🏆 League', MODE === 'league', () => { MODE = 'league'; updateVisibility(); }));
+  // dynamic section tags
+  collectSectionTags(APP_DATA).forEach(t => {
+    wrap.appendChild(chipEl(t, MODE === t, () => { MODE = t; updateVisibility(); }));
+  });
+}
+
+/* ==== VISIBILITY ==== */
+function updateVisibility() {
+  // story mode:
+  if (el.storyWrap) el.storyWrap.style.display = (MODE === 'story') ? '' : 'none';
+  // league:
+  if (el.board) el.board.style.display = (MODE === 'league') ? '' : 'none';
+  // sections:
+  const cont = document.querySelector('.container');
+  if (cont) cont.style.display = (MODE !== 'story' && MODE !== 'league') ? '' : 'none';
+  if (MODE !== 'story' && MODE !== 'league') { renderSectionsGrid(); }
+}
+
+/* =========================
+   STORY (BANNER) KARUSEL
+========================= */
+function renderBannerChips() {
+  const w = el.bannerChips;
+  if (!w) return;
+  w.innerHTML = '';
+  const tags = (APP_DATA.bannerGroups || []).map(g => String(g.tag));
+  if (tags.length === 0) {
+    const m = document.createElement('div');
+    m.className = 'chip sm';
+    m.style.opacity = .7;
+    m.textContent = 'Banner guruhlari yo‘q';
+    w.appendChild(m);
+    return;
+  }
+  if (!ACTIVE_BANNER_TAG) ACTIVE_BANNER_TAG = tags[0];
+  tags.forEach(t => {
+    const pressed = (t === ACTIVE_BANNER_TAG);
+    w.appendChild(chipEl(t, pressed, () => { ACTIVE_BANNER_TAG = t; mountStory(); }, 'sm'));
+  });
+}
+
+function mountStory() {
+  renderBannerChips();
+  const track = el.storyTrack, prog = el.storyProg;
+  if (!track || !prog) return;
+  
+  track.innerHTML = '';
+  prog.innerHTML = '';
+  const grp = (APP_DATA.bannerGroups || []).find(g => String(g.tag) === String(ACTIVE_BANNER_TAG));
+  if (!grp || !grp.items || grp.items.length === 0) {
+    track.innerHTML = '<div class="story-slide"><h3 style="margin:0">Banner yo‘q</h3></div>';
+    return;
+  }
+  grp.items.forEach(() => {
+    const bar = document.createElement('div');
+    bar.className = 'story-bar';
+    bar.innerHTML = '<span></span>';
+    prog.appendChild(bar);
+  });
+  grp.items.forEach(it => {
+    const s = document.createElement('div');
+    s.className = 'story-slide';
+    s.innerHTML = it.html || '';
+    track.appendChild(s);
+  });
+
+  let i = 0, raf = null, start = 0, playing = true;
+  const spans = [...prog.querySelectorAll('span')];
+  const D = () => Math.max(1100, Number(grp.items[i]?.durationMs || 4500));
+  const setX = () => track.style.transform = `translateX(${-i * 100}%)`;
+  const step = () => {
+    const p = Math.min(1, (performance.now() - start) / D());
+    spans[i].style.width = (p * 100) + '%';
+    if (p < 1 && playing) raf = requestAnimationFrame(step);
+    else {
+      spans[i].style.width = '100%';
+      if (i < grp.items.length - 1) {
+        i++;
+        setX();
+        start = performance.now();
+        raf = requestAnimationFrame(step);
+      }
+    }
+  };
+  setX();
+  start = performance.now();
+  raf = requestAnimationFrame(step);
+
+  // swipe / pointer
+  let sx = 0, dx = 0, dragging = false;
+  if (el.story) {
+    el.story.addEventListener('pointerdown', e => { dragging = true; sx = e.clientX; dx = 0; el.story.setPointerCapture(e.pointerId); });
+    el.story.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      dx = e.clientX - sx;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${(-i * 100) + (dx / window.innerWidth * 100)}%)`;
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      track.style.transition = 'transform .25s ease';
+      if (Math.abs(dx) > 40) {
+        if (dx < 0 && i < grp.items.length - 1) i++;
+        if (dx > 0 && i > 0) i--;
+      }
+      setX();
+      start = performance.now();
+      spans.forEach((sp, idx) => sp.style.width = idx < i ? '100%' : '0');
+    };
+    el.story.addEventListener('pointerup', end);
+    el.story.addEventListener('pointercancel', end);
+  }
+}
+
+/* =========================
+   SECTIONS + CARDS GRID
+========================= */
+const SECTION_FILTERS = new Map(); // per-section subtag filters
+const getSecKey = s => (s.title || '') + '__' + (s.tag || '');
+
+function sectionTags(sec) {
+  const s = new Set();
+  (sec.items || []).forEach(it => (it.tags || []).forEach(t => s.add(String(t))));
+  return [...s].sort();
+}
+
+function computeState(it, now) {
+  const t = it.type || 'open', start = toMs(it.startAt), end = toMs(it.endAt);
+  if (t === 'open') return { status: 'open' };
+  if (t === 'coming_soon') return { status: 'soon' };
+  if (t === 'window') {
+    if (!start || !end) return { status: 'open' };
+    if (now < start) return { status: 'locked_until', left: start - now };
+    if (now <= end) return { status: 'open_window', left: end - now };
+    return { status: 'closed' };
+  }
+  return { status: 'open' };
+}
+
+function renderCard(it) {
+  const card = document.createElement('article');
+  card.className = 'ucard grad-border glass';
+  const hasImg = !!it.image;
+  const titleBig = `<div class="titleBig">${escapeHtml(it.name || '')}</div>`;
+  const media = hasImg ? `<img src="${escapeHtml(it.image)}" alt="">` : titleBig;
+  card.innerHTML = `
+    <div class="media">${media}<div class="veil" style="display:none"><div class="badge">⏳ Tez kunda</div><div style="font-weight:1000;font-size:22px"><span class="cd"></span></div></div></div>
+    <div class="body">
+      <h3 class="name">${escapeHtml(it.name || '')}</h3>
+      ${it.description ? `<p class="desc">${escapeHtml(it.description)}</p>` : ''}
+      <div class="actions"></div>
+      <div class="meta"></div>
+      <div class="chipline">${(it.tags || []).map(t => `<span class="chip sm">${escapeHtml(String(t))}</span>`).join('')}</div>
+    </div>`;
+  const veil = card.querySelector('.veil'), cd = card.querySelector('.cd'), meta = card.querySelector('.meta'), acts = card.querySelector('.actions');
+
+  // Buttons (link / modal)
+  (it.buttons || []).forEach(btn => {
+    if (btn.kind === 'link') {
+      const a = document.createElement('a');
+      a.className = 'btn';
+      a.textContent = btn.label || 'Ochish';
+      if (btn.href) a.href = btn.href;
+      else a.setAttribute('disabled', '1');
+      acts.appendChild(a);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'btn ghost';
+      b.textContent = btn.label || 'Ko‘rsatma';
+      b.onclick = () => openHtmlModal(btn.html || '');
+      acts.appendChild(b);
+    }
+  });
+
+  // State overlay + countdown
+  function tick() {
+    const st = computeState(it, Date.now());
+    if (st.status === 'open') { veil.style.display = 'none'; meta.textContent = ''; }
+    else if (st.status === 'soon') { veil.style.display = 'flex'; veil.querySelector('.badge').textContent = '⏳ Tez kunda'; cd.textContent = ''; }
+    else if (st.status === 'locked_until') { veil.style.display = 'flex'; veil.querySelector('.badge').textContent = '🔒 Boshlanishiga'; cd.textContent = fmtTime(st.left); }
+    else if (st.status === 'open_window') { veil.style.display = 'flex'; veil.querySelector('.badge').textContent = '⏱ Davom etmoqda'; cd.textContent = 'Qolgan: ' + fmtTime(st.left); }
+    else { veil.style.display = 'flex'; veil.querySelector('.badge').textContent = '⏹ Tugadi'; cd.textContent = ''; }
+  }
+  tick();
+  const tmr = setInterval(tick, 1000);
+  card.addEventListener('remove', () => clearInterval(tmr));
+  return card;
+}
+
+function renderSectionBlock(sec) {
+  const key = getSecKey(sec);
+  if (!SECTION_FILTERS.has(key)) SECTION_FILTERS.set(key, new Set());
+  const subSel = SECTION_FILTERS.get(key);
+
+  const frag = document.createDocumentFragment();
+  const title = document.createElement('h3');
+  title.style.margin = '10px 6px';
+  title.style.fontSize = '15px';
+  title.style.opacity = '.8';
+  title.innerHTML = `${escapeHtml(sec.title || 'Bo‘lim')} ${sec.tag ? `— <span style="font-weight:600;opacity:.9">${escapeHtml(sec.tag)}</span>` : ''}`;
+  frag.appendChild(title);
+
+  const subWrap = document.createElement('section');
+  subWrap.className = 'filters grad-border glass';
+  subWrap.innerHTML = `<h4>Kichik teglar:</h4><div class="chips"></div>`;
+  const chipsRow = subWrap.querySelector('.chips');
+  const tags = sectionTags(sec);
+  if (tags.length === 0) { chipsRow.innerHTML = `<span class="chip sm" style="opacity:.7">Teglar yo‘q</span>`; }
+  else {
+    const reset = chipEl('Reset', subSel.size === 0, () => { subSel.clear(); renderSectionsGrid(); }, 'sm');
+    chipsRow.appendChild(reset);
+    tags.forEach(t => {
+      const pressed = subSel.has(t);
+      chipsRow.appendChild(chipEl(t, pressed, (btn) => {
+        const on = btn.getAttribute('aria-pressed') === 'true';
+        if (on) { subSel.delete(t); btn.setAttribute('aria-pressed', 'false'); }
+        else { subSel.add(t); btn.setAttribute('aria-pressed', 'true'); }
+        renderSectionsGrid();
+      }, 'sm'));
+    });
+  }
+  frag.appendChild(subWrap);
+
+  // cards
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  let items = (sec.items || []);
+  if (subSel.size > 0) {
+    const want = [...subSel];
+    items = items.filter(it => (it.tags || []).map(String).some(t => want.includes(t)));
+  }
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'desc';
+    empty.style.margin = '0 6px 10px';
+    empty.style.opacity = '.7';
+    empty.textContent = 'Bu bo‘lim uchun tanlangan teg(lar) bo‘yicha ma’lumot topilmadi.';
+    frag.appendChild(empty);
+  }
+  items.forEach(it => grid.appendChild(renderCard(it)));
+  frag.appendChild(grid);
+  return frag;
+}
+
+function renderSectionsGrid() {
+  const wrap = el.sections;
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const list = (APP_DATA.sections || []).filter(s => MODE && s.tag && String(s.tag) === MODE);
+  if (list.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'desc';
+    empty.style.margin = '10px 6px';
+    empty.style.opacity = '.75';
+    empty.textContent = 'Bu teg bo‘yicha bo‘lim topilmadi.';
+    wrap.appendChild(empty);
+    return;
+  }
+  list.forEach(sec => wrap.appendChild(renderSectionBlock(sec)));
+}
+
+/* =========================
+   HTML MODAL (for modal buttons)
+========================= */
+function openHtmlModal(html) {
+  if (el.htmlFrame) {
+    el.htmlFrame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px/1.6 system-ui;padding:16px}</style></head><body>${html || ''}</body></html>`;
+  }
+  if (el.htmlModal) el.htmlModal.style.display = 'flex';
+}
+
+if (el.closeHtmlModal) el.closeHtmlModal.onclick = () => {
+  if (el.htmlModal) el.htmlModal.style.display = 'none';
+  if (el.htmlFrame) el.htmlFrame.srcdoc = '';
+};
+
+if (el.copyHtmlBtn) el.copyHtmlBtn.onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(el.htmlFrame.contentDocument?.body?.innerHTML || '');
+    alert('Nusxa olindi ✓');
+  } catch { }
+};
+
+/* =========================
+   CONTENT LOAD (index.json)
+========================= */
+async function initContent() {
+  try {
+    const r = await fetch('./index.json', { cache: 'no-store' });
+    APP_DATA = await r.json();
+
+    // story init
+    renderBannerChips();
+    mountStory();
+
+    // chips + visibility
+    renderMainChips();
+    MODE = 'story';
+    updateVisibility();
+  } catch (e) {
+    console.error('Kontent yuklashda xato:', e);
+    // Mock ma'lumotlar agar index.json mavjud bo'lmasa
+    APP_DATA = {
+      bannerGroups: [
+        {
+          tag: "Asosiy",
+          items: [
+            {
+              html: "<h2>LeaderMath ga xush kelibsiz!</h2><p>Bu yerda siz matematika bo'yicha qiziqarli materiallar topasiz</p>",
+              durationMs: 5000
+            }
+          ]
+        }
+      ],
+      sections: [
+        {
+          title: "Matematika",
+          tag: "Matematika",
+          items: [
+            {
+              name: "Algebra",
+              description: "Algebra bo'yicha darsliklar va masalalar",
+              tags: ["9-sinf", "10-sinf"],
+              type: "open",
+              buttons: [
+                { kind: "link", label: "Ochish", href: "#" }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+    
+    // Mock ma'lumotlar bilan qayta chizish
+    renderBannerChips();
+    mountStory();
+    renderMainChips();
+    MODE = 'story';
+    updateVisibility();
+  }
+}
+
+/* =========================
+   LEADERBOARD (saqlangan oqim)
+========================= */
+const GROUPS = [
+  { label: '💎 Diamond League', start: 1, end: 10, tier: 'diamond', grad: ['#9FE3FF', '#39B6FF', '#0077FF'] },
+  { label: '💚 Emerald League', start: 11, end: 20, tier: 'emerald', grad: ['#8FE3B0', '#2E8B57', '#1F6B45'] },
+  { label: '🥇 Gold League', start: 21, end: 30, tier: 'gold', grad: ['#FFE082', '#FFC107', '#FF8F00'] },
+  { label: '🥈 Silver League', start: 31, end: 40, tier: 'silver', grad: ['#DDE3EC', '#BFC6D4', '#9AA6B2'] },
+  { label: '🥉 Bronze League', start: 41, end: 50, tier: 'bronze', grad: ['#C69462', '#9A6B3F', '#7C4F2E'] }
+];
+let CURRENT_DECILE = 0, latestUsers = [];
+
+function starSVG(fillPct, colors = ['#9FE3FF', '#39B6FF', '#0077FF']) {
+  const [c1, c2, c3] = colors, gid = 'g' + Math.random().toString(36).slice(2, 8), cid = 'c' + Math.random().toString(36).slice(2, 8);
+  const p = 'M12 2.3l2.9 5.9 6.5.9-4.7 4.5 1.1 6.4L12 17.8l-5.8 3.1 1.1-6.4L2.6 9.1l6.5-.9L12 2.3z';
+  return `<svg viewBox="0 0 24 24"><defs><linearGradient id="${gid}" x1="0" x2="1"><stop offset="0%" stop-color="${c1}"/><stop offset="50%" stop-color="${c2}"/><stop offset="100%" stop-color="${c3}"/></linearGradient><clipPath id="${cid}"><rect x="0" y="0" width="${fillPct}%" height="100%"/></clipPath></defs><path d="${p}" fill="#d0dbd5"/><path d="${p}" fill="url(#${gid})" clip-path="url(#${cid})"/></svg>`;
+}
+
+function drawDecile(users, ix) {
+  const g = GROUPS[ix];
+  if (!g) {
+    if (el.boardList) el.boardList.innerHTML = '<div class="desc">Hali ma’lumot yo‘q</div>';
+    return;
+  }
+  const arr = users.slice(0, 50), rows = [];
+  for (let r = g.start; r <= g.end; r++) {
+    const u = arr[r - 1];
+    if (!u) continue;
+    const isTop3 = r <= 3;
+    const left = isTop3 ? `<span class="medal ${r === 1 ? 'm1' : r === 2 ? 'm2' : 'm3'}">${r === 1 ? '🏆' : r === 2 ? '🥈' : '🥉'}</span>` : `<span class="rnk">#${r}</span>`;
+    rows.push(`<div class="rank grad-border glass tier-${g.tier} ${isTop3 ? ('top-' + r) : ''}">
+      <div>${left}</div>
+      <div><b>${escapeHtml(u.name || 'Foydalanuvchi')}</b><div class="desc">${escapeHtml(u.class || '—')} · ${escapeHtml(u.school || '—')}</div></div>
+      <div style="text-align:right"><b>⭐ ${fmtPoints(u.points)}</b></div>
+    </div>`);
+  }
+  if (el.boardList) el.boardList.innerHTML = `<div class="group grad-border glass"><div class="groupHead tier-${g.tier}"><span class="tier-badge">${g.label}</span><span class="stars">${starSVG(100, g.grad)}</span></div><div class="groupBody">${rows.join('')}</div></div>`;
+  if (el.decileInfo) el.decileInfo.textContent = g.label;
+  if (el.decilePrev) el.decilePrev.disabled = (ix <= 0);
+  if (el.decileNext) el.decileNext.disabled = (ix >= GROUPS.length - 1);
+}
+
+if (el.decilePrev) el.decilePrev.onclick = () => {
+  if (CURRENT_DECILE > 0) {
+    CURRENT_DECILE--;
+    drawDecile(latestUsers, CURRENT_DECILE);
+  }
+};
+
+if (el.decileNext) el.decileNext.onclick = () => {
+  if (CURRENT_DECILE < GROUPS.length - 1) {
+    CURRENT_DECILE++;
+    drawDecile(latestUsers, CURRENT_DECILE);
+  }
+};
+
+/* =========================
+   REGIONS JSON (saqlangan oqim)
+========================= */
+let REGION_DATA = { regions: [] };
+
+async function loadRegions() {
+  try {
+    const res = await fetch('./region.json', { cache: 'no-store' });
+    REGION_DATA = await res.json();
+  } catch (e) {
+    console.error('region.json yuklashda xato', e);
+    // Mock region ma'lumotlari
+    REGION_DATA = {
+      regions: [
+        {
+          name: "Toshkent shahri",
+          districts: [
+            {
+              name: "Yunusobod tumani",
+              schools: ["1-maktab", "2-maktab", "3-maktab"]
+            },
+            {
+              name: "Mirzo Ulug'bek tumani",
+              schools: ["4-maktab", "5-maktab", "6-maktab"]
+            }
+          ]
+        },
+        {
+          name: "Samarqand viloyati",
+          districts: [
+            {
+              name: "Samarqand shahri",
+              schools: ["7-maktab", "8-maktab", "9-maktab"]
+            }
+          ]
+        }
+      ]
+    };
+  }
+}
+
+function fillRegionSelect(selectedName = '') {
+  if (!el.PM.rSel) return;
+  const opts = REGION_DATA.regions.map(r => `<option value="${r.name}">${r.name}</option>`);
+  el.PM.rSel.innerHTML = `<option value="" disabled ${selectedName ? '' : 'selected'}>— tanlang —</option>` + opts.join('');
+  if (selectedName && REGION_DATA.regions.find(r => r.name === selectedName)) el.PM.rSel.value = selectedName;
+  fillDistrictSelect(el.PM.rSel.value || '', '');
+}
+
+function findRegion(name) {
+  return REGION_DATA.regions.find(r => r.name === name);
+}
+
+function fillDistrictSelect(regionName, selectedDistrict = '') {
+  if (!el.PM.dSel) return;
+  const reg = findRegion(regionName);
+  const dlist = reg ? reg.districts.map(d => (typeof d === 'string' ? { name: d, schools: [] } : d)) : [];
+  const opts = dlist.map(d => `<option value="${d.name}">${d.name}</option>`);
+  el.PM.dSel.innerHTML = `<option value="" disabled ${selectedDistrict ? '' : 'selected'}>— tanlang —</option>` + opts.join('');
+  if (selectedDistrict && dlist.some(d => d.name === selectedDistrict)) el.PM.dSel.value = selectedDistrict;
+  fillSchoolSelect(regionName, el.PM.dSel.value || '', '');
+}
+
+function getDistrict(regionName, districtName) {
+  const reg = findRegion(regionName);
+  if (!reg) return null;
+  const obj = reg.districts.map(d => (typeof d === 'string' ? { name: d, schools: [] } : d)).find(x => x.name === districtName);
+  return obj || null;
+}
+
+function fillSchoolSelect(regionName, districtName, selectedSchool = '') {
+  if (!el.PM.schoolSel) return;
+  const dist = getDistrict(regionName, districtName);
+  const schools = dist?.schools || [];
+  const opts = schools.map(s => `<option value="${s}">${s}</option>`);
+  el.PM.schoolSel.innerHTML = `<option value="" disabled ${selectedSchool ? '' : 'selected'}>— tanlang —</option>` + opts.join('');
+  if (selectedSchool && schools.includes(selectedSchool)) el.PM.schoolSel.value = selectedSchool;
+}
+
+/* ==== SCHOOL custom toggle ==== */
+function useCustomSchool(on) {
+  if (!el.PM.schoolCustom || !el.PM.schoolSel || !el.PM.schoolToggle) return;
+  el.PM.schoolCustom.classList.toggle('hidden', !on);
+  el.PM.schoolSel.classList.toggle('hidden', on);
+  el.PM.schoolToggle.textContent = on ? "Ro'yxatdan tanlash" : "Ro'yxatda yo'q";
+}
+
+if (el.PM.schoolToggle) el.PM.schoolToggle.addEventListener('click', () => {
+  const isCustom = el.PM.schoolCustom.classList.contains('hidden') === false;
+  useCustomSchool(!isCustom);
+});
+
+/* ==== CLASS ==== */
+const GRADE_LIST = Array.from({ length: 11 }, (_, i) => String(i + 1)); // 1..11
+
+function fillClassSelect(gradeValue) {
+  if (!el.PM.grade) return;
+  el.PM.grade.innerHTML =
+    `<option value="" disabled ${gradeValue ? '' : 'selected'}>—</option>` +
+    GRADE_LIST.map(g => `<option value="${g}">${g}</option>`).join('');
+  if (gradeValue) el.PM.grade.value = String(gradeValue);
+}
+
+function onlyGradeFromClass(klass) {
+  const m = String(klass || '').match(/\d+/);
+  return m ? m[0] : '';
+}
+
+function setClassVisible(visible) {
+  if (el.PM.gradeWrap) el.PM.gradeWrap.style.display = visible ? '' : 'none';
+}
+
+/* ==== POPUP ==== */
+function openPop() {
+  if (!el.mask || !el.pop || !el.chip) return;
+  el.mask.style.display = 'block';
+  el.pop.style.display = 'block';
+  el.chip.setAttribute('aria-expanded', 'true');
+}
+
+function closePop() {
+  if (!el.mask || !el.pop || !el.chip) return;
+  el.mask.style.display = 'none';
+  el.pop.style.display = 'none';
+  el.chip.setAttribute('aria-expanded', 'false');
+}
+
+if (el.more) el.more.addEventListener('click', e => { e.stopPropagation(); openPop(); });
+
+if (el.mask) el.mask.addEventListener('click', closePop);
+
+document.addEventListener('click', e => {
+  if (el.pop && el.chip && !el.pop.contains(e.target) && !el.chip.contains(e.target)) closePop();
+});
+
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
+
+/* ==== PROFILE FLOW ==== */
+let currentUserId = null, CURRENT_PROFILE = null;
+
+function profileIsComplete(u) {
+  const must = !!(u && u.name && /\s/.test(u.name) && u.region && u.district && u.school && u.phone && u.role);
+  if (!must) return false;
+  if (u.role === 'teacher') return true;
+  return !!u.class;
+}
+
+function showApp() {
+  if (!gate || !app) return;
+  gate.style.display = 'none';
+  app.style.display = 'block';
+  html.classList.remove('auth-checking');
+}
+
+function lockToLogin() {
+  if (!gate || !app) return;
+  app.style.display = 'none';
+  gate.style.display = 'flex';
+  html.classList.remove('auth-checking');
+}
+
+function openProfileModal(pref = {}) {
+  if (!el.PM.mask) return;
+  
+  el.PM.first.value = pref.first || '';
+  el.PM.last.value = pref.last || '';
+  el.PM.ph.value = pref.phone || '';
+  el.PM.err.textContent = '';
+  el.PM.role.value = (pref.role === 'teacher' || pref.role === 'student') ? pref.role : 'student';
+  setClassVisible(el.PM.role.value === 'student');
+
+  fillRegionSelect(pref.region || '');
+  fillDistrictSelect(pref.region || '', pref.district || '');
+  fillSchoolSelect(pref.region || '', pref.district || '', pref.school || '');
+
+  const dist = getDistrict(pref.region || '', pref.district || '');
+  const inList = !!(pref.school && dist?.schools?.includes(pref.school));
+  useCustomSchool(!inList);
+  if (!inList) el.PM.schoolCustom.value = pref.school || '';
+
+  const gradePref = onlyGradeFromClass(pref.klass || '');
+  fillClassSelect(gradePref);
+
+  el.PM.mask.style.display = 'flex';
+  document.body.classList.add('modal-open');
+}
+
+function closeProfileModal() {
+  if (!el.PM.mask) return;
+  el.PM.mask.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+if (el.PM.close) el.PM.close.onclick = closeProfileModal;
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && el.PM.mask && getComputedStyle(el.PM.mask).display !== 'none') closeProfileModal();
+});
+
+if (el.PM.rSel) el.PM.rSel.addEventListener('change', () => {
+  fillDistrictSelect(el.PM.rSel.value, '');
+  useCustomSchool(false);
+  el.PM.schoolCustom.value = '';
+});
+
+if (el.PM.dSel) el.PM.dSel.addEventListener('change', () => {
+  fillSchoolSelect(el.PM.rSel.value, el.PM.dSel.value, '');
+  useCustomSchool(false);
+  el.PM.schoolCustom.value = '';
+});
+
+if (el.PM.role) el.PM.role.addEventListener('change', () => setClassVisible(el.PM.role.value === 'student'));
+
+/* SAVE */
+if (el.PM.save) el.PM.save.onclick = async () => {
+  if (!el.PM.err) return;
+  el.PM.err.textContent = '';
+
+  const first = el.PM.first.value.trim(), last = el.PM.last.value.trim();
+  const role = el.PM.role.value || 'student';
+  const region = el.PM.rSel.value || '';
+  const district = el.PM.dSel.value || '';
+  const isCustom = !el.PM.schoolCustom.classList.contains('hidden');
+  const school = isCustom ? el.PM.schoolCustom.value.trim() : (el.PM.schoolSel.value || '');
+  const phone = el.PM.ph.value.trim();
+  const klass = (role === 'teacher') ? '' : (el.PM.grade.value || '');
+
+  if (!first || !last || !role || !region || !district || !school || !phone) {
+    el.PM.err.textContent = 'Barcha maydonlar majburiy (o\'qituvchi uchun sinf majburiy emas).';
+    return;
+  }
+  if (role === 'student' && !klass) {
+    el.PM.err.textContent = 'Sinf raqamini tanlang.';
+    return;
+  }
+
+  const name = `${first} ${last}`;
+  try {
+    const ref = doc(db, 'users', currentUserId);
+    await setDoc(ref, {
+      name, role, region, district, school, class: (role === 'teacher' ? null : klass), phone
+    }, { merge: true });
+    CURRENT_PROFILE = { ...(CURRENT_PROFILE || {}), name, role, region, district, school, class: (role === 'teacher' ? null : klass), phone };
+    closeProfileModal();
+    fillChip(CURRENT_PROFILE);
+  } catch (e) {
+    console.error('profile save error', e);
+    el.PM.err.textContent = 'Saqlashda xatolik. Internetni tekshiring.';
+  }
+};
+
+/* CHIP */
+function fillChip(u) {
+  const nameEl = document.getElementById('ucName');
+  const numericEl = document.getElementById('ucNumeric');
+  const regionEl = document.getElementById('ucRegion');
+  const districtEl = document.getElementById('ucDistrict');
+  const schoolEl = document.getElementById('ucSchool');
+  const classEl = document.getElementById('ucClass');
+  const phoneEl = document.getElementById('ucPhone');
+  
+  if (nameEl) nameEl.textContent = u?.name || 'Foydalanuvchi';
+  if (numericEl) numericEl.textContent = 'ID: ' + (u?.numericId || '—');
+  if (regionEl) regionEl.textContent = u?.region || '—';
+  if (districtEl) districtEl.textContent = u?.district || '—';
+  if (schoolEl) schoolEl.textContent = u?.school || '—';
+  if (classEl) classEl.textContent = (u?.role === 'teacher') ? '— (o\'qituvchi)' : (u?.class ? `${u.class}-sinf` : '—');
+  if (phoneEl) phoneEl.textContent = u?.phone || '—';
+  if (el.pointsVal) el.pointsVal.textContent = fmtPoints(u?.points ?? 0);
+}
+
+/* AUTH */
+async function ensureUser(user) {
+  const ref = doc(db, 'users', user.uid);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) {
+      tx.set(ref, {
+        name: user.displayName || (user.email ? user.email.split('@')[0] : 'Foydalanuvchi'),
+        email: user.email || null,
+        photoURL: user.photoURL || null,
+        role: 'student',
+        numericId: Math.floor(1000 + Math.random() * 9000),
+        points: 0,
+        region: null,
+        district: null,
+        school: null,
+        class: null,
+        phone: null,
+        createdAt: Date.now()
+      });
+    }
+  });
+  const data = (await getDoc(ref)).data();
+  return data;
+}
+
+function resetChip() {
+  const ava = document.getElementById('ucAva');
+  if (ava) ava.textContent = 'LM';
+  if (el.pointsVal) el.pointsVal.textContent = '—';
+  const nameEl = document.getElementById('ucName');
+  const numericEl = document.getElementById('ucNumeric');
+  const regionEl = document.getElementById('ucRegion');
+  const districtEl = document.getElementById('ucDistrict');
+  const schoolEl = document.getElementById('ucSchool');
+  const classEl = document.getElementById('ucClass');
+  const phoneEl = document.getElementById('ucPhone');
+  
+  if (nameEl) nameEl.textContent = 'Mehmon';
+  if (numericEl) numericEl.textContent = 'ID: —';
+  if (regionEl) regionEl.textContent = '—';
+  if (districtEl) districtEl.textContent = '—';
+  if (schoolEl) schoolEl.textContent = '—';
+  if (classEl) classEl.textContent = '—';
+  if (phoneEl) phoneEl.textContent = '—';
+}
+
+watchAuth(async (user) => {
+  if (!user) {
+    currentUserId = null;
+    CURRENT_PROFILE = null;
+    resetChip();
+    lockToLogin();
+    return;
+  }
+  currentUserId = user.uid;
+  await loadRegions();
+  const u = await ensureUser(user);
+  CURRENT_PROFILE = u;
+  setAvatar(user.photoURL || initials(u.name || user.email));
+  fillChip(u);
+  showApp();
+
+  const seenKey = `lm-profile-seen:${currentUserId}`;
+  if (!profileIsComplete(u) && !localStorage.getItem(seenKey)) {
+    const nm = (u.name || '').trim().split(/\s+/, 2);
+    openProfileModal({
+      first: nm[0] || '',
+      last: nm[1] || '',
+      role: u.role || 'student',
+      region: u.region || '',
+      district: u.district || '',
+      school: u.school || '',
+      klass: u.class || '',
+      phone: u.phone || ''
+    });
+    localStorage.setItem(seenKey, '1');
+  }
+
+  // Leaderboard real-time updates
+  onSnapshot(query(collection(db, 'users'), orderBy('points', 'desc'), limit(100)), (snap) => {
+    latestUsers = snap.docs.map(d => ({ id: d.id, uid: d.id, ...d.data() }))
+      .sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0) || (a.numericId ?? 0) - (b.numericId ?? 0));
+    drawDecile(latestUsers, CURRENT_DECILE);
+  }, (err) => {
+    console.error('board error', err);
+    if (el.boardList) el.boardList.innerHTML = '<div class="desc">Leaderboard hozircha yopiq</div>';
+  });
+});
+
+/* Popover actions */
+if (el.openProfile) el.openProfile.onclick = (e) => {
+  e.preventDefault();
+  closePop();
+  const u = CURRENT_PROFILE || {};
+  const nm = (u.name || '').trim().split(/\s+/, 2);
+  openProfileModal({
+    first: nm[0] || '',
+    last: nm[1] || '',
+    role: u.role || 'student', // Tuzatildi: nuqta o'rniga vergul
+    region: u.region || '',
+    district: u.district || '',
+    school: u.school || '',
+    klass: u.class || '',
+    phone: u.phone || ''
+  });
+};
+
+if (el.signOutBtn) el.signOutBtn.onclick = async (e) => {
+  e.preventDefault();
+  await signOut(auth);
+  closePop();
+  lockToLogin();
+};
+
+/* ===== BOOT ===== */
+async function boot() {
+  await initContent();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+</script>
 </body>
 </html>
