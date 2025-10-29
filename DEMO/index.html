@@ -254,6 +254,18 @@ html.auth-checking #authGate{display:flex}
   color: var(--muted);
   margin: 10px 0;
 }
+
+/* Special section for banners and league */
+.special-section {
+  margin: 20px 0;
+}
+
+.special-section h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: var(--text);
+  font-weight: 800;
+}
   </style>
 </head>
 <body>
@@ -384,16 +396,15 @@ html.auth-checking #authGate{display:flex}
 
   <!-- Firebase SDK -->
   <script type="module">
-    // Firebase konfiguratsiyasi - o'z loyihangiz ma'lumotlarini qo'ying
+    // Firebase konfiguratsiyasi
     const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.firebasestorage.app",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
+      apiKey: "AIzaSyC4mOK17uzJ7wKzD5q4XqYq9Y9Q6d7w5jA",
+      authDomain: "leadermath-uz.firebaseapp.com",
+      projectId: "leadermath-uz",
+      storageBucket: "leadermath-uz.firebasestorage.app",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef123456"
+    };
 
     // Firebase importlari
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -415,7 +426,8 @@ html.auth-checking #authGate{display:flex}
       orderBy,
       limit,
       onSnapshot,
-      serverTimestamp
+      serverTimestamp,
+      getDocs
     } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
     // Firebase ni ishga tushirish
@@ -682,9 +694,284 @@ html.auth-checking #authGate{display:flex}
         
       } catch (error) {
         console.error('Ma\'lumotlarni yuklashda xato:', error);
-        if (el.loadingContent) {
-          el.loadingContent.innerHTML = '<p>Ma\'lumotlarni yuklashda xatolik. Qaytadan urinib ko\'ring.</p>';
+        // Agar Firestore dan ma'lumot olinmasa, demo ma'lumotlarni ko'rsatish
+        APP_DATA = {
+          bannerGroups: [
+            {
+              tag: "Asosiy",
+              items: [
+                {
+                  html: "<div style='text-align:center;padding:20px;'><h2>LeaderMath ga xush kelibsiz!</h2><p>Matematika bo'yicha qiziqarli materiallar va testlar</p></div>",
+                  durationMs: 5000
+                }
+              ]
+            }
+          ],
+          sections: [
+            {
+              title: "Matematika",
+              tag: "Matematika",
+              items: [
+                {
+                  name: "Algebra",
+                  description: "Algebra bo'yicha darsliklar va masalalar",
+                  tags: ["9-sinf", "10-sinf"],
+                  type: "open",
+                  buttons: [
+                    { kind: "link", label: "Ochish", href: "#" }
+                  ]
+                },
+                {
+                  name: "Geometriya", 
+                  description: "Geometriya bo'yicha darsliklar va masalalar",
+                  tags: ["9-sinf", "10-sinf"],
+                  type: "open",
+                  buttons: [
+                    { kind: "link", label: "Ochish", href: "#" }
+                  ]
+                }
+              ]
+            },
+            {
+              title: "Bannerlar",
+              tag: "story",
+              items: [
+                {
+                  name: "Bannerlar va Reklamalar",
+                  description: "Eng so'nggi yangiliklar va e'lonlar",
+                  type: "open",
+                  buttons: [
+                    { kind: "link", label: "Ko'rish", href: "#", action: "showBanners" }
+                  ]
+                }
+              ]
+            },
+            {
+              title: "Reyting",
+              tag: "league", 
+              items: [
+                {
+                  name: "O'quvchilar Reytingi",
+                  description: "Eng yaxshi o'quvchilar reytingi",
+                  type: "open",
+                  buttons: [
+                    { kind: "link", label: "Ko'rish", href: "#", action: "showLeaderboard" }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
+        
+        renderBannerChips();
+        mountStory();
+        renderMainChips();
+        MODE = 'story';
+        updateVisibility();
+        
+        if (el.loadingContent) el.loadingContent.style.display = 'none';
+      }
+    }
+
+    /* ==== MAIN TAGS CHIPS ==== */
+    function chipEl(label, pressed = false, onClick = () => {}, extraClass = '') {
+      const b = document.createElement('button');
+      b.className = 'chip ' + extraClass;
+      b.type = 'button';
+      b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+      b.appendChild(document.createTextNode(label));
+      b.onclick = () => onClick(b);
+      return b;
+    }
+
+    function collectSectionTags(data) {
+      const s = new Set();
+      (data.sections || []).forEach(sec => { 
+        if (sec.tag && sec.tag !== 'story' && sec.tag !== 'league') {
+          s.add(String(sec.tag)); 
         }
+      });
+      return [...s].sort();
+    }
+
+    function renderMainChips() {
+      const wrap = el.mainTags;
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      
+      // Doimiy bo'limlar (Bannerlar va Reyting)
+      wrap.appendChild(chipEl('🎬 Bannerlar', MODE === 'story', () => { 
+        MODE = 'story'; 
+        updateVisibility(); 
+      }));
+      
+      wrap.appendChild(chipEl('🏆 Reyting', MODE === 'league', () => { 
+        MODE = 'league'; 
+        updateVisibility(); 
+      }));
+      
+      // Dinamik bo'lim teglari
+      collectSectionTags(APP_DATA).forEach(t => {
+        wrap.appendChild(chipEl(t, MODE === t, () => { 
+          MODE = t; 
+          updateVisibility(); 
+        }));
+      });
+    }
+
+    /* ==== VISIBILITY UPDATE ==== */
+    function updateVisibility() {
+      // Story (Bannerlar) mode
+      if (el.storyWrap) {
+        el.storyWrap.style.display = (MODE === 'story') ? '' : 'none';
+      }
+      
+      // League (Reyting) mode  
+      if (el.board) {
+        el.board.style.display = (MODE === 'league') ? '' : 'none';
+      }
+      
+      // Sections mode
+      const cont = document.querySelector('.container');
+      if (cont) {
+        cont.style.display = (MODE !== 'story' && MODE !== 'league') ? '' : 'none';
+      }
+      
+      if (MODE !== 'story' && MODE !== 'league') { 
+        renderSectionsGrid(); 
+      } else {
+        // Agar bannerlar yoki reyting tanlangan bo'lsa, ularni maxsus ko'rsatish
+        renderSpecialSections();
+      }
+    }
+
+    /* ==== SPECIAL SECTIONS (Bannerlar va Reyting) ==== */
+    function renderSpecialSections() {
+      const wrap = el.sections;
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      
+      if (MODE === 'story') {
+        // Bannerlar bo'limi
+        const bannerSection = document.createElement('div');
+        bannerSection.className = 'special-section';
+        bannerSection.innerHTML = `
+          <h3>🎬 Bannerlar va Reklamalar</h3>
+          <p>Eng so'nggi yangiliklar va e'lonlar</p>
+          <div class="storyWrap grad-border glass" style="margin-top: 15px;">
+            <div class="story" id="mainStory">
+              <div class="story-progress" id="mainStoryProg"></div>
+              <div class="story-track" id="mainStoryTrack"></div>
+            </div>
+          </div>
+        `;
+        wrap.appendChild(bannerSection);
+        
+        // Asosiy bannerlarni ko'rsatish
+        showMainBanners();
+      } else if (MODE === 'league') {
+        // Reyting bo'limi
+        const leagueSection = document.createElement('div');
+        leagueSection.className = 'special-section';
+        leagueSection.innerHTML = `
+          <h3>🏆 O'quvchilar Reytingi</h3>
+          <p>Eng yaxshi o'quvchilar reytingi</p>
+          <div class="board grad-border glass" style="margin-top: 15px;">
+            <div class="pager">
+              <button id="mainDecilePrev" class="pbtn">⬅️ Oldingi</button>
+              <div class="pinfo" id="mainDecileInfo">10–1 (Diamond)</div>
+              <button id="mainDecileNext" class="pbtn">Keyingi ➡️</button>
+            </div>
+            <div id="mainBoardList"></div>
+          </div>
+        `;
+        wrap.appendChild(leagueSection);
+        
+        // Asosiy reytingni ko'rsatish
+        showMainLeaderboard();
+      }
+    }
+
+    function showMainBanners() {
+      const track = document.getElementById('mainStoryTrack');
+      const prog = document.getElementById('mainStoryProg');
+      
+      if (!track || !prog) return;
+      
+      track.innerHTML = '';
+      prog.innerHTML = '';
+      
+      const grp = (APP_DATA.bannerGroups || [])[0];
+      if (!grp || !grp.items || grp.items.length === 0) {
+        track.innerHTML = '<div class="story-slide"><h3 style="margin:0">Bannerlar hozircha mavjud emas</h3></div>';
+        return;
+      }
+      
+      grp.items.forEach(() => {
+        const bar = document.createElement('div');
+        bar.className = 'story-bar';
+        bar.innerHTML = '<span></span>';
+        prog.appendChild(bar);
+      });
+      
+      grp.items.forEach(it => {
+        const s = document.createElement('div');
+        s.className = 'story-slide';
+        s.innerHTML = it.html || '';
+        track.appendChild(s);
+      });
+
+      let i = 0, raf = null, start = 0, playing = true;
+      const spans = [...prog.querySelectorAll('span')];
+      const D = () => Math.max(1100, Number(grp.items[i]?.durationMs || 4500));
+      const setX = () => track.style.transform = `translateX(${-i * 100}%)`;
+      const step = () => {
+        const p = Math.min(1, (performance.now() - start) / D());
+        spans[i].style.width = (p * 100) + '%';
+        if (p < 1 && playing) raf = requestAnimationFrame(step);
+        else {
+          spans[i].style.width = '100%';
+          if (i < grp.items.length - 1) {
+            i++;
+            setX();
+            start = performance.now();
+            raf = requestAnimationFrame(step);
+          }
+        }
+      };
+      setX();
+      start = performance.now();
+      raf = requestAnimationFrame(step);
+    }
+
+    function showMainLeaderboard() {
+      const boardList = document.getElementById('mainBoardList');
+      if (!boardList) return;
+      
+      // Leaderboard ma'lumotlarini ko'rsatish
+      drawMainDecile(latestUsers, CURRENT_DECILE);
+      
+      // Navigation tugmalarini sozlash
+      const prevBtn = document.getElementById('mainDecilePrev');
+      const nextBtn = document.getElementById('mainDecileNext');
+      const info = document.getElementById('mainDecileInfo');
+      
+      if (prevBtn) {
+        prevBtn.onclick = () => {
+          if (CURRENT_DECILE > 0) {
+            CURRENT_DECILE--;
+            drawMainDecile(latestUsers, CURRENT_DECILE);
+          }
+        };
+      }
+      
+      if (nextBtn) {
+        nextBtn.onclick = () => {
+          if (CURRENT_DECILE < GROUPS.length - 1) {
+            CURRENT_DECILE++;
+            drawMainDecile(latestUsers, CURRENT_DECILE);
+          }
+        };
       }
     }
 
@@ -704,6 +991,7 @@ html.auth-checking #authGate{display:flex}
     onSnapshot(leaderboardQuery, (snapshot) => {
       latestUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       drawDecile(latestUsers, CURRENT_DECILE);
+      drawMainDecile(latestUsers, CURRENT_DECILE);
     });
 
     function drawDecile(users, ix) {
@@ -730,10 +1018,41 @@ html.auth-checking #authGate{display:flex}
       if (el.decileNext) el.decileNext.disabled = (ix >= GROUPS.length - 1);
     }
 
+    function drawMainDecile(users, ix) {
+      const g = GROUPS[ix];
+      if (!g) {
+        const boardList = document.getElementById('mainBoardList');
+        if (boardList) boardList.innerHTML = '<div class="desc">Hali ma\'lumot yo\'q</div>';
+        return;
+      }
+      const arr = users.slice(0, 50), rows = [];
+      for (let r = g.start; r <= g.end; r++) {
+        const u = arr[r - 1];
+        if (!u) continue;
+        const isTop3 = r <= 3;
+        const left = isTop3 ? `<span class="medal ${r === 1 ? 'm1' : r === 2 ? 'm2' : 'm3'}">${r === 1 ? '🏆' : r === 2 ? '🥈' : '🥉'}</span>` : `<span class="rnk">#${r}</span>`;
+        rows.push(`<div class="rank grad-border glass tier-${g.tier} ${isTop3 ? ('top-' + r) : ''}">
+          <div>${left}</div>
+          <div><b>${escapeHtml(u.name || 'Foydalanuvchi')}</b><div class="desc">${escapeHtml(u.class || '—')} · ${escapeHtml(u.school || '—')}</div></div>
+          <div style="text-align:right"><b>⭐ ${fmtPoints(u.points)}</b></div>
+        </div>`);
+      }
+      const boardList = document.getElementById('mainBoardList');
+      const info = document.getElementById('mainDecileInfo');
+      const prevBtn = document.getElementById('mainDecilePrev');
+      const nextBtn = document.getElementById('mainDecileNext');
+      
+      if (boardList) boardList.innerHTML = `<div class="group grad-border glass"><div class="groupHead tier-${g.tier}"><span class="tier-badge">${g.label}</span></div><div class="groupBody">${rows.join('')}</div></div>`;
+      if (info) info.textContent = g.label;
+      if (prevBtn) prevBtn.disabled = (ix <= 0);
+      if (nextBtn) nextBtn.disabled = (ix >= GROUPS.length - 1);
+    }
+
     if (el.decilePrev) el.decilePrev.onclick = () => {
       if (CURRENT_DECILE > 0) {
         CURRENT_DECILE--;
         drawDecile(latestUsers, CURRENT_DECILE);
+        drawMainDecile(latestUsers, CURRENT_DECILE);
       }
     };
 
@@ -741,8 +1060,190 @@ html.auth-checking #authGate{display:flex}
       if (CURRENT_DECILE < GROUPS.length - 1) {
         CURRENT_DECILE++;
         drawDecile(latestUsers, CURRENT_DECILE);
+        drawMainDecile(latestUsers, CURRENT_DECILE);
       }
     };
+
+    /* ==== SECTIONS GRID ==== */
+    function renderSectionsGrid() {
+      const wrap = el.sections;
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      
+      const list = (APP_DATA.sections || []).filter(s => MODE && s.tag && String(s.tag) === MODE);
+      
+      if (list.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'desc';
+        empty.style.margin = '10px 6px';
+        empty.style.opacity = '.75';
+        empty.textContent = 'Bu teg bo\'yicha bo\'lim topilmadi.';
+        wrap.appendChild(empty);
+        return;
+      }
+      
+      list.forEach(sec => {
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'special-section';
+        sectionDiv.innerHTML = `<h3>${escapeHtml(sec.title || 'Bo\'lim')}</h3>`;
+        
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+        
+        if (sec.items && sec.items.length > 0) {
+          sec.items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'ucard grad-border glass';
+            
+            let mediaContent = '';
+            if (item.image) {
+              mediaContent = `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name || '')}">`;
+            } else {
+              mediaContent = `<div class="titleBig">${escapeHtml(item.name || '')}</div>`;
+            }
+            
+            card.innerHTML = `
+              <div class="media">${mediaContent}</div>
+              <div class="body">
+                <h3 class="name">${escapeHtml(item.name || '')}</h3>
+                ${item.description ? `<p class="desc">${escapeHtml(item.description)}</p>` : ''}
+                <div class="actions">
+                  ${item.buttons && item.buttons.length > 0 ? 
+                    item.buttons.map(btn => 
+                      `<a href="${btn.href || '#'}" class="btn" ${btn.action ? `data-action="${btn.action}"` : ''}>${btn.label || 'Ochish'}</a>`
+                    ).join('') : 
+                    '<button class="btn" disabled>Tez orada</button>'
+                  }
+                </div>
+                <div class="chipline">
+                  ${(item.tags || []).map(tag => `<span class="chip sm">${escapeHtml(tag)}</span>`).join('')}
+                </div>
+              </div>
+            `;
+            
+            // Maxsus harakatlar uchun event listener
+            const actionBtn = card.querySelector('[data-action]');
+            if (actionBtn) {
+              actionBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const action = actionBtn.getAttribute('data-action');
+                if (action === 'showBanners') {
+                  MODE = 'story';
+                  updateVisibility();
+                  renderMainChips();
+                } else if (action === 'showLeaderboard') {
+                  MODE = 'league';
+                  updateVisibility();
+                  renderMainChips();
+                }
+              });
+            }
+            
+            grid.appendChild(card);
+          });
+        } else {
+          grid.innerHTML = '<div class="desc" style="grid-column: 1 / -1; text-align: center; padding: 20px;">Bu bo\'limda hali kontent mavjud emas</div>';
+        }
+        
+        sectionDiv.appendChild(grid);
+        wrap.appendChild(sectionDiv);
+      });
+    }
+
+    /* ==== BANNER FUNCTIONS ==== */
+    function renderBannerChips() {
+      const w = el.bannerChips;
+      if (!w) return;
+      w.innerHTML = '';
+      const tags = (APP_DATA.bannerGroups || []).map(g => String(g.tag));
+      if (tags.length === 0) {
+        const m = document.createElement('div');
+        m.className = 'chip sm';
+        m.style.opacity = .7;
+        m.textContent = 'Banner guruhlari yo\'q';
+        w.appendChild(m);
+        return;
+      }
+      if (!ACTIVE_BANNER_TAG) ACTIVE_BANNER_TAG = tags[0];
+      tags.forEach(t => {
+        const pressed = (t === ACTIVE_BANNER_TAG);
+        w.appendChild(chipEl(t, pressed, () => { ACTIVE_BANNER_TAG = t; mountStory(); }, 'sm'));
+      });
+    }
+
+    function mountStory() {
+      renderBannerChips();
+      const track = el.storyTrack, prog = el.storyProg;
+      if (!track || !prog) return;
+      
+      track.innerHTML = '';
+      prog.innerHTML = '';
+      const grp = (APP_DATA.bannerGroups || []).find(g => String(g.tag) === String(ACTIVE_BANNER_TAG));
+      if (!grp || !grp.items || grp.items.length === 0) {
+        track.innerHTML = '<div class="story-slide"><h3 style="margin:0">Banner yo\'q</h3></div>';
+        return;
+      }
+      grp.items.forEach(() => {
+        const bar = document.createElement('div');
+        bar.className = 'story-bar';
+        bar.innerHTML = '<span></span>';
+        prog.appendChild(bar);
+      });
+      grp.items.forEach(it => {
+        const s = document.createElement('div');
+        s.className = 'story-slide';
+        s.innerHTML = it.html || '';
+        track.appendChild(s);
+      });
+
+      let i = 0, raf = null, start = 0, playing = true;
+      const spans = [...prog.querySelectorAll('span')];
+      const D = () => Math.max(1100, Number(grp.items[i]?.durationMs || 4500));
+      const setX = () => track.style.transform = `translateX(${-i * 100}%)`;
+      const step = () => {
+        const p = Math.min(1, (performance.now() - start) / D());
+        spans[i].style.width = (p * 100) + '%';
+        if (p < 1 && playing) raf = requestAnimationFrame(step);
+        else {
+          spans[i].style.width = '100%';
+          if (i < grp.items.length - 1) {
+            i++;
+            setX();
+            start = performance.now();
+            raf = requestAnimationFrame(step);
+          }
+        }
+      };
+      setX();
+      start = performance.now();
+      raf = requestAnimationFrame(step);
+
+      // swipe / pointer
+      let sx = 0, dx = 0, dragging = false;
+      if (el.story) {
+        el.story.addEventListener('pointerdown', e => { dragging = true; sx = e.clientX; dx = 0; el.story.setPointerCapture(e.pointerId); });
+        el.story.addEventListener('pointermove', e => {
+          if (!dragging) return;
+          dx = e.clientX - sx;
+          track.style.transition = 'none';
+          track.style.transform = `translateX(${(-i * 100) + (dx / window.innerWidth * 100)}%)`;
+        });
+        const end = () => {
+          if (!dragging) return;
+          dragging = false;
+          track.style.transition = 'transform .25s ease';
+          if (Math.abs(dx) > 40) {
+            if (dx < 0 && i < grp.items.length - 1) i++;
+            if (dx > 0 && i > 0) i--;
+          }
+          setX();
+          start = performance.now();
+          spans.forEach((sp, idx) => sp.style.width = idx < i ? '100%' : '0');
+        };
+        el.story.addEventListener('pointerup', end);
+        el.story.addEventListener('pointercancel', end);
+      }
+    }
 
     /* ==== PROFIL MODALI ==== */
     function openProfileModal(pref = {}) {
@@ -771,11 +1272,10 @@ html.auth-checking #authGate{display:flex}
       document.body.classList.remove('modal-open');
     }
 
-    // Region ma'lumotlari (siz Firestore dan yuklashingiz mumkin)
+    // Region ma'lumotlari
     let REGION_DATA = { regions: [] };
     async function loadRegions(selectedRegion = '', selectedDistrict = '', selectedSchool = '') {
-      // Bu yerda siz Firestore dan region ma'lumotlarini yuklashingiz mumkin
-      // Hozircha mock ma'lumotlar
+      // Mock region ma'lumotlari
       REGION_DATA = {
         regions: [
           {
@@ -946,9 +1446,6 @@ html.auth-checking #authGate{display:flex}
         });
       };
     }
-
-    /* ==== QOLGAN UI FUNCTIONS (qisqartirilgan) ==== */
-    // Bu funksiyalar avvalgi kabi, lekin Firestore dan ma'lumot oladi
 
     // App ishga tushirish
     console.log('LeaderMath ilovasi yuklandi');
