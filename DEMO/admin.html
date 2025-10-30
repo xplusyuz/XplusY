@@ -3,106 +3,350 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LeaderMath — Admin Panel</title>
+  <title>LeaderMath — Admin Panel (Secure)</title>
   <meta name="theme-color" content="#2E8B57"/>
   <style>
-    body{margin:0;font-family:system-ui;background:#f4f8f6;color:#0d1b14;padding:20px}
-    h1{color:#2E8B57}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    td,th{border:1px solid #d8e7dd;padding:8px}
-    input,textarea{width:100%;border:1px solid #cfe7db;border-radius:8px;padding:6px}
-    .btn{background:#2E8B57;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer}
-    .btn.red{background:#a33}
+    :root{
+      --brand:#2E8B57;--brand2:#1F6B45;
+      --bg:#f4f8f6;--text:#0d1b14;--muted:#5b7a6b;
+      --card:#fff;--frame:#d8e7dd;--ring:#8ad1b1;--radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:15px/1.45 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);background:var(--bg)}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 14px}
+    .bar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .logo{display:flex;gap:10px;align-items:center}
+    .badge{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;
+      background:linear-gradient(135deg,#7fd6ad,#2E8B57);color:#fff;font-weight:800}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:12px;border:1px solid var(--frame);background:var(--card);cursor:pointer}
+    .btn.pri{background:linear-gradient(180deg,#8fe3b0,#2E8B57);border-color:#1F6B45;color:#fff}
+    .btn.red{background:#c62828;color:#fff;border-color:#b71c1c}
+    .btn.ghost{background:transparent}
+    .muted{color:var(--muted)}
+    .card{border:1px solid var(--frame);background:var(--card);border-radius:var(--radius);box-shadow:0 8px 30px rgba(0,0,0,.06);padding:16px}
+    .grid{display:grid;gap:12px}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0 10px}
+    .tbl th{font-size:13px;color:var(--muted);text-align:left;padding:0 8px}
+    .row{background:var(--card);border:1px solid var(--frame)}
+    .row td{padding:10px 8px}
+    input[type="text"],input[type="number"],textarea{
+      width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)
+    }
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media (max-width:760px){ .two{grid-template-columns:1fr} }
+    .gate{max-width:560px;margin:60px auto}
+    .center{text-align:center}
+    .hide{display:none!important}
   </style>
 </head>
 <body>
-  <h1>LeaderMath — Admin Panel</h1>
-  <button class="btn" onclick="addChip()">+ Chip qo‘shish</button>
-  <button class="btn" onclick="downloadJson()">JSON yuklab olish</button>
-  <table id="tbl">
-    <thead><tr><th>ID</th><th>Nomi</th><th>Order</th><th>Ko‘rinadi</th><th>Amal</th></tr></thead>
-    <tbody></tbody>
-  </table>
-
-  <div id="editor" style="display:none;margin-top:20px">
-    <h3>Chip tahrirlash</h3>
-    <label>Nomi:<br><input id="label"></label><br><br>
-    <label>Order:<br><input id="order" type="number"></label><br><br>
-    <label>Ko‘rinadigan:<input type="checkbox" id="visible" checked></label><br><br>
-    <label>HTML:<br><textarea id="html" rows="12"></textarea></label><br><br>
-    <button class="btn" onclick="saveChip()">Saqlash</button>
-    <button class="btn red" onclick="cancelEdit()">Bekor</button>
+<div class="wrap">
+  <div class="bar">
+    <div class="logo">
+      <div class="badge">L</div>
+      <div>
+        <div style="font-weight:800">LeaderMath — Admin Panel</div>
+        <div id="status" class="muted">Kirish talab qilinadi</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="signInBtn" class="btn pri">Google bilan kirish</button>
+      <button id="signOutBtn" class="btn ghost hide">Chiqish</button>
+    </div>
   </div>
 
-<script>
-let DATA={chips:[]};
-let editId=null;
-async function load(){
-  try{
-    const res=await fetch('admin.json',{cache:'no-store'});
-    DATA=await res.json();
-  }catch{DATA={chips:[]}}
-  render();
-}
-function render(){
-  const tb=document.querySelector('#tbl tbody');
-  tb.innerHTML=DATA.chips.map(c=>`
-    <tr>
-      <td>${c.id}</td>
-      <td>${c.label}</td>
-      <td>${c.order||0}</td>
-      <td>${c.visible!==false?'✅':'❌'}</td>
-      <td>
-        <button onclick="editChip('${c.id}')">✏️</button>
-        <button onclick="delChip('${c.id}')">🗑️</button>
-      </td>
-    </tr>`).join('');
-}
-function addChip(){
-  const id='chip_'+Date.now().toString(36);
-  editId=id;
-  document.querySelector('#editor').style.display='block';
-  document.querySelector('#label').value='Yangi chip';
-  document.querySelector('#order').value=DATA.chips.length+1;
-  document.querySelector('#visible').checked=true;
-  document.querySelector('#html').value='<!doctype html><html><body><h2>Yangi chip</h2></body></html>';
-}
-function editChip(id){
-  const c=DATA.chips.find(x=>x.id===id);
-  if(!c)return;
-  editId=id;
-  document.querySelector('#editor').style.display='block';
-  document.querySelector('#label').value=c.label;
-  document.querySelector('#order').value=c.order;
-  document.querySelector('#visible').checked=c.visible!==false;
-  document.querySelector('#html').value=c.html;
-}
-function saveChip(){
-  const obj={
-    id:editId,
-    label:document.querySelector('#label').value.trim(),
-    order:Number(document.querySelector('#order').value)||0,
-    visible:document.querySelector('#visible').checked,
-    html:document.querySelector('#html').value
-  };
-  const ex=DATA.chips.findIndex(x=>x.id===editId);
-  if(ex>=0)DATA.chips[ex]=obj;else DATA.chips.push(obj);
-  render();
-  document.querySelector('#editor').style.display='none';
-}
-function cancelEdit(){document.querySelector('#editor').style.display='none';}
-function delChip(id){
-  if(confirm('O‘chirilsinmi?')){
-    DATA.chips=DATA.chips.filter(c=>c.id!==id);
-    render();
+  <!-- Gate / Unauthorized -->
+  <div id="gate" class="card gate center">
+    <h2 style="margin:4px 0 8px">Kirish talab qilinadi</h2>
+    <p class="muted">Ushbu sahifaga faqat super-admin kirishi mumkin.</p>
+    <button id="gateSignIn" class="btn pri">Google bilan kirish</button>
+  </div>
+
+  <!-- Not allowed -->
+  <div id="denied" class="card hide center" style="border-color:#f2c2c2;background:#fff7f7">
+    <h3 style="margin:0 0 6px">Ruxsat yo‘q</h3>
+    <p class="muted">Sizning hisobingiz admin panelga kirish huquqiga ega emas.</p>
+  </div>
+
+  <!-- Admin content -->
+  <div id="adminUI" class="grid hide">
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center">
+        <div style="font-weight:800">Chiplar boshqaruvi</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="loadRemote">admin.json ni yuklash</button>
+          <label class="btn">
+            JSON import
+            <input id="importFile" type="file" accept="application/json" style="display:none">
+          </label>
+          <button class="btn pri" id="downloadJson">JSON yuklab olish</button>
+          <button class="btn" id="addChip">+ Chip qo‘shish</button>
+        </div>
+      </div>
+
+      <table class="tbl" style="margin-top:12px">
+        <thead>
+          <tr><th>#</th><th>ID</th><th>Nomi</th><th>Order</th><th>Ko‘rinadi</th><th>Amal</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div id="editorCard" class="card hide">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="font-weight:800">Chip tahrirlash</div>
+        <button id="closeEditor" class="btn">Yopish</button>
+      </div>
+      <div class="two" style="margin-top:12px">
+        <div>
+          <label class="muted">ID (o‘zgarmas)</label>
+          <input id="eId" type="text" disabled>
+        </div>
+        <div>
+          <label class="muted">Nomi (label)</label>
+          <input id="eLabel" type="text" placeholder="Masalan: Bosh sahifa">
+        </div>
+      </div>
+      <div class="two" style="margin-top:12px">
+        <div>
+          <label class="muted">Order</label>
+          <input id="eOrder" type="number" value="0">
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <input id="eVisible" type="checkbox" checked>
+          <label for="eVisible" class="muted">Ko‘rinadigan</label>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label class="muted">To‘liq HTML (JS ham mumkin)</label>
+        <textarea id="eHtml" rows="16" spellcheck="false"></textarea>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          Eslatma: agar ichida &lt;script&gt; bo‘lsa, JSON eksportda avtomatik xavfsiz holatda saqlanadi (<\/script>).
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="saveChip" class="btn pri">Saqlash</button>
+        <button id="deleteChip" class="btn red">O‘chirish</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* ================= Firebase ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence,
+  onAuthStateChanged, signInWithPopup, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+/* ====== CONFIG — O'zingiznikini qo'ying ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+const SUPER_ADMINS = [
+  // ❗ Bu yerga super-admin email(lar) yozing:
+  // "sohibjonmath@gmail.com",
+  // "admin@leadermath.uz"
+];
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: "select_account" });
+await setPersistence(auth, browserLocalPersistence);
+
+/* ================== DOM refs ================== */
+const $ = s => document.querySelector(s);
+const rows = $("#rows");
+const adminUI = $("#adminUI");
+const gate = $("#gate");
+const denied = $("#denied");
+const statusEl = $("#status");
+
+$("#signInBtn").onclick = () => signInWithPopup(auth, provider).catch(e=>alert(e.message));
+$("#gateSignIn").onclick = () => signInWithPopup(auth, provider).catch(e=>alert(e.message));
+$("#signOutBtn").onclick = () => signOut(auth);
+
+/* ======= Auth guard (email + Firestore role) ======= */
+onAuthStateChanged(auth, async (user)=>{
+  if(!user){
+    statusEl.textContent = "Kirish talab qilinadi";
+    $("#signOutBtn").classList.add("hide");
+    $("#signInBtn").classList.remove("hide");
+    gate.classList.remove("hide");
+    denied.classList.add("hide");
+    adminUI.classList.add("hide");
+    return;
   }
+
+  $("#signOutBtn").classList.remove("hide");
+  $("#signInBtn").classList.add("hide");
+  statusEl.textContent = `Kirdingiz: ${user.email||""}`;
+
+  // 1) Email allowlist
+  let allowed = SUPER_ADMINS.includes((user.email||"").toLowerCase());
+
+  // 2) Yoki Firestore'da role == "admin"
+  if(!allowed){
+    try{
+      const us = await getDoc(doc(db,"users",user.uid));
+      allowed = us.exists() && (us.data().role === "admin");
+    }catch{}
+  }
+
+  if(!allowed){
+    gate.classList.add("hide");
+    adminUI.classList.add("hide");
+    denied.classList.remove("hide");
+    statusEl.textContent = `Ruxsat yo‘q: ${user.email||""}`;
+    return;
+  }
+
+  // OK — show UI
+  gate.classList.add("hide");
+  denied.classList.add("hide");
+  adminUI.classList.remove("hide");
+  loadRemote(); // admin.json ni o‘qib kelamiz
+});
+
+/* ================== Admin data ================== */
+let DATA = { chips: [] };
+let EDIT_ID = null;
+
+function render(){
+  if(!Array.isArray(DATA.chips)) DATA.chips = [];
+  rows.innerHTML = DATA.chips.map((c,i)=>`
+    <tr class="row">
+      <td>${i+1}</td>
+      <td><code>${c.id}</code></td>
+      <td>${escapeHtml(c.label||"")}</td>
+      <td>${Number(c.order||0)}</td>
+      <td>${c.visible===false?'❌':'✅'}</td>
+      <td>
+        <button class="btn" data-act="edit" data-id="${c.id}">✏️</button>
+        <button class="btn red" data-act="del" data-id="${c.id}">🗑️</button>
+      </td>
+    </tr>`).join("");
+
+  rows.querySelectorAll("button[data-act]").forEach(b=>{
+    b.onclick = (e)=>{
+      const id = e.currentTarget.dataset.id;
+      const act = e.currentTarget.dataset.act;
+      if(act==="edit") openEditor(id);
+      if(act==="del") delChip(id);
+    };
+  });
 }
+
+function openEditor(id){
+  const c = DATA.chips.find(x=>x.id===id);
+  if(!c) return;
+  EDIT_ID = id;
+  $("#editorCard").classList.remove("hide");
+  $("#eId").value     = c.id;
+  $("#eLabel").value  = c.label || "";
+  $("#eOrder").value  = Number(c.order||0);
+  $("#eVisible").checked = c.visible !== false;
+  $("#eHtml").value   = c.html || "";
+}
+$("#closeEditor").onclick = ()=> $("#editorCard").classList.add("hide");
+
+function addChip(){
+  const id = "chip_"+Date.now().toString(36);
+  const c = {
+    id, label: "Yangi chip", order: (DATA.chips.length+1),
+    visible:true,
+    html: sampleChipHtml(id)
+  };
+  DATA.chips.push(c);
+  render(); openEditor(id);
+}
+$("#addChip").onclick = addChip;
+
+function delChip(id){
+  if(!confirm("Ushbu chipni o‘chirishni tasdiqlaysizmi?")) return;
+  DATA.chips = DATA.chips.filter(c=>c.id!==id);
+  render(); $("#editorCard").classList.add("hide");
+}
+
+function saveChip(){
+  const idx = DATA.chips.findIndex(x=>x.id===EDIT_ID);
+  if(idx<0) return;
+  DATA.chips[idx] = {
+    id: $("#eId").value,
+    label: $("#eLabel").value.trim(),
+    order: Number($("#eOrder").value)||0,
+    visible: $("#eVisible").checked,
+    html: $("#eHtml").value
+  };
+  render();
+  alert("Saqlandi (xotirada). Endi 'JSON yuklab olish' ni bosing va serverga almashtiring.");
+}
+$("#saveChip").onclick = saveChip;
+
 function downloadJson(){
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'}));
-  a.download='admin.json';a.click();
+  // JSON.stringify oldidan </script> larni xavfsiz holga keltirish shart emas,
+  // chunki bu yerda matn JSONga ketadi; shunchaki eksportdan oldin foydali sanitizatsiya qilamiz:
+  const safe = {
+    chips: (DATA.chips||[]).map(c=>({
+      ...c,
+      html: (c.html||"").replaceAll("</script>","<\\/script>")
+    }))
+  };
+  const blob = new Blob([JSON.stringify(safe,null,2)],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "admin.json";
+  a.click(); URL.revokeObjectURL(a.href);
 }
-load();
+$("#downloadJson").onclick = downloadJson;
+
+async function loadRemote(){
+  try{
+    const res = await fetch("./admin.json",{cache:"no-store"});
+    if(!res.ok) throw new Error("admin.json topilmadi");
+    DATA = await res.json();
+  }catch(e){
+    DATA = { chips: [] };
+  }
+  // tartibla va render
+  DATA.chips = (DATA.chips||[]).filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0));
+  render();
+}
+$("#loadRemote").onclick = loadRemote;
+
+// import from file
+$("#importFile").addEventListener("change", async (e)=>{
+  const f = e.target.files?.[0]; if(!f) return;
+  const txt = await f.text();
+  try{
+    const json = JSON.parse(txt);
+    if(!Array.isArray(json.chips)) throw new Error("Noto‘g‘ri format: chips yo‘q");
+    DATA = json; DATA.chips = DATA.chips.filter(Boolean).sort((a,b)=>(a.order||0)-(b.order||0));
+    render(); alert("JSON import qilindi. Kerak bo‘lsa tahrirlab, qayta yuklab oling.");
+  }catch(err){ alert("JSON xatolik: "+err.message); }
+});
+
+/* ============= Utils ============= */
+function escapeHtml(x=''){ return x.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])) }
+function sampleChipHtml(id){ return `<!doctype html>
+<html><head><meta charset="utf-8"><title>${id}</title>
+<style>body{font:16px system-ui;margin:0;padding:24px} .box{border:1px solid #e5e7eb;border-radius:12px;padding:16px}</style></head>
+<body>
+  <div class="box"><b>${id}</b> — namunaviy chip</div>
+  <script>console.log("Chip '${id}' ishga tushdi");<\/script>
+</body></html>` }
 </script>
 </body>
 </html>
