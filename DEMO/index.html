@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — To‘liq sahifa chiplar</title>
+  <title>LeaderMath — To‘liq sahifa chiplar (scroll-top + fade-in)</title>
   <style>
     :root{
       --brand:#2E8B57;--brand2:#1F6B45;--bg:#f6faf8;--text:#0f172a;--muted:#5b7a6a;--frame:#d8e7dd;--ring:#8ad1b1;
@@ -23,6 +23,14 @@
     main{flex:1;display:flex;flex-direction:column;width:100%;margin:0;padding:0}
     .page{flex:1;width:100%;display:block;padding:0;margin:0}
     .muted{color:var(--muted);padding:20px;text-align:center}
+
+    /* Fade-in anim (reduced-motion hurmat qilinadi) */
+    .chip-enter{opacity:0; transform:translateY(10px)}
+    .chip-enter-active{opacity:1; transform:none; transition:opacity .35s ease, transform .35s ease}
+    @media (prefers-reduced-motion: reduce){
+      .chip-enter{opacity:1; transform:none}
+      .chip-enter-active{transition:none}
+    }
   </style>
 </head>
 <body>
@@ -60,18 +68,31 @@
       const id=getQS()||localStorage.getItem('lm:lastChip');
       chipsEl.querySelectorAll('.chip').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
     }
-    function inject(el,html){
-      el.innerHTML=html||'';
-      el.querySelectorAll('script').forEach(s=>{
-        const n=document.createElement('script');
-        [...s.attributes].forEach(a=>n.setAttribute(a.name,a.value));
-        n.textContent=s.textContent;
-        s.replaceWith(n);
+
+    // Injects HTML and re-runs <script> tags
+    function injectWithScripts(container, html){
+      container.innerHTML='';
+      const wrap=document.createElement('div');
+      wrap.className='chip-enter';
+      wrap.innerHTML=html||'<p class="muted">Kontent yo‘q</p>';
+      container.appendChild(wrap);
+      // Re-run inline scripts
+      wrap.querySelectorAll('script').forEach(old=>{
+        const s=document.createElement('script');
+        [...old.attributes].forEach(a=>s.setAttribute(a.name,a.value));
+        s.textContent=old.textContent; old.replaceWith(s);
       });
+      // Start fade-in (next frame)
+      requestAnimationFrame(()=>{ wrap.classList.add('chip-enter-active'); });
     }
+
     function openChip(id){
       const c=chips.find(x=>x.id===id); if(!c)return;
-      inject(contentEl,c.html||'<p class="muted">Kontent yo‘q</p>');
+      // 1) Scroll-to-top (smooth)
+      window.scrollTo({ top:0, behavior:'smooth' });
+      // 2) Inject content + fade-in
+      injectWithScripts(contentEl, c.html);
+      // 3) Persist + UI
       localStorage.setItem('lm:lastChip',id);
       setQS(id);
       highlight();
