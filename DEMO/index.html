@@ -262,16 +262,77 @@
     async function openProfileModal(prefill){ profileModal.classList.add('show'); populateRegions(); if(prefill){ pf_first.value=prefill.first||''; pf_last.value=prefill.last||''; pf_region.value=prefill.region||''; populateDistricts(); pf_district.value=prefill.district||''; populateSchools(); pf_school.value=prefill.school||''; pf_school_custom.value=prefill.schoolCustom||''; pf_class.value=prefill.class||''; pf_phone.value=prefill.phone||''; } }
     const closeProfileModal=()=> profileModal.classList.remove('show'); closeProfile.onclick=closeProfileModal;
 
-    saveProfile.onclick=async()=>{
-      const u={ first:pf_first.value.trim(), last:pf_last.value.trim(), region:pf_region.value, district:pf_district.value, school:pf_school.value, schoolCustom:pf_school_custom.value.trim(), class:pf_class.value, phone:pf_phone.value.trim() };
-      if(!profileIsComplete(u)){ alert('Iltimos, barcha majburiy maydonlarni to‘ldiring.'); return; }
-      let avatarData=null; try{ if(pf_avatar.files?.[0]) avatarData=await readFileAsDataURL(pf_avatar.files[0]); }catch{}
-      const user=auth.currentUser; const uid=user?.uid; if(!uid) return;
-      let prev=null; try{ const snap=await getDoc(doc(db,'users',uid)); prev=snap.exists()?snap.data():null; }catch{}
-      const payload={ name:`${u.first} ${u.last}`.trim(), first:u.first, last:u.last, region:u.region, district:u.district, school:u.school||u.schoolCustom, class:u.class, phone:u.phone, avatar:avatarData||undefined, updatedAt:serverTimestamp() };
-      try{ await setDoc(doc(db,'users',uid), payload, {merge:true}); localStorage.setItem('lm-profile', JSON.stringify({ ...prev, ...payload })); applyHeaderProfile({ ...prev, ...payload, photoURL: avatarData || user?.photoURL }); closeProfileModal(); lockCover.classList.remove('show'); contentEl.classList.remove('locked'); }
-      catch(e){ alert('Saqlashda xato: '+e.message); }
-    };
+    saveProfile.onclick = async () => {
+  const u = {
+    first: pf_first.value.trim(),
+    last: pf_last.value.trim(),
+    region: pf_region.value,
+    district: pf_district.value,
+    school: pf_school.value,
+    schoolCustom: pf_school_custom.value.trim(),
+    class: pf_class.value,
+    phone: pf_phone.value.trim()
+  };
+
+  if (!profileIsComplete(u)) {
+    alert('Iltimos, barcha majburiy maydonlarni to‘ldiring.');
+    return;
+  }
+
+  // 1) Avatarni o‘qish (bo‘lsa)
+  let avatarData = null;
+  try {
+    if (pf_avatar.files?.[0]) {
+      avatarData = await readFileAsDataURL(pf_avatar.files[0]);
+    }
+  } catch {}
+
+  const user = auth.currentUser;
+  const uid = user?.uid;
+  if (!uid) return;
+
+  // 2) Oldingi hujjatni olib qo‘yamiz (localStorage merge uchun)
+  let prev = null;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    prev = snap.exists() ? snap.data() : null;
+  } catch {}
+
+  // 3) Payload — UNDEFINED YO‘Q!
+  const payload = {
+    name: `${u.first} ${u.last}`.trim(),
+    first: u.first,
+    last: u.last,
+    region: u.region,
+    district: u.district,
+    school: u.school || u.schoolCustom,
+    class: u.class,
+    phone: u.phone,
+    updatedAt: serverTimestamp()
+  };
+  if (avatarData !== null) {
+    payload.avatar = avatarData; // faqat bo‘lsa qo‘shamiz
+  }
+
+  try {
+    await setDoc(doc(db, 'users', uid), payload, { merge: true });
+
+    // 4) Kesh va headerni yangilash
+    const merged = { ...prev, ...payload };
+    if (avatarData !== null) merged.avatar = avatarData;
+
+    localStorage.setItem('lm-profile', JSON.stringify(merged));
+    applyHeaderProfile({ ...merged, photoURL: merged.avatar || user?.photoURL });
+
+    // 5) UI
+    closeProfileModal();
+    lockCover.classList.remove('show');
+    contentEl.classList.remove('locked');
+  } catch (e) {
+    alert('Saqlashda xato: ' + e.message);
+  }
+};
+
 
     // ===== View profile (readonly) =====
     const viewModal=$('#viewProfileModal'), closeView=$('#closeView');
