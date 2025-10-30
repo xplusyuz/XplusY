@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — Chips + Auth + Profil (points • mandatory profile)</title>
+  <title>LeaderMath — Chips + Auth + Profil (Security)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <link rel="icon" href="./logo.png">
   <link rel="apple-touch-icon" href="./logo.png">
@@ -13,6 +13,7 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:var(--bg);color:var(--text);font:15px/1.6 system-ui,Segoe UI,Roboto;min-height:100vh;display:flex;flex-direction:column}
 
+    /* = Header = */
     header{background:rgba(255,255,255,.85);backdrop-filter:blur(10px) saturate(1.1);border-bottom:1px solid var(--frame);position:relative;z-index:50}
     html[data-theme="dark"] header{background:rgba(16,24,39,.6)}
     .bar{max-width:1200px;margin:auto;display:flex;align-items:center;gap:12px;padding:10px 14px}
@@ -21,7 +22,7 @@
     .spacer{flex:1}
     .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--frame);background:var(--card);padding:8px 12px;border-radius:10px;cursor:pointer}
 
-    /* User pill */
+    /* = User pill = */
     #userBox{display:none}
     .user-pill{display:flex;align-items:center;gap:10px;background:var(--pill);border:1px solid var(--frame);border-radius:999px;padding:4px 8px;cursor:pointer}
     .avatar{width:28px;height:28px;border-radius:999px;background:#fff url('./logo.png') center/cover no-repeat;border:1px solid var(--frame)}
@@ -29,13 +30,13 @@
     .score{font-size:12px;border-radius:999px;padding:2px 8px;border:1px solid var(--frame)}
     .caret{font-size:10px;opacity:.7}
 
-    /* Portal dropdown */
+    /* = Dropdown (portal, fixed) = */
     .menu{position:fixed;display:none;min-width:220px;background:var(--card);border:1px solid var(--frame);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.25);z-index:10000}
     .menu.show{display:block}
     .menu .mi{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
     .menu .mi:hover{background:rgba(0,0,0,.05)}
 
-    /* Chips (sticky) */
+    /* = Chips (sticky) = */
     .chips-sticky{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.9);backdrop-filter:blur(8px) saturate(1.1);border-bottom:1px solid var(--frame)}
     html[data-theme="dark"] .chips-sticky{background:rgba(16,24,39,.7)}
     .chips-wrap{overflow-x:auto;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none}
@@ -46,14 +47,14 @@
     .chip.active{outline:2px solid var(--ring)}
     .chip .icon{width:18px;height:18px;display:block}
 
-    /* Content */
+    /* = Content = */
     main{flex:1;display:flex;flex-direction:column;width:100%;margin-top:12px;position:relative;z-index:1}
     .page{flex:1;width:100%;position:relative;z-index:2}
     iframe,video{position:relative;z-index:3}
     .chip-enter{opacity:0;transform:translateY(10px)}
     .chip-enter-active{opacity:1;transform:none;transition:opacity .35s ease,transform .35s ease}
 
-    /* Lock states */
+    /* = Lock = */
     .locked{filter:blur(6px);pointer-events:none;user-select:none}
     #lockCover{position:fixed;inset:0;background:rgba(255,255,255,.4);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:2000}
     html[data-theme="dark"] #lockCover{background:rgba(0,0,0,.35)}
@@ -67,7 +68,7 @@
     .google-btn img{width:18px;height:18px}
     .danger{color:var(--danger)}
 
-    /* Modals */
+    /* = Modals = */
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.25);z-index:3000}
     .modal.show{display:flex}
     .modal-card{width:min(860px,96vw);background:var(--card);border:1px solid var(--frame);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.16)}
@@ -85,8 +86,17 @@
     .row{display:flex;gap:8px;flex-wrap:wrap}
     .btn.pri{background:linear-gradient(135deg,#f3fbf7,#e7f9f0);border-color:var(--ring)}
 
-    /* Portal root */
-    #portal-root{position:relative;z-index:10000}
+    /* = Security overlay/watermark = */
+    body.protect{user-select:none}
+    body.protect input, body.protect textarea, body.protect select{user-select:text}
+    body.protect img, body.protect video{pointer-events:none;-webkit-user-drag:none}
+    body.protect a{pointer-events:none}
+    body.protect::before{
+      content:""; position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:.08;
+      background-image: var(--wm, none);
+      background-size: 420px auto; background-repeat: repeat; transform: rotate(-12deg);
+    }
+    @media print{ body.protect{ display:none !important } }
   </style>
 </head>
 <body>
@@ -136,6 +146,7 @@
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G"> <span>Google bilan kirish</span>
         </button>
       </div>
+      <div id="authErr" class="danger" style="margin-top:8px"></div>
     </div>
   </div>
 
@@ -209,6 +220,8 @@
     const firebaseConfig = {apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",authDomain: "xplusy-760fa.firebaseapp.com",projectId: "xplusy-760fa",storageBucket: "xplusy-760fa.firebasestorage.app",messagingSenderId: "992512966017",appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",measurementId: "G-459PLJ7P7L"};
     const app=initializeApp(firebaseConfig); const auth=getAuth(app); const db=getFirestore(app);
 
+    const WHITELIST_EMAIL = 'sohibjonmath@gmail.com';
+
     const metaTheme=document.getElementById('meta-theme-color');
     const setTheme=t=>{ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('lm-theme',t); metaTheme.content=(t==='dark')?'#101827':'#2E8B57'; };
     setTheme(localStorage.getItem('lm-theme')||'light');
@@ -233,8 +246,8 @@
     const emailLogin=$('#emailLogin'), em=$('#em'), pw=$('#pw'), googleBtn=$('#googleBtn'), authErr=$('#authErr');
     const showLock=(on)=>{ lockCover.classList.toggle('show',!!on); contentEl.classList.toggle('locked',!!on); };
     signInBtn.onclick=()=>{ lockTitle.textContent='Kirish talab qilinadi'; lockText.textContent='Chiplar kontenti faqat tizimga kirgan foydalanuvchilar uchun.'; authBox.style.display='flex'; showLock(true); };
-    googleBtn.onclick=async()=>{ authErr.textContent=''; try{ await signInWithPopup(auth,new GoogleAuthProvider()); }catch(e){ authErr.textContent=e.message; } };
-    emailLogin.onclick=async()=>{ authErr.textContent=''; const email=(em.value||'').trim(), pass=pw.value||''; if(!email||pass.length<6){ authErr.textContent='Email yoki parol xato (min 6 belgi)'; return; } try{ await signInWithEmailAndPassword(auth,email,pass); }catch(e){ if(String(e.code||'').includes('user-not-found')){ try{ await createUserWithEmailAndPassword(auth,email,pass);}catch(er){ authErr.textContent=er.message;} }else{ authErr.textContent=e.message;} } };
+    googleBtn.onclick=async()=>{ if(authErr) authErr.textContent=''; try{ await signInWithPopup(auth,new GoogleAuthProvider()); }catch(e){ if(authErr) authErr.textContent=e.message; } };
+    emailLogin.onclick=async()=>{ if(authErr) authErr.textContent=''; const email=(em.value||'').trim(), pass=pw.value||''; if(!email||pass.length<6){ if(authErr) authErr.textContent='Email yoki parol xato (min 6 belgi)'; return; } try{ await signInWithEmailAndPassword(auth,email,pass); }catch(e){ if(String(e.code||'').includes('user-not-found')){ try{ await createUserWithEmailAndPassword(auth,email,pass);}catch(er){ if(authErr) authErr.textContent=er.message;} }else{ if(authErr) authErr.textContent=e.message;} } };
 
     // ===== Profile (edit) =====
     const profileModal=$('#profileModal'), closeProfile=$('#closeProfile'), saveProfile=$('#saveProfile');
@@ -256,8 +269,7 @@
       const user=auth.currentUser; const uid=user?.uid; if(!uid) return;
       let prev=null; try{ const snap=await getDoc(doc(db,'users',uid)); prev=snap.exists()?snap.data():null; }catch{}
       const payload={ name:`${u.first} ${u.last}`.trim(), first:u.first, last:u.last, region:u.region, district:u.district, school:u.school||u.schoolCustom, class:u.class, phone:u.phone, avatar:avatarData||undefined, updatedAt:serverTimestamp() };
-      try{ await setDoc(doc(db,'users',uid), payload, {merge:true}); localStorage.setItem('lm-profile', JSON.stringify({ ...prev, ...payload })); applyHeaderProfile({ ...prev, ...payload, photoURL: avatarData || user?.photoURL }); closeProfileModal(); // profil to'liq bo'lsa lockni yechamiz
-        lockCover.classList.remove('show'); contentEl.classList.remove('locked'); }
+      try{ await setDoc(doc(db,'users',uid), payload, {merge:true}); localStorage.setItem('lm-profile', JSON.stringify({ ...prev, ...payload })); applyHeaderProfile({ ...prev, ...payload, photoURL: avatarData || user?.photoURL }); closeProfileModal(); lockCover.classList.remove('show'); contentEl.classList.remove('locked'); }
       catch(e){ alert('Saqlashda xato: '+e.message); }
     };
 
@@ -283,16 +295,64 @@
     editProfileBtn.onclick=async()=>{ const u=auth.currentUser; if(!u) return; const snap=await getDoc(doc(db,'users',u.uid)); const p=snap.exists()?snap.data():JSON.parse(localStorage.getItem('lm-profile')||'null'); await openProfileModal(p||{}); };
     signOutBtn.onclick=()=> signOut(auth);
 
+    // ===== Security hardening (runtime) =====
+    let securityOn=false; let removeHandlers=null;
+    function svgWatermark(text){
+      const t = encodeURIComponent(text);
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='420' height='200'>`+
+                  `<text x='10' y='80' font-size='22' fill='rgba(0,0,0,0.15)'>${t}</text>`+
+                  `<text x='10' y='160' font-size='22' fill='rgba(0,0,0,0.15)'>${t}</text>`+
+                  `</svg>`;
+      return `url("data:image/svg+xml;utf8,${svg}")`;
+    }
+    function enableSecurity(user){
+      if(securityOn) return; securityOn=true; document.body.classList.add('protect');
+      const wmText = `${user?.email||'guest'} • ${new Date().toLocaleString()}`;
+      document.body.style.setProperty('--wm', svgWatermark(wmText));
+      const onCtx = e=>e.preventDefault();
+      const onDrag = e=>e.preventDefault();
+      const onKey = e=>{
+        const k=e.key.toLowerCase();
+        if(
+          e.keyCode===123 || // F12
+          (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
+          (e.ctrlKey && ['u','s','p'].includes(k)) ||
+          (e.metaKey && ['u','s','p'].includes(k)) ||
+          k==='printscreen'
+        ){ e.preventDefault(); e.stopPropagation(); try{ navigator.clipboard?.writeText(''); }catch{} }
+      };
+      document.addEventListener('contextmenu', onCtx, true);
+      document.addEventListener('copy', onCtx, true);
+      document.addEventListener('cut', onCtx, true);
+      document.addEventListener('dragstart', onDrag, true);
+      window.addEventListener('dragover', onDrag, true);
+      window.addEventListener('drop', onDrag, true);
+      document.addEventListener('keydown', onKey, true);
+      removeHandlers = ()=>{
+        document.removeEventListener('contextmenu', onCtx, true);
+        document.removeEventListener('copy', onCtx, true);
+        document.removeEventListener('cut', onCtx, true);
+        document.removeEventListener('dragstart', onDrag, true);
+        window.removeEventListener('dragover', onDrag, true);
+        window.removeEventListener('drop', onDrag, true);
+        document.removeEventListener('keydown', onKey, true);
+      };
+    }
+    function disableSecurity(){ if(!securityOn) return; securityOn=false; document.body.classList.remove('protect'); document.body.style.removeProperty('--wm'); removeHandlers?.(); }
+
     // ===== Auth state =====
-    let unsubUser=null; // live points listener
+    let unsubUser=null;
     onAuthStateChanged(auth, async(user)=>{
       if(unsubUser){ unsubUser(); unsubUser=null; }
       if(!user){
-        // Auth talab
-        lockTitle.textContent='Kirish talab qilinadi'; lockText.textContent='Chiplar kontenti faqat tizimga kirgan foydalanuvchilar uchun.'; authBox.style.display='flex';
-        showLock(true); $('#signInBtn').style.display=''; userBox.style.display='none'; return;
+        enableSecurity(null); // mehmonlar uchun doimo himoya yoqilgan
+        showLock(true); $('#signInBtn').style.display=''; $('#userBox').style.display='none'; return;
       }
-      $('#signInBtn').style.display='none'; userBox.style.display='block';
+      $('#signInBtn').style.display='none'; $('#userBox').style.display='block';
+
+      // Whitelist: Sohibjon uchun barcha cheklovlarni o'chiramiz
+      if(user.email === WHITELIST_EMAIL){ disableSecurity(); }
+      else { enableSecurity(user); }
 
       const ref=doc(db,'users',user.uid);
       unsubUser = onSnapshot(ref, (snap)=>{
@@ -300,14 +360,13 @@
         applyHeaderProfile({ ...p, photoURL: p?.avatar || user?.photoURL });
       });
 
-      // Profil tekshirish — majburiy
       let profile=null; try{ const snap=await getDoc(ref); profile=snap.exists()?snap.data():null; }catch{}
-      const complete = profileIsComplete(profile||{});
+      const complete = profile && profile.first && profile.last && profile.region && profile.district && (profile.school||profile.schoolCustom) && profile.class && profile.phone;
       if(!complete){
-        // Profilni to'ldirish majburiy: kontentni bloklaymiz, auth formni yashiramiz
-        lockTitle.textContent='Profilni to‘ldirish talab qilinadi';
-        lockText.textContent='Davom etish uchun shaxsiy ma’lumotlarni kiriting.';
-        authBox.style.display='none';
+        // Profil majburiy
+        document.getElementById('lockTitle').textContent='Profilni to‘ldirish talab qilinadi';
+        document.getElementById('lockText').textContent='Davom etish uchun shaxsiy ma’lumotlarni kiriting.';
+        document.getElementById('authBox').style.display='none';
         showLock(true);
         const nm=(user.displayName||'').trim().split(/\s+/,2);
         await openProfileModal({ first:nm[0]||'', last:nm[1]||'', region:'', district:'', school:'', schoolCustom:'', class:'', phone:'' });
@@ -318,8 +377,7 @@
     });
 
     // ===== Init =====
-    function renderInit(){ renderChips(); const initial=getQS()||localStorage.getItem('lm:lastChip')||chips[0]?.id; if(initial) openChip(initial); }
-    renderInit();
+    renderChips(); const initial=getQS()||localStorage.getItem('lm:lastChip')||chips[0]?.id; if(initial) openChip(initial);
   </script>
 </body>
 </html>
