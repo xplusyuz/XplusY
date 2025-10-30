@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <title>LeaderMath Admin — Chip boshqaruvi</title>
+  <meta name="theme-color" content="#2E8B57"/>
+  <link rel="icon" href="./favicon.png"/>
+  <style>
+    :root{
+      --brand:#2E8B57;--brand2:#1F6B45;
+      --bg:#f4f8f6;--text:#0d1b14;--muted:#375c4c;
+      --card:#ffffff;--frame:#d8e7dd;--ring:#8ad1b1;--radius:16px;
+    }
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,Segoe UI,Roboto,Arial,sans-serif}
+    .wrap{max-width:1120px;margin:24px auto;padding:0 14px}
+    .h{font-weight:800;font-size:22px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid var(--frame);background:var(--card);cursor:pointer}
+    .btn.pri{background:linear-gradient(180deg,#8fe3b0,#2E8B57);border-color:#1F6B45;color:#fff}
+    .btn.dng{border-color:#c62828;color:#c62828}
+    .card{margin-top:16px;border:1px solid var(--frame);background:var(--card);border-radius:var(--radius);box-shadow:0 8px 30px rgba(0,0,0,.06);padding:14px}
+    .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .tbl td{background:var(--card);border:1px solid var(--frame);padding:10px;border-left:none;border-right:none;vertical-align:top}
+    input[type="text"],input[type="number"],textarea{width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)}
+    label{font-size:13px;color:var(--muted)}
+    .muted{color:var(--muted)}
+    .right{margin-left:auto}
+    .code{font-family:ui-monospace,Consolas,monospace;background:#f1f5f3;border:1px solid var(--frame);padding:6px 8px;border-radius:10px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="h">LeaderMath — Chip boshqaruvi</div>
+    <div class="row">
+      <button class="btn" id="loadServer">Serverdan admin.json yukla</button>
+      <label class="btn">
+        JSON import <input id="fileIn" type="file" accept="application/json" style="display:none">
+      </label>
+      <button class="btn pri" id="downloadJson">JSON ni yuklab olish</button>
+      <span class="right muted">Diqqat: o‘zgartirishlar brauzer xotirasida. Tayyor bo‘lsa — JSON’ni yuklab olib serverga qo‘ying.</span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button class="btn pri" id="addChip">+ Yangi chip</button>
+        <button class="btn" id="clearAll">Hammasini tozalash</button>
+      </div>
+
+      <table class="tbl" id="list"></table>
+    </div>
+
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label>Tanlangan chip ma’lumoti</label>
+          <div id="selInfo" class="code" style="white-space:pre; overflow:auto; max-height:240px">—</div>
+        </div>
+        <div>
+          <label>HTML tahrirlash (to‘liq sahifa bo‘lishi mumkin)</label>
+          <textarea id="htmlEdit" rows="12" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn pri" id="saveHtml">HTML ni saqlash</button>
+            <button class="btn" id="previewHtml">Oldindan ko‘rish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+const store = {
+  get(k, d=null){ try{ return JSON.parse(localStorage.getItem(k)) ?? d }catch{ return d } },
+  set(k, v){ localStorage.setItem(k, JSON.stringify(v)) }
+};
+const KEY = "lm.adminjson.v1";
+let DATA = {chips:[]};
+let SELECTED_ID = null;
+
+function esc(x=''){return String(x||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]))}
+function uid(){ return 'chip_' + Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-4); }
+
+function render(){
+  const tbl = document.getElementById('list');
+  if(!DATA.chips.length){ tbl.innerHTML = '<tr><td>Hali chip yo‘q. “+ Yangi chip” bosing.</td></tr>'; return; }
+  const rows = DATA.chips
+    .sort((a,b)=>(a.order||999)-(b.order||999))
+    .map((c,i)=>`
+      <tr data-id="${c.id}">
+        <td style="width:52px;text-align:center">${i+1}</td>
+        <td style="min-width:180px">
+          <label>Nomi (label)<br><input type="text" data-k="label" value="${esc(c.label||c.id)}"></label>
+        </td>
+        <td style="width:110px">
+          <label>Order<br><input type="number" data-k="order" value="${Number(c.order||0)}"></label>
+        </td>
+        <td style="width:120px">
+          <label>Ko‘rinish<br><input type="checkbox" data-k="visible" ${c.visible===false?'':'checked'}></label>
+        </td>
+        <td style="width:210px">
+          <div>ID: <span class="code">${c.id}</span></div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" data-act="select">Tanlash</button>
+            <button class="btn" data-act="edit">HTML</button>
+            <button class="btn dng" data-act="del">O‘chirish</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  tbl.innerHTML = rows;
+
+  // field changes
+  tbl.querySelectorAll('tr').forEach(tr=>{
+    const id
