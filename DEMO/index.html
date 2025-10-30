@@ -1,382 +1,127 @@
 <!doctype html>
-<html lang="uz" class="h-full">
+<html lang="uz">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>LeaderMath.uz — Bosh sahifa (Userpanel + Chip menyu)</title>
-  <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
-  <link rel="icon" href="/favicon.png">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeaderMath — Micro-CMS (JSON → HTML chips)</title>
   <style>
     :root{
-      --brand:#2E8B57;--brand2:#1F6B45;
-      --bg:#f3f7f5;--text:#0f172a;--muted:#4b6b5c;--card:#ffffff;
-      --frame:#d8e7dd;--frame-strong:#b7d6c5;--chip:#edf7f2;--chip-b:#cfe7db;
-      --ring:#8ad1b1;--shadow:0 10px 30px rgba(0,0,0,.08);
-      --radius:18px;
+      --brand:#2E8B57; --bg:#f6faf8; --text:#0f172a; --muted:#5b7a6a;
+      --card:#fff; --frame:#d8e7dd; --radius:16px; --ring:#8ad1b1;
     }
-    :root.dark{
-      --bg:#0e1512;--text:#eaf7ee;--muted:#a5c7b4;--card:#111a16;
-      --frame:#1b3429;--frame-strong:#224836;--chip:#0f1e18;--chip-b:#1b4031;
-      --ring:#1ea971;--shadow:0 12px 36px rgba(0,0,0,.35);
-    }
-
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans";
-      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale}
-
-    /* Appbar */
-    .app{min-height:100%;display:flex;flex-direction:column}
-    .appbar{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.55);
-      backdrop-filter:saturate(140%) blur(14px); border-bottom:1px solid var(--frame)}
-    :root.dark .appbar{background:rgba(16,24,21,.55)}
-    .bar{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:10px 16px}
-    .logo{display:flex;align-items:center;gap:10px;font-weight:800}
-    .logo-badge{width:34px;height:34px;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand2));
-      display:grid;place-items:center;color:#fff;font-weight:900;box-shadow:0 6px 16px rgba(46,139,87,.35)}
-    .logo small{opacity:.65;font-weight:700}
-
-    .chips{flex:1;display:flex;gap:8px;overflow:auto hidden;padding:4px 6px;scrollbar-width:thin}
-    .chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;
-      background:var(--chip);border:1px solid var(--chip-b);cursor:pointer;white-space:nowrap;
-      transition:transform .15s ease, box-shadow .15s ease, background .2s ease}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,Segoe UI,Roboto}
+    header{position:sticky;top:0;background:rgba(255,255,255,.6);backdrop-filter:saturate(1.5) blur(10px);
+      border-bottom:1px solid var(--frame); padding:10px 16px; display:flex; gap:10px; align-items:center}
+    .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#2E8B57,#1F6B45); color:#fff;
+      display:grid;place-items:center;font-weight:900}
+    h1{font-size:16px;margin:0} .muted{color:var(--muted)}
+    main{max-width:1200px;margin:16px auto;padding:0 16px;display:grid;grid-template-columns:280px 1fr;gap:16px}
+    .panel{background:var(--card);border:1px solid var(--frame);border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.05)}
+    .chips{padding:12px}
+    .search{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--frame);outline:0}
+    .chip{width:100%; text-align:left; margin:8px 0; padding:10px 12px; border-radius:12px; border:1px solid var(--frame);
+      background:#fafdfb; cursor:pointer; transition:.15s}
     .chip:hover{transform:translateY(-1px); box-shadow:0 6px 14px rgba(0,0,0,.08)}
-    .chip.active{background:linear-gradient(180deg,#fff, var(--chip)); border-color:var(--ring);
-      box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 28%, transparent)}
-    :root.dark .chip.active{background:linear-gradient(180deg,#17251e,var(--chip))}
-
-    .grow{flex:1}
-
-    /* User chip */
-    .userchip{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:999px;background:var(--card);
-      border:1px solid var(--frame);cursor:pointer;min-width:0;box-shadow:var(--shadow)}
-    .ava{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:#dfeee6;color:#1F6B45}
-    :root.dark .ava{background:#173328;color:#94e0be}
-    .umeta{display:flex;flex-direction:column;min-width:0}
-    .uname{font-weight:800;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .upoints{font-size:12px;color:var(--muted)}
-
-    /* Popover */
-    .pop{position:absolute;top:64px;right:16px;max-width:380px;background:var(--card);border:1px solid var(--frame);
-      border-radius:16px;box-shadow:var(--shadow);padding:12px;display:none;animation:pop .12s ease}
-    .pop.show{display:block}
-    @keyframes pop{from{transform:translateY(-6px);opacity:.4}to{transform:translateY(0);opacity:1}}
-    .prow{display:flex;gap:12px;align-items:center}
-    .pinfo b{display:block}
-    .pinfo small{color:var(--muted)}
-    .pact{display:flex;gap:8px;margin-top:12px}
-    .btn{appearance:none;border:1px solid var(--frame);background:var(--chip);padding:9px 12px;border-radius:10px;font-weight:700;cursor:pointer}
-    .btn.primary{border-color:var(--ring);background:linear-gradient(180deg,#e9f7f0,#d2efe2)}
-
-    /* Main */
-    .main{flex:1;max-width:1180px;margin:12px auto;padding:0 16px 20px}
-    .viewer{width:100%;height:calc(100dvh - 140px);border-radius:20px;border:1px solid var(--frame-strong);
-      background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
-    .viewer iframe{width:100%;height:100%;border:0;background:#fff}
-
-    /* Login */
-    .login{max-width:460px;margin:10vh auto;padding:20px;border-radius:20px;border:1px solid var(--frame);
-      background:var(--card);box-shadow:var(--shadow)}
-    .login h1{margin:0 0 6px}
-    .login .muted{color:var(--muted)}
-    .actions{display:flex;flex-direction:column;gap:10px;margin-top:8px}
-    input[type=email]{width:100%;padding:11px 12px;border-radius:12px;border:1px solid var(--frame);background:var(--bg)}
-
-    /* Banners / toasts */
-    .banner{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--card);border:1px solid var(--frame);
-      border-radius:12px;padding:10px 14px;box-shadow:var(--shadow);display:none;max-width:90%}
-    .banner.show{display:block}
-
-    /* Toggle */
-    .toggle{display:flex;align-items:center;gap:6px;user-select:none}
-    .toggle input{accent-color:var(--brand)}
-
-    @media (max-width:720px){
-      .uname{max-width:110px}
-      .viewer{height:calc(100dvh - 160px)}
-    }
+    .chip.active{outline:2px solid var(--ring); background:#f2fbf7}
+    .viewer-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--frame)}
+    .viewer{height:72vh;border:0;width:100%;border-radius:0 0 var(--radius) var(--radius)}
+    .badgelite{font-size:12px;padding:4px 8px;border-radius:999px;background:#eff9f4;border:1px solid var(--frame)}
+    @media (max-width:900px){ main{grid-template-columns:1fr} .viewer{height:66vh} }
   </style>
 </head>
 <body>
-<div class="app" id="app" style="display:none">
-  <header class="appbar">
-    <div class="bar">
-      <div class="logo">
-        <div class="logo-badge">π</div>
-        LeaderMath <small>Premium</small>
-      </div>
-
-      <nav class="chips" id="chips" aria-label="Bo‘limlar"></nav>
-
-      <div class="toggle">
-        <input type="checkbox" id="modeToggle" aria-label="Dark mode"/>
-        <label for="modeToggle">Dark</label>
-      </div>
-
-      <div class="grow"></div>
-
-      <div class="userchip" id="userChip" title="Profilni ochish">
-        <div class="ava" id="userAva">L</div>
-        <div class="umeta">
-          <div class="uname" id="userName">Guest</div>
-          <div class="upoints" id="userPoints">Ball: 0</div>
-        </div>
-      </div>
+  <header>
+    <div class="logo">L</div>
+    <div>
+      <h1>LeaderMath Micro-CMS</h1>
+      <div class="muted">JSON ichidagi HTML bo‘laklari bilan modul platforma</div>
     </div>
   </header>
 
-  <div class="pop" id="pop" role="dialog" aria-modal="true" aria-label="Profil">
-    <div class="prow">
-      <div class="ava" id="popAva">L</div>
-      <div class="pinfo">
-        <b id="popName">Guest</b>
-        <small id="popEmail">—</small>
+  <main>
+    <!-- CHIPS PANEL -->
+    <aside class="panel">
+      <div class="chips">
+        <input id="q" class="search" placeholder="Chip qidirish..." autocomplete="off"/>
+        <div id="chipList" style="margin-top:10px"></div>
       </div>
-    </div>
-    <div class="pact">
-      <button class="btn" id="editProfile">Profil</button>
-      <button class="btn primary" id="signOutBtn">Chiqish</button>
-    </div>
-  </div>
+    </aside>
 
-  <main class="main">
-    <div class="viewer">
-      <iframe id="viewer" sandbox="allow-scripts allow-forms allow-modals allow-popups" referrerpolicy="no-referrer"></iframe>
-    </div>
+    <!-- VIEWER -->
+    <section class="panel">
+      <div class="viewer-head">
+        <div>
+          <strong id="title">Chip tanlang</strong>
+          <span id="meta" class="badgelite" hidden></span>
+        </div>
+        <div class="muted" id="hint">Bosilganda kontent ochiladi</div>
+      </div>
+      <iframe id="viewer" class="viewer"
+        sandbox="allow-scripts"
+        referrerpolicy="no-referrer"></iframe>
+    </section>
   </main>
-</div>
 
-<!-- Login screen -->
-<div class="login" id="loginCard">
-  <h1>LeaderMath hisobingizga kiring</h1>
-  <p class="muted">Google yoki e-pochta orqali kirish mumkin.</p>
-  <div class="actions">
-    <button class="btn primary" id="googleBtn">Google orqali kirish</button>
-    <div>
-      <input type="email" id="emailInput" placeholder="email@example.com" autocomplete="email">
-      <button class="btn" id="emailLinkBtn">E-pochtaga kirish havolasi yuborish</button>
-    </div>
+  <script type="module">
+    // ===== Helpers
+    const $ = (s, r=document) => r.querySelector(s);
+    const esc = (s='') => String(s).replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+    const setQS = (id) => history.replaceState(null,'',`?id=${encodeURIComponent(id)}`);
+    const getQS = () => new URLSearchParams(location.search).get('id');
+
+    // ===== Load admin.json
+    const admin = await fetch('./admin.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({chips:[]}));
+    const chips = Array.isArray(admin.chips) ? admin.chips : [];
+
+    // ===== Render chip list
+    const chipList = $('#chipList');
+    function drawList(filter=''){
+      const f = filter.trim().toLowerCase();
+      chipList.innerHTML = chips
+        .filter(c => !f || (c.title||'').toLowerCase().includes(f) || (c.tags||[]).join(' ').toLowerCase().includes(f))
+        .map(c=>`<button class="chip" data-id="${esc(c.id)}">${esc(c.title||c.id)}${c.tags?.length?`<div class="muted" style="font-size:12px">${c.tags.join(' · ')}</div>`:''}</button>`)
+        .join('') || `<div class="muted">Hech narsa topilmadi</div>`;
+      chipList.querySelectorAll('.chip').forEach(b=>b.onclick=()=>openChip(b.dataset.id));
+      highlightActive();
+    }
+    $('#q').addEventListener('input', e => drawList(e.target.value));
+
+    // ===== Open chip (safe sandboxed iframe via srcdoc)
+    const viewer = $('#viewer'), titleEl = $('#title'), meta = $('#meta'), hint = $('#hint');
+    function openChip(id){
+      const c = chips.find(x=>x.id===id); if(!c){return}
+      titleEl.textContent = c.title || c.id;
+      meta.hidden = !c.tags?.length; if(!meta.hidden) meta.textContent = c.tags.join(' · ');
+      const html = `
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto; color:#0f172a; background:#fff}
+  .wrap{padding:16px 14px}
+  .note{font-size:12px;color:#6b7280;margin:8px 0 14px}
+  .wrap > *{max-width:900px}
+</style>
+</head><body>
+  <div class="wrap">
+    <div class="note">Isolated sandbox — bu bo‘lak boshqa modullarni buzmaydi.</div>
+    ${c.html||''}
   </div>
-  <small class="muted" style="display:block;margin-top:8px">
-    Eslatma: Firebase → Authentication → Authorized domains va <b>linkDomain</b> to‘g‘ri sozlangan bo‘lsin.
-  </small>
-</div>
-
-<!-- Toast/banner -->
-<div class="banner" id="banner"></div>
-
-<!-- Profil dialog -->
-<template id="profileTemplate">
-  <dialog id="profileDlg" style="border:1px solid var(--frame);border-radius:18px;padding:0;max-width:540px">
-    <form method="dialog" style="padding:16px;background:var(--card)">
-      <h3 style="margin:0 0 12px">Profil ma’lumotlari</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label>Ism familiya<input id="f_name" style="width:100%"/></label>
-        <label>Telefon<input id="f_phone" style="width:100%"/></label>
-        <label>Maktab<input id="f_school" style="width:100%"/></label>
-        <label>Sinf (raqam)<input id="f_class" type="number" min="1" max="11" style="width:100%"/></label>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-        <button class="btn" value="cancel">Bekor</button>
-        <button class="btn primary" id="saveProfile" value="default">Saqlash</button>
-      </div>
-    </form>
-  </dialog>
-</template>
-
-<script type="module">
-  /* ========== Theme ========== */
-  const rt=document.documentElement, modeT=document.getElementById('modeToggle'), themeMeta=document.getElementById('meta-theme-color');
-  const saved=localStorage.getItem('lm-theme');
-  if(saved==='dark'){ rt.classList.add('dark'); modeT.checked=true; themeMeta.content='#0e1512'; }
-  modeT.onchange=()=>{ const dark=modeT.checked; rt.classList.toggle('dark', dark); localStorage.setItem('lm-theme', dark?'dark':'light'); themeMeta.content = dark ? '#0e1512' : '#2E8B57'; };
-
-  /* ========== UI refs ========== */
-  const app=document.getElementById('app');
-  const loginCard=document.getElementById('loginCard');
-  const chips=document.getElementById('chips');
-  const viewer=document.getElementById('viewer');
-  const banner=document.getElementById('banner');
-
-  const userChip=document.getElementById('userChip');
-  const pop=document.getElementById('pop');
-  const userAva=document.getElementById('userAva');
-  const userNameEl=document.getElementById('userName');
-  const userPtsEl=document.getElementById('userPoints');
-  const popAva=document.getElementById('popAva');
-  const popName=document.getElementById('popName');
-  const popEmail=document.getElementById('popEmail');
-  const editBtn=document.getElementById('editProfile');
-  const signOutBtn=document.getElementById('signOutBtn');
-
-  /* ========== Helpers ========== */
-  const toast=(msg,ms=3000)=>{ banner.textContent=msg; banner.classList.add('show'); setTimeout(()=>banner.classList.remove('show'), ms); };
-  const q=(s,el=document)=>el.querySelector(s);
-
-  /* ========== Firebase ========== */
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
-  import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.firebasestorage.app",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-    measurementId: "G-459PLJ7P7L"
-  };
-  const appFB = initializeApp(firebaseConfig);
-  const auth   = getAuth(appFB);
-  const db     = getFirestore(appFB);
-
-  // Magic-link sozlamasi — domenni loyihangizga moslab qo‘ying
-  const actionCodeSettings = {
-    url: location.origin + "/auth-finish",
-    handleCodeInApp: true,
-    iOS: { bundleId: "uz.leadermath.pwa" },
-    android: { packageName: "uz.leadermath.pwa", installApp: true, minimumVersion: "12" },
-    linkDomain: "xplusy-760fa.firebaseapp.com"
-  };
-
-  /* ========== Chips from admin.json ========== */
-  let CHIP_DATA=[];
-  function setActiveChip(id){ [...chips.children].forEach(n=>n.classList.toggle('active', n.dataset.id===id)); }
-
-  async function loadChips(){
-    try{
-      const res=await fetch("/admin.json?_="+Date.now(), {cache:"no-store"});
-      if(!res.ok) throw new Error("admin.json topilmadi");
-      const data=await res.json();
-      const list = Array.isArray(data.chips)? data.chips : [];
-      CHIP_DATA = list.filter(c => c && c.id && (typeof c.html==="string"));
-      chips.innerHTML="";
-      if(!CHIP_DATA.length){ chips.innerHTML="<span class='muted'>Chips yo‘q</span>"; return; }
-
-      CHIP_DATA.forEach(c=>{
-        const b=document.createElement("button");
-        b.className="chip"; b.dataset.id=c.id;
-        b.innerHTML = `${c.icon||""}<span>${c.label||c.id}</span>`;
-        b.onclick=()=>openChip(c.id);
-        chips.appendChild(b);
-      });
-    }catch(e){
-      console.error(e);
-      toast("admin.json yuklashda xatolik. JSON sintaksisini tekshiring.");
+</body></html>`;
+      viewer.srcdoc = html; // kapsulaga yuklash
+      localStorage.setItem('lm:lastChip', id);
+      setQS(id);
+      highlightActive();
+      hint.textContent = c.desc ? c.desc : 'Sandbox ichida ishga tushdi';
     }
-  }
 
-  function openChip(id){
-    const c = CHIP_DATA.find(x=>x.id===id) || CHIP_DATA[0];
-    if(!c) return;
-    setActiveChip(c.id);
-    // HTML+JS ni izolyatsiya qilish: sandboxed iframe, referrer yo‘q
-    const src = c.html || "<!doctype html><meta charset='utf-8'><body><h2>Kontent tayyorlanmoqda</h2>";
-    viewer.srcdoc = src;
-    localStorage.setItem("lm-last-chip", c.id);
-  }
-
-  /* ========== Popover ========== */
-  let popOpen=false;
-  userChip.addEventListener("click", e=>{ e.stopPropagation(); popOpen=!popOpen; pop.classList.toggle("show", popOpen); });
-  document.addEventListener("click", e=>{ if(popOpen && !e.target.closest("#pop")){ popOpen=false; pop.classList.remove("show"); } });
-
-  /* ========== Profile dialog ========== */
-  function openProfileDialog(current={}){
-    const tpl=q("#profileTemplate").content.cloneNode(true);
-    document.body.appendChild(tpl);
-    const dlg=q("#profileDlg");
-    dlg.showModal();
-    const nameI=q("#f_name"), phoneI=q("#f_phone"), schoolI=q("#f_school"), classI=q("#f_class");
-    nameI.value=current.name||""; phoneI.value=current.phone||""; schoolI.value=current.school||""; classI.value=current.class||"";
-    q("#saveProfile").onclick=async(ev)=>{
-      ev.preventDefault();
-      if(!auth.currentUser) return;
-      const ref=doc(db,"users",auth.currentUser.uid);
-      await setDoc(ref,{
-        name:nameI.value.trim(), phone:phoneI.value.trim(), school:schoolI.value.trim(),
-        class:Number(classI.value||0)||null, updatedAt:serverTimestamp()
-      },{merge:true});
-      dlg.close();
-      toast("Profil saqlandi");
-    };
-    dlg.addEventListener("close", ()=>dlg.remove());
-  }
-  editBtn.onclick=()=>openProfileDialog(window.CURRENT_PROFILE||{});
-
-  /* ========== Auth flows ========== */
-  const googleBtn=document.getElementById('googleBtn');
-  const emailBtn=document.getElementById('emailLinkBtn');
-  const emailIn =document.getElementById('emailInput');
-
-  googleBtn.onclick=async ()=>{
-    try{
-      const provider=new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    }catch(e){ console.error(e); toast("Google orqali kirishda xatolik"); }
-  };
-
-  emailBtn.onclick=async ()=>{
-    const email=(emailIn.value||"").trim();
-    if(!email) return toast("E-pochta kiriting");
-    try{
-      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      localStorage.setItem("lm-email-for-signin", email);
-      toast("Havola yuborildi. E-pochtani tekshiring.");
-    }catch(e){ console.error(e); toast("Email-link yuborishda xatolik"); }
-  };
-
-  // Agar email-link bilan ochilgan bo‘lsa
-  if(isSignInWithEmailLink(auth, location.href)){
-    let email = localStorage.getItem("lm-email-for-signin");
-    if(!email) email = prompt("E-pochtangizni kiriting");
-    try{
-      await signInWithEmailLink(auth, email, location.href);
-      localStorage.removeItem("lm-email-for-signin");
-      toast("Muvaffaqiyatli kirdingiz");
-      history.replaceState({}, document.title, location.pathname);
-    }catch(e){ console.error(e); toast("Email-link orqali kirishda xatolik"); }
-  }
-
-  signOutBtn.onclick=()=>signOut(auth);
-
-  /* ========== Auth state & bootstrap ========== */
-  onAuthStateChanged(auth, async (u)=>{
-    if(!u){
-      app.style.display='none';
-      loginCard.style.display='block';
-      return;
+    function highlightActive(){
+      const id = getQS() || localStorage.getItem('lm:lastChip');
+      chipList.querySelectorAll('.chip').forEach(b=>b.classList.toggle('active', b.dataset.id===id));
     }
-    loginCard.style.display='none';
-    app.style.display='flex';
 
-    // Firestore profilini yaratish/yangilash
-    const ref=doc(db,"users",u.uid);
-    const snap=await getDoc(ref);
-    if(!snap.exists()){
-      await setDoc(ref,{
-        uid:u.uid, email:u.email||null, name:u.displayName||"Foydalanuvchi",
-        photoURL:u.photoURL||null, points:0, createdAt:serverTimestamp()
-      },{merge:true});
-    }
-    const data=(await getDoc(ref)).data()||{};
-    window.CURRENT_PROFILE=data;
-
-    // Userchip ma’lumotlari
-    const letter=(data.name||u.displayName||'L').trim().charAt(0).toUpperCase();
-    userAva.textContent=letter; popAva.textContent=letter;
-    userNameEl.textContent=data.name||u.displayName||'Foydalanuvchi';
-    userPtsEl.textContent="Ball: " + (Number(data.points||0));
-    popName.textContent=userNameEl.textContent;
-    popEmail.textContent=u.email||"—";
-
-    // Chips
-    await loadChips();
-    const last=localStorage.getItem("lm-last-chip");
-    openChip(last || (CHIP_DATA[0] && CHIP_DATA[0].id));
-  });
-</script>
+    // ===== Init
+    drawList();
+    const initial = getQS() || localStorage.getItem('lm:lastChip') || chips[0]?.id;
+    if (initial) openChip(initial);
+  </script>
 </body>
 </html>
