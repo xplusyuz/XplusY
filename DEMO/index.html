@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-  <title>LeaderMath.uz — Bosh sahifa (Chip Renderer)</title>
+  <title>LeaderMath.uz — Bosh sahifa</title>
   <meta name="theme-color" content="#2E8B57"/>
   <link rel="icon" href="./favicon.png"/>
   <style>
@@ -35,7 +35,7 @@
     .uname{font-weight:600;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .score{padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b);font-weight:700}
 
-    /* User popover */
+    /* Popover */
     .popover{position:absolute;inset:auto 12px auto auto;top:58px;max-width:360px;border:1px solid var(--frame);background:var(--card);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:14px;display:none}
     .row{display:flex;gap:12px}
     .popava{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#bfead3,#66c79a);display:grid;place-items:center;color:#0c3a2a;font-weight:800;font-size:20px}
@@ -53,23 +53,10 @@
     .chip{white-space:nowrap;padding:8px 12px;border-radius:12px;border:1px solid var(--chip-b);background:var(--chip);cursor:pointer}
     .chip.act{background:#2E8B57;color:#fff;border-color:#1F6B45;font-weight:600}
 
-    /* Main content */
+    /* Main */
     .main{max-width:1120px;margin:16px auto;padding:0 14px 60px}
     .card{border:1px solid var(--frame);background:var(--card);border-radius:var(--radius);box-shadow:0 8px 30px rgba(0,0,0,.06)}
     .viewer{height:calc(100dvh - 220px);min-height:420px;border:none;width:100%;border-radius:inherit}
-
-    /* Modal */
-    .modalBack{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:60}
-    .modal{width:min(920px,96vw);max-height:86vh;overflow:auto;border:1px solid var(--frame);background:var(--card);border-radius:16px;padding:16px}
-    .fld{display:grid;gap:6px;margin:10px 0}
-    .fld>label{font-size:13px;color:var(--muted)}
-    .fld>input,.fld>textarea{border:1px solid var(--frame);border-radius:12px;padding:10px 12px;background:transparent;color:var(--text)}
-    .tbl{width:100%;border-collapse:separate;border-spacing:0 8px}
-    .tbl td{background:var(--card);border:1px solid var(--frame);padding:10px;border-left:none;border-right:none}
-    .tbl tr{border-radius:10px}
-
-    /* Admin pill */
-    .adminpill{position:fixed;right:12px;bottom:12px;background:var(--card);border:1px solid var(--frame);padding:8px 12px;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.08);cursor:pointer}
     @media (max-width:720px){ .viewer{height:calc(100dvh - 260px)} }
   </style>
 </head>
@@ -114,24 +101,13 @@
   <!-- MAIN -->
   <main class="main">
     <div class="card">
-      <!-- Chip kontenti shu yerda ko‘rinadi -->
       <iframe id="viewer" class="viewer" sandbox="allow-scripts"></iframe>
     </div>
   </main>
 </div>
 
-<!-- ADMIN PILL -->
-<div id="adminBtn" class="adminpill" title="Chiplarni boshqarish">⚙️ Admin</div>
-
-<!-- MODALS -->
-<div id="modalBack" class="modalBack" role="dialog" aria-modal="true" aria-hidden="true">
-  <div class="modal" id="modalContent">
-    <!-- dynamic -->
-  </div>
-</div>
-
 <script>
-/* ============= Helpers & State ============= */
+/* ===== Helpers & State ===== */
 const qs = (s, r=document)=>r.querySelector(s);
 const qsa= (s, r=document)=>Array.from(r.querySelectorAll(s));
 const store = {
@@ -140,18 +116,12 @@ const store = {
 };
 const PROFILE_KEY = "lm.profile.v1";
 const LAST_CHIP_KEY = "lm.lastChip";
-const ADMIN_FLAG = "lm.isAdminLocal"; // optional: set true in console to unlock admin
-
-let ADMIN = store.get(ADMIN_FLAG, false);
 let CHIP_DATA = { chips: [] };
 
-/* ============= User Panel ============= */
+/* ===== User Panel ===== */
 function initProfile(){
   let p = store.get(PROFILE_KEY, null);
-  if(!p){
-    p = { name:"Foydalanuvchi", school:"", klass:"", phone:"", score:0 };
-    store.set(PROFILE_KEY, p);
-  }
+  if(!p){ p={name:"Foydalanuvchi",school:"",klass:"",phone:"",score:0}; store.set(PROFILE_KEY,p); }
   renderUser(p);
 }
 function initials(name){
@@ -165,40 +135,42 @@ function renderUser(p){
   qs("#popAva").textContent = initials(p.name);
   qs("#popName").textContent = p.name || "Foydalanuvchi";
   qs("#popInfo").textContent = [p.school, p.klass].filter(Boolean).join(" • ") || "Maktab / Sinf";
-  // Light rejimida ball qora (default var(--text) allaqachon darkda ham kontrastli)
 }
-
-/* ============= Popover & Profile Modal ============= */
 const userChip = qs("#userChip"), userPop = qs("#userPop");
-userChip.addEventListener("click", (e)=>{
+userChip.addEventListener("click", ()=>{
   const open = userPop.style.display === "block";
   userPop.style.display = open ? "none" : "block";
   userChip.setAttribute("aria-expanded", String(!open));
 });
-document.addEventListener("click", (e)=>{
+document.addEventListener("click",(e)=>{
   if(!userPop.contains(e.target) && !userChip.contains(e.target)){
-    userPop.style.display = "none"; userChip.setAttribute("aria-expanded","false");
+    userPop.style.display="none"; userChip.setAttribute("aria-expanded","false");
   }
 });
 qs("#editProfileBtn").onclick = ()=> openProfileModal();
 qs("#addScoreBtn").onclick = ()=>{
   const p = store.get(PROFILE_KEY, {}); p.score = (p.score|0)+50; store.set(PROFILE_KEY,p); renderUser(p);
 };
-
 function openProfileModal(){
   const p = store.get(PROFILE_KEY, {});
-  openModal(`
-    <h2 style="margin:4px 0 8px">Profil</h2>
-    <div class="fld"><label>F.I.Sh</label><input id="pfName" value="${escapeHtml(p.name||"")}"></div>
-    <div class="fld"><label>Maktab</label><input id="pfSchool" value="${escapeHtml(p.school||"")}"></div>
-    <div class="fld"><label>Sinf (masalan: 9-A)</label><input id="pfKlass" value="${escapeHtml(p.klass||"")}"></div>
-    <div class="fld"><label>Telefon</label><input id="pfPhone" value="${escapeHtml(p.phone||"")}"></div>
-    <div class="fld"><label>Ball (score)</label><input id="pfScore" type="number" value="${Number(p.score||0)}"></div>
-    <div class="grp mt12">
-      <button class="btn pri" id="pfSave">Saqlash</button>
-      <button class="btn" id="pfCancel">Bekor qilish</button>
-    </div>
-  `);
+  const html = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center;z-index:60" id="mb">
+      <div style="width:min(560px,96vw);border:1px solid var(--frame);background:var(--card);border-radius:16px;padding:16px">
+        <h2 style="margin:4px 0 8px">Profil</h2>
+        <div style="display:grid;gap:6px;margin:10px 0">
+          <label>F.I.Sh <input id="pfName" value="${esc(p.name||"")}" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)"></label>
+          <label>Maktab <input id="pfSchool" value="${esc(p.school||"")}" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)"></label>
+          <label>Sinf (masalan: 9-A) <input id="pfKlass" value="${esc(p.klass||"")}" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)"></label>
+          <label>Telefon <input id="pfPhone" value="${esc(p.phone||"")}" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)"></label>
+          <label>Ball <input id="pfScore" type="number" value="${Number(p.score||0)}" style="width:100%;padding:10px;border:1px solid var(--frame);border-radius:12px;background:transparent;color:var(--text)"></label>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="pfSave" style="padding:10px 14px;border-radius:12px;border:1px solid #1F6B45;background:#2E8B57;color:#fff">Saqlash</button>
+          <button id="pfCancel" style="padding:10px 14px;border-radius:12px;border:1px solid var(--frame);background:var(--card)">Bekor</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
   qs("#pfSave").onclick=()=>{
     const np = {
       name:qs("#pfName").value.trim(),
@@ -207,213 +179,54 @@ function openProfileModal(){
       phone:qs("#pfPhone").value.trim(),
       score:Number(qs("#pfScore").value)||0
     };
-    store.set(PROFILE_KEY,np); renderUser(np); closeModal();
+    store.set(PROFILE_KEY,np); renderUser(np); qs("#mb").remove();
   };
-  qs("#pfCancel").onclick=closeModal;
+  qs("#pfCancel").onclick=()=>qs("#mb").remove();
 }
 
-/* ============= Modal infra ============= */
-const modalBack = qs("#modalBack"), modalContent=qs("#modalContent");
-function openModal(inner){ modalContent.innerHTML = inner; modalBack.style.display="flex"; modalBack.setAttribute("aria-hidden","false"); }
-function closeModal(){ modalBack.style.display="none"; modalBack.setAttribute("aria-hidden","true"); }
-modalBack.addEventListener("click", (e)=>{ if(e.target===modalBack) closeModal(); });
-
-/* ============= Chips: load from admin.json ============= */
+/* ===== Chips from admin.json ===== */
 async function loadChips(){
   try{
-    const res = await fetch("./admin.json", {cache:"no-store"});
-    if(!res.ok) throw new Error("admin.json topilmadi");
+    const res = await fetch("./admin.json",{cache:"no-store"});
+    if(!res.ok) throw new Error("admin.json not found");
     CHIP_DATA = await res.json();
-  }catch(err){
-    // Fallback: agar admin.json yo‘q bo‘lsa, namunaviy ikki chip
-    CHIP_DATA = {
-      chips:[
-        {id:"welcome", label:"Bosh sahifa", order:1, visible:true, html:`<!doctype html>
+  }catch{
+    CHIP_DATA = {chips:[{id:"welcome",label:"Bosh sahifa",order:1,visible:true,html:`<!doctype html>
 <html><head><meta charset="utf-8"><title>Welcome</title>
 <style>body{font:16px system-ui;margin:0;padding:24px} .h{font-weight:800;font-size:28px}</style></head>
 <body>
   <div class="h">LeaderMath.uz — Xush kelibsiz!</div>
-  <p>Bu chip ichiga <b>to‘liq HTML + JS</b> yozish mumkin. Masalan, hisoblagich:</p>
+  <p>Bu kontent <b>admin.json</b> bo'lmasa ham, avtomatik namuna sifatida chiqadi.</p>
   <button id="b">+1</button> <span id="c">0</span>
   <script>let n=0; b.onclick=()=>{ c.textContent=++n };</script>
-</body></html>`},
-        {id:"league", label:"League", order:2, visible:true, html:`<!doctype html>
-<html><head><meta charset="utf-8"><title>League</title>
-<style>body{font:16px system-ui;margin:0;padding:24px} .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;box-shadow:0 6px 14px rgba(0,0,0,.06)}</style></head>
-<body>
-  <div class="card"><b>Diamond League</b> — 1–10 o‘rinlar</div>
-  <div class="card" style="margin-top:12px"><b>Emerald League</b> — 11–20 o‘rinlar</div>
-</body></html>`}
-      ]
-    };
+</body></html>`}]};
   }
-  CHIP_DATA.chips = (CHIP_DATA.chips||[])
-    .filter(c=>c && (c.visible!==false))
-    .sort((a,b)=>(a.order||999)-(b.order||999));
+  CHIP_DATA.chips=(CHIP_DATA.chips||[]).filter(c=>c && (c.visible!==false)).sort((a,b)=>(a.order||999)-(b.order||999));
   renderChipTabs();
 }
-
 function renderChipTabs(){
   const wrap = qs("#chipList"); wrap.innerHTML="";
   CHIP_DATA.chips.forEach(ch=>{
     const el = document.createElement("button");
-    el.className = "chip"; el.role="tab"; el.dataset.id = ch.id;
+    el.className="chip"; el.role="tab"; el.dataset.id=ch.id;
     el.textContent = ch.label || ch.id;
-    el.onclick = ()=> activateChip(ch.id);
+    el.onclick=()=> activateChip(ch.id);
     wrap.appendChild(el);
   });
   const last = store.get(LAST_CHIP_KEY, CHIP_DATA.chips[0]?.id);
   const exists = CHIP_DATA.chips.find(c=>c.id===last)?.id || CHIP_DATA.chips[0]?.id;
   if(exists) activateChip(exists);
 }
-
 function activateChip(id){
   const chip = CHIP_DATA.chips.find(c=>c.id===id); if(!chip) return;
-  // UI highlight
   qsa(".chip").forEach(x=>x.classList.toggle("act", x.dataset.id===id));
-  // Render to iframe
-  const iframe = qs("#viewer");
-  const doc = iframe.contentWindow.document;
+  const iframe = qs("#viewer"); const doc = iframe.contentWindow.document;
   doc.open(); doc.write(chip.html || "<!doctype html><meta charset='utf-8'><body>Bo‘sh chip</body>"); doc.close();
   store.set(LAST_CHIP_KEY, id);
 }
 
-/* ============= Admin (local, optional) ============= */
-const adminBtn = qs("#adminBtn");
-adminBtn.style.display = ADMIN ? "block" : "block"; // har doim ko‘rinadi; kirganda ogohlantiramiz
-adminBtn.onclick = ()=> openAdmin();
-
-function openAdmin(){
-  if(!ADMIN){
-    openModal(`
-      <h3 style="margin:0 0 8px">Admin rejimi</h3>
-      <p class="muted">Bu lokal tahrirlash oynasi. O‘zgarishlar <b>faqat sizning brauzeringiz xotirasida</b> saqlanadi. Yakunida “JSON ni yuklab olish” tugmasi bilan <code>admin.json</code> faylini ko‘chirib serverga qo‘ying.</p>
-      <div class="grp mt12">
-        <button class="btn pri" id="admStart">Davom etish</button>
-        <button class="btn" id="admCancel">Yopish</button>
-      </div>
-    `);
-    qs("#admStart").onclick=()=>{ ADMIN=true; store.set(ADMIN_FLAG,true); closeModal(); renderAdminUi(); };
-    qs("#admCancel").onclick=closeModal;
-  }else{
-    renderAdminUi();
-  }
-}
-
-function renderAdminUi(){
-  const rows = (CHIP_DATA.chips||[]).map((c,i)=>`
-    <tr>
-      <td style="width:64px;text-align:center">${i+1}</td>
-      <td><input data-key="label" data-id="${c.id}" value="${escapeHtml(c.label||c.id)}" /></td>
-      <td style="width:110px"><input type="number" data-key="order" data-id="${c.id}" value="${Number(c.order||0)}"/></td>
-      <td style="width:110px"><input type="checkbox" data-key="visible" data-id="${c.id}" ${c.visible===false?"":"checked"} /></td>
-      <td style="width:180px"><code>${c.id}</code></td>
-      <td style="width:120px">
-        <button class="btn small" data-act="edit" data-id="${c.id}">Tahrirla</button>
-        <button class="btn small" data-act="del" data-id="${c.id}">O‘chir</button>
-      </td>
-    </tr>
-  `).join("");
-
-  openModal(`
-    <h2 style="margin:4px 0 8px">Chiplar boshqaruvi</h2>
-    <div class="grp mt8">
-      <button class="btn pri" id="addChip">Yangi chip</button>
-      <button class="btn" id="downloadJson">JSON ni yuklab olish</button>
-      <button class="btn" id="closeAdmin">Yopish</button>
-    </div>
-    <div class="mt12" style="overflow:auto">
-      <table class="tbl">
-        <thead><tr><td>#</td><td>Nomi</td><td>Order</td><td>Ko‘rin.</td><td>ID</td><td>Amal</td></tr></thead>
-        <tbody id="admRows">${rows || '<tr><td colspan="6">Chip topilmadi</td></tr>'}</tbody>
-      </table>
-    </div>
-  `);
-
-  // inline edits (label/order/visible)
-  qsa('input[data-id]').forEach(inp=>{
-    inp.onchange = (e)=>{
-      const id = e.target.dataset.id; const key = e.target.dataset.key;
-      const chip = CHIP_DATA.chips.find(c=>c.id===id); if(!chip) return;
-      if(key==="visible"){ chip.visible = e.target.checked; }
-      else if(key==="order"){ chip.order = Number(e.target.value)||0; }
-      else { chip[key] = e.target.value; }
-      renderChipTabs();
-    };
-  });
-
-  // actions
-  qs("#addChip").onclick = ()=>{
-    const nid = `chip_${Date.now().toString(36)}`;
-    openChipEditor({id:nid,label:"Yangi chip",order: (CHIP_DATA.chips.length+1), visible:true, html: sampleChipHtml(nid)});
-  };
-  qs("#downloadJson").onclick = downloadAdminJson;
-  qs("#closeAdmin").onclick = closeModal;
-
-  qsa('button[data-act]').forEach(b=>{
-    b.onclick = (e)=>{
-      const id = e.currentTarget.dataset.id;
-      const act = e.currentTarget.dataset.act;
-      const chip = CHIP_DATA.chips.find(c=>c.id===id);
-      if(!chip) return;
-      if(act==="edit") openChipEditor(chip);
-      if(act==="del"){
-        if(confirm("Ushbu chipni o‘chirishni tasdiqlaysizmi?")){
-          CHIP_DATA.chips = CHIP_DATA.chips.filter(c=>c.id!==id);
-          renderChipTabs(); renderAdminUi();
-        }
-      }
-    };
-  });
-}
-
-function openChipEditor(chip){
-  openModal(`
-    <h3 style="margin:0 0 8px">Chip: ${chip.id}</h3>
-    <div class="fld"><label>Nomi (label)</label><input id="ceLabel" value="${escapeHtml(chip.label||chip.id)}"></div>
-    <div class="fld"><label>Order</label><input id="ceOrder" type="number" value="${Number(chip.order||0)}"></div>
-    <div class="fld"><label>Ko‘rinadigan (visible)</label><input id="ceVisible" type="checkbox" ${chip.visible===false?"":"checked"}></div>
-    <div class="fld">
-      <label>Chip HTML (to‘liq sahifa yozishingiz mumkin)</label>
-      <textarea id="ceHtml" rows="18" spellcheck="false">${escapeHtml(chip.html||"")}</textarea>
-    </div>
-    <div class="grp mt12">
-      <button class="btn pri" id="ceSave">Saqlash</button>
-      <button class="btn" id="ceCancel">Bekor</button>
-    </div>
-  `);
-  qs("#ceSave").onclick=()=>{
-    chip.label = qs("#ceLabel").value.trim() || chip.id;
-    chip.order = Number(qs("#ceOrder").value)||0;
-    chip.visible = qs("#ceVisible").checked;
-    chip.html   = qs("#ceHtml").value;
-    if(!CHIP_DATA.chips.find(c=>c.id===chip.id)) CHIP_DATA.chips.push(chip);
-    closeModal(); renderChipTabs(); activateChip(chip.id); openAdmin(); // qayta och
-  };
-  qs("#ceCancel").onclick=()=>{ closeModal(); openAdmin(); };
-}
-
-function downloadAdminJson(){
-  const out = JSON.stringify({chips:CHIP_DATA.chips}, null, 2);
-  const blob = new Blob([out], {type:"application/json;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "admin.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-/* ============= Utils ============= */
-function escapeHtml(x=''){ return x.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])) }
-function sampleChipHtml(id){ return `<!doctype html>
-<html><head><meta charset="utf-8"><title>${id}</title>
-<style>body{font:16px system-ui;margin:0;padding:24px} .box{border:1px solid #e5e7eb;border-radius:12px;padding:16px}</style></head>
-<body>
-  <div class="box"><b>${id}</b> — bu chip namunaviy html.</div>
-  <script>console.log("Chip '${id}' yuklandi")</script>
-</body></html>` }
-
-/* ============= Boot ============= */
+/* ===== Utils & Boot ===== */
+function esc(x=''){return x.replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]))}
 initProfile();
 loadChips();
 </script>
