@@ -8,7 +8,146 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.png">
   <style>
-    /* ... mavjud CSS kodlari ... */
+    :root{
+      --brand:#2E8B57;--brand2:#1F6B45;
+      --bg:#f4f8f6;--text:#0d1b14;--muted:#375c4c;--card:#ffffff;
+      --frame:#d8e7dd;--frame-strong:#b7d6c5;--chip:#eaf6f0;--chip-b:#cfe7db;
+      --radius:16px; --ring:#8ad1b1;
+    }
+    :root.dark{
+      --bg:#0e1512; --text:#EAF7EE; --muted:#A5C7B4; --card:#142018;
+      --frame:#244b39; --frame-strong:#2f6b52; --chip:#132a20; --chip-b:#2a5742; --ring:#2fbf7d;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+
+    /* -------- AUTH GUARD -------- */
+    html.auth-checking #app{display:none}
+    html.auth-checking #authGate{display:flex}
+
+    #authGate{
+      position:fixed; inset:0; z-index:9999; display:none;
+      align-items:center; justify-content:center; padding:24px;
+      background:linear-gradient(135deg, rgba(14,21,18,.85), rgba(31,107,69,.85));
+      backdrop-filter: blur(10px);
+    }
+    #authCard{
+      width:min(560px,96vw);
+      background:var(--card);
+      border:1px solid var(--frame-strong);
+      border-radius:18px;
+      padding:20px;
+      box-shadow:0 24px 64px rgba(0,0,0,.35);
+    }
+    #authCard h2{ margin:0 0 6px; font-size:22px }
+    #authCard p{ margin:0 0 14px; color:var(--muted) }
+    .auth-row{ display:flex; gap:10px; justify-content:flex-end; margin-top:8px }
+
+    /* ====== PREMIUM GLASS BUTTONS ====== */
+    .btn{
+      position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      padding:10px 14px; border:none; border-radius:12px; cursor:pointer; text-decoration:none;
+      font-weight:800; color:#fff; isolation:isolate;
+      background:linear-gradient(135deg,var(--brand),var(--brand2));
+      box-shadow:0 6px 18px rgba(46,139,87,.25), inset 0 0 0 1px #ffffff22;
+      transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+      backdrop-filter:saturate(120%);
+    }
+    .btn::before{
+      content:""; position:absolute; inset:0; border-radius:inherit; z-index:-1;
+      background:radial-gradient(120% 120% at -10% -10%, rgba(255,255,255,.55), transparent 40%),
+                 radial-gradient(120% 120% at 110% 110%, rgba(255,255,255,.18), transparent 55%);
+      opacity:.9; pointer-events:none;
+    }
+    .btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(46,139,87,.32), inset 0 0 0 1px #ffffff33 }
+    .btn:active{ transform:translateY(0); filter:saturate(1.05) }
+    .btn:focus-visible{ outline:none; box-shadow:0 0 0 4px color-mix(in srgb, var(--ring) 30%, transparent), 0 10px 28px rgba(46,139,87,.32) }
+
+    /* Ghost (glass) button */
+    .btn.ghost{
+      background:linear-gradient(180deg,#fff,#f5faf7);
+      color:var(--brand2);
+      border:1px solid var(--frame);
+      box-shadow:0 4px 12px rgba(0,0,0,.06);
+    }
+    .dark .btn.ghost{
+      background:linear-gradient(180deg,#1a2a21,#17261f);
+      color:#c8f0dc; border-color:#2a5742;
+    }
+    .btn.ghost:hover{ box-shadow:0 8px 20px rgba(0,0,0,.12) }
+
+    /* Badge-like small chip buttons (re-use) */
+    .uc-pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b);font-size:13px}
+    .uc-pill .uc-pill-label{opacity:.7}
+
+    /* Ichki UI */
+    .glass{background:rgba(255,255,255,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    .dark .glass{background:rgba(20,32,24,.55)}
+    .grad-border{position:relative}
+    .grad-border::before{
+      content:""; position:absolute; inset:0; padding:1px; border-radius:14px;
+      background:linear-gradient(135deg, #9ce8c0, #2E8B57 40%, #39B6FF);
+      -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none;
+    }
+
+    /* Appbar */
+    .appbar{position:sticky;top:0;z-index:90;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+    .logo{width:60px;height:60px;border-radius:14px;background:#fff2;display:grid;place-items:center;font-weight:800;overflow:hidden}
+    .logo img{width:100%;height:100%;object-fit:contain}
+    .title{font-weight:800;font-size:18px}
+    .sub{font-size:12px;opacity:.9}
+    .spacer{flex:1}
+    .iconbtn{background:#ffffff22;border:1px solid #ffffff33;color:#fff;border-radius:12px;padding:8px 10px;font-weight:700;cursor:pointer}
+
+    /* MOBILE header tweaks */
+    @media (max-width:600px){
+      .logo{width:60px;height:60px;border-radius:10px}
+      .title{font-size:16px}
+      .sub{font-size:10px}
+      .uc-chip{scale:.9}
+    }
+
+    /* === Compact User Chip === */
+    .uc-chip{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--frame);border-radius:20px;padding:6px 8px 6px 6px;box-shadow:0 10px 24px rgba(0,0,0,.1);transition:.15s ease}
+    .uc-chip:hover{transform:translateY(-1px);box-shadow:0 16px 36px rgba(0,0,0,.12)}
+    .uc-ava{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;font-weight:900;display:grid;place-items:center;overflow:hidden;box-shadow:inset 0 0 0 2px #ffffff22}
+    .uc-ava img{width:100%;height:100%;object-fit:cover}
+    .uc-more{width:32px;height:32px;border-radius:10px;border:1px solid var(--frame);background:linear-gradient(180deg,#fff,#f5faf7);cursor:pointer;display:grid;place-items:center;font-size:20px;font-weight:900;color:var(--brand)}
+
+    /* === Popover === */
+    .uc-popover-mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:998}
+    .uc-popover{
+      position:fixed;right:14px;top:84px;z-index:999;width:min(520px,94vw);
+      background:var(--card);border:1px solid var(--frame-strong);
+      border-radius:18px;padding:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);
+      display:none;
+      background-image:
+        radial-gradient(1200px 600px at 10% -20%, rgba(46,139,87,.08), transparent 55%),
+        radial-gradient(1200px 600px at 110% 120%, rgba(57,182,255,.08), transparent 55%);
+    }
+    .uc-pop-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    .uc-ava.lg{width:56px;height:56px}
+    .uc-namebox .uc-fullname{font-weight:900;font-size:18px}
+    .uc-namebox .uc-sub{color:var(--muted);font-size:12px}
+    .uc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 12px}
+    @media(max-width:560px){.uc-grid{grid-template-columns:1fr}}
+    .uc-kv{background:var(--chip);border:1px solid var(--chip-b);border-radius:12px;padding:10px 12px}
+    .uc-kv .k{font-size:12px;color:var(--muted);margin-bottom:4px}
+    .uc-kv .v{font-weight:700}
+    .uc-actions{display:flex;gap:10px;justify-content:flex-end}
+    .btn-primary{padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;font-weight:800;cursor:pointer}
+    .btn-ghost{padding:10px 14px;border:1px solid var(--frame);border-radius:12px;background:#fff;cursor:pointer}
+    .dark .uc-chip{background:rgba(20,32,24,.65)}
+    .dark .uc-popover{background:rgba(20,32,24,.85)}
+
+    /* Filters (TOP) */
+    .filters{margin:10px 12px;padding:10px;background:var(--card);border:1px solid var(--frame);border-radius:14px;box-shadow:0 8px 18px rgba(0,0,0,.06)}
+    .filters h4{margin:0 0 8px;font-size:14px;opacity:.75}
+    .chips{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--chip-b);font-size:12px;cursor:pointer}
+    .chip[aria-pressed="true"]{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:#0000;color:#fff}
+    .chip.sm{font-size:11px;padding:5px 8px}
 
     /* === YANGI CARD DIZAYNI === */
     .cards-grid {
@@ -182,75 +321,6 @@
       color: #c8f0dc;
     }
 
-    /* === MODAL DIZAYNI === */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 20px;
-      backdrop-filter: blur(5px);
-    }
-
-    .modal-content {
-      width: min(800px, 95vw);
-      max-height: 90vh;
-      background: var(--card);
-      border-radius: 20px;
-      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .modal-header {
-      padding: 20px;
-      border-bottom: 1px solid var(--frame);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .modal-title {
-      font-size: 20px;
-      font-weight: 900;
-      margin: 0;
-      color: var(--text);
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: var(--muted);
-    }
-
-    .modal-body {
-      padding: 20px;
-      flex-grow: 1;
-      overflow-y: auto;
-    }
-
-    .modal-html-content {
-      max-width: 100%;
-      overflow: auto;
-    }
-
-    .modal-footer {
-      padding: 20px;
-      border-top: 1px solid var(--frame);
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
     /* === BANNER CAROUSEL === */
     .banner-carousel {
       position: relative;
@@ -351,6 +421,75 @@
       transform: scale(1.2);
     }
 
+    /* === MODAL DIZAYNI === */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+      backdrop-filter: blur(5px);
+    }
+
+    .modal-content {
+      width: min(800px, 95vw);
+      max-height: 90vh;
+      background: var(--card);
+      border-radius: 20px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--frame);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 900;
+      margin: 0;
+      color: var(--text);
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .modal-body {
+      padding: 20px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .modal-html-content {
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid var(--frame);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
     /* === ADMIN PANEL STYLES === */
     .admin-panel {
       display: none;
@@ -437,125 +576,322 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /* === PREMIUM GLASS PROFILE MODAL === */
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(14,21,18,.35), rgba(31,107,69,.35));
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .modal {
+      background: rgba(255,255,255,.58);
+      border: 1px solid var(--frame-strong);
+      border-radius: 18px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.35);
+      padding: 18px;
+      width: min(760px, 96vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: glassPop .22s ease-out;
+      backdrop-filter: saturate(140%) blur(16px);
+      -webkit-backdrop-filter: saturate(140%) blur(16px);
+    }
+    .premium-modal{
+      position:relative;
+      background-image:
+        radial-gradient(1200px 600px at 10% -20%, rgba(46,139,87,.10), transparent 55%),
+        radial-gradient(1200px 600px at 110% 120%, rgba(57,182,255,.10), transparent 55%);
+    }
+    .dark .modal{
+      background: rgba(20,32,24,.78);
+      box-shadow: 0 28px 72px rgba(0,0,0,.55);
+    }
+    .dark .premium-modal{
+      background-image:
+        radial-gradient(1200px 600px at 10% -20%, rgba(46,139,87,.14), transparent 55%),
+        radial-gradient(1200px 600px at 110% 120%, rgba(57,182,255,.14), transparent 55%);
+    }
+    .premium-modal::after{
+      content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
+      background:radial-gradient(600px 240px at 0% 0%, rgba(255,255,255,.18), transparent 60%),
+                 radial-gradient(600px 240px at 100% 100%, rgba(255,255,255,.08), transparent 60%);
+    }
+    .modal h3{
+      margin:0 0 12px; font-size:18px; letter-spacing:.2px;
+      background:linear-gradient(135deg, var(--brand), #39B6FF);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+
+    /* FORM (modal ichida) */
+    .grid2, .grid3 { display:grid; gap:10px }
+    .grid2 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) }
+    .grid3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) }
+    @media(max-width:560px){ .grid2,.grid3{ grid-template-columns:1fr } }
+    .ctl label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    .ctl input, .ctl select, .ctl textarea{
+      width:100%; padding:11px 12px; border:1px solid var(--frame); border-radius:12px; font:inherit;
+      background:rgba(255,255,255,.7); color:var(--text); outline:none;
+      transition:border .15s, box-shadow .15s, background .15s;
+    }
+    .dark .ctl input, .dark .ctl select, .dark .ctl textarea{ background:rgba(20,32,24,.6) }
+    .ctl input:focus, .ctl select:focus, .ctl textarea:focus{
+      border-color:var(--ring); box-shadow:0 0 0 4px color-mix(in srgb, var(--ring) 25%, transparent);
+    }
+    .row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+    .danger{flex:1;color:#c62828;font-size:12px;display:flex;align-items:center}
+    .modal-open{overflow:hidden}
+
+    /* Animatsiya */
+    @keyframes glassPop{ from{transform:translateY(8px) scale(.98); opacity:0} to{transform:translateY(0) scale(1); opacity:1} }
+    @media (prefers-reduced-motion: reduce){ .modal{ animation:none } }
+
+    /* Helpers */
+    .inline-actions{display:flex;gap:8px;align-items:center}
+    .linklike{font-size:12px;color:var(--brand2);cursor:pointer;text-decoration:underline}
+    .hidden{display:none !important}
+
+    /* Light rejimda ball qora */
+    body:not(.dark) .uc-pill b { color:#000; }
   </style>
 </head>
 <body>
-  <!-- ... mavjud HTML kodlari ... -->
-  
-  <!-- Yangi Banner Carousel -->
-  <section class="banner-carousel grad-border glass" id="bannerCarousel">
-    <div class="banner-track" id="bannerTrack">
-      <!-- Bannerlar JavaScript orqali qo'shiladi -->
-    </div>
-    <button class="carousel-nav carousel-prev" id="carouselPrev">❮</button>
-    <button class="carousel-nav carousel-next" id="carouselNext">❯</button>
-    <div class="carousel-dots" id="carouselDots">
-      <!-- Nuqtalar JavaScript orqali qo'shiladi -->
-    </div>
-  </section>
-  
-  <!-- Yangi Card Grid -->
-  <div class="cards-grid" id="cardsGrid">
-    <!-- Cardlar JavaScript orqali qo'shiladi -->
-  </div>
-  
-  <!-- Modal oyna -->
-  <div class="modal-overlay" id="modalOverlay">
-    <div class="modal-content glass grad-border">
-      <div class="modal-header">
-        <h3 class="modal-title" id="modalTitle">Modal Sarlavha</h3>
-        <button class="modal-close" id="modalClose">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-html-content" id="modalHtmlContent">
-          <!-- Modal kontenti -->
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn ghost" id="modalCancel">Bekor qilish</button>
-        <button class="btn" id="modalConfirm">Tasdiqlash</button>
+  <!-- ===== AUTH GATE ===== -->
+  <div id="authGate">
+    <div id="authCard" class="grad-border glass">
+      <h2>Davom etish uchun kirish talab qilinadi</h2>
+      <p>LeaderMath resurslaridan foydalanish uchun Google orqali tizimga kiring.</p>
+      <div class="meta-why">🔒 Siz kirgunga qadar asosiy kontent ko'rsatilmaydi.</div>
+      <div class="auth-row">
+        <a id="goLogin" class="btn">🔑 Kirish</a>
       </div>
     </div>
   </div>
-  
-  <!-- Admin Panel (dastlab yashirin) -->
-  <div class="admin-panel" id="adminPanel">
-    <div class="admin-header">
-      <h2>Admin Panel</h2>
-      <button class="btn ghost" id="closeAdminPanel">Yopish</button>
-    </div>
-    
-    <div class="admin-actions">
-      <button class="btn" id="addCardBtn">Yangi Card Qo'shish</button>
-      <button class="btn" id="addBannerBtn">Yangi Banner Qo'shish</button>
-    </div>
-    
-    <div class="admin-form" id="cardForm" style="display: none;">
-      <h3>Yangi Card</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="cardTitle">Sarlavha</label>
-          <input type="text" id="cardTitle">
-        </div>
-        <div class="form-group">
-          <label for="cardDescription">Tavsif</label>
-          <textarea id="cardDescription"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="cardImage">Rasm URL</label>
-          <input type="text" id="cardImage">
-        </div>
-        <div class="form-group">
-          <label for="cardTags">Teglar (vergul bilan ajrating)</label>
-          <input type="text" id="cardTags">
-        </div>
-        <div class="form-group">
-          <label for="cardPrimaryBtn">Asosiy Tugma Matni</label>
-          <input type="text" id="cardPrimaryBtn" value="Boshlash">
-        </div>
-        <div class="form-group">
-          <label for="cardSecondaryBtn">Ikkinchi Tugma Matni</label>
-          <input type="text" id="cardSecondaryBtn" value="Ma'lumot">
-        </div>
-        <div class="form-group">
-          <label for="cardModalContent">Modal Kontenti (HTML)</label>
-          <textarea id="cardModalContent"></textarea>
+
+  <!-- ===== APP ===== -->
+  <div id="app">
+    <header class="appbar">
+      <div class="logo"><img src="./icon-512.png" alt="LeaderMath Logo"></div>
+      <div>
+        <div class="title">LeaderMath</div>
+        <div class="sub">BSB / CHSB / ONLINE OLIMPIADA / DTM / dars-resurslar</div>
+      </div>
+      <div class="spacer"></div>
+      <button id="themeBtn" class="iconbtn" title="Dark/Light">🌙</button>
+      <div class="uc-chip" id="ucChip" aria-haspopup="dialog" aria-expanded="false">
+        <div class="uc-ava" id="ucAva">LM</div>
+        <div class="uc-pill"><span class="uc-pill-label">⭐</span><b id="ucPointsVal">—</b></div>
+        <button class="uc-more" id="ucMore" aria-label="Profil">⋯</button>
+      </div>
+    </header>
+
+    <!-- Popover -->
+    <div class="uc-popover-mask" id="ucMask"></div>
+    <div class="uc-popover grad-border glass" id="ucPopover" role="dialog" aria-modal="true" aria-hidden="true">
+      <div class="uc-pop-head">
+        <div class="uc-ava lg" id="ucAvaLg">LM</div>
+        <div class="uc-namebox">
+          <div class="uc-fullname" id="ucName">Foydalanuvchi</div>
+          <div class="uc-sub" id="ucNumeric">ID: —</div>
         </div>
       </div>
-      <div class="button-group">
-        <button class="btn ghost" id="cancelCardForm">Bekor qilish</button>
-        <button class="btn" id="saveCard">Saqlash</button>
+      <div class="uc-grid">
+        <div class="uc-kv"><div class="k">Viloyat</div><div class="v" id="ucRegion">—</div></div>
+        <div class="uc-kv"><div class="k">Tuman</div><div class="v" id="ucDistrict">—</div></div>
+        <div class="uc-kv"><div class="k">Maktab</div><div class="v" id="ucSchool">—</div></div>
+        <div class="uc-kv"><div class="k">Sinf</div><div class="v" id="ucClass">—</div></div>
+        <div class="uc-kv"><div class="k">Telefon</div><div class="v" id="ucPhone">—</div></div>
+      </div>
+      <div class="uc-actions">
+        <button class="btn-primary" id="ucOpenProfile">📝 Profil</button>
+        <button class="btn-ghost" id="ucSignOut">⬅️ Chiqish</button>
       </div>
     </div>
-    
-    <div class="admin-form" id="bannerForm" style="display: none;">
-      <h3>Yangi Banner</h3>
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="bannerTitle">Sarlavha</label>
-          <input type="text" id="bannerTitle">
-        </div>
-        <div class="form-group">
-          <label for="bannerDescription">Tavsif</label>
-          <textarea id="bannerDescription"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="bannerImage">Rasm URL</label>
-          <input type="text" id="bannerImage">
-        </div>
-        <div class="form-group">
-          <label for="bannerLink">Havola (ixtiyoriy)</label>
-          <input type="text" id="bannerLink">
-        </div>
+
+    <!-- TOP FILTERS -->
+    <section class="filters grad-border glass" id="filtersMain">
+      <h4>BO'LIMLAR:</h4>
+      <div id="mainTags" class="chips"></div>
+    </section>
+
+    <!-- Banner Carousel -->
+    <section class="banner-carousel grad-border glass" id="bannerCarousel">
+      <div class="banner-track" id="bannerTrack">
+        <!-- Bannerlar JavaScript orqali qo'shiladi -->
       </div>
-      <div class="button-group">
-        <button class="btn ghost" id="cancelBannerForm">Bekor qilish</button>
-        <button class="btn" id="saveBanner">Saqlash</button>
+      <button class="carousel-nav carousel-prev" id="carouselPrev">❮</button>
+      <button class="carousel-nav carousel-next" id="carouselNext">❯</button>
+      <div class="carousel-dots" id="carouselDots">
+        <!-- Nuqtalar JavaScript orqali qo'shiladi -->
+      </div>
+    </section>
+
+    <!-- Yangi Card Grid -->
+    <div class="cards-grid" id="cardsGrid">
+      <!-- Cardlar JavaScript orqali qo'shiladi -->
+    </div>
+
+    <!-- Modal oyna -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal-content glass grad-border">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modalTitle">Modal Sarlavha</h3>
+          <button class="modal-close" id="modalClose">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-html-content" id="modalHtmlContent">
+            <!-- Modal kontenti -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn ghost" id="modalCancel">Bekor qilish</button>
+          <button class="btn" id="modalConfirm">Tasdiqlash</button>
+        </div>
       </div>
     </div>
-    
-    <div id="existingCards">
-      <!-- Mavjud cardlar ro'yxati -->
+
+    <!-- Profile modal -->
+    <div id="profileModal" class="modal-mask" aria-modal="true" role="dialog">
+      <div class="modal glass grad-border premium-modal">
+        <h3>Profil ma'lumotlari (majburiy)</h3>
+
+        <div class="grid2">
+          <div class="ctl"><label>Ism *</label><input id="pFirst" autocomplete="given-name"></div>
+          <div class="ctl"><label>Familiya *</label><input id="pLast" autocomplete="family-name"></div>
+        </div>
+
+        <div class="grid3">
+          <div class="ctl">
+            <label>Roli *</label>
+            <select id="pRole">
+              <option value="student">O'quvchi</option>
+              <option value="teacher">O'qituvchi</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <label>Viloyat *</label>
+            <select id="pRegion"></select>
+          </div>
+          <div class="ctl">
+            <label>Tuman/Shahar *</label>
+            <select id="pDistrict"></select>
+          </div>
+        </div>
+
+        <div class="grid3">
+          <div class="ctl">
+            <label>Maktab *</label>
+            <div class="inline-actions">
+              <select id="pSchoolSel" style="flex:1 1 auto"></select>
+              <span id="schoolToggle" class="linklike" title="Ro'yxatda yo'q">Ro'yxatda yo'q</span>
+            </div>
+            <input id="pSchoolCustom" class="hidden" placeholder="Maktab nomini kiriting">
+          </div>
+
+          <div class="ctl" id="pGradeWrap">
+            <label>Sinf *</label>
+            <select id="pGrade"></select>
+          </div>
+
+          <div class="ctl">
+            <label>Telefon *</label>
+            <input id="pPhone" placeholder="+998 XX XXX XX XX" autocomplete="tel">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="danger" id="pError"></div>
+          <button id="pSave" class="btn">Saqlash</button>
+          <button id="pClose" class="btn ghost">Yopish</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Panel (dastlab yashirin) -->
+    <div class="admin-panel" id="adminPanel">
+      <div class="admin-header">
+        <h2>Admin Panel</h2>
+        <button class="btn ghost" id="closeAdminPanel">Yopish</button>
+      </div>
+      
+      <div class="admin-actions">
+        <button class="btn" id="addCardBtn">Yangi Card Qo'shish</button>
+        <button class="btn" id="addBannerBtn">Yangi Banner Qo'shish</button>
+      </div>
+      
+      <div class="admin-form" id="cardForm" style="display: none;">
+        <h3>Yangi Card</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="cardTitle">Sarlavha</label>
+            <input type="text" id="cardTitle">
+          </div>
+          <div class="form-group">
+            <label for="cardDescription">Tavsif</label>
+            <textarea id="cardDescription"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="cardImage">Rasm URL</label>
+            <input type="text" id="cardImage">
+          </div>
+          <div class="form-group">
+            <label for="cardTags">Teglar (vergul bilan ajrating)</label>
+            <input type="text" id="cardTags">
+          </div>
+          <div class="form-group">
+            <label for="cardPrimaryBtn">Asosiy Tugma Matni</label>
+            <input type="text" id="cardPrimaryBtn" value="Boshlash">
+          </div>
+          <div class="form-group">
+            <label for="cardSecondaryBtn">Ikkinchi Tugma Matni</label>
+            <input type="text" id="cardSecondaryBtn" value="Ma'lumot">
+          </div>
+          <div class="form-group">
+            <label for="cardModalContent">Modal Kontenti (HTML)</label>
+            <textarea id="cardModalContent"></textarea>
+          </div>
+        </div>
+        <div class="button-group">
+          <button class="btn ghost" id="cancelCardForm">Bekor qilish</button>
+          <button class="btn" id="saveCard">Saqlash</button>
+        </div>
+      </div>
+      
+      <div class="admin-form" id="bannerForm" style="display: none;">
+        <h3>Yangi Banner</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="bannerTitle">Sarlavha</label>
+            <input type="text" id="bannerTitle">
+          </div>
+          <div class="form-group">
+            <label for="bannerDescription">Tavsif</label>
+            <textarea id="bannerDescription"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="bannerImage">Rasm URL</label>
+            <input type="text" id="bannerImage">
+          </div>
+          <div class="form-group">
+            <label for="bannerLink">Havola (ixtiyoriy)</label>
+            <input type="text" id="bannerLink">
+          </div>
+        </div>
+        <div class="button-group">
+          <button class="btn ghost" id="cancelBannerForm">Bekor qilish</button>
+          <button class="btn" id="saveBanner">Saqlash</button>
+        </div>
+      </div>
+      
+      <div id="existingCards">
+        <!-- Mavjud cardlar ro'yxati -->
+      </div>
     </div>
   </div>
 
@@ -598,7 +934,7 @@
       
       const imageHtml = cardData.image ? 
         `<img src="${cardData.image}" alt="${cardData.title}">` : 
-        `<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 48px; color: white;">${cardData.title.charAt(0)}</div>`;
+        `<div style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 48px; color: white; background: linear-gradient(135deg, #2E8B57, #1F6B45);">${cardData.title.charAt(0)}</div>`;
       
       card.innerHTML = `
         <div class="card-image">
@@ -630,11 +966,19 @@
       
       if (primaryBtn && cardData.primaryAction) {
         primaryBtn.addEventListener('click', cardData.primaryAction);
+      } else if (primaryBtn) {
+        primaryBtn.addEventListener('click', () => {
+          alert(`"${cardData.title}" boshlanishi kerak!`);
+        });
       }
       
       if (secondaryBtn && cardData.modalContent) {
         secondaryBtn.addEventListener('click', () => {
           openModal(cardData.title, cardData.modalContent);
+        });
+      } else if (secondaryBtn) {
+        secondaryBtn.addEventListener('click', () => {
+          openModal(cardData.title, `<p>${cardData.description}</p>`);
         });
       }
       
@@ -961,6 +1305,21 @@
       loadInitialData();
       checkAdminAccess();
     });
+
+    // === THEME TOGGLER ===
+    const root = document.documentElement;
+    const themeBtn = document.getElementById('themeBtn');
+    const THEME_KEY = 'lm-theme';
+    
+    const setTheme = (m) => {
+      root.classList.toggle('dark', m === 'dark');
+      localStorage.setItem(THEME_KEY, m);
+      if (themeBtn) themeBtn.textContent = m === 'dark' ? '☀️' : '🌙';
+    };
+    
+    setTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    
+    if (themeBtn) themeBtn.onclick = () => setTheme(root.classList.contains('dark') ? 'light' : 'dark');
   </script>
 </body>
 </html>
