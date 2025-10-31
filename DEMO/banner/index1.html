@@ -3,16 +3,14 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — Banners Only</title>
+  <title>LeaderMath — Banners Only (JSON-ready)</title>
   <meta name="theme-color" content="#000"/>
   <link rel="icon" href="./logo.png"/>
   <style>
-    /* Ekranni to'liq egallash */
     html,body{height:100%;margin:0;background:#000;overflow:hidden}
     .stage{position:fixed;inset:0;background:#000}
     .layer{position:absolute;inset:0;opacity:0;transition:opacity .35s ease;border:0;width:100%;height:100%}
     .layer.show{opacity:1}
-    /* Tap/Swipe zonalari (ko'rinmas) */
     .tap{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;z-index:5}
     .tap>div{height:100%}
     .tap .left{cursor:w-resize}
@@ -21,13 +19,16 @@
 </head>
 <body>
   <div class="stage">
-    <!-- Double buffer iframes -->
+    <!-- Double buffer iframes for smooth cross-fade -->
     <iframe id="A" class="layer show" loading="eager"
-      sandbox="allow-forms allow-pointer-lock allow-popups allow-same-origin allow-scripts" referrerpolicy="no-referrer"></iframe>
-    <iframe id="B" class="layer"
-      sandbox="allow-forms allow-pointer-lock allow-popups allow-same-origin allow-scripts" referrerpolicy="no-referrer"></iframe>
+      sandbox="allow-forms allow-pointer-lock allow-popups allow-same-origin allow-scripts"
+      referrerpolicy="no-referrer"></iframe>
 
-    <!-- Ko'rinmas boshqaruv zonalari -->
+    <iframe id="B" class="layer"
+      sandbox="allow-forms allow-pointer-lock allow-popups allow-same-origin allow-scripts"
+      referrerpolicy="no-referrer"></iframe>
+
+    <!-- Invisible tap zones -->
     <div class="tap">
       <div id="left"  class="left"  aria-label="prev"></div>
       <div id="right" class="right" aria-label="next"></div>
@@ -35,65 +36,108 @@
   </div>
 
   <script>
-  // ===== Sozlamalar =====
-  const DUR_MS = 5000;     // har slaydga 5s
-  const WRAP   = true;     // oxiridan boshiga o'tsin
+  /* ================== Settings ================== */
+  const DUR_MS = 5000;   // Autoplay duration per banner
+  const WRAP   = true;   // Loop from end to start
 
-  // ===== Holat =====
-  let DATA = {sections:[]};
-  let playlist = [];       // {secIdx, idx, html, bg, link, title}
-  let ptr = 0;             // joriy indeks
-  let active = 'A';        // qaysi iframe ko'rinmoqda: 'A' | 'B'
-  let timer = null;
-  let lastTick = 0;
-  let remaining = DUR_MS;
-  let paused = false;
+  /* ================== State ================== */
+  let DATA = { sections: [] };
+  let playlist = [];     // Flattened list of banners with runtime props
+  let ptr = 0;           // Current index in playlist
+  let active = 'A';      // 'A' or 'B' iframe is visible
+  let timer = null, lastTick = 0, remaining = DUR_MS, paused = false;
 
-  // ===== Qisqa yordamchilar =====
-  const $ = sel => document.querySelector(sel);
+  const $ = (s)=>document.querySelector(s);
   const A = $('#A'), B = $('#B');
   const L = $('#left'), R = $('#right');
 
-  function wrapHtml(bn, sec){
+  /* ================== Helpers ================== */
+  function wrapHtml(bn, sec, injectedData=null){
     const bg = bn.bg || (sec?.darkish ? '#0f1814' : '#ffffff');
-    const css = `
+    const baseCSS = `
       <style>
         *{box-sizing:border-box}
-        html,body{height:100%;margin:0;background:${bg};font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+        html,body{height:100%;margin:0;background:${bg};
+          font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
         a{text-decoration:none}
       </style>`;
-    // Bannerning o'zi: bn.html
-    return css + (bn.html || `<div style="display:grid;place-items:center;height:100%;color:#888">Bo‘sh banner</div>`);
+    // If srcdoc-injection is requested and data provided, expose it:
+    const injectScript = injectedData!=null
+      ? `<script>window.__BANNER_DATA__=${JSON.stringify(injectedData)};<\/script>`
+      : '';
+    return baseCSS + injectScript + (bn.html || `<div style="display:grid;place-items:center;height:100%;color:#888">Bo‘sh banner</div>`);
   }
 
-  function buildPlaylist(){
+  async function fetchMaybe(url){
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('JSON yuklanmadi: '+url);
+    return res.json();
+  }
+
+  // Build flattened playlist and (optionally) preload JSON for inject/postMessage
+  async function buildPlaylist(){
+    const tasks = [];
     playlist = [];
+
     DATA.sections.forEach((sec, sI)=>{
       (sec.banners||[]).forEach((bn, bI)=>{
-        playlist.push({
-          secIdx: sI, idx: bI,
-          html: wrapHtml(bn, sec),
-          bg: bn.bg, link: bn.link, title: bn.title
-        });
+        const item = {
+          secIdx:sI, idx:bI, rawHtml:bn.html||'',
+          bg:bn.bg, link:bn.link, title:bn.title,
+          // JSON integration options from banner.json:
+          dataUrl: bn.dataUrl || null,         // where to get JSON
+          dataMode: bn.dataMode || 'self',     // 'self' | 'inject' | 'postMessage'
+          data: null,                           // fetched JSON cache (for inject/postMessage)
+          srcdoc: ''                            // final HTML we will put into iframe.srcdoc
+        };
+
+        // If we need to preload data for inject/postMessage, schedule it:
+        if(item.dataUrl && (item.dataMode==='inject' || item.dataMode==='postMessage')){
+          tasks.push(fetchMaybe(item.dataUrl).then(json=>{ item.data = json; }));
+        }
+        playlist.push(item);
       });
+    });
+
+    // Wait for all preloads
+    if(tasks.length){ await Promise.allSettled(tasks); }
+
+    // Prepare srcdoc for each item (inject mode => include window.__BANNER_DATA__)
+    playlist.forEach(it=>{
+      const sec = DATA.sections[it.secIdx];
+      const injectData = (it.dataMode==='inject' && it.data!=null) ? it.data : null;
+      it.srcdoc = wrapHtml(
+        { html: it.rawHtml, bg: it.bg },
+        sec,
+        injectData
+      );
     });
   }
 
-  // Double-buffer render
-  function renderTo(target, html){
-    target.srcdoc = html;
+  function renderTo(target, item){
+    // If we plan to postMessage, we must wait for 'load' to fire:
+    if(item.dataMode==='postMessage' && item.data!=null){
+      const handler = ()=>{ try{
+          target.contentWindow?.postMessage({type:'banner-data', data:item.data}, '*');
+        }catch(e){/* ignore */}
+      target.addEventListener('load', handler, {once:true});
+    }
+    target.srcdoc = item.srcdoc;
   }
+
   function show(idx, resetDur=false){
     if(!playlist.length) return;
     ptr = ((idx%playlist.length)+playlist.length)%playlist.length;
-    const nextLayer = active === 'A' ? B : A;
-    const curLayer  = active === 'A' ? A : B;
+    const item = playlist[ptr];
 
-    renderTo(nextLayer, playlist[ptr].html);
+    const nextLayer = (active==='A') ? B : A;
+    const curLayer  = (active==='A') ? A : B;
+
+    renderTo(nextLayer, item);
     // cross-fade
     nextLayer.classList.add('show');
     curLayer.classList.remove('show');
-    active = (active === 'A') ? 'B' : 'A';
+    active = (active==='A') ? 'B' : 'A';
 
     // timer
     remaining = resetDur ? DUR_MS : remaining;
@@ -103,54 +147,43 @@
       timer = setTimeout(()=> next(), remaining);
     }
   }
+
   function next(){
     if(!playlist.length) return;
     const nx = ptr + 1;
-    if(nx >= playlist.length){
-      if(!WRAP) return;
-      show(0, true);
-    }else{
-      show(nx, true);
-    }
+    if(nx >= playlist.length){ WRAP ? show(0, true) : null; }
+    else{ show(nx, true); }
   }
+
   function prev(){
     if(!playlist.length) return;
     const pv = ptr - 1;
-    if(pv < 0){
-      if(!WRAP) return;
-      show(playlist.length-1, true);
-    }else{
-      show(pv, true);
-    }
+    if(pv < 0){ WRAP ? show(playlist.length-1, true) : null; }
+    else{ show(pv, true); }
   }
 
-  // Pauza/resume (ushlab turish)
   function pause(){
-    if(paused) return;
-    paused = true;
+    if(paused) return; paused = true;
     clearTimeout(timer);
     const elapsed = performance.now() - lastTick;
     remaining = Math.max(0, remaining - elapsed);
   }
   function resume(){
-    if(!paused) return;
-    paused = false;
+    if(!paused) return; paused = false;
     lastTick = performance.now();
     timer = setTimeout(()=> next(), remaining);
   }
 
   // Controls
-  L.addEventListener('click', prev);
-  R.addEventListener('click', next);
-
+  L.addEventListener('click', prev);  R.addEventListener('click', next);
   ['left','right'].forEach(id=>{
     const el = document.getElementById(id);
     el.addEventListener('pointerdown', pause);
-    el.addEventListener('pointerup', resume);
-    el.addEventListener('pointerleave', resume);
+    el.addEventListener('pointerup',   resume);
+    el.addEventListener('pointerleave',resume);
   });
 
-  // Swipe (mobil)
+  // Swipe
   let sx=0, sy=0;
   document.addEventListener('touchstart', e=>{
     if(!e.touches[0]) return;
@@ -158,40 +191,44 @@
   }, {passive:true});
   document.addEventListener('touchend', e=>{
     resume();
-    const t = e.changedTouches[0]; if(!t) return;
-    const dx = t.clientX - sx, dy = t.clientY - sy;
-    if(Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)){ dx < 0 ? next() : prev(); }
+    const t=e.changedTouches[0]; if(!t) return;
+    const dx=t.clientX-sx, dy=t.clientY-sy;
+    if(Math.abs(dx)>40 && Math.abs(dx)>Math.abs(dy)){ dx<0 ? next() : prev(); }
   }, {passive:true});
 
-  // Klaviatura
+  // Keyboard
   window.addEventListener('keydown', e=>{
-    if(e.key === 'ArrowRight') next();
-    else if(e.key === 'ArrowLeft') prev();
-    else if(e.code === 'Space'){ paused ? resume() : pause(); e.preventDefault(); }
+    if(e.key==='ArrowRight') next();
+    else if(e.key==='ArrowLeft') prev();
+    else if(e.code==='Space'){ paused?resume():pause(); e.preventDefault(); }
   });
 
   async function init(){
     try{
       const res = await fetch('./banner.json', {cache:'no-store'});
       DATA = await res.json();
-      buildPlaylist();
+      await buildPlaylist();
+
       if(!playlist.length){
-        // JSON bo'sh bo'lsa ham "faqat banner" falsafasini buzmaslik uchun banner ichida xabar
-        const msg = `<div style="display:grid;place-items:center;height:100%;background:#111;color:#fff;font-family:system-ui">
-          <div style="text-align:center;opacity:.9">banner.json bo'sh</div></div>`;
+        const msg = `<style>html,body{height:100%;margin:0;display:grid;place-items:center;background:#111;color:#fff;font-family:system-ui}</style>
+                     <div>banner.json bo‘sh</div>`;
         A.srcdoc = msg; A.classList.add('show'); return;
       }
-      // birinchi bannerlarni har ikkala qatlamga yuklab, keyin ko'rsatish
-      A.srcdoc = playlist[0].html; A.classList.add('show'); active='A';
-      // 2-chi oldindan bufferga (agar bo'lsa)
-      if(playlist[1]) B.srcdoc = playlist[1].html;
 
-      // avtomatik start
+      // Prime first and second
+      A.srcdoc = playlist[0].srcdoc; A.classList.add('show'); active='A';
+      if(playlist[0].dataMode==='postMessage' && playlist[0].data!=null){
+        A.addEventListener('load', ()=> {
+          try{ A.contentWindow?.postMessage({type:'banner-data', data:playlist[0].data}, '*'); }catch(e){}
+        }, {once:true});
+      }
+      if(playlist[1]){ renderTo(B, playlist[1]); }
+
       remaining = DUR_MS; lastTick = performance.now();
       timer = setTimeout(()=> next(), remaining);
     }catch(err){
-      const msg = `<div style="display:grid;place-items:center;height:100%;background:#111;color:#fff;font-family:system-ui">
-        <div style="text-align:center;opacity:.9">banner.json yuklanmadi</div></div>`;
+      const msg = `<style>html,body{height:100%;margin:0;display:grid;place-items:center;background:#111;color:#fff;font-family:system-ui}</style>
+                   <div>banner.json yuklanmadi</div>`;
       A.srcdoc = msg; A.classList.add('show');
     }
   }
