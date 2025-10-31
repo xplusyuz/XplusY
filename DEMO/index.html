@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — Dynamic Chips (Icon-only)</title>
+  <title>LeaderMath — Dynamic Chips (Icon-only, Fixed)</title>
   <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
   <link rel="icon" href="./logo.png"/>
   <link rel="apple-touch-icon" href="./logo.png"/>
@@ -302,7 +302,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
 
     /* ---------- Helpers ---------- */
     const $=s=>document.querySelector(s);
-    const esc=s=>String(s||'').replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+    const esc=s=>String(s||'').replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
     const metaTheme=$('#meta-theme-color');
     const setTheme=t=>{ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('theme',t); metaTheme.content=(t==='dark')?'#101827':'#2E8B57'; };
     setTheme(localStorage.getItem('theme')||'light');
@@ -435,30 +435,40 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     }
     const chips = admin.chips || [];
 
+    /* ---------- ICON-ONLY chips: to'g'ri ishlaydigan render + open ---------- */
+    let visibleChips = [];
+
+    function chipKey(c){ return c?.id || c?.icon || ''; }
+
     function renderChips(){
       const list = Array.isArray(chips) ? chips : [];
-      const items = [];
+      visibleChips = [];
 
-      for(const c of list){
+      const items = [];
+      for (const c of list){
         const icon = (c?.icon||'').trim();
         const isPng = /\.png(\?.*)?$/i.test(icon);
         if(!icon || !isPng) continue; // faqat PNG
 
-        const id = c.id || (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
-        const label = c.title || c.label || id;
+        visibleChips.push(c);
+        const idx = visibleChips.length - 1;
 
+        const keyLabel = c.title || c.label || c.id || c.icon;
         items.push(`
-          <button class="chip" data-id="${id}" aria-label="${esc(label)}" title="${esc(label)}">
-            <img class="chip-img" src="${esc(icon)}" alt="${esc(label)}"/>
+          <button class="chip" data-idx="${idx}" aria-label="${esc(keyLabel)}" title="${esc(keyLabel)}">
+            <img class="chip-img" src="${esc(icon)}" alt="${esc(keyLabel)}"/>
           </button>
         `);
       }
 
       chipsEl.innerHTML = items.join('');
-      chipsEl.querySelectorAll('.chip').forEach(b=>b.onclick=()=>openChip(b.dataset.id));
+      chipsEl.querySelectorAll('.chip').forEach(b=>{
+        b.onclick = () => openChipAt(parseInt(b.dataset.idx,10));
+      });
+
       highlight();
 
-      if(!items.length){
+      if(!visibleChips.length){
         contentEl.innerHTML = `
           <div style="padding:28px;text-align:center">
             <h3 style="font-weight:900;color:var(--primary)">Icon chiplar topilmadi</h3>
@@ -466,9 +476,33 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
           </div>`;
       }
     }
+
+    function openChipAt(idx){
+      const c = visibleChips[idx];
+      if(!c) return;
+
+      window.scrollTo({top:0,behavior:'smooth'});
+      setChipHTML(c.html);
+
+      const key = chipKey(c);
+      localStorage.setItem('lastChipKey', key);
+
+      const qs = new URLSearchParams(location.search);
+      qs.set('id', key);
+      history.replaceState(null,'',`?${qs.toString()}`);
+
+      highlight();
+    }
+
     function highlight(){
-      const id = new URLSearchParams(location.search).get('id') || localStorage.getItem('lastChip');
-      chipsEl.querySelectorAll('.chip').forEach(b=>b.classList.toggle('active', b.dataset.id===id));
+      const urlKey = new URLSearchParams(location.search).get('id');
+      const savedKey = localStorage.getItem('lastChipKey');
+      const activeKey = urlKey || savedKey;
+
+      chipsEl.querySelectorAll('.chip').forEach((b,i)=>{
+        const k = chipKey(visibleChips[i]);
+        b.classList.toggle('active', !!activeKey && k===activeKey);
+      });
     }
 
     // Chip HTML injection (script taglarni qayta ishga tushirish)
@@ -486,18 +520,8 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
       });
       requestAnimationFrame(()=>wrap.classList.add('chip-enter-active'));
     }
-    function openChip(id){
-      const c = chips.find(x=>x.id===id);
-      if(!c) return;
-      window.scrollTo({top:0,behavior:'smooth'});
-      setChipHTML(c.html);
-      localStorage.setItem('lastChip', id);
-      const qs = new URLSearchParams(location.search); qs.set('id', id);
-      history.replaceState(null,'',`?${qs.toString()}`);
-      highlight();
-    }
 
-    /* ---------- Profile forms & helpers ---------- */
+    /* ---------- Regionlar (profil selectlar) ---------- */
     const regions = await fetch('./region.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({regions:[]}));
     const pf_first=$('#pf_first'), pf_last=$('#pf_last'), pf_region=$('#pf_region'), pf_district=$('#pf_district'), pf_school=$('#pf_school'), pf_school_custom=$('#pf_school_custom'), pf_class=$('#pf_class'), pf_phone=$('#pf_phone'), pf_avatar=$('#pf_avatar');
     function populateRegions(){ pf_region.innerHTML = `<option value="">Tanlang</option>` + (regions.regions||[]).map(r=>`<option>${esc(r.name)}</option>`).join(''); }
@@ -605,13 +629,16 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     /* ---------- Init (header -> auth -> chips) ---------- */
     await loadHeaderFromJSON();   // header.json’dan yukla
     bindAuthListener();           // header DOM tayyor bo‘lgach
-    renderChips();                // PNG icon-only chiplar
+    renderChips();                // PNG icon-only chiplarni chiz
 
-    // initial chip ochish (demo yo‘q)
-    const initial = new URLSearchParams(location.search).get('id')
-      || localStorage.getItem('lastChip')
-      || (chips[0]?.id);
-    if(initial) openChip(initial);
+    // Boshlang'ich ochish: URL yoki localStorage bo‘yicha
+    (function openInitial(){
+      const urlKey = new URLSearchParams(location.search).get('id');
+      const savedKey = localStorage.getItem('lastChipKey');
+      const key = urlKey || savedKey || (visibleChips[0] ? (visibleChips[0].id || visibleChips[0].icon) : '');
+      const idx = visibleChips.findIndex(c => (c.id || c.icon) === key);
+      if(idx >= 0) openChipAt(idx);
+    })();
 
     // Modal overlay close on background click
     document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
