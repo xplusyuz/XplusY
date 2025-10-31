@@ -1,341 +1,478 @@
 <!doctype html>
-<html lang="uz">
+<html lang="uz" data-theme="light">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — Admin (Pro) • JSON Chip Editor</title>
-  <meta name="theme-color" content="#2E8B57">
-  <link rel="icon" href="./favicon.png">
+  <title>LeaderMath — Chips Admin (PNG only)</title>
+  <meta name="theme-color" content="#2E8B57"/>
   <style>
-    :root{
-      --brand:#2E8B57;--brand2:#1F6B45;--bg:#f6faf8;--text:#0f172a;--muted:#5b7a6a;
-      --card:#fff;--frame:#d8e7dd;--ring:#8ad1b1;--danger:#d83a3a;--ok:#1F6B45;--warn:#c97c1a;
-      --radius:16px;
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto}
-
-    /* ===== Topbar ===== */
-    header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.8);backdrop-filter:blur(12px) saturate(1.1);border-bottom:1px solid var(--frame)}
-    .bar{max-width:1200px;margin:0 auto;padding:10px 14px;display:flex;align-items:center;gap:12px}
-    .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;display:grid;place-items:center;font-weight:900}
-    .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
-    .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--frame);background:#fff;cursor:pointer;padding:8px 12px;border-radius:10px;transition:.15s}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,.08)}
-    .btn.pri{background:linear-gradient(135deg,#f3fbf7,#e7f9f0);border-color:var(--ring)}
-    .btn.warn{background:#fff8eb;border-color:#ffe3b6;color:#7a4b00}
-    .btn.danger{background:#fff0f0;border-color:#ffd5d5;color:#a30000}
-    .btn:active{transform:scale(.98)}
-    .counter{font-size:12px;color:var(--muted)}
-    .dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:#9aa6b2;margin-left:6px}
-    .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.dirty{background:#0077ff}
-
-    /* ===== Layout ===== */
-    main{max-width:1200px;margin:16px auto;padding:0 14px;display:grid;grid-template-columns:340px 1fr;gap:16px}
-    @media (max-width:1024px){ main{grid-template-columns:1fr} }
-
-    .panel{background:var(--card);border:1px solid var(--frame);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.06);min-height:200px}
-    .panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--frame)}
-    .panel-body{padding:12px 14px}
-
-    /* ===== Left list ===== */
-    .search{width:100%;padding:9px 12px;border:1px solid var(--frame);border-radius:12px;margin-bottom:10px}
-    .list{display:flex;flex-direction:column;gap:8px;max-height:70vh;overflow:auto}
-    .item{display:grid;grid-template-columns:26px 30px 1fr auto;align-items:center;gap:8px;border:1px solid var(--frame);padding:8px;border-radius:12px;background:#fafdfb}
-    .item[draggable="true"]{cursor:grab}
-    .drag{user-select:none;opacity:.6}
-    .meta{font-size:12px;color:var(--muted)}
-    .item.active{outline:2px solid var(--ring);background:#f2fbf7}
-    .tag{font-size:11px;padding:2px 6px;border-radius:999px;background:#eff9f4;border:1px solid var(--frame);margin-left:6px}
-    .iconthumb{width:24px;height:24px;display:grid;place-items:center}
-    .iconthumb img{max-width:24px;max-height:24px;display:block}
-
-    /* ===== Right editor ===== */
-    .editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media (max-width:1000px){ .editor-grid{grid-template-columns:1fr} }
-    .field{display:flex;flex-direction:column;gap:6px}
-    .field input,.field textarea{padding:10px 12px;border:1px solid var(--frame);border-radius:12px;font:inherit}
-    textarea.code{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;min-height:320px}
-    .hint{font-size:12px;color:var(--muted)}
-    .row{display:flex;gap:8px;flex-wrap:wrap}
-    .right{margin-left:auto}
-    .badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#eff9f4;border:1px solid var(--frame)}
-
-    /* Sticky sub-toolbar under editor head */
-    .subbar{position:sticky;top:64px;z-index:5;background:rgba(255,255,255,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--frame);padding:8px 14px;display:flex;gap:8px;align-items:center}
-
-    /* Preview + JSON */
-    .split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media (max-width:1000px){ .split{grid-template-columns:1fr} }
-    iframe.preview{width:100%;height:360px;border:1px solid var(--frame);border-radius:12px}
-    pre.json{margin:0;border:1px solid var(--frame);border-radius:12px;padding:10px;overflow:auto;background:#fbfdfc;max-height:360px}
-
-    /* Validation states */
-    .invalid{border-color:var(--danger)!important; outline:1px solid var(--danger)!important}
-    .warn-txt{color:var(--warn)} .ok-txt{color:var(--ok)} .danger-txt{color:var(--danger)}
+/* ===== THEME ===== */
+:root[data-theme="light"]{
+  --primary:#2E8B57;--accent:#6B8E23;
+  --bg:#F6FBF8;--card:#FFFFFF;--bg-alt:#ECF5EF;
+  --text:#102017;--muted:#5E7867;
+  --line:#DFEAE3;--line2:#EAF3EE;
+  --shadow:0 10px 30px rgba(46,139,87,.12);
+  --shadow-sm:0 2px 8px rgba(46,139,87,.08);
+  --gradient:linear-gradient(135deg,#2E8B57 0%,#6B8E23 100%);
+}
+:root[data-theme="dark"]{
+  --primary:#4CBB7D;--accent:#8BCF5A;
+  --bg:#0D1511;--card:#142019;--bg-alt:#111C16;
+  --text:#EAF7EF;--muted:#A6C6B6;
+  --line:#1E3329;--line2:#1B2B24;
+  --shadow:0 28px 70px rgba(0,0,0,.55);
+  --shadow-sm:0 2px 10px rgba(0,0,0,.35);
+  --gradient:linear-gradient(135deg,#4CBB7D 0%,#8BCF5A 100%);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;
+  background:
+    radial-gradient(1100px 800px at -5% -10%, rgba(46,139,87,.10), transparent 60%),
+    radial-gradient(900px 700px at 110% 15%, rgba(107,142,35,.10), transparent 55%),
+    var(--bg);
+  color:var(--text);
+  padding:22px; line-height:1.5;
+}
+h1{font-size:1.6rem;margin-bottom:12px}
+h2{font-size:1.1rem;margin:14px 0 10px;color:var(--primary)}
+p.muted{color:var(--muted);margin-bottom:18px}
+.container{
+  max-width:1200px;margin:0 auto;background:linear-gradient(180deg,var(--card), color-mix(in oklab, var(--card) 86%, var(--bg-alt) 14%));
+  border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden;
+}
+.header{
+  display:flex; align-items:center; justify-content:space-between; gap:14px;
+  padding:16px 18px; border-bottom:1px solid var(--line);
+}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.btn{
+  appearance:none; border:1px solid var(--line);
+  background:linear-gradient(180deg,var(--card),color-mix(in oklab,var(--card) 74%, var(--bg-alt) 26%));
+  color:var(--text); padding:.65rem .9rem; border-radius:10px; font-weight:800; cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35), var(--shadow-sm);
+  transition:.2s;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn.pri{border:0;color:#fff;background:var(--gradient)}
+.btn.warn{border-color:#e67e22;background:linear-gradient(180deg,#ffedd5,#ffe4c7)}
+.btn.danger{border-color:#e74c3c;background:linear-gradient(180deg,#ffe0e0,#ffd6d6)}
+.btn.ghost{background:transparent}
+.switch{margin-left:auto}
+.main{display:grid;grid-template-columns:1.3fr .7fr;gap:16px;padding:16px}
+.panel{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card)}
+.row{display:grid;grid-template-columns:36px 150px 1fr 140px 40px;gap:10px;align-items:center;padding:8px;border-bottom:1px dashed var(--line2)}
+.row:last-child{border-bottom:0}
+.row.headerRow{font-weight:900;color:var(--muted);background:color-mix(in oklab, var(--card) 90%, var(--bg-alt) 10%);border-radius:10px}
+.drag{cursor:grab;text-align:center;color:var(--muted)}
+.iconPrev{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff center/contain no-repeat}
+.inp,.sel,.ta{
+  width:100%; padding:.6rem .7rem; border:1px solid var(--line); border-radius:10px;
+  background:linear-gradient(180deg,var(--card),color-mix(in oklab,var(--card) 76%, var(--bg-alt) 24%));
+  color:var(--text); font-weight:650; outline:none; transition:.15s;
+}
+.inp:focus,.sel:focus,.ta:focus{border-color:transparent; box-shadow:0 0 0 6px rgba(46,139,87,.12), inset 0 1px 0 rgba(255,255,255,.35)}
+.small{font-size:.82rem;color:var(--muted)}
+.ta{min-height:110px;resize:vertical}
+.kv{display:flex;gap:8px;align-items:center}
+.kv .file{display:none}
+.kv .btn{padding:.45rem .7rem}
+.del{color:#e74c3c;cursor:pointer;font-weight:900;text-align:center}
+hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
+.previewHeader{display:flex;align-items:center;justify-content:space-between}
+.iconChips{display:flex;gap:8px;flex-wrap:wrap;padding:8px}
+.iconChip{
+  --chip:56px;width:var(--chip);height:var(--chip);border-radius:50%;
+  border:1px solid var(--line);
+  background:radial-gradient(140% 140% at 20% 0%, rgba(255,255,255,.22) 0%, transparent 38%),
+            linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 72%, var(--bg-alt) 28%));
+  display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 2px 8px rgba(46,139,87,.12);
+}
+.iconChips img{width:28px;height:28px;object-fit:contain}
+.render{border:1px dashed var(--line);border-radius:12px;min-height:140px;padding:10px;margin-top:8px;background:linear-gradient(180deg,var(--card),color-mix(in oklab, var(--card) 86%, var(--bg-alt) 14%))}
+.flex{display:flex;gap:8px;align-items:center}
+.right{text-align:right}
+footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;color:var(--muted)}
+.bad{color:#e74c3c;font-weight:800}
+.good{color:#16a34a;font-weight:800}
   </style>
 </head>
 <body>
-  <header>
-    <div class="bar">
-      <div class="logo">L</div>
+  <div class="container">
+    <div class="header">
       <div>
-        <div style="font-weight:800">LeaderMath — Admin (Pro)</div>
-        <div class="counter"><span id="count">0</span> ta chip • schema <span id="schema">2</span> <span id="saveDot" class="dot"></span></div>
+        <h1>Chips Admin</h1>
+        <p class="muted">Faqat <b>PNG</b> ikonli chiplar. JSON: <code>{ "chips": [...] }</code></p>
       </div>
-      <div class="toolbar">
-        <button class="btn pri" id="new" title="Yangi (Ctrl+Alt+N)">➕ Yangi</button>
-        <button class="btn" id="dup" title="Nusxa (Ctrl+D)">📄 Nusxa</button>
-        <button class="btn warn" id="up" title="Yuqoriga (Alt+↑)">⬆️</button>
-        <button class="btn warn" id="down" title="Pastga (Alt+↓)">⬇️</button>
-        <button class="btn danger" id="del" title="O‘chirish (Del)">🗑️ O'chirish</button>
-        <button class="btn" id="import" title="Import JSON">📥 Import</button>
-        <button class="btn pri" id="export" title="Export admin.json (Ctrl/⌘+S)">📤 Export</button>
+      <div class="actions">
+        <button id="btnTheme" class="btn">Kun/Tun</button>
+        <button id="btnNew" class="btn pri">+ Yangi chip</button>
+        <button id="btnImport" class="btn">Import JSON</button>
+        <button id="btnExport" class="btn">Export JSON</button>
+        <button id="btnSaveLS" class="btn">Saqlash (local)</button>
+        <button id="btnReset" class="btn danger">Hammasini tozalash</button>
+        <input id="fileImport" type="file" accept="application/json" style="display:none"/>
       </div>
     </div>
-  </header>
 
-  <main>
-    <!-- LEFT: list -->
-    <aside class="panel">
-      <div class="panel-head">
-        <strong>Chiplar</strong>
-        <input id="filter" class="search" placeholder="Qidirish (sarlavha / tag / id)"/>
-      </div>
-      <div class="panel-body">
-        <div class="list" id="list"></div>
-      </div>
-    </aside>
-
-    <!-- RIGHT: editor -->
-    <section class="panel">
-      <div class="panel-head">
-        <strong>Chip tahriri</strong>
-        <div class="row right">
-          <span class="badge" id="status">—</span>
+    <div class="main">
+      <!-- Left: Editor -->
+      <div class="panel" id="editor">
+        <div class="row headerRow">
+          <div class="drag">↕</div>
+          <div>ID</div>
+          <div>Ikon (PNG yo‘l yoki data URL)</div>
+          <div>Fayl</div>
+          <div>—</div>
+        </div>
+        <div id="rows"></div>
+        <hr class="sep"/>
+        <div>
+          <h2>Tanlangan chip HTML</h2>
+          <textarea id="htmlEditor" class="ta" placeholder="Bu yerga chip HTML yozing..."></textarea>
+          <div class="right" style="margin-top:8px">
+            <span id="pngCheck" class="small"></span>
+          </div>
         </div>
       </div>
 
-      <div class="subbar">
-        <button class="btn" id="preview">👁️ Ko'rish</button>
-        <button class="btn pri" id="saveLocal">💾 Saqlash (Local)</button>
-        <button class="btn" id="undo" title="Orqaga (Ctrl+Z)">↶ Orqaga</button>
-        <button class="btn" id="redo" title="Oldinga (Ctrl+Y)">↷ Oldinga</button>
-        <span id="valBadge" class="badge">Validatsiya: —</span>
-      </div>
-
-      <div class="panel-body">
-        <div class="editor-grid">
-          <div>
-            <div class="field">
-              <label>ID <span class="hint">(lotin, bo'shliq yo‘q, takrorlanmasin)</span></label>
-              <input id="f_id" placeholder="masalan: algebra-1"/>
-            </div>
-            <div class="field">
-              <label>Sarlavha</label>
-              <input id="f_title" placeholder="Ko'rsatiladigan nom"/>
-            </div>
-            <div class="field">
-              <label>Teglar (vergul bilan)</label>
-              <input id="f_tags" placeholder="algebra, dars, video"/>
-            </div>
-            <div class="field">
-              <label>Tavsif (ixtiyoriy)</label>
-              <input id="f_desc" placeholder="Qisqa izoh"/>
-            </div>
-            <div class="field">
-              <label>SVG / rasm manzili (ikonka, ixtiyoriy)</label>
-              <input id="f_icon" placeholder="/assets/icon.svg yoki https://... yoki to'g'ridan-to'g'ri <svg>..."/>
-              <div class="hint">.svg tavsiya etiladi. Inline <svg> ham qo‘llanadi.</div>
-              <div id="iconLive" style="margin-top:6px;display:flex;align-items:center;gap:8px">
-                <div style="font-size:12px" class="muted">Ko‘rinishi:</div>
-                <div id="iconBox" style="width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--frame);border-radius:8px;background:#fff"></div>
-              </div>
-            </div>
-          </div>
-          <div>
-            <div class="field">
-              <label>HTML kontent</label>
-              <textarea id="f_html" class="code" placeholder="<h2>Sarlavha</h2>\n<p>Kontent...</p>\n<script>console.log('demo')</script>"></textarea>
-              <div class="hint">Ctrl/⌘+Enter → tezkor preview • Ctrl/⌘+S → eksport fayl</div>
-            </div>
+      <!-- Right: Preview -->
+      <div class="panel">
+        <div class="previewHeader">
+          <h2>Preview</h2>
+          <div class="flex">
+            <span class="small">Aktiv chip:</span>
+            <select id="selActive" class="sel"></select>
+            <button id="btnRender" class="btn pri">Render</button>
           </div>
         </div>
-
-        <div class="split" style="margin-top:12px">
-          <div>
-            <h3 style="margin:6px 0 8px">Tezkor preview</h3>
-            <iframe class="preview" id="previewFrame" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-          </div>
-          <div>
-            <h3 style="margin:6px 0 8px">JSON ko‘rinishi</h3>
-            <pre id="jsonView" class="json">{}</pre>
-            <div class="row" style="margin-top:8px">
-              <button class="btn" id="copyJson">📋 Nusxa olish</button>
-              <span id="jsonSize" class="hint"></span>
-            </div>
-          </div>
-        </div>
+        <div id="chipsPreview" class="iconChips"></div>
+        <div id="renderArea" class="render"><div class="small">HTML natija shu yerda chiqadi</div></div>
       </div>
-    </section>
-  </main>
+    </div>
 
-  <input type="file" id="fileInput" accept="application/json" hidden>
+    <footer>
+      <div>Holat: <span id="status" class="small">—</span></div>
+      <div><span class="small">Hotkeylar: <b>Ctrl/Cmd + S</b> — Local saqlash, <b>Ctrl/Cmd + B</b> — Render</span></div>
+    </footer>
+  </div>
 
-  <script type="module">
-    const $ = (s, r=document) => r.querySelector(s);
-    const esc = (s='') => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-    const slug = s => (s||'').toLowerCase().trim().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'');
-    const debounce = (fn,ms=350)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};
+<script>
+/* ========= State ========= */
+let model = { chips: [] };
+let activeIndex = -1;
 
-    // ===== State =====
-    let data = { schemaVersion: 2, chips: [] };
-    let filtered = [];
-    let sel = null;       // selected id
-    let dirty = false;    // unsaved local state
+/* ========= Helpers ========= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s||'').replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+const isPngPath = (p='') => /\.png(\?.*)?$/i.test(p.trim());
+const isPngDataUrl = (p='') => /^data:image\/png;base64,/i.test(p.trim());
+const isPng = p => isPngPath(p) || isPngDataUrl(p);
+const uid = () => Math.random().toString(36).slice(2,9);
 
-    // History (undo/redo)
-    const hist = { stack:[], idx:-1 };
-    const pushHist = () => { hist.stack = hist.stack.slice(0, hist.idx+1); hist.stack.push(JSON.stringify(data)); hist.idx = hist.stack.length-1; };
-    const canUndo = () => hist.idx>0; const canRedo = () => hist.idx<hist.stack.length-1;
-    const doUndo = () => { if(!canUndo()) return; hist.idx--; data = JSON.parse(hist.stack[hist.idx]); onDataRebind(); };
-    const doRedo = () => { if(!canRedo()) return; hist.idx++; data = JSON.parse(hist.stack[hist.idx]); onDataRebind(); };
+/* ========= UI Builders ========= */
+function makeRow(c, i){
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.draggable = true;
+  row.dataset.idx = i;
 
-    // Elements
-    const listEl=$('#list'), filterEl=$('#filter'), countEl=$('#count'), schemaEl=$('#schema'), statusEl=$('#status'), saveDot=$('#saveDot'), valBadge=$('#valBadge');
-    const f_id=$('#f_id'), f_title=$('#f_title'), f_tags=$('#f_tags'), f_desc=$('#f_desc'), f_icon=$('#f_icon'), f_html=$('#f_html');
-    const prevFrame=$('#previewFrame'), jsonView=$('#jsonView'), jsonSize=$('#jsonSize'), iconBox=$('#iconBox');
+  row.innerHTML = `
+    <div class="drag" title="Tartiblash">≡</div>
+    <input class="inp id" placeholder="id (ixtiyoriy)" value="${esc(c.id||'')}"/>
+    <div class="kv">
+      <div class="iconPrev" style="background-image:url('${esc(c.icon||'')}')"></div>
+      <input class="inp icon" placeholder="./icons/name.png yoki data:image/png;base64,..." value="${esc(c.icon||'')}"/>
+    </div>
+    <div class="kv">
+      <input class="file" type="file" accept="image/png"/>
+      <button class="btn pick">PNG yuklash</button>
+      <button class="btn ghost paste">Paste (Ctrl+V)</button>
+    </div>
+    <div class="del" title="O'chirish">✕</div>
+  `;
 
-    init();
+  // events
+  row.querySelector('.id').addEventListener('input', e=>{
+    model.chips[i].id = e.target.value.trim();
+    refreshSelect();
+    setStatus('ID yangilandi');
+  });
 
-    async function init(){
-      const local = localStorage.getItem('lm-admin-json');
-      if(local){ try{ data = JSON.parse(local); mark('Localdan yuklandi'); }catch{} }
-      if(!data || !Array.isArray(data.chips) || !data.chips.length){
-        try{ const j = await fetch('./admin.json',{cache:'no-store'}).then(r=>r.json()); data = j; mark('admin.json dan yuklandi'); }
-        catch{ data = { schemaVersion: 2, chips:[ {id:'welcome', title:'Boshlash', tags:['info'], desc:'Starter', icon:'', html:'<h2>Xush kelibsiz</h2>'} ]}; mark('Bo\'sh shablon'); }
-      }
-      // Migrate to schema 2 (icon)
-      if((data.schemaVersion||1)<2){ data.chips=(data.chips||[]).map(c=>({...c,icon:c.icon||''})); data.schemaVersion=2; }
-      schemaEl.textContent = data.schemaVersion;
-      pushHist();
-      drawList();
-      if(data.chips[0]) select(data.chips[0].id);
-      bindUI();
-      // Shortcuts
-      window.addEventListener('keydown',e=>{
-        if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); doExport(); }
-        if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ e.preventDefault(); doPreview(); }
-        if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); doUndo(); }
-        if((e.ctrlKey||e.metaKey)&& (e.key.toLowerCase()==='y' || (e.shiftKey&&e.key.toLowerCase()==='z'))){ e.preventDefault(); doRedo(); }
-        if(e.key==='Delete'){ e.preventDefault(); doDelete(); }
-        if(e.altKey && (e.key==='ArrowUp'||e.key==='ArrowDown')){ e.preventDefault(); moveBy(e.key==='ArrowUp'?-1:1); }
-        if(e.ctrlKey && e.altKey && e.key.toLowerCase()==='n'){ e.preventDefault(); doNew(); }
-        if(e.ctrlKey && e.key.toLowerCase()==='d'){ e.preventDefault(); doDuplicate(); }
-      });
-    }
+  const iconInput = row.querySelector('.icon');
+  const iconPrev = row.querySelector('.iconPrev');
+  iconInput.addEventListener('input', e=>{
+    model.chips[i].icon = e.target.value.trim();
+    iconPrev.style.backgroundImage = `url('${model.chips[i].icon||''}')`;
+    validateIcons();
+  });
 
-    function mark(msg){ statusEl.textContent = msg; }
-    function setDot(state){ saveDot.className = 'dot ' + (state||''); }
+  const file = row.querySelector('.file');
+  row.querySelector('.pick').onclick = ()=> file.click();
+  file.onchange = async (e)=>{
+    const f = e.target.files[0];
+    if(!f) return;
+    if(f.type!=='image/png'){ alert('Faqat PNG ruxsat'); return; }
+    const dataUrl = await fileToDataUrl(f);
+    model.chips[i].icon = dataUrl;
+    iconInput.value = dataUrl;
+    iconPrev.style.backgroundImage = `url('${dataUrl}')`;
+    validateIcons();
+  };
+  row.querySelector('.paste').onclick = ()=> {
+    navigator.clipboard.readText().then(txt=>{
+      if(!txt) return;
+      model.chips[i].icon = txt.trim();
+      iconInput.value = model.chips[i].icon;
+      iconPrev.style.backgroundImage = `url('${model.chips[i].icon}')`;
+      validateIcons();
+    }).catch(()=>alert('Clipboarddan o‘qib bo‘lmadi'));
+  };
 
-    function drawList(){
-      const q=(filterEl.value||'').toLowerCase().trim();
-      filtered=(data.chips||[]).filter(c=>!q||(c.title||'').toLowerCase().includes(q)||(c.tags||[]).join(' ').toLowerCase().includes(q)||(c.id||'').toLowerCase().includes(q));
-      listEl.innerHTML='';
-      filtered.forEach(c=>{
-        const row=document.createElement('div'); row.className='item'; row.draggable=true; row.dataset.id=c.id;
-        row.innerHTML = `
-          <div class="drag">☰</div>
-          <div class="iconthumb">${renderIconThumb(c.icon)}</div>
-          <div>
-            <div><strong>${esc(c.title||c.id)}</strong>${(c.tags||[]).map(t=>`<span class='tag'>${esc(t)}</span>`).join('')}</div>
-            <div class="meta">${esc(c.id)}${c.desc?' — '+esc(c.desc):''}</div>
-          </div>
-          <div><button class="btn" data-open>✏️</button></div>`;
-        row.querySelector('[data-open]').onclick=()=>select(c.id);
-        // Drag
-        row.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',c.id);row.classList.add('active');});
-        row.addEventListener('dragend',()=>row.classList.remove('active'));
-        row.addEventListener('dragover',e=>{e.preventDefault();row.style.outline='2px dashed var(--ring)';});
-        row.addEventListener('dragleave',()=>{row.style.outline='';});
-        row.addEventListener('drop',e=>{e.preventDefault();row.style.outline='';const fromId=e.dataTransfer.getData('text/plain');const toId=c.id;if(fromId===toId)return;moveChip(fromId,toId);});
-        listEl.appendChild(row);
-      });
-      countEl.textContent = data.chips.length;
-      [...listEl.children].forEach(n=> n.classList.toggle('active', n.dataset.id===sel));
-    }
+  row.querySelector('.del').onclick = ()=>{
+    if(!confirm('Bu chipni o‘chirasizmi?')) return;
+    model.chips.splice(i,1);
+    if(activeIndex>=model.chips.length) activeIndex = model.chips.length-1;
+    renderAll();
+    setStatus('Chip o‘chirildi');
+  };
 
-    function select(id){ sel=id; const c=data.chips.find(x=>x.id===id); if(!c) return;
-      f_id.value=c.id||''; f_title.value=c.title||''; f_tags.value=(c.tags||[]).join(', '); f_desc.value=c.desc||''; f_icon.value=c.icon||''; f_html.value=c.html||'';
-      renderIconLive(c.icon); drawList(); mark(`Tanlandi: ${id}`); validate(); renderJSON(); setDot(dirty?'dirty':'ok'); }
+  // drag and drop
+  row.addEventListener('dragstart', (e)=>{
+    row.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', i.toString());
+  });
+  row.addEventListener('dragend', ()=>{
+    row.classList.remove('dragging');
+  });
+  row.addEventListener('dragover', (e)=>{
+    e.preventDefault();
+    const from = parseInt(document.querySelector('.row.dragging')?.dataset.idx||-1,10);
+    const to = i;
+    if(from<0 || from===to) return;
+    // visual guide
+  });
+  row.addEventListener('drop', (e)=>{
+    e.preventDefault();
+    const from = parseInt(e.dataTransfer.getData('text/plain')||-1,10);
+    const to = i;
+    if(from<0 || to<0 || from===to) return;
+    const [moved] = model.chips.splice(from,1);
+    model.chips.splice(to,0,moved);
+    if(activeIndex===from) activeIndex = to;
+    else if(from<activeIndex && to>=activeIndex) activeIndex--;
+    else if(from>activeIndex && to<=activeIndex) activeIndex++;
+    renderAll();
+    setStatus('Tartib o‘zgardi');
+  });
 
-    function saveCurrentToState(){ if(!sel) return; const idx=data.chips.findIndex(x=>x.id===sel); if(idx<0) return;
-      const newId=slug(f_id.value||''); if(!newId){ invalid(f_id,true); return alert('ID bo\'sh bo\'lmasin'); }
-      const dup=data.chips.some((x,i)=> i!==idx && x.id===newId); if(dup){ invalid(f_id,true); return alert('Bunday ID allaqachon bor'); }
-      const obj={ id:newId, title:f_title.value||'', tags:(f_tags.value||'').split(',').map(s=>s.trim()).filter(Boolean), desc:f_desc.value||'', icon:f_icon.value||'', html:f_html.value||'' };
-      data.chips[idx]=obj; sel=newId; localSave(); drawList(); renderJSON(); validate(); }
+  row.addEventListener('click', ()=>{
+    activeIndex = i;
+    refreshSelect();
+    loadHtmlEditor();
+    renderPreviewChips();
+  });
 
-    const debouncedSave = debounce(()=> saveCurrentToState(), 400);
+  return row;
+}
 
-    function localSave(){ localStorage.setItem('lm-admin-json', JSON.stringify(data)); dirty=false; setDot('ok'); mark('Localga saqlandi'); pushHist(); }
-    function markDirty(){ dirty=true; setDot('dirty'); }
+function renderRows(){
+  const host = $('#rows');
+  host.innerHTML = '';
+  model.chips.forEach((c,i)=> host.appendChild(makeRow(c,i)));
+}
 
-    function doPreview(){ saveCurrentToState(); const c=data.chips.find(x=>x.id===sel); if(!c) return;
-      const html = `<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-      <style>body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto}.wrap{padding:12px}</style></head>
-      <body><div class='wrap'><div class='note' style='font-size:12px;color:#6b7280;margin-bottom:8px'>Sandbox preview</div>${c.html||''}</div></body></html>`;
-      prevFrame.srcdoc=html; mark('Preview yangilandi'); }
+function refreshSelect(){
+  const sel = $('#selActive');
+  const prev = sel.value;
+  sel.innerHTML = model.chips.map((c,i)=>`<option value="${i}" ${i===activeIndex?'selected':''}>${esc(c.id||`chip-${i+1}`)}</option>`).join('');
+  if(prev && sel.querySelector(`option[value="${prev}"]`)) sel.value = prev;
+}
 
-    function moveChip(fromId,toId){ const a=data.chips.findIndex(x=>x.id===fromId); const b=data.chips.findIndex(x=>x.id===toId); if(a<0||b<0)return; const [m]=data.chips.splice(a,1); data.chips.splice(b,0,m); drawList(); localSave(); }
-    function moveBy(d){ if(!sel)return; const i=data.chips.findIndex(x=>x.id===sel); const j=i+d; if(i<0||j<0||j>=data.chips.length)return; const [m]=data.chips.splice(i,1); data.chips.splice(j,0,m); drawList(); localSave(); }
+function renderPreviewChips(){
+  const wrap = $('#chipsPreview');
+  wrap.innerHTML = model.chips.map((c,i)=>`
+    <button class="iconChip" data-i="${i}" title="${esc(c.id||c.icon||'chip')}">
+      <img src="${esc(c.icon||'')}" alt="icon"/>
+    </button>
+  `).join('');
 
-    function bindUI(){ filterEl.addEventListener('input', drawList);
-      $('#new').onclick=doNew; $('#dup').onclick=doDuplicate; $('#del').onclick=doDelete; $('#up').onclick=()=>moveBy(-1); $('#down').onclick=()=>moveBy(1);
-      $('#export').onclick=doExport; $('#import').onclick=()=>$('#fileInput').click(); $('#saveLocal').onclick=()=>saveCurrentToState(); $('#preview').onclick=doPreview; $('#undo').onclick=doUndo; $('#redo').onclick=doRedo; $('#copyJson').onclick=copyJSON;
-      $('#fileInput').addEventListener('change', onImportFile);
-      // autosave on blur / debounce on input
-      [f_id,f_title,f_tags,f_desc,f_icon,f_html].forEach(el=>{
-        el.addEventListener('input',()=>{ markDirty(); if(el===f_icon) renderIconLive(f_icon.value); renderJSON(); validate(); debouncedSave(); });
-        el.addEventListener('blur', saveCurrentToState);
-      });
-      // auto slug id from title
-      f_title.addEventListener('blur',()=>{ if(!f_id.value.trim()) { f_id.value = slug(f_title.value); markDirty(); debouncedSave(); } });
-    }
+  wrap.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{
+      activeIndex = parseInt(b.dataset.i,10);
+      refreshSelect();
+      loadHtmlEditor();
+      renderOne();
+    };
+  });
+}
 
-    function doNew(){ const base={id:uniqueId('chip-'), title:'Yangi chip', tags:[], desc:'', icon:'', html:'<h2>Yangi</h2>'}; data.chips.push(base); drawList(); select(base.id); localSave(); }
-    function doDuplicate(){ if(!sel) return; const c=data.chips.find(x=>x.id===sel); if(!c) return; const copy=JSON.parse(JSON.stringify(c)); copy.id=uniqueId(c.id+'-copy'); copy.title=(c.title||'')+' (nusxa)'; data.chips.splice(data.chips.findIndex(x=>x.id===sel)+1,0,copy); drawList(); select(copy.id); localSave(); }
-    function doDelete(){ if(!sel) return; if(!confirm('Haqiqatan o\'chirilsinmi?')) return; const i=data.chips.findIndex(x=>x.id===sel); if(i<0)return; data.chips.splice(i,1); sel=null; drawList(); localSave(); if(data.chips[0]) select(data.chips[0].id); }
+function loadHtmlEditor(){
+  const ta = $('#htmlEditor');
+  ta.value = (model.chips[activeIndex]?.html)||'';
+  updatePngCheck(activeIndex);
+}
 
-    function doExport(){ saveCurrentToState(); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='admin.json'; a.click(); URL.revokeObjectURL(a.href); mark('Fayl: admin.json'); }
+function renderOne(){
+  const area = $('#renderArea');
+  const c = model.chips[activeIndex];
+  area.innerHTML = c ? (c.html||'<div class="small">HTML yo‘q</div>') : '<div class="small">Chip tanlanmagan</div>';
 
-    async function onImportFile(e){ const file=e.target.files?.[0]; if(!file) return; const text=await file.text(); try{ const j=JSON.parse(text); if(!j||!Array.isArray(j.chips)) throw new Error('chips[] topilmadi'); data=j; if((data.schemaVersion||1)<2){ data.chips=(data.chips||[]).map(c=>({...c,icon:c.icon||''})); data.schemaVersion=2; } schemaEl.textContent=data.schemaVersion; sel=null; drawList(); if(data.chips[0]) select(data.chips[0].id); localSave(); mark('Import qilindi'); }catch(err){ alert('Noto\'g\'ri JSON: '+err.message); } e.target.value=''; }
+  // scriptlarni qayta ishga tushirish
+  if(c && c.html){
+    const tmp = document.createElement('div');
+    tmp.innerHTML = c.html;
+    tmp.querySelectorAll('script').forEach(old=>{
+      const s=document.createElement('script');
+      for (const a of old.attributes) s.setAttribute(a.name,a.value);
+      s.textContent=old.textContent; document.body.appendChild(s);
+      setTimeout(()=>s.remove(),0);
+    });
+  }
+}
 
-    function renderIconThumb(icon){ if(!icon) return '🟢'; if(icon.trim().startsWith('<svg')) return '<span style="display:inline-block;width:20px;height:20px">'+icon+'</span>'; return `<img src="${esc(icon)}" alt="">`; }
-    function renderIconLive(icon){ if(!icon){ iconBox.innerHTML=''; return; } if(icon.trim().startsWith('<svg')) iconBox.innerHTML=icon; else iconBox.innerHTML = `<img src="${esc(icon)}" alt="">`; }
+/* ========= Actions ========= */
+$('#btnNew').onclick = ()=>{
+  model.chips.push({ id:'', icon:'', html:'' });
+  activeIndex = model.chips.length-1;
+  renderAll();
+  setStatus('Yangi chip qo‘shildi');
+};
 
-    function renderJSON(){ const out = JSON.stringify(data,null,2); jsonView.textContent = out; jsonSize.textContent = (new Blob([out]).size/1024).toFixed(1)+' KB'; }
-    function copyJSON(){ const txt=jsonView.textContent||''; navigator.clipboard.writeText(txt).then(()=>mark('JSON nusxalandi')); }
+$('#btnImport').onclick = ()=> $('#fileImport').click();
+$('#fileImport').onchange = async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const text = await f.text();
+    const json = JSON.parse(text);
+    if(!json || !Array.isArray(json.chips)) throw new Error('Noto‘g‘ri format');
+    model = { chips: json.chips.map(sanitizeChip) };
+    activeIndex = model.chips.length ? 0 : -1;
+    renderAll();
+    setStatus('JSON import qilindi');
+  }catch(err){
+    alert('Import xatosi: '+err.message);
+  }finally{
+    e.target.value = '';
+  }
+};
 
-    function validate(){
-      // Required: id, title; unique id
-      [f_id,f_title].forEach(el=> invalid(el,false));
-      let ok=true; const id=slug(f_id.value||''); const title=(f_title.value||'').trim();
-      if(!id){ invalid(f_id,true); ok=false; }
-      if(!title){ invalid(f_title,true); ok=false; }
-      // Unique id check
-      const dup = data.chips.filter(c=>c.id===id).length>1; if(dup){ invalid(f_id,true); ok=false; }
-      // Length hint for HTML
-      if((f_html.value||'').length>100000){ valBadge.textContent='Validatsiya: HTML juda katta'; valBadge.className='badge warn-txt'; return false; }
-      valBadge.textContent = ok ? 'Validatsiya: ✔' : 'Validatsiya: xatolik';
-      valBadge.className = 'badge ' + (ok?'ok-txt':'danger-txt');
-      return ok;
-    }
-    function invalid(el,on){ el.classList.toggle('invalid', !!on); }
+$('#btnExport').onclick = ()=>{
+  const blob = new Blob([JSON.stringify({chips:model.chips}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'admin.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setStatus('admin.json yuklab olindi');
+};
 
-    function onDataRebind(){ schemaEl.textContent=data.schemaVersion??2; drawList(); if(data.chips[0]){ const id=data.chips.find(c=>c.id===sel)?.id || data.chips[0].id; select(id); } renderJSON(); mark('Tarixdan tiklandi'); setDot('ok'); }
+$('#btnSaveLS').onclick = ()=>{
+  localStorage.setItem('admin-json', JSON.stringify({chips:model.chips}));
+  setStatus('LocalStorage ga saqlandi');
+};
 
-    function uniqueId(base){ let i=1; let id=slug(base||'chip'); const exists=id=>data.chips.some(c=>c.id===id); while(exists(id)) id=`${slug(base||'chip')}-${i++}`; return id; }
-  </script>
+$('#btnReset').onclick = ()=>{
+  if(!confirm('Barcha chiplarni o‘chirishni tasdiqlaysizmi?')) return;
+  model = { chips: [] };
+  activeIndex = -1;
+  renderAll();
+  setStatus('Tozalandi');
+};
+
+$('#btnRender').onclick = ()=>{ saveHtmlFromEditor(); renderOne(); setStatus('Render qilindi'); };
+$('#htmlEditor').addEventListener('input', ()=>{
+  if(activeIndex>=0){ model.chips[activeIndex].html = $('#htmlEditor').value; }
+});
+$('#htmlEditor').addEventListener('blur', saveHtmlFromEditor);
+
+function saveHtmlFromEditor(){
+  if(activeIndex>=0){ model.chips[activeIndex].html = $('#htmlEditor').value; }
+}
+
+$('#selActive').onchange = (e)=>{
+  activeIndex = parseInt(e.target.value,10);
+  loadHtmlEditor();
+  renderOne();
+};
+
+$('#btnTheme').onclick = ()=>{
+  const cur = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',cur);
+  setStatus('Tema o‘zgardi: '+cur);
+};
+
+document.addEventListener('keydown', (e)=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); $('#btnSaveLS').click(); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='b'){ e.preventDefault(); $('#btnRender').click(); }
+});
+
+/* ========= Validatsiya ========= */
+function sanitizeChip(c){
+  const id = (c?.id||'').toString();
+  const icon = (c?.icon||'').toString();
+  const html = (c?.html||'').toString();
+  return { id, icon, html };
+}
+function validateIcons(){
+  const allOk = model.chips.every(c=>!c.icon || isPng(c.icon));
+  const anyBad = model.chips.some(c=>c.icon && !isPng(c.icon));
+  const lab = $('#pngCheck');
+  if(anyBad){ lab.textContent = 'Ba’zi ikonlar PNG emas'; lab.className='small bad'; }
+  else if(allOk){ lab.textContent = 'Barcha ikonlar PNG ✅'; lab.className='small good'; }
+  else { lab.textContent=''; lab.className='small'; }
+}
+function updatePngCheck(i){
+  const c = model.chips[i];
+  const lab = $('#pngCheck');
+  if(!c){ lab.textContent=''; lab.className='small'; return; }
+  if(!c.icon){ lab.textContent='Ikon yo‘q'; lab.className='small'; return; }
+  if(isPng(c.icon)){ lab.textContent='PNG ✅'; lab.className='small good'; }
+  else{ lab.textContent='PNG emas'; lab.className='small bad'; }
+}
+
+/* ========= Files ========= */
+function fileToDataUrl(file){
+  return new Promise((res,rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ========= Render all ========= */
+function renderAll(){
+  renderRows();
+  refreshSelect();
+  renderPreviewChips();
+  loadHtmlEditor();
+  renderOne();
+  validateIcons();
+}
+
+/* ========= Init ========= */
+(function init(){
+  // 1) localStorage dan o‘qish
+  try{
+    const saved = JSON.parse(localStorage.getItem('admin-json')||'null');
+    if(saved && Array.isArray(saved.chips)) model = { chips: saved.chips.map(sanitizeChip) };
+  }catch{}
+  // 2) serverdan admin.json ni yuklab ko‘rish (ixtiyoriy, 404 bo‘lsa e’tibor bermaydi)
+  fetch('./admin.json', {cache:'no-store'}).then(r=>{
+    if(!r.ok) return null; return r.json();
+  }).then(json=>{
+    if(json && Array.isArray(json.chips)) model = { chips: json.chips.map(sanitizeChip) };
+  }).catch(()=>{}).finally(()=>{
+    activeIndex = model.chips.length ? 0 : -1;
+    renderAll();
+    setStatus('Tayyor');
+  });
+})();
+
+function setStatus(msg){ $('#status').textContent = msg; }
+</script>
 </body>
 </html>
