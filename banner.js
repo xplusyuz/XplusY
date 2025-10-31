@@ -1,15 +1,34 @@
 {
-  "schemaVersion": 2,
-  "chips": [
+  "sections": [
     {
-      "id": "home",
-      "title": "Bosh Sahifa",
-      "tags": [
-        "Home"
-      ],
-      "desc": "barcha yangiliklar shu yerda",
-      "icon": "/svg/home.svg",
-      "html": "<section id=\"bannerArea\" class=\"lm-banner-area\"></section>\n\n<script src=\"./banner.js\"></script>\n<script>\n(async function(){\n  const container = document.getElementById('bannerArea');\n  const data = window.BANNERS || [];\n  container.innerHTML = data.map((sec, i) => `\n    <div class=\"lm-banner-section\">\n      <div class=\"lm-banner-head\">\n        <h3>${sec.section}</h3>\n      </div>\n      <div class=\"lm-carousel\" id=\"lm-carousel-${i}\">\n        <div class=\"lm-track\">\n          ${sec.banners.map(b => b.html).join('')}\n        </div>\n        <button class=\"lm-nav prev\">‹</button>\n        <button class=\"lm-nav next\">›</button>\n      </div>\n    </div>\n  `).join('');\n\n  // carousel\n  document.querySelectorAll('.lm-carousel').forEach(carousel => {\n    const track = carousel.querySelector('.lm-track');\n    const slides = track.children;\n    let index = 0;\n    const update = ()=> track.style.transform = `translateX(-${index * 100}%)`;\n    carousel.querySelector('.next').onclick = ()=>{ index = (index+1)%slides.length; update(); };\n    carousel.querySelector('.prev').onclick = ()=>{ index = (index-1+slides.length)%slides.length; update(); };\n    setInterval(()=>{ index=(index+1)%slides.length; update(); },4000);\n  });\n})();\n</script>\n\n<style>\n/* ——— Layout moslashgan, dizaynni buzmaydi ——— */\n.lm-banner-area{\n  max-width:1100px;\n  margin:0 auto;\n  padding:20px 10px;\n}\n.lm-banner-section{\n  margin-bottom:50px;\n  backdrop-filter:blur(14px);\n  background:color-mix(in oklab, var(--card, #fff) 90%, transparent);\n  border:1px solid var(--frame,#d8e7dd);\n  border-radius:20px;\n  box-shadow:var(--shadow,0 8px 24px rgba(46,139,87,.12));\n  overflow:hidden;\n}\n.lm-banner-head{\n  padding:16px 22px;\n  border-bottom:1px solid var(--frame,#d8e7dd);\n}\n.lm-banner-head h3{\n  margin:0;\n  font-size:1.2rem;\n  font-weight:800;\n  color:var(--brand,#2E8B57);\n}\n.lm-carousel{\n  position:relative;\n  overflow:hidden;\n}\n.lm-track{\n  display:flex;\n  transition:transform .6s ease;\n}\n.lm-banner{\n  flex:0 0 100%;\n  height:340px;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  font-weight:800;\n  font-size:1.4rem;\n  position:relative;\n  border-radius:18px;\n}\n.lm-banner-content{\n  padding:20px;\n  text-align:center;\n}\n.lm-banner-overlay{\n  position:absolute;\n  inset:0;\n  display:flex;\n  align-items:center;\n  justify-content:center;\n  background:rgba(0,0,0,.45);\n  color:white;\n  text-align:center;\n  padding:20px;\n}\n.lm-nav{\n  position:absolute;\n  top:50%;\n  transform:translateY(-50%);\n  background:rgba(255,255,255,.75);\n  border:none;\n  border-radius:50%;\n  width:40px;\n  height:40px;\n  font-size:1.4rem;\n  font-weight:bold;\n  cursor:pointer;\n  box-shadow:0 2px 8px rgba(0,0,0,.2);\n  color:var(--brand,#2E8B57);\n}\n.lm-nav:hover{\n  background:var(--brand,#2E8B57);\n  color:white;\n}\n.lm-nav.prev{left:10px}\n.lm-nav.next{right:10px}\n\n@media(max-width:720px){\n  .lm-banner{height:260px;font-size:1.1rem}\n}\n</style>\n"
+      "title": "Asosiy reklama",
+      "banners": [
+        {
+          "image": "https://picsum.photos/1200/400?1",
+          "title": "🎉 Yangi Mavsum Boshlanmoqda!",
+          "desc": "LeaderMath Premium — 50% chegirma va sovg‘ali testlar"
+        },
+        {
+          "image": "https://picsum.photos/1200/400?2",
+          "title": "🔥 Online testlar endi yangi formatda!",
+          "desc": "Interaktiv, natijali va tezkor"
+        }
+      ]
+    },
+    {
+      "title": "Fanlar bo‘yicha",
+      "banners": [
+        {
+          "image": "https://picsum.photos/1200/400?3",
+          "title": "📘 Algebra 0 dan 1 gacha",
+          "desc": "To‘liq intensiv video kurs"
+        },
+        {
+          "image": "https://picsum.photos/1200/400?4",
+          "title": "⚡ Geometriya intensiv kurslari",
+          "desc": "Yangi mavzular va testlar bilan"
+        }
+      ]
     }
   ]
 }
