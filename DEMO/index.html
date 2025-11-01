@@ -289,6 +289,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
 
   <div id="portal-root"></div>
 
+  <!-- UPDATED SCRIPT: chip.json + page/{id}.html mapping -->
   <script type="module">
     /* ---------- Firebase ---------- */
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -302,7 +303,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
 
     /* ---------- Helpers ---------- */
     const $=s=>document.querySelector(s);
-    const esc=s=>String(s||'').replace(/[&<>\"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+    const esc=s=>String(s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
     const metaTheme=$('#meta-theme-color');
     const setTheme=t=>{ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('theme',t); metaTheme.content=(t==='dark')?'#101827':'#2E8B57'; };
     setTheme(localStorage.getItem('theme')||'light');
@@ -426,37 +427,29 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
       signInBtn?.addEventListener('click', ()=>{ document.getElementById('lockCover').classList.add('show'); });
     }
 
-    /* ---------- Chips from admin.json (ICON-ONLY PNG) ---------- */
+    /* ---------- Chips from chip.json (ICON-ONLY PNG) ---------- */
     const chipsEl = $('#chips'), contentEl = $('#content');
-    let admin;
-    try { admin = JSON.parse(localStorage.getItem('admin-json')||'null'); } catch {}
-    if (!admin || !Array.isArray(admin.chips)) {
-      admin = await fetch('./admin.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({chips:[]}));
-    }
-    const chips = admin.chips || [];
 
-    /* ---------- ICON-ONLY chips: to'g'ri ishlaydigan render + open ---------- */
+    let chipsData = { chips: [] };
+    try { chipsData = await fetch('./chip.json', { cache:'no-store' }).then(r=>r.json()); } catch {}
+    const chips = Array.isArray(chipsData.chips) ? chipsData.chips : [];
+
     let visibleChips = [];
 
-    function chipKey(c){ return c?.id || c?.icon || ''; }
-
     function renderChips(){
-      const list = Array.isArray(chips) ? chips : [];
       visibleChips = [];
-
       const items = [];
-      for (const c of list){
+
+      for (const c of chips){
+        const id = String(c?.id||'').trim();
         const icon = (c?.icon||'').trim();
-        const isPng = /\.png(\?.*)?$/i.test(icon);
-        if(!icon || !isPng) continue; // faqat PNG
+        if(!id) continue;
+        if(!icon || !/\.png(\?.*)?$/i.test(icon)) continue; // PNG icon shart
 
-        visibleChips.push(c);
-        const idx = visibleChips.length - 1;
-
-        const keyLabel = c.title || c.label || c.id || c.icon;
+        const idx = visibleChips.push({ id, icon, title: c.title||c.label||id }) - 1;
         items.push(`
-          <button class="chip" data-idx="${idx}" aria-label="${esc(keyLabel)}" title="${esc(keyLabel)}">
-            <img class="chip-img" src="${esc(icon)}" alt="${esc(keyLabel)}"/>
+          <button class="chip" data-idx="${idx}" aria-label="${esc(visibleChips[idx].title)}" title="${esc(visibleChips[idx].title)}">
+            <img class="chip-img" src="${esc(icon)}" alt="${esc(visibleChips[idx].title)}"/>
           </button>
         `);
       }
@@ -472,40 +465,46 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
         contentEl.innerHTML = `
           <div style="padding:28px;text-align:center">
             <h3 style="font-weight:900;color:var(--primary)">Icon chiplar topilmadi</h3>
-            <p class="subtitle">Iltimos, <code>admin.json</code> ga <b>.png</b> iconli chiplar qo‘shing.</p>
+            <p class="subtitle">Iltimos, <code>chip.json</code> ga <b>id</b> va <b>.png</b> iconli chiplar qo‘shing.</p>
           </div>`;
       }
     }
 
-    function openChipAt(idx){
+    async function openChipAt(idx){
       const c = visibleChips[idx];
       if(!c) return;
 
       window.scrollTo({top:0,behavior:'smooth'});
-      setChipHTML(c.html);
 
-      const key = chipKey(c);
-      localStorage.setItem('lastChipKey', key);
+      const url = \`./page/\${encodeURIComponent(c.id)}.html\`;
+      let html = '';
+      try{
+        const res = await fetch(url, { cache:'no-store' });
+        html = res.ok ? await res.text() : \`<div style="padding:20px">Sahifa topilmadi: <code>\${url}</code></div>\`;
+      }catch(e){
+        html = \`<div style="padding:20px;color:#c0392b">Yuklash xatosi: \${String(e)}</div>\`;
+      }
+      setChipHTML(html);
 
+      localStorage.setItem('lastChipId', c.id);
       const qs = new URLSearchParams(location.search);
-      qs.set('id', key);
-      history.replaceState(null,'',`?${qs.toString()}`);
+      qs.set('id', c.id);
+      history.replaceState(null,'',\`?\${qs.toString()}\`);
 
       highlight();
     }
 
     function highlight(){
-      const urlKey = new URLSearchParams(location.search).get('id');
-      const savedKey = localStorage.getItem('lastChipKey');
-      const activeKey = urlKey || savedKey;
+      const urlId = new URLSearchParams(location.search).get('id');
+      const savedId = localStorage.getItem('lastChipId');
+      const activeId = urlId || savedId;
 
       chipsEl.querySelectorAll('.chip').forEach((b,i)=>{
-        const k = chipKey(visibleChips[i]);
-        b.classList.toggle('active', !!activeKey && k===activeKey);
+        const k = visibleChips[i]?.id;
+        b.classList.toggle('active', !!activeId && k===activeId);
       });
     }
 
-    // Chip HTML injection (script taglarni qayta ishga tushirish)
     function setChipHTML(html){
       contentEl.innerHTML = '';
       const wrap=document.createElement('div');
@@ -545,7 +544,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
       let avatarData=null; try{ if(pf_avatar.files?.[0]) avatarData=await readFileAsDataURL(pf_avatar.files[0]); }catch{}
       const user=auth.currentUser; const uid=user?.uid; if(!uid) return;
       let prev=null; try{ const snap=await getDoc(doc(db,'users',uid)); prev=snap.exists()?snap.data():null; }catch{}
-      const payload={ name:`${u.first} ${u.last}`.trim(), first:u.first, last:u.last, region:u.region, district:u.district, school:u.school||u.schoolCustom, class:u.class, phone:u.phone, updatedAt:serverTimestamp() };
+      const payload={ name:\`\${u.first} \${u.last}\`.trim(), first:u.first, last:u.last, region:u.region, district:u.district, school:u.school||u.schoolCustom, class:u.class, phone:u.phone, updatedAt:serverTimestamp() };
       if(avatarData!==null) payload.avatar=avatarData;
       try{
         await setDoc(doc(db,'users',uid), payload, {merge:true});
@@ -560,7 +559,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     const viewModal=$('#viewProfileModal'), closeView=$('#closeView');
     const v_pic=$('#v_pic'), v_name=$('#v_name');
     const v_first=$('#v_first'), v_last=$('#v_last'), v_region=$('#v_region'), v_district=$('#v_district'), v_school=$('#v_school'), v_class=$('#v_class'), v_phone=$('#v_phone'), v_points=$('#v_points');
-    const openView=(p)=>{ v_first.value=p?.first||''; v_last.value=p?.last||''; v_region.value=p?.region||''; v_district.value=p?.district||''; v_school.value=p?.school||''; v_class.value=p?.class||''; v_phone.value=p?.phone||''; v_points.value=(p?.points??0); v_name.textContent=p?.name||'Foydalanuvchi'; v_pic.style.backgroundImage=p?.avatar?`url('${p.avatar}')`:"url('./logo.png')"; viewModal.classList.add('show'); };
+    const openView=(p)=>{ v_first.value=p?.first||''; v_last.value=p?.last||''; v_region.value=p?.region||''; v_district.value=p?.district||''; v_school.value=p?.school||''; v_class.value=p?.class||''; v_phone.value=p?.phone||''; v_points.value=(p?.points??0); v_name.textContent=p?.name||'Foydalanuvchi'; v_pic.style.backgroundImage=p?.avatar?\`url('\${p.avatar}')\`:"url('./logo.png')"; viewModal.classList.add('show'); };
     const closeViewModal=()=>viewModal.classList.remove('show'); closeView.onclick=closeViewModal;
 
     /* ---------- Header profile & auth state ---------- */
@@ -568,9 +567,9 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
       const userAvatar=document.getElementById('userAvatar');
       const userName=document.getElementById('userName');
       const userScore=document.getElementById('userScore');
-      if(userAvatar) userAvatar.style.backgroundImage=p?.photoURL?`url('${p.photoURL}')`:"url('./logo.png')";
+      if(userAvatar) userAvatar.style.backgroundImage=p?.photoURL?\`url('\${p.photoURL}')\`:"url('./logo.png')";
       if(userName) userName.textContent=p?.name||'Foydalanuvchi';
-      if(userScore) userScore.textContent=`${p?.points??0} ⭐`;
+      if(userScore) userScore.textContent=\`\${p?.points??0} ⭐\`;
     };
 
     function enableSecurity(){ document.addEventListener('contextmenu',e=>e.preventDefault(),{passive:false}); }
@@ -627,23 +626,21 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     };
 
     /* ---------- Init (header -> auth -> chips) ---------- */
-    await loadHeaderFromJSON();   // header.json’dan yukla
-    bindAuthListener();           // header DOM tayyor bo‘lgach
-    renderChips();                // PNG icon-only chiplarni chiz
+    await loadHeaderFromJSON();
+    bindAuthListener();
+    renderChips();
 
-    // Boshlang'ich ochish: URL yoki localStorage bo‘yicha
-    (function openInitial(){
-      const urlKey = new URLSearchParams(location.search).get('id');
-      const savedKey = localStorage.getItem('lastChipKey');
-      const key = urlKey || savedKey || (visibleChips[0] ? (visibleChips[0].id || visibleChips[0].icon) : '');
-      const idx = visibleChips.findIndex(c => (c.id || c.icon) === key);
-      if(idx >= 0) openChipAt(idx);
+    (async function openInitial(){
+      const urlId = new URLSearchParams(location.search).get('id');
+      const savedId = localStorage.getItem('lastChipId');
+      const key = urlId || savedId || (visibleChips[0]?.id || '');
+      const idx = visibleChips.findIndex(c => c.id === key);
+      if(idx >= 0) await openChipAt(idx);
     })();
 
-    // Modal overlay close on background click
     document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
-    $('#closeView').addEventListener('click',()=>$('#viewProfileModal').classList.remove('show'));
-    $('#closeProfile').addEventListener('click',()=>$('#profileModal').classList.remove('show'));
+    document.getElementById('closeView')?.addEventListener('click',()=>document.getElementById('viewProfileModal').classList.remove('show'));
+    document.getElementById('closeProfile')?.addEventListener('click',()=>document.getElementById('profileModal').classList.remove('show'));
   </script>
 </body>
 </html>
