@@ -289,7 +289,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
 
   <div id="portal-root"></div>
 
-  <!-- UPDATED SCRIPT: chip.json + page/{id}.html mapping -->
+  <!-- UPDATED SCRIPT: chip.json + page/{id}.html mapping (with cache-busting) -->
   <script type="module">
     /* ---------- Firebase ---------- */
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -300,6 +300,9 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+
+    // cache-busting version
+    const ver = 'v4';
 
     /* ---------- Helpers ---------- */
     const $=s=>document.querySelector(s);
@@ -521,7 +524,7 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     }
 
     /* ---------- Regionlar (profil selectlar) ---------- */
-    const regions = await fetch('./region.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({regions:[]}));
+    const regions = await fetch('./region.json?v='+ver, {cache:'no-store'}).then(r=>r.json()).catch(()=>({regions:[]}));
     const pf_first=$('#pf_first'), pf_last=$('#pf_last'), pf_region=$('#pf_region'), pf_district=$('#pf_district'), pf_school=$('#pf_school'), pf_school_custom=$('#pf_school_custom'), pf_class=$('#pf_class'), pf_phone=$('#pf_phone'), pf_avatar=$('#pf_avatar');
     function populateRegions(){ pf_region.innerHTML = `<option value="">Tanlang</option>` + (regions.regions||[]).map(r=>`<option>${esc(r.name)}</option>`).join(''); }
     function populateDistricts(){ const r=(regions.regions||[]).find(x=>x.name===pf_region.value); const d=r?.districts||[]; pf_district.innerHTML = `<option value="">Tanlang</option>` + d.map(x=>`<option>${esc(x.name)}</option>`).join(''); populateSchools(); }
@@ -642,5 +645,20 @@ main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh -
     document.getElementById('closeView')?.addEventListener('click',()=>document.getElementById('viewProfileModal').classList.remove('show'));
     document.getElementById('closeProfile')?.addEventListener('click',()=>document.getElementById('profileModal').classList.remove('show'));
   </script>
+
+<script>
+// One-time: remove any old service workers that might cache stale files
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs){
+    regs.forEach(function(r){ r.unregister(); });
+    // Optional hard reload on first visit after unregister
+    if (!localStorage.getItem('lm-sw-cleared')) {
+      localStorage.setItem('lm-sw-cleared','1');
+      setTimeout(function(){ location.reload(true); }, 300);
+    }
+  });
+}
+</script>
+
 </body>
 </html>
