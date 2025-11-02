@@ -123,6 +123,7 @@
     }
   }
 
+  /* -------------------- Header chip -------------------- */
   function renderUserChip(u, profile){
     const slot=q('#user-slot'); if(!slot) return;
     const points=profile?.points??0;
@@ -150,6 +151,7 @@
     q('#mEdit',slot).onclick=e=>{e.preventDefault();menu.classList.remove('open');openProfileEditor();};
   }
 
+  /* -------------------- Profile VIEW -------------------- */
   function openProfileView(){
     const d=PROFILE||{}; const name=(d.firstName||'')+(d.lastName?' '+d.lastName:'');
     const age=d.birthDate?calcAge(d.birthDate):''; const avatar=d.avatarUrl||(CURRENT_USER?.photoURL||'');
@@ -182,6 +184,7 @@
     q('#closeView').onclick=closeOverlay;
   }
 
+  /* -------------------- Profile EDIT -------------------- */
   function openProfileEditor(){
     const d=PROFILE||{}; const avatar=d.avatarUrl||(CURRENT_USER?.photoURL||'');
     showOverlay(`
@@ -224,7 +227,7 @@
           <div class="grid2">
             <div class="fld"><label>Boshqa maktab (ixtiyoriy)</label><input id="schoolCustom" value="${d.schoolCustom||''}" placeholder="Masalan: 12-maktab filiali"></div>
             <div class="fld"><label>O‘qituvchi (ism-familya)</label>
-              <!-- Talabingizga ko'ra SELECT mavjud, ammo faqat "Boshqa..." ni ko'rsatamiz; foydalanuvchi pastdagi matnga yozadi -->
+              <!-- Talabga ko‘ra select bor, ammo faqat “Boshqa…”; foydalanuvchi pastdagi inputga yozadi -->
               <select id="teacherSel"><option value="__other__" selected>Boshqa… (quyida yozing)</option></select>
             </div>
           </div>
@@ -244,7 +247,7 @@
         </div>
       </div>`);
 
-    // chain selects (region → district → schools)
+    // chain selects
     const rSel=q('#regionSel'), dSel=q('#districtSel'), sSel=q('#schoolSel');
     function fillRegions(){
       rSel.innerHTML=`<option value="">Tanlang...</option>`+REGIONS.map(r=>`<option value="${r.name}">${r.name}</option>`).join('');
@@ -302,7 +305,6 @@
         avatarUrl: PROFILE?.avatarUrl || (CURRENT_USER.photoURL || ''),
         points: PROFILE?.points ?? 0
       };
-      // bazaviy talablar
       for(const k of ALWAYS_REQ){ if(!v[k]){ alert('Majburiy maydonlarni to‘ldiring.'); return; } }
       if(roleVal==='O‘quvchi'){
         if(!v.class){ alert('Sinfni tanlang.'); return; }
@@ -315,19 +317,28 @@
     };
   }
 
+  /* -------------------- Overlay helpers -------------------- */
   const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
   const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
 
+  /* -------------------- Home (chips/sections) -------------------- */
   async function fetchHome(){
-    try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){console.warn('home load failed',e);}
-    const r=await fetch('./home.json',{cache:'no-store'}); if(!r.ok) return {sections:[]}; return await r.json();
+    try{
+      const s=await getDoc(doc(db,'configs','home'));
+      if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}
+    }catch(e){console.warn('home load failed',e);}
+    const r=await fetch('./home.json',{cache:'no-store'});
+    if(!r.ok) return {sections:[]};
+    return await r.json();
   }
+
   const state={sections:[],activeId:null};
   async function loadHome(){ const d=await fetchHome(); state.sections=Array.isArray(d.sections)?d.sections:[]; renderChips(); renderSections(); if(state.sections.length) activate(state.sections[0].id||'sec0'); }
   function renderChips(){ const bar=q('#chipbar'); bar.innerHTML=''; state.sections.forEach((s,i)=>{ const b=document.createElement('button'); b.className='chip'+(i===0?' active':''); b.textContent=s.title||s.id||('Bo‘lim '+(i+1)); b.dataset.target=s.id||('sec'+i); b.onclick=()=>activate(b.dataset.target); bar.appendChild(b);});}
-  function renderSections(){ const host=q('#sections'); host.innerHTML=''; state.sections.forEach((s,i)=>{ const id=s.id||('sec'+i); const outer=document.createElement('section'); outer.className='section'+(s.fullBleed?' h-bleed':''); outer.dataset.section=id; const sh=document.createElement('div'); sh.className='section-hdr'+(s.fullBleed?' bleed':''); sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; if(!s.title) sh.style.display='none'; const cont=document.createElement('div'); cont.className='iframe-wrap'+(s.fullBleed?' bleed':''); const ifr=document.createElement('iframe'); ifr.className='sbx'; ifr.setAttribute('sandbox', s.sandbox||'allow-scripts allow-forms'); if(s.mode==='url'&&s.src){ifr.src=s.src;}else{const base=s.baseHref?'<base href="'+s.baseHref+'">':''; ifr.srcdoc='<!doctype html><html><head>'+base+'<meta charset="utf-8"></head><body>'+(s.contentHtml||'')+'</body></html>';} cont.appendChild(ifr); outer.appendChild(sh); outer.appendChild(cont); host.appendChild(outer);});}
+  function renderSections(){ const host=q('#sections'); host.innerHTML=''; state.sections.forEach((s,i)=>{ const id=s.id||('sec'+i); const outer=document.createElement('section'); outer.className='section'+(s.fullBleed?' h-bleed':''); outer.dataset.section=id; const sh=document.createElement('div'); sh.className='section-hdr'+(s.fullBleed?' bleed':''); sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; if(!s.title) sh.style.display='none'; const cont=document.createElement('div'); cont.className='iframe-wrap'+(s.fullBleed?' bleed':''); const ifr=document.createElement('iframe'); ifr.className='sbx'; ifr.setAttribute('sandbox', s.sandbox||'allow-scripts allow-forms'); if(s.mode==='url'&&s.src){ifr.src=s.src;} else { const base=s.baseHref?'<base href="'+s.baseHref+'">':''; ifr.srcdoc='<!doctype html><html><head>'+base+'<meta charset="utf-8"></head><body>'+(s.contentHtml||'')+'</body></html>'; } cont.appendChild(ifr); outer.appendChild(sh); outer.appendChild(cont); host.appendChild(outer);});}
   function activate(id){ state.activeId=id; qa('.chip').forEach(c=>c.classList.toggle('active',c.dataset.target===id)); qa('[data-section]').forEach(s=>s.style.display=(s.dataset.section===id)?'block':'none'); const vis=q('[data-section="'+id+'"]'); if(vis) vis.scrollIntoView({behavior:'smooth',block:'start'}); }
 
+  /* -------------------- Auth lock -------------------- */
   function setLocked(b){ const a=q('#app'); if(a) a.hidden=b; }
   function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock'); const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='lock'; lock.hidden=true; lock.innerHTML='<div class="card"><div class="title"><img src="./logo.png" width="28" height="28" style="border-radius:8px"/><span>LeaderMath.<b>UZ</b></span></div><div class="hint">Ro‘yxatdan o‘ting yoki kiring — tizimga kirmaguncha kontent ko‘rinmaydi.</div><div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"/></div><div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"/></div><div id="err"></div><div class="rowx"><button id="login" class="btn primary">Kirish</button><button id="signup" class="btn">Ro‘yxatdan o‘tish</button></div><div style="height:10px"></div><button id="google" class="btn full"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"/> Google bilan kirish</button></div>'; document.body.appendChild(lock); lock.addEventListener('click',async e=>{const id=e.target.id; const errEl=q('#err',lock); const busy=b=>qa('button',lock).forEach(x=>x.disabled=b); try{busy(true); if(id==='google') await signInWithPopup(auth,new GoogleAuthProvider()); if(id==='login'){const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await signInWithEmailAndPassword(auth,eml,pwd);} if(id==='signup'){const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await createUserWithEmailAndPassword(auth,eml,pwd);} }catch(err){ if(errEl) errEl.textContent=err?.message||String(err);} finally{busy(false);} }); return lock;}
   onAuthStateChanged(auth, async (u)=>{
@@ -342,13 +353,6 @@
     if(PROFILE?.role==='O‘quvchi'){ ok=ok && !!PROFILE.class && !!PROFILE.teacherCustom; }
     if(!ok){ setLocked(true); openProfileEditor(); } else { renderUserChip(u,PROFILE); }
   });
-
-  // home chips
-  async function fetchHome(){ try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){console.warn('home load failed',e);} const r=await fetch('./home.json',{cache:'no-store'}); if(!r.ok) return {sections:[]}; return await r.json();}
-  const state={sections:[],activeId:null}; async function loadHome(){ const d=await fetchHome(); state.sections=Array.isArray(d.sections)?d.sections:[]; renderChips(); renderSections(); if(state.sections.length) activate(state.sections[0].id||'sec0'); }
-  function renderChips(){ const bar=q('#chipbar'); bar.innerHTML=''; state.sections.forEach((s,i)=>{ const b=document.createElement('button'); b.className='chip'+(i===0?' active':''); b.textContent=s.title||s.id||('Bo‘lim '+(i+1)); b.dataset.target=s.id||('sec'+i); b.onclick=()=>activate(b.dataset.target); bar.appendChild(b);});}
-  function renderSections(){ const host=q('#sections'); host.innerHTML=''; state.sections.forEach((s,i)=>{ const id=s.id||('sec'+i); const outer=document.createElement('section'); outer.className='section'+(s.fullBleed?' h-bleed':''); outer.dataset.section=id; const sh=document.createElement('div'); sh.className='section-hdr'+(s.fullBleed?' bleed':''); sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; if(!s.title) sh.style.display='none'; const cont=document.createElement('div'); cont.className='iframe-wrap'+(s.fullBleed?' bleed':''); const ifr=document.createElement('iframe'); ifr.className='sbx'; ifr.setAttribute('sandbox', s.sandbox||'allow-scripts allow-forms'); if(s.mode==='url'&&s.src){ifr.src=s.src;} else { const base=s.baseHref?'<base href="'+s.baseHref+'">':''; ifr.srcdoc='<!doctype html><html><head>'+base+'<meta charset="utf-8"></head><body>'+(s.contentHtml||'')+'</body></html>'; } cont.appendChild(ifr); outer.appendChild(sh); outer.appendChild(cont); host.appendChild(outer);});}
-  function activate(id){ state.activeId=id; qa('.chip').forEach(c=>c.classList.toggle('active',c.dataset.target===id)); qa('[data-section]').forEach(s=>s.style.display=(s.dataset.section===id)?'block':'none'); const vis=q('[data-section="'+id+'"]'); if(vis) vis.scrollIntoView({behavior:'smooth',block:'start'}); }
 
   await loadHome();
   </script>
