@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LeaderMath — Home Admin (JSON Editor)</title>
+  <title>LeaderMath — Home Admin (Firebase + Guard)</title>
   <style>
     body{margin:0;font:15px/1.5 system-ui,Segoe UI,Arial;background:#f4f8f6;color:#0d1b14}
     header{position:sticky;top:0;background:#f4f8f6;border-bottom:1px solid #dfe7e2;z-index:10}
@@ -19,171 +19,122 @@
     .card .body{padding:12px}
     input,select,textarea{width:100%;padding:8px 10px;border:1px solid #dfe7e2;border-radius:10px}
     textarea{min-height:180px;font-family:ui-monospace,Consolas,monospace}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px;border-bottom:1px solid #eef2ee;text-align:left;vertical-align:top}
-    tr:hover{background:#f7faf8}
+    table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #eef2ee;text-align:left;vertical-align:top}
     .small{font-size:12px;color:#4a6b5a}
     .pill{padding:4px 8px;border:1px solid #dfe7e2;border-radius:999px;background:#fff}
     .rowflex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .danger{color:#b00020}
   </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.appspot.com",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const ADMIN_EMAILS = ["sohibjonsattorov@gmail.com"]; // bu ro'yxatni o'zingizga moslang
+
+    function guard(u){
+      const wrap = document.getElementById('guard');
+      if(!u){ wrap.innerHTML = '<button id="glogin">Google bilan kiring</button>'; document.getElementById('glogin').onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()); return false; }
+      if(ADMIN_EMAILS.indexOf(u.email)<0){ wrap.innerHTML = '<div class="danger">Kirish taqiqlangan. Bu sahifa faqat admin uchun.</div>'; return false; }
+      wrap.innerHTML = '<div>👋 '+(u.email||u.uid)+'</div>'; return true;
+    }
+
+    let state = {sections:[], sel:-1};
+
+    function renderTable(){
+      const tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
+      state.sections.forEach((s,i)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>'+(i+1)+'</td><td>'+(s.id||'')+'</td><td>'+(s.title||'')+'</td><td><span class="pill">'+(s.mode||'html')+'</span></td>'+
+                       '<td class="rowflex"><button data-i="'+i+'" class="sel">Tanlash</button><button data-i="'+i+'" class="up">↑</button><button data-i="'+i+'" class="down">↓</button><button data-i="'+i+'" class="del">O‘chirish</button></td>';
+        tb.appendChild(tr);
+      });
+    }
+    function editCard(i){
+      state.sel=i; const s=state.sections[i]||{}; const ed=document.getElementById('editor');
+      ed.innerHTML = ''+
+        '<div class="rowflex">'+
+        ' <div style="flex:1"><label>ID</label><input id="eid" value="'+(s.id||'')+'"/></div>'+
+        ' <div style="flex:1"><label>Sarlavha</label><input id="etitle" value="'+(s.title||'')+'"/></div>'+
+        '</div>'+
+        '<div class="rowflex">'+
+        ' <div style="flex:1"><label>Mode</label><select id="emode"><option value="html"'+(s.mode==='html'?' selected':'')+'>html</option><option value="url"'+(s.mode==='url'?' selected':'')+'>url</option></select></div>'+
+        ' <div style="flex:1"><label>Sandbox</label><input id="esandbox" value="'+(s.sandbox||'allow-scripts allow-forms')+'"/></div>'+
+        '</div>'+
+        '<div class="rowflex">'+
+        ' <div style="flex:1"><label>fullBleed</label><select id="efull"><option value="false"'+(!s.fullBleed?' selected':'')+'>false</option><option value="true"'+(s.fullBleed?' selected':'')+'>true</option></select></div>'+
+        ' <div style="flex:1"><label>baseHref</label><input id="ebase" value="'+(s.baseHref||'')+'"/></div>'+
+        '</div>'+
+        '<div id="htmlBlock" style="'+(s.mode==='html'?'':'display:none')+'"><label>contentHtml</label><textarea id="ehtml">'+(s.contentHtml?String(s.contentHtml).replace(/</g,'&lt;'):'')+'</textarea></div>'+
+        '<div id="urlBlock" style="'+(s.mode==='url'?'':'display:none')+'"><label>src</label><input id="esrc" value="'+(s.src||'')+'"/></div>'+
+        '<div class="rowflex" style="margin-top:8px"><button id="saveOne" class="primary">Saqlash</button></div>';
+      ed.querySelector('#emode').onchange=function(){ const v=this.value; ed.querySelector('#htmlBlock').style.display=(v==='html'?'block':'none'); ed.querySelector('#urlBlock').style.display=(v==='url'?'block':'none');};
+      ed.querySelector('#saveOne').onclick=function(){
+        const obj={ id:ed.querySelector('#eid').value.trim(), title:ed.querySelector('#etitle').value.trim(), mode:ed.querySelector('#emode').value, sandbox:ed.querySelector('#esandbox').value.trim(), fullBleed:ed.querySelector('#efull').value==='true' };
+        const baseHref=ed.querySelector('#ebase').value.trim(); if(baseHref) obj.baseHref=baseHref;
+        if(obj.mode==='html'){ obj.contentHtml = ed.querySelector('#ehtml').value; } else { obj.src = ed.querySelector('#esrc').value.trim(); }
+        state.sections[i]=obj; renderTable(); alert('Bo‘lim saqlandi.');
+      };
+    }
+
+    document.addEventListener('click', (e)=>{
+      const i = e.target.getAttribute('data-i'); if(i===null) return;
+      const idx=parseInt(i,10);
+      if(e.target.classList.contains('sel')) editCard(idx);
+      if(e.target.classList.contains('up') && idx>0){ const t=state.sections[idx-1]; state.sections[idx-1]=state.sections[idx]; state.sections[idx]=t; renderTable(); }
+      if(e.target.classList.contains('down') && idx<state.sections.length-1){ const t=state.sections[idx+1]; state.sections[idx+1]=state.sections[idx]; state.sections[idx]=t; renderTable(); }
+      if(e.target.classList.contains('del')){ if(confirm('O‘chirishni tasdiqlaysizmi?')){ state.sections.splice(idx,1); renderTable(); document.getElementById('editor').innerHTML='<div class="small">Chapdan biror bo‘limni tanlang.</div>'; } }
+    });
+
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      onAuthStateChanged(auth, async (u)=>{
+        if(!guard(u)) return;
+        const snap = await getDoc(doc(db,'configs','home'));
+        state = snap.exists()? (snap.data()||{sections:[]}) : {sections:[]};
+        if(!Array.isArray(state.sections)) state.sections=[];
+        renderTable(); if(state.sections[0]) editCard(0);
+      });
+
+      document.getElementById('add').onclick = ()=>{ const n=state.sections.length+1; state.sections.push({id:'sec'+n,title:'Yangi bo‘lim '+n,mode:'html',sandbox:'allow-scripts allow-forms',fullBleed:false,contentHtml:'<section style=\'padding:20px\'><h2>Yangi</h2></section>'}); renderTable(); editCard(state.sections.length-1); };
+      document.getElementById('download').onclick = ()=>{ const blob=new Blob([JSON.stringify({sections:state.sections},null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='home.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); };
+      document.getElementById('publish').onclick = async ()=>{
+        try{ await setDoc(doc(db,'configs','home'), {sections:state.sections}); alert('Firestore’ga saqlandi ✅'); }
+        catch(e){ alert('Saqlash xatosi: '+e.message); }
+      };
+      document.getElementById('loadfile').onchange = async (e)=>{
+        const f=e.target.files[0]; if(!f) return; const txt=await f.text(); try{ const obj=JSON.parse(txt); if(Array.isArray(obj.sections)) { state.sections=obj.sections; renderTable(); if(state.sections[0]) editCard(0); } else { alert('JSON: sections topilmadi'); } } catch(err){ alert('JSON parse xato: '+err.message); }
+      };
+    });
+  </script>
 </head>
 <body>
   <header><div class="row"><div class="brand">LeaderMath — Home Admin</div>
-    <div class="rowflex">
-      <button id="load">home.json ni yuklash</button>
-      <button id="save" class="primary">Yuklab olish (download)</button>
-      <button id="add">+ Bo‘lim qo‘shish</button>
-    </div></div></header>
+    <div class="rowflex" style="margin-left:auto" id="guard"><button id="glogin">Google bilan kiring</button></div>
+  </div></header>
   <main>
+    <div class="toolbar">
+      <button id="add">+ Bo‘lim qo‘shish</button>
+      <label class="rowflex">JSON fayldan yuklash <input id="loadfile" type="file" accept="application/json"/></label>
+      <button id="download">Yuklab olish (home.json)</button>
+      <button id="publish" class="primary">Firestore’ga chiqarish</button>
+    </div>
     <div class="grid">
-      <div class="card">
-        <h3>Bo‘limlar</h3>
-        <div class="body">
-          <table id="tbl"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Mode</th><th>Actions</th></tr></thead><tbody></tbody></table>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Tahrir</h3>
-        <div class="body" id="editor">
-          <div class="small">Chapdan biror bo‘limni tanlang.</div>
-        </div>
-      </div>
+      <div class="card"><h3>Bo‘limlar</h3><div class="body"><table id="tbl"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Mode</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card"><h3>Tahrir</h3><div class="body" id="editor"><div class="small">Chapdan biror bo‘limni tanlang.</div></div></div>
     </div>
   </main>
-<script>
-(function(){
-  var state = {sections:[], sel:-1};
-
-  function renderTable(){
-    var tb = document.querySelector('#tbl tbody'); tb.innerHTML='';
-    state.sections.forEach(function(s, i){
-      var tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>'+ (i+1) +'</td>' +
-        '<td>'+ (s.id||'') +'</td>' +
-        '<td>'+ (s.title||'') +'</td>' +
-        '<td><span class="pill">'+ (s.mode||'html') +'</span></td>' +
-        '<td class="rowflex">'+
-          '<button data-i="'+i+'" class="sel">Tanlash</button>'+
-          '<button data-i="'+i+'" class="up">↑</button>'+
-          '<button data-i="'+i+'" class="down">↓</button>'+
-          '<button data-i="'+i+'" class="del">O‘chirish</button>'+
-        '</td>';
-      tb.appendChild(tr);
-    });
-  }
-
-  function editCard(i){
-    state.sel = i;
-    var s = state.sections[i] || {};
-    var ed = document.getElementById('editor');
-    ed.innerHTML =
-      '<div class="rowflex">'+
-        '<div style="flex:1">'+
-          '<label>ID</label><input id="eid" value="'+(s.id||'')+'"/>'+
-        '</div>'+
-        '<div style="flex:1">'+
-          '<label>Sarlavha</label><input id="etitle" value="'+(s.title||'')+'"/>'+
-        '</div>'+
-      '</div>'+
-      '<div class="rowflex">'+
-        '<div style="flex:1">'+
-          '<label>Mode</label>'+
-          '<select id="emode">'+
-            '<option value="html"'+(s.mode==='html'?' selected':'')+'>html</option>'+
-            '<option value="url"'+(s.mode==='url'?' selected':'')+'>url</option>'+
-          '</select>'+
-        '</div>'+
-        '<div style="flex:1">'+
-          '<label>Sandbox</label><input id="esandbox" value="'+(s.sandbox||'allow-scripts allow-forms')+'"/>'+
-        '</div>'+
-      '</div>'+
-      '<div class="rowflex">'+
-        '<div style="flex:1">'+
-          '<label>fullBleed</label>'+
-          '<select id="efull">'+
-            '<option value="false"'+(!s.fullBleed?' selected':'')+'>false</option>'+
-            '<option value="true"'+(s.fullBleed?' selected':'')+'>true</option>'+
-          '</select>'+
-        '</div>'+
-        '<div style="flex:1">'+
-          '<label>baseHref (ixtiyoriy)</label><input id="ebase" value="'+(s.baseHref||'')+'"/>'+
-        '</div>'+
-      '</div>'+
-      '<div id="htmlBlock" style="'+(s.mode==='html'?'':'display:none')+'">'+
-        '<label>contentHtml</label><textarea id="ehtml">'+(s.contentHtml?String(s.contentHtml).replace(/</g,'&lt;'):'')+'</textarea>'+
-      '</div>'+
-      '<div id="urlBlock" style="'+(s.mode==='url'?'':'display:none')+'">'+
-        '<label>src (URL yoki fayl yo‘li)</label><input id="esrc" value="'+(s.src||'')+'"/>'+
-        '<div class="small">Eslatma: iframe balandligi uchun ichki sahifaga postMessage skriptini qo‘shing.</div>'+
-      '</div>'+
-      '<div class="rowflex" style="margin-top:8px"><button id="saveOne" class="primary">Saqlash</button></div>';
-
-    ed.querySelector('#emode').onchange = function(){
-      var v = this.value;
-      ed.querySelector('#htmlBlock').style.display = (v==='html'?'block':'none');
-      ed.querySelector('#urlBlock').style.display = (v==='url'?'block':'none');
-    };
-    ed.querySelector('#saveOne').onclick = function(){
-      var id = ed.querySelector('#eid').value.trim();
-      var title = ed.querySelector('#etitle').value.trim();
-      var mode = ed.querySelector('#emode').value;
-      var sandbox = ed.querySelector('#esandbox').value.trim();
-      var fullBleed = ed.querySelector('#efull').value==='true';
-      var baseHref = ed.querySelector('#ebase').value.trim();
-      var obj = { id:id, title:title, mode:mode, sandbox:sandbox, fullBleed:fullBleed };
-      if(baseHref) obj.baseHref = baseHref;
-      if(mode==='html'){
-        var html = ed.querySelector('#ehtml').value;
-        obj.contentHtml = html;
-      }else{
-        obj.src = ed.querySelector('#esrc').value.trim();
-      }
-      state.sections[i] = obj;
-      renderTable();
-      alert('Bo‘lim saqlandi.');
-    };
-  }
-
-  document.getElementById('add').onclick = function(){
-    var n = state.sections.length+1;
-    state.sections.push({ id:'sec'+n, title:'Yangi bo‘lim '+n, mode:'html', sandbox:'allow-scripts allow-forms', fullBleed:false, contentHtml:'<section style=\'padding:20px\'><h2>Yangi</h2></section>' });
-    renderTable(); editCard(state.sections.length-1);
-  };
-
-  document.getElementById('load').onclick = async function(){
-    try{
-      var res = await fetch('./home.json', {cache:'no-store'});
-      state = await res.json();
-      if(!Array.isArray(state.sections)) state.sections = [];
-      renderTable();
-      if(state.sections[0]) editCard(0);
-    }catch(e){ alert('home.json yuklashda xato: '+e.message); }
-  };
-
-  document.getElementById('save').onclick = function(){
-    var data = {sections: state.sections};
-    var blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-    var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'home.json'; a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
-  };
-
-  document.getElementById('tbl').addEventListener('click', function(e){
-    var i = e.target.getAttribute('data-i'); if(i===null) return;
-    i = parseInt(i,10);
-    if(e.target.classList.contains('sel')) editCard(i);
-    if(e.target.classList.contains('up') && i>0){
-      var t=state.sections[i-1]; state.sections[i-1]=state.sections[i]; state.sections[i]=t; renderTable();
-    }
-    if(e.target.classList.contains('down') && i<state.sections.length-1){
-      var t2=state.sections[i+1]; state.sections[i+1]=state.sections[i]; state.sections[i]=t2; renderTable();
-    }
-    if(e.target.classList.contains('del')){
-      if(confirm('O‘chirishni tasdiqlaysizmi?')){ state.sections.splice(i,1); renderTable(); document.getElementById('editor').innerHTML='<div class="small">Chapdan biror bo‘limni tanlang.</div>'; }
-    }
-  });
-})();
-</script>
 </body>
 </html>
