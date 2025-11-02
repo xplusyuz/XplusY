@@ -63,14 +63,14 @@
     async function boot(){
       // --- Firebase config (o'zingizniki bilan almashtiring) ---
       const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.firebasestorage.app",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
+        apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+        authDomain: "xplusy-760fa.firebaseapp.com",
+        projectId: "xplusy-760fa",
+        storageBucket: "xplusy-760fa.appspot.com",
+        messagingSenderId: "992512966017",
+        appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+        measurementId: "G-459PLJ7P7L"
+      };
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       try{ await setPersistence(auth, browserLocalPersistence); }catch(e){ console.warn('setPersistence:', e); }
@@ -84,6 +84,7 @@
 
           <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"/></div>
           <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"/></div>
+          <div id="err" style="color:#b00020;min-height:18px;margin-top:4px;font-size:13px"></div>
           <div class="rowx">
             <button id="login"  class="btn primary">Kirish</button>
             <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
@@ -103,6 +104,7 @@
           const slot = userSlot(); if(slot) slot.innerHTML = '';
         }else{
           setLocked(false);
+          const el = document.querySelector('#err'); if(el) el.textContent='';
           document.querySelectorAll('.chip').forEach(c=>c.disabled=false);
           const slot = userSlot();
           if(slot){
@@ -121,8 +123,12 @@
       });
 
       lock.addEventListener('click', async (e)=>{
+        const setBusy=(b)=>{
+          lock.querySelectorAll('button').forEach(btn=>btn.disabled=b);
+        };
         const id = e.target.id;
         try{
+          setBusy(true);
           if(id==='google'){
             await signInWithPopup(auth, new GoogleAuthProvider());
           }else if(id==='login'){
@@ -133,8 +139,13 @@
             const eml = lock.querySelector('#eml').value.trim();
             const pwd = lock.querySelector('#pwd').value;
             await createUserWithEmailAndPassword(auth, eml, pwd);
+            // success
           }
-        }catch(err){ alert(err && err.message ? err.message : err); }
+        }catch(err){
+          const msg = (err && err.message)? err.message : String(err);
+          const el = lock.querySelector('#err'); if(el) el.textContent = msg;
+          console.error('Auth error:', err);
+        } finally { setBusy(false); }
       });
 
       const state = { sections:[], activeId:null };
