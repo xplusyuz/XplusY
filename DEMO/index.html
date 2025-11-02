@@ -1,687 +1,233 @@
 <!doctype html>
 <html lang="uz" data-theme="light">
 <head>
-
-  <!-- SW hard-unregister (runs before anything else) -->
-  <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(regs){
-      regs.forEach(function(r){ r.unregister(); });
-      // also remove any stale caches
-      if (window.caches && caches.keys) {
-        caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
-      }
-    });
-  }
-  </script>
-
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>LeaderMath — Dynamic Chips (Icon-only, Fixed)</title>
-  <meta name="theme-color" content="#2E8B57" id="meta-theme-color"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LeaderMath.UZ — Isolated Pages + Firebase Auth</title>
+  <meta name="theme-color" content="#2E8B57"/>
   <link rel="icon" href="./logo.png"/>
-  <link rel="apple-touch-icon" href="./logo.png"/>
   <style>
-/* =================== THEME =================== */
-:root[data-theme="light"]{
-  --primary:#2E8B57; --primary-dark:#1F6B45; --accent:#6B8E23;
-  --bg:#F6FBF8; --bg-alt:#ECF5EF; --card:#FFFFFF;
-  --text:#102017; --text-muted:#5E7867;
-  --line:#DFEAE3; --line-2:#EAF3EE;
-  --radius:14px; --radius-lg:18px; --pill:999px;
-  --shadow-sm:0 2px 8px rgba(46,139,87,.08);
-  --shadow:0 10px 30px rgba(46,139,87,.12);
-  --shadow-lg:0 22px 60px rgba(46,139,87,.18);
-  --gradient:linear-gradient(135deg, #2E8B57 0%, #6B8E23 100%);
-}
-:root[data-theme="dark"]{
-  --primary:#4CBB7D; --primary-dark:#3AA06A; --accent:#8BCF5A;
-  --bg:#0D1511; --bg-alt:#111C16; --card:#142019;
-  --text:#EAF7EF; --text-muted:#A6C6B6;
-  --line:#1E3329; --line-2:#1B2B24;
-  --radius:14px; --radius-lg:18px; --pill:999px;
-  --shadow-sm:0 2px 10px rgba(0,0,0,.35);
-  --shadow:0 12px 30px rgba(0,0,0,.45);
-  --shadow-lg:0 28px 70px rgba(0,0,0,.55);
-  --gradient:linear-gradient(135deg, #4CBB7D 0%, #8BCF5A 100%);
-}
+    :root{
+      --brand:#2E8B57; --brand-2:#1F6B45;
+      --bg:#F6FBF8; --text:#0d1b14; --muted:#4a6b5a; --card:#ffffff; --frame:#dfe7e2;
+      --radius:16px; --pill:999px; --shadow:0 8px 30px rgba(16,32,23,.08);
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,Segoe UI,Arial}
 
-/* =============== RESET / BASE =============== */
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{
-  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto;
-  background:
-    radial-gradient(1100px 800px at -5% -10%, rgba(46,139,87,.12), transparent 60%),
-    radial-gradient(900px 700px at 110% 15%, rgba(107,142,35,.12), transparent 55%),
-    var(--bg);
-  color:var(--text); line-height:1.6; overflow-x:hidden;
-}
-/* watermark soft */
-body::before{
-  content:"LeaderMath • Premium"; position:fixed; bottom:6%; left:50%;
-  transform:translateX(-50%) rotate(-9deg);
-  font-weight:800; letter-spacing:.14em; font-size:48px;
-  color:rgba(46,139,87,.03); pointer-events:none; white-space:nowrap; z-index:0;
-}
+    header.hdr{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#F6FBF8 65%,#F6FBF8c0 80%,transparent);
+      border-bottom:1px solid var(--frame);backdrop-filter:saturate(1.1) blur(6px)}
+    .row{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 16px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
+    .brand b{color:var(--brand)}
+    .grow{flex:1}
 
-/* =============== STICKY CHIPS (headerdan alohida) =============== */
-.chips-sticky{
-  position:sticky; top:0; z-index:40;
-  backdrop-filter:saturate(120%) blur(12px);
-  background:linear-gradient(to bottom, rgba(255,255,255,.65), rgba(255,255,255,.45));
-  border-bottom:1px solid var(--line);
-}
-:root[data-theme="dark"] .chips-sticky{
-  background:linear-gradient(to bottom, rgba(20,32,25,.65), rgba(20,32,25,.45));
-}
-.chips-wrap{max-width:1400px; margin:0 auto; padding:0 18px; overflow-x:auto}
+    .chipbar{max-width:1180px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px}
+    .chip{padding:8px 12px;border:1px solid var(--frame);border-radius:var(--pill);cursor:pointer;background:#fff}
+    .chip.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .chip:disabled{opacity:.6;cursor:not-allowed}
 
-/* ==== ICON-ONLY CHIPS ==== */
-.chips-row{display:flex; gap:.7rem; padding:12px 0; min-width:max-content}
-.chip{
-  --chip-size:60px;
-  width:var(--chip-size); height:var(--chip-size);
-  border-radius:50%;
-  border:1px solid var(--line);
-  background:
-    radial-gradient(140% 140% at 20% 0%, rgba(255,255,255,.22) 0%, transparent 38%),
-    linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 72%, var(--bg-alt) 28%));
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.35),
-    0 2px 8px rgba(46,139,87,.12);
-  display:inline-flex; align-items:center; justify-content:center;
-  cursor:pointer; transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
-  position:relative; isolation:isolate; padding:0;
-}
-.chip:hover{
-  transform:translateY(-3px);
-  box-shadow:
-    0 10px 26px rgba(46,139,87,.18),
-    0 0 0 6px rgba(46,139,87,.08);
-}
-.chip:focus-visible{
-  outline:none;
-  box-shadow:
-    0 0 0 3px rgba(46,139,87,.45),
-    0 8px 22px rgba(46,139,87,.18);
-}
-.chip.active{
-  border-color:transparent;
-  box-shadow:
-    0 12px 30px rgba(46,139,87,.25),
-    0 0 0 8px rgba(46,139,87,.12);
-  background:
-    radial-gradient(150% 120% at 15% -10%, rgba(255,255,255,.28) 0%, transparent 45%),
-    var(--gradient);
-}
-.chip .chip-img{
-  width:30px; height:30px; object-fit:contain;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.2));
-  transition:transform .25s ease, filter .25s ease, opacity .25s ease;
-  opacity:.95;
-}
-.chip:hover .chip-img{ transform:scale(1.06); opacity:1 }
-:root[data-theme="dark"] .chip{
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.18),
-    0 2px 10px rgba(0,0,0,.45);
-}
+    main{max-width:1180px;margin:0 auto;padding:12px 16px 40px}
+    section.section{background:var(--card);border:1px solid var(--frame);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+    .section.h-bleed{border:none;border-radius:0;box-shadow:none}
+    .section-hdr{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--frame)}
+    .section-hdr h3{margin:0;font-size:18px}
+    .iframe-wrap{position:relative}
+    iframe.sbx{display:block;width:100%;border:0;background:#fff;min-height:600px}
 
-/* =============== MAIN / PAGE =============== */
-main{max-width:1400px; margin:0 auto; padding:22px 18px; min-height:calc(100vh - 220px)}
-.page{
-  position:relative; border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden;
-  background:
-    radial-gradient(140% 140% at 0% 0%, color-mix(in oklab, var(--accent) 9%, transparent) 0%, transparent 38%),
-    linear-gradient(180deg, color-mix(in oklab, var(--card) 86%, var(--bg-alt) 14%), var(--card));
-  box-shadow:var(--shadow);
-}
-.page::before{content:""; position:absolute; left:0; right:0; top:0; height:4px; background:var(--gradient)}
+    /* full-bleed 100vw cho'zish */
+    .bleed{width:100vw;margin-left:50%;transform:translateX(-50%)}
 
-/* =============== MODALS / LOCK =============== */
-#lockCover{
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:color-mix(in oklab, var(--bg) 25%, rgba(0,0,0,.65));
-  backdrop-filter:blur(14px); z-index:1000; opacity:0; visibility:hidden; transition:.25s;
-}
-#lockCover.show{opacity:1; visibility:visible}
-.lock-card{
-  width:min(460px, 92vw);
-  background:linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 80%, var(--bg-alt) 20%));
-  border:1px solid var(--line); border-radius:20px; padding:26px 24px; box-shadow:var(--shadow-lg);
-}
-#lockTitle{font-size:1.4rem; font-weight:900; color:var(--primary); margin-bottom:6px}
-#lockText{color:var(--text-muted)}
-.auth-col{display:flex; flex-direction:column; gap:.8rem; margin-top:1rem}
-.in{
-  width:100%; padding:.85rem 1rem; border:1px solid var(--line); border-radius:12px;
-  background:linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 74%, var(--bg-alt) 26%));
-  color:var(--text); font-weight:700; outline:none; transition:.2s;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.35)
-}
-.in:focus{border-color:transparent; box-shadow:0 0 0 6px rgba(46,139,87,.10), inset 0 1px 0 rgba(255,255,255,.35)}
+    /* ===== Auth Overlay (lock) ===== */
+    .lock{position:fixed;inset:0;background:linear-gradient(180deg,#F6FBF8ee,#F6FBF8ff);display:grid;place-items:center;z-index:50}
+    .card{width:min(420px,94vw);background:#fff;border:1px solid var(--frame);border-radius:18px;box-shadow:var(--shadow);padding:18px}
+    .title{display:flex;align-items:center;gap:10px;font-weight:800;margin-bottom:10px}
+    .hint{color:var(--muted);font-size:14px;margin-bottom:12px}
 
-/* =============== PROFILE MODALS =============== */
-.modal{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background:color-mix(in oklab, var(--bg) 20%, rgba(0,0,0,.65)); backdrop-filter:blur(14px);
-  z-index:1000; opacity:0; visibility:hidden; transition:.25s; padding:18px}
-.modal.show{opacity:1; visibility:visible}
-.modal-card{width:min(820px,96vw); background:linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 86%, var(--bg-alt) 14%));
-  border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow-lg); overflow:hidden}
-.modal-card::before{content:""; display:block; height:4px; background:var(--gradient)}
-.modal-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line)}
-.modal-title{font-size:1.26rem; font-weight:900; color:var(--primary)}
-.head-right{display:flex; align-items:center; gap:14px}
-.head-user{display:flex; align-items:center; gap:10px}
-.pic{width:42px;height:42px;border-radius:50%;background:url('./logo.png') center/cover no-repeat;border:2px solid var(--primary)}
-.nm{font-weight:800}
-.modal-body{padding:20px}
-.grid{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px}
-.field{display:flex; flex-direction:column; gap:.45rem}
-.field label{font-size:.86rem; font-weight:800; color:var(--text-muted)}
-.field input,.field select{
-  padding:.82rem 1rem; border:1px solid var(--line); border-radius:12px;
-  background:linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 74%, var(--bg-alt) 26%));
-  color:var(--text); font-weight:650; outline:none; transition:.2s; box-shadow:inset 0 1px 0 rgba(255,255,255,.35)
-}
-.field input:focus,.field select:focus{border-color:transparent; box-shadow:0 0 0 6px rgba(46,139,87,.10), inset 0 1px 0 rgba(255,255,255,.35)}
-.row{display:flex; gap:.8rem}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--frame);background:#fff;cursor:pointer}
+    .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .btn.full{width:100%}
+    .fld{display:grid;gap:6px;margin:8px 0}
+    .fld input{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--frame);outline:none}
+    .rowx{display:flex;gap:8px;align-items:center;justify-content:space-between}
 
-/* =============== CHIP TRANSITION =============== */
-.chip-enter{opacity:0; transform:translateY(14px); transition:opacity .45s ease, transform .45s ease}
-.chip-enter-active{opacity:1; transform:translateY(0)}
-
-/* =============== RESPONSIVE =============== */
-@media (max-width:1024px){ .chips-wrap{padding:0 14px} main{padding:22px 16px} }
-@media (max-width:768px){
-  .grid{grid-template-columns:1fr}
-  .modal-card{max-height:92vh}
-  .modal-head{flex-direction:column; align-items:flex-start; gap:10px}
-}
-@media (max-width:480px){
-  .chip{ --chip-size:56px }
-  .chip .chip-img{ width:28px; height:28px }
-  main{padding:16px 12px}
-}
+    .userchip{display:flex;gap:10px;align-items:center;border:1px solid var(--frame);padding:6px 10px;border-radius:999px;background:#fff}
+    .avatar{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#cfe7db,#eaf6f0)}
+    .logout{background:#fff;border:1px solid var(--frame);border-radius:10px;padding:6px 10px;cursor:pointer}
   </style>
-</head>
-<body>
-  <!-- DINAMIK HEADER (JSONdan yuklanadi) -->
-  <header id="headerRoot"></header>
 
-  <!-- STICKY ICON-ONLY CHIPS -->
-  <div class="chips-sticky">
-    <div class="chips-wrap">
-      <div class="chips-row" id="chips"></div>
-    </div>
-  </div>
-
-  <main>
-    <section id="content" class="page">
-      <p class="subtitle" style="padding:20px;text-align:center">Yuqoridagi ikonlardan birini bosing.</p>
-    </section>
-  </main>
-
-<style>
-.err-banner{position:fixed;left:12px;bottom:12px;right:12px;z-index:2000;
-  border:1px solid #f3b0b0;background:#fff4f4;color:#8a1f1f;border-radius:12px;
-  box-shadow:0 12px 30px rgba(0,0,0,.15);padding:10px 12px;font-weight:800;display:none}
-.err-banner.show{display:block}
-</style>
-<div id="errBanner" class="err-banner"></div>
-
-
-  <!-- LOCK COVER (Kirish modal) -->
-  <div id="lockCover">
-    <div class="lock-card">
-      <h2 id="lockTitle">Kirish talab qilinadi</h2>
-      <div id="lockText" class="subtitle">Chiplar faqat kirgan foydalanuvchilar uchun.</div>
-      <div class="auth-col" id="authBox">
-        <input id="em" class="in" placeholder="Email" type="email"/>
-        <input id="pw" class="in" placeholder="Parol (min 6)" type="password"/>
-        <button id="emailLogin" class="btn pri">Email orqali kirish</button>
-        <div class="subtitle" style="text-align:center">— yoki —</div>
-        <button id="googleBtn" class="btn">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" width="18" height="18">
-          <span>Google bilan kirish</span>
-        </button>
-      </div>
-      <div id="authErr" style="margin-top:8px;color:#c0392b;font-weight:700"></div>
-    </div>
-  </div>
-
-  <!-- VIEW PROFILE -->
-  <div id="viewProfileModal" class="modal">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div class="modal-title">Profil</div>
-        <div class="head-right">
-          <div class="head-user">
-            <div id="v_pic" class="pic"></div><div id="v_name" class="nm">—</div>
-          </div>
-          <button id="closeView" class="btn">✕</button>
-        </div>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field"><label>Ism</label><input id="v_first" disabled></div>
-          <div class="field"><label>Familiya</label><input id="v_last" disabled></div>
-          <div class="field"><label>Viloyat</label><input id="v_region" disabled></div>
-          <div class="field"><label>Tuman/Shahar</label><input id="v_district" disabled></div>
-          <div class="field"><label>Maktab</label><input id="v_school" disabled></div>
-          <div class="field"><label>Sinf / Status</label><input id="v_class" disabled></div>
-          <div class="field"><label>Telefon</label><input id="v_phone" disabled></div>
-          <div class="field"><label>Ball (points)</label><input id="v_points" disabled></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- EDIT PROFILE -->
-  <div id="profileModal" class="modal">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div class="modal-title">Profilni tahrirlash</div>
-        <button id="closeProfile" class="btn">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field"><label>Ism</label><input id="pf_first" required></div>
-          <div class="field"><label>Familiya</label><input id="pf_last" required></div>
-          <div class="field"><label>Viloyat</label><select id="pf_region" required></select></div>
-          <div class="field"><label>Tuman/Shahar</label><select id="pf_district" required></select></div>
-          <div class="field"><label>Maktab</label><select id="pf_school"></select><div class="subtitle">Topilmasa — quyida yozing</div></div>
-          <div class="field"><label>Maktab (yo‘q bo‘lsa yozing)</label><input id="pf_school_custom"></div>
-          <div class="field"><label>Sinf / Status</label>
-            <select id="pf_class" required>
-              <option value="">Tanlang</option><option>1</option><option>2</option><option>3</option><option>4</option>
-              <option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option>
-              <option>1-kurs</option><option>2-kurs</option><option>Talaba</option><option>O'qituvchi</option>
-            </select>
-          </div>
-          <div class="field"><label>Telefon</label><input id="pf_phone" required></div>
-          <div class="field"><label>Avatar (rasm)</label><input id="pf_avatar" type="file" accept="image/*"></div>
-        </div>
-        <div class="row" style="margin-top:12px;justify-content:flex-end">
-          <button id="saveProfile" class="btn pri">Saqlash</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="portal-root"></div>
-
-  <!-- UPDATED SCRIPT: chip.json + page/{id}.html mapping (with cache-busting) -->
+  <!-- Firebase v10 (modular CDN) -->
   <script type="module">
-    /* ---------- Firebase ---------- */
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-    import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import {
+      getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
+      setPersistence, browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword
+    } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
 
-    const firebaseConfig = {apiKey:"AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",authDomain:"xplusy-760fa.firebaseapp.com",projectId:"xplusy-760fa",storageBucket:"xplusy-760fa.firebasestorage.app",messagingSenderId:"992512966017",appId:"1:992512966017:web:5e919dbc9b8d8abcb43c80",measurementId:"G-459PLJ7P7L"};
+    // === 1) Firebase config (o’zingiznikiga almashtiring) ===
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      appId: "YOUR_APP_ID"
+    };
+
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    await setPersistence(auth, browserLocalPersistence);
 
-    // cache-busting version
-    const ver = 'v6';
+    // === 2) UI elementlari ===
+    const lock = document.createElement('div'); lock.className='lock'; lock.hidden = true;
+    lock.innerHTML = \`
+      <div class="card">
+        <div class="title"><img src="./logo.png" width="28" height="28" style="border-radius:8px"/><span>LeaderMath.<b>UZ</b></span></div>
+        <div class="hint">Ro‘yxatdan o‘ting yoki kiring — tizimga kirmaguncha kontent ko‘rinmaydi.</div>
 
-    /* ---------- Helpers ---------- */
-    const $=s=>document.querySelector(s);
-    const esc=s=>String(s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
-    const metaTheme=$('#meta-theme-color');
-    const setTheme=t=>{ document.documentElement.setAttribute('data-theme',t); localStorage.setItem('theme',t); metaTheme.content=(t==='dark')?'#101827':'#2E8B57'; };
-    setTheme(localStorage.getItem('theme')||'light');
-
-    /* ===================== HEADER LOADER (JSON -> DOM) ===================== */
-    async function loadHeaderFromJSON() {
-      const root = document.getElementById('headerRoot'); if (!root) return;
-
-      let conf;
-      try { conf = await fetch('./header.json', { cache:'no-store' }).then(r=>r.json()); } catch { conf = null; }
-
-      const logoHref = conf?.logo?.href ?? './';
-      const logoSrc  = conf?.logo?.src  ?? './logo.png';
-      const logoAlt  = conf?.logo?.alt  ?? 'LeaderMath';
-      const signInText = conf?.buttons?.signInText ?? 'Kirish';
-      const menuItems  = Array.isArray(conf?.menu) ? conf.menu : [];
-      const style = conf?.style || {};
-      const barMaxWidth = style.barMaxWidth ?? 1400;
-      const logoSize = style.logoSize ?? 64;
-      const rounded  = style.rounded ?? 16;
-
-      const hdrCSS = `
-        <style>
-          header.lm-hdr{position:relative;background:linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 82%, var(--bg-alt) 18%));border-bottom:1px solid var(--line);box-shadow:var(--shadow-sm)}
-          .lm-bar{max-width:${barMaxWidth}px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px}
-          .lm-logo{width:${logoSize}px;height:${logoSize}px;border-radius:${rounded}px;position:relative;isolation:isolate;background:url('${logoSrc}') center/cover no-repeat,linear-gradient(145deg,rgba(255,255,255,.35),rgba(255,255,255,.05));border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.5), var(--shadow-sm);transition:.25s}
-          .lm-logo:hover{transform:scale(1.05);box-shadow:0 6px 20px rgba(46,139,87,.25),0 0 0 6px rgba(46,139,87,.10)}
-          .lm-btn{appearance:none;border:1px solid var(--line);background:linear-gradient(180deg,var(--card),color-mix(in oklab,var(--card) 74%,var(--bg-alt) 26%));color:var(--text);padding:.7rem 1rem;border-radius:12px;font-weight:800;font-size:.92rem;display:inline-flex;align-items:center;gap:.6rem;cursor:pointer;transition:.25s;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),var(--shadow-sm)}
-          .lm-btn:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-          #userBox{position:relative}
-          .user-pill{border:1px solid var(--line);background:linear-gradient(180deg,var(--card),color-mix(in oklab,var(--card) 70%,var(--bg-alt) 30%));padding:.45rem .7rem;border-radius:var(--pill);display:flex;align-items:center;gap:.6rem;cursor:pointer;transition:.25s;box-shadow:var(--shadow-sm)}
-          .user-pill:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-          .avatar{width:44px;height:44px;border-radius:50%;background:url('${logoSrc}') center/cover no-repeat;border:2px solid color-mix(in oklab,var(--primary) 65%, transparent);box-shadow:0 0 0 4px color-mix(in oklab,var(--bg) 74%, transparent)}
-          .uname{font-weight:800;font-size:.92rem}.score{font-weight:900;color:var(--primary);font-size:.9rem;display:flex;align-items:center;gap:.25rem}.caret{font-size:.84rem;color:var(--text-muted)}
-          .menu{position:fixed;min-width:230px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--card),color-mix(in oklab,var(--card) 78%,var(--bg-alt) 22%));box-shadow:var(--shadow-lg);padding:.35rem 0;z-index:1000;opacity:0;visibility:hidden;transform:translateY(-8px);transition:.18s}
-          .menu.show{opacity:1;visibility:visible;transform:translateY(0)}
-          .mi{padding:.9rem 1rem;border-bottom:1px solid var(--line-2);cursor:pointer;font-weight:800;display:flex;align-items:center}
-          .mi:last-child{border-bottom:0}
-          .mi:hover{background:color-mix(in oklab,var(--bg-alt) 70%, transparent);color:var(--primary);transform:translateX(4px)}
-          .icon-img{width:20px;height:20px;margin-right:10px;filter:brightness(.6);transition:.25s}
-          .mi:hover .icon-img{transform:scale(1.1);filter:brightness(1)}
-        </style>
-      `;
-      const menuHTML = `
-        <div id="userMenu" class="menu">
-          ${menuItems.map(m => `
-            <div class="mi" id="${m.id}">
-              <img class="icon-img" src="${m.icon}" alt="">
-              <span>${m.label}</span>
-            </div>
-          `).join('')}
+        <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"/></div>
+        <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"/></div>
+        <div class="rowx">
+          <button id="login"  class="btn primary">Kirish</button>
+          <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
         </div>
-      `;
-      root.classList.add('lm-hdr');
-      root.innerHTML = `
-        ${hdrCSS}
-        <div class="lm-bar">
-          <a class="lm-logo" href="${logoHref}" aria-label="${logoAlt}"></a>
-          <div style="display:flex; align-items:center; gap:12px">
-            <button id="signInBtn" class="lm-btn">${signInText}</button>
-            <div id="userBox" style="display:none">
-              <div id="userPill" class="user-pill">
-                <div id="userAvatar" class="avatar"></div>
-                <div id="userName" class="uname">Foydalanuvchi</div>
-                <div id="userScore" class="score">0 ⭐</div>
-                <div class="caret">▾</div>
+        <div style="height:10px"></div>
+        <button id="google" class="btn full"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"/> Google bilan kirish</button>
+      </div>\`;
+    document.body.appendChild(lock);
+
+    // Header user chip
+    const userSlot = () => document.getElementById('user-slot');
+
+    // === 3) Auth holatini kuzatish va UI ni bloklash ===
+    const setLocked = (locked) => { lock.hidden = !locked; document.getElementById('app').hidden = locked; };
+
+    onAuthStateChanged(auth, (u)=>{
+      if(!u){ // kirmagan — blok
+        setLocked(true);
+        document.querySelectorAll('.chip').forEach(c=>c.disabled=true);
+        const slot = userSlot(); if(slot) slot.innerHTML = '';
+      }else{
+        setLocked(false);
+        document.querySelectorAll('.chip').forEach(c=>c.disabled=false);
+        const slot = userSlot();
+        if(slot){
+          slot.innerHTML = \`
+            <div class="userchip">
+              <div class="avatar"></div>
+              <div style="display:grid;line-height:1">
+                <b style="font-size:14px">\${u.displayName||u.email||'Foydalanuvchi'}</b>
+                <small style="color:var(--muted)">\${u.email||''}</small>
               </div>
-              ${menuHTML}
-            </div>
-          </div>
-        </div>
-      `;
-
-      // Menu wiring
-      const userPill = document.getElementById('userPill');
-      const userMenu = document.getElementById('userMenu');
-      const placeMenu = () => {
-        const r = userPill.getBoundingClientRect();
-        document.body.appendChild(userMenu);
-        userMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - userMenu.offsetWidth - 8)) + 'px';
-        userMenu.style.top  = (r.bottom + 8) + 'px';
-      };
-      const openMenu  = () => { userMenu.style.visibility='hidden'; userMenu.classList.add('show'); placeMenu(); requestAnimationFrame(()=>userMenu.style.visibility='visible'); };
-      const closeMenu = () => userMenu.classList.remove('show');
-
-      userPill?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        userMenu.classList.contains('show') ? closeMenu() : openMenu();
-      });
-      document.addEventListener('click', closeMenu);
-      ['resize','scroll'].forEach(ev => window.addEventListener(ev, () => userMenu.classList.contains('show') && placeMenu(), true));
-
-      // Actions (theme/view/edit/signOut)
-      const themeToggle = document.getElementById('themeToggle');
-      if (themeToggle) themeToggle.onclick = () => {
-        const t = document.documentElement.getAttribute('data-theme')==='dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', t);
-        localStorage.setItem('theme', t);
-        const metaTheme = document.querySelector('#meta-theme-color');
-        if (metaTheme) metaTheme.content = (t==='dark') ? '#101827' : '#2E8B57';
-      };
-      const viewProfile = document.getElementById('viewProfile');
-      if (viewProfile) viewProfile.onclick = async () => {
-        const u = auth.currentUser; if(!u) return;
-        const snap = await getDoc(doc(db,'users',u.uid));
-        const p = snap.exists()?snap.data():JSON.parse(localStorage.getItem('profile')||'null');
-        openView(p||{});
-      };
-      const editProfile = document.getElementById('editProfile');
-      if (editProfile) editProfile.onclick = async () => {
-        const u = auth.currentUser; if(!u) return;
-        const snap = await getDoc(doc(db,'users',u.uid));
-        const p = snap.exists()?snap.data():JSON.parse(localStorage.getItem('profile')||'null');
-        openProfileModal(p||{});
-      };
-      const signOutBtn = document.getElementById('signOutBtn');
-      if (signOutBtn) signOutBtn.onclick = () => signOut(auth);
-
-      // Lock modal trigger
-      const signInBtn = document.getElementById('signInBtn');
-      signInBtn?.addEventListener('click', ()=>{ document.getElementById('lockCover').classList.add('show'); });
-    }
-
-    /* ---------- Chips from chip.json (ICON-ONLY PNG) ---------- */
-    const chipsEl = $('#chips'), contentEl = $('#content');
-
-    let chipsData = { chips: [] };
-    try { chipsData = await fetch('./chip.json', { cache:'no-store' }).then(r=>r.json()); } catch {}
-    const chips = Array.isArray(chipsData.chips) ? chipsData.chips : [];
-
-    let visibleChips = [];
-
-    function renderChips(){ console.log('renderChips() run');
-      visibleChips = [];
-      const items = [];
-
-      for (const c of chips){
-        const id = String(c?.id||'').trim();
-        const icon = (c?.icon||'').trim();
-        if(!id) continue;
-        if(!icon || !/\.png(\?.*)?$/i.test(icon)) continue; // PNG icon shart
-
-        const idx = visibleChips.push({ id, icon, title: c.title||c.label||id }) - 1;
-        items.push(`
-          <button class="chip" data-idx="${idx}" aria-label="${esc(visibleChips[idx].title)}" title="${esc(visibleChips[idx].title)}">
-            <img class="chip-img" src="${esc(icon)}" alt="${esc(visibleChips[idx].title)}"/>
-          </button>
-        `);
-      }
-
-      chipsEl.innerHTML = items.join('');
-      chipsEl.querySelectorAll('.chip').forEach(b=>{
-        b.onclick = () => openChipAt(parseInt(b.dataset.idx,10));
-      });
-
-      highlight();
-
-      if(!visibleChips.length){
-        contentEl.innerHTML = `
-          <div style="padding:28px;text-align:center">
-            <h3 style="font-weight:900;color:var(--primary)">Icon chiplar topilmadi</h3>
-            <p class="subtitle">Iltimos, <code>chip.json</code> ga <b>id</b> va <b>.png</b> iconli chiplar qo‘shing.</p>
-          </div>`;
-      }
-    }
-
-    async function openChipAt(idx){ console.log('openChipAt idx=', idx);
-      const c = visibleChips[idx];
-      if(!c) return;
-
-      window.scrollTo({top:0,behavior:'smooth'});
-
-      const url = \`./page/\${encodeURIComponent(c.id)}.html\`;
-      let html = '';
-      try{
-        const res = await fetch(url, { cache:'no-store' });
-        html = res.ok ? await res.text() : \`<div style="padding:20px">Sahifa topilmadi: <code>\${url}</code></div>\`;
-      }catch(e){
-        html = \`<div style="padding:20px;color:#c0392b">Yuklash xatosi: \${String(e)}</div>\`;
-      }
-      setChipHTML(html);
-
-      localStorage.setItem('lastChipId', c.id);
-      const qs = new URLSearchParams(location.search);
-      qs.set('id', c.id);
-      history.replaceState(null,'',\`?\${qs.toString()}\`);
-
-      highlight();
-    }
-
-    function highlight(){
-      const urlId = new URLSearchParams(location.search).get('id');
-      const savedId = localStorage.getItem('lastChipId');
-      const activeId = urlId || savedId;
-
-      chipsEl.querySelectorAll('.chip').forEach((b,i)=>{
-        const k = visibleChips[i]?.id;
-        b.classList.toggle('active', !!activeId && k===activeId);
-      });
-    }
-
-    function setChipHTML(html){
-      contentEl.innerHTML = '';
-      const wrap=document.createElement('div');
-      wrap.className='chip-enter';
-      wrap.innerHTML = html || '<p class="subtitle" style="padding:20px;text-align:center">Kontent yo‘q</p>';
-      contentEl.appendChild(wrap);
-      wrap.querySelectorAll('script').forEach(old=>{
-        const s=document.createElement('script');
-        for (const a of old.attributes) s.setAttribute(a.name,a.value);
-        s.textContent=old.textContent; document.body.appendChild(s);
-        setTimeout(()=>s.remove(),0);
-      });
-      requestAnimationFrame(()=>wrap.classList.add('chip-enter-active'));
-    }
-
-    /* ---------- Regionlar (profil selectlar) ---------- */
-    const regions = await fetch('./region.json?v='+ver, {cache:'no-store'}).then(r=>r.json()).catch(()=>({regions:[]}));
-    const pf_first=$('#pf_first'), pf_last=$('#pf_last'), pf_region=$('#pf_region'), pf_district=$('#pf_district'), pf_school=$('#pf_school'), pf_school_custom=$('#pf_school_custom'), pf_class=$('#pf_class'), pf_phone=$('#pf_phone'), pf_avatar=$('#pf_avatar');
-    function populateRegions(){ pf_region.innerHTML = `<option value="">Tanlang</option>` + (regions.regions||[]).map(r=>`<option>${esc(r.name)}</option>`).join(''); }
-    function populateDistricts(){ const r=(regions.regions||[]).find(x=>x.name===pf_region.value); const d=r?.districts||[]; pf_district.innerHTML = `<option value="">Tanlang</option>` + d.map(x=>`<option>${esc(x.name)}</option>`).join(''); populateSchools(); }
-    function populateSchools(){ const r=(regions.regions||[]).find(x=>x.name===pf_region.value); const d=r?.districts?.find(x=>x.name===pf_district.value); const s=d?.schools||[]; pf_school.innerHTML = `<option value="">Tanlang</option>` + s.map(x=>`<option>${esc(x)}</option>`).join(''); }
-    pf_region.onchange=populateDistricts; pf_district.onchange=populateSchools;
-
-    const readFileAsDataURL=f=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(f); });
-    const profileIsComplete=u=> u&&u.first&&u.last&&(u.region&&u.district)&&(u.school||u.schoolCustom)&&u.class&&u.phone;
-
-    const profileModal=$('#profileModal'), closeProfile=$('#closeProfile'), saveProfile=$('#saveProfile');
-    async function openProfileModal(prefill){
-      profileModal.classList.add('show'); populateRegions();
-      if(prefill){ pf_first.value=prefill.first||''; pf_last.value=prefill.last||''; pf_region.value=prefill.region||''; populateDistricts(); pf_district.value=prefill.district||''; populateSchools(); pf_school.value=prefill.school||''; pf_school_custom.value=prefill.schoolCustom||''; pf_class.value=prefill.class||''; pf_phone.value=prefill.phone||''; }
-    }
-    const closeProfileModal=()=>profileModal.classList.remove('show'); closeProfile.onclick=closeProfileModal;
-
-    saveProfile.onclick = async () => {
-      const u={ first:pf_first.value.trim(), last:pf_last.value.trim(), region:pf_region.value, district:pf_district.value, school:pf_school.value, schoolCustom:pf_school_custom.value.trim(), class:pf_class.value, phone:pf_phone.value.trim() };
-      if(!profileIsComplete(u)){ alert('Iltimos, barcha majburiy maydonlarni to‘ldiring.'); return; }
-      let avatarData=null; try{ if(pf_avatar.files?.[0]) avatarData=await readFileAsDataURL(pf_avatar.files[0]); }catch{}
-      const user=auth.currentUser; const uid=user?.uid; if(!uid) return;
-      let prev=null; try{ const snap=await getDoc(doc(db,'users',uid)); prev=snap.exists()?snap.data():null; }catch{}
-      const payload={ name:\`\${u.first} \${u.last}\`.trim(), first:u.first, last:u.last, region:u.region, district:u.district, school:u.school||u.schoolCustom, class:u.class, phone:u.phone, updatedAt:serverTimestamp() };
-      if(avatarData!==null) payload.avatar=avatarData;
-      try{
-        await setDoc(doc(db,'users',uid), payload, {merge:true});
-        const merged={...prev,...payload}; if(avatarData!==null) merged.avatar=avatarData;
-        localStorage.setItem('profile', JSON.stringify(merged));
-        applyHeaderProfile({ ...merged, photoURL: merged.avatar || user?.photoURL });
-        closeProfileModal(); document.getElementById('lockCover').classList.remove('show'); contentEl.classList.remove('locked');
-      }catch(e){ alert('Saqlashda xato: '+e.message); }
-    };
-
-    // view profile helpers
-    const viewModal=$('#viewProfileModal'), closeView=$('#closeView');
-    const v_pic=$('#v_pic'), v_name=$('#v_name');
-    const v_first=$('#v_first'), v_last=$('#v_last'), v_region=$('#v_region'), v_district=$('#v_district'), v_school=$('#v_school'), v_class=$('#v_class'), v_phone=$('#v_phone'), v_points=$('#v_points');
-    const openView=(p)=>{ v_first.value=p?.first||''; v_last.value=p?.last||''; v_region.value=p?.region||''; v_district.value=p?.district||''; v_school.value=p?.school||''; v_class.value=p?.class||''; v_phone.value=p?.phone||''; v_points.value=(p?.points??0); v_name.textContent=p?.name||'Foydalanuvchi'; v_pic.style.backgroundImage=p?.avatar?\`url('\${p.avatar}')\`:"url('./logo.png')"; viewModal.classList.add('show'); };
-    const closeViewModal=()=>viewModal.classList.remove('show'); closeView.onclick=closeViewModal;
-
-    /* ---------- Header profile & auth state ---------- */
-    const applyHeaderProfile=p=>{
-      const userAvatar=document.getElementById('userAvatar');
-      const userName=document.getElementById('userName');
-      const userScore=document.getElementById('userScore');
-      if(userAvatar) userAvatar.style.backgroundImage=p?.photoURL?\`url('\${p.photoURL}')\`:"url('./logo.png')";
-      if(userName) userName.textContent=p?.name||'Foydalanuvchi';
-      if(userScore) userScore.textContent=\`\${p?.points??0} ⭐\`;
-    };
-
-    function enableSecurity(){ document.addEventListener('contextmenu',e=>e.preventDefault(),{passive:false}); }
-    function disableSecurityHandlers(){}
-
-    let unsubUser=null;
-
-    function bindAuthListener(){
-      const signInBtn=()=>document.getElementById('signInBtn');
-      const userBox=()=>document.getElementById('userBox');
-      if(unsubUser){ unsubUser(); unsubUser=null; }
-
-      onAuthStateChanged(auth, async (user)=>{
-        if(!user){
-          enableSecurity();
-          signInBtn()?.style && (signInBtn().style.display='');
-          userBox()?.style && (userBox().style.display='none');
-          return;
+              <button id="logout" class="logout">Chiqish</button>
+            </div>\`;
+          slot.querySelector('#logout').onclick = ()=>signOut(auth);
         }
-        signInBtn()?.style && (signInBtn().style.display='none');
-        userBox()?.style && (userBox().style.display='block');
-        disableSecurityHandlers();
+      }
+    });
 
-        const ref=doc(db,'users',user.uid);
-        unsubUser = onSnapshot(ref,(snap)=>{
-          const p = snap.exists()? snap.data(): JSON.parse(localStorage.getItem('profile')||'null') || {};
-          applyHeaderProfile({ ...p, photoURL: p?.avatar || user?.photoURL });
-        });
+    // === 4) Kirish tugmalari ===
+    lock.addEventListener('click', async (e)=>{
+      const id = e.target.id;
+      if(id==='google'){
+        try{ await signInWithPopup(auth, new GoogleAuthProvider()); }catch(err){ alert(err.message); }
+      }else if(id==='login'){
+        const eml = lock.querySelector('#eml').value.trim();
+        const pwd = lock.querySelector('#pwd').value;
+        try{ await signInWithEmailAndPassword(auth, eml, pwd); }catch(err){ alert(err.message); }
+      }else if(id==='signup'){
+        const eml = lock.querySelector('#eml').value.trim();
+        const pwd = lock.querySelector('#pwd').value;
+        try{ await createUserWithEmailAndPassword(auth, eml, pwd); }catch(err){ alert(err.message); }
+      }
+    });
 
-        let profile=null; try{ const s=await getDoc(ref); profile=s.exists()?s.data():null; }catch{}
-        if(!profile || !(profile.first&&profile.last)){
-          await openProfileModal({
-            first:(user.displayName||'').split(' ')[0]||'',
-            last:(user.displayName||'').split(' ')[1]||'',
-            region:'', district:'', school:'', schoolCustom:'', class:'', phone:''
-          });
-        }
+    // === 5) Chip navigatsiya + sandbox iframe render ===
+    const state = { sections:[], activeId:null };
+    async function loadHome(){
+      const res = await fetch('./home.json', {cache:'no-store'});
+      const data = await res.json();
+      state.sections = Array.isArray(data.sections)? data.sections : [];
+      renderChips(); renderSections();
+      if(state.sections[0]) activate(state.sections[0].id||('sec0'));
+    }
+
+    function renderChips(){
+      const bar = document.getElementById('chipbar'); bar.innerHTML='';
+      state.sections.forEach((s,i)=>{
+        const btn = document.createElement('button');
+        btn.className='chip'+(i===0?' active':''); btn.textContent = s.title || s.id || ('Bo‘lim '+(i+1));
+        btn.dataset.target = s.id||('sec'+i); btn.onclick = ()=> activate(btn.dataset.target);
+        bar.appendChild(btn);
       });
     }
 
-    /* ---------- Auth modal actions ---------- */
-    const googleBtn=$('#googleBtn'), emailLogin=$('#emailLogin'), em=$('#em'), pw=$('#pw'), authErr=$('#authErr');
-    googleBtn.onclick=async()=>{ authErr.textContent=''; try{ await signInWithPopup(auth, new GoogleAuthProvider()); }catch(e){ authErr.textContent=e.message; } };
-    emailLogin.onclick=async()=>{
-      authErr.textContent='';
-      const email=(em.value||'').trim(), pass=pw.value||'';
-      if(!email||pass.length<6){ authErr.textContent='Email yoki parol xato (min 6)'; return; }
-      try{ await signInWithEmailAndPassword(auth,email,pass); }
-      catch(e){
-        if(String(e.code||'').includes('user-not-found')){
-          try{ await createUserWithEmailAndPassword(auth,email,pass);}catch(er){ authErr.textContent=er.message;}
-        } else authErr.textContent=e.message;
-      }
-    };
+    function renderSections(){
+      const host = document.getElementById('sections'); host.innerHTML = '';
+      state.sections.forEach((s,i)=>{
+        const secId = s.id || ('sec'+i);
+        const outer = document.createElement('section');
+        outer.className = 'section'+(s.fullBleed?' h-bleed':''); outer.dataset.section = secId;
 
-    /* ---------- Init (header -> auth -> chips) ---------- */
-    await loadHeaderFromJSON();
-    bindAuthListener();
-    renderChips();
+        const sh = document.createElement('div');
+        sh.className = 'section-hdr'+(s.fullBleed?' bleed':''); sh.innerHTML = \`<h3>\${s.title||''}</h3>\`;
+        if(!s.title) sh.style.display='none';
 
-    (async function openInitial(){
-      const urlId = new URLSearchParams(location.search).get('id');
-      const savedId = localStorage.getItem('lastChipId');
-      const key = urlId || savedId || (visibleChips[0]?.id || '');
-      const idx = visibleChips.findIndex(c => c.id === key);
-      if(idx >= 0) await openChipAt(idx);
-    })();
+        const cont = document.createElement('div');
+        cont.className = 'iframe-wrap'+(s.fullBleed?' bleed':'');
+        const ifr = document.createElement('iframe');
+        ifr.className='sbx';
+        ifr.setAttribute('sandbox', s.sandbox || 'allow-scripts allow-forms');
+        if(s.mode==='url' && s.src){
+          ifr.src = s.src;
+        }else{
+          const base = s.baseHref ? \`<base href="\${s.baseHref}">\` : '';
+          ifr.srcdoc = \`<!doctype html><html><head>\${base}<meta charset='utf-8'></head><body>\${s.contentHtml||''}</body></html>\`;
+        }
+        if(s.fullBleed) ifr.style.background='transparent';
+        cont.appendChild(ifr);
 
-    document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
-    document.getElementById('closeView')?.addEventListener('click',()=>document.getElementById('viewProfileModal').classList.remove('show'));
-    document.getElementById('closeProfile')?.addEventListener('click',()=>document.getElementById('profileModal').classList.remove('show'));
+        outer.appendChild(sh); outer.appendChild(cont);
+        host.appendChild(outer);
+      });
+    }
+
+    function activate(id){
+      state.activeId = id;
+      document.querySelectorAll('.chip').forEach(c=>{ c.classList.toggle('active', c.dataset.target===id); });
+      document.querySelectorAll('[data-section]').forEach(x=>{ x.style.display = (x.dataset.section===id)? 'block':'none'; });
+      const vis = document.querySelector(\`[data-section="\${id}"]\`);
+      if(vis){ vis.scrollIntoView({behavior:'smooth',block:'start'}); }
+    }
+
+    // === 6) Iframe avto-height: ichkaridan postMessage qilsin ===
+    window.addEventListener('message', (ev)=>{
+      const msg = ev.data || {}; if(!msg.__lmResize) return;
+      const { id, height } = msg;
+      const sec = document.querySelector(\`[data-section="\${id}"]\`);
+      if(!sec) return;
+      const ifr = sec.querySelector('iframe'); if(!ifr) return;
+      const h = Math.max(parseInt(height,10)||0, 200);
+      ifr.style.height = h + 'px';
+    });
+
+    // === 7) Boshlash ===
+    await loadHome();
   </script>
+</head>
+<body>
+  <header class="hdr">
+    <div class="row">
+      <div class="brand">
+        <img src="./logo.png" alt="LM" width="28" height="28" style="border-radius:8px"/>
+        <span>LeaderMath.<b>UZ</b></span>
+      </div>
+      <div class="grow"></div>
+      <div id="user-slot"></div>
+    </div>
+    <nav id="chipbar" class="chipbar"></nav>
+  </header>
 
-<script>
-// One-time: remove any old service workers that might cache stale files
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs){
-    regs.forEach(function(r){ r.unregister(); });
-    // Optional hard reload on first visit after unregister
-    if (!localStorage.getItem('lm-sw-cleared')) {
-      localStorage.setItem('lm-sw-cleared','1');
-      setTimeout(function(){ location.reload(true); }, 300);
-    }
-  });
-}
-</script>
-
+  <main id="app">
+    <div id="sections"></div>
+  </main>
 </body>
 </html>
