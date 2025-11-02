@@ -76,7 +76,8 @@
       try{ await setPersistence(auth, browserLocalPersistence); }catch(e){ console.warn('setPersistence:', e); }
 
       // --- Auth overlay ---
-      const lock = document.createElement('div'); lock.className='lock'; lock.hidden = true;
+      let lock = document.getElementById('auth-lock');
+      if(!lock){ lock = document.createElement('div'); lock.id='auth-lock'; lock.className='lock'; lock.hidden = true; // already appended above}
       lock.innerHTML = `
         <div class="card">
           <div class="title"><img src="./logo.png" width="28" height="28" style="border-radius:8px"/><span>LeaderMath.<b>UZ</b></span></div>
@@ -92,13 +93,29 @@
           <div style="height:10px"></div>
           <button id="google" class="btn full"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"/> Google bilan kirish</button>
         </div>`;
-      document.body.appendChild(lock);
+      // already appended above
 
       const userSlot = () => document.getElementById('user-slot');
-      const setLocked = (locked) => { lock.hidden = !locked; document.getElementById('app').hidden = locked; };
+      const setLocked = (locked) => {
+        const appEl = document.getElementById('app');
+        if(appEl) appEl.hidden = locked;
+        if(!locked){
+          // hide and then remove from DOM to avoid overlay intercepting clicks
+          if(lock){ lock.style.display='none'; setTimeout(()=>{ try{ lock.remove(); }catch(e){} }, 0); }
+        }else{
+          if(lock){ lock.style.removeProperty('display'); lock.hidden = false; }
+        }
+      };
 
       onAuthStateChanged(auth, (u)=>{
+        
         if(!u){
+          // Recreate overlay if it was removed earlier
+          if(!document.getElementById('auth-lock')){
+            const nl = document.createElement('div'); nl.id='auth-lock'; nl.className='lock';
+            nl.innerHTML = lock.innerHTML; document.body.appendChild(nl); lock = nl;
+          }
+
           setLocked(true);
           document.querySelectorAll('.chip').forEach(c=>c.disabled=true);
           const slot = userSlot(); if(slot) slot.innerHTML = '';
@@ -224,6 +241,7 @@
       });
 
       await loadHome();
+      if(auth.currentUser){ setLocked(false); }
     }
 
     // start safely (no top-level await issues)
