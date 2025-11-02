@@ -14,19 +14,16 @@
     }
     *{box-sizing:border-box} html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,Segoe UI,Arial}
-
     header.hdr{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#F6FBF8 65%,#F6FBF8c0 80%,transparent);
       border-bottom:1px solid var(--frame);backdrop-filter:saturate(1.1) blur(6px)}
     .row{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:10px 16px}
     .brand{display:flex;align-items:center;gap:10px;font-weight:800}
     .brand b{color:var(--brand)}
     .grow{flex:1}
-
     .chipbar{max-width:1180px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px}
     .chip{padding:8px 12px;border:1px solid var(--frame);border-radius:var(--pill);cursor:pointer;background:#fff}
     .chip.active{background:var(--brand);color:#fff;border-color:var(--brand)}
     .chip:disabled{opacity:.6;cursor:not-allowed}
-
     main{max-width:1180px;margin:0 auto;padding:12px 16px 40px}
     section.section{background:var(--card);border:1px solid var(--frame);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
     .section.h-bleed{border:none;border-radius:0;box-shadow:none}
@@ -34,24 +31,21 @@
     .section-hdr h3{margin:0;font-size:18px}
     .iframe-wrap{position:relative}
     iframe.sbx{display:block;width:100%;border:0;background:#fff;min-height:600px}
-
     .bleed{width:100vw;margin-left:50%;transform:translateX(-50%)}
-
     .lock{position:fixed;inset:0;background:linear-gradient(180deg,#F6FBF8ee,#F6FBF8ff);display:grid;place-items:center;z-index:50}
     .card{width:min(420px,94vw);background:#fff;border:1px solid var(--frame);border-radius:18px;box-shadow:var(--shadow);padding:18px}
     .title{display:flex;align-items:center;gap:10px;font-weight:800;margin-bottom:10px}
     .hint{color:var(--muted);font-size:14px;margin-bottom:12px}
-
     .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--frame);background:#fff;cursor:pointer}
     .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
     .btn.full{width:100%}
     .fld{display:grid;gap:6px;margin:8px 0}
     .fld input{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--frame);outline:none}
     .rowx{display:flex;gap:8px;align-items:center;justify-content:space-between}
-
     .userchip{display:flex;gap:10px;align-items:center;border:1px solid var(--frame);padding:6px 10px;border-radius:999px;background:#fff}
     .avatar{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#cfe7db,#eaf6f0)}
     .logout{background:#fff;border:1px solid var(--frame);border-radius:10px;padding:6px 10px;cursor:pointer}
+    #err{color:#b00020;min-height:18px;margin-top:4px;font-size:13px}
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
@@ -61,7 +55,6 @@
     } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
 
     async function boot(){
-      // --- Firebase config (o'zingizniki bilan almashtiring) ---
       const firebaseConfig = {
         apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
         authDomain: "xplusy-760fa.firebaseapp.com",
@@ -75,102 +68,105 @@
       const auth = getAuth(app);
       try{ await setPersistence(auth, browserLocalPersistence); }catch(e){ console.warn('setPersistence:', e); }
 
-      // --- Auth overlay ---
-      let lock = document.getElementById('auth-lock');
-      if(!lock){ lock = document.createElement('div'); lock.id='auth-lock'; lock.className='lock'; lock.hidden = true; // already appended above}
-      lock.innerHTML = `
-        <div class="card">
-          <div class="title"><img src="./logo.png" width="28" height="28" style="border-radius:8px"/><span>LeaderMath.<b>UZ</b></span></div>
-          <div class="hint">Ro‘yxatdan o‘ting yoki kiring — tizimga kirmaguncha kontent ko‘rinmaydi.</div>
+      var lock = document.getElementById('auth-lock');
+      if(!lock){
+        lock = document.createElement('div');
+        lock.id='auth-lock'; lock.className='lock'; lock.hidden=true;
+        var html = '' +
+          '<div class="card">' +
+          ' <div class="title"><img src="./logo.png" width="28" height="28" style="border-radius:8px"/><span>LeaderMath.<b>UZ</b></span></div>' +
+          ' <div class="hint">Ro‘yxatdan o‘ting yoki kiring — tizimga kirmaguncha kontent ko‘rinmaydi.</div>' +
+          ' <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"/></div>' +
+          ' <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"/></div>' +
+          ' <div id="err"></div>' +
+          ' <div class="rowx">' +
+          '   <button id="login" class="btn primary">Kirish</button>' +
+          '   <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>' +
+          ' </div>' +
+          ' <div style="height:10px"></div>' +
+          ' <button id="google" class="btn full"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"/> Google bilan kirish</button>' +
+          '</div>';
+        lock.innerHTML = html;
+        document.body.appendChild(lock);
+      }
 
-          <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"/></div>
-          <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"/></div>
-          <div id="err" style="color:#b00020;min-height:18px;margin-top:4px;font-size:13px"></div>
-          <div class="rowx">
-            <button id="login"  class="btn primary">Kirish</button>
-            <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
-          </div>
-          <div style="height:10px"></div>
-          <button id="google" class="btn full"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18"/> Google bilan kirish</button>
-        </div>`;
-      // already appended above
-
-      const userSlot = () => document.getElementById('user-slot');
-      const setLocked = (locked) => {
-        const appEl = document.getElementById('app');
+      function setLocked(locked){
+        var appEl = document.getElementById('app');
         if(appEl) appEl.hidden = locked;
         if(!locked){
-          // hide and then remove from DOM to avoid overlay intercepting clicks
-          if(lock){ lock.style.display='none'; setTimeout(()=>{ try{ lock.remove(); }catch(e){} }, 0); }
+          if(lock){ lock.style.display='none'; setTimeout(function(){ try{ lock.remove(); }catch(e){} }, 0); }
         }else{
-          if(lock){ lock.style.removeProperty('display'); lock.hidden = false; }
+          if(lock){ lock.style.removeProperty('display'); lock.hidden=false; }
         }
-      };
+      }
 
-      onAuthStateChanged(auth, (u)=>{
-        
+      function setBusy(b){
+        var btns = lock.querySelectorAll('button');
+        for(var i=0;i<btns.length;i++){ btns[i].disabled = b; }
+      }
+
+      onAuthStateChanged(auth, function(u){
         if(!u){
-          // Recreate overlay if it was removed earlier
           if(!document.getElementById('auth-lock')){
-            const nl = document.createElement('div'); nl.id='auth-lock'; nl.className='lock';
+            var nl = document.createElement('div'); nl.id='auth-lock'; nl.className='lock';
             nl.innerHTML = lock.innerHTML; document.body.appendChild(nl); lock = nl;
           }
-
           setLocked(true);
-          document.querySelectorAll('.chip').forEach(c=>c.disabled=true);
-          const slot = userSlot(); if(slot) slot.innerHTML = '';
+          var chips = document.querySelectorAll('.chip');
+          for(var i=0;i<chips.length;i++){ chips[i].disabled=true; }
+          var slot = document.getElementById('user-slot'); if(slot) slot.innerHTML='';
         }else{
           setLocked(false);
-          const el = document.querySelector('#err'); if(el) el.textContent='';
-          document.querySelectorAll('.chip').forEach(c=>c.disabled=false);
-          const slot = userSlot();
-          if(slot){
-            slot.innerHTML = `
-              <div class="userchip">
-                <div class="avatar"></div>
-                <div style="display:grid;line-height:1">
-                  <b style="font-size:14px">${u.displayName||u.email||'Foydalanuvchi'}</b>
-                  <small style="color:var(--muted)">${u.email||''}</small>
-                </div>
-                <button id="logout" class="logout">Chiqish</button>
-              </div>`;
-            slot.querySelector('#logout').onclick = ()=>signOut(auth);
+          var chips2 = document.querySelectorAll('.chip');
+          for(var j=0;j<chips2.length;j++){ chips2[j].disabled=false; }
+          var slot2 = document.getElementById('user-slot');
+          if(slot2){
+            var htmlChip = '' +
+              '<div class="userchip">' +
+              ' <div class="avatar"></div>' +
+              ' <div style="display:grid;line-height:1">' +
+              '   <b style="font-size:14px">' + (u.displayName||u.email||'Foydalanuvchi') + '</b>' +
+              '   <small style="color:var(--muted)">' + (u.email||'') + '</small>' +
+              ' </div>' +
+              ' <button id="logout" class="logout">Chiqish</button>' +
+              '</div>';
+            slot2.innerHTML = htmlChip;
+            var lo = slot2.querySelector('#logout'); if(lo) lo.onclick=function(){ signOut(auth); };
           }
+          var errEl = document.getElementById('err'); if(errEl){ errEl.textContent=''; }
         }
       });
 
-      lock.addEventListener('click', async (e)=>{
-        const setBusy=(b)=>{
-          lock.querySelectorAll('button').forEach(btn=>btn.disabled=b);
-        };
-        const id = e.target.id;
+      lock.addEventListener('click', async function(e){
+        var id = e.target.id;
         try{
           setBusy(true);
           if(id==='google'){
             await signInWithPopup(auth, new GoogleAuthProvider());
           }else if(id==='login'){
-            const eml = lock.querySelector('#eml').value.trim();
-            const pwd = lock.querySelector('#pwd').value;
+            var eml = lock.querySelector('#eml').value.trim();
+            var pwd = lock.querySelector('#pwd').value;
             await signInWithEmailAndPassword(auth, eml, pwd);
           }else if(id==='signup'){
-            const eml = lock.querySelector('#eml').value.trim();
-            const pwd = lock.querySelector('#pwd').value;
-            await createUserWithEmailAndPassword(auth, eml, pwd);
-            // success
+            var eml2 = lock.querySelector('#eml').value.trim();
+            var pwd2 = lock.querySelector('#pwd').value;
+            await createUserWithEmailAndPassword(auth, eml2, pwd2);
           }
         }catch(err){
-          const msg = (err && err.message)? err.message : String(err);
-          const el = lock.querySelector('#err'); if(el) el.textContent = msg;
+          var msg = (err && err.message)? err.message : String(err);
+          var el = lock.querySelector('#err'); if(el) el.textContent = msg;
           console.error('Auth error:', err);
-        } finally { setBusy(false); }
+        }finally{
+          setBusy(false);
+        }
       });
 
-      const state = { sections:[], activeId:null };
+      var state = { sections:[], activeId:null };
       async function loadHome(){
-        let data = null;
+        var data = null;
         try{
-          const res = await fetch('./home.json', {cache:'no-store'});
-          if(!res.ok){ throw new Error('home.json topilmadi yoki 404.'); }
+          var res = await fetch('./home.json', {cache:'no-store'});
+          if(!res.ok){ throw new Error('home.json topilmadi yoki 404'); }
           data = await res.json();
         }catch(e){
           console.error('home.json parse error:', e);
@@ -179,64 +175,76 @@
         }
         state.sections = Array.isArray(data.sections)? data.sections : [];
         renderChips(); renderSections();
-        if(state.sections[0]) activate(state.sections[0].id||('sec0'));
+        if(state.sections.length>0){
+          var firstId = state.sections[0].id || 'sec0';
+          activate(firstId);
+        }
       }
 
       function renderChips(){
-        const bar = document.getElementById('chipbar'); bar.innerHTML='';
-        state.sections.forEach((s,i)=>{
-          const btn = document.createElement('button');
-          btn.className='chip'+(i===0?' active':''); btn.textContent = s.title || s.id || ('Bo‘lim '+(i+1));
-          btn.dataset.target = s.id||('sec'+i); btn.onclick = ()=> activate(btn.dataset.target);
+        var bar = document.getElementById('chipbar'); bar.innerHTML='';
+        for(var i=0;i<state.sections.length;i++){
+          var s = state.sections[i];
+          var btn = document.createElement('button');
+          btn.className = 'chip' + (i===0?' active':'');
+          btn.textContent = s.title || s.id || ('Bo‘lim ' + (i+1));
+          btn.dataset.target = s.id || ('sec'+i);
+          btn.onclick = (function(target){ return function(){ activate(target); }; })(btn.dataset.target);
           bar.appendChild(btn);
-        });
+        }
       }
 
       function renderSections(){
-        const host = document.getElementById('sections'); host.innerHTML = '';
-        state.sections.forEach((s,i)=>{
-          const secId = s.id || ('sec'+i);
-          const outer = document.createElement('section');
-          outer.className = 'section'+(s.fullBleed?' h-bleed':''); outer.dataset.section = secId;
+        var host = document.getElementById('sections'); host.innerHTML='';
+        for(var i=0;i<state.sections.length;i++){
+          var s = state.sections[i];
+          var secId = s.id || ('sec'+i);
+          var outer = document.createElement('section');
+          outer.className = 'section' + (s.fullBleed?' h-bleed':'');
+          outer.dataset.section = secId;
 
-          const sh = document.createElement('div');
-          sh.className = 'section-hdr'+(s.fullBleed?' bleed':''); sh.innerHTML = `<h3>${s.title||''}</h3>`;
+          var sh = document.createElement('div');
+          sh.className = 'section-hdr' + (s.fullBleed?' bleed':'');
+          sh.innerHTML = '<h3>' + (s.title||'') + '</h3>';
           if(!s.title) sh.style.display='none';
 
-          const cont = document.createElement('div');
-          cont.className = 'iframe-wrap'+(s.fullBleed?' bleed':'');
-          const ifr = document.createElement('iframe');
-          ifr.className='sbx';
+          var cont = document.createElement('div');
+          cont.className = 'iframe-wrap' + (s.fullBleed?' bleed':'');
+          var ifr = document.createElement('iframe');
+          ifr.className = 'sbx';
           ifr.setAttribute('sandbox', s.sandbox || 'allow-scripts allow-forms');
           if(s.mode==='url' && s.src){
             ifr.src = s.src;
           }else{
-            const base = s.baseHref ? `<base href="${s.baseHref}">` : '';
-            ifr.srcdoc = `<!doctype html><html><head>${base}<meta charset='utf-8'></head><body>${s.contentHtml||''}</body></html>`;
+            var baseTag = s.baseHref ? '<base href="' + s.baseHref + '">' : '';
+            var inner = '<!doctype html><html><head>' + baseTag + '<meta charset="utf-8"></head><body>' + (s.contentHtml||'') + '</body></html>';
+            ifr.srcdoc = inner;
           }
           if(s.fullBleed) ifr.style.background='transparent';
           cont.appendChild(ifr);
 
-          outer.appendChild(sh); outer.appendChild(cont);
+          outer.appendChild(sh);
+          outer.appendChild(cont);
           host.appendChild(outer);
-        });
+        }
       }
 
       function activate(id){
         state.activeId = id;
-        document.querySelectorAll('.chip').forEach(c=>{ c.classList.toggle('active', c.dataset.target===id); });
-        document.querySelectorAll('[data-section]').forEach(x=>{ x.style.display = (x.dataset.section===id)? 'block':'none'; });
-        const vis = document.querySelector(`[data-section="${id}"]`);
+        var chips = document.querySelectorAll('.chip');
+        for(var i=0;i<chips.length;i++){ chips[i].classList.toggle('active', chips[i].dataset.target===id); }
+        var secs = document.querySelectorAll('[data-section]');
+        for(var j=0;j<secs.length;j++){ secs[j].style.display = (secs[j].dataset.section===id)? 'block':'none'; }
+        var vis = document.querySelector('[data-section="' + id + '"]');
         if(vis){ vis.scrollIntoView({behavior:'smooth',block:'start'}); }
       }
 
-      window.addEventListener('message', (ev)=>{
-        const msg = ev.data || {}; if(!msg.__lmResize) return;
-        const { id, height } = msg;
-        const sec = document.querySelector(`[data-section="${id}"]`);
+      window.addEventListener('message', function(ev){
+        var msg = ev.data || {}; if(!msg.__lmResize) return;
+        var sec = document.querySelector('[data-section="' + msg.id + '"]');
         if(!sec) return;
-        const ifr = sec.querySelector('iframe'); if(!ifr) return;
-        const h = Math.max(parseInt(height,10)||0, 200);
+        var ifr = sec.querySelector('iframe'); if(!ifr) return;
+        var h = Math.max(parseInt(msg.height,10)||0, 200);
         ifr.style.height = h + 'px';
       });
 
@@ -244,8 +252,7 @@
       if(auth.currentUser){ setLocked(false); }
     }
 
-    // start safely (no top-level await issues)
-    boot().catch(e=>console.error('boot error:', e));
+    boot().catch(function(e){ console.error('boot error', e); });
   </script>
 </head>
 <body>
@@ -260,7 +267,6 @@
     </div>
     <nav id="chipbar" class="chipbar"></nav>
   </header>
-
   <main id="app">
     <div id="sections"></div>
   </main>
