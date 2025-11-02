@@ -82,7 +82,7 @@
     browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword
   } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-  import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+  import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -101,15 +101,17 @@
   try { await setPersistence(auth, browserLocalPersistence); } catch {}
 
   const q=(s,r=document)=>r.querySelector(s), qa=(s,r=document)=>[...r.querySelectorAll(s)];
-  const ALWAYS_REQ = ['firstName','lastName','birthDate','region','district','role'];
+  const ALWAYS_REQ = ['firstName','lastName','birthDate','region','district','role']; // o‘quvchi bo‘lsa class ham qo‘shiladi
 
   let REGIONS = [];
   let CURRENT_USER = null;
   let PROFILE = null;
+  let USER_POINTS = 0;
 
   const calcAge = iso => { try{const b=new Date(iso), t=new Date(); let a=t.getFullYear()-b.getFullYear(); const m=t.getMonth()-b.getMonth(); if(m<0||(m===0&&t.getDate()<b.getDate())) a--; return a;}catch{return '';} };
   async function getProfile(uid){ const s=await getDoc(doc(db,'profiles',uid)); return s.exists()? s.data(): null; }
   async function saveProfile(uid,data){ data.updatedAt=serverTimestamp(); if(!PROFILE) data.createdAt=serverTimestamp(); await setDoc(doc(db,'profiles',uid),data,{merge:false}); PROFILE=data; }
+  async function getUserPoints(uid){ try{ const s=await getDoc(doc(db,'users',uid)); return s.exists()? (s.data().points||0):0; }catch{return 0;} }
 
   async function loadRegions(){
     try{
@@ -126,7 +128,6 @@
   /* -------------------- Header chip -------------------- */
   function renderUserChip(u, profile){
     const slot=q('#user-slot'); if(!slot) return;
-    const points=profile?.points??0;
     const age=profile?.birthDate?calcAge(profile.birthDate):'';
     const name=profile?.firstName?(profile.firstName+(profile.lastName?' '+profile.lastName:'')):(u.displayName||u.email||'Foydalanuvchi');
     const avatar=profile?.avatarUrl||u.photoURL||'';
@@ -136,7 +137,7 @@
         <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
         <div style="display:grid;line-height:1">
           <b style="font-size:14px">${name}</b>
-          <small class="mini">${role} • ${age?age+' yosh • ':''}${points} points</small>
+          <small class="mini">${role} • ${age?age+' yosh • ':''}${USER_POINTS} points</small>
         </div>
         <div class="menu" id="usermenu">
           <a href="#" id="mProfile">Profil</a>
@@ -160,24 +161,26 @@
         <div class="rowx" style="align-items:center">
           <div class="avatar" style="width:56px;height:56px;border-radius:14px;overflow:hidden;background:#f2f6f3">${avatar?`<img src="${avatar}" alt="">`:''}</div>
           <div style="display:grid"><b style="font-size:18px">${name||'—'}</b>
-            <span class="muted">${(d.role||'—')} • ${age?age+' yosh • ':''}${d.points??0} points</span>
+            <span class="muted">${(d.role||'—')} • ${age?age+' yosh • ':''}${USER_POINTS} points</span>
           </div>
           <div class="grow"></div>
           <button class="btn" id="toEdit">Tahrirlash</button>
           <button class="btn" id="closeView">Yopish</button>
         </div>
+
         <div class="divider"></div>
         <div class="grid3">
           <div><div class="muted">Viloyat</div><b>${d.region||'—'}</b></div>
           <div><div class="muted">Tuman</div><b>${d.district||'—'}</b></div>
           <div><div class="muted">Tug‘ilgan sana</div><b>${d.birthDate||'—'}</b></div>
         </div>
+
         ${d.role==='O‘quvchi'?`
         <div style="height:6px"></div>
         <div class="grid3">
           <div><div class="muted">Sinf</div><b>${d.class||'—'}</b></div>
-          <div><div class="muted">O‘qituvchi</div><b>${d.teacherCustom||'—'}</b></div>
           <div><div class="muted">Maktab</div><b>${d.school||d.schoolCustom||'—'}</b></div>
+          <div></div>
         </div>`:''}
       </div>`);
     q('#toEdit').onclick=()=>{closeOverlay();openProfileEditor();};
@@ -192,7 +195,8 @@
         <div class="rowx" style="align-items:center">
           <div class="avatar" style="width:56px;height:56px;border-radius:14px;overflow:hidden;background:#f2f6f3" id="pAvatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
           <div class="grow"></div>
-          <label class="btn"><input type="file" id="avatarFile" accept="image/*" style="display:none"> Avatarni almashtirish</label>
+          <label class="btn"><input type="file" id="avatarFile" accept="image/*" style="display:none"> Fayldan avatar</label>
+          <button class="btn" id="avatarUrlBtn">URLdan o‘rnatish</button>
         </div>
 
         <div class="divider"></div>
@@ -211,7 +215,7 @@
           </div>
         </div>
 
-        <!-- O‘quvchi bo‘lsa: sinf + o‘qituvchi + maktab -->
+        <!-- O‘quvchi bo‘lsa: faqat sinf + maktab -->
         <div id="stuBlock">
           <div class="grid2">
             <div class="fld"><label>Sinf</label>
@@ -224,14 +228,7 @@
               <small class="muted">Ro‘yxatdan tanlang yoki “Boshqa…”ni tanlang.</small>
             </div>
           </div>
-          <div class="grid2">
-            <div class="fld"><label>Boshqa maktab (ixtiyoriy)</label><input id="schoolCustom" value="${d.schoolCustom||''}" placeholder="Masalan: 12-maktab filiali"></div>
-            <div class="fld"><label>O‘qituvchi (ism-familya)</label>
-              <!-- Talabga ko‘ra select bor, ammo faqat “Boshqa…”; foydalanuvchi pastdagi inputga yozadi -->
-              <select id="teacherSel"><option value="__other__" selected>Boshqa… (quyida yozing)</option></select>
-            </div>
-          </div>
-          <div class="fld"><label>O‘qituvchi ismi (majburiy)</label><input id="teacherCustom" value="${d.teacherCustom||''}" placeholder="Ism Familya"></div>
+          <div class="fld"><label>Boshqa maktab (ixtiyoriy)</label><input id="schoolCustom" value="${d.schoolCustom||''}" placeholder="Masalan: 12-maktab filiali"></div>
         </div>
 
         <div class="grid2">
@@ -247,7 +244,7 @@
         </div>
       </div>`);
 
-    // chain selects
+    // Region → District → School chaining
     const rSel=q('#regionSel'), dSel=q('#districtSel'), sSel=q('#schoolSel');
     function fillRegions(){
       rSel.innerHTML=`<option value="">Tanlang...</option>`+REGIONS.map(r=>`<option value="${r.name}">${r.name}</option>`).join('');
@@ -275,16 +272,30 @@
     function toggleRoleFields(){ stuBlock.classList.toggle('hide', roleSel.value!=='O‘quvchi'); }
     roleSel.onchange=toggleRoleFields; toggleRoleFields();
 
-    // Avatar upload
+    // Avatar — yangi usul: data URL bilan uploadString
     q('#avatarFile').onchange=async (e)=>{
       const f=e.target.files?.[0]; if(!f||!CURRENT_USER) return;
-      const path=`avatars/${CURRENT_USER.uid}/${Date.now()}.jpg`;
-      const r=sRef(st, path);
-      await uploadBytes(r,f,{contentType:f.type||'image/jpeg'});
-      const url=await getDownloadURL(r);
-      const bust=url+(url.includes('?')?'&':'?')+'v='+Date.now();
-      q('#pAvatar').innerHTML=`<img src="${bust}" alt="">`;
-      PROFILE={...(PROFILE||{}),avatarUrl:bust};
+      const fr=new FileReader();
+      fr.onload = async () => {
+        try{
+          const dataUrl = fr.result; // data:image/...;base64,...
+          const ref = sRef(st, `avatars/${CURRENT_USER.uid}/${Date.now()}.jpg`);
+          await uploadString(ref, dataUrl, 'data_url');
+          const url=await getDownloadURL(ref);
+          const bust=url+(url.includes('?')?'&':'?')+'v='+Date.now();
+          q('#pAvatar').innerHTML=`<img src="${bust}" alt="">`;
+          PROFILE={...(PROFILE||{}),avatarUrl:bust};
+        }catch(err){ alert('Avatar yuklashda xatolik: '+(err?.message||err)); }
+      };
+      fr.readAsDataURL(f);
+    };
+
+    // Avatar — URLdan o‘rnatish
+    q('#avatarUrlBtn').onclick = ()=>{
+      const url = prompt("Avatar rasm URL manzilini kiriting:");
+      if(!url) return;
+      PROFILE={...(PROFILE||{}),avatarUrl:url};
+      q('#pAvatar').innerHTML=`<img src="${url}" alt="">`;
     };
 
     q('#cancelEdit').onclick=closeOverlay;
@@ -301,15 +312,11 @@
         class: roleVal==='O‘quvchi' ? q('#class').value : '',
         school: roleVal==='O‘quvchi' ? (sSel.value==="__other__"?'':sSel.value) : '',
         schoolCustom: roleVal==='O‘quvchi' ? q('#schoolCustom').value.trim() : '',
-        teacherCustom: roleVal==='O‘quvchi' ? q('#teacherCustom').value.trim() : '',
-        avatarUrl: PROFILE?.avatarUrl || (CURRENT_USER.photoURL || ''),
-        points: PROFILE?.points ?? 0
+        avatarUrl: PROFILE?.avatarUrl || (CURRENT_USER.photoURL || '')
       };
       for(const k of ALWAYS_REQ){ if(!v[k]){ alert('Majburiy maydonlarni to‘ldiring.'); return; } }
-      if(roleVal==='O‘quvchi'){
-        if(!v.class){ alert('Sinfni tanlang.'); return; }
-        if(!v.teacherCustom){ alert('O‘qituvchi ismini yozing.'); return; }
-      }
+      if(roleVal==='O‘quvchi' && !v.class){ alert('Sinfni tanlang.'); return; }
+
       await saveProfile(CURRENT_USER.uid, v);
       closeOverlay();
       renderUserChip(CURRENT_USER, PROFILE);
@@ -345,13 +352,24 @@
     const lock=buildAuthLock(); CURRENT_USER=u||null;
     if(!u){ setLocked(true); lock.style.removeProperty('display'); lock.hidden=false; q('#user-slot').innerHTML=''; return; }
     setLocked(false); lock.style.display='none'; setTimeout(()=>{try{lock.remove();}catch{}},0);
+
     if(!REGIONS.length) REGIONS=await loadRegions();
-    PROFILE=await getProfile(u.uid);
+
+    // profil + points
+    [PROFILE, USER_POINTS] = await Promise.all([
+      getProfile(u.uid),
+      getUserPoints(u.uid)
+    ]);
+
     if(PROFILE && !PROFILE.role){ PROFILE.role='O‘quvchi'; await saveProfile(u.uid, PROFILE); }
-    const baseOk=ALWAYS_REQ.every(k=>PROFILE&&PROFILE[k]);
-    let ok=baseOk;
-    if(PROFILE?.role==='O‘quvchi'){ ok=ok && !!PROFILE.class && !!PROFILE.teacherCustom; }
-    if(!ok){ setLocked(true); openProfileEditor(); } else { renderUserChip(u,PROFILE); }
+
+    // tekshiruv: rollarga mos
+    const baseOk = ALWAYS_REQ.every(k=>PROFILE&&PROFILE[k]);
+    let ok = baseOk;
+    if(PROFILE?.role==='O‘quvchi'){ ok = ok && !!PROFILE.class; }
+
+    if(!ok){ setLocked(true); openProfileEditor(); }
+    else{ renderUserChip(u, PROFILE); }
   });
 
   await loadHome();
