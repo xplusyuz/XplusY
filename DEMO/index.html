@@ -3,31 +3,26 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>LeaderMath — Fullscreen Carousel + Progress</title>
+  <title>LeaderMath — Fullscreen Carousel + Segments</title>
   <meta name="theme-color" content="#2E8B57"/>
   <link rel="icon" href="./logo.png"/>
 
   <style>
-    :root{ --vh:1vh; --brand:#2E8B57; }
+    :root{ --vh:1vh; --brand:#2E8B57; --brand2:#1F6B45; }
     html,body{margin:0;height:100%;overflow:hidden;background:#000}
     *{box-sizing:border-box}
 
-    .carousel{
-      position:fixed; inset:0;
-      width:100%; height:calc(var(--vh)*100);
-      overflow:hidden; background:#000;
-    }
+    .carousel{ position:fixed; inset:0; width:100%; height:calc(var(--vh)*100); overflow:hidden; background:#000; }
     .slides{
       display:grid; grid-auto-flow:column; grid-auto-columns:100%;
-      width:100%; height:100%;
-      transition:transform .8s ease-in-out;
+      width:100%; height:100%; transition:transform .8s ease-in-out;
     }
     iframe{width:100%;height:100%;border:0;display:block;background:#000}
 
-    /* ozgina vizual halqa */
     .gradient{position:absolute; inset:0; pointer-events:none;
       background:linear-gradient(180deg,rgba(0,0,0,.22),rgba(0,0,0,.08))}
-    /* nav */
+
+    /* nav buttons */
     .nav-btn{
       position:absolute; top:50%; transform:translateY(-50%);
       width:56px; height:56px; border:none; border-radius:50%;
@@ -42,7 +37,7 @@
       .nav-btn.left{ left:10px } .nav-btn.right{ right:10px }
     }
 
-    /* progress bar */
+    /* central progress bar */
     .progress-wrap{
       position:absolute; left:50%; bottom:18px; transform:translateX(-50%);
       width:min(520px,76vw); height:6px; border-radius:999px;
@@ -50,10 +45,27 @@
       backdrop-filter:blur(6px);
       box-shadow:0 2px 10px rgba(0,0,0,.35) inset, 0 1px 0 rgba(255,255,255,.08);
     }
-    .progress{
-      height:100%; width:0%;
-      background:linear-gradient(90deg,#7fd1a5,var(--brand));
+    .progress{ height:100%; width:0%; background:linear-gradient(90deg,#7fd1a5,var(--brand)); transition:width .12s linear; }
+
+    /* per-slide segments (dots/bars) */
+    .segments{
+      position:absolute; top:18px; left:50%; transform:translateX(-50%);
+      display:flex; gap:10px; z-index:22;
+      padding:6px 10px; border-radius:999px; backdrop-filter:blur(6px);
+      background:rgba(0,0,0,.25); box-shadow:0 2px 10px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .seg{
+      width:42px; height:6px; border-radius:999px; overflow:hidden;
+      background:rgba(255,255,255,.18);
+    }
+    .seg > .fill{
+      width:0%; height:100%;
+      background:linear-gradient(90deg,var(--brand),var(--brand2));
       transition:width .12s linear;
+    }
+    @media (max-width:480px){
+      .segments{ gap:6px; padding:6px 8px }
+      .seg{ width:30px; height:5px }
     }
   </style>
 </head>
@@ -61,7 +73,13 @@
   <div class="carousel" id="carousel">
     <div class="slides" id="slides"></div>
     <div class="gradient"></div>
+
+    <!-- per-slide segments -->
+    <div class="segments" id="segments" aria-hidden="true"></div>
+
+    <!-- central progress -->
     <div class="progress-wrap" aria-hidden="true"><div class="progress" id="progress"></div></div>
+
     <button class="nav-btn left" id="prev">‹</button>
     <button class="nav-btn right" id="next">›</button>
   </div>
@@ -116,25 +134,48 @@
     }
 
     function renderCarousel(banners){
-      const slides=q('#slides'); const progress=q('#progress'); const car=q('#carousel');
-      slides.innerHTML='';
-      banners.forEach(b=>{ const w=document.createElement('div'); w.appendChild(makeFrame(b)); slides.appendChild(w); });
+      const slides=q('#slides');
+      const progress=q('#progress');
+      const car=q('#carousel');
+      const segHost=q('#segments');
 
-      let idx=0, timer=null, raf=null;
-      const total=banners.length, interval=5000; // ms
-      let startTime=0, pausedAt=0, running=false;
+      slides.innerHTML=''; segHost.innerHTML='';
+      banners.forEach(b=>{
+        const w=document.createElement('div');
+        w.appendChild(makeFrame(b));
+        slides.appendChild(w);
+      });
+      // build segments
+      const segs = banners.map(_=>{
+        const seg=document.createElement('div'); seg.className='seg';
+        const fill=document.createElement('div'); fill.className='fill';
+        seg.appendChild(fill); segHost.appendChild(seg);
+        return fill;
+      });
 
-      const setProgress = (p)=>{ progress.style.width = Math.max(0,Math.min(1,p))*100 + '%'; };
+      let idx=0, raf=null, running=false;
+      const total=banners.length;
+      const interval=5000; // ms
+      let startTime=0, pausedAt=0;
+
+      const setBar = (p)=>{ progress.style.width = (Math.max(0,Math.min(1,p))*100)+'%'; };
+      const setSeg = (i,p)=>{
+        segs.forEach((f,k)=>{
+          if(k < i){ f.style.width = '100%'; }
+          else if(k > i){ f.style.width = '0%'; }
+          else { f.style.width = (Math.max(0,Math.min(1,p))*100)+'%'; }
+        });
+      };
 
       const step = (t)=>{
         if(!running) return;
         if(!startTime) startTime=t;
         const elapsed = t - startTime;
         const p = elapsed / interval;
-        setProgress(p);
+        setBar(p); setSeg(idx, p);
         if (elapsed >= interval){
           go(idx+1);
-          start();
+          start(); // restart timer for next slide
           return;
         }
         raf = requestAnimationFrame(step);
@@ -145,26 +186,23 @@
         running=true;
         startTime=performance.now();
         raf = requestAnimationFrame(step);
-        timer = setInterval(()=>{}, interval); // placeholder to keep symmetry (optional)
       };
 
-      const stop = (keepBar=false)=>{
+      const stop = (keepUI=false)=>{
         running=false;
-        if (timer){ clearInterval(timer); timer=null; }
-        if (raf){ cancelAnimationFrame(raf); raf=null; }
-        if(!keepBar) setProgress(0);
+        if(raf){ cancelAnimationFrame(raf); raf=null; }
+        if(!keepUI){ setBar(0); setSeg(idx,0); }
       };
 
       const go = (n)=>{
         idx = (n+total)%total;
         slides.style.transform = `translateX(-${idx*100}%)`;
-        setProgress(0);
+        setBar(0); setSeg(idx,0);
       };
 
-      // initial
-      if(total>1){ start(); } else { setProgress(1); }
+      if(total>1){ start(); } else { setBar(1); setSeg(0,1); }
 
-      // hover/touch pause/resume
+      // pause/resume
       const pause = ()=>{ if(!running) return; pausedAt = performance.now() - startTime; stop(true); };
       const resume = ()=>{ if(running) return; startTime = performance.now() - pausedAt; running=true; raf = requestAnimationFrame(step); };
 
@@ -181,7 +219,7 @@
       let sx=0;
       car.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; }, {passive:true});
       car.addEventListener('touchend',e=>{
-        const dx = e.changedTouches[0].clientX - sx;
+        const dx=e.changedTouches[0].clientX - sx;
         if(Math.abs(dx)>50){ stop(); go(dx<0?idx+1:idx-1); start(); }
       }, {passive:true});
     }
