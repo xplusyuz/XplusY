@@ -396,29 +396,89 @@
   }
 
   function renderSection(sec){
-    const id=sec.id||('sec'+Math.random()); const outer=document.createElement('section'); outer.dataset.section=id;
-    const full=!!sec.fullBleed; outer.className='section'+(full?' full-banner':'');
-    if(!full){ const sh=document.createElement('div'); sh.className='section-hdr'; sh.innerHTML=`<h3>${sec.title||id}</h3>`; outer.appendChild(sh); }
-    const body=document.createElement('div'); body.className='iframe-wrap';
-    const items=Array.isArray(sec.items)?sec.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
+  const id = sec.id || ('sec' + Math.random());
+  const outer = document.createElement('section');
+  outer.dataset.section = id;
+  outer.className = 'section';
+  
+  // Sarlavha
+  const sh = document.createElement('div');
+  sh.className = 'section-hdr';
+  sh.innerHTML = `<h3>${sec.title || id}</h3>`;
+  outer.appendChild(sh);
 
-    if(full){
-      if(banners.length>1) body.appendChild(renderCarousel(banners,true, sec.baseHref));
-      else if(banners.length===1) body.appendChild(renderBanner(banners[0],true, sec.baseHref));
-    }else{
-      if(banners.length>1) body.appendChild(renderCarousel(banners,false, sec.baseHref));
-      else if(banners.length===1) body.appendChild(renderBanner(banners[0],false, sec.baseHref));
+  const body = document.createElement('div');
+  body.className = 'iframe-wrap';
+  const inner = document.createElement('div');
+  inner.style.padding = '12px';
+
+  // --- BIRINCHI darajadagi sub-bo‘limlar orqali chizish ---
+  const subs = Array.isArray(sec.subsections) ? sec.subsections : [];
+  subs.forEach((sub, idx) => {
+    const subWrap = document.createElement('div');
+    subWrap.className = 'section';
+    subWrap.style.margin = '16px 0';
+    
+    const subHead = document.createElement('div');
+    subHead.className = 'section-hdr';
+    subHead.innerHTML = `<h4>${sub.title || ('Sub ' + (idx + 1))}</h4>`;
+    subWrap.appendChild(subHead);
+
+    const subBody = document.createElement('div');
+    subBody.className = 'iframe-wrap';
+    const subInner = document.createElement('div');
+    subInner.style.padding = '10px';
+
+    const banners = Array.isArray(sub.banners) ? sub.banners : [];
+    const cards   = Array.isArray(sub.cards)   ? sub.cards   : [];
+
+    // BANNERS
+    if (banners.length > 1)
+      subInner.appendChild(renderCarousel(banners, false, sub.baseHref));
+    else if (banners.length === 1)
+      subInner.appendChild(renderBanner(banners[0], false, sub.baseHref));
+
+    // CARDS
+    if (cards.length) {
+      const filters = buildFilters();
+      subInner.appendChild(filters.wrap);
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      cards.forEach(c => grid.appendChild(renderCard(c)));
+      subInner.appendChild(grid);
+      filters.onChange = k => applyFilter(grid, k);
     }
 
-    if(cards.length){
-      const filters=buildFilters(); const pad=document.createElement('div'); pad.style.padding='12px'; pad.appendChild(filters.wrap);
-      const grid=document.createElement('div'); grid.className='grid'; cards.forEach(c=>grid.appendChild(renderCard(c))); pad.appendChild(grid); body.appendChild(pad);
-      filters.onChange=(k)=>applyFilter(grid,k);
-    }
+    subBody.appendChild(subInner);
+    subWrap.appendChild(subBody);
+    inner.appendChild(subWrap);
+  });
 
-    const subs=Array.isArray(sec.subsections)?sec.subsections:[]; subs.forEach(ss=> body.appendChild(renderSubSection(ss)));
-    outer.appendChild(body); return outer;
+  // Agar sub-bo‘limlar bo‘lmasa, eski banner/cardlar shu joyda chiqsin
+  if (!subs.length) {
+    const banners = Array.isArray(sec.banners) ? sec.banners : [];
+    const cards   = Array.isArray(sec.cards)   ? sec.cards   : [];
+
+    if (banners.length > 1)
+      inner.appendChild(renderCarousel(banners, false, sec.baseHref));
+    else if (banners.length === 1)
+      inner.appendChild(renderBanner(banners[0], false, sec.baseHref));
+
+    if (cards.length) {
+      const filters = buildFilters();
+      inner.appendChild(filters.wrap);
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      cards.forEach(c => grid.appendChild(renderCard(c)));
+      inner.appendChild(grid);
+      filters.onChange = k => applyFilter(grid, k);
+    }
   }
+
+  body.appendChild(inner);
+  outer.appendChild(body);
+  return outer;
+}
 
   function renderSections(){
     const host=q('#sections'); host.innerHTML='';
