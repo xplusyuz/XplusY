@@ -1,509 +1,354 @@
 <!doctype html>
-<html lang="uz" data-theme="light">
+<html lang="uz">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>LeaderMath.UZ — Home + Profil</title>
-
-  <link rel="icon" href="./logo.png" sizes="any">
-  <link rel="apple-touch-icon" href="./logo.png">
-  <meta name="theme-color" content="#2E8B57"/>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <title>LeaderMath — Home Renderer</title>
+  <meta name="theme-color" content="#2E8B57">
   <style>
-  :root{
-    --brand:#2E8B57; --bg:#F6FAF7; --bg-2:#ECF4EF; --card:#FFFFFF; --text:#0f1b15;
-    --muted:#5f7469; --line:#E3EBE6; --speed:.25s;
-    --shadow:0 20px 60px rgba(18,40,28,.14);
-    --shadow-sm:0 8px 26px rgba(18,40,28,.10);
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; color:var(--text);
-    font:16px/1.55 system-ui,Segoe UI,Inter,Arial;
-    background:
-      radial-gradient(1200px 600px at 15% -10%, #d9f0e4 0, #0000 60%),
-      radial-gradient(1400px 700px at 110% 10%, #e5f6ed 0, #0000 60%),
-      linear-gradient(180deg,var(--bg),var(--bg-2));
-  }
-
-  /* Header + chipbar */
-  .hdr{ position:sticky; top:0; z-index:90; backdrop-filter:saturate(1.1) blur(10px);
-    background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent);
-    border-bottom:1px solid color-mix(in srgb, var(--line) 60%, transparent);}
-  .row{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px}
-  .brand{display:flex;align-items:center;gap:12px;font-weight:800}
-  .brand img{width:52px;height:52px;border-radius:12px;display:block;box-shadow:0 6px 24px rgba(46,139,87,.25)}
-  .brand b{color:var(--brand)} .grow{flex:1}
-
-  .chipbar-wrap{ position:sticky; top:66px; z-index:80; backdrop-filter:saturate(1.05) blur(6px);
-    background:linear-gradient(180deg, color-mix(in srgb, var(--card) 72%, transparent), transparent);
-    border-bottom:1px solid color-mix(in srgb,var(--line) 60%, transparent);}
-  .chipbar{ max-width:1180px; margin:0 auto; padding:8px 16px 12px; display:flex; gap:10px;
-    overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scroll-behavior:smooth; }
-  .chipbar::-webkit-scrollbar{display:none} .chipbar{scrollbar-width:none}
-  .chip{ appearance:none; border:1px solid var(--line); background:var(--card); border-radius:999px;
-    padding:10px 14px; cursor:pointer; box-shadow:var(--shadow-sm); font-weight:700; white-space:nowrap;
-    transition:transform .2s, box-shadow .2s, background .2s, color .2s;}
-  .chip:hover{transform:translateY(-1px); box-shadow:var(--shadow)}
-  .chip.active{background:linear-gradient(180deg, color-mix(in srgb, var(--brand) 92%, #fff), var(--brand)); color:#fff; border-color:transparent}
-
-  /* Sections / banner */
-  main{max-width:1180px;margin:0 auto;padding:14px 16px 56px}
-  .section{ background:var(--card); border:1px solid var(--line); border-radius:22px;
-    box-shadow:var(--shadow); overflow:hidden; margin-bottom:14px; transition:transform .2s }
-  .section:hover{transform:translateY(-2px)}
-  .section-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
-  .section-hdr h3{margin:0;font-size:18px}
-  .iframe-wrap{position:relative}
-  iframe.sbx{display:block;width:100%;border:0;background:transparent}
-
-  /* Fullscreen banner (birinchi bo‘lim) */
-  .full-banner{ position:fixed; left:0; right:0; bottom:0; top:calc(var(--top-gap,120px)); border:none; border-radius:0; background:transparent; z-index:60 }
-  .full-banner .iframe-wrap, .full-banner .sbx{ width:100%; height:100% }
-
-  /* User chip + menu (portal) */
-  .userchip{border:1px solid var(--line);background:var(--card);padding:6px 10px;border-radius:999px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:10px;cursor:pointer}
-  .avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,#dcefe5,#f1faf5)}
-  .avatar img{width:100%;height:100%;object-fit:cover;display:block}
-
-  .menu{ position:fixed; min-width:280px; background:var(--card); border:1px solid var(--line); border-radius:16px;
-    box-shadow:0 16px 50px rgba(16,32,24,.18), 0 2px 10px rgba(16,32,24,.06); display:none; overflow:hidden; z-index:9999 }
-  .menu.open{display:block}
-  .menu a{display:flex;align-items:center;gap:10px;padding:12px 14px;text-decoration:none;color:inherit;border-bottom:1px solid color-mix(in srgb,var(--line) 80%, transparent)}
-  .menu a:last-child{border-bottom:none}
-  .menu .label{padding:8px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--card) 60%, transparent)}
-  .ico{width:18px;height:18px;display:inline-block}
-
-  /* Overlay / modallar */
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.18);display:none;place-items:center;z-index:110}
-  .overlay.show{display:grid}
-  .profile-card{width:min(820px,96vw);background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:22px}
-  .btn{appearance:none;border:1px solid var(--line);background:var(--card);padding:12px 16px;border-radius:14px;cursor:pointer;font-weight:800}
-  .btn.primary{background:linear-gradient(180deg, #7fd1a5, var(--brand));color:#fff;border-color:transparent}
-  .fld{display:grid;gap:8px;margin:10px 0}
-  .fld input,.fld select{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,var(--card),color-mix(in srgb,var(--card) 92%,#000))}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .muted{color:var(--muted)} .divider{height:1px;background:var(--line);margin:12px 0}
-  @media (max-width:900px){.grid2{grid-template-columns:1fr}}
+    :root{
+      --brand:#2E8B57; --bg:#f4f8f6; --text:#0d1b14; --muted:#446c59;
+      --card:#ffffff; --line:#dfe7e2; --ring:#8ad1b1;
+      --radius:14px; --radius-lg:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,Segoe UI,Arial}
+    header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:50}
+    .row{max-width:1200px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px}
+    .brand{font-weight:800;color:var(--brand);letter-spacing:.2px}
+    main{max-width:1200px;margin:0 auto;padding:14px;display:grid;gap:14px}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .ghost{opacity:.65}
+    button,.btn{padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer}
+    .btn-primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .btn-ghost{background:#fff}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .section{border:1px solid var(--line);background:var(--card);border-radius:var(--radius-lg);overflow:hidden}
+    .section.fullBleed{border:none;border-radius:0;background:transparent}
+    .sec-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line)}
+    .sec-title{font-weight:800}
+    .sec-body{padding:12px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    @media (max-width:960px){.grid{grid-template-columns:1fr 1fr}}
+    @media (max-width:640px){.grid{grid-template-columns:1fr}}
+    .card{border:1px solid var(--line);background:var(--card);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .card h4{margin:0;font-size:16px}
+    .rowflex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .badge{padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:#f0f7f3}
+    .badge.soon{background:#fff8e5;border-color:#f2d48a}
+    .badge.active{background:#eaf6ef;border-color:#84d1a8}
+    .badge.ended{background:#f5f5f5}
+    .muted{color:var(--muted)}
+    .ratio{position:relative;width:100%;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:#fff}
+    .ratio[data-r="16-9"]::before{content:"";display:block;padding-top:56.25%}
+    .ratio>iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+    /* fullBleed banner */
+    .bleed{position:relative;width:100%;height:100vh}
+    .bleed>iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+    /* modal */
+    .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:9999}
+    .modal-box{width:min(900px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.25)}
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line)}
+    .modal-body{padding:12px}
+    .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+    // ==== Firebase (sizniki) ====
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.appspot.com",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // ==== Utilities ====
+    const $  = (s,el=document)=>el.querySelector(s);
+    const el = (tag,attrs={},html)=>{ const n=document.createElement(tag); for(const k in attrs) n.setAttribute(k,attrs[k]); if(html!==undefined) n.innerHTML=html; return n; };
+
+    // Parse "YYYY-MM-DD HH:mm" as local
+    function parseLocal(s){
+      if(!s) return null;
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+      if(!m) return null;
+      const [_,Y,M,D,h,mn] = m;
+      return new Date(Number(Y), Number(M)-1, Number(D), Number(h), Number(mn), 0, 0);
+    }
+    function cardState(it){
+      if(it.cardStyle==='soon') return 'soon';
+      if(it.cardStyle==='timed'){
+        const now = new Date();
+        const s = parseLocal(it.startAt), e = parseLocal(it.endAt);
+        if(s && now < s) return 'soon';
+        if(s && e && now >= s && now <= e) return 'active';
+        if(e && now > e) return 'ended';
+        // Fallback
+        return 'active';
+      }
+      return 'available';
+    }
+    function fmt(dt){
+      if(!dt) return '-';
+      const pad = n=>String(n).padStart(2,'0');
+      return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    }
+
+    // ==== Modal ====
+    let MODAL=null;
+    function openModal(title, html){
+      const back = $('#modal');
+      const box  = $('.modal-box', back);
+      $('.modal-title', back).textContent = title || '';
+      const body = $('.modal-body', back);
+      body.innerHTML = html || '';
+      back.style.display='flex';
+      MODAL = back;
+    }
+    function closeModal(){ if(MODAL){ MODAL.style.display='none'; MODAL=null; } }
+
+    // ==== Rendering ====
+    function renderRoot(data){
+      const wrap = $('#content');
+      wrap.innerHTML = '';
+      const sections = Array.isArray(data.sections)? data.sections: [];
+      sections.forEach(sec=>{
+        wrap.appendChild(renderSection(sec));
+      });
+    }
+
+    function renderSection(sec){
+      const box = el('section', {class:`section${sec.fullBleed?' fullBleed':''}`});
+      const title = sec.title || sec.id || 'Bo‘lim';
+      // Head (skip border for fullBleed)
+      if(!sec.fullBleed){
+        const head = el('div',{class:'sec-head'});
+        head.appendChild(el('div',{class:'sec-title'}, title));
+        head.appendChild(el('div',{class:'muted'}, sec.baseHref?`base: ${sec.baseHref}`:''));
+        box.appendChild(head);
+      }
+
+      // Body
+      const body = el('div',{class:'sec-body'});
+      // Items first
+      const items = Array.isArray(sec.items)? sec.items : [];
+
+      // fullBleed → faqat bannerlarni to‘liq ekranda ko‘rsatamiz; cardlar bo‘lsa odatdagi konteynerda pastda
+      const banners = items.filter(i=>i.kind==='banner');
+      const cards   = items.filter(i=>i.kind==='card');
+
+      if(sec.fullBleed && banners.length){
+        banners.forEach(b=>{
+          body.appendChild(renderBanner(b, true, sec.baseHref));
+        });
+      } else if(banners.length){
+        // 16:9 konteynerlarda
+        banners.forEach(b=>{
+          body.appendChild(renderBanner(b, false, sec.baseHref));
+        });
+      }
+
+      if(cards.length){
+        const grid = el('div',{class:'grid'});
+        cards.forEach(c=> grid.appendChild(renderCard(c)));
+        body.appendChild(grid);
+      }
+
+      // Subsections (recursive, meta ko‘rinishda; fullBleed bo‘lsa ichki bo‘limlar oddiy ko‘rinishda)
+      const subs = Array.isArray(sec.subsections)? sec.subsections: [];
+      subs.forEach(ss=>{
+        body.appendChild(renderSubSection(ss));
+      });
+
+      if(sec.fullBleed){
+        // fullBleed bo‘limda body’ni section ichiga to‘g‘ridan kiritamiz (borderyoq)
+        box.appendChild(body);
+      }else{
+        box.appendChild(body);
+      }
+      return box;
+    }
+
+    function renderSubSection(ss){
+      const title = ss.title || ss.id || 'Sub-bo‘lim';
+      const card = el('div',{class:'section'});
+      const head = el('div',{class:'sec-head'});
+      head.appendChild(el('div',{class:'sec-title'}, title));
+      card.appendChild(head);
+      const body = el('div',{class:'sec-body'});
+
+      const items = Array.isArray(ss.items)? ss.items: [];
+      const banners = items.filter(i=>i.kind==='banner');
+      const cards   = items.filter(i=>i.kind==='card');
+
+      banners.forEach(b=> body.appendChild(renderBanner(b, false)));
+      if(cards.length){
+        const grid = el('div',{class:'grid'});
+        cards.forEach(c=> grid.appendChild(renderCard(c)));
+        body.appendChild(grid);
+      }
+
+      const subs = Array.isArray(ss.subsections)? ss.subsections: [];
+      subs.forEach(iii=> body.appendChild(renderSubSection(iii)));
+
+      card.appendChild(body);
+      return card;
+    }
+
+    function renderBanner(b, fullBleed=false, inheritedBaseHref=null){
+      const baseHref = b.baseHref || inheritedBaseHref || '';
+      if(b.mode==='url'){
+        if(fullBleed){
+          const r = el('div',{class:'bleed'});
+          const f = el('iframe',{src:b.src||'', sandbox:b.sandbox||'allow-scripts allow-forms'});
+          r.appendChild(f);
+          return r;
+        }else{
+          const r = el('div',{class:'ratio','data-r':'16-9'});
+          const f = el('iframe',{src:b.src||'', sandbox:b.sandbox||'allow-scripts allow-forms'});
+          r.appendChild(f);
+          return r;
+        }
+      }else{
+        const srcdoc = (()=>{
+          const html = String(b.contentHtml||'');
+          // base qo‘llash
+          const baseTag = baseHref ? `<base href="${baseHref}">` : '';
+          return `<!doctype html><html><head>${baseTag}<meta charset="utf-8"></head><body style="margin:0">${html}</body></html>`;
+        })();
+        if(fullBleed){
+          const r = el('div',{class:'bleed'});
+          const f = el('iframe',{sandbox:b.sandbox||'allow-scripts allow-forms'});
+          f.srcdoc = srcdoc;
+          r.appendChild(f);
+          return r;
+        }else{
+          const r = el('div',{class:'ratio','data-r':'16-9'});
+          const f = el('iframe',{sandbox:b.sandbox||'allow-scripts allow-forms'});
+          f.srcdoc = srcdoc;
+          r.appendChild(f);
+          return r;
+        }
+      }
+    }
+
+    function renderCard(it){
+      const c = el('div',{class:'card'});
+      const title = it.title || 'Card';
+      const state = cardState(it);
+      const row1 = el('div',{class:'rowflex'});
+      row1.appendChild(el('h4',{}, title));
+      const badge = el('span',{class:`badge ${state==='soon'?'soon':state==='active'?'active':state==='ended'?'ended':''}`},
+        state==='soon' ? 'Yaqinda'
+        : state==='active' ? 'Faol'
+        : state==='ended' ? 'Tugagan'
+        : 'Mavjud');
+      row1.appendChild(badge);
+      c.appendChild(row1);
+
+      // Timers info
+      if(it.cardStyle==='timed'){
+        const s = parseLocal(it.startAt), e = parseLocal(it.endAt);
+        const info = el('div',{class:'muted'}, `Vaqt: ${fmt(s)} — ${fmt(e)}`);
+        c.appendChild(info);
+      }
+
+      // Actions
+      const actions = el('div',{class:'rowflex'});
+      const infoBtn = el('button',{class:'btn'}, 'ℹ️ Info');
+      infoBtn.onclick = ()=> openModal(title, it.infoHtml || '<p class="muted">Ma’lumot yo‘q.</p>');
+      actions.appendChild(infoBtn);
+
+      const label = it.ctaLabel || 'Boshlash';
+      const href  = it.ctaHref  || '';
+      const startBtn = el('a',{class:`btn btn-primary${(state==='soon' || state==='ended')?' btn-ghost':''}`, href: href || '#', target: href?'_blank':'_self'}, label);
+      if(state==='soon' || state==='ended' || !href){ startBtn.setAttribute('disabled',''); startBtn.removeAttribute('href'); }
+      actions.appendChild(startBtn);
+
+      c.appendChild(actions);
+      return c;
+    }
+
+    // ==== Load order ====
+    async function tryLoadFromFirestore(){
+      const snap = await getDoc(doc(db,'configs','home'));
+      if(snap.exists()){
+        return snap.data();
+      }
+      return null;
+    }
+
+    async function boot(){
+      const data = await tryLoadFromFirestore();
+      if(data && Array.isArray(data.sections) && data.sections.length){
+        renderRoot(data);
+        $('.ghost', $('#fallback')).textContent='(Firestore’dan yuklandi)';
+      }else{
+        // Fallback: local file upload
+        $('#fallback').style.display='block';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      // Modal close
+      $('#modal').addEventListener('click', (e)=>{ if(e.target.id==='modal' || e.target.id==='mclose') closeModal(); });
+      // Local upload
+      $('#loadfile').addEventListener('change', async (e)=>{
+        const f = e.target.files[0]; if(!f) return;
+        try{
+          const txt = await f.text();
+          const obj = JSON.parse(txt);
+          renderRoot(obj);
+          $('.ghost', $('#fallback')).textContent='(home.json’dan yuklandi)';
+        }catch(err){
+          alert('JSON xato: '+err.message);
+        }
+      });
+      boot();
+    });
+  </script>
 </head>
 <body>
-  <header class="hdr" id="hdr">
+  <header>
     <div class="row">
-      <div class="brand">
-        <img src="./logo.png" alt="LM"/>
-        <div style="display:grid;line-height:1.1">
-          <span style="font-size:18px;font-weight:800">LeaderMath.<b style="color:var(--brand)">UZ</b></span>
-          <small style="color:var(--muted)">Matematika platformasi</small>
-        </div>
-      </div>
-      <div class="grow"></div>
-      <div id="user-slot"></div>
-    </div>
-
-    <div class="chipbar-wrap" id="chipwrap">
-      <nav id="chipbar" class="chipbar" aria-label="Bo‘limlar"></nav>
+      <div class="brand">LeaderMath — Home</div>
+      <div style="margin-left:auto" class="ghost" id="srcnote"></div>
     </div>
   </header>
 
-  <main id="app"><div id="sections"></div></main>
+  <main id="content"></main>
 
-  <div id="overlay" class="overlay" aria-modal="true"></div>
-  <div id="portal-root"></div>
-
-  <script type="module">
-  /* Firebase */
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, setPersistence, browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-  import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.appspot.com",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-    measurementId: "G-459PLJ7P7L"
-  };
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db   = getFirestore(app);
-  const st   = getStorage(app);
-  try { await setPersistence(auth, browserLocalPersistence); } catch {}
-
-  /* Helpers */
-  const q=(s,r=document)=>r.querySelector(s); const qa=(s,r=document)=>[...r.querySelectorAll(s)];
-  const ALWAYS_REQ=['firstName','lastName','birthDate','region','district','role'];
-  let REGIONS=[]; let CURRENT_USER=null; let PROFILE=null; let USER_POINTS=0;
-
-  const calcAge=iso=>{try{const b=new Date(iso),t=new Date();let a=t.getFullYear()-b.getFullYear();const m=t.getMonth()-b.getMonth();if(m<0||(m===0&&t.getDate()<b.getDate()))a--;return a;}catch{return '';}};
-  async function getProfile(uid){const s=await getDoc(doc(db,'profiles',uid));return s.exists()?s.data():null;}
-  async function saveProfile(uid,data){data.updatedAt=serverTimestamp();if(!PROFILE)data.createdAt=serverTimestamp();await setDoc(doc(db,'profiles',uid),data,{merge:false});PROFILE=data;}
-  async function getUserPoints(uid){try{const s=await getDoc(doc(db,'users',uid));return s.exists()?(s.data().points||0):0;}catch{return 0;}}
-
-  async function loadRegions(){
-    try{const r=await fetch('./region.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();return j?.regions||[];}
-    catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}
-  }
-
-  /* User chip + menu (portal) */
-  function renderUserChip(u, profile){
-    const slot=q('#user-slot');
-    const age=profile?.birthDate?calcAge(profile.birthDate):'';
-    const name=profile?.firstName?(profile.firstName+(profile.lastName?' '+profile.lastName:'')):(u.displayName||u.email||'Foydalanuvchi');
-    const avatar=profile?.avatarUrl||u.photoURL||'';
-    const role=profile?.role||'—';
-    slot.innerHTML=`
-      <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
-        <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
-        <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+' yosh • ':''}${USER_POINTS} points</small></div>
-        <div class="menu" id="usermenu" role="menu">
-          <a href="#" id="mProfile" role="menuitem">Profil</a>
-          <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
-          <a href="#" id="mLogout" role="menuitem">Chiqish</a>
-          <div class="label">Aloqa</div>
-          <a href="tel:+998901234567">+998 90 123 45 67</a>
-          <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
-          <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
-          <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
-          <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
-          <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
-        </div>
-      </div>`;
-  }
-
-  function openUserMenu(){
-    const chip = q('#userchip'); const menu=q('#usermenu'); if(!chip||!menu) return;
-    (q('#portal-root')||document.body).appendChild(menu);
-    menu.style.visibility='hidden'; menu.style.display='block';
-
-    const r = chip.getBoundingClientRect();
-    const mw = menu.offsetWidth, mh = menu.offsetHeight, gap = 8;
-
-    let left = Math.min(Math.max(r.right - mw, 8), innerWidth - mw - 8);
-    let top  = r.bottom + gap;
-    if (top + mh > innerHeight - 8) top = Math.max(8, r.top - gap - mh);
-
-    menu.style.left = left+'px'; menu.style.top = Math.max(8, top)+'px';
-    menu.classList.add('open'); menu.style.visibility='visible'; chip.setAttribute('aria-expanded','true');
-
-    const closeOnOutside = (e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
-    const onSR = ()=> position();
-    function position(){
-      if(!menu.classList.contains('open')) return;
-      const r2 = chip.getBoundingClientRect();
-      let L = Math.min(Math.max(r2.right - mw, 8), innerWidth - mw - 8);
-      let T = r2.bottom + gap;
-      if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
-      menu.style.left=L+'px'; menu.style.top=Math.max(8,T)+'px';
-    }
-    menu._closers={closeOnOutside, onSR};
-    addEventListener('click', closeOnOutside, {capture:true});
-    addEventListener('scroll', onSR, {passive:true});
-    addEventListener('resize', onSR, {passive:true});
-  }
-  function closeUserMenu(){
-    const menu=q('#usermenu'); if(!menu) return;
-    menu.classList.remove('open'); menu.style.display='none';
-    if(menu._closers){
-      removeEventListener('click', menu._closers.closeOnOutside, {capture:true});
-      removeEventListener('scroll', menu._closers.onSR);
-      removeEventListener('resize', menu._closers.onSR);
-      menu._closers=null;
-    }
-    const chip=q('#userchip'); if(chip){ chip.appendChild(menu); chip.setAttribute('aria-expanded','false'); }
-  }
-
-  /* OVERLAY helpers */
-  const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
-  const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
-  q('#overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeOverlay(); });
-  addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeOverlay(); });
-
-  /* Profile VIEW / EDIT */
-  function openProfileView(){
-    if(!CURRENT_USER) return;
-    const p = PROFILE||{}; const age=p.birthDate?calcAge(p.birthDate):'';
-    showOverlay(`
-      <div class="profile-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="display:flex;gap:12px;align-items:center">
-            <div class="avatar" style="width:56px;height:56px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
-            <div><b style="font-size:18px">${p.firstName||''} ${p.lastName||''}</b><br>
-              <small class="muted">${p.role||'—'} ${age?`• ${age} yosh`:''} • ${USER_POINTS} points</small></div>
-          </div>
-          <button class="btn" id="pvClose">Yopish</button>
-        </div>
-        <div class="divider"></div>
-        <div class="grid2">
-          <div><div class="muted">Tug‘ilgan sana</div><b>${p.birthDate||'—'}</b></div>
-          <div><div class="muted">Hudud</div><b>${p.region||'—'}${p.district?`, ${p.district}`:''}</b></div>
-          <div><div class="muted">Maktab</div><b>${p.school||'—'}</b></div>
-          <div><div class="muted">Sinf</div><b>${p.class||'—'}</b></div>
-        </div>
-        <div style="height:10px"></div>
-        <button class="btn primary" id="pvEdit">Tahrirlash</button>
+  <!-- Firestore bo'sh bo'lsa: local JSON yuklash -->
+  <section id="fallback" class="section" style="display:none;max-width:1200px;margin:12px auto">
+    <div class="sec-head">
+      <div class="sec-title">Home.json yuklash</div>
+      <div class="ghost">(manba aniqlanmoqda)</div>
+    </div>
+    <div class="sec-body">
+      <div class="toolbar">
+        <label class="btn">JSON tanlang <input id="loadfile" type="file" accept="application/json" style="display:none"></label>
+        <span class="muted">Admin panelingizdan eksport qilingan <code>home.json</code> ni tanlang.</span>
       </div>
-    `);
-    q('#pvClose').onclick=closeOverlay;
-    q('#pvEdit').onclick=()=>{ closeOverlay(); openProfileEditor(); };
-  }
+    </div>
+  </section>
 
-  function fillSelect(sel, items, value){
-    sel.innerHTML = '<option value="">—</option>' + (items||[]).map(x=>`<option>${x}</option>`).join('');
-    if(value) sel.value=value;
-  }
-  function buildClassOptions(){ return Array.from({length:11},(_,i)=>String(i+1)); }
-
-  function openProfileEditor(){
-    if(!CURRENT_USER) return;
-    const p={...(PROFILE||{})};
-    showOverlay(`
-      <div class="profile-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <b style="font-size:18px">Profilni tahrirlash</b>
-          <button class="btn" id="peClose">Yopish</button>
-        </div>
-        <div class="divider"></div>
-        <div style="display:flex;gap:14px;align-items:center">
-          <div class="avatar" style="width:76px;height:76px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
-          <div>
-            <input type="file" id="avatarFile" accept="image/*" style="display:none"/>
-            <button class="btn" id="btnAvatar">Avatarni almashtirish</button>
-            <small class="muted" style="display:block">JPG/PNG, 1–2 MB gacha.</small>
-          </div>
-        </div>
-        <div class="grid2">
-          <div class="fld"><label>Ism *</label><input id="firstName" value="${p.firstName||''}"></div>
-          <div class="fld"><label>Familiya *</label><input id="lastName"  value="${p.lastName||''}"></div>
-          <div class="fld"><label>Tug‘ilgan sana *</label><input id="birthDate" type="date" value="${p.birthDate||''}"></div>
-          <div class="fld"><label>Rol *</label>
-            <select id="role">
-              <option value="">—</option>
-              <option ${p.role==='O‘qituvchi'?'selected':''}>O‘qituvchi</option>
-              <option ${p.role==='Talaba'?'selected':''}>Talaba</option>
-              <option ${p.role==='Abituriyent'?'selected':''}>Abituriyent</option>
-              <option ${p.role==='O‘quvchi'?'selected':''}>O‘quvchi</option>
-            </select>
-          </div>
-          <div class="fld"><label>Viloyat *</label><select id="region"></select></div>
-          <div class="fld"><label>Tuman *</label><select id="district"></select></div>
-          <div class="fld"><label>Maktab</label><select id="school"></select></div>
-
-          <div class="fld" id="classWrap" style="display:none">
-            <label>Sinf *</label><select id="classSel"></select>
-          </div>
-        </div>
-        <div id="peErr" style="color:#c62828;min-height:18px"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn primary" id="btnSave">Saqlash</button>
-        </div>
+  <!-- Modal -->
+  <div id="modal" class="modal-back" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mtitle">
+      <div class="modal-head">
+        <div id="mtitle" class="modal-title">Info</div>
+        <button id="mclose" class="btn">✕</button>
       </div>
-    `);
-    q('#peClose').onclick=closeOverlay;
-    q('#btnAvatar').onclick=()=>q('#avatarFile').click();
+      <div class="modal-body"></div>
+    </div>
+  </div>
 
-    const rSel=q('#region'), dSel=q('#district'), sSel=q('#school'), roleSel=q('#role'), classWrap=q('#classWrap'), classSel=q('#classSel');
-
-    // kaskad selectlar
-    fillSelect(rSel, REGIONS.map(r=>r.name), p.region||'');
-    function refreshDistricts(){
-      const reg = REGIONS.find(x=>x.name===rSel.value);
-      fillSelect(dSel, reg?reg.districts.map(d=>d.name):[], p.district||'');
-      refreshSchools();
-    }
-    function refreshSchools(){
-      const reg = REGIONS.find(x=>x.name===rSel.value);
-      const dis = reg?.districts.find(d=>d.name===dSel.value);
-      fillSelect(sSel, dis?dis.schools:[], p.school||'');
-    }
-    rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools;
-    refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
-
-    // sinf selecti (1-11) — faqat O‘quvchi bo‘lsa
-    function toggleClass(){
-      const isPupil = roleSel.value==='O‘quvchi';
-      classWrap.style.display = isPupil ? 'block' : 'none';
-      if(isPupil){
-        fillSelect(classSel, buildClassOptions(), p.class||'');
-      }else{
-        classSel.innerHTML='';
-      }
-    }
-    roleSel.onchange=toggleClass;
-    toggleClass();
-
-    // avatar upload
-    q('#avatarFile').addEventListener('change', async (ev)=>{
-      const f=ev.target.files?.[0]; if(!f) return;
-      const err=q('#peErr'); err.textContent='';
-      try{
-        const reader=new FileReader();
-        reader.onload=async ()=>{
-          const dataURL=reader.result;
-          const ref=sRef(st, `avatars/${CURRENT_USER.uid}.jpg`);
-          await uploadString(ref, dataURL, 'data_url');
-          const url=await getDownloadURL(ref);
-          PROFILE={...PROFILE, avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE);
-          const av= q('.profile-card .avatar img') || document.createElement('img');
-          av.src=url; if(!q('.profile-card .avatar img')) q('.profile-card .avatar').appendChild(av);
-          renderUserChip(CURRENT_USER, PROFILE);
-        };
-        reader.readAsDataURL(f);
-      }catch(e){ err.textContent = e?.message || String(e); }
-    });
-
-    // saqlash
-    q('#btnSave').onclick=async ()=>{
-      const err=q('#peErr'); err.textContent='';
-      const data={
-        firstName:q('#firstName').value.trim(),
-        lastName:q('#lastName').value.trim(),
-        birthDate:q('#birthDate').value,
-        role:roleSel.value,
-        region:rSel.value, district:dSel.value, school:sSel.value,
-        class: roleSel.value==='O‘quvchi' ? (classSel.value||'') : '',
-        avatarUrl: PROFILE?.avatarUrl || ''
-      };
-      for(const k of ALWAYS_REQ){ if(!data[k]){ err.textContent='* Belgilangan maydonlar to‘ldirilishi shart.'; return; } }
-      if(data.role==='O‘quvchi' && !data.class){ err.textContent='O‘quvchi uchun “Sinf” majburiy.'; return; }
-      try{ await saveProfile(CURRENT_USER.uid, data); PROFILE=data; renderUserChip(CURRENT_USER, PROFILE); closeOverlay(); }
-      catch(e){ err.textContent=e?.message||String(e); }
-    };
-  }
-
-  /* Home sections */
-  async function fetchHome(){
-    try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){}
-    const r=await fetch('./home.json',{cache:'no-store'}); if(!r.ok) return {sections:[]}; return await r.json();
-  }
-  const state={sections:[],activeId:null};
-
-  async function loadHome(){
-    const d=await fetchHome(); state.sections=Array.isArray(d.sections)?d.sections:[];
-    renderChips(); renderSections();
-    if(state.sections.length) activate(state.sections[0].id||'sec0');
-  }
-  function renderChips(){
-    const bar=q('#chipbar'); bar.innerHTML='';
-    state.sections.forEach((s,i)=>{
-      const b=document.createElement('button'); b.className='chip'+(i===0?' active':'');
-      b.textContent=s.title||s.id||('Bo‘lim '+(i+1)); b.dataset.target=s.id||('sec'+i);
-      b.onclick=()=>{ activate(b.dataset.target); b.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); };
-      bar.appendChild(b);
-    });
-  }
-  function makeIframeForSection(s){
-    const ifr=document.createElement('iframe'); ifr.className='sbx';
-    const sandbox = s.sandbox || 'allow-scripts allow-same-origin allow-forms'; ifr.setAttribute('sandbox', sandbox);
-    if(s.mode==='url' && s.src){ ifr.src=s.src; }
-    else{
-      const base = s.baseHref ? `<base href="${s.baseHref}">` : '';
-      ifr.srcdoc = `<!doctype html><html><head>${base}<meta charset="utf-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-        <style>html,body{height:100%;margin:0;background:transparent}</style></head>
-        <body>${s.contentHtml||''}</body></html>`;
-    }
-    // banner ichidagi kontent qanday bo‘lsa shunday ko‘rinsin (scalesiz):
-    ifr.addEventListener('load', ()=>{ try{
-      const d=ifr.contentDocument;
-      d.documentElement.style.height='100%'; d.body.style.height='100%'; // ichida hech narsa siqilmasin
-    }catch{} });
-    return ifr;
-  }
-  function renderSections(){
-    const host=q('#sections'); host.innerHTML='';
-    state.sections.forEach((s,i)=>{
-      const id=s.id||('sec'+i);
-      const makeFull = (i===0); // 1-bo‘lim — fullscreen banner
-      const outer=document.createElement('section');
-      outer.className='section'+(makeFull?' full-banner':''); outer.dataset.section=id;
-
-      if(!makeFull && s.title){
-        const sh=document.createElement('div'); sh.className='section-hdr';
-        sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; outer.appendChild(sh);
-      }
-
-      const wrap=document.createElement('div'); wrap.className='iframe-wrap';
-      const ifr=makeIframeForSection(s);
-      wrap.appendChild(ifr); outer.appendChild(wrap); host.appendChild(outer);
-    });
-  }
-
-  // fullscreen banner balandligini header+chipbar’dan keyin boshlash
-  function sizeBannerGap(){
-    const hdrH=(q('#hdr')?.getBoundingClientRect().height||0);
-    const chipH=(q('#chipwrap')?.getBoundingClientRect().height||0);
-    document.documentElement.style.setProperty('--top-gap', (hdrH+chipH)+'px');
-  }
-
-  function activate(id){
-    state.activeId=id;
-    document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.target===id));
-    document.querySelectorAll('[data-section]').forEach(s=>{ const show=(s.dataset.section===id); s.style.display=show?'block':'none'; s.classList.toggle('showing',show); });
-    sizeBannerGap();
-  }
-  addEventListener('resize', sizeBannerGap);
-  addEventListener('orientationchange', sizeBannerGap);
-
-  /* Auth lock (minimum) */
-  function setLocked(b){const a=q('#app'); if(a) a.hidden=b;}
-  function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock');
-    const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='overlay show';
-    lock.innerHTML=`<div class="profile-card">
-      <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"></div>
-      <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"></div>
-      <div id="err" style="color:#c62828"></div>
-      <div style="display:flex;gap:10px">
-        <button id="login" class="btn primary">Kirish</button>
-        <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
-        <button id="google" class="btn">Google</button>
-      </div>
-    </div>`;
-    document.body.appendChild(lock);
-    lock.addEventListener('click', async (e)=>{
-      const id=e.target.id, errEl=q('#err',lock); const busy=b=>qa('button',lock).forEach(x=>x.disabled=b);
-      try{
-        busy(true);
-        if(id==='google') await signInWithPopup(auth,new GoogleAuthProvider());
-        if(id==='login'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await signInWithEmailAndPassword(auth,eml,pwd); }
-        if(id==='signup'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await createUserWithEmailAndPassword(auth,eml,pwd); }
-      }catch(err){ if(errEl) errEl.textContent=err?.message||String(err); } finally{ busy(false); }
-    });
-    return lock;
-  }
-
-  onAuthStateChanged(auth, async (u)=>{
-    CURRENT_USER=u||null;
-    if(!u){ setLocked(true); buildAuthLock(); q('#user-slot').innerHTML=''; return; }
-    qa('#auth-lock').forEach(x=>x.remove()); setLocked(false);
-    if(!REGIONS.length) REGIONS=await loadRegions();
-    [PROFILE, USER_POINTS] = await Promise.all([ getProfile(u.uid), getUserPoints(u.uid) ]);
-    if(PROFILE && !PROFILE.role){ PROFILE.role='O‘quvchi'; await saveProfile(u.uid, PROFILE); }
-    renderUserChip(u, PROFILE||{});
-
-    const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]);
-    const ok = baseOk && (PROFILE?.role!=='O‘quvchi' || !!PROFILE.class);
-    if(!ok) openProfileEditor();
-  });
-
-  /* GLOBAL DELEGATION — butun userchip bosilganda ochilsin */
-  document.addEventListener('click', (e)=>{
-    const t=e.target;
-    if(t.closest('#userchip')){
-      const open = q('#usermenu')?.classList.contains('open');
-      open ? closeUserMenu() : openUserMenu();
-    }
-    if(t.closest('#mProfile')){ e.preventDefault(); closeUserMenu(); openProfileView(); }
-    if(t.closest('#mEdit')){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
-    if(t.closest('#mLogout')){ e.preventDefault(); closeUserMenu(); signOut(auth); }
-  });
-
-  await loadHome();
-  sizeBannerGap();
-  </script>
+  <span class="sr-only">Renderer loaded</span>
 </body>
 </html>
