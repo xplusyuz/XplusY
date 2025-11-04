@@ -15,7 +15,8 @@
     --muted:#5f7469; --line:#E3EBE6; --speed:.25s;
     --shadow:0 20px 60px rgba(18,40,28,.14);
     --shadow-sm:0 8px 26px rgba(18,40,28,.10);
-    --vh: 1vh; /* dynamic 100vh for mobile */
+    /* dynamic 100vh for mobile */
+    --vh: 1vh;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -55,14 +56,14 @@
     top: 0; left: 0; right: 0; bottom: 0;
     z-index: 40;
     overflow: hidden;
-    pointer-events: none; /* controls will re-enable */
+    pointer-events: none; /* controls re-enable */
   }
   .banner-carousel {
     position: absolute; top: 0; left: 0;
     width: 100%; height: 100%;
     display: flex;
     transition: transform 0.6s ease;
-    pointer-events: auto; /* allow hover/pause + interactions */
+    pointer-events: auto; /* hover/pause works */
   }
   .banner-slide { flex: 0 0 100%; height: 100%; position: relative; }
   .banner-slide iframe { width: 100%; height: 100%; border: 0; display: block; }
@@ -155,7 +156,7 @@
   .menu .label{padding:8px 14px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--card) 60%, transparent)}
   .ico{width:18px;height:18px;display:inline-block}
 
-  /* Overlay / modals (glass + anim) */
+  /* Overlay / modals */
   .overlay{
     position:fixed; inset:0; display:none; place-items:center; z-index:110;
     background:color-mix(in srgb, #000 18%, transparent);
@@ -272,9 +273,10 @@
     catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}
   }
 
-  /* Banner Carousel (fullscreen top) */
+  /* ===== FULLSCREEN BANNERS (ONLY FIRESTORE) ===== */
   const BANNER_STATE = { banners: [], currentIndex: 0, interval: null };
 
+  // Variant A (recommend): read from configs/banners
   async function fetchBanners() {
     try {
       const s = await getDoc(doc(db, "configs", "banners"));
@@ -283,12 +285,21 @@
         if (Array.isArray(d.banners)) return d.banners;
       }
     } catch(e) {}
-    try {
-      const r = await fetch("./banners.json", {cache: "no-store"});
-      if (r.ok) return await r.json();
-    } catch {}
     return [];
   }
+
+  // ----- If you want to read fullscreen banners from configs/home instead, use this version:
+  // async function fetchBanners() {
+  //   try {
+  //     const s = await getDoc(doc(db, "configs", "home"));
+  //     if (s.exists()) {
+  //       const d = s.data();
+  //       const arr = d.sections?.[0]?.subsections?.[0]?.banners;
+  //       if (Array.isArray(arr)) return arr;
+  //     }
+  //   } catch(e) {}
+  //   return [];
+  // }
 
   function bannerFrameFromObj(b, srcdocBaseHref=null) {
     const f = document.createElement("iframe");
@@ -360,235 +371,9 @@
   function stopBannerRotation(){ if (BANNER_STATE.interval) { clearInterval(BANNER_STATE.interval); BANNER_STATE.interval = null; } }
   async function loadBanners(){ const banners = await fetchBanners(); renderBannerCarousel(banners); }
 
-  /* User chip + menu */
-  function renderUserChip(u, profile){
-    const slot=q("#user-slot");
-    const age=profile?.birthDate?calcAge(profile.birthDate):"";
-    const name=profile?.firstName?(profile.firstName+(profile.lastName?` ${profile.lastName}`:"")):(u.displayName||u.email||"Foydalanuvchi");
-    const avatar=profile?.avatarUrl||u.photoURL||"";
-    const role=profile?.role||"—";
-    slot.innerHTML=`
-      <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
-        <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:""}</div>
-        <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+" yosh • ":""}${USER_POINTS} points</small></div>
-        <div class="menu" id="usermenu" role="menu">
-          <a href="#" id="mProfile" role="menuitem">Profil</a>
-          <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
-          <a href="#" id="mLogout" role="menuitem">Chiqish</a>
-          <div class="label">Aloqa</div>
-          <a href="tel:+998901234567">+998 90 123 45 67</a>
-          <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
-          <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
-          <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
-          <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
-          <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
-        </div>
-      </div>`;
-  }
-
-  function openUserMenu(){
-    const chip = q("#userchip"); const menu=q("#usermenu"); if(!chip||!menu) return;
-    (q("#portal-root")||document.body).appendChild(menu);
-    menu.style.visibility="hidden"; menu.style.display="block";
-    const r = chip.getBoundingClientRect();
-    const mw = menu.offsetWidth, mh = menu.offsetHeight, gap = 8;
-    let left = Math.min(Math.max(r.right - mw, 8), innerWidth - mw - 8);
-    let top  = r.bottom + gap;
-    if (top + mh > innerHeight - 8) top = Math.max(8, r.top - gap - mh);
-    menu.style.left = left+"px"; menu.style.top = Math.max(8, top)+"px";
-    menu.classList.add("open"); menu.style.visibility="visible"; chip.setAttribute("aria-expanded","true");
-
-    const closeOnOutside = (e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
-    const onSR = ()=> position();
-    function position(){
-      if(!menu.classList.contains("open")) return;
-      const r2 = chip.getBoundingClientRect();
-      let L = Math.min(Math.max(r2.right - mw, 8), innerWidth - mw - 8);
-      let T = r2.bottom + gap;
-      if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
-      menu.style.left=L+"px"; menu.style.top=Math.max(8,T)+"px";
-    }
-    menu._closers={closeOnOutside, onSR};
-    addEventListener("click", closeOnOutside, {capture:true});
-    addEventListener("scroll", onSR, {passive:true});
-    addEventListener("resize", onSR, {passive:true});
-  }
-
-  function closeUserMenu(){
-    const menu=q("#usermenu"); if(!menu) return;
-    menu.classList.remove("open"); menu.style.display="none";
-    if(menu._closers){
-      removeEventListener("click", menu._closers.closeOnOutside, {capture:true});
-      removeEventListener("scroll", menu._closers.onSR);
-      removeEventListener("resize", menu._closers.onSR);
-      menu._closers=null;
-    }
-    const chip=q("#userchip"); if(chip){ chip.appendChild(menu); chip.setAttribute("aria-expanded","false"); }
-  }
-
-  /* OVERLAY helpers */
-  const showOverlay=html=>{const ov=q("#overlay"); ov.innerHTML=html; ov.classList.add("show");};
-  const closeOverlay=()=>{const ov=q("#overlay"); ov.classList.remove("show"); ov.innerHTML="";};
-  q("#overlay").addEventListener("click", (e)=>{ if(e.target.id==="overlay") closeOverlay(); });
-  addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeOverlay(); });
-
-  /* Avatar modal */
-  function readFileToDataURL(file){
-    return new Promise((resolve, reject)=>{
-      const ok = /image\/(png|jpe?g|webp|gif)$/i.test(file.type);
-      if(!ok) return reject(new Error("Rasm formati: JPG/PNG/WebP/GIF."));
-      const reader=new FileReader();
-      reader.onload=()=>resolve(reader.result);
-      reader.onerror=()=>reject(new Error("Faylni o'qishda xatolik."));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function openAvatarModal(initialSrc){
-    const html = `
-      <div class="modal-card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-          <b style="font-size:18px">Avatarni yangilash</b>
-          <button class="btn" id="avClose">✕</button>
-        </div>
-        <div style="height:8px"></div>
-        <div class="grid2">
-          <div class="dropzone" id="dz">
-            <div class="preview" id="preview">${initialSrc?`<img src="${initialSrc}" alt="">`:'<span class="hint">Rasm hali tanlanmagan</span>'}</div>
-            <div class="hint">Rasmni bu yerga tashlang yoki tanlang (JPG/PNG/WebP, 2MB gacha).</div>
-            <input type="file" id="avFile" accept="image/*" style="display:none"/>
-            <button class="btn" id="pick">Fayl tanlash</button>
-          </div>
-          <div>
-            <div class="hint">Maslahat: kvadrat (1:1) rasm yaxshi ko'rinadi.</div>
-          </div>
-        </div>
-        <div id="avErr" style="color:#c62828;min-height:18px"></div>
-        <div class="modal-actions">
-          <button class="btn" id="avCancel">Bekor</button>
-          <button class="btn primary" id="avSave" disabled>Saqlash</button>
-        </div>
-      </div>`;
-    showOverlay(html);
-
-    const dz = q("#dz"), avFile=q("#avFile"), pick=q("#pick");
-    const prev=q("#preview"); const err=q("#avErr");
-    let dataURL = initialSrc || "";
-    const setPreview = (src)=>{ dataURL=src||""; prev.innerHTML = dataURL ? `<img src="${dataURL}" alt="">` : '<span class="hint">Rasm hali tanlanmagan</span>'; q("#avSave").disabled=!dataURL; };
-    const onDrag = (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); };
-    const onDrop = async (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); err.textContent=""; try{
-        const file = e.dataTransfer.files?.[0]; if(!file) return;
-        if(file.size > 2*1024*1024) throw new Error("2MB dan oshmasin.");
-        setPreview(await readFileToDataURL(file));
-      }catch(ex){ err.textContent=ex?.message||String(ex); } };
-    ["dragenter","dragover"].forEach(t=>dz.addEventListener(t,onDrag));
-    ["dragleave","drop"].forEach(t=>dz.addEventListener(t,(t==="drop")?onDrop:(e)=>{e.preventDefault(); dz.classList.remove("drag");}));
-    pick.onclick = ()=> avFile.click();
-    avFile.onchange = async (ev)=>{ err.textContent=""; try{
-        const f=ev.target.files?.[0]; if(!f) return;
-        if(f.size > 2*1024*1024) throw new Error("2MB dan oshmasin.");
-        setPreview(await readFileToDataURL(f));
-      }catch(ex){ err.textContent=ex?.message||String(ex); } };
-    q("#avClose").onclick=closeOverlay; q("#avCancel").onclick=closeOverlay;
-    q("#avSave").onclick=async ()=>{ if(!CURRENT_USER || !dataURL) return; err.textContent=""; q("#avSave").disabled=true;
-      try{ const ref=sRef(st, `avatars/${CURRENT_USER.uid}.jpg`); await uploadString(ref, dataURL, "data_url"); const url=await getDownloadURL(ref);
-        PROFILE={...(PROFILE||{}), avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE); renderUserChip(CURRENT_USER, PROFILE); closeOverlay();
-      }catch(ex){ err.textContent=ex?.message||String(ex); q("#avSave").disabled=false; } };
-  }
-
-  /* Profile view / edit */
-  function openProfileView(){
-    if(!CURRENT_USER) return;
-    const p = PROFILE||{}; const age=p.birthDate?calcAge(p.birthDate):"";
-    showOverlay(`
-      <div class="profile-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="display:flex;gap:12px;align-items:center">
-            <div class="avatar" style="width:56px;height:56px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:""}</div>
-            <div><b style="font-size:18px">${p.firstName||""} ${p.lastName||""}</b><br>
-              <small class="muted">${p.role||"—"} ${age?`• ${age} yosh`:""} • ${USER_POINTS} points</small></div>
-          </div>
-          <button class="btn" id="pvClose">Yopish</button>
-        </div>
-        <div class="divider"></div>
-        <div class="grid2">
-          <div><div class="muted">Tug'ilgan sana</div><b>${p.birthDate||"—"}</b></div>
-          <div><div class="muted">Hudud</div><b>${p.region||"—"}${p.district?`, ${p.district}`:""}</b></div>
-          <div><div class="muted">Maktab</div><b>${p.school||"—"}</b></div>
-          <div><div class="muted">Sinf</div><b>${p.class||"—"}</b></div>
-        </div>
-        <div style="height:10px"></div>
-        <button class="btn primary" id="pvEdit">Tahrirlash</button>
-      </div>`);
-    q("#pvClose").onclick=closeOverlay;
-    q("#pvEdit").onclick=()=>{ closeOverlay(); openProfileEditor(); };
-  }
-
-  function fillSelect(sel, items, value){ sel.innerHTML = '<option value="">—</option>' + (items||[]).map(x=>`<option>${x}</option>`).join(""); if(value) sel.value=value; }
-  function buildClassOptions(){ return Array.from({length:11},(_,i)=>String(i+1)); }
-
-  function openProfileEditor(){
-    if(!CURRENT_USER) return;
-    const p={...(PROFILE||{})};
-    showOverlay(`
-      <div class="profile-card">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <b style="font-size:18px">Profilni tahrirlash</b>
-          <button class="btn" id="peClose">Yopish</button>
-        </div>
-        <div class="divider"></div>
-        <div style="display:flex;gap:14px;align-items:center">
-          <div class="avatar" style="width:76px;height:76px;cursor:pointer" id="avBox" title="Avatarni yangilash">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:""}</div>
-          <div><button class="btn" id="btnAvatar">Avatarni almashtirish</button></div>
-        </div>
-        <div class="grid2">
-          <div class="fld"><label>Ism *</label><input id="firstName" value="${p.firstName||""}"></div>
-          <div class="fld"><label>Familiya *</label><input id="lastName"  value="${p.lastName||""}"></div>
-          <div class="fld"><label>Tug'ilgan sana *</label><input id="birthDate" type="date" value="${p.birthDate||""}"></div>
-          <div class="fld"><label>Rol *</label>
-            <select id="role">
-              <option value="">—</option>
-              <option ${p.role==="O'qituvchi"?"selected":""}>O'qituvchi</option>
-              <option ${p.role==="Talaba"?"selected":""}>Talaba</option>
-              <option ${p.role==="Abituriyent"?"selected":""}>Abituriyent</option>
-              <option ${p.role==="O'quvchi"?"selected":""}>O'quvchi</option>
-            </select>
-          </div>
-          <div class="fld"><label>Viloyat *</label><select id="region"></select></div>
-          <div class="fld"><label>Tuman *</label><select id="district"></select></div>
-          <div class="fld"><label>Maktab</label><select id="school"></select></div>
-          <div class="fld" id="classWrap" style="display:none"><label>Sinf *</label><select id="classSel"></select></div>
-        </div>
-        <div id="peErr" style="color:#c62828;min-height:18px"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn primary" id="btnSave">Saqlash</button></div>
-      </div>`);
-    q("#peClose").onclick=closeOverlay;
-    const cur = (PROFILE?.avatarUrl || CURRENT_USER?.photoURL || "");
-    q("#avBox").onclick=()=>openAvatarModal(cur);
-    q("#btnAvatar").onclick=()=>openAvatarModal(cur);
-
-    const rSel=q("#region"), dSel=q("#district"), sSel=q("#school"), roleSel=q("#role"), classWrap=q("#classWrap"), classSel=q("#classSel");
-    fillSelect(rSel, REGIONS.map(r=>r.name), p.region||"");
-    function refreshDistricts(){ const reg = REGIONS.find(x=>x.name===rSel.value); fillSelect(dSel, reg?reg.districts.map(d=>d.name):[], p.district||""); refreshSchools(); }
-    function refreshSchools(){ const reg = REGIONS.find(x=>x.name===rSel.value); const dis = reg?.districts.find(d=>d.name===dSel.value); fillSelect(sSel, dis?dis.schools:[], p.school||""); }
-    rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools; refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
-    function toggleClass(){ const isPupil = roleSel.value==="O'quvchi"; classWrap.style.display = isPupil ? "block" : "none"; if(isPupil){ fillSelect(classSel, buildClassOptions(), p.class||""); } else classSel.innerHTML=""; }
-    roleSel.onchange=toggleClass; toggleClass();
-
-    q("#btnSave").onclick=async ()=>{ const err=q("#peErr"); err.textContent="";
-      const data={ firstName:q("#firstName").value.trim(), lastName:q("#lastName").value.trim(), birthDate:q("#birthDate").value,
-        role:roleSel.value, region:rSel.value, district:dSel.value, school:sSel.value, class: roleSel.value==="O'quvchi" ? (q("#classSel").value||"") : "", avatarUrl: PROFILE?.avatarUrl || "" };
-      for(const k of ALWAYS_REQ){ if(!data[k]){ err.textContent="* Belgilangan maydonlar to‘ldirilishi shart."; return; } }
-      if(data.role==="O'quvchi" && !data.class){ err.textContent="O‘quvchi uchun \"Sinf\" majburiy."; return; }
-      try{ await saveProfile(CURRENT_USER.uid, data); PROFILE=data; renderUserChip(CURRENT_USER, PROFILE); closeOverlay(); }
-      catch(e){ err.textContent=e?.message||String(e); }
-    };
-  }
-
-  /* ======== HOME (sections + banners + carousel + cards) ========= */
+  /* ======== HOME (sections + banners + cards) ========= */
   async function fetchHome(){
     try{const s=await getDoc(doc(db,"configs","home")); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){}
-    try{const r=await fetch("./home.json",{cache:"no-store"}); if(r.ok) return await r.json();}catch{}
     return {sections:[]};
   }
 
@@ -618,7 +403,21 @@
     });
   }
 
-  /* carousel for a list of banners (subsection-level) */
+  /* utilities */
+  function bannerFrameFromObj2(b, baseHref=null){
+    const f = document.createElement("iframe");
+    f.className="sbx";
+    f.setAttribute("sandbox", b.sandbox || "allow-scripts allow-forms");
+    f.setAttribute("scrolling","no");
+    if (b.mode==="url"){ f.src=b.src||""; }
+    else {
+      const base = b.baseHref || baseHref || "";
+      const html = `<!doctype html><html><head>${base?`<base href="${base}">`:""}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>html,body{height:100%;margin:0;overflow:hidden;background:transparent}</style></head><body>${String(b.contentHtml||"")}</body></html>`;
+      f.srcdoc = html;
+    }
+    return f;
+  }
+
   function renderCarousel(banners, fullBleed=false, baseHref=null, intervalMs=4500){
     const vp=document.createElement("div");
     if(fullBleed){ vp.className="carousel-viewport"; } else { vp.className="ratio"; vp.dataset.r="16-9"; }
@@ -627,7 +426,7 @@
 
     const frames=banners.map(b=>{
       const holder=document.createElement("div"); holder.style.cssText="position:relative;width:100%;height:100%";
-      const fr=bannerFrameFromObj(b, baseHref); fr.style.cssText="position:absolute;inset:0;width:100%;height:100%"; holder.appendChild(fr); slideWrap.appendChild(holder); return holder;
+      const fr=bannerFrameFromObj2(b, baseHref); fr.style.cssText="position:absolute;inset:0;width:100%;height:100%"; holder.appendChild(fr); slideWrap.appendChild(holder); return holder;
     });
 
     let i=0, timer=null;
@@ -639,18 +438,16 @@
     return vp;
   }
 
-  /* non-carousel single banner renderer */
   function renderBanner(b, fullBleed=false, baseHref=null){
     if(fullBleed){
       const wrap=document.createElement("div"); wrap.className="carousel-viewport";
-      wrap.appendChild(bannerFrameFromObj(b, baseHref)); return wrap;
+      wrap.appendChild(bannerFrameFromObj2(b, baseHref)); return wrap;
     }else{
       const r=document.createElement("div"); r.className="ratio"; r.dataset.r="16-9";
-      r.appendChild(bannerFrameFromObj(b, baseHref)); return r;
+      r.appendChild(bannerFrameFromObj2(b, baseHref)); return r;
     }
   }
 
-  /* card */
   function renderCard(it){
     const c=document.createElement("div"); c.className="cardX"; c.dataset.kind="card";
     const title=it.title||"Card"; const st=cardState(it); c.dataset.state=st;
@@ -749,7 +546,7 @@
     renderChips(); renderSections(); if(HSTATE.sections.length) activate(HSTATE.sections[0].id);
   }
 
-  /* Auth lock (minimum) */
+  /* ======= AUTH LOCK (minimal) ======= */
   function setLocked(b){const a=q("#app"); if(a) a.hidden=b;}
 
   function buildAuthLock(){ if(q("#auth-lock")) return q("#auth-lock");
@@ -790,6 +587,220 @@
     if(!ok) openProfileEditor();
   });
 
+  /* User chip/menu + modals (unchanged from last version) */
+  function renderUserChip(u, profile){
+    const slot=q("#user-slot");
+    const age=profile?.birthDate?calcAge(profile.birthDate):"";
+    const name=profile?.firstName?(profile.firstName+(profile.lastName?` ${profile.lastName}`:"")):(u.displayName||u.email||"Foydalanuvchi");
+    const avatar=profile?.avatarUrl||u.photoURL||"";
+    const role=profile?.role||"—";
+    slot.innerHTML=`
+      <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
+        <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:""}</div>
+        <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+" yosh • ":""}${USER_POINTS} points</small></div>
+        <div class="menu" id="usermenu" role="menu">
+          <a href="#" id="mProfile" role="menuitem">Profil</a>
+          <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
+          <a href="#" id="mLogout" role="menuitem">Chiqish</a>
+          <div class="label">Aloqa</div>
+          <a href="tel:+998901234567">+998 90 123 45 67</a>
+          <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
+          <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
+          <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
+          <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
+          <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
+        </div>
+      </div>`;
+  }
+  function openUserMenu(){
+    const chip = q("#userchip"); const menu=q("#usermenu"); if(!chip||!menu) return;
+    (q("#portal-root")||document.body).appendChild(menu);
+    menu.style.visibility="hidden"; menu.style.display="block";
+    const r = chip.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight, gap = 8;
+    let left = Math.min(Math.max(r.right - mw, 8), innerWidth - mw - 8);
+    let top  = r.bottom + gap;
+    if (top + mh > innerHeight - 8) top = Math.max(8, r.top - gap - mh);
+    menu.style.left = left+"px"; menu.style.top = Math.max(8, top)+"px";
+    menu.classList.add("open"); menu.style.visibility="visible"; chip.setAttribute("aria-expanded","true");
+    const closeOnOutside = (e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
+    const onSR = ()=> position();
+    function position(){
+      if(!menu.classList.contains("open")) return;
+      const r2 = chip.getBoundingClientRect();
+      let L = Math.min(Math.max(r2.right - mw, 8), innerWidth - mw - 8);
+      let T = r2.bottom + gap;
+      if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
+      menu.style.left=L+"px"; menu.style.top=Math.max(8,T)+"px";
+    }
+    menu._closers={closeOnOutside, onSR};
+    addEventListener("click", closeOnOutside, {capture:true});
+    addEventListener("scroll", onSR, {passive:true});
+    addEventListener("resize", onSR, {passive:true});
+  }
+  function closeUserMenu(){
+    const menu=q("#usermenu"); if(!menu) return;
+    menu.classList.remove("open"); menu.style.display="none";
+    if(menu._closers){
+      removeEventListener("click", menu._closers.closeOnOutside, {capture:true});
+      removeEventListener("scroll", menu._closers.onSR);
+      removeEventListener("resize", menu._closers.onSR);
+      menu._closers=null;
+    }
+    const chip=q("#userchip"); if(chip){ chip.appendChild(menu); chip.setAttribute("aria-expanded","false"); }
+  }
+
+  /* OVERLAY helpers */
+  const showOverlay=html=>{const ov=q("#overlay"); ov.innerHTML=html; ov.classList.add("show");};
+  const closeOverlay=()=>{const ov=q("#overlay"); ov.classList.remove("show"); ov.innerHTML="";};
+  q("#overlay").addEventListener("click", (e)=>{ if(e.target.id==="overlay") closeOverlay(); });
+  addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeOverlay(); });
+
+  /* Avatar modal + Profile view/edit (unchanged) */
+  function readFileToDataURL(file){
+    return new Promise((resolve, reject)=>{
+      const ok = /image\/(png|jpe?g|webp|gif)$/i.test(file.type);
+      if(!ok) return reject(new Error("Rasm formati: JPG/PNG/WebP/GIF."));
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(new Error("Faylni o'qishda xatolik."));
+      reader.readAsDataURL(file);
+    });
+  }
+  function openAvatarModal(initialSrc){
+    const html = `
+      <div class="modal-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <b style="font-size:18px">Avatarni yangilash</b>
+          <button class="btn" id="avClose">✕</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="grid2">
+          <div class="dropzone" id="dz">
+            <div class="preview" id="preview">${initialSrc?`<img src="${initialSrc}" alt="">`:'<span class="hint">Rasm hali tanlanmagan</span>'}</div>
+            <div class="hint">Rasmni bu yerga tashlang yoki tanlang (JPG/PNG/WebP, 2MB gacha).</div>
+            <input type="file" id="avFile" accept="image/*" style="display:none"/>
+            <button class="btn" id="pick">Fayl tanlash</button>
+          </div>
+          <div><div class="hint">Maslahat: kvadrat (1:1) rasm yaxshi ko‘rinadi.</div></div>
+        </div>
+        <div id="avErr" style="color:#c62828;min-height:18px"></div>
+        <div class="modal-actions">
+          <button class="btn" id="avCancel">Bekor</button>
+          <button class="btn primary" id="avSave" disabled>Saqlash</button>
+        </div>
+      </div>`;
+    showOverlay(html);
+    const dz = q("#dz"), avFile=q("#avFile"), pick=q("#pick");
+    const prev=q("#preview"); const err=q("#avErr");
+    let dataURL = initialSrc || "";
+    const setPreview = (src)=>{ dataURL=src||""; prev.innerHTML = dataURL ? `<img src="${dataURL}" alt="">` : '<span class="hint">Rasm hali tanlanmagan</span>'; q("#avSave").disabled=!dataURL; };
+    const onDrag = (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add("drag"); };
+    const onDrop = async (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); err.textContent=""; try{
+        const file = e.dataTransfer.files?.[0]; if(!file) return;
+        if(file.size > 2*1024*1024) throw new Error("2MB dan oshmasin.");
+        setPreview(await readFileToDataURL(file));
+      }catch(ex){ err.textContent=ex?.message||String(ex); } };
+    ["dragenter","dragover"].forEach(t=>dz.addEventListener(t,onDrag));
+    ["dragleave","drop"].forEach(t=>dz.addEventListener(t,(t==="drop")?onDrop:(e)=>{e.preventDefault(); dz.classList.remove("drag");}));
+    pick.onclick = ()=> avFile.click();
+    avFile.onchange = async (ev)=>{ err.textContent=""; try{
+        const f=ev.target.files?.[0]; if(!f) return;
+        if(f.size > 2*1024*1024) throw new Error("2MB dan oshmasin.");
+        setPreview(await readFileToDataURL(f));
+      }catch(ex){ err.textContent=ex?.message||String(ex); } };
+    q("#avClose").onclick=closeOverlay; q("#avCancel").onclick=closeOverlay;
+    q("#avSave").onclick=async ()=>{ if(!CURRENT_USER || !dataURL) return; err.textContent=""; q("#avSave").disabled=true;
+      try{ const ref=sRef(st, `avatars/${CURRENT_USER.uid}.jpg`); await uploadString(ref, dataURL, "data_url"); const url=await getDownloadURL(ref);
+        PROFILE={...(PROFILE||{}), avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE); renderUserChip(CURRENT_USER, PROFILE); closeOverlay();
+      }catch(ex){ err.textContent=ex?.message||String(ex); q("#avSave").disabled=false; } };
+  }
+  function openProfileView(){
+    if(!CURRENT_USER) return;
+    const p = PROFILE||{}; const age=p.birthDate?calcAge(p.birthDate):"";
+    showOverlay(`
+      <div class="profile-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="avatar" style="width:56px;height:56px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:""}</div>
+            <div><b style="font-size:18px">${p.firstName||""} ${p.lastName||""}</b><br>
+              <small class="muted">${p.role||"—"} ${age?`• ${age} yosh`:""} • ${USER_POINTS} points</small></div>
+          </div>
+          <button class="btn" id="pvClose">Yopish</button>
+        </div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <div><div class="muted">Tug‘ilgan sana</div><b>${p.birthDate||"—"}</b></div>
+          <div><div class="muted">Hudud</div><b>${p.region||"—"}${p.district?`, ${p.district}`:""}</b></div>
+          <div><div class="muted">Maktab</div><b>${p.school||"—"}</b></div>
+          <div><div class="muted">Sinf</div><b>${p.class||"—"}</b></div>
+        </div>
+        <div style="height:10px"></div>
+        <button class="btn primary" id="pvEdit">Tahrirlash</button>
+      </div>`);
+    q("#pvClose").onclick=closeOverlay;
+    q("#pvEdit").onclick=()=>{ closeOverlay(); openProfileEditor(); };
+  }
+  function fillSelect(sel, items, value){ sel.innerHTML = '<option value="">—</option>' + (items||[]).map(x=>`<option>${x}</option>`).join(""); if(value) sel.value=value; }
+  function buildClassOptions(){ return Array.from({length:11},(_,i)=>String(i+1)); }
+  function openProfileEditor(){
+    if(!CURRENT_USER) return;
+    const p={...(PROFILE||{})};
+    showOverlay(`
+      <div class="profile-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:18px">Profilni tahrirlash</b>
+          <button class="btn" id="peClose">Yopish</button>
+        </div>
+        <div class="divider"></div>
+        <div style="display:flex;gap:14px;align-items:center">
+          <div class="avatar" style="width:76px;height:76px;cursor:pointer" id="avBox" title="Avatarni yangilash">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:""}</div>
+          <div><button class="btn" id="btnAvatar">Avatarni almashtirish</button></div>
+        </div>
+        <div class="grid2">
+          <div class="fld"><label>Ism *</label><input id="firstName" value="${p.firstName||""}"></div>
+          <div class="fld"><label>Familiya *</label><input id="lastName"  value="${p.lastName||""}"></div>
+          <div class="fld"><label>Tug‘ilgan sana *</label><input id="birthDate" type="date" value="${p.birthDate||""}"></div>
+          <div class="fld"><label>Rol *</label>
+            <select id="role">
+              <option value="">—</option>
+              <option ${p.role==="O'qituvchi"?"selected":""}>O'qituvchi</option>
+              <option ${p.role==="Talaba"?"selected":""}>Talaba</option>
+              <option ${p.role==="Abituriyent"?"selected":""}>Abituriyent</option>
+              <option ${p.role==="O'quvchi"?"selected":""}>O'quvchi</option>
+            </select>
+          </div>
+          <div class="fld"><label>Viloyat *</label><select id="region"></select></div>
+          <div class="fld"><label>Tuman *</label><select id="district"></select></div>
+          <div class="fld"><label>Maktab</label><select id="school"></select></div>
+          <div class="fld" id="classWrap" style="display:none"><label>Sinf *</label><select id="classSel"></select></div>
+        </div>
+        <div id="peErr" style="color:#c62828;min-height:18px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn primary" id="btnSave">Saqlash</button></div>
+      </div>`);
+    q("#peClose").onclick=closeOverlay;
+    const cur = (PROFILE?.avatarUrl || CURRENT_USER?.photoURL || "");
+    q("#avBox").onclick=()=>openAvatarModal(cur);
+    q("#btnAvatar").onclick=()=>openAvatarModal(cur);
+
+    const rSel=q("#region"), dSel=q("#district"), sSel=q("#school"), roleSel=q("#role"), classWrap=q("#classWrap"), classSel=q("#classSel");
+    fillSelect(rSel, REGIONS.map(r=>r.name), p.region||"");
+    function refreshDistricts(){ const reg = REGIONS.find(x=>x.name===rSel.value); fillSelect(dSel, reg?reg.districts.map(d=>d.name):[], p.district||""); refreshSchools(); }
+    function refreshSchools(){ const reg = REGIONS.find(x=>x.name===rSel.value); const dis = reg?.districts.find(d=>d.name===dSel.value); fillSelect(sSel, dis?dis.schools:[], p.school||""); }
+    rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools; refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
+    function toggleClass(){ const isPupil = roleSel.value==="O'quvchi"; classWrap.style.display = isPupil ? "block" : "none"; if(isPupil){ fillSelect(classSel, buildClassOptions(), p.class||""); } else classSel.innerHTML=""; }
+    roleSel.onchange=toggleClass; toggleClass();
+
+    q("#btnSave").onclick=async ()=>{ const err=q("#peErr"); err.textContent="";
+      const data={ firstName:q("#firstName").value.trim(), lastName:q("#lastName").value.trim(), birthDate:q("#birthDate").value,
+        role:roleSel.value, region:rSel.value, district:dSel.value, school:sSel.value, class: roleSel.value==="O'quvchi" ? (q("#classSel").value||"") : "", avatarUrl: PROFILE?.avatarUrl || "" };
+      for(const k of ALWAYS_REQ){ if(!data[k]){ err.textContent="* Belgilangan maydonlar to‘ldirilishi shart."; return; } }
+      if(data.role==="O'quvchi" && !data.class){ err.textContent="O‘quvchi uchun \"Sinf\" majburiy."; return; }
+      try{ await saveProfile(CURRENT_USER.uid, data); PROFILE=data; renderUserChip(CURRENT_USER, PROFILE); closeOverlay(); }
+      catch(e){ err.textContent=e?.message||String(e); }
+    };
+  }
+
   // Global delegation
   document.addEventListener("click", (e)=>{
     const t=e.target;
@@ -804,7 +815,7 @@
 
   // start
   await loadHome();
-  await loadBanners(); // Load fullscreen banners
+  await loadBanners(); // Firestore-only fullscreen banners
   sizeBannerGap();
   addEventListener("resize", sizeBannerGap);
   addEventListener("orientationchange", sizeBannerGap);
