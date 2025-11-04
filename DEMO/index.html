@@ -233,6 +233,8 @@
   <div id="portal-root"></div>
 
   <script type="module">
+/* app.js — LeaderMath.UZ (slot/order/time bilan) */
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
@@ -281,36 +283,59 @@ async function loadRegions(){
   catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}
 }
 
+/* ================== TIME / ORDER UTILS ================== */
+function parseLocal(s){
+  if(!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if(!m) return null;
+  const [,Y,M,D,h,mn]=m;
+  return new Date(+Y,+M-1,+D,+h,+mn,0,0);
+}
+function isActiveByTime(b){
+  const now = new Date();
+  const s = parseLocal(b.startAt);
+  const e = parseLocal(b.endAt);
+  if (s && now < s) return false;
+  if (e && now > e) return false;
+  return true;
+}
+const byOrder = (a,b)=> (a.order??9999) - (b.order??9999);
+
 /* ================== FULLSCREEN BANNERS ================== */
 const BANNER_STATE = { banners: [], currentIndex: 0, interval: null };
 
-/* Firestore: configs/home → sections → (items|subsections) ichidan bannerlarni yig‘ish */
-async function fetchBanners() {
-  try {
-    const s = await getDoc(doc(db, "configs", "home"));
-    if (!s.exists()) return [];
+/* Firestore: configs/home → sections → (items|subsections) ichidan bannerlarni yig‘ish,
+   so‘ngra faqat slot:"fullscreen" bo‘lganlarini tartib bilan qaytarish */
+async function fetchBanners(){
+  try{
+    const s = await getDoc(doc(db,"configs","home"));
+    if(!s.exists()) return [];
     const d = s.data();
 
-    const sections = Array.isArray(d.sections) ? d.sections : [];
-    const banners = [];
+    const sections = Array.isArray(d.sections)? d.sections : [];
+    const all = [];
 
-    for (const sec of sections) {
+    for (const sec of sections){
+      // top-level items
       const items = Array.isArray(sec.items) ? sec.items : [];
-      for (const it of items) if (it?.kind === "banner") banners.push(it);
+      for (const it of items) if (it?.kind==="banner") all.push(it);
 
+      // subsections
       const subs = Array.isArray(sec.subsections) ? sec.subsections : [];
-      for (const ss of subs) {
-        if (Array.isArray(ss.banners)) banners.push(...ss.banners); // eski sxema
-        const sitems = Array.isArray(ss.items) ? ss.items : [];     // yangi sxema
-        for (const sit of sitems) if (sit?.kind === "banner") banners.push(sit);
+      for (const ss of subs){
+        if (Array.isArray(ss.banners)) all.push(...ss.banners); // eski sxema
+        const sitems = Array.isArray(ss.items) ? ss.items : []; // yangi sxema
+        for (const sit of sitems) if (sit?.kind==="banner") all.push(sit);
       }
     }
 
-    return banners;
-  } catch (e) {
-    console.warn("fetchBanners error", e);
-    return [];
-  }
+    const fullscreen = all
+      .filter(b => (b.slot||"fullscreen")==="fullscreen")
+      .filter(isActiveByTime)
+      .sort(byOrder);
+
+    return fullscreen;
+  }catch(e){ console.warn("fetchBanners error", e); return []; }
 }
 
 function bannerFrameFromObj(b, srcdocBaseHref=null) {
@@ -383,11 +408,11 @@ async function fetchHome(){
 const HSTATE={ sections:[], activeId:null };
 const ORDER={active:0, soon:1, available:2, ended:3};
 
-function parseLocal(s){ if(!s) return null; const m=s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/); if(!m) return null; const [,Y,M,D,h,mn]=m; return new Date(+Y,+M-1,+D,+h,+mn,0,0); }
+function parseLocalCard(s){ if(!s) return null; const m=s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/); if(!m) return null; const [,Y,M,D,h,mn]=m; return new Date(+Y,+M-1,+D,+h,+mn,0,0); }
 function fmtDate(d){ return !d?"-":`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;}
 function cardState(it){
   if(it.cardStyle==="soon") return "soon";
-  if(it.cardStyle==="timed"){ const now=new Date(), s=parseLocal(it.startAt), e=parseLocal(it.endAt);
+  if(it.cardStyle==="timed"){ const now=new Date(), s=parseLocalCard(it.startAt), e=parseLocalCard(it.endAt);
     if(s && now<s) return "soon"; if(s && e && now>=s && now<=e) return "active"; if(e && now>e) return "ended"; return "active"; }
   return "available";
 }
@@ -440,7 +465,7 @@ function renderCard(it){
   const row=document.createElement("div"); row.className="rowflex";
   const h=document.createElement("h4"); h.textContent=title; row.appendChild(h);
   const bd=document.createElement("span"); bd.className="badge "+(st==="soon"?"soon":st==="active"?"active":st==="ended"?"ended":""); bd.textContent=(st==="soon"?"Yaqinda":st==="active"?"Faol":st==="ended"?"Tugagan":"Mavjud"); row.appendChild(bd); c.appendChild(row);
-  if(it.cardStyle==="timed"){ const s=parseLocal(it.startAt), e=parseLocal(it.endAt);
+  if(it.cardStyle==="timed"){ const s=parseLocalCard(it.startAt), e=parseLocalCard(it.endAt);
     const t=document.createElement("div"); t.className="muted"; t.textContent=`Vaqt: ${fmtDate(s)} — ${fmtDate(e)}`; c.appendChild(t); }
   const actions=document.createElement("div"); actions.className="rowflex";
   const info=document.createElement("button"); info.className="btn"; info.textContent="ℹ️ Info";
@@ -458,7 +483,7 @@ function buildFilters(){
   const f={wrap,onChange:null}; return f;
 }
 function applyFilter(grid, key){ qa(".cardX", grid).forEach(card=>{ const st=card.dataset.state||"available"; const show=(key==="all")||(st===key); card.style.display=show?"flex":"none"; }); }
-function sortCards(cards){ return [...cards].sort((a,b)=>{ const sa=cardState(a), sb=cardState(b); const oa=(ORDER[sa]??9), ob=(ORDER[sb]??9); if(oa!==ob) return oa-ob; const as=parseLocal(a.startAt)?.getTime()||0; const bs=parseLocal(b.startAt)?.getTime()||0; return as-bs; }); }
+function sortCards(cards){ return [...cards].sort((a,b)=>{ const sa=cardState(a), sb=cardState(b); const oa=(ORDER[sa]??9), ob=(ORDER[sb]??9); if(oa!==ob) return oa-ob; const as=parseLocalCard(a.startAt)?.getTime()||0; const bs=parseLocalCard(b.startAt)?.getTime()||0; return as-bs; }); }
 
 function renderSubSection(ss){
   const wrap=document.createElement("section"); wrap.className="section";
@@ -784,10 +809,11 @@ onAuthStateChanged(auth, async (u)=>{
 });
 
 await loadHome();
-await loadBanners();
+await loadBanners();      // fullscreen: slot:"fullscreen", order sort, time check
 sizeBannerGap();
 addEventListener("resize", sizeBannerGap);
 addEventListener("orientationchange", sizeBannerGap);
+
   </script>
 </body>
 </html>
