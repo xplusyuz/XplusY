@@ -150,358 +150,638 @@
   <div id="overlay" class="overlay" aria-modal="true"></div>
   <div id="portal-root"></div>
 
-  <script type="module">
-  /* Firebase (o‘zgarmagan) */
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, setPersistence, browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-  import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+<script type="module">
+/* ====== Firebase ====== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider,
+         setPersistence, browserLocalPersistence, signOut,
+         signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.appspot.com",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-    measurementId: "G-459PLJ7P7L"
-  };
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db   = getFirestore(app);
-  const st   = getStorage(app);
-  try { await setPersistence(auth, browserLocalPersistence); } catch {}
+const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+const st   = getStorage(app);
+try { await setPersistence(auth, browserLocalPersistence); } catch {}
 
-  /* Helpers (o‘zgarmagan) */
-  const q=(s,r=document)=>r.querySelector(s); const qa=(s,r=document)=>[...r.querySelectorAll(s)];
-  const ALWAYS_REQ=['firstName','lastName','birthDate','region','district','role'];
-  let REGIONS=[]; let CURRENT_USER=null; let PROFILE=null; let USER_POINTS=0;
+/* ====== Shorthand helpers ====== */
+const q=(s,r=document)=>r.querySelector(s);
+const qa=(s,r=document)=>[...r.querySelectorAll(s)];
+const ALWAYS_REQ=['firstName','lastName','birthDate','region','district','role'];
+let REGIONS=[]; let CURRENT_USER=null; let PROFILE=null; let USER_POINTS=0;
 
-  const calcAge=iso=>{try{const b=new Date(iso),t=new Date();let a=t.getFullYear()-b.getFullYear();const m=t.getMonth()-b.getMonth();if(m<0||(m===0&&t.getDate()<b.getDate()))a--;return a;}catch{return '';}};  
-  async function getProfile(uid){const s=await getDoc(doc(db,'profiles',uid));return s.exists()?s.data():null;}
-  async function saveProfile(uid,data){data.updatedAt=serverTimestamp();if(!PROFILE)data.createdAt=serverTimestamp();await setDoc(doc(db,'profiles',uid),data,{merge:false});PROFILE=data;}
-  async function getUserPoints(uid){try{const s=await getDoc(doc(db,'users',uid));return s.exists()?(s.data().points||0):0;}catch{return 0;}}
-  async function loadRegions(){try{const r=await fetch('./region.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();return j?.regions||[];}
-    catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}}
-  
-  /* ===== Legacy -> new normalizer (o‘zgarmagan) ===== */
-  function normalizeNode(node = {}) {
-    const out = { ...node };
-    const items = Array.isArray(node.items) ? [...node.items] : [];
-    if (Array.isArray(node.banners)) items.push(...node.banners.map(b=>({kind:'banner',mode:'html',...b})));
-    if (Array.isArray(node.cards))   items.push(...node.cards.map(c=>({kind:'card',...c})));
-    out.items = items;
-    if (Array.isArray(node.subsections)) out.subsections = node.subsections.map(normalizeNode);
-    return out;
+/* ====== Common utils ====== */
+const calcAge=iso=>{try{const b=new Date(iso),t=new Date();let a=t.getFullYear()-b.getFullYear();const m=t.getMonth()-b.getMonth();if(m<0||(m===0&&t.getDate()<b.getDate()))a--;return a;}catch{return '';}};
+async function getProfile(uid){const s=await getDoc(doc(db,'profiles',uid));return s.exists()?s.data():null;}
+async function saveProfile(uid,data){data.updatedAt=serverTimestamp();if(!PROFILE)data.createdAt=serverTimestamp();await setDoc(doc(db,'profiles',uid),data,{merge:false});PROFILE=data;}
+async function getUserPoints(uid){try{const s=await getDoc(doc(db,'users',uid));return s.exists()?(s.data().points||0):0;}catch{return 0;}}
+async function loadRegions(){
+  try{const r=await fetch('./region.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();return j?.regions||[];}
+  catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}
+}
+
+/* ====== User chip + menu ====== */
+function renderUserChip(u, profile){
+  const slot=q('#user-slot'); const age=profile?.birthDate?calcAge(profile.birthDate):'';
+  const name=profile?.firstName?(profile.firstName+(profile.lastName?' '+profile.lastName:'')):(u.displayName||u.email||'Foydalanuvchi');
+  const avatar=profile?.avatarUrl||u.photoURL||''; const role=profile?.role||'—';
+  slot.innerHTML=`
+    <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
+      <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
+      <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+' yosh • ':''}${USER_POINTS} points</small></div>
+      <div class="menu" id="usermenu" role="menu">
+        <a href="#" id="mProfile" role="menuitem">Profil</a>
+        <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
+        <a href="#" id="mLogout" role="menuitem">Chiqish</a>
+        <div class="label">Aloqa</div>
+        <a href="tel:+998901234567">+998 90 123 45 67</a>
+        <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
+        <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
+        <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
+        <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
+        <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
+      </div>
+    </div>`;
+}
+function openUserMenu(){
+  const chip = q('#userchip'); const menu=q('#usermenu'); if(!chip||!menu) return;
+  (q('#portal-root')||document.body).appendChild(menu);
+  menu.style.visibility='hidden'; menu.style.display='block';
+  const r = chip.getBoundingClientRect(); const mw = menu.offsetWidth, mh = menu.offsetHeight, gap = 8;
+  let left = Math.min(Math.max(r.right - mw, 8), innerWidth - mw - 8);
+  let top  = r.bottom + gap; if (top + mh > innerHeight - 8) top = Math.max(8, r.top - gap - mh);
+  menu.style.left = left+'px'; menu.style.top = Math.max(8, top)+'px';
+  menu.classList.add('open'); menu.style.visibility='visible'; chip.setAttribute('aria-expanded','true');
+  const closeOnOutside = (e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
+  const onSR = ()=> position();
+  function position(){
+    if(!menu.classList.contains('open')) return;
+    const r2 = chip.getBoundingClientRect();
+    let L = Math.min(Math.max(r2.right - mw, 8), innerWidth - mw - 8);
+    let T = r2.bottom + gap; if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
+    menu.style.left=L+'px'; menu.style.top=Math.max(8,T)+'px';
   }
-  function normalizeData(raw = {}) {
-    const secs = Array.isArray(raw.sections) ? raw.sections : [];
-    return { sections: secs.map(normalizeNode) };
+  menu._closers={closeOnOutside, onSR};
+  addEventListener('click', closeOnOutside, {capture:true});
+  addEventListener('scroll', onSR, {passive:true});
+  addEventListener('resize', onSR, {passive:true});
+}
+function closeUserMenu(){
+  const menu=q('#usermenu'); if(!menu) return;
+  menu.classList.remove('open'); menu.style.display='none';
+  if(menu._closers){
+    removeEventListener('click', menu._closers.closeOnOutside, {capture:true});
+    removeEventListener('scroll', menu._closers.onSR);
+    removeEventListener('resize', menu._closers.onSR);
+    menu._closers=null;
   }
+  const chip=q('#userchip'); if(chip){ chip.appendChild(menu); chip.setAttribute('aria-expanded','false'); }
+}
 
-  /* ==== User chip + menu (o‘zgarmagan logika, hover animatsiya CSS’da) ==== */
-  function renderUserChip(u, profile){
-    const slot=q('#user-slot');
-    const age=profile?.birthDate?calcAge(profile.birthDate):'';
-    const name=profile?.firstName?(profile.firstName+(profile.lastName?' '+profile.lastName:'')):(u.displayName||u.email||'Foydalanuvchi');
-    const avatar=profile?.avatarUrl||u.photoURL||'';
-    const role=profile?.role||'—';
-    slot.innerHTML=`
-      <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
-        <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
-        <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+' yosh • ':''}${USER_POINTS} points</small></div>
-        <div class="menu" id="usermenu" role="menu">
-          <a href="#" id="mProfile" role="menuitem">Profil</a>
-          <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
-          <a href="#" id="mLogout" role="menuitem">Chiqish</a>
-          <div class="label">Aloqa</div>
-          <a href="tel:+998901234567">+998 90 123 45 67</a>
-          <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
-          <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
-          <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
-          <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
-          <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
-        </div>
-      </div>`;
-  }
-  function openUserMenu(){
-    const chip=q('#userchip'), menu=q('#usermenu'); if(!chip||!menu) return;
-    (q('#portal-root')||document.body).appendChild(menu);
-    menu.style.visibility='hidden'; menu.style.display='block';
-    const r=chip.getBoundingClientRect(); const mw=menu.offsetWidth, mh=menu.offsetHeight, gap=8;
-    let left=Math.min(Math.max(r.right-mw,8), innerWidth-mw-8);
-    let top=r.bottom+gap; if(top+mh>innerHeight-8) top=Math.max(8, r.top-gap-mh);
-    menu.style.left=left+'px'; menu.style.top=Math.max(8,top)+'px';
-    menu.classList.add('open'); menu.style.visibility='visible'; chip.setAttribute('aria-expanded','true');
-    const closeOnOutside=(e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
-    const onSR=()=>position();
-    function position(){ if(!menu.classList.contains('open')) return;
-      const r2=chip.getBoundingClientRect(); let L=Math.min(Math.max(r2.right-mw,8), innerWidth-mw-8); let T=r2.bottom+gap;
-      if(T+mh>innerHeight-8) T=Math.max(8, r2.top-gap-mh); menu.style.left=L+'px'; menu.style.top=Math.max(8,T)+'px'; }
-    menu._closers={closeOnOutside,onSR}; addEventListener('click',closeOnOutside,{capture:true});
-    addEventListener('scroll',onSR,{passive:true}); addEventListener('resize',onSR,{passive:true});
-  }
-  function closeUserMenu(){
-    const menu=q('#usermenu'); if(!menu) return; menu.classList.remove('open'); menu.style.display='none';
-    if(menu._closers){ removeEventListener('click',menu._closers.closeOnOutside,{capture:true}); removeEventListener('scroll',menu._closers.onSR); removeEventListener('resize',menu._closers.onSR); menu._closers=null; }
-    const chip=q('#userchip'); if(chip){ chip.appendChild(menu); chip.setAttribute('aria-expanded','false'); }
-  }
+/* ====== Overlay helpers ====== */
+const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
+const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
+q('#overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeOverlay(); });
+addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeOverlay(); });
 
-  /* Overlay & Avatar modal (o‘zgarmagan) */
-  const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
-  const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
-  q('#overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeOverlay(); });
-  addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeOverlay(); });
-
-  function readFileToDataURL(file){ return new Promise((resolve,reject)=>{ const ok=/image\/(png|jpe?g|webp|gif)$/i.test(file.type);
-    if(!ok) return reject(new Error('Rasm formati: JPG/PNG/WebP/GIF.')); const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=()=>reject(new Error('Faylni o‘qishda xatolik.')); r.readAsDataURL(file); }); }
-
-  function openAvatarModal(initialSrc){
-    const html=`<div class="modal-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><b style="font-size:18px">Avatarni yangilash</b><button class="btn" id="avClose">✕</button></div>
+/* ====== Avatar modal ====== */
+function readFileToDataURL(file){
+  return new Promise((resolve, reject)=>{
+    const ok = /image\/(png|jpe?g|webp|gif)$/i.test(file.type);
+    if(!ok) return reject(new Error('Rasm formati: JPG/PNG/WebP/GIF.'));
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(new Error('Faylni o‘qishda xatolik.'));
+    reader.readAsDataURL(file);
+  });
+}
+function openAvatarModal(initialSrc){
+  const html = `
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <b style="font-size:18px">Avatarni yangilash</b>
+        <button class="btn" id="avClose">✕</button>
+      </div>
       <div style="height:8px"></div>
       <div class="grid2">
         <div class="dropzone" id="dz">
           <div class="preview" id="preview">${initialSrc?`<img src="${initialSrc}" alt="">`:'<span class="hint">Rasm hali tanlanmagan</span>'}</div>
-          <div class="hint">Rasmni bu yerga tashlang yoki tugmadan tanlang (2MB gacha).</div>
+          <div class="hint">Rasmni bu yerga tashlang yoki tugmadan tanlang (JPG/PNG/WebP, 2MB gacha).</div>
           <input type="file" id="avFile" accept="image/*" style="display:none"/>
           <button class="btn" id="pick">Fayl tanlash</button>
         </div>
-        <div><div class="hint">Maslahat: 1:1 kvadrat rasm eng yaxshi.</div></div>
+        <div>
+          <div class="hint">Maslahat: kvadrat (1:1) rasm yaxshi ko‘rinadi.</div>
+          <div style="height:10px"></div>
+          <ul class="hint" style="margin:0 0 12px 16px;line-height:1.6">
+            <li>Drag & drop ishlaydi</li>
+            <li>Saqlashdan keyin darhol yangilanadi</li>
+          </ul>
+        </div>
       </div>
       <div id="avErr" style="color:#c62828;min-height:18px"></div>
-      <div class="modal-actions"><button class="btn" id="avCancel">Bekor</button><button class="btn primary" id="avSave" disabled>Saqlash</button></div>
-    </div>`;
-    showOverlay(html);
-    const dz=q('#dz'), avFile=q('#avFile'), pick=q('#pick'), prev=q('#preview'), err=q('#avErr'); let dataURL=initialSrc||'';
-    const setPreview=(src)=>{ dataURL=src||''; prev.innerHTML=dataURL?`<img src="${dataURL}" alt="">`:'<span class="hint">Rasm hali tanlanmagan</span>'; q('#avSave').disabled=!dataURL; };
-    const onDrag=(e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag'); };
-    const onDrop=async(e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag'); err.textContent=''; try{
-      const f=e.dataTransfer.files?.[0]; if(!f) return; if(f.size>2*1024*1024) throw new Error('2MB dan oshmasin.'); setPreview(await readFileToDataURL(f));
-    }catch(ex){ err.textContent=ex?.message||String(ex); } };
-    ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,onDrag));
-    ['dragleave','drop'].forEach(t=>dz.addEventListener(t,(t==='drop')?onDrop:(e)=>{e.preventDefault(); dz.classList.remove('drag');}));
-    pick.onclick=()=>avFile.click();
-    avFile.onchange=async(ev)=>{ err.textContent=''; try{ const f=ev.target.files?.[0]; if(!f) return; if(f.size>2*1024*1024) throw new Error('2MB dan oshmasin.'); setPreview(await readFileToDataURL(f)); }catch(ex){ err.textContent=ex?.message||String(ex);} };
-    q('#avClose').onclick=closeOverlay; q('#avCancel').onclick=closeOverlay;
-    q('#avSave').onclick=async()=>{ if(!CURRENT_USER||!dataURL) return; err.textContent=''; q('#avSave').disabled=true;
-      try{ const ref=sRef(st,`avatars/${CURRENT_USER.uid}.jpg`); await uploadString(ref,dataURL,'data_url'); const url=await getDownloadURL(ref);
-        PROFILE={...(PROFILE||{}), avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE); renderUserChip(CURRENT_USER, PROFILE); closeOverlay();
-      }catch(ex){ err.textContent=ex?.message||String(ex); q('#avSave').disabled=false; } };
-  }
-
-  /* ===== HOME (banners carousel qo‘shildi) ===== */
-  async function fetchHome(){
-    try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){}
-    try{const r=await fetch('./home.json',{cache:'no-store'}); if(r.ok) return await r.json();}catch{}
-    return {sections:[]};
-  }
-  const HSTATE={ sections:[], activeId:null };
-
-  function parseLocal(s){ if(!s) return null; const m=s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/); if(!m) return null; const [,Y,M,D,h,mn]=m; return new Date(+Y,+M-1,+D,+h,+mn,0,0); }
-  function cardState(it){ if(it.cardStyle==='soon') return 'soon';
-    if(it.cardStyle==='timed'){ const now=new Date(), s=parseLocal(it.startAt), e=parseLocal(it.endAt);
-      if(s && now < s) return 'soon'; if(s && e && now >= s && now <= e) return 'active'; if(e && now > e) return 'ended'; return 'active'; }
-    return 'available'; }
-  const fmtDate=(d)=>!d?'-':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-  function msParts(ms){ const sec=Math.max(0, Math.floor(ms/1000)); return { d:Math.floor(sec/86400), h:Math.floor((sec%86400)/3600), m:Math.floor((sec%3600)/60), s:sec%60 }; }
-  const z=n=>String(n).padStart(2,'0'); const fmtParts=p=>(p.d>0?`${p.d} kun `:'')+`${z(p.h)}:${z(p.m)}:${z(p.s)}`;
-  function buildCountdownText(it){ if(it.cardStyle!=='timed') return ''; const now=Date.now(), s=parseLocal(it.startAt)?.getTime(), e=parseLocal(it.endAt)?.getTime();
-    if(s && now < s) return `Boshlanishigacha: ${fmtParts(msParts(s-now))}`; if(s && e && now>=s && now<=e) return `Tugashigacha: ${fmtParts(msParts(e-now))}`; if(e && now>e) return 'Tugagan'; return ''; }
-
-  function renderChips(){ const bar=q('#chipbar'); bar.innerHTML='';
-    HSTATE.sections.forEach((s,i)=>{ const b=document.createElement('button'); b.className='chip'+(i===0?' active':''); b.textContent=s.title||s.id||('Bo‘lim '+(i+1));
-      b.dataset.target=s.id||('sec'+i); b.onclick=()=>{ activate(b.dataset.target); b.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }; bar.appendChild(b); }); }
-
-  /* --- Banner helper: scrollsiz iframe --- */
-  function makeIframeFromBanner(b, baseHref, full){
-    const sbx = b.sandbox || 'allow-scripts allow-forms allow-same-origin';
-    if(b.mode==='url'){
-      const f=document.createElement('iframe'); f.className='sbx'; f.setAttribute('sandbox', sbx);
-      f.setAttribute('scrolling','no'); f.style.overflow='hidden'; f.src=b.src||''; return f;
-    }else{
-      const html = `<!doctype html><html><head>${baseHref?`<base href="${baseHref}">`:''}<meta charset="utf-8">
-        <style>html,body{height:100%;margin:0;overflow:hidden}</style></head><body>${String(b.contentHtml||'')}</body></html>`;
-      const f=document.createElement('iframe'); f.className='sbx'; f.setAttribute('sandbox', sbx); f.setAttribute('scrolling','no'); f.srcdoc=html; return f;
-    }
-  }
-
-  /* --- Carousel builder (sub-bo‘lim bannerlari uchun) --- */
-  function buildCarousel(banners, full=false, baseHref=''){
-    const root=document.createElement('div'); root.className='carousel'+(full?' full':'');
-    const slides=[]; const dots=[];
-    banners.forEach((b,i)=>{
-      const s=document.createElement('div'); s.className='slide'+(i===0?' active':'');
-      const f=makeIframeFromBanner(b, baseHref, full); s.appendChild(f);
-      root.appendChild(s); slides.push(s);
-    });
-    if(banners.length>1){
-      const prev=document.createElement('div'); prev.className='nav prev'; prev.textContent='‹';
-      const next=document.createElement('div'); next.className='nav next'; next.textContent='›';
-      root.appendChild(prev); root.appendChild(next);
-      const dotWrap=document.createElement('div'); dotWrap.className='dots';
-      banners.forEach((_,i)=>{ const d=document.createElement('div'); d.className='dot'+(i===0?' active':''); dotWrap.appendChild(d); dots.push(d); });
-      root.appendChild(dotWrap);
-
-      let idx=0, timer=null, paused=false;
-      function show(n){ slides[idx].classList.remove('active'); dots[idx]?.classList.remove('active'); idx=(n+banners.length)%banners.length; slides[idx].classList.add('active'); dots[idx]?.classList.add('active'); }
-      function play(){ stop(); timer=setInterval(()=>{ if(!paused) show(idx+1); }, 6000); }
-      function stop(){ if(timer) clearInterval(timer); timer=null; }
-      prev.onclick=()=>{show(idx-1); play();}; next.onclick=()=>{show(idx+1); play();};
-      dots.forEach((d,i)=> d.onclick=()=>{show(i); play();});
-      root.addEventListener('mouseenter', ()=>paused=true); root.addEventListener('mouseleave', ()=>paused=false);
-      play();
-    }
-    return root;
-  }
-
-  /* --- Old single banner (ratio/bleed) fallback --- */
-  function renderSingleBanner(b, full=false, baseHref=''){
-    if(full){ const box=document.createElement('div'); box.className='bleed'; box.appendChild(makeIframeFromBanner(b, baseHref, true)); return box; }
-    const box=document.createElement('div'); box.className='ratio'; box.dataset.r='16-9'; box.appendChild(makeIframeFromBanner(b, baseHref, false)); return box;
-  }
-
-  const ORDER={active:0, soon:1, available:2, ended:3};
-  function renderCard(it){
-    const c=document.createElement('div'); c.className='cardX'; c.dataset.kind='card'; const title=it.title||'Card'; const st=cardState(it); c.dataset.state=st;
-    const row=document.createElement('div'); row.className='rowflex';
-    const h=document.createElement('h4'); h.textContent=title; row.appendChild(h);
-    const bd=document.createElement('span'); bd.className='badge '+(st==='soon'?'soon':st==='active'?'active':st==='ended'?'ended':''); bd.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':st==='ended'?'Tugagan':'Mavjud'); row.appendChild(bd);
-    c.appendChild(row);
-    if(it.cardStyle==='timed'){ const s=parseLocal(it.startAt), e=parseLocal(it.endAt);
-      const t=document.createElement('div'); t.className='muted'; t.textContent=`Vaqt: ${fmtDate(s)} — ${fmtDate(e)}`; c.appendChild(t);
-      const cd=document.createElement('div'); cd.className='muted'; cd.dataset.countdown=''; cd.textContent=buildCountdownText(it); c.appendChild(cd);
-      c._timed={start:s?.getTime()||null, end:e?.getTime()||null}; }
-    const actions=document.createElement('div'); actions.className='rowflex';
-    const info=document.createElement('button'); info.className='btn'; info.textContent='ℹ️ Info';
-    info.onclick=()=> showOverlay(`<div class="profile-card"><div style="display:flex;justify-content:space-between;align-items:center"><b>${title}</b><button class="btn" onclick="(${closeOverlay.toString()})();">Yopish</button></div><div class="divider"></div>${it.infoHtml||'<p class="muted">Ma’lumot yo‘q.</p>'}</div>`);
-    actions.appendChild(info);
-    const a=document.createElement('a'); const label=it.ctaLabel||'Boshlash'; const href=it.ctaHref||'';
-    a.textContent=label; a.className='btn primary'; if(href){ a.href=href; a.target='_blank'; a.dataset.href=href; }
-    if(st==='active' && href){ a.setAttribute('data-enabled','1'); }
-    if(st==='soon'||st==='ended'||!href){ a.classList.remove('primary'); a.classList.add('btn'); a.setAttribute('disabled',''); a.removeAttribute('href'); a.removeAttribute('target'); }
-    actions.appendChild(a); c.appendChild(actions); return c;
-  }
-
-  function renderSubSection(ss){
-    const wrap=document.createElement('section'); wrap.className='section';
-    const head=document.createElement('div'); head.className='section-hdr'; head.innerHTML=`<h3>${ss.title||ss.id||'Sub-bo‘lim'}</h3>`; wrap.appendChild(head);
-    const body=document.createElement('div'); body.className='iframe-wrap'; const inner=document.createElement('div'); inner.style.padding='12px';
-    const items=Array.isArray(ss.items)?ss.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
-
-    /* >>>>> BANNERS: carousel (>=2), else single */
-    if(banners.length>1) inner.appendChild(buildCarousel(banners,false,ss.baseHref||'')); 
-    else if(banners.length===1) inner.appendChild(renderSingleBanner(banners[0],false,ss.baseHref||''));
-
-    if(cards.length){
-      const filters = buildFilters(); inner.appendChild(filters.wrap);
-      const grid=document.createElement('div'); grid.className='grid';
-      cards.forEach(c=> grid.appendChild(renderCard(c))); inner.appendChild(grid);
-      filters.onChange = (state)=>applyFilter(grid, state);
-    }
-    const subs=Array.isArray(ss.subsections)?ss.subsections:[]; subs.forEach(s2=> inner.appendChild(renderSubSection(s2)));
-    body.appendChild(inner); wrap.appendChild(body); return wrap;
-  }
-
-  function renderSection(sec){
-    const id=sec.id || ('sec'+Math.random()); const outer=document.createElement('section'); outer.dataset.section=id;
-    const full=!!sec.fullBleed; outer.className='section'+(full?' full-banner':'');
-    if(!full){ const sh=document.createElement('div'); sh.className='section-hdr'; sh.innerHTML=`<h3>${sec.title||id}</h3>`; outer.appendChild(sh); }
-    const body=document.createElement('div'); body.className='iframe-wrap';
-    const items=Array.isArray(sec.items)?sec.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
-
-    /* >>>>> BANNERS: fullBleed bo‘lsa ham carousel bo‘ladi */
-    if(banners.length>1){ body.appendChild(buildCarousel(banners, full, sec.baseHref||'')); }
-    else if(banners.length===1){ body.appendChild(renderSingleBanner(banners[0], full, sec.baseHref||'')); }
-
-    if(cards.length){
-      const filters = buildFilters(); const pad=document.createElement('div'); pad.style.padding='12px'; pad.appendChild(filters.wrap);
-      const grid=document.createElement('div'); grid.className='grid'; cards.forEach(c=> grid.appendChild(renderCard(c))); pad.appendChild(grid); body.appendChild(pad);
-      filters.onChange = (state)=>applyFilter(grid, state);
-    }
-    const subs=Array.isArray(sec.subsections)?sec.subsections:[]; subs.forEach(ss=> body.appendChild(renderSubSection(ss)));
-    outer.appendChild(body); return outer;
-  }
-
-  function buildFilters(){ const wrap=document.createElement('div'); wrap.className='inline-filters';
-    const options=[{key:'all',label:'Barchasi'},{key:'active',label:'Faol'},{key:'soon',label:'Yaqinda'},{key:'available',label:'Mavjud'},{key:'ended',label:'Tugagan'}];
-    const chips=options.map(o=>{ const b=document.createElement('button'); b.className='fchip'+(o.key==='all'?' active':''); b.dataset.f=o.key; b.textContent=o.label;
-      b.onclick=()=>{ chips.forEach(x=>x.classList.toggle('active', x===b)); f.onChange && f.onChange(o.key); }; wrap.appendChild(b); return b; });
-    const f={wrap, onChange:null}; return f; }
-  function applyFilter(grid, key){ qa('.cardX', grid).forEach(card=>{ const st=card.dataset.state||'available'; card.style.display=(key==='all'||st===key)?'flex':'none'; }); }
-  function sortCards(cards){ return [...cards].sort((a,b)=>{ const sa=cardState(a), sb=cardState(b); const oa=(ORDER[sa]??9), ob=(ORDER[sb]??9); if(oa!==ob) return oa-ob;
-      const as=parseLocal(a.startAt)?.getTime()||0; const bs=parseLocal(b.startAt)?.getTime()||0; return as-bs; }); }
-
-  function tickCountdown(){ const now=Date.now(); qa('[data-countdown]').forEach(cd=>{ const card=cd.closest('.cardX'); if(!card||!card._timed) return;
-      const {start,end}=card._timed; let text=''; if(start&&now<start) text=`Boshlanishigacha: ${fmtParts(msParts(start-now))}`; else if(end&&now<=end) text=`Tugashigacha: ${fmtParts(msParts(end-now))}`; else text='Tugagan'; cd.textContent=text;
-      const old=card.dataset.state; const st=(start&&now<start)?'soon':(end&&now<=end)?'active':'ended'; if(st!==old){ card.dataset.state=st;
-        const badge=card.querySelector('.badge'); if(badge){ badge.classList.remove('soon','active','ended'); if(st==='soon') badge.classList.add('soon'); if(st==='active') badge.classList.add('active'); if(st==='ended') badge.classList.add('ended'); badge.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':'Tugagan'); }
-        const cta=card.querySelector('a'); if(cta){ if(st==='active'&&cta.dataset.href){ cta.classList.add('primary'); cta.removeAttribute('disabled'); cta.href=cta.dataset.href; cta.target='_blank'; } else { cta.classList.remove('primary'); cta.setAttribute('disabled',''); cta.removeAttribute('href'); cta.removeAttribute('target'); } } } }); }
-
-  function renderSections(){ const host=q('#sections'); host.innerHTML=''; HSTATE.sections.forEach(s=>host.appendChild(renderSection(s))); }
-  function sizeBannerGap(){ const hdrH=(q('#hdr')?.getBoundingClientRect().height||0); const chipH=(q('#chipwrap')?.getBoundingClientRect().height||0); document.documentElement.style.setProperty('--top-gap', (hdrH+chipH)+'px'); }
-  function activate(id){ HSTATE.activeId=id; document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.target===id)); qa('[data-section]').forEach(s=>{ s.style.display=(s.dataset.section===id)?'block':'none'; }); sizeBannerGap(); }
-
-  async function loadHome(){
-    const raw=await fetchHome(); const data=normalizeData(raw);
-    HSTATE.sections=(Array.isArray(data.sections)?data.sections:[]).map((s,i)=>({ id:(s.id||`sec${i+1}`), ...s }));
-    renderChips(); renderSections(); if(HSTATE.sections.length) activate(HSTATE.sections[0].id); setInterval(tickCountdown,1000);
-  }
-
-  /* Auth lock (o‘zgarmagan) */
-  function setLocked(b){const a=q('#app'); if(a) a.hidden=b;}
-  function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock');
-    const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='overlay show';
-    lock.innerHTML=`<div class="profile-card">
-      <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"></div>
-      <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"></div>
-      <div id="err" style="color:#c62828"></div>
-      <div style="display:flex;gap:10px">
-        <button id="login" class="btn primary">Kirish</button>
-        <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
-        <button id="google" class="btn">Google</button>
+      <div class="modal-actions">
+        <button class="btn" id="avCancel">Bekor</button>
+        <button class="btn primary" id="avSave" disabled>Saqlash</button>
       </div>
     </div>`;
-    document.body.appendChild(lock);
-    lock.addEventListener('click', async (e)=>{
-      const id=e.target.id, errEl=q('#err',lock); const busy=b=>qa('button',lock).forEach(x=>x.disabled=b);
-      try{
-        busy(true);
-        if(id==='google') await signInWithPopup(auth,new GoogleAuthProvider());
-        if(id==='login'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await signInWithEmailAndPassword(auth,eml,pwd); }
-        if(id==='signup'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await createUserWithEmailAndPassword(auth,eml,pwd); }
-      }catch(err){ if(errEl) errEl.textContent=err?.message||String(err); } finally{ busy(false); }
+  showOverlay(html);
+
+  const dz = q('#dz'), avFile=q('#avFile'), pick=q('#pick');
+  const prev=q('#preview'); const err=q('#avErr');
+  let dataURL = initialSrc || '';
+  const setPreview = (src)=>{ dataURL=src||''; prev.innerHTML = dataURL ? `<img src="${dataURL}" alt="">` : '<span class="hint">Rasm hali tanlanmagan</span>'; q('#avSave').disabled=!dataURL; };
+
+  const onDrag = (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag'); };
+  const onDrop = async (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag'); err.textContent='';
+    try{const file=e.dataTransfer.files?.[0]; if(!file) return; if(file.size>2*1024*1024) throw new Error('2MB dan oshmasin.');
+      const url=await readFileToDataURL(file); setPreview(url);}catch(ex){ err.textContent=ex?.message||String(ex); }};
+  ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,onDrag));
+  ['dragleave','drop'].forEach(t=>dz.addEventListener(t,(t==='drop')?onDrop:(e)=>{e.preventDefault(); dz.classList.remove('drag');}));
+
+  pick.onclick = ()=> avFile.click();
+  avFile.onchange = async (ev)=>{ err.textContent=''; try{
+      const file=ev.target.files?.[0]; if(!file) return; if(file.size>2*1024*1024) throw new Error('2MB dan oshmasin.');
+      const url=await readFileToDataURL(file); setPreview(url);}catch(ex){ err.textContent=ex?.message||String(ex); } };
+
+  q('#avClose').onclick = closeOverlay;
+  q('#avCancel').onclick = closeOverlay;
+  q('#avSave').onclick = async ()=>{ if(!CURRENT_USER || !dataURL) return; err.textContent=''; q('#avSave').disabled=true;
+    try{ const ref=sRef(st, `avatars/${CURRENT_USER.uid}.jpg`); await uploadString(ref, dataURL, 'data_url'); const url=await getDownloadURL(ref);
+      PROFILE={...(PROFILE||{}), avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE); renderUserChip(CURRENT_USER, PROFILE);
+      const peAvatar=document.querySelector('.profile-card .avatar img'); if(peAvatar) peAvatar.src=url; closeOverlay();
+    }catch(ex){ err.textContent=ex?.message||String(ex); q('#avSave').disabled=false; }
+  };
+  setPreview(initialSrc||'');
+}
+
+/* ====== Profile view/edit ====== */
+function openProfileView(){
+  if(!CURRENT_USER) return;
+  const p = PROFILE||{}; const age=p.birthDate?calcAge(p.birthDate):'';
+  showOverlay(`
+    <div class="profile-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="avatar" style="width:56px;height:56px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
+          <div><b style="font-size:18px">${p.firstName||''} ${p.lastName||''}</b><br>
+            <small class="muted">${p.role||'—'} ${age?`• ${age} yosh`:''} • ${USER_POINTS} points</small></div>
+        </div>
+        <button class="btn" id="pvClose">Yopish</button>
+      </div>
+      <div class="divider"></div>
+      <div class="grid2">
+        <div><div class="muted">Tug‘ilgan sana</div><b>${p.birthDate||'—'}</b></div>
+        <div><div class="muted">Hudud</div><b>${p.region||'—'}${p.district?`, ${p.district}`:''}</b></div>
+        <div><div class="muted">Maktab</div><b>${p.school||'—'}</b></div>
+        <div><div class="muted">Sinf</div><b>${p.class||'—'}</b></div>
+      </div>
+      <div style="height:10px"></div>
+      <button class="btn primary" id="pvEdit">Tahrirlash</button>
+    </div>`);
+  q('#pvClose').onclick=closeOverlay;
+  q('#pvEdit').onclick=()=>{ closeOverlay(); openProfileEditor(); };
+}
+function fillSelect(sel, items, value){ sel.innerHTML = '<option value="">—</option>' + (items||[]).map(x=>`<option>${x}</option>`).join(''); if(value) sel.value=value; }
+function buildClassOptions(){ return Array.from({length:11},(_,i)=>String(i+1)); }
+function openProfileEditor(){
+  if(!CURRENT_USER) return;
+  const p={...(PROFILE||{})};
+  showOverlay(`
+    <div class="profile-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:18px">Profilni tahrirlash</b>
+        <button class="btn" id="peClose">Yopish</button>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:14px;align-items:center">
+        <div class="avatar" style="width:76px;height:76px;cursor:pointer" title="Avatarni yangilash">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
+        <div>
+          <button class="btn" id="btnAvatar">Avatarni almashtirish</button>
+          <small class="muted" style="display:block">JPG/PNG/WebP, 2 MB gacha.</small>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="fld"><label>Ism *</label><input id="firstName" value="${p.firstName||''}"></div>
+        <div class="fld"><label>Familiya *</label><input id="lastName"  value="${p.lastName||''}"></div>
+        <div class="fld"><label>Tug‘ilgan sana *</label><input id="birthDate" type="date" value="${p.birthDate||''}"></div>
+        <div class="fld"><label>Rol *</label>
+          <select id="role">
+            <option value="">—</option>
+            <option ${p.role==='O‘qituvchi'?'selected':''}>O‘qituvchi</option>
+            <option ${p.role==='Talaba'?'selected':''}>Talaba</option>
+            <option ${p.role==='Abituriyent'?'selected':''}>Abituriyent</option>
+            <option ${p.role==='O‘quvchi'?'selected':''}>O‘quvchi</option>
+          </select>
+        </div>
+        <div class="fld"><label>Viloyat *</label><select id="region"></select></div>
+        <div class="fld"><label>Tuman *</label><select id="district"></select></div>
+        <div class="fld"><label>Maktab</label><select id="school"></select></div>
+        <div class="fld" id="classWrap" style="display:none">
+          <label>Sinf *</label><select id="classSel"></select>
+        </div>
+      </div>
+      <div id="peErr" style="color:#c62828;min-height:18px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn primary" id="btnSave">Saqlash</button>
+      </div>
+    </div>`);
+  q('#peClose').onclick=closeOverlay;
+  const avatarBox = document.querySelector('.profile-card .avatar');
+  avatarBox.addEventListener('click', ()=> openAvatarModal(PROFILE?.avatarUrl || CURRENT_USER?.photoURL || ''));
+  q('#btnAvatar').addEventListener('click', ()=> openAvatarModal(PROFILE?.avatarUrl || CURRENT_USER?.photoURL || ''));
+
+  const rSel=q('#region'), dSel=q('#district'), sSel=q('#school'), roleSel=q('#role'), classWrap=q('#classWrap'), classSel=q('#classSel');
+  fillSelect(rSel, REGIONS.map(r=>r.name), p.region||'');
+  function refreshDistricts(){ const reg = REGIONS.find(x=>x.name===rSel.value); fillSelect(dSel, reg?reg.districts.map(d=>d.name):[], p.district||''); refreshSchools(); }
+  function refreshSchools(){ const reg = REGIONS.find(x=>x.name===rSel.value); const dis = reg?.districts.find(d=>d.name===dSel.value); fillSelect(sSel, dis?dis.schools:[], p.school||''); }
+  rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools; refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
+  function toggleClass(){ const isPupil = roleSel.value==='O‘quvchi'; classWrap.style.display = isPupil ? 'block' : 'none'; if(isPupil){ fillSelect(classSel, buildClassOptions(), p.class||''); } else classSel.innerHTML=''; }
+  roleSel.onchange=toggleClass; toggleClass();
+
+  q('#btnSave').onclick=async ()=>{
+    const err=q('#peErr'); err.textContent='';
+    const data={
+      firstName:q('#firstName').value.trim(),
+      lastName:q('#lastName').value.trim(),
+      birthDate:q('#birthDate').value,
+      role:roleSel.value,
+      region:rSel.value, district:dSel.value, school:sSel.value,
+      class: roleSel.value==='O‘quvchi' ? (q('#classSel').value||'') : '',
+      avatarUrl: PROFILE?.avatarUrl || ''
+    };
+    for(const k of ALWAYS_REQ){ if(!data[k]){ err.textContent='* Belgilangan maydonlar to‘ldirilishi shart.'; return; } }
+    if(data.role==='O‘quvchi' && !data.class){ err.textContent='O‘quvchi uchun “Sinf” majburiy.'; return; }
+    try{ await saveProfile(CURRENT_USER.uid, data); PROFILE=data; renderUserChip(CURRENT_USER, PROFILE); closeOverlay(); }
+    catch(e){ err.textContent=e?.message||String(e); }
+  };
+}
+
+/* ====== Home data (normalize) ====== */
+async function fetchHome(){
+  try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch(e){}
+  try{const r=await fetch('./home.json',{cache:'no-store'}); if(r.ok) return await r.json();}catch{}
+  return {sections:[]};
+}
+function normalizeSection(s){
+  const out={...s};
+  // legacy -> items
+  const items=[];
+  if(Array.isArray(s.items)) items.push(...s.items);
+  if(Array.isArray(s.banners)) items.push(...s.banners.map(b=>({kind:'banner', ...b})));
+  if(Array.isArray(s.cards))   items.push(...s.cards.map(c=>({kind:'card', ...c})));
+  out.items=items;
+  if(Array.isArray(s.subsections)){
+    out.subsections=s.subsections.map(ss=>{
+      const it=[];
+      if(Array.isArray(ss.items)) it.push(...ss.items);
+      if(Array.isArray(ss.banners)) it.push(...ss.banners.map(b=>({kind:'banner', ...b})));
+      if(Array.isArray(ss.cards))   it.push(...ss.cards.map(c=>({kind:'card', ...c})));
+      return {...ss, items:it};
     });
-    return lock;
+  }
+  return out;
+}
+
+/* ====== Renderers: chips / banners / carousel / cards ====== */
+const HSTATE={ sections:[], activeId:null };
+
+function renderChips(){
+  const bar=q('#chipbar'); bar.innerHTML='';
+  HSTATE.sections.forEach((s,i)=>{
+    const b=document.createElement('button'); b.className='chip'+(i===0?' active':'');
+    b.textContent=s.title||s.id||('Bo‘lim '+(i+1)); b.dataset.target=s.id||('sec'+i);
+    b.onclick=()=>{ activate(b.dataset.target); b.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); };
+    bar.appendChild(b);
+  });
+}
+
+/* ---- Single banner ---- */
+function bannerFrameFromObj(b, fullBleed=false, inheritedBaseHref=null){
+  const baseHref = b.baseHref || inheritedBaseHref || '';
+  const wrap = document.createElement(fullBleed?'div':'div');
+  wrap.className = fullBleed ? 'bleed' : 'ratio'; if(!fullBleed) wrap.dataset.r='16-9';
+  const f=document.createElement('iframe');
+  f.className='sbx'; f.setAttribute('sandbox', b.sandbox||'allow-scripts allow-forms'); f.setAttribute('scrolling','no'); f.style.overflow='hidden';
+  if(b.mode==='url'){ f.src=b.src||''; }
+  else{
+    const srcdoc = `<!doctype html><html><head>${baseHref?`<base href="${baseHref}">`:''}<meta charset="utf-8">
+      <style>html,body{height:100%;margin:0;overflow:hidden;background:transparent}</style></head>
+      <body>${String(b.contentHtml||'')}</body></html>`;
+    f.srcdoc=srcdoc;
+  }
+  if(fullBleed){ wrap.appendChild(f); }
+  else{ wrap.appendChild(f); }
+  return wrap;
+}
+
+/* ---- Carousel for many banners (sub-bo‘lim yoki bo‘lim) ---- */
+function renderCarousel(banners, fullBleed=false, inheritedBaseHref=null, opts={}){
+  if(!banners.length) return document.createDocumentFragment();
+  if(banners.length===1) return bannerFrameFromObj(banners[0], fullBleed, inheritedBaseHref);
+
+  const {autoplayMs=4500} = opts;
+  const root=document.createElement('div');
+  root.style.position='relative';
+  root.style.borderRadius = fullBleed ? '0' : '16px';
+  root.style.overflow='hidden';
+
+  // viewport
+  const vp=document.createElement('div');
+  vp.style.position='relative'; vp.style.width='100%';
+  if(fullBleed){ vp.style.height='100vh'; } else { vp.className='ratio'; vp.dataset.r='16-9'; }
+
+  // slider inner
+  const inner=document.createElement('div');
+  inner.style.position='absolute'; inner.style.inset='0';
+  inner.style.display='grid'; inner.style.gridAutoFlow='column';
+  inner.style.gridAutoColumns='100%'; inner.style.transition='transform .5s ease';
+  inner.style.willChange='transform';
+
+  // slides
+  banners.forEach(b=>{
+    const slide=document.createElement('div'); slide.style.position='relative';
+    slide.style.width='100%'; slide.style.height='100%';
+    const frame = bannerFrameFromObj(b, true, inheritedBaseHref); // full size inside slide
+    slide.appendChild(frame.firstElementChild || frame);
+    inner.appendChild(slide);
+  });
+
+  // dots
+  const dots=document.createElement('div');
+  dots.style.position='absolute'; dots.style.left='50%'; dots.style.bottom='12px';
+  dots.style.transform='translateX(-50%)'; dots.style.display='flex'; dots.style.gap='8px';
+  const dotEls=banners.map((_,i)=>{
+    const d=document.createElement('button');
+    d.style.width='8px'; d.style.height='8px'; d.style.borderRadius='50%';
+    d.style.border='0'; d.style.cursor='pointer';
+    d.style.background=i===0?'#2E8B57':'#cfe6da';
+    d.onclick=()=>go(i,true);
+    dots.appendChild(d); return d;
+  });
+
+  vp.appendChild(inner); root.appendChild(vp); root.appendChild(dots);
+
+  // logic
+  let i=0, timer=null, locked=false;
+  function mark(){ dotEls.forEach((d,idx)=>d.style.background = idx===i?'#2E8B57':'#cfe6da'); }
+  function go(n,manual=false){
+    if(locked) return; locked=true;
+    i=(n+banners.length)%banners.length;
+    inner.style.transform=`translateX(-${i*100}%)`;
+    mark(); setTimeout(()=>locked=false, 520);
+    if(manual) restart();
+  }
+  function next(){ go(i+1); }
+  function start(){ timer = setInterval(next, autoplayMs); }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; } }
+  function restart(){ stop(); start(); }
+
+  root.addEventListener('pointerenter', stop);
+  root.addEventListener('pointerleave', start);
+  start();
+
+  return root;
+}
+
+/* ---- Cards ---- */
+const ORDER={active:0, soon:1, available:2, ended:3};
+function parseLocal(s){ if(!s) return null; const m=s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/); if(!m) return null;
+  const [,Y,M,D,h,mn]=m; return new Date(+Y,+M-1,+D,+h,+mn,0,0); }
+function cardState(it){
+  if(it.cardStyle==='soon') return 'soon';
+  if(it.cardStyle==='timed'){ const now=new Date(), s=parseLocal(it.startAt), e=parseLocal(it.endAt);
+    if(s && now<s) return 'soon'; if(s&&e&&now>=s&&now<=e) return 'active'; if(e&&now>e) return 'ended'; return 'active'; }
+  return 'available';
+}
+const fmtDate=(d)=>!d?'-':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+function msParts(ms){ const sec=Math.max(0,Math.floor(ms/1000)); const d=Math.floor(sec/86400);
+  const h=Math.floor((sec%86400)/3600), m=Math.floor((sec%3600)/60), s=sec%60; return {d,h,m,s}; }
+function fmtParts(p){ const z=n=>String(n).padStart(2,'0'); return (p.d>0?`${p.d} kun `:'')+`${z(p.h)}:${z(p.m)}:${z(p.s)}`; }
+function buildCountdownText(it){
+  if(it.cardStyle!=='timed') return '';
+  const now=Date.now(), s=parseLocal(it.startAt)?.getTime(), e=parseLocal(it.endAt)?.getTime();
+  if(s && now < s) return `Boshlanishigacha: ${fmtParts(msParts(s-now))}`;
+  if(s && e && now>=s && now<=e) return `Tugashigacha: ${fmtParts(msParts(e-now))}`;
+  if(e && now>e) return 'Tugagan'; return '';
+}
+function renderCard(it){
+  const c=document.createElement('div'); c.className='cardX'; c.dataset.kind='card';
+  const title=it.title||'Card'; const st=cardState(it); c.dataset.state=st;
+
+  const row=document.createElement('div'); row.className='rowflex';
+  const h=document.createElement('h4'); h.textContent=title; row.appendChild(h);
+  const bd=document.createElement('span'); bd.className='badge '+(st==='soon'?'soon':st==='active'?'active':st==='ended'?'ended':''); bd.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':st==='ended'?'Tugagan':'Mavjud'); row.appendChild(bd);
+  c.appendChild(row);
+
+  if(it.cardStyle==='timed'){
+    const s=parseLocal(it.startAt), e=parseLocal(it.endAt);
+    const t=document.createElement('div'); t.className='muted'; t.textContent=`Vaqt: ${fmtDate(s)} — ${fmtDate(e)}`; c.appendChild(t);
+    const cd=document.createElement('div'); cd.className='muted'; cd.dataset.countdown=''; cd.textContent=buildCountdownText(it); c.appendChild(cd);
+    c._timed={start:s?.getTime()||null, end:e?.getTime()||null};
+  }
+  const actions=document.createElement('div'); actions.className='rowflex';
+  const info=document.createElement('button'); info.className='btn'; info.textContent='ℹ️ Info';
+  info.onclick=()=> showOverlay(`<div class="profile-card"><div style="display:flex;justify-content:space-between;align-items:center"><b>${title}</b><button class="btn" onclick="(${closeOverlay.toString()})();">Yopish</button></div><div class="divider"></div>${it.infoHtml||'<p class="muted">Ma’lumot yo‘q.</p>'}</div>`);
+  actions.appendChild(info);
+
+  const a=document.createElement('a'); const label=it.ctaLabel||'Boshlash'; const href=it.ctaHref||'';
+  a.textContent=label; a.className='btn primary';
+  if(href){ a.href=href; a.target='_blank'; a.dataset.href=href; }
+  if(st==='active' && href){ a.setAttribute('data-enabled','1'); }
+  if(st==='soon' || st==='ended' || !href){ a.classList.remove('primary'); a.classList.add('btn'); a.setAttribute('disabled',''); a.removeAttribute('href'); a.removeAttribute('target'); }
+  actions.appendChild(a);
+  c.appendChild(actions);
+  return c;
+}
+function buildFilters(){
+  const wrap=document.createElement('div'); wrap.className='inline-filters';
+  const options=[{key:'all',label:'Barchasi'},{key:'active',label:'Faol'},{key:'soon',label:'Yaqinda'},{key:'available',label:'Mavjud'},{key:'ended',label:'Tugagan'}];
+  const chips=options.map(o=>{
+    const b=document.createElement('button'); b.className='fchip'+(o.key==='all'?' active':''); b.dataset.f=o.key; b.textContent=o.label;
+    b.onclick=()=>{ chips.forEach(x=>x.classList.toggle('active', x===b)); f.onChange && f.onChange(o.key); };
+    wrap.appendChild(b); return b;
+  });
+  const f={wrap,onChange:null}; return f;
+}
+function applyFilter(grid, key){ qa('.cardX',grid).forEach(card=>{ const st=card.dataset.state||'available'; const show=(key==='all')||(st===key); card.style.display=show?'flex':'none'; }); }
+function sortCards(cards){
+  return [...cards].sort((a,b)=>{
+    const sa=cardState(a), sb=cardState(b);
+    const oa=(ORDER[sa]??9), ob=(ORDER[sb]??9);
+    if(oa!==ob) return oa-ob;
+    const as=parseLocal(a.startAt)?.getTime()||0;
+    const bs=parseLocal(b.startAt)?.getTime()||0;
+    return as-bs;
+  });
+}
+
+/* ---- Sections ---- */
+function renderSubSection(ss){
+  const wrap=document.createElement('section'); wrap.className='section';
+  const head=document.createElement('div'); head.className='section-hdr'; head.innerHTML=`<h3>${ss.title||ss.id||'Sub-bo‘lim'}</h3>`; wrap.appendChild(head);
+
+  const body=document.createElement('div'); body.className='iframe-wrap';
+  const inner=document.createElement('div'); inner.style.padding='12px';
+
+  const items=Array.isArray(ss.items)?ss.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
+
+  if(banners.length){ inner.appendChild(renderCarousel(banners,false,ss.baseHref,{autoplayMs:4500})); }
+  if(cards.length){
+    const filters = buildFilters(); inner.appendChild(filters.wrap);
+    const grid=document.createElement('div'); grid.className='grid';
+    cards.forEach(c=> grid.appendChild(renderCard(c))); inner.appendChild(grid);
+    filters.onChange = (state)=>applyFilter(grid, state);
   }
 
-  onAuthStateChanged(auth, async (u)=>{
-    CURRENT_USER=u||null;
-    if(!u){ setLocked(true); buildAuthLock(); q('#user-slot').innerHTML=''; return; }
-    qa('#auth-lock').forEach(x=>x.remove()); setLocked(false);
-    if(!REGIONS.length) REGIONS=await loadRegions();
-    [PROFILE, USER_POINTS] = await Promise.all([ getProfile(u.uid), getUserPoints(u.uid) ]);
-    if(PROFILE && !PROFILE.role){ PROFILE.role='O‘quvchi'; await saveProfile(u.uid, PROFILE); }
-    renderUserChip(u, PROFILE||{});
-    const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]);
-    const ok = baseOk && (PROFILE?.role!=='O‘quvchi' || !!PROFILE.class);
-    if(!ok) openProfileEditor();
-  });
+  const subs=Array.isArray(ss.subsections)?ss.subsections:[]; subs.forEach(s2=> inner.appendChild(renderSubSection(s2)));
+  body.appendChild(inner); wrap.appendChild(body); return wrap;
+}
+function renderSection(sec){
+  const id = sec.id || ('sec'+Math.random()); const outer=document.createElement('section'); outer.dataset.section=id;
+  const full = !!sec.fullBleed; outer.className='section'+(full?' full-banner':'');
 
-  document.addEventListener('click', (e)=>{
-    const t=e.target;
-    if(t.closest('#userchip')){
-      const open = q('#usermenu')?.classList.contains('open');
-      open ? closeUserMenu() : openUserMenu();
+  if(!full){ const sh=document.createElement('div'); sh.className='section-hdr'; sh.innerHTML=`<h3>${sec.title||id}</h3>`; outer.appendChild(sh); }
+  const body=document.createElement('div'); body.className='iframe-wrap';
+
+  const items=Array.isArray(sec.items)?sec.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
+
+  if(banners.length){
+    if(full){ body.appendChild(renderCarousel(banners,true,sec.baseHref,{autoplayMs:5000})); }
+    else   { body.appendChild(renderCarousel(banners,false,sec.baseHref,{autoplayMs:5000})); }
+  }
+  if(cards.length){
+    const filters = buildFilters(); const pad = document.createElement('div'); pad.style.padding='12px';
+    pad.appendChild(filters.wrap); const grid=document.createElement('div'); grid.className='grid';
+    cards.forEach(c=> grid.appendChild(renderCard(c))); pad.appendChild(grid); body.appendChild(pad);
+    filters.onChange = (state)=>applyFilter(grid, state);
+  }
+  const subs=Array.isArray(sec.subsections)?sec.subsections:[]; subs.forEach(ss=> body.appendChild(renderSubSection(ss)));
+  outer.appendChild(body); return outer;
+}
+function renderSections(){
+  const host=q('#sections'); host.innerHTML='';
+  HSTATE.sections.forEach(s=> host.appendChild(renderSection(s)));
+}
+
+/* ---- Full-bleed banner offset (single, no duplicates) ---- */
+function sizeBannerGap(){
+  const hdrH=(q('#hdr')?.getBoundingClientRect().height||0);
+  const chipH=(q('#chipwrap')?.getBoundingClientRect().height||0);
+  document.documentElement.style.setProperty('--top-gap', (hdrH+chipH)+'px');
+}
+
+/* ---- Activate section ---- */
+function activate(id){
+  HSTATE.activeId=id;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.target===id));
+  qa('[data-section]').forEach(s=>{ const show=(s.dataset.section===id); s.style.display=show?'block':'none'; });
+  sizeBannerGap();
+}
+
+/* ---- Countdown tick ---- */
+function tickCountdown(){
+  const now=Date.now();
+  qa('[data-countdown]').forEach(cd=>{
+    const card = cd.closest('.cardX'); if(!card || !card._timed) return;
+    const {start,end}=card._timed; let text='';
+    if(start && now<start) text=`Boshlanishigacha: ${fmtParts(msParts(start-now))}`;
+    else if(end && now<=end) text=`Tugashigacha: ${fmtParts(msParts(end-now))}`;
+    else text='Tugagan';
+    cd.textContent=text;
+
+    const old=card.dataset.state;
+    const st = (start && now<start)?'soon':(end && now<=end)?'active':'ended';
+    if(st!==old){
+      card.dataset.state=st;
+      const badge=card.querySelector('.badge');
+      if(badge){ badge.classList.remove('soon','active','ended'); if(st==='soon') badge.classList.add('soon'); if(st==='active') badge.classList.add('active'); if(st==='ended') badge.classList.add('ended');
+        badge.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':'Tugagan'); }
+      const cta=card.querySelector('a');
+      if(cta){
+        if(st==='active' && cta.dataset.href){ cta.classList.add('primary'); cta.removeAttribute('disabled'); cta.href=cta.dataset.href; cta.target='_blank'; }
+        else{ cta.classList.remove('primary'); cta.setAttribute('disabled',''); cta.removeAttribute('href'); cta.removeAttribute('target'); }
+      }
     }
-    if(t.closest('#mProfile')){ e.preventDefault(); closeUserMenu(); openProfileView(); }
-    if(t.closest('#mEdit')){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
-    if(t.closest('#mLogout')){ e.preventDefault(); closeUserMenu(); signOut(auth); }
   });
+}
 
-  await loadHome();
-  function sizeBannerGap(){ const hdrH=(q('#hdr')?.getBoundingClientRect().height||0); const chipH=(q('#chipwrap')?.getBoundingClientRect().height||0); document.documentElement.style.setProperty('--top-gap', (hdrH+chipH)+'px'); }
-  sizeBannerGap(); addEventListener('resize', sizeBannerGap); addEventListener('orientationchange', sizeBannerGap);
-  </script>
+/* ---- Data load & boot ---- */
+async function loadHome(){
+  const data=await fetchHome();
+  HSTATE.sections = (Array.isArray(data.sections)? data.sections: []).map((s,i)=>normalizeSection({ id: (s.id||`sec${i+1}`), ...s }));
+  renderChips(); renderSections();
+  if(HSTATE.sections.length) activate(HSTATE.sections[0].id);
+  setInterval(tickCountdown, 1000);
+}
+
+/* ---- Auth lock (mini) ---- */
+function setLocked(b){const a=q('#app'); if(a) a.hidden=b;}
+function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock');
+  const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='overlay show';
+  lock.innerHTML=`<div class="profile-card">
+    <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"></div>
+    <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"></div>
+    <div id="err" style="color:#c62828"></div>
+    <div style="display:flex;gap:10px">
+      <button id="login" class="btn primary">Kirish</button>
+      <button id="signup" class="btn">Ro‘yxatdan o‘tish</button>
+      <button id="google" class="btn">Google</button>
+    </div></div>`;
+  document.body.appendChild(lock);
+  lock.addEventListener('click', async (e)=>{
+    const id=e.target.id, errEl=q('#err',lock); const busy=b=>qa('button',lock).forEach(x=>x.disabled=b);
+    try{
+      busy(true);
+      if(id==='google') await signInWithPopup(auth,new GoogleAuthProvider());
+      if(id==='login'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await signInWithEmailAndPassword(auth,eml,pwd); }
+      if(id==='signup'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await createUserWithEmailAndPassword(auth,eml,pwd); }
+    }catch(err){ if(errEl) errEl.textContent=err?.message||String(err); } finally{ busy(false); }
+  });
+  return lock;
+}
+
+/* ---- Auth wiring ---- */
+onAuthStateChanged(auth, async (u)=>{
+  CURRENT_USER=u||null;
+  if(!u){ setLocked(true); buildAuthLock(); q('#user-slot').innerHTML=''; return; }
+  qa('#auth-lock').forEach(x=>x.remove()); setLocked(false);
+  if(!REGIONS.length) REGIONS=await loadRegions();
+  [PROFILE, USER_POINTS] = await Promise.all([ getProfile(u.uid), getUserPoints(u.uid) ]);
+  if(PROFILE && !PROFILE.role){ PROFILE.role='O‘quvchi'; await saveProfile(u.uid, PROFILE); }
+  renderUserChip(u, PROFILE||{});
+  const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]);
+  const ok = baseOk && (PROFILE?.role!=='O‘quvchi' || !!PROFILE.class);
+  if(!ok) openProfileEditor();
+});
+
+/* ---- Global delegation ---- */
+document.addEventListener('click', (e)=>{
+  const t=e.target;
+  if(t.closest('#userchip')){
+    const open = q('#usermenu')?.classList.contains('open');
+    open ? closeUserMenu() : openUserMenu();
+  }
+  if(t.closest('#mProfile')){ e.preventDefault(); closeUserMenu(); openProfileView(); }
+  if(t.closest('#mEdit')){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
+  if(t.closest('#mLogout')){ e.preventDefault(); closeUserMenu(); signOut(auth); }
+});
+
+/* ---- Start ---- */
+await loadHome();
+sizeBannerGap();
+addEventListener('resize', sizeBannerGap);
+addEventListener('orientationchange', sizeBannerGap);
+</script>
 </body>
 </html>
