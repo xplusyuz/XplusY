@@ -183,271 +183,602 @@
   <div id="portal-root"></div>
 
   <!-- App JS -->
-<script type="module">
-/* Firebase */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, setPersistence, browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+  <script type="module">
+  /* Firebase */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, setPersistence, browserLocalPersistence, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+  import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.appspot.com",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
-const st   = getStorage(app);
-try { await setPersistence(auth, browserLocalPersistence); } catch {}
+  const firebaseConfig = {
+    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+    authDomain: "xplusy-760fa.firebaseapp.com",
+    projectId: "xplusy-760fa",
+    storageBucket: "xplusy-760fa.appspot.com",
+    messagingSenderId: "992512966017",
+    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+    measurementId: "G-459PLJ7P7L"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+  const st   = getStorage(app);
+  try { await setPersistence(auth, browserLocalPersistence); } catch {}
 
-const q=(s,r=document)=>r.querySelector(s);
-const qa=(s,r=document)=>[...r.querySelectorAll(s)];
-let REGIONS=[], CURRENT_USER=null, PROFILE=null, USER_POINTS=0;
+  /* Helpers */
+  const q=(s,r=document)=>r.querySelector(s); const qa=(s,r=document)=>[...r.querySelectorAll(s)];
+  const ALWAYS_REQ=['firstName','lastName','birthDate','region','district','role'];
+  let REGIONS=[]; let CURRENT_USER=null; let PROFILE=null; let USER_POINTS=0;
 
-function setVH(){ const vh=innerHeight*0.01; document.documentElement.style.setProperty('--vh', `${vh}px`); }
-setVH(); addEventListener('resize', setVH);
+  // Dynamic VH
+  function setVH(){ const vh = innerHeight * 0.01; document.documentElement.style.setProperty('--vh', `${vh}px`); }
+  setVH(); addEventListener('resize', setVH); addEventListener('orientationchange', setVH);
 
-function parseLocal(s){
-  if(!s)return null;
-  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
-  if(!m)return null;
-  const [,Y,M,D,h,mn]=m;
-  return new Date(+Y,+M-1,+D,+h,+mn,0,0);
-}
-function activeByTime(b){
-  const now=new Date();
-  const s=parseLocal(b.startAt), e=parseLocal(b.endAt);
-  if(s&&now<s)return false;
-  if(e&&now>e)return false;
-  return true;
-}
+  const calcAge=iso=>{try{const b=new Date(iso),t=new Date();let a=t.getFullYear()-b.getFullYear();const m=t.getMonth()-b.getMonth();if(m<0||(m===0&&t.getDate()<b.getDate()))a--;return a;}catch{return '';}};
 
-/* ===== HOME SECTIONS ===== */
-async function fetchHome(){
-  try{const s=await getDoc(doc(db,'configs','home'));if(s.exists()){const d=s.data();if(Array.isArray(d.sections))return d;}}catch{}
-  return {sections:[]};
-}
-
-const HSTATE={sections:[],activeId:null};
-const ORDER={active:0,soon:1,available:2,ended:3};
-
-function parseLocalCard(s){return parseLocal(s);}
-function fmtDate(d){return!d?'-':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
-function cardState(it){
-  if(it.cardStyle==='soon')return'soon';
-  if(it.cardStyle==='timed'){
-    const now=new Date(),s=parseLocalCard(it.startAt),e=parseLocalCard(it.endAt);
-    if(s&&now<s)return'soon';
-    if(s&&e&&now>=s&&now<=e)return'active';
-    if(e&&now>e)return'ended';
-    return'active';
+  async function getProfile(uid){const s=await getDoc(doc(db,'profiles',uid));return s.exists()?s.data():null;}
+  async function saveProfile(uid,data){data.updatedAt=serverTimestamp();if(!PROFILE)data.createdAt=serverTimestamp();await setDoc(doc(db,'profiles',uid),data,{merge:false});PROFILE=data;}
+  async function getUserPoints(uid){try{const s=await getDoc(doc(db,'users',uid));return s.exists()?(s.data().points||0):0;}catch{return 0;}}
+  async function loadRegions(){
+    try{const r=await fetch('./region.json',{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();return j?.regions||[];}
+    catch{return[{name:"Toshkent",districts:[{name:"Chilonzor",schools:["1-maktab","12-maktab"]},{name:"Olmazor",schools:["5-maktab","14-maktab"]}]},{name:"Samarqand",districts:[{name:"Urgut",schools:["3-maktab","28-maktab"]}]}];}
   }
-  return'available';
-}
 
-function bannerFrameFromObj(b, baseHref=null){
-  const f=document.createElement('iframe');f.className='sbx';
-  f.setAttribute('sandbox',b.sandbox||'allow-scripts allow-forms');
-  f.setAttribute('scrolling','no');
-  const base=b.baseHref||baseHref||'';
-  const html=`<!doctype html><html><head>${base?`<base href="${base}">`:""}<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{height:100%;margin:0;overflow:hidden;background:transparent}</style></head><body>${String(b.contentHtml||'')}</body></html>`;
-  if(b.mode==='url')f.src=b.src||'';else f.srcdoc=html;
-  f.style.width='100%';f.style.height='auto';f.style.minHeight='250px';f.style.border='0';f.style.display='block';
-  return f;
-}
+  /* ===== FULLSCREEN BANNERS: slot:"fullscreen" + order + time ===== */
+  const BSTATE = { banners: [], currentIndex: 0, interval: null };
 
-function renderCarousel(banners,fullBleed=false,baseHref=null,intervalMs=4500){
-  const vp=document.createElement('div');
-  vp.className='carousel-viewport';
-  vp.style.position='relative';
-  vp.style.height='auto';
-  vp.style.overflow='hidden';
-  const slideWrap=document.createElement('div');
-  slideWrap.style.cssText='display:flex;transition:transform .6s ease;width:100%';
-  vp.appendChild(slideWrap);
-  banners.forEach(b=>{
-    const holder=document.createElement('div');
-    holder.style.cssText='flex:0 0 100%;position:relative';
-    const fr=bannerFrameFromObj(b,baseHref);
-    holder.appendChild(fr);
-    slideWrap.appendChild(holder);
-  });
-  let i=0,timer=null;
-  const go=n=>{i=(n+banners.length)%banners.length;slideWrap.style.transform=`translateX(-${i*100}%)`;};
-  const play=()=>{stop();if(banners.length>1)timer=setInterval(()=>go(i+1),intervalMs);};
-  const stop=()=>{if(timer){clearInterval(timer);timer=null;}};
-  vp.addEventListener('mouseenter',stop);
-  vp.addEventListener('mouseleave',play);
-  if(banners.length>1)play();
-  return vp;
-}
-function renderBanner(b,fullBleed=false,baseHref=null){
-  const r=document.createElement('div');
-  r.className='ratio';
-  r.dataset.r='16-9';
-  r.appendChild(bannerFrameFromObj(b,baseHref));
-  return r;
-}
+  function parseLocal(s){
+    if(!s) return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+    if(!m) return null;
+    const [,Y,M,D,h,mn]=m;
+    return new Date(+Y,+M-1,+D,+h,+mn,0,0);
+  }
+  function activeByTime(b){
+    const now = new Date();
+    const s = parseLocal(b.startAt), e = parseLocal(b.endAt);
+    if (s && now < s) return false;
+    if (e && now > e) return false;
+    return true;
+  }
 
-function renderCard(it){
-  const c=document.createElement('div');c.className='cardX';c.dataset.kind='card';
-  const title=it.title||'Card';const st=cardState(it);c.dataset.state=st;
-  const row=document.createElement('div');row.className='rowflex';
-  const h=document.createElement('h4');h.textContent=title;row.appendChild(h);
-  const bd=document.createElement('span');bd.className='badge '+(st==='soon'?'soon':st==='active'?'active':st==='ended'?'ended':'');bd.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':st==='ended'?'Tugagan':'Mavjud');row.appendChild(bd);c.appendChild(row);
-  if(it.cardStyle==='timed'){const s=parseLocalCard(it.startAt),e=parseLocalCard(it.endAt);const t=document.createElement('div');t.className='muted';t.textContent=`Vaqt: ${fmtDate(s)} — ${fmtDate(e)}`;c.appendChild(t);}
-  const actions=document.createElement('div');actions.className='rowflex';
-  const a=document.createElement('a');a.className='btn primary';a.textContent=it.ctaLabel||'Boshlash';
-  if(st==='active'&&it.ctaHref){a.href=it.ctaHref;a.target='_blank';}else{a.classList.remove('primary');a.setAttribute('disabled','');}
-  actions.appendChild(a);c.appendChild(actions);
-  return c;
-}
+  async function fetchBanners(){
+    try{
+      const s = await getDoc(doc(db,'configs','home'));
+      if(!s.exists()) return [];
+      const d = s.data();
+      const sections = Array.isArray(d.sections)? d.sections : [];
+      const all = [];
 
-function buildFilters(){
-  const wrap=document.createElement('div');
-  wrap.className='inline-filters';
-  const options=[{key:'all',label:'Barchasi'},{key:'active',label:'Faol'},{key:'soon',label:'Yaqinda'},{key:'available',label:'Mavjud'},{key:'ended',label:'Tugagan'}];
-  const chips=options.map(o=>{
-    const b=document.createElement('button');
-    b.className='fchip'+(o.key==='all'?' active':'');
-    b.dataset.f=o.key;
-    b.textContent=o.label;
-    b.onclick=()=>{chips.forEach(x=>x.classList.toggle('active',x===b));f.onChange&&f.onChange(o.key);};
-    wrap.appendChild(b);
-    return b;
-  });
-  const f={wrap,onChange:null};
-  return f;
-}
+      for (const sec of sections){
+        const items = Array.isArray(sec.items) ? sec.items : [];
+        for (const it of items) if (it?.kind==="banner") all.push(it);
 
-function applyFilter(grid,key){
-  qa('.cardX',grid).forEach(card=>{
-    const st=card.dataset.state||'available';
-    const show=(key==='all')||(st===key);
-    card.style.display=show?'flex':'none';
-  });
-}
+        const subs = Array.isArray(sec.subsections) ? sec.subsections : [];
+        for (const ss of subs){
+          if (Array.isArray(ss.banners)) all.push(...ss.banners);     // eski sxema
+          const sitems = Array.isArray(ss.items) ? ss.items : [];     // yangi sxema
+          for (const sit of sitems) if (sit?.kind==="banner") all.push(sit);
+        }
+      }
 
-function sortCards(cards){
-  return [...cards].sort((a,b)=>{
-    const sa=cardState(a),sb=cardState(b);
-    const oa=(ORDER[sa]??9),ob=(ORDER[sb]??9);
-    if(oa!==ob)return oa-ob;
-    const as=parseLocalCard(a.startAt)?.getTime()||0;
-    const bs=parseLocalCard(b.startAt)?.getTime()||0;
-    return as-bs;
-  });
-}
+      return all
+        .filter(b => (b.slot||'fullscreen')==='fullscreen')
+        .filter(activeByTime)
+        .sort((a,b)=>(+a.order||0)-(+b.order||0));
+    }catch(e){ console.warn(e); return []; }
+  }
 
-function renderSection(sec){
-  const id=sec.id||('sec'+Math.random());
-  const outer=document.createElement('section');
-  outer.dataset.section=id;
-  outer.className='section';
-  const sh=document.createElement('div');
-  sh.className='section-hdr';
-  sh.innerHTML=`<h3>${sec.title||id}</h3>`;
-  outer.appendChild(sh);
-  const body=document.createElement('div');
-  body.className='iframe-wrap';
-  const inner=document.createElement('div');
-  inner.style.padding='12px';
-  const subs=Array.isArray(sec.subsections)?sec.subsections:[];
-  subs.forEach((sub,idx)=>{
-    const subWrap=document.createElement('div');
-    subWrap.className='section';
-    subWrap.style.margin='16px 0';
-    const subHead=document.createElement('div');
-    subHead.className='section-hdr';
-    subHead.innerHTML=`<h4>${sub.title||('Sub '+(idx+1))}</h4>`;
-    subWrap.appendChild(subHead);
-    const subBody=document.createElement('div');
-    subBody.className='iframe-wrap';
-    const subInner=document.createElement('div');
-    subInner.style.padding='10px';
-    const banners=Array.isArray(sub.banners)?sub.banners.filter(b=>b.slot!=='fullscreen'):[];
-    const cards=Array.isArray(sub.cards)?sub.cards:[];
-    if(banners.length>1)subInner.appendChild(renderCarousel(banners,false,sub.baseHref));
-    else if(banners.length===1)subInner.appendChild(renderBanner(banners[0],false,sub.baseHref));
-    if(cards.length){
-      const filters=buildFilters();
-      subInner.appendChild(filters.wrap);
-      const grid=document.createElement('div');
-      grid.className='grid';
-      cards.forEach(c=>grid.appendChild(renderCard(c)));
-      subInner.appendChild(grid);
-      filters.onChange=k=>applyFilter(grid,k);
+  function bannerFrameFromObj(b, baseHref=null){
+    const f=document.createElement('iframe'); f.className='sbx';
+    f.setAttribute('sandbox', b.sandbox || 'allow-scripts allow-forms');
+    f.setAttribute('scrolling','no');
+    if (b.mode==='url'){ f.src=b.src||''; }
+    else {
+      const base = b.baseHref || baseHref || '';
+      const html = `<!doctype html><html><head>${base?`<base href="${base}">`:""}<meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+        <style>html,body{height:100%;margin:0;overflow:hidden;background:transparent}</style></head>
+        <body>${String(b.contentHtml||'')}</body></html>`;
+      f.srcdoc = html;
     }
+    return f;
+  }
+
+  function renderBannerCarousel(banners){
+    BSTATE.banners=banners; BSTATE.currentIndex=0;
+    const carousel=q('#bannerCarousel'), indicators=q('#bannerIndicators');
+    carousel.innerHTML=''; indicators.innerHTML='';
+    if(!banners.length){ q('#bannerCarouselSection').style.display='none'; return; }
+    q('#bannerCarouselSection').style.display='block';
+    banners.forEach((b,i)=>{
+      const slide=document.createElement('div'); slide.className='banner-slide';
+      slide.appendChild(bannerFrameFromObj(b)); carousel.appendChild(slide);
+      const dot=document.createElement('div'); dot.className='banner-indicator'+(i===0?' active':'');
+      dot.onclick=()=>goToBanner(i); indicators.appendChild(dot);
+    });
+    startBannerRotation();
+    q('#bannerPrev').onclick=prevBanner; q('#bannerNext').onclick=nextBanner;
+    carousel.addEventListener('mouseenter', stopBannerRotation);
+    carousel.addEventListener('mouseleave', startBannerRotation);
+  }
+  function goToBanner(i){
+    if(i<0 || i>=BSTATE.banners.length) return;
+    BSTATE.currentIndex=i; q('#bannerCarousel').style.transform=`translateX(-${i*100}%)`;
+    qa('.banner-indicator').forEach((el,k)=>el.classList.toggle('active',k===i));
+    stopBannerRotation(); startBannerRotation();
+  }
+  const nextBanner=()=>goToBanner((BSTATE.currentIndex+1)%BSTATE.banners.length);
+  const prevBanner=()=>goToBanner((BSTATE.currentIndex-1+BSTATE.banners.length)%BSTATE.banners.length);
+  function startBannerRotation(){ stopBannerRotation(); if(BSTATE.banners.length>1) BSTATE.interval=setInterval(nextBanner,5000); }
+  function stopBannerRotation(){ if(BSTATE.interval){ clearInterval(BSTATE.interval); BSTATE.interval=null; } }
+
+  async function loadBanners(){ renderBannerCarousel(await fetchBanners()); }
+
+  /* ===== HOME (sections/cards) ===== */
+  async function fetchHome(){
+    try{const s=await getDoc(doc(db,'configs','home')); if(s.exists()){const d=s.data(); if(Array.isArray(d.sections)) return d;}}catch{}
+    return {sections:[]};
+  }
+  const HSTATE={ sections:[], activeId:null };
+  const ORDER={active:0, soon:1, available:2, ended:3};
+  const parseLocalCard = parseLocal;
+  const fmtDate=(d)=>!d?'-':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  function cardState(it){
+    if(it.cardStyle==='soon') return 'soon';
+    if(it.cardStyle==='timed'){ const now=new Date(), s=parseLocalCard(it.startAt), e=parseLocalCard(it.endAt);
+      if(s && now<s) return 'soon'; if(s && e && now>=s && now<=e) return 'active'; if(e && now>e) return 'ended'; return 'active'; }
+    return 'available';
+  }
+
+  function renderChips(){
+    const bar=q('#chipbar'); bar.innerHTML='';
+    HSTATE.sections.forEach((s,i)=>{
+      const b=document.createElement('button'); b.className='chip'+(i===0?' active':'');
+      b.textContent=s.title||s.id||('Bo\'lim '+(i+1)); b.dataset.target=s.id||('sec'+i);
+      b.onclick=()=>{ activate(b.dataset.target); b.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); };
+      bar.appendChild(b);
+    });
+  }
+
+  function renderCarousel(banners, fullBleed=false, baseHref=null, intervalMs=4500){
+    const vp=document.createElement('div'); vp.className=fullBleed?'carousel-viewport':'ratio'; if(!fullBleed) vp.dataset.r='16-9';
+    const slideWrap=document.createElement('div'); slideWrap.style.cssText='position:absolute;inset:0;display:grid;grid-auto-flow:column;grid-auto-columns:100%;transition:transform .6s ease;'; vp.appendChild(slideWrap);
+    const frames=banners.map(b=>{ const holder=document.createElement('div'); holder.style.cssText='position:relative;width:100%;height:100%';
+      const fr=bannerFrameFromObj(b, baseHref); fr.style.cssText='position:absolute;inset:0;width:100%;height:100%'; holder.appendChild(fr); slideWrap.appendChild(holder); return holder; });
+    let i=0, timer=null; const go=n=>{i=(n+frames.length)%frames.length; slideWrap.style.transform=`translateX(-${i*100}%)`;};
+    const play=()=>{ stop(); if(frames.length>1) timer=setInterval(()=>go(i+1), intervalMs); };
+    const stop=()=>{ if(timer){ clearInterval(timer); timer=null; } };
+    vp.addEventListener('pointerenter', stop); vp.addEventListener('pointerleave', play); if(frames.length>1) play(); return vp;
+  }
+  function renderBanner(b, fullBleed=false, baseHref=null){
+    if(fullBleed){ const wrap=document.createElement('div'); wrap.className='carousel-viewport'; wrap.appendChild(bannerFrameFromObj(b, baseHref)); return wrap; }
+    const r=document.createElement('div'); r.className='ratio'; r.dataset.r='16-9'; r.appendChild(bannerFrameFromObj(b, baseHref)); return r;
+  }
+  function renderCard(it){
+    const c=document.createElement('div'); c.className='cardX'; c.dataset.kind='card';
+    const title=it.title||'Card'; const st=cardState(it); c.dataset.state=st;
+    const row=document.createElement('div'); row.className='rowflex';
+    const h=document.createElement('h4'); h.textContent=title; row.appendChild(h);
+    const bd=document.createElement('span'); bd.className='badge '+(st==='soon'?'soon':st==='active'?'active':st==='ended'?'ended':''); bd.textContent=(st==='soon'?'Yaqinda':st==='active'?'Faol':st==='ended'?'Tugagan':'Mavjud'); row.appendChild(bd); c.appendChild(row);
+    if(it.cardStyle==='timed'){ const s=parseLocalCard(it.startAt), e=parseLocalCard(it.endAt);
+      const t=document.createElement('div'); t.className='muted'; t.textContent=`Vaqt: ${fmtDate(s)} — ${fmtDate(e)}`; c.appendChild(t); }
+    const actions=document.createElement('div'); actions.className='rowflex';
+    const info=document.createElement('button'); info.className='btn'; info.textContent='ℹ️ Info';
+    info.onclick=()=> showOverlay(`<div class="profile-card"><div style="display:flex;justify-content:space-between;align-items:center"><b>${title}</b><button class="btn" onclick="(${closeOverlay.toString()})();">Yopish</button></div><div class="divider"></div>${it.infoHtml||'<p class="muted">Ma\'lumot yo\'q.</p>'}</div>`);
+    actions.appendChild(info);
+    const a=document.createElement('a'); a.className='btn primary'; a.textContent=it.ctaLabel||'Boshlash';
+    if(st==='active' && it.ctaHref){ a.href=it.ctaHref; a.target='_blank'; } else { a.classList.remove('primary'); a.setAttribute('disabled',''); }
+    actions.appendChild(a); c.appendChild(actions); return c;
+  }
+  function buildFilters(){
+    const wrap=document.createElement('div'); wrap.className='inline-filters';
+    const options=[{key:'all',label:'Barchasi'},{key:'active',label:'Faol'},{key:'soon',label:'Yaqinda'},{key:'available',label:'Mavjud'},{key:'ended',label:'Tugagan'}];
+    const chips=options.map(o=>{ const b=document.createElement('button'); b.className='fchip'+(o.key==='all'?' active':''); b.dataset.f=o.key; b.textContent=o.label;
+      b.onclick=()=>{ chips.forEach(x=>x.classList.toggle('active',x===b)); f.onChange && f.onChange(o.key); }; wrap.appendChild(b); return b; });
+    const f={wrap,onChange:null}; return f;
+  }
+  function applyFilter(grid, key){ qa('.cardX', grid).forEach(card=>{ const st=card.dataset.state||'available'; const show=(key==='all')||(st===key); card.style.display=show?'flex':'none'; }); }
+  function sortCards(cards){ return [...cards].sort((a,b)=>{ const sa=cardState(a), sb=cardState(b); const oa=(ORDER[sa]??9), ob=(ORDER[sb]??9); if(oa!==ob) return oa-ob; const as=parseLocalCard(a.startAt)?.getTime()||0; const bs=parseLocalCard(b.startAt)?.getTime()||0; return as-bs; }); }
+
+  function renderSubSection(ss){
+    const wrap=document.createElement('section'); wrap.className='section';
+    const head=document.createElement('div'); head.className='section-hdr'; head.innerHTML=`<h3>${ss.title||ss.id||'Bo\'lim'}</h3>`; wrap.appendChild(head);
+    const body=document.createElement('div'); body.className='iframe-wrap'; const inner=document.createElement('div'); inner.style.padding='12px';
+
+    const items=Array.isArray(ss.items)?ss.items:[]; const banners=items.filter(x=>x.kind==='banner'); let cards=items.filter(x=>x.kind==='card'); cards=sortCards(cards);
+    if(banners.length>1) inner.appendChild(renderCarousel(banners,false, ss.baseHref));
+    else if(banners.length===1) inner.appendChild(renderBanner(banners[0],false, ss.baseHref));
+    if(cards.length){ const filters=buildFilters(); inner.appendChild(filters.wrap); const grid=document.createElement('div'); grid.className='grid'; cards.forEach(c=>grid.appendChild(renderCard(c))); inner.appendChild(grid); filters.onChange=(k)=>applyFilter(grid,k); }
+
+    const subs=Array.isArray(ss.subsections)?ss.subsections:[]; subs.forEach(s2=> inner.appendChild(renderSubSection(s2)));
+    body.appendChild(inner); wrap.appendChild(body); return wrap;
+  }
+
+  function renderSection(sec){
+  const id = sec.id || ('sec' + Math.random());
+  const outer = document.createElement('section');
+  outer.dataset.section = id;
+  outer.className = 'section';
+  
+  // Sarlavha
+  const sh = document.createElement('div');
+  sh.className = 'section-hdr';
+  sh.innerHTML = `<h3>${sec.title || id}</h3>`;
+  outer.appendChild(sh);
+
+  const body = document.createElement('div');
+  body.className = 'iframe-wrap';
+  const inner = document.createElement('div');
+  inner.style.padding = '12px';
+
+  // --- BIRINCHI darajadagi sub-bo‘limlar orqali chizish ---
+  const subs = Array.isArray(sec.subsections) ? sec.subsections : [];
+  subs.forEach((sub, idx) => {
+    const subWrap = document.createElement('div');
+    subWrap.className = 'section';
+    subWrap.style.margin = '16px 0';
+    
+    const subHead = document.createElement('div');
+    subHead.className = 'section-hdr';
+    subHead.innerHTML = `<h4>${sub.title || ('Sub ' + (idx + 1))}</h4>`;
+    subWrap.appendChild(subHead);
+
+    const subBody = document.createElement('div');
+    subBody.className = 'iframe-wrap';
+    const subInner = document.createElement('div');
+    subInner.style.padding = '10px';
+
+    const banners = Array.isArray(sub.banners) ? sub.banners : [];
+    const cards   = Array.isArray(sub.cards)   ? sub.cards   : [];
+
+    // BANNERS
+    if (banners.length > 1)
+      subInner.appendChild(renderCarousel(banners, false, sub.baseHref));
+    else if (banners.length === 1)
+      subInner.appendChild(renderBanner(banners[0], false, sub.baseHref));
+
+    // CARDS
+    if (cards.length) {
+      const filters = buildFilters();
+      subInner.appendChild(filters.wrap);
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      cards.forEach(c => grid.appendChild(renderCard(c)));
+      subInner.appendChild(grid);
+      filters.onChange = k => applyFilter(grid, k);
+    }
+
     subBody.appendChild(subInner);
     subWrap.appendChild(subBody);
     inner.appendChild(subWrap);
   });
-  if(!subs.length){
-    const banners=Array.isArray(sec.banners)?sec.banners.filter(b=>b.slot!=='fullscreen'):[];
-    const cards=Array.isArray(sec.cards)?sec.cards:[];
-    if(banners.length>1)inner.appendChild(renderCarousel(banners,false,sec.baseHref));
-    else if(banners.length===1)inner.appendChild(renderBanner(banners[0],false,sec.baseHref));
-    if(cards.length){
-      const filters=buildFilters();
+
+  // Agar sub-bo‘limlar bo‘lmasa, eski banner/cardlar shu joyda chiqsin
+  if (!subs.length) {
+    const banners = Array.isArray(sec.banners) ? sec.banners : [];
+    const cards   = Array.isArray(sec.cards)   ? sec.cards   : [];
+
+    if (banners.length > 1)
+      inner.appendChild(renderCarousel(banners, false, sec.baseHref));
+    else if (banners.length === 1)
+      inner.appendChild(renderBanner(banners[0], false, sec.baseHref));
+
+    if (cards.length) {
+      const filters = buildFilters();
       inner.appendChild(filters.wrap);
-      const grid=document.createElement('div');
-      grid.className='grid';
-      cards.forEach(c=>grid.appendChild(renderCard(c)));
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      cards.forEach(c => grid.appendChild(renderCard(c)));
       inner.appendChild(grid);
-      filters.onChange=k=>applyFilter(grid,k);
+      filters.onChange = k => applyFilter(grid, k);
     }
   }
+
   body.appendChild(inner);
   outer.appendChild(body);
   return outer;
 }
 
-function renderChips(){
-  const bar=q('#chipbar');bar.innerHTML='';
-  HSTATE.sections.forEach((s,i)=>{
-    const b=document.createElement('button');
-    b.className='chip'+(i===0?' active':'');
-    b.textContent=s.title||s.id||('Bo\'lim '+(i+1));
-    b.dataset.target=s.id||('sec'+i);
-    b.onclick=()=>{activate(b.dataset.target);b.scrollIntoView({behavior:'smooth',inline:'center'});};
-    bar.appendChild(b);
+  function renderSections(){
+    const host=q('#sections'); host.innerHTML='';
+    HSTATE.sections.forEach(s=> host.appendChild(renderSection(s)));
+  }
+
+  function sizeBannerGap(){
+    const hdrH=(q('#hdr')?.getBoundingClientRect().height||0);
+    const chipH=(q('#chipwrap')?.getBoundingClientRect().height||0);
+    document.documentElement.style.setProperty('--top-gap', (hdrH+chipH)+'px');
+  }
+
+  function activate(id){
+    HSTATE.activeId=id;
+    document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.target===id));
+    qa('[data-section]').forEach(s=>{ const show=(s.dataset.section===id); s.style.display=show?'block':'none'; });
+    sizeBannerGap();
+  }
+
+  async function loadHome(){
+    const data=await fetchHome();
+    HSTATE.sections = (Array.isArray(data.sections)? data.sections: []).map((s,i)=>({ id: (s.id||`sec${i+1}`), ...s }));
+    renderChips(); renderSections(); if(HSTATE.sections.length) activate(HSTATE.sections[0].id);
+  }
+
+  /* ===== USER CHIP / MENULAR / OVERLAYS (profil qisqacha) ===== */
+  function renderUserChip(u, profile){
+    const slot=q('#user-slot');
+    const age=profile?.birthDate?calcAge(profile.birthDate):'';
+    const name=profile?.firstName?(profile.firstName+(profile.lastName?' '+profile.lastName:'')):(u.displayName||u.email||'Foydalanuvchi');
+    const avatar=profile?.avatarUrl||u.photoURL||''; const role=profile?.role||'—';
+    slot.innerHTML=`
+      <div class="userchip" id="userchip" aria-haspopup="menu" aria-expanded="false">
+        <div class="avatar">${avatar?`<img src="${avatar}" alt="">`:''}</div>
+        <div style="display:grid;line-height:1"><b style="font-size:14px">${name}</b><small class="mini">${role} • ${age?age+' yosh • ':''}${USER_POINTS} points</small></div>
+        <div class="menu" id="usermenu" role="menu">
+          <a href="#" id="mProfile" role="menuitem">Profil</a>
+          <a href="#" id="mEdit" role="menuitem">Profilni tahrirlash</a>
+          <a href="#" id="mLogout" role="menuitem">Chiqish</a>
+          <div class="label">Aloqa</div>
+          <a href="tel:+998901234567">+998 90 123 45 67</a>
+          <a href="mailto:info@leadermath.uz">info@leadermath.uz</a>
+          <a href="https://t.me/LeaderMathUZ" target="_blank" rel="noopener">Telegram</a>
+          <a href="https://t.me/LeaderMathBot" target="_blank" rel="noopener">Bot</a>
+          <a href="https://instagram.com/leadermath.uz" target="_blank" rel="noopener">Instagram</a>
+          <a href="https://www.youtube.com/@leadermathuz" target="_blank" rel="noopener">YouTube</a>
+        </div>
+      </div>`;
+  }
+  function openUserMenu(){
+    const chip = q('#userchip'); const menu=q('#usermenu'); if(!chip||!menu) return;
+    (q('#portal-root')||document.body).appendChild(menu);
+    menu.style.visibility='hidden'; menu.style.display='block';
+    const r = chip.getBoundingClientRect(); const mw = menu.offsetWidth, mh = menu.offsetHeight, gap = 8;
+    let left = Math.min(Math.max(r.right - mw, 8), innerWidth - mw - 8); let top  = r.bottom + gap;
+    if (top + mh > innerHeight - 8) top = Math.max(8, r.top - gap - mh);
+    menu.style.left = left+'px'; menu.style.top = Math.max(8, top)+'px';
+    menu.classList.add('open'); menu.style.visibility='visible'; chip.setAttribute('aria-expanded','true');
+    const closeOnOutside = (e)=>{ if(!menu.contains(e.target) && !chip.contains(e.target)) closeUserMenu(); };
+    const onSR = ()=> position();
+    function position(){
+      if(!menu.classList.contains('open')) return;
+      const r2 = chip.getBoundingClientRect();
+      let L = Math.min(Math.max(r2.right - mw, 8), innerWidth - mw - 8);
+      let T = r2.bottom + gap;
+      if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
+      menu.style.left=L+'px'; menu.style.top=Math.max(8,T)+'px';
+    }
+    menu._closers={closeOnOutside, onSR};
+    addEventListener('click', closeOnOutside, {capture:true});
+    addEventListener('scroll', onSR, {passive:true});
+    addEventListener('resize', onSR, {passive:true});
+  }
+  function closeUserMenu(){
+    const menu=q('#usermenu'); if(!menu) return;
+    menu.classList.remove('open'); menu.style.display='none';
+    if(menu._closers){
+      removeEventListener('click', menu._closers.closeOnOutside, {capture:true});
+      removeEventListener('scroll', menu._closers.onSR);
+      removeEventListener('resize', menu._closers.onSR);
+      menu._closers=null;
+    }
+    const chip=q('#userchip'); if(chip){ chip.appendChild(menu); chip.setAttribute('aria-expanded','false'); }
+  }
+
+  const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
+  const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
+  q('#overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeOverlay(); });
+  addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeOverlay(); });
+
+  /* Profil editori qisqacha (o'zgarmagan) */
+  function readFileToDataURL(file){
+    return new Promise((resolve, reject)=>{
+      const ok = /image\/(png|jpe?g|webp|gif)$/i.test(file.type);
+      if(!ok) return reject(new Error('Rasm formati: JPG/PNG/WebP/GIF.'));
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(new Error('Faylni o\'qishda xatolik.'));
+      reader.readAsDataURL(file);
+    });
+  }
+  function openAvatarModal(initialSrc){
+    const html = `
+      <div class="modal-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <b style="font-size:18px">Avatarni yangilash</b>
+          <button class="btn" id="avClose">✕</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="grid2">
+          <div class="dropzone" id="dz">
+            <div class="preview" id="preview">${initialSrc?`<img src="${initialSrc}" alt="">`:'<span class="hint">Rasm hali tanlanmagan</span>'}</div>
+            <div class="hint">Rasmni bu yerga tashlang yoki tanlang (JPG/PNG/WebP, 2MB gacha).</div>
+            <input type="file" id="avFile" accept="image/*" style="display:none"/>
+            <button class="btn" id="pick">Fayl tanlash</button>
+          </div>
+          <div><div class="hint">Maslahat: kvadrat (1:1) rasm yaxshi ko'rinadi.</div></div>
+        </div>
+        <div id="avErr" style="color:#c62828;min-height:18px"></div>
+        <div class="modal-actions">
+          <button class="btn" id="avCancel">Bekor</button>
+          <button class="btn primary" id="avSave" disabled>Saqlash</button>
+        </div>
+      </div>`;
+    showOverlay(html);
+    const dz = q('#dz'), avFile=q('#avFile'), pick=q('#pick');
+    const prev=q('#preview'); const err=q('#avErr'); let dataURL = initialSrc || '';
+    const setPreview = (src)=>{ dataURL=src||''; prev.innerHTML = dataURL ? `<img src="${dataURL}" alt="">` : '<span class="hint">Rasm hali tanlanmagan</span>'; q('#avSave').disabled=!dataURL; };
+    const onDrag = (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.add('drag'); };
+    const onDrop = async (e)=>{ e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag'); err.textContent=''; try{
+        const file = e.dataTransfer.files?.[0]; if(!file) return;
+        if(file.size > 2*1024*1024) throw new Error('2MB dan oshmasin.');
+        setPreview(await readFileToDataURL(file));
+      }catch(ex){ err.textContent=ex?.message||String(ex); } };
+    ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,onDrag));
+    ['dragleave','drop'].forEach(t=>dz.addEventListener(t,(t==='drop')?onDrop:(e)=>{e.preventDefault(); dz.classList.remove('drag');}));
+    pick.onclick = ()=> avFile.click();
+    avFile.onchange = async (ev)=>{ err.textContent=''; try{
+        const f=ev.target.files?.[0]; if(!f) return;
+        if(f.size > 2*1024*1024) throw new Error('2MB dan oshmasin.');
+        setPreview(await readFileToDataURL(f));
+      }catch(ex){ err.textContent=ex?.message||String(ex); } };
+    q('#avClose').onclick=closeOverlay; q('#avCancel').onclick=closeOverlay;
+    q('#avSave').onclick=async ()=>{ if(!CURRENT_USER || !dataURL) return; err.textContent=''; q('#avSave').disabled=true;
+      try{ const ref=sRef(st, `avatars/${CURRENT_USER.uid}.jpg`); await uploadString(ref, dataURL, 'data_url'); const url=await getDownloadURL(ref);
+        PROFILE={...(PROFILE||{}), avatarUrl:url}; await saveProfile(CURRENT_USER.uid, PROFILE); renderUserChip(CURRENT_USER, PROFILE); closeOverlay();
+      }catch(ex){ err.textContent=ex?.message||String(ex); q('#avSave').disabled=false; } };
+  }
+
+  function openProfileView(){
+    if(!CURRENT_USER) return;
+    const p = PROFILE||{}; const age=p.birthDate?calcAge(p.birthDate):'';
+    showOverlay(`
+      <div class="profile-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="avatar" style="width:56px;height:56px">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
+            <div><b style="font-size:18px">${p.firstName||''} ${p.lastName||''}</b><br>
+              <small class="muted">${p.role||'—'} ${age?`• ${age} yosh`:''} • ${USER_POINTS} points</small></div>
+          </div>
+          <button class="btn" id="pvClose">Yopish</button>
+        </div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <div><div class="muted">Tug'ilgan sana</div><b>${p.birthDate||'—'}</b></div>
+          <div><div class="muted">Hudud</div><b>${p.region||'—'}${p.district?`, ${p.district}`:''}</b></div>
+          <div><div class="muted">Maktab</div><b>${p.school||'—'}</b></div>
+          <div><div class="muted">Sinf</div><b>${p.class||'—'}</b></div>
+        </div>
+        <div style="height:10px"></div>
+        <button class="btn primary" id="pvEdit">Tahrirlash</button>
+      </div>`);
+    q('#pvClose').onclick=closeOverlay;
+    q('#pvEdit').onclick=()=>{ closeOverlay(); openProfileEditor(); };
+  }
+
+  function fillSelect(sel, items, value){ sel.innerHTML = '<option value="">—</option>' + (items||[]).map(x=>`<option>${x}</option>`).join(''); if(value) sel.value=value; }
+  function buildClassOptions(){ return Array.from({length:11},(_,i)=>String(i+1)); }
+
+  function openProfileEditor(){
+    if(!CURRENT_USER) return;
+    const p={...(PROFILE||{})};
+    showOverlay(`
+      <div class="profile-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <b style="font-size:18px">Profilni tahrirlash</b>
+          <button class="btn" id="peClose">Yopish</button>
+        </div>
+        <div class="divider"></div>
+        <div style="display:flex;gap:14px;align-items:center">
+          <div class="avatar" style="width:76px;height:76px;cursor:pointer" id="avBox" title="Avatarni yangilash">${(p.avatarUrl||CURRENT_USER.photoURL)?`<img src="${p.avatarUrl||CURRENT_USER.photoURL}">`:''}</div>
+          <div><button class="btn" id="btnAvatar">Avatarni almashtirish</button></div>
+        </div>
+        <div class="grid2">
+          <div class="fld"><label>Ism *</label><input id="firstName" value="${p.firstName||''}"></div>
+          <div class="fld"><label>Familiya *</label><input id="lastName"  value="${p.lastName||''}"></div>
+          <div class="fld"><label>Tug'ilgan sana *</label><input id="birthDate" type="date" value="${p.birthDate||''}"></div>
+          <div class="fld"><label>Rol *</label>
+            <select id="role">
+              <option value="">—</option>
+              <option ${p.role==='O\'qituvchi'?'selected':''}>O'qituvchi</option>
+              <option ${p.role==='Talaba'?'selected':''}>Talaba</option>
+              <option ${p.role==='Abituriyent'?'selected':''}>Abituriyent</option>
+              <option ${p.role==='O\'quvchi'?'selected':''}>O'quvchi</option>
+            </select>
+          </div>
+          <div class="fld"><label>Viloyat *</label><select id="region"></select></div>
+          <div class="fld"><label>Tuman *</label><select id="district"></select></div>
+          <div class="fld"><label>Maktab</label><select id="school"></select></div>
+          <div class="fld" id="classWrap" style="display:none"><label>Sinf *</label><select id="classSel"></select></div>
+        </div>
+        <div id="peErr" style="color:#c62828;min-height:18px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn primary" id="btnSave">Saqlash</button></div>
+      </div>`);
+    q('#peClose').onclick=closeOverlay;
+    const cur = (PROFILE?.avatarUrl || CURRENT_USER?.photoURL || '');
+    q('#avBox').onclick=()=>openAvatarModal(cur);
+    q('#btnAvatar').onclick=()=>openAvatarModal(cur);
+
+    const rSel=q('#region'), dSel=q('#district'), sSel=q('#school'), roleSel=q('#role'), classWrap=q('#classWrap'), classSel=q('#classSel');
+    fillSelect(rSel, REGIONS.map(r=>r.name), p.region||'');
+    function refreshDistricts(){ const reg = REGIONS.find(x=>x.name===rSel.value); fillSelect(dSel, reg?reg.districts.map(d=>d.name):[], p.district||''); refreshSchools(); }
+    function refreshSchools(){ const reg = REGIONS.find(x=>x.name===rSel.value); const dis = reg?.districts.find(d=>d.name===dSel.value); fillSelect(sSel, dis?dis.schools:[], p.school||''); }
+    rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools; refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
+    function toggleClass(){ const isPupil = roleSel.value==='O\'quvchi'; classWrap.style.display = isPupil ? 'block' : 'none'; if(isPupil){ fillSelect(classSel, buildClassOptions(), p.class||''); } else classSel.innerHTML=''; }
+    roleSel.onchange=toggleClass; toggleClass();
+    q('#btnSave').onclick=async ()=>{ const err=q('#peErr'); err.textContent='';
+      const data={ firstName:q('#firstName').value.trim(), lastName:q('#lastName').value.trim(), birthDate:q('#birthDate').value,
+        role:roleSel.value, region:rSel.value, district:dSel.value, school:sSel.value, class: roleSel.value==='O\'quvchi' ? (q('#classSel').value||'') : '', avatarUrl: PROFILE?.avatarUrl || '' };
+      for(const k of ALWAYS_REQ){ if(!data[k]){ err.textContent='* Belgilangan maydonlar to\'ldirilishi shart.'; return; } }
+      if(data.role==='O\'quvchi' && !data.class){ err.textContent='O\'quvchi uchun "Sinf" majburiy.'; return; }
+      try{ await saveProfile(CURRENT_USER.uid, data); PROFILE=data; renderUserChip(CURRENT_USER, PROFILE); closeOverlay(); }
+      catch(e){ err.textContent=e?.message||String(e); }
+    };
+  }
+
+  /* Auth lock (minimum) */
+  function setLocked(b){const a=q('#app'); if(a) a.hidden=b;}
+  function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock');
+    const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='overlay show';
+    lock.innerHTML=`<div class="profile-card">
+      <div class="fld"><label>Email</label><input type="email" id="eml" placeholder="email@example.com"></div>
+      <div class="fld"><label>Parol</label><input type="password" id="pwd" placeholder="••••••••"></div>
+      <div id="err" style="color:#c62828"></div>
+      <div style="display:flex;gap:10px">
+        <button id="login" class="btn primary">Kirish</button>
+        <button id="signup" class="btn">Ro'yxatdan o'tish</button>
+        <button id="google" class="btn">Google</button>
+      </div>
+    </div>`;
+    document.body.appendChild(lock);
+    lock.addEventListener('click', async (e)=>{
+      const id=e.target.id, errEl=q('#err',lock); const busy=b=>qa('button',lock).forEach(x=>x.disabled=b);
+      try{
+        busy(true);
+        if(id==='google') await signInWithPopup(auth,new GoogleAuthProvider());
+        if(id==='login'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await signInWithEmailAndPassword(auth,eml,pwd); }
+        if(id==='signup'){ const eml=q('#eml',lock).value.trim(), pwd=q('#pwd',lock).value; await createUserWithEmailAndPassword(auth,eml,pwd); }
+      }catch(err){ if(errEl) errEl.textContent=err?.message||String(err); } finally{ busy(false); }
+    });
+    return lock;
+  }
+
+  onAuthStateChanged(auth, async (u)=>{
+    CURRENT_USER=u||null;
+    if(!u){ setLocked(true); buildAuthLock(); q('#user-slot').innerHTML=''; return; }
+    qa('#auth-lock').forEach(x=>x.remove()); setLocked(false);
+    if(!REGIONS.length) REGIONS=await loadRegions();
+    [PROFILE, USER_POINTS] = await Promise.all([ getProfile(u.uid), getUserPoints(u.uid) ]);
+    if(PROFILE && !PROFILE.role){ PROFILE.role='O\'quvchi'; await saveProfile(u.uid, PROFILE); }
+    renderUserChip(u, PROFILE||{});
+    const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]);
+    const ok = baseOk && (PROFILE?.role!=='O\'quvchi' || !!PROFILE.class);
+    if(!ok) openProfileEditor();
   });
+
+  // Global delegation
+  document.addEventListener('click', (e)=>{
+    const t=e.target;
+    if(t.closest('#userchip')){
+      const open = q('#usermenu')?.classList.contains('open');
+      open ? closeUserMenu() : openUserMenu();
+    }
+    if(t.closest('#mProfile')){ e.preventDefault(); closeUserMenu(); openProfileView(); }
+    if(t.closest('#mEdit')){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
+    if(t.closest('#mLogout')){ e.preventDefault(); closeUserMenu(); signOut(auth); }
+  });
+
+ function updateTopGap(){
+  const hdrH = (document.querySelector('#hdr')?.getBoundingClientRect().height || 0);
+  const chipH = (document.querySelector('#chipwrap')?.getBoundingClientRect().height || 0);
+  document.documentElement.style.setProperty('--top-gap', (hdrH + chipH) + 'px');
 }
 
-function renderSections(){
-  const host=q('#sections');
-  host.innerHTML='';
-  HSTATE.sections.forEach(s=>host.appendChild(renderSection(s)));
-}
-
-function activate(id){
-  HSTATE.activeId=id;
-  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c.dataset.target===id));
-  qa('[data-section]').forEach(s=>s.style.display=(s.dataset.section===id)?'block':'none');
-}
-
-async function loadHome(){
-  const data=await fetchHome();
-  HSTATE.sections=(Array.isArray(data.sections)?data.sections:[]).map((s,i)=>({id:s.id||`sec${i+1}`,...s}));
-  renderChips();
-  renderSections();
-  if(HSTATE.sections.length)activate(HSTATE.sections[0].id);
-}
-
-/* USER / AUTH qisqa */
-onAuthStateChanged(auth, async (u)=>{
-  CURRENT_USER=u||null;
-  if(!u){ q('#user-slot').innerHTML='<button class="btn">Kirish</button>'; return; }
-  [PROFILE,USER_POINTS]=await Promise.all([getDoc(doc(db,'profiles',u.uid)).then(s=>s.data()||{}),0]);
-  q('#user-slot').innerHTML=`<div class="userchip"><div class="avatar">${u.photoURL?`<img src="${u.photoURL}">`:''}</div><b>${u.displayName||'Foydalanuvchi'}</b></div>`;
-});
-
+// start
 await loadHome();
-</script>
+await loadBanners();           // slot:"fullscreen" bannerlar
+updateTopGap();
+addEventListener('resize', updateTopGap);
+addEventListener('orientationchange', updateTopGap);
+  </script>
 </body>
 </html>
