@@ -208,7 +208,7 @@
       if (T + mh > innerHeight - 8) T = Math.max(8, r2.top - gap - mh);
       menu.style.left=L+'px'; menu.style.top=Math.max(8,T)+'px';
     }
-    menu._closers={closeOnOutside:onSR, onSR};
+    menu._closers={closeOnOutside, onSR};
     addEventListener('click', closeOnOutside, {capture:true});
     addEventListener('scroll', onSR, {passive:true});
     addEventListener('resize', onSR, {passive:true});
@@ -228,7 +228,6 @@
   /* OVERLAY helpers */
   const showOverlay=html=>{const ov=q('#overlay'); ov.innerHTML=html; ov.classList.add('show');};
   const closeOverlay=()=>{const ov=q('#overlay'); ov.classList.remove('show'); ov.innerHTML='';};
-  // backdrop click & ESC yopish
   q('#overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeOverlay(); });
   addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeOverlay(); });
 
@@ -323,8 +322,7 @@
       const dis = reg?.districts.find(d=>d.name===dSel.value);
       fillSelect(sSel, dis?dis.schools:[], p.school||'');
     }
-    rSel.onchange=()=>{ refreshDistricts(); };
-    dSel.onchange=()=>{ refreshSchools(); };
+    rSel.onchange=refreshDistricts; dSel.onchange=refreshSchools;
     refreshDistricts(); if(p.district){ dSel.value=p.district; refreshSchools(); } if(p.school){ sSel.value=p.school; }
 
     // avatar upload
@@ -373,7 +371,8 @@
   const state={sections:[],activeId:null};
 
   async function loadHome(){
-    const d=await fetchHome(); state.sections=Array.isArray(d.sections)?d.sections:[]; renderChips(); renderSections();
+    const d=await fetchHome(); state.sections=Array.isArray(d.sections)?d.sections:[];
+    renderChips(); renderSections();
     if(state.sections.length) activate(state.sections[0].id||'sec0');
   }
   function renderChips(){
@@ -402,10 +401,19 @@
   function renderSections(){
     const host=q('#sections'); host.innerHTML='';
     state.sections.forEach((s,i)=>{
-      const id=s.id||('sec'+i), asBody=!!s.asBody;
-      const outer=document.createElement('section'); outer.className='section'+(asBody?' as-body':''); outer.dataset.section=id;
-      if(s.title && !asBody){ const sh=document.createElement('div'); sh.className='section-hdr'; sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; outer.appendChild(sh); }
-      const wrap=document.createElement('div'); wrap.className='iframe-wrap'; const ifr=makeIframeForSection(s);
+      //  🔥 1-BO‘LIMNI DOIMO FULLSCREEN QILAMIZ (yoki s.asBody=true bo‘lsa)
+      const makeFull = (i===0 && s.asBody!==false) || s.asBody===true;
+      const id=s.id||('sec'+i);
+      const outer=document.createElement('section');
+      outer.className='section'+(makeFull?' as-body':''); outer.dataset.section=id;
+
+      if(s.title && !makeFull){
+        const sh=document.createElement('div'); sh.className='section-hdr';
+        sh.innerHTML='<h3>'+(s.title||'')+'</h3>'; outer.appendChild(sh);
+      }
+
+      const wrap=document.createElement('div'); wrap.className='iframe-wrap';
+      const ifr=makeIframeForSection(s);
       wrap.appendChild(ifr); outer.appendChild(wrap); host.appendChild(outer);
     });
   }
@@ -432,7 +440,7 @@
   addEventListener('resize', sizeActiveSection);
   addEventListener('orientationchange', sizeActiveSection);
 
-  /* Auth lock */
+  /* Auth lock (minimum) */
   function setLocked(b){const a=q('#app'); if(a) a.hidden=b;}
   function buildAuthLock(){ if(q('#auth-lock')) return q('#auth-lock');
     const lock=document.createElement('div'); lock.id='auth-lock'; lock.className='overlay show';
@@ -466,26 +474,23 @@
     if(!REGIONS.length) REGIONS=await loadRegions();
     [PROFILE, USER_POINTS] = await Promise.all([ getProfile(u.uid), getUserPoints(u.uid) ]);
     if(PROFILE && !PROFILE.role){ PROFILE.role='O‘quvchi'; await saveProfile(u.uid, PROFILE); }
-    const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]); let ok = baseOk; if(PROFILE?.role==='O‘quvchi'){ ok = ok && !!PROFILE.class; }
     renderUserChip(u, PROFILE||{});
-    if(!ok){ openProfileEditor(); }
+
+    const baseOk = ALWAYS_REQ.every(k=>PROFILE && PROFILE[k]);
+    const ok = baseOk && (PROFILE?.role!=='O‘quvchi' || !!PROFILE.class);
+    if(!ok) openProfileEditor();
   });
 
-  // GLOBAL DELEGATION — menyu tugmalari doim ishlaydi
+  /* GLOBAL DELEGATION — chip va menyu */
   document.addEventListener('click', (e)=>{
     const t=e.target;
-    if(t.id==='userchip'){ // chipni bosganda och/yop
-      if(q('#usermenu')?.classList.contains('open')) closeUserMenu(); else openUserMenu();
+    if(t.closest('#userchip')){ // ← avatar/ism/har qayeri bosilsa
+      const open = q('#usermenu')?.classList.contains('open');
+      open ? closeUserMenu() : openUserMenu();
     }
-    if(t.id==='mProfile'){ e.preventDefault(); closeUserMenu(); openProfileView(); }
-    if(t.id==='mEdit'){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
-    if(t.id==='mLogout'){ e.preventDefault(); closeUserMenu(); signOut(auth); }
-  });
-
-  // chips markazga
-  document.addEventListener('pointerdown', (e)=>{
-    const t = e.target.closest('.chip'); if(!t) return;
-    t.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
+    if(t.closest('#mProfile')){ e.preventDefault(); closeUserMenu(); openProfileView(); }
+    if(t.closest('#mEdit')){ e.preventDefault(); closeUserMenu(); openProfileEditor(); }
+    if(t.closest('#mLogout')){ e.preventDefault(); closeUserMenu(); signOut(auth); }
   });
 
   await loadHome();
