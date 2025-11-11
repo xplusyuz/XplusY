@@ -554,6 +554,11 @@
       color: var(--warning);
     }
 
+    .badge-danger {
+      background: rgba(247, 37, 133, 0.1);
+      color: var(--danger);
+    }
+
     .hidden {
       display: none !important;
     }
@@ -568,10 +573,63 @@
       animation: pulse 1s infinite;
     }
 
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.7; }
-      100% { opacity: 1; }
+    .question-analysis {
+      margin-top: 30px;
+    }
+
+    .analysis-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 15px;
+      overflow: hidden;
+    }
+
+    .analysis-header {
+      padding: 15px;
+      background: var(--light);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .analysis-question {
+      font-weight: 500;
+    }
+
+    .analysis-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .analysis-body {
+      padding: 15px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    .analysis-answer {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .analysis-label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .analysis-value {
+      font-weight: 500;
+    }
+
+    .analysis-correct {
+      color: var(--success);
+    }
+
+    .analysis-incorrect {
+      color: var(--danger);
     }
 
     @media (max-width: 768px) {
@@ -596,6 +654,16 @@
       .math-keyboard {
         grid-template-columns: repeat(6, 1fr);
       }
+      
+      .analysis-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
     }
   </style>
 </head>
@@ -876,6 +944,13 @@
             </div>
           </div>
           
+          <div class="question-analysis">
+            <h3 style="margin-bottom: 15px;">Savollar tahlili</h3>
+            <div id="questionsAnalysis">
+              <!-- Savollar tahlili dinamik ravishda yuklanadi -->
+            </div>
+          </div>
+          
           <div class="actions-row">
             <button class="btn btn-secondary" id="exportCsv">
               <i class="fas fa-file-csv"></i> CSV eksport
@@ -931,7 +1006,8 @@
       subSkills: {},
       subSkillsCorrect: {},
       isDemo: false,
-      activeInput: null
+      activeInput: null,
+      userAnswers: [] // Foydalanuvchi javoblarini saqlash uchun
     };
 
     // DOM elementlari
@@ -978,6 +1054,7 @@
       timeSpent: document.getElementById('timeSpent'),
       finalGrade: document.getElementById('finalGrade'),
       skillsAnalysis: document.getElementById('skillsAnalysis'),
+      questionsAnalysis: document.getElementById('questionsAnalysis'),
       historyTable: document.getElementById('historyTable'),
       exportCsv: document.getElementById('exportCsv'),
       exportJson: document.getElementById('exportJson'),
@@ -1108,6 +1185,71 @@
         }
         
         return null;
+      },
+      
+      // Javobni formatlash
+      formatAnswer(answer, questionType) {
+        if (!answer) return "Javob berilmagan";
+        
+        if (questionType === 'roots') {
+          if (answer.complex) return "Kompleks ildizlar";
+          return `x₁ = ${answer.x1?.toFixed(4) || '?'}, x₂ = ${answer.x2?.toFixed(4) || '?'}`;
+        }
+        
+        if (questionType === 'vertex') {
+          return `(h, k) = (${answer.h?.toFixed(4) || '?'}, ${answer.k?.toFixed(4) || '?'})`;
+        }
+        
+        if (questionType === 'vieta') {
+          return `S = ${answer.S?.toFixed(4) || '?'}, P = ${answer.P?.toFixed(4) || '?'}`;
+        }
+        
+        if (questionType === 'disc') {
+          return `D = ${answer.D || '?'}`;
+        }
+        
+        if (questionType === 'count') {
+          return `${answer.count || '?'} ta`;
+        }
+        
+        if (questionType === 'axis') {
+          return `x = ${answer.axis?.toFixed(4) || '?'}`;
+        }
+        
+        if (questionType === 'yint') {
+          return `y(0) = ${answer.y0 || '?'}`;
+        }
+        
+        if (questionType === 'factor') {
+          return answer.factorization || "Omillarga ajratib bo'lmaydi";
+        }
+        
+        if (questionType === 'ineq') {
+          return answer.range || '?';
+        }
+        
+        if (questionType === 'g_roots') {
+          if ('count' in answer) return `${answer.count} ta`;
+          return `x₁ ≈ ${answer.x1?.toFixed(2) || '?'}, x₂ ≈ ${answer.x2?.toFixed(2) || '?'}`;
+        }
+        
+        if (questionType === 'g_vertex') {
+          return `(h, k) = (${answer.h || '?'}, ${answer.k || '?'})`;
+        }
+        
+        if (questionType === 'g_axis') {
+          return `x = ${answer.axis || '?'}`;
+        }
+        
+        if (questionType === 'g_range') {
+          return answer.range || '?';
+        }
+        
+        if (questionType === 'g_to_eq') {
+          return `a = ${answer.A || '?'}, h = ${answer.h || '?'}, k = ${answer.k || '?'}`;
+        }
+        
+        return JSON.stringify(answer);
       }
     };
 
@@ -2007,13 +2149,8 @@
         DOM.graphInstructions.textContent = instructions;
       },
       
-      // Javobni tekshirish
-      checkAnswer() {
-        const question = STATE.questions[STATE.currentQuestionIndex];
-        let isCorrect = false;
-        let partialScore = 0;
-        let message = '';
-        
+      // Foydalanuvchi javobini olish
+      getUserAnswer(question) {
         const getAnswerValue = (id) => {
           const element = document.getElementById(`answer_${id}`);
           return element ? element.value : null;
@@ -2021,30 +2158,121 @@
         
         const parseAnswer = (value) => UTILS.parseNumber(value);
         
-        // Turli savol turlari uchun tekshirish
+        let userAnswer = {};
+        
         switch (question.type) {
           case 'disc':
-            const userD = parseAnswer(getAnswerValue('D'));
-            isCorrect = UTILS.nearlyEqual(userD, question.answer.D);
-            message = `To'g'ri javob: D = ${question.answer.D}`;
+            userAnswer.D = parseAnswer(getAnswerValue('D'));
             break;
             
           case 'count':
-            const userCount = parseInt(getAnswerValue('count'));
-            isCorrect = userCount === question.answer.count;
-            message = `Diskriminant: ${ALGEBRA.discriminant(question.a, question.b, question.c)} → ${question.answer.count} ta haqiqiy ildiz`;
+            userAnswer.count = parseInt(getAnswerValue('count'));
             break;
             
           case 'roots':
             if (question.answer.complex) {
               const answer1 = (getAnswerValue('x1') || '').toLowerCase();
               const answer2 = (getAnswerValue('x2') || '').toLowerCase();
-              isCorrect = answer1.includes('i') || answer2.includes('i') || 
-                         answer1.includes('kompleks') || answer2.includes('kompleks');
+              userAnswer.complex = answer1.includes('i') || answer2.includes('i') || 
+                                 answer1.includes('kompleks') || answer2.includes('kompleks');
+            } else {
+              userAnswer.x1 = parseAnswer(getAnswerValue('x1'));
+              userAnswer.x2 = parseAnswer(getAnswerValue('x2'));
+            }
+            break;
+            
+          case 'vertex':
+            userAnswer.h = parseAnswer(getAnswerValue('h'));
+            userAnswer.k = parseAnswer(getAnswerValue('k'));
+            break;
+            
+          case 'axis':
+            userAnswer.axis = parseAnswer(getAnswerValue('axis'));
+            break;
+            
+          case 'yint':
+            userAnswer.y0 = parseAnswer(getAnswerValue('y0'));
+            break;
+            
+          case 'vieta':
+            userAnswer.S = parseAnswer(getAnswerValue('S'));
+            userAnswer.P = parseAnswer(getAnswerValue('P'));
+            break;
+            
+          case 'factor':
+            userAnswer.factorization = getAnswerValue('factorization');
+            break;
+            
+          case 'ineq':
+            userAnswer.range = getAnswerValue('range');
+            break;
+            
+          case 'g_roots':
+            if ('count' in question.answer) {
+              userAnswer.count = parseInt(getAnswerValue('count'));
+            } else {
+              userAnswer.x1 = parseAnswer(getAnswerValue('x1'));
+              userAnswer.x2 = parseAnswer(getAnswerValue('x2'));
+            }
+            break;
+            
+          case 'g_vertex':
+            userAnswer.h = parseAnswer(getAnswerValue('h'));
+            userAnswer.k = parseAnswer(getAnswerValue('k'));
+            break;
+            
+          case 'g_axis':
+            userAnswer.axis = parseAnswer(getAnswerValue('axis'));
+            break;
+            
+          case 'g_range':
+            userAnswer.range = getAnswerValue('range');
+            break;
+            
+          case 'g_to_eq':
+            userAnswer.A = parseAnswer(getAnswerValue('A'));
+            userAnswer.h = parseAnswer(getAnswerValue('h'));
+            userAnswer.k = parseAnswer(getAnswerValue('k'));
+            break;
+        }
+        
+        return userAnswer;
+      },
+      
+      // Javobni tekshirish
+      checkAnswer() {
+        const question = STATE.questions[STATE.currentQuestionIndex];
+        let isCorrect = false;
+        let partialScore = 0;
+        let message = '';
+        
+        // Foydalanuvchi javobini olish va saqlash
+        const userAnswer = this.getUserAnswer(question);
+        STATE.userAnswers[STATE.currentQuestionIndex] = userAnswer;
+        
+        const parseAnswer = (value) => UTILS.parseNumber(value);
+        
+        // Turli savol turlari uchun tekshirish
+        switch (question.type) {
+          case 'disc':
+            const userD = userAnswer.D;
+            isCorrect = UTILS.nearlyEqual(userD, question.answer.D);
+            message = `To'g'ri javob: D = ${question.answer.D}`;
+            break;
+            
+          case 'count':
+            const userCount = userAnswer.count;
+            isCorrect = userCount === question.answer.count;
+            message = `Diskriminant: ${ALGEBRA.discriminant(question.a, question.b, question.c)} → ${question.answer.count} ta haqiqiy ildiz`;
+            break;
+            
+          case 'roots':
+            if (question.answer.complex) {
+              isCorrect = userAnswer.complex === true;
               message = 'Diskriminant manfiy - haqiqiy ildizlar mavjud emas';
             } else {
-              const x1 = parseAnswer(getAnswerValue('x1'));
-              const x2 = parseAnswer(getAnswerValue('x2'));
+              const x1 = userAnswer.x1;
+              const x2 = userAnswer.x2;
               
               if (x1 === null || x2 === null) {
                 isCorrect = false;
@@ -2069,8 +2297,8 @@
             break;
             
           case 'vertex':
-            const h = parseAnswer(getAnswerValue('h'));
-            const k = parseAnswer(getAnswerValue('k'));
+            const h = userAnswer.h;
+            const k = userAnswer.k;
             isCorrect = h !== null && k !== null && 
                        UTILS.nearlyEqual(h, question.answer.h) && 
                        UTILS.nearlyEqual(k, question.answer.k);
@@ -2079,20 +2307,20 @@
             break;
             
           case 'axis':
-            const axis = parseAnswer(getAnswerValue('axis'));
+            const axis = userAnswer.axis;
             isCorrect = UTILS.nearlyEqual(axis, question.answer.axis);
             message = `To'g'ri javob: x = ${question.answer.axis.toFixed(4)}`;
             break;
             
           case 'yint':
-            const y0 = parseAnswer(getAnswerValue('y0'));
+            const y0 = userAnswer.y0;
             isCorrect = UTILS.nearlyEqual(y0, question.answer.y0);
             message = `To'g'ri javob: y(0) = ${question.answer.y0}`;
             break;
             
           case 'vieta':
-            const S = parseAnswer(getAnswerValue('S'));
-            const P = parseAnswer(getAnswerValue('P'));
+            const S = userAnswer.S;
+            const P = userAnswer.P;
             isCorrect = S !== null && P !== null && 
                        UTILS.nearlyEqual(S, question.answer.S) && 
                        UTILS.nearlyEqual(P, question.answer.P);
@@ -2105,15 +2333,15 @@
               isCorrect = false;
               message = 'Bu tenglamani chiroyli omillarga ajratib bo\'lmaydi';
             } else {
-              const userAnswer = (getAnswerValue('factorization') || '').toLowerCase().replace(/\s+/g, '');
+              const userAnswerText = (userAnswer.factorization || '').toLowerCase().replace(/\s+/g, '');
               const correctAnswer = question.answer.factorization.toLowerCase().replace(/\s+/g, '');
-              isCorrect = userAnswer.includes(correctAnswer) || correctAnswer.includes(userAnswer);
+              isCorrect = userAnswerText.includes(correctAnswer) || correctAnswer.includes(userAnswerText);
               message = `To'g'ri javob: ${question.answer.factorization}`;
             }
             break;
             
           case 'ineq':
-            const userRange = (getAnswerValue('range') || '').replace(/\s+/g, '');
+            const userRange = (userAnswer.range || '').replace(/\s+/g, '');
             const correctRange = question.answer.range.replace(/\s+/g, '');
             isCorrect = userRange === correctRange;
             message = `To'g'ri javob: ${question.answer.range}`;
@@ -2121,12 +2349,12 @@
             
           case 'g_roots':
             if ('count' in question.answer) {
-              const userCount = parseInt(getAnswerValue('count'));
+              const userCount = userAnswer.count;
               isCorrect = userCount === question.answer.count;
               message = 'Grafik O\'x o\'qini kesmaydi - ildizlar yo\'q';
             } else {
-              const x1 = parseAnswer(getAnswerValue('x1'));
-              const x2 = parseAnswer(getAnswerValue('x2'));
+              const x1 = userAnswer.x1;
+              const x2 = userAnswer.x2;
               
               if (x1 === null || x2 === null) {
                 isCorrect = false;
@@ -2149,8 +2377,8 @@
             break;
             
           case 'g_vertex':
-            const gh = parseAnswer(getAnswerValue('h'));
-            const gk = parseAnswer(getAnswerValue('k'));
+            const gh = userAnswer.h;
+            const gk = userAnswer.k;
             // Grafik uchi uchun kengroq xatolik chegarasi
             isCorrect = UTILS.nearlyEqual(gh, question.answer.h, 0.3) && 
                        UTILS.nearlyEqual(gk, question.answer.k, 0.3);
@@ -2159,22 +2387,22 @@
             break;
             
           case 'g_axis':
-            const gAxis = parseAnswer(getAnswerValue('axis'));
+            const gAxis = userAnswer.axis;
             isCorrect = UTILS.nearlyEqual(gAxis, question.answer.axis, 0.3);
             message = `To'g'ri javob: x = ${question.answer.axis}`;
             break;
             
           case 'g_range':
-            const userGRange = (getAnswerValue('range') || '').replace(/\s+/g, '');
+            const userGRange = (userAnswer.range || '').replace(/\s+/g, '');
             const correctGRange = question.answer.range.replace(/\s+/g, '');
             isCorrect = userGRange === correctGRange;
             message = `To'g'ri javob: ${question.answer.range}`;
             break;
             
           case 'g_to_eq':
-            const gA = parseAnswer(getAnswerValue('A'));
-            const gH = parseAnswer(getAnswerValue('h'));
-            const gK = parseAnswer(getAnswerValue('k'));
+            const gA = userAnswer.A;
+            const gH = userAnswer.h;
+            const gK = userAnswer.k;
             // Grafik tenglama uchun kengroq xatolik chegarasi
             isCorrect = UTILS.nearlyEqual(gA, question.answer.A, 0.3) && 
                        UTILS.nearlyEqual(gH, question.answer.h, 0.3) && 
@@ -2277,6 +2505,9 @@
         // Ko'nikmalar tahlili
         this.renderSkillsAnalysis();
         
+        // Savollar tahlili
+        this.renderQuestionsAnalysis();
+        
         // Tarixni yangilash
         this.saveToHistory(timeSpent, totalQuestions, maxScore, grade);
         this.renderHistory();
@@ -2327,6 +2558,157 @@
         }
         
         DOM.skillsAnalysis.innerHTML = html || '<p>Hech qanday ma\'lumot mavjud emas</p>';
+      },
+      
+      // Savollar tahlili
+      renderQuestionsAnalysis() {
+        let html = '';
+        
+        for (let i = 0; i < STATE.questions.length; i++) {
+          const question = STATE.questions[i];
+          const userAnswer = STATE.userAnswers[i] || {};
+          const isCorrect = this.isAnswerCorrect(question, userAnswer);
+          
+          const userAnswerText = UTILS.formatAnswer(userAnswer, question.type);
+          const correctAnswerText = UTILS.formatAnswer(question.answer, question.type);
+          
+          html += `
+            <div class="analysis-item">
+              <div class="analysis-header">
+                <div class="analysis-question">
+                  <strong>${i + 1}.</strong> ${question.text}
+                </div>
+                <div class="analysis-status">
+                  ${isCorrect ? 
+                    '<span class="badge badge-success"><i class="fas fa-check"></i> To\'g\'ri</span>' : 
+                    '<span class="badge badge-danger"><i class="fas fa-times"></i> Noto\'g\'ri</span>'
+                  }
+                </div>
+              </div>
+              <div class="analysis-body">
+                <div class="analysis-answer">
+                  <div class="analysis-label">Sizning javobingiz:</div>
+                  <div class="analysis-value ${isCorrect ? 'analysis-correct' : 'analysis-incorrect'}">${userAnswerText}</div>
+                </div>
+                <div class="analysis-answer">
+                  <div class="analysis-label">To'g'ri javob:</div>
+                  <div class="analysis-value analysis-correct">${correctAnswerText}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        
+        DOM.questionsAnalysis.innerHTML = html;
+        
+        // MathJax ni yangilash
+        if (window.MathJax && MathJax.typeset) {
+          MathJax.typeset();
+        }
+      },
+      
+      // Javob to'g'ri yoki yo'qligini tekshirish
+      isAnswerCorrect(question, userAnswer) {
+        // Bu yerda checkAnswer funksiyasidagi tekshirish mantiqini qayta ishlatamiz
+        // Ammo soddalik uchun, biz oddiygina tekshiramiz
+        // Haqiqiy loyihada bu mantiqni alohida funksiyaga ajratish maqsadga muvofiq
+        
+        const parseAnswer = (value) => UTILS.parseNumber(value);
+        
+        switch (question.type) {
+          case 'disc':
+            return UTILS.nearlyEqual(userAnswer.D, question.answer.D);
+            
+          case 'count':
+            return userAnswer.count === question.answer.count;
+            
+          case 'roots':
+            if (question.answer.complex) {
+              return userAnswer.complex === true;
+            } else {
+              const x1 = userAnswer.x1;
+              const x2 = userAnswer.x2;
+              
+              if (x1 === null || x2 === null) return false;
+              
+              const userRoots = [x1, x2].sort((a, b) => a - b);
+              const correctRoots = [question.answer.x1, question.answer.x2];
+              
+              return UTILS.nearlyEqual(userRoots[0], correctRoots[0]) && 
+                     UTILS.nearlyEqual(userRoots[1], correctRoots[1]);
+            }
+            
+          case 'vertex':
+            const h = userAnswer.h;
+            const k = userAnswer.k;
+            return h !== null && k !== null && 
+                   UTILS.nearlyEqual(h, question.answer.h) && 
+                   UTILS.nearlyEqual(k, question.answer.k);
+            
+          case 'axis':
+            return UTILS.nearlyEqual(userAnswer.axis, question.answer.axis);
+            
+          case 'yint':
+            return UTILS.nearlyEqual(userAnswer.y0, question.answer.y0);
+            
+          case 'vieta':
+            const S = userAnswer.S;
+            const P = userAnswer.P;
+            return S !== null && P !== null && 
+                   UTILS.nearlyEqual(S, question.answer.S) && 
+                   UTILS.nearlyEqual(P, question.answer.P);
+            
+          case 'factor':
+            if (!question.answer.factorization) return false;
+            const userAnswerText = (userAnswer.factorization || '').toLowerCase().replace(/\s+/g, '');
+            const correctAnswer = question.answer.factorization.toLowerCase().replace(/\s+/g, '');
+            return userAnswerText.includes(correctAnswer) || correctAnswer.includes(userAnswerText);
+            
+          case 'ineq':
+            const userRange = (userAnswer.range || '').replace(/\s+/g, '');
+            const correctRange = question.answer.range.replace(/\s+/g, '');
+            return userRange === correctRange;
+            
+          case 'g_roots':
+            if ('count' in question.answer) {
+              return userAnswer.count === question.answer.count;
+            } else {
+              const x1 = userAnswer.x1;
+              const x2 = userAnswer.x2;
+              
+              if (x1 === null || x2 === null) return false;
+              
+              const userRoots = [x1, x2].sort((a, b) => a - b);
+              const correctRoots = [question.answer.x1, question.answer.x2];
+              
+              return UTILS.nearlyEqual(userRoots[0], correctRoots[0], 0.5) && 
+                     UTILS.nearlyEqual(userRoots[1], correctRoots[1], 0.5);
+            }
+            
+          case 'g_vertex':
+            const gh = userAnswer.h;
+            const gk = userAnswer.k;
+            return UTILS.nearlyEqual(gh, question.answer.h, 0.3) && 
+                   UTILS.nearlyEqual(gk, question.answer.k, 0.3);
+            
+          case 'g_axis':
+            return UTILS.nearlyEqual(userAnswer.axis, question.answer.axis, 0.3);
+            
+          case 'g_range':
+            const userGRange = (userAnswer.range || '').replace(/\s+/g, '');
+            const correctGRange = question.answer.range.replace(/\s+/g, '');
+            return userGRange === correctGRange;
+            
+          case 'g_to_eq':
+            const gA = userAnswer.A;
+            const gH = userAnswer.h;
+            const gK = userAnswer.k;
+            return UTILS.nearlyEqual(gA, question.answer.A, 0.3) && 
+                   UTILS.nearlyEqual(gH, question.answer.h, 0.3) && 
+                   UTILS.nearlyEqual(gK, question.answer.k, 0.3);
+        }
+        
+        return false;
       },
       
       // Tarixga saqlash
@@ -2397,6 +2779,7 @@
         // Savollarni yaratish
         const questionCount = isDemo ? 1 : STATE.config.questionCount;
         STATE.questions = [];
+        STATE.userAnswers = []; // Foydalanuvchi javoblarini tozalash
         
         for (let i = 0; i < questionCount; i++) {
           const question = QUESTION_GENERATOR.generateQuestion(STATE.config, randomFn);
