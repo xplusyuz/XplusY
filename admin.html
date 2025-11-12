@@ -3,36 +3,144 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>LeaderMath — Home Admin (Subsections + Carousel)</title>
+  <title>LeaderMath — Home Admin (PWA Icons + Splash, Image Cards)</title>
   <style>
-    :root{--brand:#2E8B57;--line:#dfe7e2;--muted:#4a6b5a}
+    :root{--brand:#2E8B57;--line:#dfe7e2;--muted:#4a6b5a;--ring:#8ad1b1}
+    *{box-sizing:border-box}
     body{margin:0;font:15px/1.5 system-ui,Segoe UI,Arial;background:#f4f8f6;color:#0d1b14}
     header{position:sticky;top:0;background:#f4f8f6;border-bottom:1px solid var(--line);z-index:10}
     .row{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center}
     .brand{font-weight:800;color:var(--brand)}
+    .muted{color:var(--muted)}
     main{max-width:1180px;margin:0 auto;padding:16px;display:grid;gap:12px}
     .toolbar{display:flex;gap:8px;flex-wrap:wrap}
     button{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
     button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .card{border:1px solid var(--line);border-radius:12px;background:#fff}
+    @media (max-width:990px){.grid{grid-template-columns:1fr}}
+    .card{border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 8px 26px rgba(17,38,28,.06)}
     .card h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--line)}
     .card .body{padding:12px}
     input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+    input:focus,select:focus,textarea:focus{outline:2px solid var(--ring);border-color:transparent}
     textarea{min-height:160px;font-family:ui-monospace,Consolas,monospace}
-    table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #eef2ee;text-align:left;vertical-align:top}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eef2ee;text-align:left;vertical-align:top}
     .small{font-size:12px;color:var(--muted)}
     .rowflex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .pill{padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px}
     .danger{color:#b00020}
     .subtbl td{background:#fbfdfb}
-    .muted{color:var(--muted)}
+    .thumb{width:44px;height:32px;border-radius:6px;border:1px solid var(--line);object-fit:cover;background:#f2f6f3}
+
+    /* Modal */
+    .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.28);backdrop-filter:blur(6px);z-index:100}
+    .overlay.show{display:grid}
+    .modal{width:min(960px,96vw);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.18)}
+    .modal .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:12px}
+    .modal .ct{padding:12px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    @media (max-width:900px){.grid3{grid-template-columns:1fr}}
+
+    .drop{border:2px dashed #dfe7e2;border-radius:12px;display:grid;place-items:center;padding:18px;min-height:160px;background:#fbfdfb}
+    .drop.drag{background:#f1faf5;border-color:var(--ring)}
+    .preview{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+    .preview img{width:120px;height:120px;object-fit:contain;border:1px solid var(--line);border-radius:10px;background:#fff}
+    .code{font:12px/1.5 ui-monospace,Consolas,monospace;background:#0f172a;color:#e2e8f0;padding:10px;border-radius:10px;overflow:auto}
   </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <div class="brand">LeaderMath — Home Admin</div>
+      <div class="rowflex" style="margin-left:auto" id="guard"><button id="glogin">Google bilan kiring</button></div>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <button id="addSec">+ Bo‘lim qo‘shish</button>
+      <label class="rowflex">JSON fayldan yuklash <input id="loadfile" type="file" accept="application/json"/></label>
+      <button id="download">Yuklab olish (home.json)</button>
+      <button id="publish" class="primary">Firestore’ga chiqarish</button>
+      <button id="openPWA">🧩 PWA ikon & splash generator</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Bo‘limlar</h3>
+        <div class="body">
+          <table id="tbl-sections"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Full</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Bo‘lim tahriri</h3>
+        <div class="body" id="sec-editor"><div class="small">Chapdan bo‘lim tanlang.</div></div>
+      </div>
+
+      <div class="card">
+        <h3>Sub-bo‘limlar</h3>
+        <div class="body">
+          <table id="tbl-subs"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Full</th><th>Actions</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Sub-bo‘lim tahriri</h3>
+        <div class="body" id="sub-editor"></div>
+      </div>
+
+      <div class="card">
+        <h3>Banner/Card ro‘yxati</h3>
+        <div class="body" id="items-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Element tahriri</h3>
+        <div class="body" id="item-editor"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- PWA ICONS MODAL -->
+  <div id="pwaOverlay" class="overlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pwaTitle">
+      <div class="hd"><b id="pwaTitle">🧩 PWA ikon & splash generator</b> <div class="rowflex"><button id="genAll" class="primary">Zip yaratish</button><button id="closePWA">Yopish</button></div></div>
+      <div class="ct">
+        <div class="grid3">
+          <div class="card"><h3>1) Logo</h3><div class="body">
+            <div id="logoDrop" class="drop">PNG/SVG logoni bu yerga tashlang yoki tanlang
+              <input id="logoFile" type="file" accept="image/*" style="display:none"></div>
+            <div class="rowflex" style="margin-top:8px"><button id="pickLogo">Fayl tanlash</button><span class="small">1024×1024 kvadrat tavsiya.</span></div>
+            <div id="logoPrev" class="preview" style="display:none;margin-top:10px"><img id="logoImg"><div>
+              <div class="small">Tayyorlandi</div>
+              <label>App nomi<input id="appName" value="LeaderMath.UZ"></label>
+              <label>Brand rang<input id="brandColor" type="color" value="#2E8B57"></label>
+              <label>Fon rangi<input id="bgColor" type="color" value="#F6FAF7"></label>
+            </div></div>
+          </div></div>
+
+          <div class="card"><h3>2) Natijalar</h3><div class="body" id="iconList">
+            <div class="small">Zip ichiga quyidagilar kiradi: 48, 72, 96, 128, 192, 256, 384, 512 (maskable va square), splash-light/dark (1280×2560), manifest.webmanifest.</div>
+          </div></div>
+
+          <div class="card"><h3>3) manifest.webmanifest</h3><div class="body">
+            <pre id="manifestOut" class="code">// Logo tanlang → avtomatik to‘ldiriladi</pre>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
     import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+    import { getStorage, ref as sRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+
+    // JSZip CDN
+    const JSZip = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
 
     const firebaseConfig = {
       apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -46,6 +154,7 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const st = getStorage(app);
     const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
 
     function guard(u){
@@ -172,7 +281,7 @@
         alert('Sub-bo‘lim saqlandi.');
       };
       $('#addBanner').onclick=()=>{ sb.banners.push({mode:'html',sandbox:'allow-scripts allow-forms',contentHtml:'<section style="display:grid;place-items:center;height:100vh"><h2>Yangi Banner</h2></section>'}); state.selKind='banner'; state.selIdx=sb.banners.length-1; renderItemsList(); editItem(); };
-      $('#addCard').onclick=()=>{ sb.cards.push({title:'Yangi Card',cardStyle:'available',ctaLabel:'Boshlash',ctaHref:'',infoHtml:'<p>—</p>'}); state.selKind='card'; state.selIdx=sb.cards.length-1; renderItemsList(); editItem(); };
+      $('#addCard').onclick=()=>{ sb.cards.push({title:'Yangi Card',cardStyle:'available',ctaLabel:'Boshlash',ctaHref:'',infoHtml:'<p>—</p>',imageUrl:''}); state.selKind='card'; state.selIdx=sb.cards.length-1; renderItemsList(); editItem(); };
       $('#selBanner').onclick=()=>{ state.selKind='banner'; state.selIdx=-1; renderItemsList(); $('#item-editor').innerHTML='<div class="small">Banner tanlang.</div>'; };
       $('#selCard').onclick=()=>{ state.selKind='card'; state.selIdx=-1; renderItemsList(); $('#item-editor').innerHTML='<div class="small">Card tanlang.</div>'; };
       renderItemsList();
@@ -190,7 +299,9 @@
           ? `Banner ${i+1} — ${it.mode||'html'}`
           : `Card ${i+1} — ${it.title||''}`;
         li.className='rowflex'; li.style.marginBottom='6px';
+        const img = (state.selKind==='card' && it.imageUrl) ? `<img class="thumb" src="${it.imageUrl}"/>` : '<span class="thumb"></span>';
         li.innerHTML = `
+          ${img}
           <span>${label}</span>
           <button data-i="${i}" class="selIt">Tahrirlash</button>
           <button data-i="${i}" class="upIt">↑</button>
@@ -250,17 +361,33 @@
             <div style="flex:1"><label>CTA Label</label><input id="clab" value="${it.ctaLabel||'Boshlash'}"></div>
             <div style="flex:1"><label>CTA Link</label><input id="chref" value="${it.ctaHref||''}"></div>
           </div>
+          <div class="rowflex">
+            <div style="flex:1"><label>Kartochka rasmi (imageUrl)</label><input id="cimg" value="${it.imageUrl||''}"></div>
+            <div class="rowflex"><input id="cimgFile" type="file" accept="image/*"><button id="cimgUpload">Yuklash (Storage)</button></div>
+          </div>
           <div><label>Info HTML</label><textarea id="cinfo">${it.infoHtml?String(it.infoHtml).replace(/</g,'&lt;'):''}</textarea></div>
           <div class="rowflex" style="margin-top:8px"><button id="saveItem" class="primary">Card saqlash</button></div>`;
-        $('#saveItem').onclick=function(){
+        $('#saveItem').onclick=()=>{
           it.title=$('#ctitle').value.trim();
           it.cardStyle=$('#cstyle').value;
           it.startAt=$('#cstart').value.trim();
           it.endAt=$('#cend').value.trim();
           it.ctaLabel=$('#clab').value.trim();
           it.ctaHref=$('#chref').value.trim();
+          it.imageUrl=$('#cimg').value.trim();
           it.infoHtml=$('#cinfo').value;
+          renderItemsList();
           alert('Card saqlandi.');
+        };
+        $('#cimgUpload').onclick=async()=>{
+          const f=$('#cimgFile').files?.[0]; if(!f){ alert('Fayl tanlanmagan'); return; }
+          const r=new FileReader(); r.onload=async()=>{
+            try{
+              const path=`cards/${(state.sections[state.selSec]?.id||'sec')}/${(state.sections[state.selSec]?.subsections?.[state.selSub]?.id||'sub')}/${Date.now()}.webp`;
+              const ref=sRef(st,path); await uploadString(ref, r.result, 'data_url');
+              const url=await getDownloadURL(ref); $('#cimg').value=url; it.imageUrl=url; renderItemsList(); alert('Rasm yuklandi ✅');
+            }catch(e){ alert('Yuklash xatosi: '+(e?.message||e)); }
+          }; r.readAsDataURL(f);
         };
       }
     }
@@ -323,57 +450,138 @@
         try{ const obj=JSON.parse(txt); if(Array.isArray(obj.sections)) { state.sections=obj.sections; renderSectionsTable(); } else { alert('JSON: sections topilmadi'); } }
         catch(err){ alert('JSON parse xato: '+err.message); }
       };
+
+      // PWA modal
+      const ov=$('#pwaOverlay');
+      $('#openPWA').onclick=()=>ov.classList.add('show');
+      $('#closePWA').onclick=()=>ov.classList.remove('show');
+      $('#pickLogo').onclick=()=>$('#logoFile').click();
+      const drop=$('#logoDrop');
+      const logoPrev=$('#logoPrev');
+      const logoImg=$('#logoImg');
+      const iconList=$('#iconList');
+      const manifestOut=$('#manifestOut');
+      let logoBitmap=null;
+
+      function preventDefaults(e){e.preventDefault();e.stopPropagation();}
+      ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,(e)=>{preventDefaults(e);drop.classList.add('drag');}));
+      ;['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,(e)=>{preventDefaults(e);drop.classList.remove('drag');}));
+      drop.addEventListener('click',()=>$('#logoFile').click());
+      drop.addEventListener('drop',(e)=>{const f=e.dataTransfer.files?.[0]; if(f) loadLogo(f);});
+      $('#logoFile').addEventListener('change',(e)=>{const f=e.target.files?.[0]; if(f) loadLogo(f);});
+
+      async function loadLogo(file){
+        const url=URL.createObjectURL(file);
+        const img=new Image(); img.crossOrigin='anonymous';
+        await new Promise(res=>{ img.onload=res; img.src=url; });
+        const c=document.createElement('canvas'); const ctx=c.getContext('2d');
+        // square crop
+        const s=Math.min(img.width,img.height); const sx=(img.width-s)/2, sy=(img.height-s)/2;
+        c.width=c.height=1024; ctx.fillStyle='#fff'; ctx.fillRect(0,0,1024,1024);
+        ctx.drawImage(img, sx, sy, s, s, 0,0,1024,1024);
+        logoImg.src=c.toDataURL('image/png'); logoPrev.style.display='grid';
+        logoBitmap = await createImageBitmap(c);
+        updateManifestPreview();
+        listTargets();
+      }
+
+      function updateManifestPreview(){
+        const name=$('#appName').value||'LeaderMath.UZ';
+        const theme=$('#brandColor').value||'#2E8B57';
+        const bg=$('#bgColor').value||'#F6FAF7';
+        const manifest={
+          name, short_name:name.replace(/\s+/g,'').slice(0,12),
+          start_url:"./", display:"standalone", background_color:bg, theme_color:theme,
+          icons:[
+            {src:"/icons/icon-192.png",sizes:"192x192",type:"image/png"},
+            {src:"/icons/icon-512.png",sizes:"512x512",type:"image/png"},
+            {src:"/icons/maskable-192.png",sizes:"192x192",type:"image/png",purpose:"maskable"},
+            {src:"/icons/maskable-512.png",sizes:"512x512",type:"image/png",purpose:"maskable"}
+          ]
+        };
+        manifestOut.textContent = JSON.stringify(manifest,null,2);
+      }
+      $('#appName').addEventListener('input',updateManifestPreview);
+      $('#brandColor').addEventListener('input',updateManifestPreview);
+      $('#bgColor').addEventListener('input',updateManifestPreview);
+
+      function listTargets(){
+        iconList.innerHTML = '<ul class="small" style="margin:0;padding-left:18px">'
+          + ['48','72','96','128','192','256','384','512'].map(s=>`<li>${s}×${s} ikon (square + maskable)</li>`).join('')
+          + '<li>1280×2560 splash (light/dark)</li>'
+          + '<li>manifest.webmanifest</li>'
+          + '</ul>';
+      }
+
+      async function drawIcon(size, maskable=false){
+        const s=size; const c=document.createElement('canvas'); c.width=c.height=s; const ctx=c.getContext('2d');
+        // background transparent for square; for maskable add padding circle/roundrect
+        ctx.clearRect(0,0,s,s);
+        if(maskable){
+          ctx.fillStyle=$('#bgColor').value||'#F6FAF7';
+          ctx.fillRect(0,0,s,s);
+          const pad=Math.round(s*0.12);
+          ctx.fillStyle='#fff';
+          ctx.fillRect(pad,pad,s-2*pad,s-2*pad);
+        }
+        // draw logo centered
+        const logo=logoBitmap; if(logo){
+          const scale = maskable?0.68:0.86; // keep safe area for maskable
+          const w = Math.round(s*scale), h=w;
+          const x=Math.round((s-w)/2), y=Math.round((s-h)/2);
+          ctx.drawImage(logo,0,0,logo.width,logo.height,x,y,w,h);
+        }
+        return c.toDataURL('image/png');
+      }
+
+      async function drawSplash(light=true){
+        const w=1280,h=2560; const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d');
+        ctx.fillStyle = light ? ($('#bgColor').value||'#F6FAF7') : '#121a16';
+        ctx.fillRect(0,0,w,h);
+        const logo=logoBitmap; if(logo){
+          const size=Math.round(w*0.45); const x=Math.round((w-size)/2), y=Math.round((h-size)/2);
+          ctx.save();
+          ctx.shadowColor='rgba(0,0,0,.15)'; ctx.shadowBlur=24; ctx.shadowOffsetY=8;
+          ctx.drawImage(logo,0,0,logo.width,logo.height,x,y,size,size);
+          ctx.restore();
+        }
+        // brand stripe
+        ctx.fillStyle=$('#brandColor').value||'#2E8B57';
+        ctx.fillRect(0,h-10,w,10);
+        return c.toDataURL('image/png');
+      }
+
+      async function makeZip(){
+        if(!logoBitmap){ alert('Avval logo tanlang.'); return; }
+        const name=$('#appName').value||'LeaderMath.UZ';
+        const theme=$('#brandColor').value||'#2E8B57';
+        const bg=$('#bgColor').value||'#F6FAF7';
+        const zip=new JSZip.default();
+        const dir=zip.folder('icons');
+        const sizes=[48,72,96,128,192,256,384,512];
+        for(const s of sizes){
+          const square=await drawIcon(s,false); dir.file(`icon-${s}.png`, square.split(',')[1], {base64:true});
+          const mask=await drawIcon(s,true); dir.file(`maskable-${s}.png`, mask.split(',')[1], {base64:true});
+        }
+        const splashL=await drawSplash(true); zip.file('splash-light-1280x2560.png', splashL.split(',')[1], {base64:true});
+        const splashD=await drawSplash(false); zip.file('splash-dark-1280x2560.png', splashD.split(',')[1], {base64:true});
+        const manifest={
+          name, short_name:name.replace(/\s+/g,'').slice(0,12), start_url:"./", display:"standalone", background_color:bg, theme_color:theme,
+          icons:[
+            {src:"/icons/icon-192.png",sizes:"192x192",type:"image/png"},
+            {src:"/icons/icon-512.png",sizes:"512x512",type:"image/png"},
+            {src:"/icons/maskable-192.png",sizes:"192x192",type:"image/png",purpose:"maskable"},
+            {src:"/icons/maskable-512.png",sizes:"512x512",type:"image/png",purpose:"maskable"}
+          ]
+        };
+        zip.file('manifest.webmanifest', JSON.stringify(manifest,null,2));
+        const blob=await zip.generateAsync({type:'blob'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='pwa-assets.zip'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),800);
+      }
+
+      $('#genAll').onclick=makeZip;
     });
   </script>
-</head>
-<body>
-  <header><div class="row"><div class="brand">LeaderMath — Home Admin</div>
-    <div class="rowflex" style="margin-left:auto" id="guard"><button id="glogin">Google bilan kiring</button></div>
-  </div></header>
-
-  <main>
-    <div class="toolbar">
-      <button id="addSec">+ Bo‘lim qo‘shish</button>
-      <label class="rowflex">JSON fayldan yuklash <input id="loadfile" type="file" accept="application/json"/></label>
-      <button id="download">Yuklab olish (home.json)</button>
-      <button id="publish" class="primary">Firestore’ga chiqarish</button>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h3>Bo‘limlar</h3>
-        <div class="body">
-          <table id="tbl-sections"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Full</th><th>Actions</th></tr></thead><tbody></tbody></table>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Bo‘lim tahriri</h3>
-        <div class="body" id="sec-editor"><div class="small">Chapdan bo‘lim tanlang.</div></div>
-      </div>
-
-      <div class="card">
-        <h3>Sub-bo‘limlar</h3>
-        <div class="body">
-          <table id="tbl-subs"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Full</th><th>Actions</th></tr></thead><tbody></tbody></table>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Sub-bo‘lim tahriri</h3>
-        <div class="body" id="sub-editor"></div>
-      </div>
-
-      <div class="card">
-        <h3>Banner/Card ro‘yxati</h3>
-        <div class="body" id="items-list"></div>
-      </div>
-
-      <div class="card">
-        <h3>Element tahriri</h3>
-        <div class="body" id="item-editor"></div>
-      </div>
-    </div>
-  </main>
 </body>
 </html>
