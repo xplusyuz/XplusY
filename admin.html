@@ -6,10 +6,7 @@
 <title>LeaderMath — Home Admin (Pro)</title>
 <meta name="theme-color" content="#2E8B57"/>
 
-<!-- (ixtiyoriy) favicon bo‘lsa 404 bo‘lmaydi -->
 <link rel="icon" href="/favicon.png" sizes="any">
-
-<!-- ZIP generator uchun -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 
@@ -52,7 +49,13 @@ textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 @media(max-width:900px){ .layout{grid-template-columns:1fr} }
 .thumb{width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.badge{display:inline-block;padding:2px 6px;border:1px solid var(--line);border-radius:999px;font-size:11px;background:#f7fbf8}
 
+/* Page editor panel */
+.card.soft{border-style:dashed}
+.kbd{font:11px/1.2 ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:#fff}
+
+/* Toasts */
 .toasts{position:fixed;right:14px;bottom:14px;display:grid;gap:8px;z-index:1000}
 .toast{display:flex;gap:8px;align-items:center;background:#fff;border:1px solid var(--line);
   border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)}
@@ -69,7 +72,6 @@ textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
 .modal .sheet{width:min(960px,96vw);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);
   border-radius:16px;box-shadow:var(--shadow);padding:14px}
 .canvasWrap{border:1px dashed var(--line);border-radius:12px;padding:8px;display:grid;place-items:center;background:#fafdfb}
-.kbd{font:11px/1.2 ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:#fff}
 </style>
 </head>
 <body>
@@ -83,7 +85,7 @@ textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
   </div>
 </header>
 
-<!-- Guard (login oldidan faqat shu ko‘rinadi) -->
+<!-- Guard -->
 <main id="gate" class="gate">
   <div class="card panel">
     <h3 style="margin:0;padding:12px;border-bottom:1px solid var(--line)">🔒 Admin panel</h3>
@@ -95,9 +97,9 @@ textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
   </div>
 </main>
 
-<!-- Asosiy admin UI (faqat admin bo‘lsa ochiladi) -->
+<!-- App -->
 <section id="app" class="layout" style="display:none">
-  <!-- Chap panel: bo‘limlar ro‘yxati + toolbar -->
+  <!-- Left -->
   <div class="card">
     <h3>Bo‘limlar</h3>
     <div class="body">
@@ -111,7 +113,7 @@ textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
     </div>
   </div>
 
-  <!-- O‘ng panel: tahrirchi (section -> subsection -> item) -->
+  <!-- Right -->
   <div class="card">
     <h3>Tahrirlash</h3>
     <div class="body" id="editor"><div class="small">Chapdan bo‘limni tanlang.</div></div>
@@ -196,7 +198,96 @@ const toast=(msg,kind='success')=>{
   host.appendChild(el); setTimeout(()=>el.remove(),4000);
 };
 
-/* ===== Global state ===== */
+/* ===== Tiny DOM utils for Page Editor ===== */
+function mk(tag, attrs={}, ...kids){
+  const el=document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){
+    if(k==='class') el.className=v;
+    else if(k==='style') el.style.cssText=v;
+    else el.setAttribute(k,v);
+  }
+  kids.forEach(k=> el.appendChild(typeof k==='string'? document.createTextNode(k):k));
+  return el;
+}
+function pageEditor(p={}, onChange){
+  const page = {
+    enabled: !!p.enabled,
+    title: p.title||'',
+    mode: p.mode||'url',            // 'url' | 'html'
+    src: p.src||'',
+    contentHtml: p.contentHtml||'',
+    baseHref: p.baseHref||'',
+    sandbox: p.sandbox||'allow-scripts allow-forms',
+    fit: p.fit||'cover',            // 'cover' | 'contain'
+    fullHeight: !!p.fullHeight
+  };
+  const wrap = mk('div',{class:'card soft', style:'display:grid;gap:10px;padding:12px'});
+  wrap.append(
+    mk('div',{}, mk('label',{}, mk('input',{type:'checkbox', id:'pg_enabled', ...(page.enabled?{checked:true}:{})}), '  Sahifa biriktirish (ixtiyoriy)')),
+    mk('div',{class:'grid2'},
+      mk('label',{}, 'Sarlavha', mk('input',{id:'pg_title', value:page.title, placeholder:'Bo‘lim sahifasi'})),
+      mk('label',{}, 'Rejim', (()=>{
+        const s=mk('select',{id:'pg_mode'});
+        ['url','html'].forEach(m=> s.appendChild(mk('option',{value:m, ...(page.mode===m?{selected:true}:{})}, m.toUpperCase())));
+        return s;
+      })())
+    ),
+    mk('div',{id:'pg_url', style: page.mode==='url'?'display:block':'display:none'},
+      mk('label',{}, 'URL', mk('input',{id:'pg_src', value:page.src, placeholder:'https://...'}))
+    ),
+    mk('div',{id:'pg_html', style: page.mode==='html'?'display:block':'display:none'},
+      mk('label',{}, 'HTML', mk('textarea',{id:'pg_html'}, page.contentHtml))
+    ),
+    mk('div',{class:'grid3'},
+      mk('label',{}, 'baseHref', mk('input',{id:'pg_base', value:page.baseHref, placeholder:'https://cdn.../'})),
+      mk('label',{}, 'sandbox', mk('input',{id:'pg_sbx', value:page.sandbox})),
+      mk('label',{}, 'Fit', (()=>{
+        const s=mk('select',{id:'pg_fit'});
+        ['cover','contain'].forEach(m=> s.appendChild(mk('option',{value:m, ...(page.fit===m?{selected:true}:{})}, m)));
+        return s;
+      })())
+    ),
+    mk('label',{}, mk('input',{type:'checkbox', id:'pg_full', ...(page.fullHeight?{checked:true}:{})}), '  To‘liq balandlik (ratio o‘rniga)')
+  );
+  const els={
+    en:wrap.querySelector('#pg_enabled'),
+    ti:wrap.querySelector('#pg_title'),
+    mo:wrap.querySelector('#pg_mode'),
+    su:wrap.querySelector('#pg_src'),
+    ht:wrap.querySelector('#pg_html'),
+    ba:wrap.querySelector('#pg_base'),
+    sb:wrap.querySelector('#pg_sbx'),
+    ft:wrap.querySelector('#pg_fit'),
+    fh:wrap.querySelector('#pg_full'),
+    blkUrl:wrap.querySelector('#pg_url'),
+    blkHtml:wrap.querySelector('#pg_html')
+  };
+  function emit(){
+    onChange({
+      enabled: els.en.checked,
+      title: els.ti.value.trim(),
+      mode: els.mo.value,
+      src: (els.su.value||'').trim(),
+      contentHtml: els.ht.value,
+      baseHref: (els.ba.value||'').trim(),
+      sandbox: (els.sb.value||'allow-scripts allow-forms').trim(),
+      fit: els.ft.value,
+      fullHeight: els.fh.checked
+    });
+  }
+  els.mo.addEventListener('change',()=>{
+    els.blkUrl.style.display = els.mo.value==='url' ? 'block':'none';
+    els.blkHtml.style.display= els.mo.value==='html' ? 'block':'none';
+    emit();
+  });
+  [els.en,els.ti,els.su,els.ht,els.ba,els.sb,els.ft,els.fh].forEach(x=>{
+    x.addEventListener('input', emit); x.addEventListener('change', emit);
+  });
+  emit();
+  return wrap;
+}
+
+/* ===== State ===== */
 let STATE = { sections:[], selSec:-1, selSub:-1, selKind:'banner', selIdx:-1 };
 
 /* ===== Auth guard ===== */
@@ -219,7 +310,6 @@ onAuthStateChanged(auth, async (u)=>{
   $('#who').textContent='👋 '+(u.email||u.uid);
   $('#gate').style.display='none';
   $('#app').style.display='grid';
-  // Firestore’dan holatni yuklash
   try{
     const snap=await getDoc(doc(db,'configs','home'));
     STATE = snap.exists() ? (snap.data()||{sections:[]}) : {sections:[]};
@@ -230,13 +320,19 @@ onAuthStateChanged(auth, async (u)=>{
 });
 
 /* ===== Sections list (chap panel) ===== */
+function sectionBadge(s){
+  const flags=[];
+  if(s.fullBleed) flags.push('full');
+  if(s.page?.enabled) flags.push('page');
+  return flags.length? ` • ${flags.join(' + ')}` : '';
+}
 function renderSections(){
   const host=$('#secList'); host.innerHTML='';
   STATE.sections.forEach((s,i)=>{
     const el=document.createElement('div'); el.className='item';
     el.innerHTML=`
       <div class="meta"><b>${s.title||s.id||('sec'+(i+1))}</b>
-        <span class="small">${s.id||''} ${s.fullBleed?' • full':''}</span></div>
+        <span class="small">${s.id||''}${sectionBadge(s)}</span></div>
       <div class="act">
         <button class="btn" data-i="${i}" data-act="edit">Tahrirlash</button>
         <button class="btn" data-i="${i}" data-act="up">↑</button>
@@ -255,7 +351,7 @@ $('#secList').onclick=(e)=>{
   if(t.dataset.act==='del'){ if(confirm('O‘chirilsinmi?')){ STATE.sections.splice(i,1); renderSections(); $('#editor').innerHTML='<div class="small">Chapdan tanlang.</div>'; } }
 };
 
-/* ===== Section editor (o‘ng panel) ===== */
+/* ===== Section editor ===== */
 function openSectionEditor(idx){
   STATE.selSec=idx; STATE.selSub=-1; STATE.selIdx=-1;
   const s = STATE.sections[idx] || {subsections:[]};
@@ -269,6 +365,7 @@ function openSectionEditor(idx){
         <option value="true"${s.fullBleed?' selected':''}>true</option></select></label></div>
       <div><label>baseHref<input id="sbase" value="${s.baseHref||''}"></label></div>
     </div>
+    <div id="secPageWrap"></div>
     <div class="rowflex" style="margin:10px 0">
       <button id="saveSec" class="btn primary">Bo‘limni saqlash</button>
       <button id="addSub" class="btn">+ Sub-bo‘lim</button>
@@ -277,27 +374,40 @@ function openSectionEditor(idx){
     <div id="subList" class="list"></div>
     <div id="subEditor" style="margin-top:10px"></div>
   `;
+
+  // PAGE EDITOR (SECTION)
+  const holder = $('#secPageWrap');
+  holder.innerHTML = `<h3 style="margin:12px 0 6px">📄 Sahifa (ixtiyoriy)</h3>`;
+  holder.appendChild(pageEditor(s.page||{}, (val)=>{ s.page = val.enabled? val : {enabled:false}; }));
+
   $('#saveSec').onclick=()=>{
     const o={ id:$('#sid').value.trim(), title:$('#stitle').value.trim(), fullBleed:($('#sfull').value==='true') };
     const base=$('#sbase').value.trim(); if(base) o.baseHref=base;
+    o.page = (s.page && s.page.enabled)? s.page : {enabled:false};
     o.subsections = s.subsections||[];
     STATE.sections[idx]=o; renderSections(); toast('Bo‘lim saqlandi');
   };
   $('#addSub').onclick=()=>{
     s.subsections=s.subsections||[];
     const n=s.subsections.length+1;
-    s.subsections.push({id:'sub'+n,title:'Yangi sub '+n,fullBleed:false,banners:[],cards:[]});
+    s.subsections.push({id:'sub'+n,title:'Yangi sub '+n,fullBleed:false,page:{enabled:false},banners:[],cards:[]});
     renderSubs();
     toast('Sub-bo‘lim qo‘shildi');
   };
 
+  function subBadge(sb){
+    const flags=[];
+    if(sb.fullBleed) flags.push('full');
+    if(sb.page?.enabled) flags.push('page');
+    return flags.length? ` • ${flags.join(' + ')}` : '';
+  }
   function renderSubs(){
     const host=$('#subList'); host.innerHTML='';
     (s.subsections||[]).forEach((sb,j)=>{
       const el=document.createElement('div'); el.className='item';
       el.innerHTML=`
         <div class="meta"><b>${sb.title||sb.id||('sub'+(j+1))}</b>
-        <span class="small">${sb.id||''} ${sb.fullBleed?' • full':''}</span></div>
+        <span class="small">${sb.id||''}${subBadge(sb)}</span></div>
         <div class="act">
           <button class="btn" data-j="${j}" data-act="editSub">Tahrirlash</button>
           <button class="btn" data-j="${j}" data-act="upSub">↑</button>
@@ -329,6 +439,7 @@ function openSectionEditor(idx){
           <option value="true"${sb.fullBleed?' selected':''}>true</option></select></label></div>
         <div><label>baseHref<input id="bbase" value="${sb.baseHref||''}"></label></div>
       </div>
+      <div id="subPageWrap"></div>
       <div class="rowflex" style="margin:8px 0">
         <button id="saveSub" class="btn primary">Sub saqlash</button>
         <button id="addBanner" class="btn">+ Banner</button>
@@ -341,6 +452,11 @@ function openSectionEditor(idx){
       <div id="items" class="list"></div>
       <div id="itemEditor" style="margin-top:10px"></div>
     `;
+    // PAGE EDITOR (SUBSECTION)
+    const holder2 = $('#subPageWrap');
+    holder2.innerHTML = `<h3 style="margin:12px 0 6px">📄 Sub-bo‘lim sahifasi (ixtiyoriy)</h3>`;
+    holder2.appendChild(pageEditor(sb.page||{}, (val)=>{ sb.page = val.enabled? val : {enabled:false}; }));
+
     $('#saveSub').onclick=()=>{
       sb.id=$('#bid').value.trim(); sb.title=$('#btitle').value.trim();
       sb.fullBleed=$('#bfull').value==='true'; sb.baseHref=$('#bbase').value.trim();
@@ -365,6 +481,7 @@ function openSectionEditor(idx){
           ${thumb}
           ${left}
           <div class="act">
+            <span class="badge">${STATE.selKind==='banner' ? (it.baseHref?'baseHref':'') : (it.startAt?'timed':'')}</span>
             <button class="btn" data-k="${k}" data-act="editIt">Tahrirlash</button>
             <button class="btn" data-k="${k}" data-act="upIt">↑</button>
             <button class="btn" data-k="${k}" data-act="downIt">↓</button>
@@ -397,10 +514,24 @@ function openSectionEditor(idx){
           </div>
           <div id="blkHtml" style="${it.mode==='html'?'':'display:none'}"><label>contentHtml<textarea id="ehtml">${(it.contentHtml||'').replace(/</g,'&lt;')}</textarea></label></div>
           <div id="blkUrl" style="${it.mode==='url'?'':'display:none'}"><label>src<input id="esrc" value="${it.src||''}"></label></div>
+          <div class="grid2">
+            <div><label>fit
+              <select id="efit">
+                <option value="cover"${it.fit==='cover'?' selected':''}>cover</option>
+                <option value="contain"${it.fit==='contain'?' selected':''}>contain</option>
+              </select></label></div>
+            <div><label>fullHeight
+              <select id="efull">
+                <option value="false"${!it.fullHeight?' selected':''}>false</option>
+                <option value="true"${it.fullHeight?' selected':''}>true</option>
+              </select></label></div>
+          </div>
           <div class="rowflex" style="margin-top:8px"><button id="saveItem" class="btn primary">Saqlash</button></div>
         `;
         $('#emode').onchange=()=>{ const v=$('#emode').value; $('#blkHtml').style.display=(v==='html'?'block':'none'); $('#blkUrl').style.display=(v==='url'?'block':'none'); };
-        $('#saveItem').onclick=()=>{ it.mode=$('#emode').value; it.sandbox=$('#esbx').value.trim(); it.baseHref=$('#ebase').value.trim(); if(it.mode==='html') it.contentHtml=$('#ehtml').value; else it.src=$('#esrc').value.trim(); toast('Banner saqlandi'); };
+        $('#saveItem').onclick=()=>{ it.mode=$('#emode').value; it.sandbox=$('#esbx').value.trim(); it.baseHref=$('#ebase').value.trim();
+          it.fit=$('#efit').value; it.fullHeight=$('#efull').value==='true';
+          if(it.mode==='html') it.contentHtml=$('#ehtml').value; else it.src=$('#esrc').value.trim(); toast('Banner saqlandi'); };
       } else {
         const it = sb.cards[k];
         ed.innerHTML = `
@@ -432,7 +563,7 @@ function openSectionEditor(idx){
 }
 
 /* ===== Toolbar ===== */
-$('#addSec').onclick=()=>{ const n=STATE.sections.length+1; STATE.sections.push({id:'sec'+n,title:'Yangi bo‘lim '+n,fullBleed:false,subsections:[]}); renderSections(); openSectionEditor(STATE.sections.length-1); };
+$('#addSec').onclick=()=>{ const n=STATE.sections.length+1; STATE.sections.push({id:'sec'+n,title:'Yangi bo‘lim '+n,fullBleed:false,page:{enabled:false},subsections:[]}); renderSections(); openSectionEditor(STATE.sections.length-1); };
 $('#download').onclick=()=>{ const blob=new Blob([JSON.stringify({sections:STATE.sections},null,2)],{type:'application/json'}); saveAs(blob,'home.json'); };
 $('#publish').onclick=async()=>{ try{ await setDoc(doc(db,'configs','home'),{sections:STATE.sections}); toast('Firestore’ga saqlandi'); } catch(e){ toast('Xato: '+(e.message||e),'error'); } };
 $('#loadfile').onchange=async(e)=>{ const f=e.target.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(Array.isArray(obj.sections)){ STATE.sections=obj.sections; renderSections(); toast('JSON yuklandi'); } else toast('JSON ichida sections yo‘q','error'); }catch(err){ toast('Parse xato: '+err.message,'error'); } };
@@ -513,9 +644,7 @@ document.addEventListener('keydown',(e)=>{
   if(e.key==='s' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); $('#publish').click(); }
 });
 
-/* ===== (ixtiyoriy) Service Worker ro‘yxatdan o‘tkazish =====
- Agar /sw.js qo‘ygan bo‘lsangiz, quyidagini ochiq qoldiring.
-*/
+/* ===== Service Worker (ixtiyoriy) ===== */
 // if('serviceWorker' in navigator){
 //   window.addEventListener('load',()=>{ navigator.serviceWorker.register('/sw.js').catch(console.error); });
 // }
