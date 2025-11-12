@@ -173,6 +173,122 @@
   </style>
 </head>
 <body>
+<!-- ====== INSTALL BANNER (put near top of <body>) ====== -->
+<style>
+  .install-wrap{position:sticky;top:0;z-index:9999;display:none}
+  .install-banner{
+    margin:0; padding:10px 14px; display:flex; gap:10px; align-items:center; justify-content:space-between;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--card, #fff) 94%, #fff), var(--card, #fff));
+    border-bottom:1px solid color-mix(in srgb, var(--line, #dfe7e2) 80%, transparent);
+    box-shadow:0 10px 30px rgba(0,0,0,.06);
+  }
+  .install-banner .txt{display:flex; gap:10px; align-items:center; font-weight:700}
+  .install-banner .txt .ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+    background:var(--brand, #2E8B57); color:#fff; font-size:16px;}
+  .install-actions{display:flex; gap:8px; align-items:center}
+  .install-btn{padding:8px 12px;border:1px solid var(--line, #dfe7e2);border-radius:10px;background:#fff;cursor:pointer;font-weight:800}
+  .install-btn.primary{background:var(--brand, #2E8B57);color:#fff;border-color:var(--brand, #2E8B57)}
+  .install-x{appearance:none;background:transparent;border:0;font-size:18px;line-height:1;cursor:pointer;color:#777}
+  @media (max-width:560px){ .install-banner{padding:8px 10px} .install-banner .txt b{font-size:14px} }
+</style>
+
+<div id="installWrap" class="install-wrap" role="region" aria-label="O‘rnatish taklifi">
+  <div class="install-banner">
+    <div class="txt">
+      <span class="ico">⬇️</span>
+      <div><b>LeaderMath’ni o‘rnatib oling</b><div class="mini" style="color:var(--muted,#5f7469)">Offline, tez kirish va to‘liq ekran</div></div>
+    </div>
+    <div class="install-actions">
+      <button id="btnInstallNow" class="install-btn primary">O‘rnatish</button>
+      <button id="btnInstallLater" class="install-btn">Keyinroq</button>
+      <button id="btnInstallClose" class="install-x" aria-label="Yopish">✕</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const wrap = document.getElementById('installWrap');
+  const btnNow = document.getElementById('btnInstallNow');
+  const btnLater = document.getElementById('btnInstallLater');
+  const btnClose = document.getElementById('btnInstallClose');
+
+  const DISMISS_KEY = 'lm_install_dismiss_until';
+  let deferredPrompt = null;
+
+  // util: ko'rsatilganmi?
+  const isStandalone = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+
+  const showBanner = () => { wrap.style.display = 'block'; };
+  const hideBanner = () => { wrap.style.display = 'none'; };
+
+  // 7 kun bezovta qilmaslik
+  const snooze = (days=7) => {
+    const until = Date.now() + days*24*60*60*1000;
+    localStorage.setItem(DISMISS_KEY, String(until));
+  };
+  const snoozed = () => {
+    const v = Number(localStorage.getItem(DISMISS_KEY) || 0);
+    return v && Date.now() < v;
+  };
+
+  // iOS uchun qo'llanma (beforeinstallprompt yo'q)
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  function maybeShowIOSHint() {
+    if (isIOS && !isStandalone() && !snoozed()) {
+      // iOS tip text (Install o‘rniga qo‘llanma)
+      document.querySelector('.install-banner .txt div').innerHTML =
+        '<b>Home Screen’ga qo‘shing</b><div class="mini" style="color:var(--muted,#5f7469)">Safari’da <b>Share</b> → <b>Add to Home Screen</b></div>';
+      btnNow.textContent = 'Tushunarli';
+      btnNow.onclick = () => { hideBanner(); snooze(7); };
+      btnLater.onclick = () => { hideBanner(); snooze(3); };
+      btnClose.onclick = () => { hideBanner(); snooze(14); };
+      showBanner();
+    }
+  }
+
+  // PWA allaqachon o'rnatilgan bo'lsa, ko'rsatma
+  if (isStandalone()) hideBanner();
+
+  // beforeinstallprompt — Android/Chrome
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Default promptni bloklaymiz
+    e.preventDefault();
+    deferredPrompt = e;
+
+    if (isStandalone() || snoozed()) return; // o‘rnatilgan yoki snooze — ko‘rsatmaymiz
+    // banner event bog'lash
+    btnNow.onclick = async () => {
+      try {
+        hideBanner();
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        // qabul qilmasa 7 kun snooze
+        if (!choice || choice.outcome !== 'accepted') snooze(7);
+      } catch (_) {}
+    };
+    btnLater.onclick = () => { hideBanner(); snooze(3); };
+    btnClose.onclick = () => { hideBanner(); snooze(14); };
+
+    showBanner();
+  });
+
+  // O‘rnatib bo‘linganda yashiramiz
+  window.addEventListener('appinstalled', () => {
+    hideBanner();
+    localStorage.removeItem(DISMISS_KEY);
+  });
+
+  // iOS fallback (agar beforeinstallprompt bo‘lmasa)
+  if (!('BeforeInstallPromptEvent' in window)) {
+    maybeShowIOSHint();
+  }
+})();
+</script>
   <!-- =================== HEADER =================== -->
   <header class="hdr" id="hdr">
     <div class="row">
