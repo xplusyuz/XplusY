@@ -1,298 +1,519 @@
 <!doctype html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>LeaderMath — Home Admin (Secure)</title>
-  <meta name="theme-color" content="#2E8B57"/>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>LeaderMath — Home Admin (Pro + PWA Generator)</title>
+<meta name="theme-color" content="#2E8B57"/>
 
-  <!-- Favicon: 404 bo'lmasligi uchun -->
-  <link rel="icon" href="/favicon.png" sizes="any">
-  <link rel="shortcut icon" href="/favicon.png" type="image/png">
+<!-- Favicon: 404 ni bartaraf -->
+<link rel="icon" href="/favicon.png" sizes="any">
+<link rel="shortcut icon" href="/favicon.png" type="image/png">
 
-  <style>
-    :root{--brand:#2E8B57;--line:#dfe7e2;--muted:#4a6b5a}
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;font:15px/1.5 system-ui,Segoe UI,Arial;background:#f4f8f6;color:#0d1b14}
-    header{position:sticky;top:0;background:#f4f8f6;border-bottom:1px solid var(--line);z-index:10}
-    .row{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center}
-    .brand{font-weight:800;color:var(--brand)}
-    main{max-width:1180px;margin:0 auto;padding:16px;display:grid;gap:12px}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
-    button{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
-    button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .card{border:1px solid var(--line);border-radius:12px;background:#fff}
-    .card h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--line)}
-    .card .body{padding:12px}
-    input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
-    textarea{min-height:160px;font-family:ui-monospace,Consolas,monospace}
-    table{width:100%;border-collapse:collapse} th,td{padding:8px;border-bottom:1px solid #eef2ee;text-align:left;vertical-align:top}
-    .small{font-size:12px;color:var(--muted)}
-    .rowflex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .pill{padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px}
-    .danger{color:#b00020}
-    .subtbl td{background:#fbfdfb}
-    .muted{color:var(--muted)}
-    /* Guard ekran */
-    #gate{display:grid;place-items:center;min-height:60vh}
-    #app{display:none} /* <— default: yashirin */
-    /* Toast */
-    .toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:10px;z-index:1200;max-width:min(360px,90vw)}
-    .toast{display:flex;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;box-shadow:0 8px 26px rgba(0,0,0,.08)}
-    .toast .x{margin-left:auto;border:0;background:transparent;cursor:pointer;font-weight:900}
-    .toast.success{border-color:#9edfae}.toast.error{border-color:#f2b4ac}
-    .thumb{width:48px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
-  </style>
+<!-- JSZip va FileSaver: ZIP qilib yuklab berish uchun -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
-    import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-storage.js";
+<style>
+:root{
+  --brand:#2E8B57; --brand-2:#1F6B45;
+  --bg:#f5faf7; --card:#fff; --line:#dfe7e2; --text:#0d1b14; --muted:#4f6b5b;
+  --radius:14px; --shadow:0 14px 50px rgba(18,40,28,.12);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14.5px/1.55 system-ui,Segoe UI,Inter,Arial}
 
-    // ── Firebase config
-    const firebaseConfig = {
-      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-      authDomain: "xplusy-760fa.firebaseapp.com",
-      projectId: "xplusy-760fa",
-      storageBucket: "xplusy-760fa.appspot.com",
-      messagingSenderId: "992512966017",
-      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-      measurementId: "G-459PLJ7P7L"
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db   = getFirestore(app);
-    const st   = getStorage(app);
+.appbar{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#ffffffee,#ffffffd8);
+  backdrop-filter:saturate(1.2) blur(10px); border-bottom:1px solid var(--line)}
+.appbar .row{max-width:1240px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center}
+.brand{font-weight:900;letter-spacing:.2px;color:var(--brand)}
+.space{flex:1}
+.btn{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn.ghost{background:transparent}
+.btn.icon{display:inline-flex;gap:8px;align-items:center}
 
-    // ── Faqat shu e-maillar admin
-    const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
+.layout{max-width:1240px;margin:0 auto;padding:14px;display:grid;grid-template-columns:300px 1fr;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card h3{margin:0;padding:12px;border-bottom:1px solid var(--line);font-size:16px}
+.card .body{padding:12px}
 
-    // ── Shirin helperlar
-    const $  = (s,r=document)=>r.querySelector(s);
-    const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
-    const toast=(t,kind='info')=>{
-      const host=$('#toasts'); const el=document.createElement('div');
-      el.className='toast '+kind; el.innerHTML=`<b>${kind==='error'?'❌':'✅'}</b><span>${t}</span><button class="x">×</button>`;
-      el.querySelector('.x').onclick=()=>el.remove(); host.appendChild(el); setTimeout(()=>el.remove(),3500);
-    };
+.list{display:grid;gap:8px;padding:8px}
+.item{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);
+  border-radius:10px;background:#fff;padding:8px}
+.item .meta{display:grid}
+.item .act{display:flex;gap:6px}
+.small{color:var(--muted);font-size:12px}
+.rowflex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+textarea{min-height:150px;font-family:ui-monospace,Consolas,monospace}
 
-    // ── Global state
-    let state = {sections:[], selSec:-1, selSub:-1, selKind:'banner', selIdx:-1};
+.thumb{width:64px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:900px){ .layout{grid-template-columns:1fr} }
 
-    // ── Guard UI (kirishdan oldin faqat shu)
-    const gate = () => {
-      const g = $('#gate');
-      g.innerHTML = `
-        <div class="card" style="max-width:520px">
-          <h3 style="display:flex;align-items:center;gap:8px;padding:12px">🔒 Admin panel</h3>
-          <div class="body">
-            <p class="muted">Paneldan foydalanish faqat Administratorlar uchun.</p>
-            <div class="rowflex">
-              <button id="glogin" class="primary">Google bilan kiring</button>
-            </div>
-            <div id="gerr" class="small danger"></div>
-          </div>
-        </div>`;
-      $('#glogin').onclick=async()=>{
-        $('#gerr').textContent='';
-        try{
-          await signInWithPopup(auth,new GoogleAuthProvider());
-        }catch(e){ $('#gerr').textContent = e.message||String(e); }
-      };
-    };
+.toasts{position:fixed;right:14px;bottom:14px;display:grid;gap:8px;z-index:1000}
+.toast{display:flex;gap:8px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)}
+.toast .x{margin-left:auto;background:transparent;border:0;cursor:pointer}
+.toast.success{border-color:#9edfae}.toast.error{border-color:#f2b4ac}
 
-    // ── Kirish holatini kuzatish
-    onAuthStateChanged(auth, async (u)=>{
-      const appWrap = $('#app');
-      const guardWrap = $('#gate');
-      if(!u){ appWrap.style.display='none'; guardWrap.style.display='grid'; gate(); return; }
-
-      // faqat adminlar
-      if(ADMIN_EMAILS.indexOf(u.email)<0){
-        appWrap.style.display='none';
-        guardWrap.style.display='grid';
-        $('#gate').innerHTML = `
-          <div class="card" style="max-width:520px">
-            <h3 style="padding:12px">❌ Ruxsat yo‘q</h3>
-            <div class="body">
-              <p class="muted">Bu sahifa faqat adminlar uchun. Siz: <b>${u.email||u.uid}</b></p>
-              <button id="logout">Chiqish</button>
-            </div>
-          </div>`;
-        $('#logout').onclick=()=>signOut(auth);
-        return;
-      }
-
-      // OK — appni ochamiz
-      guardWrap.style.display='none';
-      appWrap.style.display='block';
-      $('#who').textContent = '👋 ' + (u.email||u.uid);
-
-      // Firestore’dan holatni yuklash (faqat admin bo‘lganimizdan keyin!)
-      try{
-        const snap = await getDoc(doc(db,'configs','home'));
-        state = snap.exists()? (snap.data()||{sections:[]}) : {sections:[]};
-        if(!Array.isArray(state.sections)) state.sections=[];
-        renderSectionsTable();
-        $('#sec-editor').innerHTML='<div class="small">Chapdan bo‘lim tanlang.</div>';
-        $('#sub-editor').innerHTML=''; $('#items-list').innerHTML=''; $('#item-editor').innerHTML='';
-      }catch(e){
-        toast('Firestore o‘qishda xato: '+(e.message||e),'error');
-      }
-    });
-
-    // ── Jadval va editorlar (sizdagi versiya asosida qisqartirilgan)
-    function renderSectionsTable(){
-      const tb = document.querySelector('#tbl-sections tbody'); tb.innerHTML='';
-      state.sections.forEach((s,i)=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${i+1}</td>
-          <td>${s.id||''}</td>
-          <td>${s.title||''}</td>
-          <td>${s.fullBleed?'<span class="pill">full</span>':''}</td>
-          <td class="rowflex">
-            <button data-i="${i}" class="selSec">Tanlash</button>
-            <button data-i="${i}" class="upSec">↑</button>
-            <button data-i="${i}" class="downSec">↓</button>
-            <button data-i="${i}" class="delSec">O‘chirish</button>
-          </td>`;
-        tb.appendChild(tr);
-      });
-    }
-
-    // Delegation
-    document.addEventListener('click', (e)=>{
-      const t=e.target;
-
-      // chiqish
-      if(t.id==='signout'){ signOut(auth); return; }
-
-      // sections
-      if(t.classList.contains('selSec')){ editSection(+t.dataset.i); }
-      if(t.classList.contains('upSec')){ const i=+t.dataset.i; if(i>0){ const x=state.sections[i-1]; state.sections[i-1]=state.sections[i]; state.sections[i]=x; renderSectionsTable(); } }
-      if(t.classList.contains('downSec')){ const i=+t.dataset.i; if(i<state.sections.length-1){ const x=state.sections[i+1]; state.sections[i+1]=state.sections[i]; state.sections[i]=x; renderSectionsTable(); } }
-      if(t.classList.contains('delSec')){ const i=+t.dataset.i; if(confirm('O‘chirilsinmi?')){ state.sections.splice(i,1); renderSectionsTable(); } }
-    });
-
-    function editSection(i){
-      state.selSec = i; state.selSub = -1; state.selIdx=-1;
-      const s = state.sections[i]||{subsections:[]};
-      const ed = $('#sec-editor');
-      ed.innerHTML = `
-        <div class="rowflex">
-          <div style="flex:1"><label>ID</label><input id="sid" value="${s.id||''}"></div>
-          <div style="flex:1"><label>Sarlavha</label><input id="stitle" value="${s.title||''}"></div>
-        </div>
-        <div class="rowflex">
-          <div style="flex:1"><label>fullBleed</label>
-            <select id="sfull"><option value="false"${!s.fullBleed?' selected':''}>false</option>
-            <option value="true"${s.fullBleed?' selected':''}>true</option></select></div>
-          <div style="flex:1"><label>baseHref</label><input id="sbase" value="${s.baseHref||''}"></div>
-        </div>
-        <div class="rowflex" style="margin-top:8px">
-          <button id="saveSec" class="primary">Bo‘limni saqlash</button>
-          <button id="addSub">+ Sub-bo‘lim qo‘shish</button>
-        </div>`;
-      $('#saveSec').onclick=()=>{
-        const o={ id:$('#sid').value.trim(), title:$('#stitle').value.trim(), fullBleed:($('#sfull').value==='true') };
-        const baseHref=$('#sbase').value.trim(); if(baseHref) o.baseHref=baseHref;
-        o.subsections = s.subsections||[];
-        state.sections[i]=o; renderSectionsTable(); toast('Bo‘lim saqlandi','success');
-      };
-      $('#addSub').onclick=()=>{
-        s.subsections = s.subsections||[];
-        const n=s.subsections.length+1;
-        s.subsections.push({id:'sub'+n,title:'Yangi sub '+n,fullBleed:false,banners:[],cards:[]});
-        toast('Sub-bo‘lim qo‘shildi','success');
-      };
-    }
-
-    // Toolbar
-    document.addEventListener('DOMContentLoaded', ()=>{
-      $('#addSec').onclick = ()=>{
-        const n=state.sections.length+1;
-        state.sections.push({id:'sec'+n,title:'Yangi bo‘lim '+n,fullBleed:false,subsections:[]});
-        renderSectionsTable(); editSection(state.sections.length-1);
-      };
-      $('#download').onclick = ()=>{
-        const blob=new Blob([JSON.stringify({sections:state.sections},null,2)],{type:'application/json'});
-        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='home.json'; a.click();
-        setTimeout(()=>URL.revokeObjectURL(a.href),800);
-      };
-      $('#publish').onclick = async ()=>{
-        try{ await setDoc(doc(db,'configs','home'), {sections:state.sections}); toast('Firestore’ga saqlandi ✅','success'); }
-        catch(e){ toast('Saqlash xatosi: '+e.message,'error'); }
-      };
-      $('#loadfile').onchange = async (e)=>{
-        const f=e.target.files[0]; if(!f) return; const txt=await f.text();
-        try{ const obj=JSON.parse(txt); if(Array.isArray(obj.sections)) { state.sections=obj.sections; renderSectionsTable(); toast('JSON yuklandi','success'); } else { toast('JSON: sections topilmadi','error'); } }
-        catch(err){ toast('JSON parse xato: '+err.message,'error'); }
-      };
-    });
-  </script>
+/* Modal (PWA Generator) */
+.modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.25);backdrop-filter:blur(4px);z-index:1200}
+.modal.show{display:grid}
+.modal .sheet{width:min(920px,96vw);max-height:92vh;overflow:auto;background:#fff;border:1px solid var(--line);
+  border-radius:16px;box-shadow:var(--shadow);padding:14px}
+.previewBox{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.canvasWrap{border:1px dashed var(--line);border-radius:12px;padding:8px;display:grid;place-items:center;background:#fafdfb}
+.kbd{font:11px/1.2 ui-monospace,Consolas,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:#fff}
+.hide{display:none}
+</style>
 </head>
 <body>
-  <header>
+  <header class="appbar">
     <div class="row">
       <div class="brand">LeaderMath — Home Admin</div>
-      <div class="rowflex" style="margin-left:auto;gap:8px">
-        <div id="who" class="small muted"></div>
-        <button id="signout">Chiqish</button>
-      </div>
+      <div class="space"></div>
+      <div id="who" class="small"></div>
+      <button id="btnPwaGen" class="btn icon">🧩 PWA ikon & splash generator</button>
+      <button id="signout" class="btn">Chiqish</button>
     </div>
   </header>
 
-  <!-- Guard ekran -->
-  <div id="gate"></div>
-
-  <!-- Asosiy app (faqat admin kirgach ko'rinadi) -->
-  <main id="app">
-    <div class="toolbar">
-      <button id="addSec">+ Bo‘lim qo‘shish</button>
-      <label class="rowflex">JSON fayldan yuklash <input id="loadfile" type="file" accept="application/json"/></label>
-      <button id="download">Yuklab olish (home.json)</button>
-      <button id="publish" class="primary">Firestore’ga chiqarish</button>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h3>Bo‘limlar</h3>
-        <div class="body">
-          <table id="tbl-sections"><thead><tr><th>#</th><th>ID</th><th>Sarlavha</th><th>Full</th><th>Actions</th></tr></thead><tbody></tbody></table>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Bo‘lim tahriri</h3>
-        <div class="body" id="sec-editor"><div class="small">Chapdan bo‘lim tanlang.</div></div>
-      </div>
-
-      <div class="card">
-        <h3>Sub-bo‘limlar</h3>
-        <div class="body small muted">Bo‘lim tanlang — keyin qo‘shasiz</div>
-      </div>
-
-      <div class="card">
-        <h3>Sub-bo‘lim tahriri</h3>
-        <div class="body" id="sub-editor"></div>
-      </div>
-
-      <div class="card">
-        <h3>Banner/Card ro‘yxati</h3>
-        <div class="body" id="items-list"></div>
-      </div>
-
-      <div class="card">
-        <h3>Element tahriri</h3>
-        <div class="body" id="item-editor"></div>
+  <!-- Guard: kirishdan oldin faqat shu ko'rinadi -->
+  <main id="gate" style="display:grid;place-items:center;min-height:60vh">
+    <div class="card" style="max-width:520px;width:100%">
+      <h3>🔒 Admin panel</h3>
+      <div class="body">
+        <p class="small">Paneldan foydalanish faqat administratorlar uchun.</p>
+        <button id="glogin" class="btn primary">Google bilan kiring</button>
+        <div id="gerr" class="small" style="color:#b00020;margin-top:6px"></div>
       </div>
     </div>
   </main>
 
-  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="true"></div>
+  <!-- Asosiy ilova (faqat admin bo'lsa ochiladi) -->
+  <section id="app" class="layout" style="display:none">
+    <!-- Chap: bo'limlar ro'yxati -->
+    <div class="card">
+      <h3>Bo‘limlar</h3>
+      <div class="body">
+        <div class="rowflex" style="margin-bottom:8px">
+          <button id="addSec" class="btn primary">+ Bo‘lim</button>
+          <label class="rowflex">JSON yuklash <input id="loadfile" type="file" accept="application/json"></label>
+          <button id="download" class="btn">home.json</button>
+          <button id="publish" class="btn">Firestore’ga chiqarish</button>
+        </div>
+        <div id="secList" class="list"></div>
+      </div>
+    </div>
+
+    <!-- O'ng: tahrir paneli -->
+    <div class="card">
+      <h3>Tahrirlash</h3>
+      <div class="body" id="editor">
+        <div class="small">Chapdan bo‘limni tanlang.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PWA Generator Modal -->
+  <div id="pwaModal" class="modal" aria-hidden="true">
+    <div class="sheet">
+      <div class="rowflex" style="justify-content:space-between">
+        <b>🧩 PWA ikon & splash generator</b>
+        <div class="rowflex">
+          <button id="btnGenZip" class="btn primary">ZIP yaratish</button>
+          <button id="btnClose" class="btn">Yopish</button>
+        </div>
+      </div>
+      <div class="small" style="margin:6px 0 10px">Logo yuklang, rang/gradientni tanlang, keyin ZIP ni yuklab oling — ichida <code>manifest.webmanifest</code>, ikonlar va splash rasmlar bo‘ladi.</div>
+
+      <div class="grid2">
+        <div>
+          <div class="rowflex">
+            <input id="brandName" placeholder="App nomi (LeaderMath)">
+            <input id="bgColor" type="color" value="#2E8B57" title="Asosiy rang">
+            <input id="bgColor2" type="color" value="#1F6B45" title="Gradient 2">
+          </div>
+          <div class="rowflex">
+            <label>Padding <input id="pad" type="range" min="5" max="40" value="16"></label>
+            <label>Radius <input id="rad" type="range" min="0" max="128" value="28"></label>
+            <label class="rowflex"><input id="maskable" type="checkbox" checked> maskable</label>
+          </div>
+          <div class="rowflex">
+            <input id="logoFile" type="file" accept="image/*">
+            <button id="clearLogo" class="btn">Logoni tozalash</button>
+          </div>
+          <p class="small">Maslahat: kvadrat SVG/PNG yuklang (512×512). Fonga gradient qo‘llanadi.</p>
+        </div>
+        <div class="previewBox">
+          <div>
+            <div class="small">Icon 512 (maskable)</div>
+            <div class="canvasWrap"><canvas id="c512" width="512" height="512"></canvas></div>
+          </div>
+          <div>
+            <div class="small">Splash (1170×2532 — iPhone 13/14)</div>
+            <div class="canvasWrap"><canvas id="cSplash" width="1170" height="2532"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+<script type="module">
+  // ===== Firebase
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+    authDomain: "xplusy-760fa.firebaseapp.com",
+    projectId: "xplusy-760fa",
+    storageBucket: "xplusy-760fa.appspot.com",
+    messagingSenderId: "992512966017",
+    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+    measurementId: "G-459PLJ7P7L"
+  };
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  const ADMIN_EMAILS = ["sohibjonmath@gmail.com"]; // <-- o'zingizga moslang
+
+  // ===== Helpers
+  const $  = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+  const toast=(msg,kind='success')=>{
+    const host=$('#toasts'); const el=document.createElement('div');
+    el.className='toast '+kind; el.innerHTML = `<b>${kind==='error'?'❌':'✅'}</b><span>${msg}</span><button class="x">×</button>`;
+    el.querySelector('.x').onclick=()=>el.remove();
+    host.appendChild(el); setTimeout(()=>el.remove(),4000);
+  };
+
+  // ===== State
+  let STATE = { sections:[], selSec:-1, selSub:-1, selKind:'banner', selIdx:-1 };
+
+  // ===== Auth flow (guard)
+  $('#glogin').onclick = async()=>{
+    $('#gerr').textContent='';
+    try{ await signInWithPopup(auth,new GoogleAuthProvider()); }
+    catch(e){ $('#gerr').textContent=e?.message||String(e); }
+  };
+  $('#signout').onclick = ()=>signOut(auth);
+
+  onAuthStateChanged(auth, async (u)=>{
+    if(!u){ $('#app').style.display='none'; $('#gate').style.display='grid'; $('#who').textContent=''; return; }
+    if(ADMIN_EMAILS.indexOf(u.email)<0){
+      $('#app').style.display='none'; $('#gate').style.display='grid';
+      $('#gerr').textContent = 'Ruxsat yo‘q: ' + (u.email||u.uid);
+      return;
+    }
+    $('#who').textContent='👋 '+(u.email||u.uid);
+    $('#gate')..style.display='none'; $('#app').style.display='grid';
+    // Firestore’dan yuklash
+    try{
+      const snap = await getDoc(doc(db,'configs','home'));
+      STATE = snap.exists()? (snap.data()||{sections:[]}) : {sections:[]};
+      if(!Array.isArray(STATE.sections)) STATE.sections=[];
+      renderSections();
+      $('#editor').innerHTML='<div class="small">Chapdan tanlang.</div>';
+    }catch(e){ toast('Firestore o‘qishda xato: '+(e.message||e),'error'); }
+  });
+
+  // ===== UI: Sections list + editor
+  function renderSections(){
+    const host=$('#secList'); host.innerHTML='';
+    STATE.sections.forEach((s,i)=>{
+      const el=document.createElement('div'); el.className='item';
+      el.innerHTML=`
+        <div class="meta"><b>${s.title||s.id||('sec'+(i+1))}</b>
+          <span class="small">${s.id||''} ${s.fullBleed? ' • full':''}</span></div>
+        <div class="act">
+          <button class="btn" data-i="${i}" data-act="edit">Tahrirlash</button>
+          <button class="btn" data-i="${i}" data-act="up">↑</button>
+          <button class="btn" data-i="${i}" data-act="down">↓</button>
+          <button class="btn" data-i="${i}" data-act="del">🗑</button>
+        </div>`;
+      host.appendChild(el);
+    });
+  }
+
+  // Section editor
+  function openSectionEditor(idx){
+    STATE.selSec=idx; STATE.selSub=-1; STATE.selIdx=-1;
+    const s = STATE.sections[idx] || {subsections:[]};
+    const ed=$('#editor');
+    ed.innerHTML = `
+      <div class="grid2">
+        <div><label>ID<input id="sid" value="${s.id||''}"></label></div>
+        <div><label>Sarlavha<input id="stitle" value="${s.title||''}"></label></div>
+        <div><label>fullBleed
+          <select id="sfull"><option value="false"${!s.fullBleed?' selected':''}>false</option>
+          <option value="true"${s.fullBleed?' selected':''}>true</option></select></label></div>
+        <div><label>baseHref<input id="sbase" value="${s.baseHref||''}"></label></div>
+      </div>
+      <div class="rowflex" style="margin:10px 0">
+        <button id="saveSec" class="btn primary">Bo‘limni saqlash</button>
+        <button id="addSub" class="btn">+ Sub-bo‘lim</button>
+      </div>
+      <div class="small">Sub-bo‘limlar</div>
+      <div id="subList" class="list"></div>
+      <div id="subEditor" style="margin-top:10px"></div>
+    `;
+    $('#saveSec').onclick=()=>{
+      const o={ id:$('#sid').value.trim(), title:$('#stitle').value.trim(), fullBleed:($('#sfull').value==='true') };
+      const base=$('#sbase').value.trim(); if(base) o.baseHref=base;
+      o.subsections = s.subsections||[];
+      STATE.sections[idx]=o; renderSections(); toast('Bo‘lim saqlandi');
+    };
+    $('#addSub').onclick=()=>{
+      s.subsections=s.subsections||[];
+      const n=s.subsections.length+1;
+      s.subsections.push({id:'sub'+n,title:'Yangi sub '+n,fullBleed:false,banners:[],cards:[]});
+      renderSubs();
+      toast('Sub-bo‘lim qo‘shildi');
+    };
+    function renderSubs(){
+      const host=$('#subList'); host.innerHTML='';
+      (s.subsections||[]).forEach((sb,j)=>{
+        const el=document.createElement('div'); el.className='item';
+        el.innerHTML=`
+          <div class="meta"><b>${sb.title||sb.id||('sub'+(j+1))}</b>
+          <span class="small">${sb.id||''} ${sb.fullBleed?' • full':''}</span></div>
+          <div class="act">
+            <button class="btn" data-j="${j}" data-act="editSub">Tahrirlash</button>
+            <button class="btn" data-j="${j}" data-act="upSub">↑</button>
+            <button class="btn" data-j="${j}" data-act="downSub">↓</button>
+            <button class="btn" data-j="${j}" data-act="delSub">🗑</button>
+          </div>`;
+        host.appendChild(el);
+      });
+    }
+    $('#subList').onclick=(e)=>{
+      const t=e.target; const j=+t.dataset.j; if(Number.isNaN(j)) return;
+      if(t.dataset.act==='editSub') openSubEditor(j);
+      if(t.dataset.act==='upSub'){ const a=s.subsections; if(j>0){ [a[j-1],a[j]]=[a[j],a[j-1]]; renderSubs(); } }
+      if(t.dataset.act==='downSub'){ const a=s.subsections; if(j<a.length-1){ [a[j+1],a[j]]=[a[j],a[j+1]]; renderSubs(); } }
+      if(t.dataset.act==='delSub'){ if(confirm('O‘chirilsinmi?')){ s.subsections.splice(j,1); renderSubs(); $('#subEditor').innerHTML=''; } }
+    };
+    renderSubs();
+
+    function openSubEditor(j){
+      STATE.selSub=j; STATE.selKind='banner'; STATE.selIdx=-1;
+      const sb = s.subsections[j];
+      const box=$('#subEditor');
+      box.innerHTML = `
+        <div class="grid2">
+          <div><label>ID<input id="bid" value="${sb.id||''}"></label></div>
+          <div><label>Sarlavha<input id="btitle" value="${sb.title||''}"></label></div>
+          <div><label>fullBleed
+            <select id="bfull"><option value="false"${!sb.fullBleed?' selected':''}>false</option>
+            <option value="true"${sb.fullBleed?' selected':''}>true</option></select></label></div>
+          <div><label>baseHref<input id="bbase" value="${sb.baseHref||''}"></label></div>
+        </div>
+        <div class="rowflex" style="margin:8px 0">
+          <button id="saveSub" class="btn primary">Sub saqlash</button>
+          <button id="addBanner" class="btn">+ Banner</button>
+          <button id="addCard" class="btn">+ Card</button>
+        </div>
+        <div class="rowflex" style="margin:8px 0">
+          <button id="tabBanner" class="btn primary">Bannerlar</button>
+          <button id="tabCard" class="btn">Cardlar</button>
+        </div>
+        <div id="items" class="list"></div>
+        <div id="itemEditor" style="margin-top:10px"></div>
+      `;
+      $('#saveSub').onclick=()=>{
+        sb.id=$('#bid').value.trim(); sb.title=$('#btitle').value.trim();
+        sb.fullBleed=$('#bfull').value==='true'; sb.baseHref=$('#bbase').value.trim();
+        toast('Sub saqlandi');
+      };
+      $('#addBanner').onclick=()=>{ sb.banners=sb.banners||[]; sb.banners.push({mode:'html',sandbox:'allow-scripts allow-forms',contentHtml:'<section style="display:grid;place-items:center;height:100vh"><h2>Yangi Banner</h2></section>'}); STATE.selKind='banner'; renderItems(); };
+      $('#addCard').onclick=()=>{ sb.cards=sb.cards||[]; sb.cards.push({title:'Yangi Card',cardStyle:'available',imageUrl:'',ctaLabel:'Boshlash',ctaHref:'',infoHtml:'<p>—</p>'}); STATE.selKind='card'; renderItems(); };
+
+      $('#tabBanner').onclick=()=>{ STATE.selKind='banner'; $('#tabBanner').classList.add('primary'); $('#tabCard').classList.remove('primary'); renderItems(); };
+      $('#tabCard').onclick=()=>{ STATE.selKind='card'; $('#tabCard').classList.add('primary'); $('#tabBanner').classList.remove('primary'); renderItems(); };
+
+      function renderItems(){
+        const host=$('#items'); host.innerHTML='';
+        const arr = STATE.selKind==='banner' ? (sb.banners||[]) : (sb.cards||[]);
+        arr.forEach((it,k)=>{
+          const el=document.createElement('div'); el.className='item';
+          const left = STATE.selKind==='banner'
+            ? `<div class="meta"><b>Banner ${k+1}</b><span class="small">${it.mode||'html'}</span></div>`
+            : `<div class="meta"><b>${it.title||('Card '+(k+1))}</b><span class="small">${it.cardStyle||'available'}</span></div>`;
+          const thumb = (STATE.selKind==='card' && it.imageUrl) ? `<img class="thumb" src="${it.imageUrl}">` : '';
+          el.innerHTML=`
+            ${thumb}
+            ${left}
+            <div class="act">
+              <button class="btn" data-k="${k}" data-act="editIt">Tahrirlash</button>
+              <button class="btn" data-k="${k}" data-act="upIt">↑</button>
+              <button class="btn" data-k="${k}" data-act="downIt">↓</button>
+              <button class="btn" data-k="${k}" data-act="delIt">🗑</button>
+            </div>`;
+          host.appendChild(el);
+        });
+        $('#items').onclick=(e)=>{
+          const t=e.target; const k=+t.dataset.k; if(Number.isNaN(k)) return;
+          const arr = STATE.selKind==='banner' ? (sb.banners||[]) : (sb.cards||[]);
+          if(t.dataset.act==='editIt'){ openItemEditor(k); }
+          if(t.dataset.act==='upIt'){ if(k>0){ [arr[k-1],arr[k]]=[arr[k],arr[k-1]]; renderItems(); } }
+          if(t.dataset.act==='downIt'){ if(k<arr.length-1){ [arr[k+1],arr[k]]=[arr[k],arr[k+1]]; renderItems(); } }
+          if(t.dataset.act==='delIt'){ if(confirm('O‘chirilsinmi?')){ arr.splice(k,1); renderItems(); $('#itemEditor').innerHTML=''; } }
+        };
+        $('#itemEditor').innerHTML='';
+      }
+      function openItemEditor(k){
+        STATE.selIdx=k; const ed=$('#itemEditor');
+        if(STATE.selKind==='banner'){
+          const it = sb.banners[k];
+          ed.innerHTML = `
+            <div class="grid2">
+              <div><label>Mode
+                <select id="emode"><option value="html"${it.mode==='html'?' selected':''}>html</option>
+                <option value="url"${it.mode==='url'?' selected':''}>url</option></select></label></div>
+              <div><label>Sandbox<input id="esbx" value="${it.sandbox||'allow-scripts allow-forms'}"></label></div>
+              <div class="grid2" style="grid-column:1/-1"><label>baseHref<input id="ebase" value="${it.baseHref||''}"></label></div>
+            </div>
+            <div id="blkHtml" style="${it.mode==='html'?'':'display:none'}"><label>contentHtml<textarea id="ehtml">${(it.contentHtml||'').replace(/</g,'&lt;')}</textarea></label></div>
+            <div id="blkUrl" style="${it.mode==='url'?'':'display:none'}"><label>src<input id="esrc" value="${it.src||''}"></label></div>
+            <div class="rowflex" style="margin-top:8px"><button id="saveItem" class="btn primary">Saqlash</button></div>
+          `;
+          $('#emode').onchange=()=>{ const v=$('#emode').value; $('#blkHtml').style.display=(v==='html'?'block':'none'); $('#blkUrl').style.display=(v==='url'?'block':'none'); };
+          $('#saveItem').onclick=()=>{ it.mode=$('#emode').value; it.sandbox=$('#esbx').value.trim(); it.baseHref=$('#ebase').value.trim(); if(it.mode==='html') it.contentHtml=$('#ehtml').value; else it.src=$('#esrc').value.trim(); toast('Banner saqlandi'); };
+        } else {
+          const it = sb.cards[k];
+          ed.innerHTML = `
+            <div class="grid2">
+              <div><label>Sarlavha<input id="ctitle" value="${it.title||''}"></label></div>
+              <div><label>Holat
+                <select id="cstyle">
+                  <option value="available"${it.cardStyle==='available'?' selected':''}>available</option>
+                  <option value="soon"${it.cardStyle==='soon'?' selected':''}>soon</option>
+                  <option value="timed"${it.cardStyle==='timed'?' selected':''}>timed</option>
+                </select></label></div>
+              <div><label>Start (YYYY-MM-DD HH:mm)<input id="cstart" value="${it.startAt||''}"></label></div>
+              <div><label>End (YYYY-MM-DD HH:mm)<input id="cend" value="${it.endAt||''}"></label></div>
+              <div><label>CTA Label<input id="clab" value="${it.ctaLabel||'Boshlash'}"></label></div>
+              <div><label>CTA Link<input id="chref" value="${it.ctaHref||''}"></label></div>
+              <div style="grid-column:1/-1"><label>Rasm URL (16:9)<input id="cimg" value="${it.imageUrl||''}" placeholder="https://.../thumb.jpg"></label></div>
+            </div>
+            <div><label>Info HTML<textarea id="cinfo">${(it.infoHtml||'').replace(/</g,'&lt;')}</textarea></label></div>
+            <div class="rowflex" style="margin-top:8px"><button id="saveItem" class="btn primary">Card saqlash</button></div>
+          `;
+          $('#saveItem').onclick=()=>{ it.title=$('#ctitle').value.trim(); it.cardStyle=$('#cstyle').value; it.startAt=$('#cstart').value.trim(); it.endAt=$('#cend').value.trim(); it.ctaLabel=$('#clab').value.trim(); it.ctaHref=$('#chref').value.trim(); it.imageUrl=$('#cimg').value.trim(); it.infoHtml=$('#cinfo').value; toast('Card saqlandi'); };
+        }
+      }
+    }
+  }
+
+  // Clicks in section list
+  $('#secList').onclick=(e)=>{
+    const t=e.target; if(!t.classList.contains('btn')) return;
+    const i=+t.dataset.i; if(Number.isNaN(i)) return;
+    if(t.dataset.act==='edit') openSectionEditor(i);
+    if(t.dataset.act==='up'){ if(i>0){ [STATE.sections[i-1],STATE.sections[i]]=[STATE.sections[i],STATE.sections[i-1]]; renderSections(); } }
+    if(t.dataset.act==='down'){ if(i<STATE.sections.length-1){ [STATE.sections[i+1],STATE.sections[i]]=[STATE.sections[i],STATE.sections[i+1]]; renderSections(); } }
+    if(t.dataset.act==='del'){ if(confirm('O‘chirilsinmi?')){ STATE.sections.splice(i,1); renderSections(); $('#editor').innerHTML='<div class="small">Chapdan tanlang.</div>'; } }
+  };
+
+  // Toolbar
+  $('#addSec').onclick=()=>{ const n=STATE.sections.length+1; STATE.sections.push({id:'sec'+n,title:'Yangi bo‘lim '+n,fullBleed:false,subsections:[]}); renderSections(); openSectionEditor(STATE.sections.length-1); };
+  $('#download').onclick=()=>{ const blob=new Blob([JSON.stringify({sections:STATE.sections},null,2)],{type:'application/json'}); saveAs(blob,'home.json'); };
+  $('#publish').onclick=async()=>{ try{ await setDoc(doc(db,'configs','home'),{sections:STATE.sections}); toast('Firestore’ga saqlandi'); } catch(e){ toast('Xato: '+(e.message||e),'error'); } };
+  $('#loadfile').onchange=async(e)=>{ const f=e.target.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(Array.isArray(obj.sections)){ STATE.sections=obj.sections; renderSections(); toast('JSON yuklandi'); } else toast('JSON ichida sections yo‘q','error'); }catch(err){ toast('Parse xato: '+err.message,'error'); } };
+
+  // ===== PWA Generator =====
+  const modal=$('#pwaModal');
+  const ctx512 = $('#c512').getContext('2d');
+  const ctxS   = $('#cSplash').getContext('2d');
+  let logoImg  = null;
+
+  function drawAll(){
+    const pad=+$('#pad').value, rad=+$('#rad').value;
+    const c1=$('#bgColor').value, c2=$('#bgColor2').value;
+    // Icon 512
+    const g1 = ctx512.createLinearGradient(0,0,512,512); g1.addColorStop(0,c1); g1.addColorStop(1,c2);
+    ctx512.clearRect(0,0,512,512); ctx512.fillStyle=g1; ctx512.fillRect(0,0,512,512);
+    if(logoImg){ const box=512-2*pad; const wh = Math.min(box, box); const x=(512-wh)/2, y=(512-wh)/2;
+      roundRect(ctx512,x,y,wh,wh,rad); ctx512.clip(); ctx512.drawImage(logoImg,x,y,wh,wh); ctx512.restore();
+    }
+    // Splash 1170x2532
+    const g2 = ctxS.createLinearGradient(0,0,1170,2532); g2.addColorStop(0,c1); g2.addColorStop(1,c2);
+    ctxS.clearRect(0,0,1170,2532); ctxS.fillStyle=g2; ctxS.fillRect(0,0,1170,2532);
+    if(logoImg){ const side = Math.min(900, 1170-2*pad); const x=(1170-side)/2, y=(2532-side)/2;
+      roundRect(ctxS,x,y,side,side,rad*2); ctxS.clip(); ctxS.drawImage(logoImg,x,y,side,side); ctxS.restore();
+    }
+  }
+  function roundRect(ctx,x,y,w,h,r){ ctx.save(); const rr=Math.min(r,Math.min(w,h)/2); ctx.beginPath();
+    ctx.moveTo(x+rr,y); ctx.arcTo(x+w,y,x+w,y+h,rr); ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr); ctx.arcTo(x,y,x+w,y,rr); ctx.closePath(); }
+
+  $('#logoFile').onchange=()=>{
+    const f=$('#logoFile').files?.[0]; if(!f) return; const img=new Image(); img.onload=()=>{ logoImg=img; drawAll(); }; img.src=URL.createObjectURL(f);
+  };
+  $('#clearLogo').onclick=()=>{ logoImg=null; $('#logoFile').value=''; drawAll(); };
+  $('#pad').oninput=drawAll; $('#rad').oninput=drawAll; $('#bgColor').oninput=drawAll; $('#bgColor2').oninput=drawAll;
+
+  $('#btnPwaGen').onclick=()=>{ modal.classList.add('show'); drawAll(); };
+  $('#btnClose').onclick=()=>modal.classList.remove('show');
+
+  $('#btnGenZip').onclick=async()=>{
+    const zip=new JSZip();
+    const name=($('#brandName').value.trim()||'LeaderMath');
+    // canv -> blobs
+    const icon512 = await new Promise(r=>$('#c512').toBlob(r,'image/png'));
+    const splash  = await new Promise(r=>$('#cSplash').toBlob(r,'image/png'));
+    // scale helper
+    const scale = async (srcCanvas, size)=>{ const c=document.createElement('canvas'); c.width=c.height=size; const cx=c.getContext('2d'); cx.drawImage(srcCanvas,0,0,size,size); return await new Promise(r=>c.toBlob(r,'image/png')); };
+    const c512 = $('#c512');
+    const icon192 = await scale(c512,192);
+    const iconMask = icon512; // 512 maskable
+
+    zip.file('icons/icon-192.png', icon192);
+    zip.file('icons/icon-512.png', icon512);
+    zip.file('icons/icon-maskable-512.png', iconMask);
+    zip.file('icons/apple-touch-icon.png', icon192); // mos keladi
+    // favicon-32
+    const fav = await (async()=>{ const c=document.createElement('canvas'); c.width=c.height=32; const cx=c.getContext('2d'); cx.drawImage(c512,0,0,32,32); return await new Promise(r=>c.toBlob(r,'image/png')); })();
+    zip.file('icons/favicon-32.png', fav);
+    // splashlar (ba’zi keng tarqalgan o‘lchamlar)
+    zip.file('splash/1170x2532.png', splash); // iPhone 13/14
+    // Android 1080x2340
+    const cA=document.createElement('canvas'); cA.width=1080; cA.height=2340; const ca=cA.getContext('2d');
+    const gA=ca.createLinearGradient(0,0,1080,2340); gA.addColorStop(0,$('#bgColor').value); gA.addColorStop(1,$('#bgColor2').value);
+    ca.fillStyle=gA; ca.fillRect(0,0,1080,2340);
+    if(logoImg){ const side=Math.min(900,1080-2*+$('#pad').value); const x=(1080-side)/2, y=(2340-side)/2;
+      roundRect(ca,x,y,side,side,+$('#rad').value*2); ca.clip(); ca.drawImage(logoImg,x,y,side,side); ca.restore(); }
+    const splashAnd = await new Promise(r=>cA.toBlob(r,'image/png'));
+    zip.file('splash/1080x2340.png', splashAnd);
+
+    // manifest
+    const manifest = {
+      name, short_name:name,
+      start_url: ".", display: "standalone",
+      background_color: $('#bgColor').value,
+      theme_color: $('#bgColor').value,
+      icons: [
+        {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png"},
+        {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png"},
+        {"src":"icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable any"},
+        {"src":"icons/apple-touch-icon.png","sizes":"192x192","type":"image/png","purpose":"any"}
+      ]
+    };
+    zip.file('manifest.webmanifest', JSON.stringify(manifest,null,2));
+    const blob = await zip.generateAsync({type:'blob'}); saveAs(blob, 'pwa-assets.zip');
+  };
+
+  // ===== Shortcuts
+  document.addEventListener('keydown',(e)=>{
+    if(e.key==='s' && (e.ctrlKey||e.metaKey)){ e.preventDefault(); $('#publish').click(); }
+  });
+</script>
 </body>
 </html>
