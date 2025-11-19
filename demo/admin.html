@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>Admin — Chip, Banner, Card Boshqaruvi</title>
+  <title>Admin — Chip, Banner, Card + Rollar</title>
   <meta name="theme-color" content="#2E8B57"/>
 
   <style>
@@ -106,7 +106,9 @@
     main{
       max-width:1180px; margin:12px auto 24px;
       padding:0 16px 24px;
-      display:grid; gap:16px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
     }
     .grid{
       display:grid; grid-template-columns:280px minmax(0,1fr);
@@ -253,7 +255,7 @@
   <div class="row">
     <div class="brand">
       <span>LeaderMath Admin</span>
-      <span class="brand-pill">Chip • Banner • Card</span>
+      <span class="brand-pill">Chip • Banner • Card • Rollar</span>
     </div>
     <div id="authArea">
       <!-- JS bilan to‘ldiriladi -->
@@ -368,6 +370,38 @@
       </div>
     </div>
   </div>
+
+  <!-- === YANGI: FOYDALANUVCHILAR VA ROLLAR BO‘LIMI === -->
+  <div class="card">
+    <div class="card-title">
+      <span>Foydalanuvchilar va rollar</span>
+      <button class="btn btn-outline" id="refreshUsersBtn">Ro‘yxatni yangilash</button>
+    </div>
+    <div id="usersList" class="items-list" style="max-height:260px;"></div>
+
+    <div class="form-grid" style="margin-top:8px;">
+      <label>
+        User ID
+        <input id="userId" readonly>
+      </label>
+      <label>
+        Ism-familya
+        <input id="userName" readonly>
+      </label>
+      <label>
+        Email
+        <input id="userEmail" readonly>
+      </label>
+      <label>
+        Rol (guest/user/pro/admin)
+        <input id="userRole" placeholder="masalan: user">
+      </label>
+    </div>
+    <div class="chip-actions" style="margin-top:6px;">
+      <span class="pill-badge" id="userStatus">Foydalanuvchi tanlanmagan</span>
+      <button class="btn" id="saveUserRoleBtn">Rolni saqlash</button>
+    </div>
+  </div>
 </main>
 
 <script type="module">
@@ -379,7 +413,9 @@
     onAuthStateChanged,
     signOut,
     loadHomeConfigOnce,
-    saveHomeConfig
+    saveHomeConfig,
+    listUsers,
+    setUserRole
   } from './firebase.js';
 
   const authArea = document.getElementById('authArea');
@@ -410,9 +446,22 @@
   const itemStatus = document.getElementById('itemStatus');
   const deleteItemBtn = document.getElementById('deleteItemBtn');
 
+  // user roles UI
+  const usersList = document.getElementById('usersList');
+  const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+  const userIdInput = document.getElementById('userId');
+  const userNameInput = document.getElementById('userName');
+  const userEmailInput = document.getElementById('userEmail');
+  const userRoleInput = document.getElementById('userRole');
+  const userStatus = document.getElementById('userStatus');
+  const saveUserRoleBtn = document.getElementById('saveUserRoleBtn');
+
   let state = { chips: [] };
   let selectedChipIndex = -1;
   let selectedItem = { type: null, index: -1 };
+
+  let usersState = [];
+  let selectedUserIndex = -1;
 
   // ---------- AUTH ----------
   function renderAuth(user) {
@@ -434,7 +483,7 @@
     }
     const isAdmin = ADMIN_EMAILS.includes(user.email);
     if (!isAdmin) {
-      authArea.innerHTML = '<span class="muted" style="font-size:12px;">Ruxsat yo‘q</span>';
+      authArea.innerHTML = '<span class="muted" style="font-size:12px;">Admin ruxsati yo‘q</span>';
       alert('Bu sahifa faqat adminlar uchun.');
       return;
     }
@@ -458,11 +507,14 @@
     renderAuth(user);
     if (user && ADMIN_EMAILS.includes(user.email)) {
       await loadConfig();
+      await loadUsers();
     } else {
       state = { chips: [] };
       renderChips();
       clearChipForm();
       clearItemForm();
+      usersState = [];
+      renderUsers();
     }
   });
 
@@ -538,6 +590,11 @@
   }
 
   function renderItems(type) {
+    if (selectedChipIndex < 0) {
+      if (type === 'banner') bannersList.innerHTML = '';
+      else cardsList.innerHTML = '';
+      return;
+    }
     const chip = state.chips[selectedChipIndex];
     const list = type === 'banner' ? bannersList : cardsList;
     const data = type === 'banner' ? (chip.banners || []) : (chip.cards || []);
@@ -732,6 +789,89 @@
     renderItems('banner');
     renderItems('card');
     clearItemForm();
+  };
+
+  // ---------- USERS + ROLLAR BO‘LIMI ----------
+  async function loadUsers() {
+    try {
+      usersState = await listUsers(200);
+      renderUsers();
+    } catch (e) {
+      console.error(e);
+      alert('Foydalanuvchilarni o‘qishda xatolik.');
+    }
+  }
+
+  function renderUsers() {
+    usersList.innerHTML = '';
+    if (!usersState.length) {
+      usersList.innerHTML = '<div class="muted" style="font-size:11px;padding:4px;">Hali users kolleksiyasida foydalanuvchi yo‘q.</div>';
+      return;
+    }
+    usersState.forEach((u, idx) => {
+      const div = document.createElement('div');
+      const active = idx === selectedUserIndex;
+      div.className = 'item-row' + (active ? ' active' : '');
+      div.onclick = () => {
+        selectedUserIndex = idx;
+        fillUserForm();
+        renderUsers();
+      };
+      const role = (u.role || 'user');
+      div.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span style="font-weight:600;">${u.displayName || u.email || '(No name)'}</span>
+          <span class="muted" style="font-size:11px;">${u.email || ''}</span>
+        </div>
+        <div class="item-actions">
+          <span class="pill-badge" style="font-size:10px;">${role}</span>
+        </div>
+      `;
+      usersList.appendChild(div);
+    });
+  }
+
+  function fillUserForm() {
+    if (selectedUserIndex < 0 || !usersState[selectedUserIndex]) {
+      userIdInput.value = '';
+      userNameInput.value = '';
+      userEmailInput.value = '';
+      userRoleInput.value = '';
+      userStatus.textContent = 'Foydalanuvchi tanlanmagan';
+      return;
+    }
+    const u = usersState[selectedUserIndex];
+    userIdInput.value = u.id;
+    userNameInput.value = u.displayName || '';
+    userEmailInput.value = u.email || '';
+    userRoleInput.value = u.role || 'user';
+    userStatus.textContent = `Tanlangan: ${u.email || u.id}`;
+  }
+
+  refreshUsersBtn.onclick = () => {
+    loadUsers();
+  };
+
+  saveUserRoleBtn.onclick = async () => {
+    if (selectedUserIndex < 0 || !usersState[selectedUserIndex]) {
+      return alert('Foydalanuvchini tanlang.');
+    }
+    const newRole = (userRoleInput.value || '').trim().toLowerCase();
+    if (!newRole) return alert('Rolni kiriting (guest/user/pro/admin).');
+    if (!['guest','user','pro','admin'].includes(newRole)) {
+      return alert('Rol faqat: guest, user, pro, admin bo‘lishi mumkin.');
+    }
+    const u = usersState[selectedUserIndex];
+    try {
+      await setUserRole(u.id, newRole);
+      usersState[selectedUserIndex].role = newRole;
+      renderUsers();
+      fillUserForm();
+      userStatus.textContent = `Rol saqlandi: ${newRole}`;
+    } catch (e) {
+      console.error(e);
+      alert('Rolni saqlashda xatolik.');
+    }
   };
 </script>
 </body>

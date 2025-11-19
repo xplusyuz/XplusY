@@ -60,6 +60,52 @@
     .brand-title span:last-child{
       font-size:11px; color:var(--muted);
     }
+    .user-chip{
+      display:flex; align-items:center; gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.9);
+      border:1px solid rgba(223,231,226,.9);
+      box-shadow:0 10px 26px rgba(16,40,26,.12);
+      cursor:pointer;
+      font-size:13px;
+      transition:transform var(--speed),box-shadow var(--speed),background var(--speed);
+    }
+    .user-chip:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 40px rgba(16,40,26,.22);
+      background:#FFFFFF;
+    }
+    .avatar{
+      width:26px; height:26px;
+      border-radius:50%;
+      background:linear-gradient(135deg,#2E8B57,#6B8E23);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff; font-size:14px; font-weight:700;
+    }
+    .user-meta{
+      display:flex; flex-direction:column; line-height:1.1;
+    }
+    .user-meta span:first-child{
+      font-weight:600; font-size:13px;
+    }
+    .user-meta span:last-child{
+      font-size:11px; color:var(--muted);
+    }
+    .btn{
+      border:0; outline:0; cursor:pointer;
+      border-radius:999px;
+      padding:6px 14px;
+      font-size:13px; font-weight:600;
+      display:inline-flex; align-items:center; gap:6px;
+      transition:background var(--speed),transform var(--speed),box-shadow var(--speed);
+      background:var(--brand); color:#fff;
+      box-shadow:0 10px 30px rgba(46,139,87,.35);
+    }
+    .btn:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 40px rgba(46,139,87,.45);
+    }
     .chip-bar{
       position:sticky; top:56px; z-index:15;
       padding:6px 0 2px;
@@ -260,6 +306,9 @@
         <span>Chiplar, bannerlar va cardlar bitta tizimda</span>
       </div>
     </div>
+    <div id="authArea">
+      <!-- JS bilan to‘ldiriladi -->
+    </div>
   </div>
 </header>
 
@@ -290,24 +339,100 @@
 </footer>
 
 <script type="module">
-  import { subscribeHomeConfig } from './firebase.js';
+  import {
+    auth,
+    provider,
+    signInWithPopup,
+    onAuthStateChanged,
+    signOut,
+    subscribeHomeConfig,
+    ensureUserDoc,
+    subscribeUserProfile
+  } from './firebase.js';
 
   const chipsRow = document.getElementById('chipsRow');
   const bannerShell = document.getElementById('bannerShell');
   const cardsGrid = document.getElementById('cardsGrid');
+  const authArea = document.getElementById('authArea');
 
   let homeConfig = { chips: [] };
   let currentChipIndex = 0;
   let bannerTimer = null;
   const AUTO_SLIDE_MS = 6000;
-  const CURRENT_ROLE = 'guest'; // kerak bo‘lsa auth bilan bog‘lab almashtirasan
+
+  let currentRole = 'guest';   // rol endi real userdan olinadi
+  let currentUser = null;
+  let unsubscribeProfile = null;
 
   function filterByRole(items) {
     return (items || []).filter(it => {
       if (!it.visibleRoles || !it.visibleRoles.length) return true;
-      return it.visibleRoles.includes(CURRENT_ROLE);
+      return it.visibleRoles.includes(currentRole);
     });
   }
+
+  // ---- AUTH ----
+  function renderAuth(user, role) {
+    authArea.innerHTML = '';
+    if (!user) {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'Kirish (Google)';
+      btn.onclick = async () => {
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (e) {
+          alert('Kirishda xatolik: ' + e.message);
+          console.error(e);
+        }
+      };
+      authArea.appendChild(btn);
+      return;
+    }
+    const chip = document.createElement('div');
+    chip.className = 'user-chip';
+    chip.innerHTML = `
+      <div class="avatar">${(user.displayName || user.email || '?')[0]?.toUpperCase()}</div>
+      <div class="user-meta">
+        <span>${user.displayName || 'Foydalanuvchi'}</span>
+        <span>${role || 'user'} • ${user.email || ''}</span>
+      </div>
+    `;
+    chip.onclick = async () => {
+      await signOut(auth);
+    };
+    authArea.appendChild(chip);
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user || null;
+    // eski profil listenerni tozalaymiz
+    if (unsubscribeProfile) {
+      unsubscribeProfile();
+      unsubscribeProfile = null;
+    }
+
+    if (!user) {
+      currentRole = 'guest';
+      renderAuth(null, currentRole);
+      renderChips();
+      renderActiveChipContent();
+      return;
+    }
+
+    try {
+      await ensureUserDoc(user);
+    } catch (e) {
+      console.error('ensureUserDoc xato:', e);
+    }
+
+    unsubscribeProfile = subscribeUserProfile(user.uid, (profile) => {
+      currentRole = profile.role || 'user';
+      renderAuth(user, currentRole);
+      renderChips();
+      renderActiveChipContent();
+    });
+  });
 
   // ---- CHIPLARNI CHIZISH ----
   function renderChips() {
@@ -317,7 +442,7 @@
       return;
     }
     homeConfig.chips.forEach((chip, idx) => {
-      const visible = !chip.visibleRoles || !chip.visibleRoles.length || chip.visibleRoles.includes(CURRENT_ROLE);
+      const visible = !chip.visibleRoles || !chip.visibleRoles.length || chip.visibleRoles.includes(currentRole);
       if (!visible) return;
       const div = document.createElement('button');
       div.type = 'button';
