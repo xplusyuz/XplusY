@@ -38,7 +38,6 @@ const provider = new GoogleAuthProvider();
 // Faqat shu email(lar)ga admin panelga kirish ruxsati beriladi
 const ADMIN_EMAILS = [
   "sohibjonmath@gmail.com",
-  // "yana_bir_admin@example.com"
 ];
 
 // Home config hujjatini o‘qish (bitta read)
