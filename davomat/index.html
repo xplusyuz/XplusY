@@ -73,7 +73,7 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      padding:.75rem 0 .9rem;
+      padding:.75rem 0 .5rem;
       gap:.75rem;
     }
     .logo{display:flex;align-items:center;gap:.6rem;}
@@ -90,8 +90,8 @@
 
     .header-actions{
       display:flex;
-      align-items:center;
-      gap:.5rem;
+      justify-content:center;
+      padding:0 0 .7rem;
     }
     .date-chip{
       background:rgba(255,255,255,.15);
@@ -210,9 +210,9 @@
     /* ========== TABLES ========== */
     .table-container{
       margin-top:.3rem;
-      overflow-x:auto;
       border-radius:var(--radius-lg);
       border:1px solid var(--gray-200);
+      overflow-x:hidden; /* scrolsiz, matnlar qatordan tushadi */
     }
     table{width:100%;border-collapse:collapse;}
     th{
@@ -224,15 +224,24 @@
       color:var(--gray-600);
       text-transform:uppercase;
       letter-spacing:.04em;
-      white-space:nowrap;
+      white-space:normal;
     }
     td{
       padding:.5rem .7rem;
       border-top:1px solid var(--gray-200);
       font-size:.75rem;
       vertical-align:top;
+      white-space:normal;
+      word-break:break-word;
     }
     tr:hover{background:var(--gray-50);}
+
+    /* Sinflar jadvali uchun yanada kichikroq font */
+    .classes-table th,
+    .classes-table td{
+      font-size:.7rem;
+      padding:.4rem .5rem;
+    }
 
     .text-danger{color:var(--danger);}
     .badge{
@@ -254,6 +263,12 @@
       border-color:rgba(239,68,68,.25);
       color:var(--danger);
     }
+
+    /* Sonlar ustunidagi rangli raqamlar */
+    .cnt-present{color:var(--success);}
+    .cnt-excused{color:var(--warning);}
+    .cnt-unexcused{color:var(--danger);}
+    .cnt-total{color:var(--gray-600);}
 
     /* ko'zcha tugma */
     .btn-eye{
@@ -413,11 +428,6 @@
       .card-body{padding:.9rem;}
       .logo-text h1{font-size:.95rem;}
     }
-	/* Sana chipini gorizontal markazga olib kelish */
-.date-chip{
-  margin: 0 auto;          /* chap-o‘ngdan auto – markazga */
-  justify-content: center; /* ichidagi ikon+matnni ham markazda ushlaydi */
-}
   </style>
 </head>
 <body>
@@ -431,18 +441,18 @@
           <p>Statistika hammaga ochiq • Sinf rahbari alohida kiradi</p>
         </div>
       </div>
-        <button id="open-login-btn" class="btn btn-primary">
-          <i class="fas fa-sign-in-alt"></i>
-          Sinf rahbari kirishi
-        </button>
+      <button id="open-login-btn" class="btn btn-primary">
+        <i class="fas fa-sign-in-alt"></i>
+        Sinf rahbari kirishi
+      </button>
+    </div>
+    <div class="header-actions">
+      <div class="date-chip">
+        <i class="far fa-calendar-alt"></i>
+        <span id="today-label">Bugun: …</span>
       </div>
     </div>
   </div>
-  <div class="header-actions">
-        <div class="date-chip">
-          <i class="far fa-calendar-alt"></i>
-          <span id="today-label">Bugun: …</span>
-        </div>
 </header>
 
 <main class="container">
@@ -458,8 +468,7 @@
           <span style="color:var(--danger)">sababsiz yo‘q / davomat berilmagan</span>.
         </p>
       </div>
-    </div>
-	<div class="flex gap-4">
+      <div class="flex gap-4">
         <a href="stats.html" class="btn btn-ghost btn-sm">
           <i class="fas fa-chart-bar"></i> PRO panel
         </a>
@@ -467,6 +476,7 @@
           <i class="fas fa-sync-alt"></i> Yangilash
         </button>
       </div>
+    </div>
     <div class="card-body">
       <div class="stats-grid">
         <!-- Bugun -->
@@ -522,7 +532,7 @@
           Sinflar kesimida bugungi davomat:
         </h3>
         <div class="table-container">
-          <table>
+          <table class="classes-table">
             <thead>
             <tr>
               <th>Sinf</th>
@@ -853,7 +863,7 @@
     clearLoginError();
     const login = loginInput.value.trim();
     const pw = passwordInput.value;
-    if(!login || !pw){
+       if(!login || !pw){
       showLoginError("Login va parolni kiriting.");
       return;
     }
@@ -945,7 +955,7 @@
       setStackedBar(gTodayBarP,gTodayBarE,gTodayBarU,0,0,0,0);
     }
 
-    // Hafta (faqat sana bo‘yicha, keyin classId bo‘yicha qo‘shib yuboramiz)
+    // Hafta
     const wSnap = await davomatCol
       .where("date",">=",wr.start)
       .where("date","<=",wr.end)
@@ -1002,7 +1012,6 @@
       const snap = await davomatCol.doc(docId).get();
 
       let percentText = "—";
-      let detailText = "—";
       let p=0,e=0,u=0,t=0;
       let excusedNames=[], unexcusedNames=[];
       let hasAttendance = false;
@@ -1025,10 +1034,8 @@
 
         if(t>0){
           percentText = Math.round(p*100/t) + "%";
-          detailText = `${p}/${e}/${Math.max(u,0)}/${t}`;
         }else{
           percentText = "0%";
-          detailText = "0/0/0/0";
         }
       }
 
@@ -1061,7 +1068,6 @@
       if(hasAttendance && t>0){
         setStackedBar(segP,segE,segU,p,e,u,t);
       }else{
-        // davomat berilmagan: hammasi nol
         segP.style.width = "0%";
         segE.style.width = "0%";
         segU.style.width = "0%";
@@ -1070,9 +1076,25 @@
       tdBar.appendChild(pb);
       tr.appendChild(tdBar);
 
-      // sonlar
+      // sonlar (rangli raqamlar)
       const tdDetail = document.createElement("td");
-      tdDetail.textContent = hasAttendance ? detailText : "—";
+      if(hasAttendance && t>0){
+        tdDetail.innerHTML = `
+          <span class="cnt-present">${p}</span> /
+          <span class="cnt-excused">${e}</span> /
+          <span class="cnt-unexcused">${Math.max(u,0)}</span> /
+          <span class="cnt-total">${t}</span>
+        `;
+      }else if(hasAttendance){
+        tdDetail.innerHTML = `
+          <span class="cnt-present">0</span> /
+          <span class="cnt-excused">0</span> /
+          <span class="cnt-unexcused">0</span> /
+          <span class="cnt-total">0</span>
+        `;
+      }else{
+        tdDetail.innerHTML = `<span class="cnt-unexcused">davomat berilmagan</span>`;
+      }
       tr.appendChild(tdDetail);
 
       // kelmaganlar
@@ -1265,7 +1287,7 @@
       setStackedBar(tTodayBarP,tTodayBarE,tTodayBarU,0,0,0,0);
     }
 
-    // Hafta – composite index kerak bo‘lmasligi uchun
+    // Hafta – classId bo‘yicha client-side filter
     const wr = weekRangeFor(currentDateStr);
     const wSnap = await davomatCol
       .where("date",">=",wr.start)
@@ -1274,7 +1296,7 @@
     let wP=0,wE=0,wU=0,wT=0, wCount=0;
     wSnap.forEach(doc=>{
       const data = doc.data();
-      if(data.classId !== cls.id) return; // client-side filter
+      if(data.classId !== cls.id) return;
       const s = data.stats || {};
       const P = s.presentCount || 0;
       const E = s.excusedCount || 0;
