@@ -769,54 +769,78 @@
 
   // Bugungi vaqtga qarab qulflash qoidasi
   function getLockInfo(dateStr){
-    if(!dateStr) return null;
-    const todayStr = toDateStr(new Date());
-    const isSchool = isSchoolDay(dateStr);
-    const d = new Date(dateStr);
-    const dow = d.getDay();
-    const isWeekend = (dow === 0 || dow === 6);
+  if(!dateStr) return null;
 
-    // Ta'til yoki oddiy dam olish kuni
-    if(!isSchool){
-      if(calendarConfig.holidays.includes(dateStr)){
-        return {
-          type:"holiday",
-          message:"Bu sana ta'til kuni. Bu kunda davomat olinmaydi."
-        };
-      }
-      if(isWeekend){
-        return {
-          type:"weekend",
-          message:"Bu sana dam olish kuni (shanba/yakshanba). Davomat olinmaydi."
-        };
-      }
-    }
+  const today = new Date();
+  const todayStr = toDateStr(today);
+  const d = new Date(dateStr);
+  if(isNaN(d)) return {
+    type: "invalid",
+    message: "Sana noto‘g‘ri."
+  };
 
-    // Kelajak sana – har doim taqiqlanadi
-    if(dateStr > todayStr){
+  const isSchool = isSchoolDay(dateStr);
+  const dow = d.getDay(); // 0 yakshanba, 6 shanba
+  const isWeekend = (dow === 0 || dow === 6);
+
+  // Ta'til yoki oddiy dam olish kunlari – har doim yopiq
+  if(!isSchool){
+    if(calendarConfig.holidays.includes(dateStr)){
       return {
-        type:"future",
-        message:"Hali kelmagan (kelajakdagi) kunlar uchun oldindan davomat berib bo‘lmaydi."
+        type: "holiday",
+        message: "Bu sana ta'til kuni. Bu kunda davomat olinmaydi."
       };
     }
-
-    // Bugungi sana: 09:00 dan keyin ham qulflanadi
-    if(dateStr === todayStr){
-      const now = new Date();
-      const hour = now.getHours();
-      const minute = now.getMinutes();
-      const afterNine = (hour > 9) || (hour === 9 && minute >= 0);
-      if(afterNine){
-        return {
-          type:"today-locked",
-          message:"Bugungi kun uchun davomatni faqat soat 09:00 gacha kiritish mumkin edi. Hozir faqat ko‘rish rejimi mavjud."
-        };
-      }
+    if(isWeekend){
+      return {
+        type: "weekend",
+        message: "Bu sana dam olish kuni (shanba/yakshanba). Davomat olinmaydi."
+      };
     }
-
-    // O'tmish kunlari (hamda bugun 09:00 gacha) – ruxsat
-    return null;
   }
+
+  // O'TGAN kunlar: faqat ko‘rish, tahrirlash taqiqlanadi
+  if(dateStr < todayStr){
+    return {
+      type: "past",
+      message: "O‘tib ketgan kunlar uchun davomatni tahrirlash mumkin emas. " +
+               "Davomatni faqat o‘sha kuni 07:30–09:00 oralig‘ida kiritish mumkin."
+    };
+  }
+
+  // KELAJAK kunlar: umuman mumkin emas
+  if(dateStr > todayStr){
+    return {
+      type: "future",
+      message: "Hali kelmagan (kelajakdagi) kunlar uchun oldindan davomat berib bo‘lmaydi."
+    };
+  }
+
+  // Shu KUN (bugun) – vaqt oynasini tekshiramiz: 07:30–09:00
+  const hour = today.getHours();
+  const minute = today.getMinutes();
+
+  const beforeWindow = (hour < 7) || (hour === 7 && minute < 30);
+  const afterWindow  = (hour > 9) || (hour === 9 && minute >= 0);
+
+  if(beforeWindow){
+    return {
+      type: "too-early",
+      message: "Davomat oynasi 07:30 dan keyin ochiladi. Hozircha kiritib bo‘lmaydi."
+    };
+  }
+
+  if(afterWindow){
+    return {
+      type: "today-locked",
+      message: "Davomatni faqat 07:30 dan 09:00 gacha kiritish mumkin edi. " +
+               "Hozir faqat ko‘rish rejimi mavjud."
+    };
+  }
+
+  // Bugun va vaqt 07:30–09:00 oralig‘ida – hammasi OK, tahrirlash mumkin
+  return null;
+}
 
   // stacked bar (yashil/sariq/qizil)
   function setStackedBar(pEl,eEl,uEl,present,excused,unexcused,total){
