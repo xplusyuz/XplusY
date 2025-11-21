@@ -263,20 +263,18 @@
       color: var(--gray-500);
     }
 
-    /* Progress Bars */
+    /* Progress Bars (uch rangli) */
     .progress-bar {
       height: 8px;
       background: var(--gray-200);
       border-radius: var(--radius-full);
       overflow: hidden;
       margin: 0.75rem 0;
+      display: flex;
     }
 
     .progress-fill {
       height: 100%;
-      border-radius: var(--radius-full);
-      width: 0;
-      transition: width 0.3s ease;
     }
 
     .progress-present {
@@ -567,28 +565,37 @@
       </div>
       <div class="card-body">
         <div class="stats-grid">
+          <!-- Bugun -->
           <div class="stat-card success">
             <div class="stat-label">Bugun</div>
             <div class="stat-value" id="g-today-value">—</div>
             <div class="stat-detail" id="g-today-detail"></div>
             <div class="progress-bar">
-              <div class="progress-fill progress-present" id="g-today-bar"></div>
+              <div class="progress-fill progress-present" id="g-today-bar-present"></div>
+              <div class="progress-fill progress-excused" id="g-today-bar-excused"></div>
+              <div class="progress-fill progress-unexcused" id="g-today-bar-unexcused"></div>
             </div>
           </div>
+          <!-- Hafta -->
           <div class="stat-card warning">
             <div class="stat-label">Joriy hafta</div>
             <div class="stat-value" id="g-week-value">—</div>
             <div class="stat-detail" id="g-week-detail"></div>
             <div class="progress-bar">
-              <div class="progress-fill progress-present" id="g-week-bar"></div>
+              <div class="progress-fill progress-present" id="g-week-bar-present"></div>
+              <div class="progress-fill progress-excused" id="g-week-bar-excused"></div>
+              <div class="progress-fill progress-unexcused" id="g-week-bar-unexcused"></div>
             </div>
           </div>
+          <!-- Oy -->
           <div class="stat-card danger">
             <div class="stat-label">Joriy oy</div>
             <div class="stat-value" id="g-month-value">—</div>
             <div class="stat-detail" id="g-month-detail"></div>
             <div class="progress-bar">
-              <div class="progress-fill progress-present" id="g-month-bar"></div>
+              <div class="progress-fill progress-present" id="g-month-bar-present"></div>
+              <div class="progress-fill progress-excused" id="g-month-bar-excused"></div>
+              <div class="progress-fill progress-unexcused" id="g-month-bar-unexcused"></div>
             </div>
           </div>
         </div>
@@ -728,7 +735,9 @@
                 <div class="stat-value" id="t-today-value">—</div>
                 <div class="stat-detail" id="t-today-detail"></div>
                 <div class="progress-bar">
-                  <div class="progress-fill progress-present" id="t-today-bar"></div>
+                  <div class="progress-fill progress-present" id="t-today-bar-present"></div>
+                  <div class="progress-fill progress-excused" id="t-today-bar-excused"></div>
+                  <div class="progress-fill progress-unexcused" id="t-today-bar-unexcused"></div>
                 </div>
               </div>
               
@@ -738,7 +747,9 @@
                   <div class="stat-value" id="t-week-value">—</div>
                   <div class="stat-detail" id="t-week-detail"></div>
                   <div class="progress-bar">
-                    <div class="progress-fill progress-present" id="t-week-bar"></div>
+                    <div class="progress-fill progress-present" id="t-week-bar-present"></div>
+                    <div class="progress-fill progress-excused" id="t-week-bar-excused"></div>
+                    <div class="progress-fill progress-unexcused" id="t-week-bar-unexcused"></div>
                   </div>
                 </div>
                 <div class="stat-card danger">
@@ -746,7 +757,9 @@
                   <div class="stat-value" id="t-month-value">—</div>
                   <div class="stat-detail" id="t-month-detail"></div>
                   <div class="progress-bar">
-                    <div class="progress-fill progress-present" id="t-month-bar"></div>
+                    <div class="progress-fill progress-present" id="t-month-bar-present"></div>
+                    <div class="progress-fill progress-excused" id="t-month-bar-excused"></div>
+                    <div class="progress-fill progress-unexcused" id="t-month-bar-unexcused"></div>
                   </div>
                 </div>
               </div>
@@ -814,18 +827,44 @@
       el.style.width = (percent || 0) + '%';
     }
 
+    // Uch rangli progress barni sozlash
+    function setTripleBar(present, excused, unexcused, total, elP, elE, elU) {
+      if (!elP || !elE || !elU) return;
+      if (!total || total <= 0) {
+        elP.style.width = '0%';
+        elE.style.width = '0%';
+        elU.style.width = '0%';
+        return;
+      }
+      const pPercent = Math.round(present * 100 / total);
+      const ePercent = Math.round(excused * 100 / total);
+      const uPercent = Math.max(0, 100 - pPercent - ePercent); // qolganini qizilga
+      elP.style.width = pPercent + '%';
+      elE.style.width = ePercent + '%';
+      elU.style.width = uPercent + '%';
+    }
+
     // ===== DOM ELEMENTLAR =====
     const todayLabel = document.getElementById('today-label');
 
     const gTodayValue = document.getElementById('g-today-value');
     const gTodayDetail = document.getElementById('g-today-detail');
-    const gTodayBar = document.getElementById('g-today-bar');
+    const gTodayBarPresent = document.getElementById('g-today-bar-present');
+    const gTodayBarExcused = document.getElementById('g-today-bar-excused');
+    const gTodayBarUnexcused = document.getElementById('g-today-bar-unexcused');
+
     const gWeekValue = document.getElementById('g-week-value');
     const gWeekDetail = document.getElementById('g-week-detail');
-    const gWeekBar = document.getElementById('g-week-bar');
+    const gWeekBarPresent = document.getElementById('g-week-bar-present');
+    const gWeekBarExcused = document.getElementById('g-week-bar-excused');
+    const gWeekBarUnexcused = document.getElementById('g-week-bar-unexcused');
+
     const gMonthValue = document.getElementById('g-month-value');
     const gMonthDetail = document.getElementById('g-month-detail');
-    const gMonthBar = document.getElementById('g-month-bar');
+    const gMonthBarPresent = document.getElementById('g-month-bar-present');
+    const gMonthBarExcused = document.getElementById('g-month-bar-excused');
+    const gMonthBarUnexcused = document.getElementById('g-month-bar-unexcused');
+
     const gClassesTbody = document.getElementById('g-classes-tbody');
     const refreshGlobalBtn = document.getElementById('refresh-global-btn');
 
@@ -850,13 +889,21 @@
 
     const tTodayValue = document.getElementById('t-today-value');
     const tTodayDetail = document.getElementById('t-today-detail');
-    const tTodayBar = document.getElementById('t-today-bar');
+    const tTodayBarPresent = document.getElementById('t-today-bar-present');
+    const tTodayBarExcused = document.getElementById('t-today-bar-excused');
+    const tTodayBarUnexcused = document.getElementById('t-today-bar-unexcused');
+
     const tWeekValue = document.getElementById('t-week-value');
     const tWeekDetail = document.getElementById('t-week-detail');
-    const tWeekBar = document.getElementById('t-week-bar');
+    const tWeekBarPresent = document.getElementById('t-week-bar-present');
+    const tWeekBarExcused = document.getElementById('t-week-bar-excused');
+    const tWeekBarUnexcused = document.getElementById('t-week-bar-unexcused');
+
     const tMonthValue = document.getElementById('t-month-value');
     const tMonthDetail = document.getElementById('t-month-detail');
-    const tMonthBar = document.getElementById('t-month-bar');
+    const tMonthBarPresent = document.getElementById('t-month-bar-present');
+    const tMonthBarExcused = document.getElementById('t-month-bar-excused');
+    const tMonthBarUnexcused = document.getElementById('t-month-bar-unexcused');
 
     let classesJson = [];
     let currentTeacher = null;
@@ -979,22 +1026,20 @@
         const s = doc.data().stats || {};
         const present = s.presentCount || 0;
         const excused = s.excusedCount || 0;
-        // ✅ sababsiz formula
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        const total = s.total || (present + excused + Math.max(unexcused,0));
+        const unexcused = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - excused, 0));
+        const total = s.total || (present + excused + unexcused);
         tP += present; tE += excused; tU += Math.max(unexcused, 0); tT += total;
       });
       if (tT) {
         const percent = Math.round(tP * 100 / tT);
         gTodayValue.textContent = percent + "%";
-        gTodayDetail.textContent = `Bor: ${tP}, Sababli: ${tE}, Sababsiz: ${tU}, Jami: ${tT}`;
-        setProgressBar(gTodayBar, percent);
+        gTodayDetail.textContent =
+          `Bor: ${tP}, Sababli: ${tE}, Sababsiz: ${tU}, Jami: ${tT}`;
+        setTripleBar(tP, tE, tU, tT, gTodayBarPresent, gTodayBarExcused, gTodayBarUnexcused);
       } else {
         gTodayValue.textContent = '—';
         gTodayDetail.textContent = 'Bugun uchun davomat hali kiritilmagan.';
-        setProgressBar(gTodayBar, 0);
+        setTripleBar(0, 0, 0, 0, gTodayBarPresent, gTodayBarExcused, gTodayBarUnexcused);
       }
 
       // Hafta
@@ -1007,21 +1052,19 @@
         const s = doc.data().stats || {};
         const present = s.presentCount || 0;
         const excused = s.excusedCount || 0;
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        const total = s.total || (present + excused + Math.max(unexcused,0));
+        const unexcused = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - excused, 0));
+        const total = s.total || (present + excused + unexcused);
         wP += present; wE += excused; wU += Math.max(unexcused, 0); wT += total;
       });
       if (wT) {
         const percent = Math.round(wP * 100 / wT);
         gWeekValue.textContent = percent + "%";
         gWeekDetail.textContent = `Kundagi yozuvlar: ${wSnap.size}`;
-        setProgressBar(gWeekBar, percent);
+        setTripleBar(wP, wE, wU, wT, gWeekBarPresent, gWeekBarExcused, gWeekBarUnexcused);
       } else {
         gWeekValue.textContent = '—';
         gWeekDetail.textContent = 'Joriy haftada davomat yozilmagan.';
-        setProgressBar(gWeekBar, 0);
+        setTripleBar(0, 0, 0, 0, gWeekBarPresent, gWeekBarExcused, gWeekBarUnexcused);
       }
 
       // Oy
@@ -1034,21 +1077,19 @@
         const s = doc.data().stats || {};
         const present = s.presentCount || 0;
         const excused = s.excusedCount || 0;
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        const total = s.total || (present + excused + Math.max(unexcused,0));
+        const unexcused = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - excused, 0));
+        const total = s.total || (present + excused + unexcused);
         mP += present; mE += excused; mU += Math.max(unexcused, 0); mT += total;
       });
       if (mT) {
         const percent = Math.round(mP * 100 / mT);
         gMonthValue.textContent = percent + "%";
         gMonthDetail.textContent = `Kundagi yozuvlar: ${mSnap.size}`;
-        setProgressBar(gMonthBar, percent);
+        setTripleBar(mP, mE, mU, mT, gMonthBarPresent, gMonthBarExcused, gMonthBarUnexcused);
       } else {
         gMonthValue.textContent = '—';
         gMonthDetail.textContent = 'Joriy oyda davomat yozilmagan.';
-        setProgressBar(gMonthBar, 0);
+        setTripleBar(0, 0, 0, 0, gMonthBarPresent, gMonthBarExcused, gMonthBarUnexcused);
       }
 
       // Sinflar kesimida bugun
@@ -1067,10 +1108,7 @@
           const s = data.stats || {};
           p = s.presentCount || 0;
           e = s.excusedCount || 0;
-          const unexcused = (s.unexcusedCount != null)
-            ? s.unexcusedCount
-            : (s.absentCount || 0) - (s.excusedCount || 0);
-          u = Math.max(unexcused,0);
+          u = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - e, 0));
           t = s.total || (p + e + u);
 
           const studs = data.students || [];
@@ -1082,7 +1120,7 @@
 
           if (t > 0) {
             percentText = Math.round(p * 100 / t) + '%';
-            detail = `${p}/${e}/${u}/${t}`;
+            detail = `${p}/${e}/${Math.max(u,0)}/${t}`;
           } else {
             percentText = '0%';
             detail = `0/0/0/0`;
@@ -1114,7 +1152,11 @@
         tr.appendChild(tdDetail);
 
         const tdNames = document.createElement('td');
-        if (!excusedNames.length && !unexcusedNames.length) {
+        if (!snap.exists) {
+          // Davomat kiritilmagan sinf — qizil matn
+          tdNames.innerHTML =
+            '<span style="color:#ef4444;font-weight:600;">Davomat kiritilmagan</span>';
+        } else if (!excusedNames.length && !unexcusedNames.length) {
           tdNames.textContent = 'Hamma bor';
         } else {
           const parts = [];
@@ -1272,83 +1314,72 @@
         const s = tSnap.data().stats || {};
         p = s.presentCount || 0;
         e = s.excusedCount || 0;
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        u = Math.max(unexcused,0);
+        u = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - e, 0));
         t = s.total || (p + e + u);
       }
       if (t) {
         const percent = Math.round(p * 100 / t);
         tTodayValue.textContent = percent + "%";
-        tTodayDetail.textContent = `Bor: ${p}, Sababli: ${e}, Sababsiz: ${u}, Jami: ${t}`;
-        setProgressBar(tTodayBar, percent);
+        tTodayDetail.textContent = `Bor: ${p}, Sababli: ${e}, Sababsiz: ${Math.max(u,0)}, Jami: ${t}`;
+        setTripleBar(p, e, u, t, tTodayBarPresent, tTodayBarExcused, tTodayBarUnexcused);
       } else {
         tTodayValue.textContent = '—';
         tTodayDetail.textContent = 'Bugun uchun davomat kiritilmagan.';
-        setProgressBar(tTodayBar, 0);
+        setTripleBar(0, 0, 0, 0, tTodayBarPresent, tTodayBarExcused, tTodayBarUnexcused);
       }
 
-      // hafta – faqat date bo‘yicha query, classId ni JSda filter qilamiz (index talab qilmaydi)
+      // hafta
       const wr = weekRangeFor(currentDateStr);
       const wSnap = await davomatCol
+        .where('classId', '==', cls.id)
         .where('date', '>=', wr.start)
         .where('date', '<=', wr.end)
         .get();
-      let wP = 0, wE = 0, wU = 0, wT = 0, wDays = 0;
+      let wP = 0, wE = 0, wU = 0, wT = 0;
       wSnap.forEach(doc => {
-        const data = doc.data();
-        if (data.classId !== cls.id) return;
-        const s = data.stats || {};
+        const s = doc.data().stats || {};
         const P = s.presentCount || 0;
         const E = s.excusedCount || 0;
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        const U = Math.max(unexcused,0);
+        const U = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - E, 0));
         const T = s.total || (P + E + U);
-        wP += P; wE += E; wU += U; wT += T; wDays++;
+        wP += P; wE += E; wU += Math.max(U,0); wT += T;
       });
       if (wT) {
         const percent = Math.round(wP * 100 / wT);
         tWeekValue.textContent = percent + "%";
-        tWeekDetail.textContent = `Kunlar soni: ${wDays}`;
-        setProgressBar(tWeekBar, percent);
+        tWeekDetail.textContent = `Kunlar soni: ${wSnap.size}`;
+        setTripleBar(wP, wE, wU, wT, tWeekBarPresent, tWeekBarExcused, tWeekBarUnexcused);
       } else {
         tWeekValue.textContent = '—';
         tWeekDetail.textContent = 'Hafta bo‘yicha davomat yozilmagan.';
-        setProgressBar(tWeekBar, 0);
+        setTripleBar(0, 0, 0, 0, tWeekBarPresent, tWeekBarExcused, tWeekBarUnexcused);
       }
 
-      // oy – yana faqat date range, classId JSda filter
+      // oy
       const mr = monthRangeFor(currentDateStr);
       const mSnap = await davomatCol
+        .where('classId', '==', cls.id)
         .where('date', '>=', mr.start)
         .where('date', '<=', mr.end)
         .get();
-      let mP = 0, mE = 0, mU = 0, mT = 0, mDays = 0;
+      let mP = 0, mE = 0, mU = 0, mT = 0;
       mSnap.forEach(doc => {
-        const data = doc.data();
-        if (data.classId !== cls.id) return;
-        const s = data.stats || {};
+        const s = doc.data().stats || {};
         const P = s.presentCount || 0;
         const E = s.excusedCount || 0;
-        const unexcused = (s.unexcusedCount != null)
-          ? s.unexcusedCount
-          : (s.absentCount || 0) - (s.excusedCount || 0);
-        const U = Math.max(unexcused,0);
+        const U = (s.unexcusedCount != null ? s.unexcusedCount : Math.max((s.absentCount || 0) - E, 0));
         const T = s.total || (P + E + U);
-        mP += P; mE += E; mU += U; mT += T; mDays++;
+        mP += P; mE += E; mU += Math.max(U,0); mT += T;
       });
       if (mT) {
         const percent = Math.round(mP * 100 / mT);
         tMonthValue.textContent = percent + "%";
-        tMonthDetail.textContent = `Kunlar soni: ${mDays}`;
-        setProgressBar(tMonthBar, percent);
+        tMonthDetail.textContent = `Kunlar soni: ${mSnap.size}`;
+        setTripleBar(mP, mE, mU, mT, tMonthBarPresent, tMonthBarExcused, tMonthBarUnexcused);
       } else {
         tMonthValue.textContent = '—';
         tMonthDetail.textContent = 'Oy bo‘yicha davomat yozilmagan.';
-        setProgressBar(tMonthBar, 0);
+        setTripleBar(0, 0, 0, 0, tMonthBarPresent, tMonthBarExcused, tMonthBarUnexcused);
       }
     }
 

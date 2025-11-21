@@ -174,6 +174,13 @@
       font-size: 0.75rem;
     }
 
+    .btn[disabled] {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
+
     /* Cards */
     .card {
       background: var(--white);
@@ -456,46 +463,82 @@
     </section>
   </main>
 
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
   <script>
     "use strict";
 
-    // Demo ma'lumotlar (keyin Firebase bilan almashtirasiz)
-    let holidays = [
-      { start: "2023-12-25", end: "2024-01-05", title: "Qishki ta'til" },
-      { start: "2024-03-21", end: "2024-03-25", title: "Navro'z bayrami" }
-    ];
+    // ==== FIREBASE INIT ====
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    // Shu yerda ham, index.html da ham bir xil joydan o‘qiymiz:
+    // collection: davomat, document: calendar
+    const calendarDocRef = db.collection("davomat").doc("calendar");
 
-    let extraSchoolDays = [
-      "2023-11-25",
-      "2023-12-02"
-    ];
+    // ==== MA'LUMOTLAR (RAMDA) ====
+    let holidays = [];
+    let extraSchoolDays = [];
 
-    document.addEventListener("DOMContentLoaded", function () {
-      // Bugungi sana
-      const today = new Date();
-      let formattedDate = "";
+    document.addEventListener("DOMContentLoaded", () => {
+      (async function init() {
+        // Bugungi sana
+        const today = new Date();
+        let formattedDate = "";
+        try {
+          formattedDate = today.toLocaleDateString("uz-UZ", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+          });
+        } catch (e) {
+          formattedDate = today.toISOString().split("T")[0];
+        }
+        document.getElementById("today-label").textContent = formattedDate;
 
-      try {
-        formattedDate = today.toLocaleDateString("uz-UZ", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric"
-        });
-      } catch (e) {
-        // Brauzer uz-UZ ni qo'llamasa fallback
-        formattedDate = today.toISOString().split("T")[0];
-      }
+        // Firestore'dan mavjud sozlamalarni yuklash
+        await loadCalendarConfig();
 
-      document.getElementById("today-label").textContent = formattedDate;
+        // Boshlang'ich jadvalni chizish
+        renderHolidays();
+        renderExtra();
 
-      // Boshlang'ich jadvalni chizish
-      renderHolidays();
-      renderExtra();
-
-      // Event listenerlar
-      setupEventListeners();
+        // Event listenerlar
+        setupEventListeners();
+      })();
     });
+
+    async function loadCalendarConfig() {
+      try {
+        const snap = await calendarDocRef.get();
+        if (snap.exists) {
+          const data = snap.data() || {};
+          holidays = Array.isArray(data.holidays) ? data.holidays : [];
+          extraSchoolDays = Array.isArray(data.extraSchoolDays) ? data.extraSchoolDays : [];
+        } else {
+          // Agar hujjat bo'lmasa, bo'sh boshlaymiz (xohlasangiz shu yerga default qo'yishingiz mumkin)
+          holidays = [];
+          extraSchoolDays = [];
+        }
+      } catch (e) {
+        console.error("Calendar config o'qishda xato:", e);
+        showStatus("Firebase'dan ma'lumot o'qishda xatolik. Internet yoki ruxsatni tekshiring.", "error");
+        // Mahalliy (local) misol sifatida ishlashda hozircha bo'sh qoladi
+        holidays = holidays || [];
+        extraSchoolDays = extraSchoolDays || [];
+      }
+    }
 
     function setupEventListeners() {
       // Ta'til qo'shish
@@ -517,12 +560,11 @@
         holidays.push({ start: start, end: end, title: title });
         renderHolidays();
 
-        // formani tozalash
         document.getElementById("holiday-start").value = "";
         document.getElementById("holiday-end").value = "";
         document.getElementById("holiday-title").value = "";
 
-        showStatus("Ta'til muvaffaqiyatli qo'shildi", "success");
+        showStatus("Ta'til muvaffaqiyatli qo'shildi (saqlash tugmasini bosing)", "success");
       });
 
       // Qo'shimcha ish kuni qo'shish
@@ -536,30 +578,31 @@
 
         if (!extraSchoolDays.includes(date)) {
           extraSchoolDays.push(date);
+          // Sana bo‘yicha tartiblash (chiroyli ko‘rinishi uchun)
+          extraSchoolDays.sort();
           renderExtra();
           document.getElementById("extra-date").value = "";
-          showStatus("Qo'shimcha ish kuni muvaffaqiyatli qo'shildi", "success");
+          showStatus("Qo'shimcha ish kuni qo'shildi (saqlash tugmasini bosing)", "success");
         } else {
           showStatus("Bu sana allaqachon qo'shilgan", "error");
         }
       });
 
       // Saqlash tugmasi
-      document.getElementById("save-btn").addEventListener("click", function () {
-        // Bu yerda keyin Firebase-ga yozasiz
-        // console.log(JSON.stringify({ holidays, extraSchoolDays }, null, 2));
-        showStatus("Barcha o'zgarishlar muvaffaqiyatli saqlandi", "success");
-      });
+      document.getElementById("save-btn").addEventListener("click", saveCalendarConfig);
     }
 
     function renderHolidays() {
       const tbody = document.getElementById("holiday-tbody");
       tbody.innerHTML = "";
 
-      holidays.forEach(function (holiday, index) {
+      // Sana bo‘yicha tartiblash
+      const sorted = [...holidays].sort((a, b) => (a.start || "").localeCompare(b.start || ""));
+
+      sorted.forEach(function (holiday, index) {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${holiday.start} → ${holiday.end}</td>
+          <td>${holiday.start || "—"} → ${holiday.end || "—"}</td>
           <td>${holiday.title || "—"}</td>
           <td>
             <button class="btn btn-danger btn-sm" data-index="${index}">
@@ -573,9 +616,16 @@
         const btn = tr.querySelector("button");
         btn.addEventListener("click", function () {
           const idx = parseInt(this.getAttribute("data-index"), 10);
-          holidays.splice(idx, 1);
+          // sorted massiv bo'yicha index, lekin holidays bilan ham sinxron bo‘lishi uchun asl indexni topamiz
+          const realHoliday = sorted[idx];
+          const realIndex = holidays.findIndex(
+            h => h.start === realHoliday.start && h.end === realHoliday.end && h.title === realHoliday.title
+          );
+          if (realIndex >= 0) {
+            holidays.splice(realIndex, 1);
+          }
           renderHolidays();
-          showStatus("Ta'til muvaffaqiyatli o'chirildi", "success");
+          showStatus("Ta'til muvaffaqiyatli o'chirildi (saqlash tugmasini bosing)", "success");
         });
       });
     }
@@ -584,7 +634,9 @@
       const tbody = document.getElementById("extra-tbody");
       tbody.innerHTML = "";
 
-      extraSchoolDays.forEach(function (date, index) {
+      const sorted = [...extraSchoolDays].sort();
+
+      sorted.forEach(function (date, index) {
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${date}</td>
@@ -600,11 +652,39 @@
         const btn = tr.querySelector("button");
         btn.addEventListener("click", function () {
           const idx = parseInt(this.getAttribute("data-index"), 10);
-          extraSchoolDays.splice(idx, 1);
+          const realDate = sorted[idx];
+          const realIndex = extraSchoolDays.indexOf(realDate);
+          if (realIndex >= 0) {
+            extraSchoolDays.splice(realIndex, 1);
+          }
           renderExtra();
-          showStatus("Qo'shimcha ish kuni muvaffaqiyatli o'chirildi", "success");
+          showStatus("Qo'shimcha ish kuni muvaffaqiyatli o'chirildi (saqlash tugmasini bosing)", "success");
         });
       });
+    }
+
+    async function saveCalendarConfig() {
+      const btn = document.getElementById("save-btn");
+      btn.disabled = true;
+      const oldHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...';
+
+      try {
+        await calendarDocRef.set(
+          {
+            holidays: holidays,
+            extraSchoolDays: extraSchoolDays
+          },
+          { merge: true }
+        );
+        showStatus("Barcha o'zgarishlar Firebase'ga muvaffaqiyatli saqlandi", "success");
+      } catch (e) {
+        console.error("Saqlashda xatolik:", e);
+        showStatus("Saqlashda xatolik. Internet yoki Firestore ruxsatlarini tekshiring.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+      }
     }
 
     function showStatus(message, type) {
