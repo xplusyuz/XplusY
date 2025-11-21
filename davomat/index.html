@@ -666,7 +666,7 @@
   </section>
 </main>
 
-<!-- MODAL: kelmaganlar ro‘yxati -->
+<!-- MODAL: kelmaganlar ro'yxati -->
 <div id="absent-modal-backdrop" class="modal-backdrop">
   <div class="modal">
     <div class="modal-header">
@@ -676,7 +676,7 @@
       </button>
     </div>
     <div id="absent-modal-body" class="text-sm">
-      <!-- JS bilan to‘ldiriladi -->
+      <!-- JS bilan to'ldiriladi -->
     </div>
   </div>
 </div>
@@ -700,19 +700,56 @@
   const db = firebase.firestore();
   const davomatCol = db.collection("davomat");
 
-  // ============== UTIL ==============
+  // ============== CALENDAR CONFIG (weekend/holiday) ==============
+  let calendarConfig = {
+    extraSchoolDays: [], // bu sanalarda dars bor (hatto hafta oxiri bo'lsa ham)
+    holidays: []         // bu sanalarda ta'til (dars yo'q)
+  };
+
+  async function loadCalendarConfig(){
+    try{
+      const snap = await davomatCol.doc("calendar").get();
+      if(snap.exists){
+        const data = snap.data() || {};
+        calendarConfig.extraSchoolDays = Array.isArray(data.extraSchoolDays) ? data.extraSchoolDays : [];
+        calendarConfig.holidays       = Array.isArray(data.holidays)       ? data.holidays       : [];
+      }
+    }catch(e){
+      console.warn("Calendar config o'qishda xato:", e);
+      calendarConfig = {extraSchoolDays:[], holidays:[]};
+    }
+  }
+
+  function isSchoolDay(dateStr){
+    if(!dateStr) return false;
+    const d = new Date(dateStr);
+    if(isNaN(d)) return false;
+
+    // Agar extraSchoolDays ichida bo'lsa – doim o'qish kuni
+    if(calendarConfig.extraSchoolDays.includes(dateStr)) return true;
+    // Agar ta'til bo'lsa – o'qish yo'q
+    if(calendarConfig.holidays.includes(dateStr)) return false;
+
+    const dow = d.getDay(); // 0 yakshanba, 6 shanba
+    const isWeekend = (dow === 0 || dow === 6);
+    if(isWeekend) return false; // dam olish kuni
+    return true;
+  }
+
   function toDateStr(d){
     const y = d.getFullYear();
     const m = String(d.getMonth()+1).padStart(2,"0");
     const day = String(d.getDate()).padStart(2,"0");
     return `${y}-${m}-${day}`;
   }
+
   function formatDateLabel(dateStr){
     const d = new Date(dateStr);
     return d.toLocaleDateString("uz-UZ",{
       weekday:"long",year:"numeric",month:"long",day:"numeric"
     });
   }
+
   function weekRangeFor(dateStr){
     const d = new Date(dateStr);
     const day = d.getDay(); // 0-yakshanba
@@ -728,6 +765,57 @@
     const s = new Date(d.getFullYear(), d.getMonth(), 1);
     const e = new Date(d.getFullYear(), d.getMonth()+1, 0);
     return {start:toDateStr(s), end:toDateStr(e)};
+  }
+
+  // Bugungi vaqtga qarab qulflash qoidasi
+  function getLockInfo(dateStr){
+    if(!dateStr) return null;
+    const todayStr = toDateStr(new Date());
+    const isSchool = isSchoolDay(dateStr);
+    const d = new Date(dateStr);
+    const dow = d.getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+
+    // Ta'til yoki oddiy dam olish kuni
+    if(!isSchool){
+      if(calendarConfig.holidays.includes(dateStr)){
+        return {
+          type:"holiday",
+          message:"Bu sana ta'til kuni. Bu kunda davomat olinmaydi."
+        };
+      }
+      if(isWeekend){
+        return {
+          type:"weekend",
+          message:"Bu sana dam olish kuni (shanba/yakshanba). Davomat olinmaydi."
+        };
+      }
+    }
+
+    // Kelajak sana – har doim taqiqlanadi
+    if(dateStr > todayStr){
+      return {
+        type:"future",
+        message:"Hali kelmagan (kelajakdagi) kunlar uchun oldindan davomat berib bo‘lmaydi."
+      };
+    }
+
+    // Bugungi sana: 09:00 dan keyin ham qulflanadi
+    if(dateStr === todayStr){
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      const afterNine = (hour > 9) || (hour === 9 && minute >= 0);
+      if(afterNine){
+        return {
+          type:"today-locked",
+          message:"Bugungi kun uchun davomatni faqat soat 09:00 gacha kiritish mumkin edi. Hozir faqat ko‘rish rejimi mavjud."
+        };
+      }
+    }
+
+    // O'tmish kunlari (hamda bugun 09:00 gacha) – ruxsat
+    return null;
   }
 
   // stacked bar (yashil/sariq/qizil)
@@ -819,7 +907,7 @@
   let currentTeacher = null;
   let currentDateStr = null;
 
-  // ============== sinf.json o‘qish ==============
+  // ============== sinf.json o'qish ==============
   async function loadClassesJson(){
     try{
       const res = await fetch("sinf.json?v=" + Date.now());
@@ -854,7 +942,7 @@
     clearLoginError();
     const login = loginInput.value.trim();
     const pw = passwordInput.value;
-       if(!login || !pw){
+    if(!login || !pw){
       showLoginError("Login va parolni kiriting.");
       return;
     }
@@ -1123,6 +1211,24 @@
   async function renderDayState(){
     dayAlerts.innerHTML = "";
     if(!currentTeacher || !currentDateStr) return;
+
+    const lock = getLockInfo(currentDateStr);
+
+    if(lock){
+      const alert = document.createElement("div");
+      alert.className = (lock.type === "future" || lock.type === "today-locked")
+        ? "alert alert-warning"
+        : "alert alert-error";
+      alert.innerHTML =
+        '<div class="alert-icon"><i class="fas fa-info-circle"></i></div>' +
+        `<div>${lock.message}</div>`;
+      dayAlerts.appendChild(alert);
+
+      // Qulflangan kunda saqlash tugmasi o'chiriladi
+      saveBtn.disabled = true;
+      return;
+    }
+
     const cls = currentTeacher.classObj;
     const docId = `${currentDateStr}_${cls.id}`;
     const snap = await davomatCol.doc(docId).get();
@@ -1136,11 +1242,16 @@
         ? "Bu sana uchun davomat kiritilgan. Kerak bo‘lsa tahrirlashingiz mumkin."
         : "Bu sana uchun davomat hali kiritilmagan."}</div>`;
     dayAlerts.appendChild(alert);
+
+    // Ruxsat berilgan kunda saqlash tugmasi ishlaydi
+    saveBtn.disabled = false;
   }
 
-  // ============== TEACHER: O‘QUVCHILAR JADVALI ==============
+  // ============== TEACHER: O'QUVCHILAR JADVALI ==============
   async function renderStudents(){
     if(!currentTeacher || !currentDateStr) return;
+
+    const lock = getLockInfo(currentDateStr);
     const cls = currentTeacher.classObj;
     const students = cls.students || [];
 
@@ -1155,6 +1266,8 @@
     classInfoSub.textContent =
       (cls.name || cls.id) + " — o‘quvchilar soni: " + students.length;
 
+    // Agar kun dam olish / ta'til / kelajak yoki bugun 09:00 dan keyin bo'lsa –
+    // jadvalni faqat ko'rish uchun ko'rsatish (saqlash baribir ishlamaydi).
     const docId = `${currentDateStr}_${cls.id}`;
     const snap = await davomatCol.doc(docId).get();
     const existingMap = {};
@@ -1182,6 +1295,11 @@
       studentsTbody.appendChild(tr);
       const sel = tr.querySelector("select");
       sel.value = (status==="absent" ? "unexcused" : status);
+
+      // Agar qulflangan kun bo'lsa – select'larni ham bloklaymiz
+      if(lock){
+        sel.disabled = true;
+      }
     });
 
     studentsEmpty.classList.add("hidden");
@@ -1191,6 +1309,13 @@
   // ============== TEACHER: SAQLASH ==============
   async function saveAttendance(){
     if(!currentTeacher || !currentDateStr) return;
+
+    const lock = getLockInfo(currentDateStr);
+    if(lock){
+      alert(lock.message);
+      return;
+    }
+
     const cls = currentTeacher.classObj;
     const students = cls.students || [];
     if(!students.length){
@@ -1274,7 +1399,7 @@
       setStackedBar(tTodayBarP,tTodayBarE,tTodayBarU,p,e,u,t);
     }else{
       tTodayValue.textContent = "—";
-      tTodayDetail.textContent = "Bugun uchun davomat kiritilmagan.";
+      tTodayDetail.textContent = "Bu sana uchun davomat kiritilmagan.";
       setStackedBar(tTodayBarP,tTodayBarE,tTodayBarU,0,0,0,0);
     }
 
@@ -1372,6 +1497,7 @@
     todayLabel.textContent = "Bugun: " + formatDateLabel(todayStr);
 
     await loadClassesJson();
+    await loadCalendarConfig();
     await refreshGlobalStats();
     restoreTeacherSession();
     if(currentTeacher){
