@@ -463,18 +463,18 @@
         <h2 class="card-title">Statistika</h2>
       </div>
       <div class="flex gap-4">
-  <a href="stats.html" class="btn btn-ghost btn-sm">
-    <i class="fas fa-chart-bar"></i> 
-  </a>
+        <a href="stats.html" class="btn btn-ghost btn-sm">
+          <i class="fas fa-chart-bar"></i>
+        </a>
 
-  <a href="admin.html" class="btn btn-ghost btn-sm">
-    <i class="fas fa-user-shield"></i> 
-  </a>
+        <a href="admin.html" class="btn btn-ghost btn-sm">
+          <i class="fas fa-user-shield"></i>
+        </a>
 
-  <button id="refresh-global-btn" class="btn btn-ghost btn-sm">
-    <i class="fas fa-sync-alt"></i> 
-  </button>
-</div>
+        <button id="refresh-global-btn" class="btn btn-ghost btn-sm">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
     </div>
     <div class="card-body">
       <div class="stats-grid">
@@ -547,6 +547,53 @@
           </table>
         </div>
       </div>
+
+      <!-- YANGI: Sinf rahbarlar reytingi -->
+      <div class="mt-4">
+        <h3 class="text-sm font-semibold mb-4">
+          Sinf rahbarlar reytingi (so‘nggi 30 kun)
+        </h3>
+        <div class="table-container">
+          <table class="classes-table">
+            <thead>
+            <tr>
+              <th>#</th>
+              <th>Sinf rahbari</th>
+              <th>Sinf</th>
+              <th>XP</th>
+              <th>Kiritilgan / jami kun</th>
+            </tr>
+            </thead>
+            <tbody id="g-teachers-rating-tbody">
+            <!-- JS to‘ldiradi -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- YANGI: Davomati eng yaxshi sinflar -->
+      <div class="mt-4">
+        <h3 class="text-sm font-semibold mb-4">
+          Davomati eng yaxshi sinflar (so‘nggi 30 kun)
+        </h3>
+        <div class="table-container">
+          <table class="classes-table">
+            <thead>
+            <tr>
+              <th>#</th>
+              <th>Sinf</th>
+              <th>Davomat %</th>
+              <th>Kelmaganlar</th>
+              <th>O‘quvchi-kun</th>
+            </tr>
+            </thead>
+            <tbody id="g-best-classes-tbody">
+            <!-- JS to‘ldiradi -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -691,7 +738,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 
 <script>
-  // ============== FIREBASE INIT ==============
+  // ============== FIREBASE INIT ==============  
   const firebaseConfig = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
     authDomain: "xplusy-760fa.firebaseapp.com",
@@ -774,78 +821,78 @@
 
   // Bugungi vaqtga qarab qulflash qoidasi
   function getLockInfo(dateStr){
-  if(!dateStr) return null;
+    if(!dateStr) return null;
 
-  const today = new Date();
-  const todayStr = toDateStr(today);
-  const d = new Date(dateStr);
-  if(isNaN(d)) return {
-    type: "invalid",
-    message: "Sana noto‘g‘ri."
-  };
+    const today = new Date();
+    const todayStr = toDateStr(today);
+    const d = new Date(dateStr);
+    if(isNaN(d)) return {
+      type: "invalid",
+      message: "Sana noto‘g‘ri."
+    };
 
-  const isSchool = isSchoolDay(dateStr);
-  const dow = d.getDay(); // 0 yakshanba, 6 shanba
-  const isWeekend = (dow === 0 || dow === 6);
+    const isSchool = isSchoolDay(dateStr);
+    const dow = d.getDay(); // 0 yakshanba, 6 shanba
+    const isWeekend = (dow === 0 || dow === 6);
 
-  // Ta'til yoki oddiy dam olish kunlari – har doim yopiq
-  if(!isSchool){
-    if(calendarConfig.holidays.includes(dateStr)){
+    // Ta'til yoki oddiy dam olish kunlari – har doim yopiq
+    if(!isSchool){
+      if(calendarConfig.holidays.includes(dateStr)){
+        return {
+          type: "holiday",
+          message: "Bu sana ta'til kuni. Bu kunda davomat olinmaydi."
+        };
+      }
+      if(isWeekend){
+        return {
+          type: "weekend",
+          message: "Bu sana dam olish kuni (shanba/yakshanba). Davomat olinmaydi."
+        };
+      }
+    }
+
+    // O'TGAN kunlar: faqat ko‘rish, tahrirlash taqiqlanadi
+    if(dateStr < todayStr){
       return {
-        type: "holiday",
-        message: "Bu sana ta'til kuni. Bu kunda davomat olinmaydi."
+        type: "past",
+        message: "O‘tib ketgan kunlar uchun davomatni tahrirlash mumkin emas. " +
+                 "Davomatni faqat o‘sha kuni 07:30–09:00 oralig‘ida kiritish mumkin."
       };
     }
-    if(isWeekend){
+
+    // KELAJAK kunlar: umuman mumkin emas
+    if(dateStr > todayStr){
       return {
-        type: "weekend",
-        message: "Bu sana dam olish kuni (shanba/yakshanba). Davomat olinmaydi."
+        type: "future",
+        message: "Hali kelmagan (kelajakdagi) kunlar uchun oldindan davomat berib bo‘lmaydi."
       };
     }
+
+    // Shu KUN (bugun) – vaqt oynasini tekshiramiz: 07:30–09:00
+    const hour = today.getHours();
+    const minute = today.getMinutes();
+
+    const beforeWindow = (hour < 7) || (hour === 7 && minute < 30);
+    const afterWindow  = (hour > 9) || (hour === 9 && minute >= 0);
+
+    if(beforeWindow){
+      return {
+        type: "too-early",
+        message: "Davomat oynasi 07:30 dan keyin ochiladi. Hozircha kiritib bo‘lmaydi."
+      };
+    }
+
+    if(afterWindow){
+      return {
+        type: "today-locked",
+        message: "Davomatni faqat 07:30 dan 09:00 gacha kiritish mumkin edi. " +
+                 "Hozir faqat ko‘rish rejimi mavjud."
+      };
+    }
+
+    // Bugun va vaqt 07:30–09:00 oralig‘ida – hammasi OK, tahrirlash mumkin
+    return null;
   }
-
-  // O'TGAN kunlar: faqat ko‘rish, tahrirlash taqiqlanadi
-  if(dateStr < todayStr){
-    return {
-      type: "past",
-      message: "O‘tib ketgan kunlar uchun davomatni tahrirlash mumkin emas. " +
-               "Davomatni faqat o‘sha kuni 07:30–09:00 oralig‘ida kiritish mumkin."
-    };
-  }
-
-  // KELAJAK kunlar: umuman mumkin emas
-  if(dateStr > todayStr){
-    return {
-      type: "future",
-      message: "Hali kelmagan (kelajakdagi) kunlar uchun oldindan davomat berib bo‘lmaydi."
-    };
-  }
-
-  // Shu KUN (bugun) – vaqt oynasini tekshiramiz: 07:30–09:00
-  const hour = today.getHours();
-  const minute = today.getMinutes();
-
-  const beforeWindow = (hour < 7) || (hour === 7 && minute < 30);
-  const afterWindow  = (hour > 9) || (hour === 9 && minute >= 0);
-
-  if(beforeWindow){
-    return {
-      type: "too-early",
-      message: "Davomat oynasi 07:30 dan keyin ochiladi. Hozircha kiritib bo‘lmaydi."
-    };
-  }
-
-  if(afterWindow){
-    return {
-      type: "today-locked",
-      message: "Davomatni faqat 07:30 dan 09:00 gacha kiritish mumkin edi. " +
-               "Hozir faqat ko‘rish rejimi mavjud."
-    };
-  }
-
-  // Bugun va vaqt 07:30–09:00 oralig‘ida – hammasi OK, tahrirlash mumkin
-  return null;
-}
 
   // stacked bar (yashil/sariq/qizil)
   function setStackedBar(pEl,eEl,uEl,present,excused,unexcused,total){
@@ -862,6 +909,19 @@
     if(pEl) pEl.style.width = pW + "%";
     if(eEl) eEl.style.width = eW + "%";
     if(uEl) uEl.style.width = uW + "%";
+  }
+
+  // YANGI: XP hisoblash (7:30 = 90, 7:31 = 89, ..., 8:59 = 1)
+  function computeXPFromTimestamp(ts){
+    if(!ts || !ts.toDate) return 0;
+    const d = ts.toDate();
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const totalMin = h*60 + m;
+    const windowStart = 7*60 + 30; // 07:30
+    const diff = totalMin - windowStart;
+    if(diff < 0 || diff >= 90) return 0; // 90 daqiqa oynadan tashqarida
+    return 90 - diff;
   }
 
   // ============== DOM ==============
@@ -887,6 +947,10 @@
 
   const gClassesTbody = document.getElementById("g-classes-tbody");
   const refreshGlobalBtn = document.getElementById("refresh-global-btn");
+
+  // YANGI reyting DOM
+  const gTeachersRatingTbody = document.getElementById("g-teachers-rating-tbody");
+  const gBestClassesTbody = document.getElementById("g-best-classes-tbody");
 
   const openLoginBtn = document.getElementById("open-login-btn");
   const toggleLoginCardBtn = document.getElementById("toggle-login-card");
@@ -1036,7 +1100,8 @@
 
   // ============== GLOBAL STATS ==============
   async function refreshGlobalStats(){
-    const today = toDateStr(new Date());
+    const todayDate = new Date();
+    const today = toDateStr(todayDate);
     const wr = weekRangeFor(today);
     const mr = monthRangeFor(today);
 
@@ -1234,6 +1299,201 @@
 
       gClassesTbody.appendChild(tr);
     }
+
+    // ================= REYTINGLAR: so‘nggi 30 kun =================
+    if(!classesJson.length){
+      if(gTeachersRatingTbody) gTeachersRatingTbody.innerHTML = "";
+      if(gBestClassesTbody) gBestClassesTbody.innerHTML = "";
+      return;
+    }
+
+    // so‘nggi 30 kun (bugun + 29 kun orqaga)
+    const startDate = new Date(todayDate);
+    startDate.setDate(startDate.getDate() - 29);
+    const startStr = toDateStr(startDate);
+
+    const rangeSnap = await davomatCol
+      .where("date", ">=", startStr)
+      .where("date", "<=", today)
+      .get();
+
+    const teacherMap = {};
+    const teacherDocDates = {};
+    const classMap = {};
+    const activeDatesSet = new Set();
+
+    // teacher + class bazasi
+    classesJson.forEach(cls=>{
+      if(cls.teacherLogin){
+        teacherMap[cls.teacherLogin] = {
+          teacherLogin: cls.teacherLogin,
+          teacherName: cls.teacherName || cls.teacherLogin,
+          classId: cls.id,
+          className: cls.name || cls.id,
+          xp: 0,
+          daysWith: 0,
+          daysMissed: 0
+        };
+        teacherDocDates[cls.teacherLogin] = new Set();
+      }
+      classMap[cls.id] = {
+        classId: cls.id,
+        className: cls.name || cls.id,
+        present: 0,
+        excused: 0,
+        unexcused: 0,
+        total: 0,
+        absent: 0,
+        attendancePercent: 0
+      };
+    });
+
+    rangeSnap.forEach(doc=>{
+      const data = doc.data();
+      const dateStr = data.date;
+      if(!dateStr) return;
+      if(!isSchoolDay(dateStr)) return;
+
+      activeDatesSet.add(dateStr);
+
+      const clsId = data.classId;
+      const stats = data.stats || {};
+      const P = stats.presentCount || 0;
+      const E = stats.excusedCount || 0;
+      const Uraw = (stats.unexcusedCount!=null ? stats.unexcusedCount : (stats.absentCount||0)) - E;
+      const U = Math.max(Uraw,0);
+      const T = stats.total || (P+E+U);
+
+      // sinf bo‘yicha yig‘ish
+      const cm = classMap[clsId];
+      if(cm){
+        cm.present += P;
+        cm.excused += E;
+        cm.unexcused += U;
+        cm.total += T;
+      }
+
+      // sinf rahbari XP (tezligi)
+      const tLogin = data.teacherLogin;
+      const tm = teacherMap[tLogin];
+      if(tm){
+        const xp = computeXPFromTimestamp(data.updatedAt);
+        tm.xp += xp;
+        tm.daysWith += 1;
+        teacherDocDates[tLogin].add(dateStr);
+      }
+    });
+
+    const activeDates = Array.from(activeDatesSet);
+
+    // to'ldirilmagan aktiv kunlar uchun -90 XP
+    Object.keys(teacherMap).forEach(login=>{
+      const tm = teacherMap[login];
+      const set = teacherDocDates[login] || new Set();
+      activeDates.forEach(ds=>{
+        if(!set.has(ds)){
+          tm.xp -= 90;
+          tm.daysMissed += 1;
+        }
+      });
+    });
+
+    // Sinf rahbarlar reytingi jadvali
+    if(gTeachersRatingTbody){
+      gTeachersRatingTbody.innerHTML = "";
+      const teacherList = Object.values(teacherMap)
+        .filter(t => t.daysWith>0 || t.daysMissed>0)
+        .sort((a,b)=>{
+          if(b.xp !== a.xp) return b.xp - a.xp;
+          return a.teacherName.localeCompare(b.teacherName);
+        });
+
+      if(teacherList.length){
+        teacherList.slice(0,10).forEach((t,idx)=>{
+          const tr = document.createElement("tr");
+
+          const tdRank = document.createElement("td");
+          tdRank.textContent = (idx+1).toString();
+          tr.appendChild(tdRank);
+
+          const tdName = document.createElement("td");
+          tdName.textContent = t.teacherName;
+          tr.appendChild(tdName);
+
+          const tdClass = document.createElement("td");
+          tdClass.textContent = t.className;
+          tr.appendChild(tdClass);
+
+          const tdXP = document.createElement("td");
+          tdXP.textContent = t.xp.toString();
+          tr.appendChild(tdXP);
+
+          const tdDays = document.createElement("td");
+          tdDays.textContent = `${t.daysWith} / ${t.daysWith + t.daysMissed}`;
+          tr.appendChild(tdDays);
+
+          gTeachersRatingTbody.appendChild(tr);
+        });
+      }else{
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.textContent = "So‘nggi 30 kun ichida reyting uchun ma'lumot topilmadi.";
+        tr.appendChild(td);
+        gTeachersRatingTbody.appendChild(tr);
+      }
+    }
+
+    // Sinflar davomati reytingi (eng kam kelmaganlar)
+    if(gBestClassesTbody){
+      gBestClassesTbody.innerHTML = "";
+      const classList = Object.values(classMap).filter(c => c.total > 0);
+      classList.forEach(c=>{
+        const absent = c.excused + c.unexcused;
+        c.absent = absent;
+        c.attendancePercent = c.total ? Math.round((c.total - absent)*100 / c.total) : 0;
+      });
+
+      classList.sort((a,b)=>{
+        if(a.absent !== b.absent) return a.absent - b.absent; // eng kam kelmagan 1-orin
+        return b.attendancePercent - a.attendancePercent;
+      });
+
+      if(classList.length){
+        classList.slice(0,10).forEach((c,idx)=>{
+          const tr = document.createElement("tr");
+
+          const tdRank = document.createElement("td");
+          tdRank.textContent = (idx+1).toString();
+          tr.appendChild(tdRank);
+
+          const tdClass = document.createElement("td");
+          tdClass.textContent = c.className;
+          tr.appendChild(tdClass);
+
+          const tdPerc = document.createElement("td");
+          tdPerc.textContent = c.attendancePercent + "%";
+          tr.appendChild(tdPerc);
+
+          const tdAbsent = document.createElement("td");
+          tdAbsent.textContent = c.absent.toString();
+          tr.appendChild(tdAbsent);
+
+          const tdTotal = document.createElement("td");
+          tdTotal.textContent = c.total.toString();
+          tr.appendChild(tdTotal);
+
+          gBestClassesTbody.appendChild(tr);
+        });
+      }else{
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 5;
+        td.textContent = "So‘nggi 30 kun uchun davomat ma'lumotlari topilmadi.";
+        tr.appendChild(td);
+        gBestClassesTbody.appendChild(tr);
+      }
+    }
   }
 
   // ============== TEACHER: KUN HOLATI ==============
@@ -1244,14 +1504,14 @@
     const lock = getLockInfo(currentDateStr);
 
     if(lock){
-      const alert = document.createElement("div");
-      alert.className = (lock.type === "future" || lock.type === "today-locked")
+      const alertEl = document.createElement("div");
+      alertEl.className = (lock.type === "future" || lock.type === "today-locked")
         ? "alert alert-warning"
         : "alert alert-error";
-      alert.innerHTML =
+      alertEl.innerHTML =
         '<div class="alert-icon"><i class="fas fa-info-circle"></i></div>' +
         `<div>${lock.message}</div>`;
-      dayAlerts.appendChild(alert);
+      dayAlerts.appendChild(alertEl);
 
       // Qulflangan kunda saqlash tugmasi o'chiriladi
       saveBtn.disabled = true;
@@ -1263,14 +1523,14 @@
     const snap = await davomatCol.doc(docId).get();
     const hasAttendance = snap.exists;
 
-    const alert = document.createElement("div");
-    alert.className = hasAttendance ? "alert alert-success" : "alert alert-error";
-    alert.innerHTML =
+    const alertEl = document.createElement("div");
+    alertEl.className = hasAttendance ? "alert alert-success" : "alert alert-error";
+    alertEl.innerHTML =
       `<div class="alert-icon">${hasAttendance ? "✅" : "⚠️"}</div>`+
       `<div>${hasAttendance
         ? "Bu sana uchun davomat kiritilgan. Kerak bo‘lsa tahrirlashingiz mumkin."
         : "Bu sana uchun davomat hali kiritilmagan."}</div>`;
-    dayAlerts.appendChild(alert);
+    dayAlerts.appendChild(alertEl);
 
     // Ruxsat berilgan kunda saqlash tugmasi ishlaydi
     saveBtn.disabled = false;
@@ -1295,8 +1555,6 @@
     classInfoSub.textContent =
       (cls.name || cls.id) + " — o‘quvchilar soni: " + students.length;
 
-    // Agar kun dam olish / ta'til / kelajak yoki bugun 09:00 dan keyin bo'lsa –
-    // jadvalni faqat ko'rish uchun ko'rsatish (saqlash baribir ishlamaydi).
     const docId = `${currentDateStr}_${cls.id}`;
     const snap = await davomatCol.doc(docId).get();
     const existingMap = {};
