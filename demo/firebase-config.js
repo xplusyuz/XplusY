@@ -7,3 +7,9 @@ const firebaseConfig = {
   appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
   measurementId: "G-459PLJ7P7L"
 };
+// 2) Firebase-ni ishga tushiramiz (faqat BIR MARTA)
+firebase.initializeApp(firebaseConfig);
+
+// 3) Boshqa skriptlar ishlatishi uchun GLOBAL qilib beramiz
+window.auth = firebase.auth();
+window.db   = firebase.firestore();
