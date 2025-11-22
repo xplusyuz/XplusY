@@ -1246,6 +1246,27 @@
             <span class="chip" id="pv-points">0 ball</span>
           </div>
         </div>
+		<div class="profile-avatar-row">
+  <div class="profile-avatar-wrap">
+    <img id="pf-avatar-preview" src="img/avatar-default.png" alt="Avatar">
+    <button type="button" id="pf-avatar-btn" class="profile-avatar-btn">
+      <i class="fa-solid fa-camera"></i>
+      Rasm yuklash
+    </button>
+    <input type="file" id="pf-avatar-file" accept="image/*" hidden>
+  </div>
+
+  <div class="profile-field profile-role-field">
+    <label>Rol</label>
+    <select id="pf-role">
+      <option value="">Tanlang</option>
+      <option value="oqituvchi">O‘qituvchi</option>
+      <option value="oquvchi">O‘quvchi</option>
+      <option value="talaba">Talaba</option>
+      <option value="abiturient">Abituriyent</option>
+    </select>
+  </div>
+</div>
         <div class="profile-summary-grid">
           <div class="summary-row">
             <span>Viloyat:</span>
@@ -1548,65 +1569,197 @@
     border:1px solid #d4d4d8;
     color:#4b5563;
   }
+  .profile-avatar-row{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-bottom:8px;
+  flex-wrap:wrap;
+}
+
+.profile-avatar-wrap{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+}
+
+#pf-avatar-preview{
+  width:72px;
+  height:72px;
+  border-radius:50%;
+  object-fit:cover;
+  border:2px solid #bfdbfe;
+  box-shadow:0 6px 14px rgba(15,23,42,.25);
+  background:#e5e7eb;
+}
+
+.profile-avatar-btn{
+  border:none;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:11px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background:#eff6ff;
+  color:#1d4ed8;
+  border:1px solid #bfdbfe;
+}
+
+.profile-avatar-btn i{
+  font-size:11px;
+}
+
+.profile-role-field select{
+  width:100%;
+}
 </style>
 <script>
-// === PROFIL MODALI — faqat Firestore "foydalanuvchilar" kolleksiyasida ishlaydi === //
+// === PROFIL MODALI — foydalanuvchilar kolleksiyasi, avatar + rol ===
 (function(){
-  let regionsData  = null;
-  let currentData  = {};
-  let isEditing    = false;
-  let isMandatory  = false;
-
-  if (!window.firebase || !window.firebase.firestore || !window.simpleAuth){
-    console.error("Firestore yoki simpleAuth topilmadi!");
+  if (!window.firebase || !firebase.firestore || !window.simpleAuth){
+    console.error("Firestore yoki simpleAuth topilmadi");
     return;
   }
-  const db = firebase.firestore();
 
-  /** --- Region yuklash --- **/
+  const db = firebase.firestore();
+  let regionsData   = null;
+  let currentData   = {};
+  let isMandatory   = false;
+  let selectedAvatarFile = null;
+
+  // ---------- region.json yuklash ----------
   async function loadRegions(){
     if (regionsData) return regionsData;
-    try {
+    try{
       const res = await fetch("region.json");
+      if (!res.ok) throw new Error("HTTP " + res.status);
       regionsData = await res.json();
-    } catch(e){
+    }catch(e){
+      console.error("region.json xato:", e);
       regionsData = { regions: [] };
     }
     return regionsData;
   }
 
   function fillRegionSelect(){
-    const el = document.getElementById("pf-region");
-    if (!el || !regionsData) return;
-    el.innerHTML = `<option value="">Tanlang</option>`;
+    const sel = document.getElementById("pf-region");
+    if (!sel || !regionsData) return;
+    sel.innerHTML = '<option value="">Tanlang</option>';
     regionsData.regions.forEach(r=>{
       const opt = document.createElement("option");
-      opt.value = r.name; opt.textContent = r.name;
-      el.appendChild(opt);
+      opt.value = r.name;
+      opt.textContent = r.name;
+      sel.appendChild(opt);
     });
   }
 
-  function fillDistrictSelect(region){
-    const el = document.getElementById("pf-district");
-    if (!el) return;
-    el.disabled = true;
-    el.innerHTML = `<option>Avval viloyatni tanlang</option>`;
-    const reg = regionsData.regions.find(r=>r.name === region);
-    if (!reg) return;
-    el.disabled = false;
-    el.innerHTML = `<option value="">Tanlang</option>`;
-    reg.districts.forEach(d=>{
+  function fillDistrictSelect(regionName){
+    const sel = document.getElementById("pf-district");
+    if (!sel) return;
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
+    if (!regionsData || !regionName) return;
+
+    const region = regionsData.regions.find(r=>r.name===regionName);
+    if (!region) return;
+
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">Tuman/shaharni tanlang</option>';
+    (region.districts || []).forEach(d=>{
       const opt = document.createElement("option");
       opt.value = d.name;
       opt.textContent = d.name;
-      el.appendChild(opt);
+      sel.appendChild(opt);
     });
   }
 
-  /** --- Profil modalini ochish --- **/
+  function calcAge(birth){
+    if (!birth) return null;
+    const d = new Date(birth);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    let age = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+    return age >= 0 ? age : null;
+  }
+
+  function calcRank(points){
+    const p = Number(points) || 0;
+    if (p >= 1000) return "Legend";
+    if (p >= 500)  return "Ustoz";
+    if (p >= 200)  return "Faol talaba";
+    if (p >= 50)   return "Faol foydalanuvchi";
+    if (p > 0)     return "Yangi ishtirokchi";
+    return "Yangi foydalanuvchi";
+  }
+
+  // ---------- View rejimni chizish ----------
+  function renderView(data){
+    const fullName = data.fullName || "Foydalanuvchi";
+    const points   = Number(data.points || 0);
+    const age      = calcAge(data.birthDate);
+    const rank     = calcRank(points);
+    const role     = data.role || "—";
+
+    document.getElementById("pv-fullname")  && (document.getElementById("pv-fullname").textContent  = fullName);
+    document.getElementById("pv-id")        && (document.getElementById("pv-id").textContent        = "ID: " + (data.loginId || "—"));
+    document.getElementById("pv-points")    && (document.getElementById("pv-points").textContent    = points + " ball");
+    document.getElementById("pv-age")       && (document.getElementById("pv-age").textContent       = age != null ? ("Yoshi: " + age) : "Yoshi: —");
+    document.getElementById("pv-region")    && (document.getElementById("pv-region").textContent    = data.region   || "—");
+    document.getElementById("pv-district")  && (document.getElementById("pv-district").textContent  = data.district || "—");
+    document.getElementById("pv-birthdate") && (document.getElementById("pv-birthdate").textContent = data.birthDate || "—");
+    document.getElementById("pv-rank")      && (document.getElementById("pv-rank").textContent      = rank);
+    document.getElementById("pv-role")      && (document.getElementById("pv-role").textContent      = "Rol: " + role);
+
+    // avatar preview ham
+    const avatarImg = document.getElementById("pf-avatar-preview");
+    if (avatarImg){
+      if (data.avatarUrl){
+        avatarImg.src = data.avatarUrl;
+      }else{
+        avatarImg.src = "img/avatar-default.png";
+      }
+    }
+
+    const pfPoints = document.getElementById("pf-points");
+    const pfRank   = document.getElementById("pf-rank-badge");
+    if (pfPoints) pfPoints.textContent = points;
+    if (pfRank)   pfRank.textContent   = rank;
+  }
+
+  function setEditMode(on){
+    const viewBlock = document.getElementById("profile-view");
+    const form      = document.getElementById("profile-form");
+    const btnEdit   = document.getElementById("profile-edit-btn");
+    const btnSave   = document.getElementById("profile-save-btn");
+    const btnCancel = document.getElementById("profile-cancel-btn");
+    const btnCloseX = document.getElementById("profile-close-btn");
+
+    if (viewBlock) viewBlock.style.display = on ? "none" : "block";
+    if (form)      form.style.display      = on ? "block" : "none";
+
+    if (btnEdit)   btnEdit.style.display   = on ? "none" : "inline-flex";
+    if (btnSave)   btnSave.style.display   = on ? "inline-flex" : "none";
+    if (btnCancel) btnCancel.style.display = (on && !isMandatory) ? "inline-flex" : "none";
+    if (btnCloseX) btnCloseX.style.display = (on || isMandatory) ? "none" : "inline-flex";
+  }
+
+  function closeProfileModal(){
+    if (isMandatory) return;
+    const ov = document.getElementById("profile-overlay");
+    if (!ov) return;
+    ov.classList.remove("open");
+    document.body.classList.remove("no-scroll");
+  }
+
+  // ---------- Profilni ochish ----------
   async function openProfileModal(mandatory){
-    const sess = simpleAuth.getSession();             // localStorage → foydalanuvchi ID
-    if (!sess) return alert("Avval tizimga kiring");
+    const sess = simpleAuth.getSession();
+    if (!sess) return alert("Avval tizimga kiring.");
 
     isMandatory = !!mandatory;
 
@@ -1616,100 +1769,146 @@
     const snap = await db.collection("foydalanuvchilar").doc(sess.docId).get();
     currentData = snap.exists ? snap.data() : {};
 
-    // Majburiy 4 maydonni formga yozamiz
-    document.getElementById("pf-fullname").value   = currentData.fullName   || "";
-    document.getElementById("pf-birthdate").value  = currentData.birthDate  || "";
-    document.getElementById("pf-region").value     = currentData.region     || "";
+    // formga yuklash
+    document.getElementById("pf-fullname").value  = currentData.fullName  || "";
+    document.getElementById("pf-birthdate").value = currentData.birthDate || "";
+    document.getElementById("pf-region").value    = currentData.region    || "";
+    document.getElementById("pf-role").value      = currentData.role      || "";
 
     if (currentData.region){
       fillDistrictSelect(currentData.region);
       document.getElementById("pf-district").value = currentData.district || "";
+    }else{
+      const dSel = document.getElementById("pf-district");
+      if (dSel){
+        dSel.disabled = true;
+        dSel.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
+      }
     }
 
-    renderView(currentData);
-    setEditMode(mandatory ? true : false);
+    // avatar preview
+    const avatarImg = document.getElementById("pf-avatar-preview");
+    if (avatarImg){
+      avatarImg.src = currentData.avatarUrl || "img/avatar-default.png";
+    }
 
-    document.getElementById("profile-overlay").classList.add("open");
+    renderView({...currentData, loginId: sess.loginId});
+
+    setEditMode(isMandatory ? true : false);
+
+    const ov = document.getElementById("profile-overlay");
+    ov.classList.add("open");
     document.body.classList.add("no-scroll");
   }
 
-  /** --- Profilni ko‘rsatish (view rejim) --- **/
-  function renderView(data){
-    document.getElementById("pv-fullname").textContent = data.fullName || "Foydalanuvchi";
-    document.getElementById("pv-id").textContent       = "ID: " + (data.loginId || "—");
-    document.getElementById("pv-birthdate").textContent= data.birthDate || "—";
-    document.getElementById("pv-region").textContent   = data.region || "—";
-    document.getElementById("pv-district").textContent = data.district || "—";
+  // ---------- avatar faylni eslab qolish ----------
+  function setupAvatarHandlers(){
+    const btn  = document.getElementById("pf-avatar-btn");
+    const file = document.getElementById("pf-avatar-file");
+    const img  = document.getElementById("pf-avatar-preview");
+    if (!btn || !file || !img) return;
+
+    btn.addEventListener("click", ()=> file.click());
+    file.addEventListener("change", ()=>{
+      const f = file.files[0];
+      if (!f) return;
+      selectedAvatarFile = f;
+      const reader = new FileReader();
+      reader.onload = e => {
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(f);
+    });
   }
 
-  /** --- Edit rejimni almashtirish --- **/
-  function setEditMode(on){
-    isEditing = on;
-    document.getElementById("profile-view").style.display = on ? "none" : "block";
-    document.getElementById("profile-form").style.display = on ? "block" : "none";
-
-    document.getElementById("profile-save-btn").style.display   = on ? "inline-flex" : "none";
-    document.getElementById("profile-cancel-btn").style.display = (on && !isMandatory) ? "inline-flex" : "none";
-    document.getElementById("profile-edit-btn").style.display   = on ? "none" : "inline-flex";
-    document.getElementById("profile-close-btn").style.display  = (on || isMandatory) ? "none" : "inline-flex";
-  }
-
-  /** --- Yopish --- **/
-  function closeProfileModal(){
-    if (isMandatory) return; // majburiy bo'lsa yopib bo‘lmaydi!
-    document.getElementById("profile-overlay").classList.remove("open");
-    document.body.classList.remove("no-scroll");
-  }
-
-  /** --- Saqlash --- **/
+  // ---------- saqlash ----------
   async function saveProfile(e){
     e.preventDefault();
 
     const sess = simpleAuth.getSession();
-    if (!sess) return alert("Session topilmayapti!");
+    if (!sess) return alert("Session topilmadi, qayta kiring.");
+
+    const fullName  = document.getElementById("pf-fullname").value.trim();
+    const birthDate = document.getElementById("pf-birthdate").value;
+    const region    = document.getElementById("pf-region").value;
+    const district  = document.getElementById("pf-district").value;
+    const role      = document.getElementById("pf-role").value;
+
+    if (!fullName || !birthDate || !region || !district){
+      return alert("Ism familiya, tug‘ilgan sana, viloyat va tuman/shahar majburiy.");
+    }
 
     const payload = {
-      fullName:   document.getElementById("pf-fullname").value.trim(),
-      birthDate:  document.getElementById("pf-birthdate").value,
-      region:     document.getElementById("pf-region").value,
-      district:   document.getElementById("pf-district").value,
-      updatedAt:  firebase.firestore.FieldValue.serverTimestamp()
+      fullName,
+      birthDate,
+      region,
+      district,
+      role,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    if (!payload.fullName || !payload.birthDate || !payload.region || !payload.district){
-      return alert("Majburiy 4 maydonni to‘ldiring!");
+    // avatarni base64 sifatida saqlashni xohlamasangiz, bu qismini
+    // keyinchalik Storage bilan almashtiramiz.
+    if (selectedAvatarFile){
+      const reader = new FileReader();
+      const dataUrl = await new Promise((resolve,reject)=>{
+        reader.onload = e=>resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedAvatarFile);
+      });
+      payload.avatarUrl = dataUrl;
+      selectedAvatarFile = null;
     }
 
     await db.collection("foydalanuvchilar").doc(sess.docId).set(payload,{ merge:true });
 
-    renderView(payload);
-    currentData = payload;
-    if (isMandatory) closeProfileModal();
+    const merged = {...currentData, ...payload, loginId: sess.loginId};
+    currentData  = merged;
+    renderView(merged);
+
+    if (isMandatory){
+      isMandatory = false;
+      closeProfileModal();
+    }
     setEditMode(false);
-    alert("Profil saqlandi ✔");
+    alert("Profil saqlandi ✅");
   }
 
-  /** --- eventlar --- **/
-  document.addEventListener("DOMContentLoaded", ()=>{
+  // ---------- init ----------
+  document.addEventListener("DOMContentLoaded", async ()=>{
+    // tugmalar
     document.getElementById("btn-profile")?.addEventListener("click", ()=>openProfileModal(false));
-    document.getElementById("profile-edit-btn")?.addEventListener("click", ()=>setEditMode(true));
     document.getElementById("profile-close-btn")?.addEventListener("click", closeProfileModal);
+    document.getElementById("profile-edit-btn")?.addEventListener("click", ()=>setEditMode(true));
     document.getElementById("profile-cancel-btn")?.addEventListener("click", closeProfileModal);
     document.getElementById("profile-form")?.addEventListener("submit", saveProfile);
+    document.getElementById("profile-overlay")?.addEventListener("click", e=>{
+      if (e.target.id === "profile-overlay") closeProfileModal();
+    });
 
     document.getElementById("pf-region")?.addEventListener("change", e=>{
       fillDistrictSelect(e.target.value);
+      document.getElementById("pf-district").value = "";
     });
 
-    /** --- Birinchi kirgan user majburiy to‘ldiradi --- **/
-    simpleAuth.fetchCurrentUserDoc().then(snap=>{
-      if (!snap) return showAuthOverlay();
+    setupAvatarHandlers();
+
+    // birinchi marta login bo‘lgan foydalanuvchi → majburiy profil
+    const snap = await simpleAuth.fetchCurrentUserDoc();
+    if (snap){
       const data = snap.data();
-      if (!data.fullName || !data.birthDate || !data.region || !data.district){
-        openProfileModal(true); // majburiy
+      const complete = !!(data.fullName && data.birthDate && data.region && data.district);
+      if (!complete){
+        openProfileModal(true);
+      }else{
+        currentData = data;
+        renderView({...data, loginId: snap.data().loginId});
       }
-    });
+    }
   });
+
+  // tashqaridan kerak bo‘lsa
+  window.openProfileModal = openProfileModal;
 
 })();
 </script>
