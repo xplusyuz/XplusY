@@ -1,253 +1,134 @@
-// auth.js
-// Firebase oldindan yuklangan bo'lishi kerak (firebase-app-compat, auth, firestore)
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
+// ===================== AUTH.JS =====================
+// Firebase global bo'lishi kerak (firebase-config.js ichida bo'ladi)
+if (!window.auth || !window.db) {
+  alert("Auth tizimi yuklanmagan! firebase-config.js ni tekshiring.");
 }
 
-const auth = firebase.auth();
-const db   = firebase.firestore();
+// Auth Overlay elementlari
+const authOverlay = document.getElementById("auth-overlay");
+const loginForm   = document.getElementById("auth-login-form");
+const btnGoogle   = document.getElementById("btn-google-login");
+const btnAutoReg  = document.getElementById("btn-auto-register");
+const logoutBtn   = document.getElementById("btn-logout");
 
-// ID = 6 xonali ixtiyoriy son
-function generateNumericId() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+// ===================== AVTO ID + PAROL GENERATOR =====================
+function generateRandomID() {
+  return String(Math.floor(100000 + Math.random() * 900000));   // 6 xonali raqam
 }
-
-// Parol = 8 ta harf+raqam (biroz chiroyliroq)
-function generatePassword(length = 8) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789";
+function generateRandomPassword() {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let pass = "";
-  for (let i = 0; i < length; i++) {
-    pass += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return pass;
+  for (let i=0;i<8;i++) pass += chars[Math.floor(Math.random()*chars.length)];
+  return pass;  // 8 belgili
 }
 
-// ID dan email alias yasash (Firebase Auth uchun)
-function idToAliasEmail(id) {
-  // Bu domen ixtiyoriy, faqat bir xil bo'lsa bo'ldi
-  return `${id}@portal.1imi`;
+// ===================== CHECK PROFILE FILL =====================
+async function isProfileCompleted(uid){
+  const ref = db.collection("users").doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+  const data = snap.data();
+  const needed = ["fullName","class","region","district","school"];
+  return needed.every(f => data[f] && data[f] !== "");
 }
 
-// Ekranda ID + Parolni ko'rsatish
-function showCredentials(id, password) {
-  const box = document.getElementById("auth-generated-credentials");
-  if (!box) return;
-  box.innerHTML = `
-    <div class="auth-cred-title">Sizning ID va Parolingiz</div>
-    <div class="auth-cred-row">
-      <span>ID:</span>
-      <code>${id}</code>
-    </div>
-    <div class="auth-cred-row">
-      <span>Parol:</span>
-      <code>${password}</code>
-    </div>
-    <div class="auth-cred-note">
-      Iltimos, ID va Parolni saqlab oling (skrinshtot yoki nusxa).
-    </div>
-  `;
-  box.style.display = "block";
-}
-
-// Avto ro'yxatdan o'tish (ID+parolni o'zi beradi)
-async function handleAutoRegister() {
-  const btn = document.getElementById("btn-auto-register");
-  if (btn) btn.disabled = true;
-
-  try {
-    let created = false;
-    let numericId, password, email;
-
-    while (!created) {
-      numericId = generateNumericId();
-      password = generatePassword(8);
-      email = idToAliasEmail(numericId);
-
-      try {
-        // Agar email allaqachon ishlatilgan bo'lsa, qayta harakat qilamiz
-        const userCred = await auth.createUserWithEmailAndPassword(email, password);
-        const user = userCred.user;
-
-        await db.collection("users").doc(user.uid).set({
-          numericId,
-          aliasEmail: email,
-          showPassword: password, // productionda saqlamaslik xavfsizroq
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          provider: "id_password",
-        });
-
-        showCredentials(numericId, password);
-        created = true;
-      } catch (err) {
-        if (err.code === "auth/email-already-in-use") {
-          // ID to'qnashdi, qayta urinamiz
-          continue;
-        } else {
-          console.error(err);
-          alert("Ro'yxatdan o'tishda xatolik: " + err.message);
-          break;
-        }
-      }
-    }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// ID + Parol bilan kirish
-async function handleIdLogin(event) {
-  event.preventDefault();
-  const idInput = document.getElementById("login-id");
-  const passInput = document.getElementById("login-password");
-  if (!idInput || !passInput) return;
-
-  const id = (idInput.value || "").trim();
-  const password = passInput.value;
-
-  if (!id || !password) {
-    alert("ID va Parolni kiriting.");
+// ===================== MAIN AUTH STATE LISTENER =====================
+auth.onAuthStateChanged(async user => {
+  if (!user) {
+    authOverlay.style.display = "flex";
     return;
   }
 
-  const email = idToAliasEmail(id);
+  // 🔑 Login bo‘lgan foydalanuvchi
+  authOverlay.style.display = "none";
 
-  try {
-    await auth.signInWithEmailAndPassword(email, password);
-    // onAuthStateChanged ichida modal yopiladi
-  } catch (err) {
-    console.error(err);
-    if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-      alert("ID yoki Parol noto'g'ri.");
-    } else {
-      alert("Kirishda xatolik: " + err.message);
+  // Agar profil to‘ldirilmagan bo‘lsa – majburiy modal profil ochiladi!
+  const done = await isProfileCompleted(user.uid);
+  if (!done) {
+    console.log("Profil to‘ldirilmagan → majburiy modal profil ochamiz");
+    if (typeof openProfileModal === "function") {
+      openProfileModal(); // profil-modaldagi funksiya – index.html ichida bor
     }
   }
-}
+});
 
-// Google bilan kirish (birinchi marta kirsa ID+Parol ham beramiz)
-async function handleGoogleLogin() {
+// ===================== ID + PAROL BILAN LOGIN =====================
+loginForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  const id   = document.getElementById("login-id").value.trim();
+  const pass = document.getElementById("login-password").value.trim();
+
+  // IDni email ko‘rinishiga o‘tkazamiz:
+  const email = `${id}@1-imi.local`;
+
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch (err) {
+    alert("Login xatosi: " + err.message);
+  }
+});
+
+// ===================== GOOGLE BILAN LOGIN =====================
+btnGoogle.addEventListener("click", async () => {
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
     const result = await auth.signInWithPopup(provider);
     const user = result.user;
-    const userDocRef = db.collection("users").doc(user.uid);
-    const snap = await userDocRef.get();
 
-    if (!snap.exists) {
-      // Yangi Google foydalanuvchi: unga ID+Parol beramiz va shu acc bilan bog'laymiz
-      let created = false;
-      let numericId, password, aliasEmail;
-
-      while (!created) {
-        numericId = generateNumericId();
-        password = generatePassword(8);
-        aliasEmail = idToAliasEmail(numericId);
-
-        try {
-          const cred = firebase.auth.EmailAuthProvider.credential(aliasEmail, password);
-          // Google accountga email+password credentialni link qilamiz
-          await user.linkWithCredential(cred);
-
-          await userDocRef.set({
-            numericId,
-            aliasEmail,
-            showPassword: password, // faqat ko'rsatish uchun
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            provider: "google",
-            displayName: user.displayName || "",
-            email: user.email || "",
-          });
-
-          showCredentials(numericId, password);
-          created = true;
-        } catch (err) {
-          if (err.code === "auth/email-already-in-use") {
-            // Tasodifan aynan shu ID kimdadir bor ekan, qayta ID generatsiya
-            continue;
-          } else {
-            console.error(err);
-            alert("Google bilan bog'lashda xatolik: " + err.message);
-            break;
-          }
-        }
-      }
-    } else {
-      // Eski Google foydalanuvchi: uning oldingi ID+Parolini ko'rsatishimiz mumkin
-      const data = snap.data();
-      if (data && data.numericId && data.showPassword) {
-        showCredentials(data.numericId, data.showPassword);
-      }
-    }
+    // Firestore hujjat yaratiladi (agar bo'lmasa):
+    await db.collection("users").doc(user.uid).set({
+      fullName: user.displayName || "",
+      email: user.email || "",
+      points: 0,
+      role: "student",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true});
+    
   } catch (err) {
-    console.error(err);
-    if (err.code !== "auth/popup-closed-by-user") {
-      alert("Google orqali kirishda xatolik: " + err.message);
-    }
+    alert("Google login xatosi: " + err.message);
   }
-}
+});
 
-// Auth modalni ochish/yopish
-function openAuthModal() {
-  const overlay = document.getElementById("auth-overlay");
-  if (overlay) overlay.style.display = "flex";
-  document.body.classList.add("no-scroll");
-}
+// ===================== AVTO RO‘YXATDAN O‘TISH =====================
+btnAutoReg.addEventListener("click", async () => {
+  const id    = generateRandomID();
+  const pass  = generateRandomPassword();
+  const email = `${id}@1-imi.local`;
 
-function closeAuthModal() {
-  const overlay = document.getElementById("auth-overlay");
-  if (overlay) overlay.style.display = "none";
-  document.body.classList.remove("no-scroll");
-}
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const user = cred.user;
 
-// Sahifani himoyalash: login bo'lmasa modal ochiq turadi
-function setupAuthGuard() {
-  auth.onAuthStateChanged(async (user) => {
-    const userInfoBox = document.getElementById("auth-user-info");
+    // Firestore hujjat
+    await db.collection("users").doc(user.uid).set({
+      fullName: "",
+      email: email,
+      points: 0,
+      role: "student",
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
 
-    if (!user) {
-      // Kirilmagan – hamma sahifalarda blok
-      if (userInfoBox) {
-        userInfoBox.textContent = "Kirish talab qilinadi.";
-      }
-      openAuthModal();
-    } else {
-      // Kirgan – modalni yopamiz
-      if (userInfoBox) {
-        const snap = await db.collection("users").doc(user.uid).get();
-        let numericIdText = "";
-        if (snap.exists && snap.data().numericId) {
-          numericIdText = `ID: ${snap.data().numericId}`;
-        }
-        userInfoBox.textContent = (user.displayName || "Foydalanuvchi") + (numericIdText ? ` (${numericIdText})` : "");
-      }
-      closeAuthModal();
-    }
-  });
-}
+    // Ekranga ko‘rsatamiz
+    const box = document.getElementById("auth-generated-credentials");
+    box.innerHTML = `
+      <div class="auth-cred-title">Sizga berilgan ID + Parol:</div>
+      <div class="auth-cred-row"><b>ID:</b> <code>${id}</code></div>
+      <div class="auth-cred-row"><b>Parol:</b> <code>${pass}</code></div>
+      <p class="auth-cred-note">Diqqat! Shu maʼlumotni yozib oling, keyin yo‘qoladi.</p>
+    `;
+    box.style.display = "block";
 
-// UI eventlarini bog'lash
-function setupAuthUi() {
-  const loginForm = document.getElementById("auth-login-form");
-  const autoRegBtn = document.getElementById("btn-auto-register");
-  const googleBtn = document.getElementById("btn-google-login");
-  const logoutBtn = document.getElementById("btn-logout");
-
-  if (loginForm) {
-    loginForm.addEventListener("submit", handleIdLogin);
+  } catch (err) {
+    alert("Ro'yxatdan o'tishda xato: " + err.message);
   }
-  if (autoRegBtn) {
-    autoRegBtn.addEventListener("click", handleAutoRegister);
-  }
-  if (googleBtn) {
-    googleBtn.addEventListener("click", handleGoogleLogin);
-  }
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => auth.signOut());
-  }
+});
 
-  setupAuthGuard();
-}
-
-// DOM tayyor bo'lganda ishga tushirish
-document.addEventListener("DOMContentLoaded", setupAuthUi);
+// ===================== LOGOUT =====================
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await auth.signOut();
+    authOverlay.style.display = "flex";
+  } catch (err) {
+    alert("Chiqishda xato: " + err.message);
+  }
+});
