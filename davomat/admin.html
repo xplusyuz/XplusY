@@ -361,33 +361,27 @@
 
   <!-- Main Content -->
   <main class="container">
-    <!-- ADMIN LOGIN -->
+    <!-- ADMIN LOGIN (Google) -->
     <section class="card" id="admin-login-card">
       <div class="card-header">
         <div>
           <h2 class="card-title">Admin kirish</h2>
-          <p class="card-subtitle">Faqat direktor / admin uchun. Sinf rahbarlari bu paneldan foydalana olmaydi.</p>
+          <p class="card-subtitle">
+            Google akkaunt bilan kiring. Faqat direktor / admin uchun.
+          </p>
         </div>
       </div>
       <div class="card-body">
         <div id="admin-login-status" class="status-message hidden"></div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="admin-email">Email (Firebase Auth dagi admin akkaunt)</label>
-            <input type="email" id="admin-email" placeholder="admin@example.com">
-          </div>
-          <div class="form-group">
-            <label for="admin-password">Parol</label>
-            <input type="password" id="admin-password" placeholder="••••••••">
-          </div>
-        </div>
-        <button id="admin-login-btn" class="btn btn-primary">
-          <i class="fas fa-user-shield"></i>
-          Tizimga kirish
+
+        <button id="google-login-btn" class="btn btn-primary">
+          <i class="fab fa-google"></i>
+          Google orqali kirish
         </button>
+
         <p class="text-sm mt-4">
-          <strong>Eslatma:</strong> Admin paroli kod ichida emas, Firebase Authentication'da saqlanadi.
-          Bu sahifada faqat ruxsat berilgan email manzillar ro'yxati (<code>ADMIN_EMAILS</code>) mavjud.
+          <strong>Eslatma:</strong> Parollar kod ichida saqlanmaydi. Faqat <code>ADMIN_EMAILS</code> ro‘yhatidagi
+          Google email manzillari admin sifatida kirishi mumkin. Ularning parollari bevosita Google’da saqlanadi.
         </p>
       </div>
     </section>
@@ -544,6 +538,39 @@
         </div>
       </section>
 
+      <!-- BUGUNGI QULFLANGAN SINFLAR RO'YHATI -->
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Bugun qulflangan sinflar</h2>
+            <p class="card-subtitle">
+              Soat 9:00 dan keyin, bugungi dars kuni bo‘lsa <strong>hali davomat bermagan</strong> sinflar ro'yxati.
+            </p>
+          </div>
+          <button id="refresh-locked-btn" class="btn btn-sm btn-secondary">
+            <i class="fas fa-sync-alt"></i>
+            Yangilash
+          </button>
+        </div>
+        <div class="card-body">
+          <div id="locked-classes-status" class="status-message hidden"></div>
+          <div class="table-container mt-4">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Sinf</th>
+                  <th>Sinf rahbari</th>
+                </tr>
+              </thead>
+              <tbody id="locked-classes-tbody">
+                <!-- JS to'ldiradi -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Save Section -->
       <section class="card">
         <div class="card-header">
@@ -575,10 +602,10 @@
     "use strict";
 
     // ==== RUXSAT BERILGAN ADMIN EMAIL(LAR) ====
-    // Faqat shu email(lar) bilan Firebase Auth orqali kirganlar admin bo'la oladi.
+    // Faqat shu Google email(lar) bilan kirganlar admin bo'la oladi.
     const ADMIN_EMAILS = [
       "sohibjonmath@gmail.com"
-      // kerak bo'lsa yana qo'shish mumkin
+      // kerak bo'lsa yana qo'shish mumkin:
       // ,"boshqaadmin@example.com"
     ];
 
@@ -641,6 +668,9 @@
         if (adminDateInput) {
           adminDateInput.value = toDateStr(new Date());
         }
+
+        // Bugungi qulflangan sinflar ro'yhatini yuklash
+        refreshLockedClasses();
       })();
     });
 
@@ -658,8 +688,10 @@
       const d = new Date(dateStr);
       if (isNaN(d)) return false;
 
+      // Qo'shimcha ish kuni bo'lsa — albatta o'qish kuni
       if (extraSchoolDays.includes(dateStr)) return true;
 
+      // Ta'til oralig'i bo'lsa — o'qish kuni emas
       for (const h of holidays) {
         if (!h || !h.start || !h.end) continue;
         if (dateStr >= h.start && dateStr <= h.end) {
@@ -667,6 +699,7 @@
         }
       }
 
+      // Dam olish (shanba / yakshanba) bo'lsa — o'qish kuni emas
       const dow = d.getDay(); // 0 yakshanba, 6 shanba
       const isWeekend = (dow === 0 || dow === 6);
       if (isWeekend) return false;
@@ -736,10 +769,8 @@
 
     // ==== UI EVENTLAR ====
     function setupEventListeners() {
-      // Admin login
-      const loginBtn = document.getElementById("admin-login-btn");
-      const emailInput = document.getElementById("admin-email");
-      const pwInput = document.getElementById("admin-password");
+      // Admin login (Google)
+      const googleBtn = document.getElementById("google-login-btn");
       const loginStatusEl = document.getElementById("admin-login-status");
       const logoutBtn = document.getElementById("admin-logout-btn");
 
@@ -751,32 +782,23 @@
         setTimeout(() => loginStatusEl.classList.add("hidden"), 3000);
       }
 
-      if (loginBtn && emailInput && pwInput) {
-        loginBtn.addEventListener("click", async () => {
-          const email = emailInput.value.trim();
-          const pw = pwInput.value;
-          if (!email || !pw) {
-            showLoginStatus("Email va parolni kiriting.", "error");
-            return;
-          }
+      if (googleBtn) {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+
+        googleBtn.addEventListener("click", async () => {
           try {
-            const cred = await auth.signInWithEmailAndPassword(email, pw);
-            const user = cred.user;
+            const result = await auth.signInWithPopup(provider);
+            const user = result.user;
             if (!user || !ADMIN_EMAILS.includes(user.email)) {
               await auth.signOut();
-              showLoginStatus("Bu email uchun admin ruxsati yo‘q.", "error");
+              showLoginStatus("Bu Google akkaunt uchun admin ruxsati yo‘q.", "error");
               return;
             }
-            showLoginStatus("Admin sifatida tizimga kirdingiz.", "success");
+            showLoginStatus("Google orqali admin sifatida tizimga kirdingiz.", "success");
           } catch (e) {
-            console.error("Admin login xatosi:", e);
-            showLoginStatus("Login/parol noto‘g‘ri yoki akkaunt mavjud emas.", "error");
-          }
-        });
-
-        pwInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            loginBtn.click();
+            console.error("Google login xatosi:", e);
+            showLoginStatus("Google orqali kirishda xatolik yoki foydalanuvchi bekor qildi.", "error");
           }
         });
       }
@@ -852,6 +874,12 @@
 
       // Admin davomatni saqlash
       document.getElementById("admin-save-attendance-btn").addEventListener("click", adminSaveAttendance);
+
+      // Bugungi qulflangan sinflar ro'yhatini yangilash
+      const refreshLockedBtn = document.getElementById("refresh-locked-btn");
+      if (refreshLockedBtn) {
+        refreshLockedBtn.addEventListener("click", refreshLockedClasses);
+      }
     }
 
     // ==== HOLIDAYS TABLE ====
@@ -1120,6 +1148,75 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = oldHtml;
+      }
+    }
+
+    // ==== BUGUNGI QULFLANGAN SINFLAR RO'YHATI ====
+    async function refreshLockedClasses() {
+      const statusEl = document.getElementById("locked-classes-status");
+      const tbody = document.getElementById("locked-classes-tbody");
+      if (!statusEl || !tbody) return;
+
+      tbody.innerHTML = "";
+
+      const today = new Date();
+      const todayStr = toDateStr(today);
+
+      // Bugun dars kuni emas bo'lsa
+      if (!isSchoolDay(todayStr)) {
+        statusEl.textContent = "Bugun dars kuni emas (ta'til yoki dam olish).";
+        statusEl.className = "status-message status-error";
+        statusEl.classList.remove("hidden");
+        return;
+      }
+
+      // Vaqt 9:00 dan oldin bo'lsa – hali qulflanmagan
+      const minutesNow = today.getHours() * 60 + today.getMinutes();
+      const lockMinutes = 9 * 60; // 9:00
+      if (minutesNow < lockMinutes) {
+        statusEl.textContent = "Hali soat 9:00 bo‘lmadi. Qulflangan sinflar ro‘yxati 9:00 dan keyin ko‘rinadi.";
+        statusEl.className = "status-message status-success";
+        statusEl.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const snap = await davomatCol.where("date", "==", todayStr).get();
+        const filledClassIds = new Set();
+        snap.forEach(doc => {
+          const data = doc.data() || {};
+          if (data.classId) {
+            filledClassIds.add(data.classId);
+          }
+        });
+
+        const locked = classesJson.filter(cls => !filledClassIds.has(cls.id));
+
+        if (!locked.length) {
+          statusEl.textContent = "Bugun soat 9:00 ga kelib barcha sinflar davomatni to‘ldirgan.";
+          statusEl.className = "status-message status-success";
+          statusEl.classList.remove("hidden");
+          return;
+        }
+
+        statusEl.textContent = "Bugun soat 9:00 dan keyin hali davomat bermagan sinflar soni: " + locked.length + " ta.";
+        statusEl.className = "status-message status-error";
+        statusEl.classList.remove("hidden");
+
+        locked.forEach((cls, idx) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${idx + 1}</td>
+            <td>${cls.name || cls.id}</td>
+            <td>${cls.teacherName || cls.teacherLogin || "—"}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error("Qulflangan sinflarni olishda xato:", e);
+        statusEl.textContent = "Qulflangan sinflar ro‘yxatini yuklashda xatolik.";
+        statusEl.className = "status-message status-error";
+        statusEl.classList.remove("hidden");
       }
     }
 
