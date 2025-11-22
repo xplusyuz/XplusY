@@ -373,8 +373,8 @@
         <div id="admin-login-status" class="status-message hidden"></div>
         <div class="form-row">
           <div class="form-group">
-            <label for="admin-login">Login</label>
-            <input type="text" id="admin-login" placeholder="admin">
+            <label for="admin-email">Email (Firebase Auth dagi admin akkaunt)</label>
+            <input type="email" id="admin-email" placeholder="admin@example.com">
           </div>
           <div class="form-group">
             <label for="admin-password">Parol</label>
@@ -386,14 +386,29 @@
           Tizimga kirish
         </button>
         <p class="text-sm mt-4">
-          <strong>Eslatma:</strong> Login va parol kod ichida saqlangan
-          (<code>ADMIN_LOGIN</code>, <code>ADMIN_PASSWORD</code> o'zgaruvchilarini o'zgartirishingiz mumkin).
+          <strong>Eslatma:</strong> Admin paroli kod ichida emas, Firebase Authentication'da saqlanadi.
+          Bu sahifada faqat ruxsat berilgan email manzillar ro'yxati (<code>ADMIN_EMAILS</code>) mavjud.
         </p>
       </div>
     </section>
 
     <!-- BARCHA ADMIN FUNKSIYALARI -->
     <div id="admin-content" class="hidden">
+      <!-- Mini panel: kim kirgan + chiqish -->
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Admin boshqaruvi</h2>
+            <p class="card-subtitle">
+              Admin sifatida kirgan foydalanuvchi: <span id="admin-current-email">—</span>
+            </p>
+          </div>
+          <button id="admin-logout-btn" class="btn btn-sm btn-danger">
+            <i class="fas fa-sign-out-alt"></i> Chiqish
+          </button>
+        </div>
+      </section>
+
       <!-- Holidays Section -->
       <section class="card">
         <div class="card-header">
@@ -554,13 +569,19 @@
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 
   <script>
     "use strict";
 
-    // ==== ADMIN LOGIN CONFIG (o'zingiz o'zgartirishingiz mumkin) ====
-    const ADMIN_LOGIN = "admin";
-    const ADMIN_PASSWORD = "davomat2025";
+    // ==== RUXSAT BERILGAN ADMIN EMAIL(LAR) ====
+    // Faqat shu email(lar) bilan Firebase Auth orqali kirganlar admin bo'la oladi.
+    const ADMIN_EMAILS = [
+      "sohibjonmath@gmail.com"
+      // kerak bo'lsa yana qo'shish mumkin
+      // ,"boshqaadmin@example.com"
+    ];
+
     let isAdminAuthed = false;
 
     // ==== FIREBASE INIT ====
@@ -575,13 +596,13 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    // Calendar doc: shu yerda ham, index.html da ham bir xil
+    // Calendar doc va davomat collection
     const calendarDocRef = db.collection("davomat").doc("calendar");
     const davomatCol = db.collection("davomat");
 
-    // ==== MA'LUMOTLAR (RAMDA) ====
-    // holidays: [{start,end,title}], extraSchoolDays: ["YYYY-MM-DD",...]
+    // RAM: holidays: [{start,end,title}], extraSchoolDays: ["YYYY-MM-DD",...]
     let holidays = [];
     let extraSchoolDays = [];
     let classesJson = [];
@@ -603,6 +624,9 @@
         }
         document.getElementById("today-label").textContent = formattedDate;
 
+        // Auth holatini kuzatish
+        setupAuthObserver();
+
         await loadCalendarConfig();
         await loadClassesJson();
 
@@ -611,7 +635,6 @@
         populateAdminClassSelect();
 
         setupEventListeners();
-        setupAdminAuthListeners();
 
         // Admin davomat panelida default sana — bugun
         const adminDateInput = document.getElementById("admin-date");
@@ -629,17 +652,14 @@
       return `${y}-${m}-${day}`;
     }
 
-    // Sana dars kuni ekanligini tekshirish (admin dla)
     function isSchoolDay(dateStr) {
       if (!dateStr) return false;
 
       const d = new Date(dateStr);
       if (isNaN(d)) return false;
 
-      // Qo'shimcha ish kuni bo'lsa — doim dars
       if (extraSchoolDays.includes(dateStr)) return true;
 
-      // Ta'til oraliqlarini tekshirish
       for (const h of holidays) {
         if (!h || !h.start || !h.end) continue;
         if (dateStr >= h.start && dateStr <= h.end) {
@@ -649,9 +669,9 @@
 
       const dow = d.getDay(); // 0 yakshanba, 6 shanba
       const isWeekend = (dow === 0 || dow === 6);
-      if (isWeekend) return false; // odatda dam olish
+      if (isWeekend) return false;
 
-      return true; // ish kuni
+      return true;
     }
 
     // ==== CALENDAR CONFIG O'QISH ====
@@ -660,17 +680,13 @@
         const snap = await calendarDocRef.get();
         if (snap.exists) {
           const data = snap.data() || {};
-
-          // Agar holidayRanges mavjud bo'lsa, shundan foydalanamiz
           if (Array.isArray(data.holidayRanges)) {
             holidays = data.holidayRanges;
           } else if (Array.isArray(data.holidays)) {
-            // Eski format (har bir sana alohida string) — uni oraliqlarga aylantiramiz
             holidays = data.holidays.map(d => ({ start: d, end: d, title: "" }));
           } else {
             holidays = [];
           }
-
           extraSchoolDays = Array.isArray(data.extraSchoolDays) ? data.extraSchoolDays : [];
         } else {
           holidays = [];
@@ -697,14 +713,35 @@
       }
     }
 
-    // ==== ADMIN LOGIN ====
-    function setupAdminAuthListeners() {
-      const loginInput = document.getElementById("admin-login");
-      const passwordInput = document.getElementById("admin-password");
-      const loginBtn = document.getElementById("admin-login-btn");
-      if (!loginInput || !passwordInput || !loginBtn) return;
+    // ==== AUTH OBSERVER ====
+    function setupAuthObserver() {
+      const loginCard = document.getElementById("admin-login-card");
+      const content = document.getElementById("admin-content");
+      const currentEmailEl = document.getElementById("admin-current-email");
 
+      auth.onAuthStateChanged((user) => {
+        if (user && ADMIN_EMAILS.includes(user.email)) {
+          isAdminAuthed = true;
+          if (loginCard) loginCard.classList.add("hidden");
+          if (content) content.classList.remove("hidden");
+          if (currentEmailEl) currentEmailEl.textContent = user.email;
+        } else {
+          isAdminAuthed = false;
+          if (content) content.classList.add("hidden");
+          if (loginCard) loginCard.classList.remove("hidden");
+          if (currentEmailEl) currentEmailEl.textContent = "—";
+        }
+      });
+    }
+
+    // ==== UI EVENTLAR ====
+    function setupEventListeners() {
+      // Admin login
+      const loginBtn = document.getElementById("admin-login-btn");
+      const emailInput = document.getElementById("admin-email");
+      const pwInput = document.getElementById("admin-password");
       const loginStatusEl = document.getElementById("admin-login-status");
+      const logoutBtn = document.getElementById("admin-logout-btn");
 
       function showLoginStatus(msg, type) {
         if (!loginStatusEl) return;
@@ -714,28 +751,46 @@
         setTimeout(() => loginStatusEl.classList.add("hidden"), 3000);
       }
 
-      function tryLogin() {
-        const user = loginInput.value.trim();
-        const pw = passwordInput.value;
+      if (loginBtn && emailInput && pwInput) {
+        loginBtn.addEventListener("click", async () => {
+          const email = emailInput.value.trim();
+          const pw = pwInput.value;
+          if (!email || !pw) {
+            showLoginStatus("Email va parolni kiriting.", "error");
+            return;
+          }
+          try {
+            const cred = await auth.signInWithEmailAndPassword(email, pw);
+            const user = cred.user;
+            if (!user || !ADMIN_EMAILS.includes(user.email)) {
+              await auth.signOut();
+              showLoginStatus("Bu email uchun admin ruxsati yo‘q.", "error");
+              return;
+            }
+            showLoginStatus("Admin sifatida tizimga kirdingiz.", "success");
+          } catch (e) {
+            console.error("Admin login xatosi:", e);
+            showLoginStatus("Login/parol noto‘g‘ri yoki akkaunt mavjud emas.", "error");
+          }
+        });
 
-        if (user === ADMIN_LOGIN && pw === ADMIN_PASSWORD) {
-          isAdminAuthed = true;
-          document.getElementById("admin-login-card").classList.add("hidden");
-          document.getElementById("admin-content").classList.remove("hidden");
-          showLoginStatus("Admin sifatida tizimga kirdingiz.", "success");
-        } else {
-          showLoginStatus("Login yoki parol noto‘g‘ri.", "error");
-        }
+        pwInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            loginBtn.click();
+          }
+        });
       }
 
-      loginBtn.addEventListener("click", tryLogin);
-      passwordInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") tryLogin();
-      });
-    }
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", async () => {
+          try {
+            await auth.signOut();
+          } catch (e) {
+            console.error("Logout xatosi:", e);
+          }
+        });
+      }
 
-    // ==== UI EVENTLAR ====
-    function setupEventListeners() {
       // Ta'til qo'shish
       document.getElementById("add-holiday-btn").addEventListener("click", function () {
         const start = document.getElementById("holiday-start").value;
@@ -1076,7 +1131,6 @@
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...';
 
       try {
-        // holiday oraliqlarini alohida sanalarga yoyamiz (index sahifasi uchun)
         const flatHolidays = [];
         holidays.forEach(h => {
           if (!h.start || !h.end) return;
@@ -1091,8 +1145,8 @@
 
         await calendarDocRef.set(
           {
-            holidays: flatHolidays,      // index.html shu massivni o'qiydi
-            holidayRanges: holidays,     // admin panel uchun to'liq ma'lumot
+            holidays: flatHolidays,
+            holidayRanges: holidays,
             extraSchoolDays: extraSchoolDays
           },
           { merge: true }
@@ -1107,13 +1161,12 @@
       }
     }
 
-    // ==== STATUS HAVOLASI ====
+    // ==== STATUS FUNKSIYALAR ====
     function showStatus(message, type) {
       const statusEl = document.getElementById("save-status");
       statusEl.textContent = message;
       statusEl.className = "status-message " + (type === "success" ? "status-success" : "status-error");
       statusEl.classList.remove("hidden");
-
       setTimeout(function () {
         statusEl.classList.add("hidden");
       }, 3000);
