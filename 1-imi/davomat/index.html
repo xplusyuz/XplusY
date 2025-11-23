@@ -1560,16 +1560,28 @@
     const activeDates = Array.from(activeDatesSet);
 
     // to'ldirilmagan aktiv (o‘quv) kunlar uchun -90 XP
-    Object.keys(teacherMap).forEach(login=>{
-      const tm = teacherMap[login];
-      const set = teacherDocDates[login] || new Set();
-      activeDates.forEach(ds=>{
-        if(!set.has(ds)){
-          tm.xp -= 90;
-          tm.daysMissed += 1;
-        }
-      });
-    });
+    // 🔥 XP ni 0 dan boshlash — agar hali 1 marta ham davomat kiritmagan bo‘lsa jarima bo‘lmaydi
+Object.keys(teacherMap).forEach(login=>{
+  const tm = teacherMap[login];
+  const set = teacherDocDates[login] || new Set();
+
+  // ❗ Agar sinf hali BIROR MARTA ham davomat kiritmagan bo‘lsa – XP = 0 (jarima bo‘lmaydi)
+  if(set.size === 0){
+    tm.xp = 0;
+    tm.daysWith = 0;
+    tm.daysMissed = 0;
+    return; // jarimana davom ettirmaslik
+  }
+
+  // ❗ Agar kamida 1 MARTA kiritgan bo‘lsa – faqat keyingi kiritilmagan kunlar uchun jarima
+  activeDates.forEach(ds=>{
+    if(!set.has(ds)){
+      tm.xp -= 90;   // jarima faqat faol ish boshlagandan keyin
+      tm.daysMissed += 1;
+    }
+  });
+});
+
 
     // Sinf rahbarlar reytingi jadvali
     if(gTeachersRatingTbody){
