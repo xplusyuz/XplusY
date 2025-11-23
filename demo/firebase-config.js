@@ -11,5 +11,5 @@ if (!firebase.apps || !firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
-// 🔹 Firestore ni globalga biriktiramiz
+// 🔹 Firestore ni global qilish
 window.db = firebase.firestore();
