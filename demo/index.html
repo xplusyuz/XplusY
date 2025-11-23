@@ -1288,40 +1288,40 @@
 </div>
 
 <script>
-  // ==== Firestore + umumiy o'zgaruvchilar ====
+  /* =============== Firestore init =============== */
   const db = firebase.firestore();
-  const PROFILES_COLL = 'portal_profiles';
+  const USER_COLL = 'foydalanuvchilar';   // profil ham shu joyga yoziladi
 
-  // IFrame modal
+  /* =============== IFRAME MODAL (sahifa ichida ochish) =============== */
   const pageModal = document.getElementById('page-modal');
   const modalFrame = document.getElementById('modal-frame');
   const modalClose = document.getElementById('modal-close');
 
-  document.querySelectorAll('[data-link]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+  document.querySelectorAll('[data-link]').forEach(btn => {
+    btn.addEventListener('click', () => {
       const url = btn.dataset.link;
-      if(!url) return;
+      if (!url) return;
       modalFrame.src = url;
       pageModal.classList.add('open');
       document.body.classList.add('no-scroll');
     });
   });
 
-  modalClose.addEventListener('click', ()=>{
+  modalClose.addEventListener('click', () => {
     pageModal.classList.remove('open');
     modalFrame.src = '';
     document.body.classList.remove('no-scroll');
   });
 
-  pageModal.addEventListener('click', e=>{
-    if(e.target === pageModal){
+  pageModal.addEventListener('click', e => {
+    if (e.target === pageModal) {
       pageModal.classList.remove('open');
       modalFrame.src = '';
       document.body.classList.remove('no-scroll');
     }
   });
 
-  // ==== PROFIL ELEMENTLAR ====
+  /* =============== PROFIL ELEMENTLAR =============== */
   const profOverlay  = document.getElementById('profile-overlay');
   const profBtn      = document.getElementById('btn-profile');
   const profCloseX   = document.getElementById('profile-close-btn');
@@ -1349,30 +1349,30 @@
   const pvRank       = document.getElementById('pv-rank');
   const headerIdEl   = document.getElementById('header-id');
 
-  let currentUser = null;    // auth-lite dan keladigan user
-  let profileData = null;    // portal_profiles dan o'qilgan profil
+  let currentUser = null;   // authLite.requireSession() dan keladi
+  let profileData = null;   // foydalanuvchilar/{docId} dan o‘qilgan ma’lumot
   let regionsData = null;
   let isEditing   = false;
   let isMandatory = false;
 
-  // ==== REGIONS (viloyat/tuman) ====
-  async function loadRegions(){
+  /* =============== REGIONS (viloyat / tuman) =============== */
+  async function loadRegions() {
     if (regionsData) return regionsData;
-    try{
+    try {
       const res = await fetch('region.json');
-      if (!res.ok) throw new Error('HTTP '+res.status);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       regionsData = await res.json();
-    }catch(err){
+    } catch (err) {
       console.error('region.json yuklashda xatolik:', err);
       regionsData = { regions: [] };
     }
     return regionsData;
   }
 
-  function fillRegionSelect(){
+  function fillRegionSelect() {
     if (!pfRegion || !regionsData) return;
     pfRegion.innerHTML = '<option value="">Tanlang</option>';
-    (regionsData.regions || []).forEach(r=>{
+    (regionsData.regions || []).forEach(r => {
       const opt = document.createElement('option');
       opt.value = r.name;
       opt.textContent = r.name;
@@ -1380,31 +1380,31 @@
     });
   }
 
-  function fillDistrictSelect(regionName, selected){
+  function fillDistrictSelect(regionName, selected) {
     if (!pfDistrict) return;
     pfDistrict.disabled = true;
     pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
 
     if (!regionName || !regionsData) return;
-    const reg = (regionsData.regions || []).find(r=>r.name === regionName);
+    const reg = (regionsData.regions || []).find(r => r.name === regionName);
     if (!reg) return;
 
     pfDistrict.disabled = false;
     pfDistrict.innerHTML = '<option value="">Tuman/shaharni tanlang</option>';
-    (reg.districts || []).forEach(d=>{
+    (reg.districts || []).forEach(d => {
       const opt = document.createElement('option');
       opt.value = d.name;
       opt.textContent = d.name;
       pfDistrict.appendChild(opt);
     });
 
-    if (selected){
+    if (selected) {
       pfDistrict.value = selected;
     }
   }
 
-  // ==== YOSH / DARAJA ====
-  function calcAge(birthDateStr){
+  /* =============== YOSH / DARAJA =============== */
+  function calcAge(birthDateStr) {
     if (!birthDateStr) return null;
     const d = new Date(birthDateStr);
     if (isNaN(d.getTime())) return null;
@@ -1415,7 +1415,7 @@
     return age >= 0 ? age : null;
   }
 
-  function calcRank(points){
+  function calcRank(points) {
     const p = Number(points || 0);
     if (p >= 1000) return "Legend";
     if (p >= 500)  return "Ustoz";
@@ -1425,47 +1425,70 @@
     return "Yangi foydalanuvchi";
   }
 
-  function isProfileComplete(p){
+  function isProfileComplete(p) {
     return !!(p && p.fullName && p.birthDate && p.region && p.district);
   }
 
-  // ==== Firestore: profilni o'qish/yozish ====
-  function getProfileDocIdFromUser(u){
-    const d = u && u.data ? u.data : {};
-    // loginId bo'lsa shuni ishlatamiz, bo'lmasa doc id
-    return String(d.loginId || u.id || '');
+  /* =============== Firestore: profilni o‘qish / yozish =============== */
+
+  // joriy userning foydalanuvchilar kolleksiyasidagi docId sini olish
+  function getUserDocId(u) {
+    // authLite obyektida ko‘p hollarda id yoki uid bo‘ladi
+    if (!u) return '';
+    if (u.id) return String(u.id);
+    if (u.uid) return String(u.uid);
+    // fallback: loginId bo‘yicha alohida doc emas, shunchaki identifikator
+    if (u.data && u.data.loginId) return String(u.data.loginId);
+    return '';
   }
 
-  async function loadProfileForCurrent(){
+  async function loadProfileForCurrent() {
     if (!currentUser) return {};
-    const docId = getProfileDocIdFromUser(currentUser);
+    const docId = getUserDocId(currentUser);
     if (!docId) return {};
-    const ref = db.collection(PROFILES_COLL).doc(docId);
+
+    const ref = db.collection(USER_COLL).doc(docId);
     const snap = await ref.get();
     return snap.exists ? snap.data() : {};
   }
 
-  async function saveProfileForCurrent(payload){
+  async function saveProfileForCurrent(payload) {
     if (!currentUser) throw new Error("User yo'q");
-    const docId = getProfileDocIdFromUser(currentUser);
+    const docId = getUserDocId(currentUser);
     if (!docId) throw new Error("Profil ID aniqlanmadi");
-    const ref = db.collection(PROFILES_COLL).doc(docId);
-    await ref.set(payload, { merge:true });
+
+    const ref = db.collection(USER_COLL).doc(docId);
+    await ref.set(payload, { merge: true });
+
     const snap = await ref.get();
     profileData = snap.data() || payload;
+
+    // authLite ichidagi cache yangilanishi uchun (agar funksiyasi bo‘lsa)
+    if (typeof authLite.refreshUser === 'function') {
+      try {
+        currentUser = await authLite.refreshUser();
+      } catch (e) {
+        console.warn('authLite.refreshUser xatolik:', e);
+      }
+    } else {
+      currentUser = {
+        ...(currentUser || {}),
+        data: { ...(currentUser?.data || {}), ...profileData }
+      };
+    }
   }
 
-  // ==== VIEW ni chizish ====
-  function renderView(){
+  /* =============== VIEW ni chizish =============== */
+  function renderView() {
     if (!currentUser) return;
     const ud = currentUser.data || {};
     const pd = profileData || {};
 
     const fullName = pd.fullName || ud.fullName || "Foydalanuvchi";
     const loginId  = ud.loginId || ud.id || currentUser.id || "—";
-    const birth    = pd.birthDate || ud.birthDate;
-    const region   = pd.region || ud.region;
-    const district = pd.district || ud.district;
+    const birth    = pd.birthDate || ud.birthDate || "";
+    const region   = pd.region || ud.region || "";
+    const district = pd.district || ud.district || "";
     const points   = Number(ud.points || 0);
     const age      = calcAge(birth);
 
@@ -1481,9 +1504,10 @@
     headerIdEl.textContent = "ID: " + (loginId || "—");
   }
 
-  // ==== Rejimlar ====
-  function setEditingMode(edit){
+  /* =============== Rejimlar (view / edit) =============== */
+  function setEditingMode(edit) {
     isEditing = !!edit;
+
     viewBlock.style.display  = edit ? 'none' : 'block';
     profForm.style.display   = edit ? 'flex' : 'none';
 
@@ -1493,18 +1517,18 @@
     document.getElementById('profile-save-btn').style.display =
       edit ? 'inline-flex' : 'none';
 
-    if (isMandatory){
+    if (isMandatory) {
       profCloseX.style.display  = 'none';
       profCloseV.style.display  = 'none';
       profCancel.style.display  = 'none';
-    }else{
+    } else {
       profCloseX.style.display  = 'inline-flex';
       if (!edit) profCloseV.style.display = 'inline-flex';
     }
   }
 
-  async function openProfile(mandatory){
-    if (!currentUser){
+  async function openProfile(mandatory) {
+    if (!currentUser) {
       alert("Avval tizimga kiring.");
       return;
     }
@@ -1515,12 +1539,12 @@
 
     const d = profileData || currentUser.data || {};
 
-    pfFullname.value = d.fullName || '';
+    pfFullname.value = d.fullName  || '';
     pfBirth.value    = d.birthDate || '';
-    pfRegion.value   = d.region || '';
-    if (d.region){
+    pfRegion.value   = d.region    || '';
+    if (d.region) {
       fillDistrictSelect(d.region, d.district || '');
-    }else{
+    } else {
       pfDistrict.disabled = true;
       pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
     }
@@ -1534,54 +1558,67 @@
     document.body.classList.add('no-scroll');
   }
 
-  function closeProfile(){
-    if (isMandatory) return;
+  function closeProfile() {
+    if (isMandatory) return;  // majburiy rejimda yopib bo‘lmaydi
     profOverlay.classList.remove('open');
     document.body.classList.remove('no-scroll');
   }
 
-  // ==== Eventlar ====
-  if (profBtn){
-    profBtn.addEventListener('click', ()=> openProfile(false));
+  /* =============== Eventlar =============== */
+
+  // profilni ochish
+  if (profBtn) {
+    profBtn.addEventListener('click', () => openProfile(false));
   }
-  if (profCloseX){
+
+  // yopish tugmalari
+  if (profCloseX) {
     profCloseX.addEventListener('click', closeProfile);
   }
-  if (profCloseV){
+  if (profCloseV) {
     profCloseV.addEventListener('click', closeProfile);
   }
-  if (profCancel){
-    profCancel.addEventListener('click', ()=>{
+
+  // bekor qilish (edit → view)
+  if (profCancel) {
+    profCancel.addEventListener('click', () => {
       if (isMandatory) return;
       const d = profileData || currentUser?.data || {};
-      pfFullname.value = d.fullName || '';
+      pfFullname.value = d.fullName  || '';
       pfBirth.value    = d.birthDate || '';
-      pfRegion.value   = d.region || '';
+      pfRegion.value   = d.region    || '';
       if (d.region) fillDistrictSelect(d.region, d.district || '');
       pfNewPass.value  = '';
       pfNewPass2.value = '';
       setEditingMode(false);
     });
   }
-  if (profOverlay){
-    profOverlay.addEventListener('click', e=>{
+
+  // overlay foniga bosilganda yopish
+  if (profOverlay) {
+    profOverlay.addEventListener('click', e => {
       if (e.target === profOverlay) closeProfile();
     });
   }
-  if (pfRegion){
-    pfRegion.addEventListener('change', ()=>{
+
+  // viloyat o'zgarganda tumanlarni qayta yuklash
+  if (pfRegion) {
+    pfRegion.addEventListener('change', () => {
       fillDistrictSelect(pfRegion.value, '');
     });
   }
-  if (profEditBtn){
-    profEditBtn.addEventListener('click', ()=>{
-      isMandatory = false;
+
+  // VIEW → EDIT
+  if (profEditBtn) {
+    profEditBtn.addEventListener('click', () => {
+      isMandatory = false;   // endi majburiy emas, oddiy tahrirlash
       setEditingMode(true);
     });
   }
 
-  if (profLogout){
-    profLogout.addEventListener('click', ()=>{
+  // CHIQISH
+  if (profLogout) {
+    profLogout.addEventListener('click', () => {
       authLite.logout();
       profOverlay.classList.remove('open');
       document.body.classList.remove('no-scroll');
@@ -1589,10 +1626,11 @@
     });
   }
 
-  if (profForm){
-    profForm.addEventListener('submit', async (e)=>{
+  // PROFILNI SAQLASH
+  if (profForm) {
+    profForm.addEventListener('submit', async e => {
       e.preventDefault();
-      if (!currentUser){
+      if (!currentUser) {
         alert("Avval tizimga kiring.");
         return;
       }
@@ -1604,16 +1642,17 @@
       const newPass   = pfNewPass.value;
       const newPass2  = pfNewPass2.value;
 
-      if (!fullName || !birthDate || !region || !district){
+      if (!fullName || !birthDate || !region || !district) {
         alert("Ism, tug‘ilgan sana, viloyat va tuman/shahar majburiy.");
         return;
       }
-      if (newPass || newPass2){
-        if (newPass.length < 6){
+
+      if (newPass || newPass2) {
+        if (newPass.length < 6) {
           alert("Yangi parol kamida 6 ta belgidan iborat bo‘lishi kerak.");
           return;
         }
-        if (newPass !== newPass2){
+        if (newPass !== newPass2) {
           alert("Yangi parol va uning takrori mos emas.");
           return;
         }
@@ -1626,481 +1665,56 @@
         district,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
+      if (newPass) {
+        payload.password = newPass;   // foydalanuvchilar hujjatidagi parolni ham yangilaymiz
+      }
 
-      try{
-        // 1) Profil kolleksiyasiga yozamiz
+      try {
         await saveProfileForCurrent(payload);
-
-        // 2) Agar authLite.updateUserData bo'lsa va parol o'zgargan bo'lsa, u yerni ham yangilab qo'yamiz
-        if (newPass && typeof authLite.updateUserData === 'function'){
-          try{
-            await authLite.updateUserData({ password:newPass });
-          }catch(e2){
-            console.warn('Parolni yangilashda xatolik (authLite):', e2);
-          }
-        }
-
         renderView();
         alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
 
-        if (isMandatory){
+        if (isMandatory) {
           isMandatory = false;
           closeProfile();
-        }else{
+        } else {
           setEditingMode(false);
         }
-      }catch(err){
+      } catch (err) {
         console.error(err);
         alert("Profilni saqlashda xatolik: " + (err.message || err));
       }
     });
   }
 
-  // ==== Sahifa yuklanganda: session + majburiy profil ====
-  document.addEventListener('DOMContentLoaded', async ()=>{
-    try{
-      const u = await authLite.requireSession(); // login bo'lmasa login.html ga yuboradi
+  /* =============== Sahifa yuklanganda: session + majburiy profil =============== */
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const u = await authLite.requireSession();  // login bo'lmasa login.html ga yuboradi
       currentUser = u;
       profileData = await loadProfileForCurrent();
       renderView();
 
-      if (!isProfileComplete(profileData)){
-        openProfile(true); // birinchi kirishda majburiy
+      if (!isProfileComplete(profileData)) {
+        openProfile(true); // birinchi kirishda majburiy to‘ldirish
       }
-    }catch(e){
-      // requireSession o'zi redirect qilib yuboradi
+    } catch (e) {
+      // requireSession o‘zi redirect qiladi
+      console.warn('Session yo‘q yoki xatolik:', e);
     }
 
-    // real-time user o'zgarishlari (ball va h.k.) bo'lsa
-    authLite.onUserChange(async u=>{
-      currentUser = u;
-      if (!u) return;
-      profileData = await loadProfileForCurrent();
-      renderView();
-    });
-  });
-</script>
-<script>
-  // ==== Firestore + umumiy o'zgaruvchilar ====
-  const db = firebase.firestore();
-  const PROFILES_COLL = 'portal_profiles';
-
-  // IFrame modal
-  const pageModal = document.getElementById('page-modal');
-  const modalFrame = document.getElementById('modal-frame');
-  const modalClose = document.getElementById('modal-close');
-
-  document.querySelectorAll('[data-link]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const url = btn.dataset.link;
-      if(!url) return;
-      modalFrame.src = url;
-      pageModal.classList.add('open');
-      document.body.classList.add('no-scroll');
-    });
-  });
-
-  modalClose.addEventListener('click', ()=>{
-    pageModal.classList.remove('open');
-    modalFrame.src = '';
-    document.body.classList.remove('no-scroll');
-  });
-
-  pageModal.addEventListener('click', e=>{
-    if(e.target === pageModal){
-      pageModal.classList.remove('open');
-      modalFrame.src = '';
-      document.body.classList.remove('no-scroll');
-    }
-  });
-
-  // ==== PROFIL ELEMENTLAR ====
-  const profOverlay  = document.getElementById('profile-overlay');
-  const profBtn      = document.getElementById('btn-profile');
-  const profCloseX   = document.getElementById('profile-close-btn');
-  const profCloseV   = document.getElementById('profile-close-view-btn');
-  const profEditBtn  = document.getElementById('profile-edit-btn');
-  const profCancel   = document.getElementById('profile-cancel-btn');
-  const profLogout   = document.getElementById('profile-logout-btn');
-  const profForm     = document.getElementById('profile-form');
-  const viewBlock    = document.getElementById('profile-view');
-
-  const pfFullname   = document.getElementById('pf-fullname');
-  const pfBirth      = document.getElementById('pf-birthdate');
-  const pfRegion     = document.getElementById('pf-region');
-  const pfDistrict   = document.getElementById('pf-district');
-  const pfNewPass    = document.getElementById('pf-new-password');
-  const pfNewPass2   = document.getElementById('pf-new-password2');
-
-  const pvFullname   = document.getElementById('pv-fullname');
-  const pvId         = document.getElementById('pv-id');
-  const pvAge        = document.getElementById('pv-age');
-  const pvPoints     = document.getElementById('pv-points');
-  const pvRegion     = document.getElementById('pv-region');
-  const pvDistrict   = document.getElementById('pv-district');
-  const pvBirth      = document.getElementById('pv-birthdate');
-  const pvRank       = document.getElementById('pv-rank');
-  const headerIdEl   = document.getElementById('header-id');
-
-  let currentUser = null;    // auth-lite dan keladigan user
-  let profileData = null;    // portal_profiles dan o'qilgan profil
-  let regionsData = null;
-  let isEditing   = false;
-  let isMandatory = false;
-
-  // ==== REGIONS (viloyat/tuman) ====
-  async function loadRegions(){
-    if (regionsData) return regionsData;
-    try{
-      const res = await fetch('region.json');
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      regionsData = await res.json();
-    }catch(err){
-      console.error('region.json yuklashda xatolik:', err);
-      regionsData = { regions: [] };
-    }
-    return regionsData;
-  }
-
-  function fillRegionSelect(){
-    if (!pfRegion || !regionsData) return;
-    pfRegion.innerHTML = '<option value="">Tanlang</option>';
-    (regionsData.regions || []).forEach(r=>{
-      const opt = document.createElement('option');
-      opt.value = r.name;
-      opt.textContent = r.name;
-      pfRegion.appendChild(opt);
-    });
-  }
-
-  function fillDistrictSelect(regionName, selected){
-    if (!pfDistrict) return;
-    pfDistrict.disabled = true;
-    pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
-
-    if (!regionName || !regionsData) return;
-    const reg = (regionsData.regions || []).find(r=>r.name === regionName);
-    if (!reg) return;
-
-    pfDistrict.disabled = false;
-    pfDistrict.innerHTML = '<option value="">Tuman/shaharni tanlang</option>';
-    (reg.districts || []).forEach(d=>{
-      const opt = document.createElement('option');
-      opt.value = d.name;
-      opt.textContent = d.name;
-      pfDistrict.appendChild(opt);
-    });
-
-    if (selected){
-      pfDistrict.value = selected;
-    }
-  }
-
-  // ==== YOSH / DARAJA ====
-  function calcAge(birthDateStr){
-    if (!birthDateStr) return null;
-    const d = new Date(birthDateStr);
-    if (isNaN(d.getTime())) return null;
-    const now = new Date();
-    let age = now.getFullYear() - d.getFullYear();
-    const m = now.getMonth() - d.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-    return age >= 0 ? age : null;
-  }
-
-  function calcRank(points){
-    const p = Number(points || 0);
-    if (p >= 1000) return "Legend";
-    if (p >= 500)  return "Ustoz";
-    if (p >= 200)  return "Faol talaba";
-    if (p >= 50)   return "Faol foydalanuvchi";
-    if (p > 0)     return "Yangi ishtirokchi";
-    return "Yangi foydalanuvchi";
-  }
-
-  function isProfileComplete(p){
-    return !!(p && p.fullName && p.birthDate && p.region && p.district);
-  }
-
-  // ==== Firestore: profilni o'qish/yozish ====
-
-  // *** MUHIM: bu funksiya endi authLite'ning turli variantlariga moslashgan ***
-  function getProfileDocIdFromUser(u){
-    if (!u) return '';
-
-    // authLite.da ma'lumot qayerda bo'lishi mumkinligini tekshiramiz
-    const d = u.data || u;
-
-    // 1) loginId – foydalanuvchi ID sifatida ishlatamiz
-    if (d.loginId) return String(d.loginId);
-
-    // 2) docId yoki id bo'lsa
-    if (d.docId)  return String(d.docId);
-    if (d.id)     return String(d.id);
-
-    // 3) fallback: uid / userId
-    if (d.uid)    return String(d.uid);
-    if (d.userId) return String(d.userId);
-
-    // boshqa holat – hech bo'lmasa konsolga chiqaramiz
-    console.warn('getProfileDocIdFromUser: profil ID topilmadi', u);
-    return '';
-  }
-
-  async function loadProfileForCurrent(){
-    if (!currentUser) return {};
-    const docId = getProfileDocIdFromUser(currentUser);
-    if (!docId) {
-      profileData = {};
-      return {};
-    }
-    const ref = db.collection(PROFILES_COLL).doc(docId);
-    const snap = await ref.get();
-    profileData = snap.exists ? snap.data() : {};
-    return profileData;
-  }
-
-  async function saveProfileForCurrent(payload){
-    if (!currentUser) throw new Error("User yo'q");
-    const docId = getProfileDocIdFromUser(currentUser);
-
-    if (!docId){
-      // avvalgi "Profil ID aniqlanmadi" o‘rniga, aniqroq xabar + throw
-      console.error('Profil ID aniqlanmadi, currentUser=', currentUser);
-      throw new Error("Profil ID aniqlanmadi (loginId topilmadi).");
-    }
-
-    const ref = db.collection(PROFILES_COLL).doc(docId);
-    await ref.set(payload, { merge:true });
-    const snap = await ref.get();
-    profileData = snap.data() || payload;
-  }
-
-  // ==== VIEW ni chizish ====
-  function renderView(){
-    if (!currentUser) return;
-    const ud = currentUser.data || currentUser || {};
-    const pd = profileData || {};
-
-    const fullName = pd.fullName || ud.fullName || "Foydalanuvchi";
-    const loginId  = ud.loginId || ud.id || ud.uid || "—";
-    const birth    = pd.birthDate || ud.birthDate;
-    const region   = pd.region || ud.region;
-    const district = pd.district || ud.district;
-    const points   = Number(ud.points || 0);
-    const age      = calcAge(birth);
-
-    pvFullname.textContent = fullName;
-    pvId.textContent       = "ID: " + (loginId || "—");
-    pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
-    pvPoints.textContent   = points + " ball";
-    pvRegion.textContent   = region   || "—";
-    pvDistrict.textContent = district || "—";
-    pvBirth.textContent    = birth    || "—";
-    pvRank.textContent     = calcRank(points);
-
-    headerIdEl.textContent = "ID: " + (loginId || "—");
-  }
-
-  // ==== Rejimlar ====
-  function setEditingMode(edit){
-    isEditing = !!edit;
-    viewBlock.style.display  = edit ? 'none' : 'block';
-    profForm.style.display   = edit ? 'flex' : 'none';
-
-    profCloseV.style.display = edit ? 'none' : 'inline-flex';
-    profEditBtn.style.display= edit ? 'none' : 'inline-flex';
-    profCancel.style.display = edit ? 'inline-flex' : 'none';
-    document.getElementById('profile-save-btn').style.display =
-      edit ? 'inline-flex' : 'none';
-
-    if (isMandatory){
-      profCloseX.style.display  = 'none';
-      profCloseV.style.display  = 'none';
-      profCancel.style.display  = 'none';
-    }else{
-      profCloseX.style.display  = 'inline-flex';
-      if (!edit) profCloseV.style.display = 'inline-flex';
-    }
-  }
-
-  async function openProfile(mandatory){
-    if (!currentUser){
-      alert("Avval tizimga kiring.");
-      return;
-    }
-    isMandatory = !!mandatory;
-
-    await loadRegions();
-    fillRegionSelect();
-
-    const d = profileData || currentUser.data || currentUser || {};
-
-    pfFullname.value = d.fullName || '';
-    pfBirth.value    = d.birthDate || '';
-    pfRegion.value   = d.region || '';
-    if (d.region){
-      fillDistrictSelect(d.region, d.district || '');
-    }else{
-      pfDistrict.disabled = true;
-      pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
-    }
-    pfNewPass.value  = '';
-    pfNewPass2.value = '';
-
-    renderView();
-    setEditingMode(!!mandatory);
-
-    profOverlay.classList.add('open');
-    document.body.classList.add('no-scroll');
-  }
-
-  function closeProfile(){
-    if (isMandatory) return;
-    profOverlay.classList.remove('open');
-    document.body.classList.remove('no-scroll');
-  }
-
-  // ==== Eventlar ====
-  if (profBtn){
-    profBtn.addEventListener('click', ()=> openProfile(false));
-  }
-  if (profCloseX){
-    profCloseX.addEventListener('click', closeProfile);
-  }
-  if (profCloseV){
-    profCloseV.addEventListener('click', closeProfile);
-  }
-  if (profCancel){
-    profCancel.addEventListener('click', ()=>{
-      if (isMandatory) return;
-      const d = profileData || currentUser?.data || currentUser || {};
-      pfFullname.value = d.fullName || '';
-      pfBirth.value    = d.birthDate || '';
-      pfRegion.value   = d.region || '';
-      if (d.region) fillDistrictSelect(d.region, d.district || '');
-      pfNewPass.value  = '';
-      pfNewPass2.value = '';
-      setEditingMode(false);
-    });
-  }
-  if (profOverlay){
-    profOverlay.addEventListener('click', e=>{
-      if (e.target === profOverlay) closeProfile();
-    });
-  }
-  if (pfRegion){
-    pfRegion.addEventListener('change', ()=>{
-      fillDistrictSelect(pfRegion.value, '');
-    });
-  }
-  if (profEditBtn){
-    profEditBtn.addEventListener('click', ()=>{
-      isMandatory = false;
-      setEditingMode(true);
-    });
-  }
-
-  if (profLogout){
-    profLogout.addEventListener('click', ()=>{
-      authLite.logout();
-      profOverlay.classList.remove('open');
-      document.body.classList.remove('no-scroll');
-      window.location.href = 'login.html';
-    });
-  }
-
-  if (profForm){
-    profForm.addEventListener('submit', async (e)=>{
-      e.preventDefault();
-      if (!currentUser){
-        alert("Avval tizimga kiring.");
-        return;
-      }
-
-      const fullName  = pfFullname.value.trim();
-      const birthDate = pfBirth.value;
-      const region    = pfRegion.value;
-      const district  = pfDistrict.value;
-      const newPass   = pfNewPass.value;
-      const newPass2  = pfNewPass2.value;
-
-      if (!fullName || !birthDate || !region || !district){
-        alert("Ism, tug‘ilgan sana, viloyat va tuman/shahar majburiy.");
-        return;
-      }
-      if (newPass || newPass2){
-        if (newPass.length < 6){
-          alert("Yangi parol kamida 6 ta belgidan iborat bo‘lishi kerak.");
-          return;
-        }
-        if (newPass !== newPass2){
-          alert("Yangi parol va uning takrori mos emas.");
-          return;
-        }
-      }
-
-      const payload = {
-        fullName,
-        birthDate,
-        region,
-        district,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-
-      try{
-        // 1) Profil kolleksiyasiga yozamiz
-        await saveProfileForCurrent(payload);
-
-        // 2) Agar authLite.updateUserData bo'lsa va parol o'zgargan bo'lsa
-        if (newPass && typeof authLite.updateUserData === 'function'){
-          try{
-            await authLite.updateUserData({ password:newPass });
-          }catch(e2){
-            console.warn('Parolni yangilashda xatolik (authLite):', e2);
-          }
-        }
-
+    // ball va boshqa ma’lumotlar o‘zgarsa
+    if (typeof authLite.onUserChange === 'function') {
+      authLite.onUserChange(async u2 => {
+        currentUser = u2;
+        if (!u2) return;
+        profileData = await loadProfileForCurrent();
         renderView();
-        alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
-
-        if (isMandatory){
-          isMandatory = false;
-          closeProfile();
-        }else{
-          setEditingMode(false);
-        }
-      }catch(err){
-        console.error(err);
-        alert("Profilni saqlashda xatolik: " + (err.message || err));
-      }
-    });
-  }
-
-  // ==== Sahifa yuklanganda: session + majburiy profil ====
-  document.addEventListener('DOMContentLoaded', async ()=>{
-    try{
-      const u = await authLite.requireSession(); // login bo'lmasa login.html ga yuboradi
-      currentUser = u;
-      await loadProfileForCurrent();
-      renderView();
-
-      if (!isProfileComplete(profileData)){
-        openProfile(true); // birinchi kirishda majburiy
-      }
-    }catch(e){
-      // requireSession o'zi redirect qiladi
+      });
     }
-
-    // real-time user o'zgarishlari (ball va h.k.)
-    authLite.onUserChange(async u=>{
-      currentUser = u;
-      if (!u) return;
-      await loadProfileForCurrent();
-      renderView();
-    });
   });
 </script>
+
 
 </body>
 </html>
