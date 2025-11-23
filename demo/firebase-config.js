@@ -7,5 +7,9 @@ const firebaseConfig = {
   appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
   measurementId: "G-459PLJ7P7L"
 };
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps || !firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+
+// 🔹 Firestore ni globalga biriktiramiz
 window.db = firebase.firestore();
