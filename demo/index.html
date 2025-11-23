@@ -1288,7 +1288,11 @@
 </div>
 
 <script>
-  // === IFrame modal ===
+  // ==== Firestore + umumiy o'zgaruvchilar ====
+  const db = firebase.firestore();
+  const PROFILES_COLL = 'portal_profiles';
+
+  // IFrame modal
   const pageModal = document.getElementById('page-modal');
   const modalFrame = document.getElementById('modal-frame');
   const modalClose = document.getElementById('modal-close');
@@ -1317,7 +1321,7 @@
     }
   });
 
-  // === PROFIL LOGIKA ===
+  // ==== PROFIL ELEMENTLAR ====
   const profOverlay  = document.getElementById('profile-overlay');
   const profBtn      = document.getElementById('btn-profile');
   const profCloseX   = document.getElementById('profile-close-btn');
@@ -1345,11 +1349,13 @@
   const pvRank       = document.getElementById('pv-rank');
   const headerIdEl   = document.getElementById('header-id');
 
-  let currentUser = null;
+  let currentUser = null;    // auth-lite dan keladigan user
+  let profileData = null;    // portal_profiles dan o'qilgan profil
   let regionsData = null;
   let isEditing   = false;
   let isMandatory = false;
 
+  // ==== REGIONS (viloyat/tuman) ====
   async function loadRegions(){
     if (regionsData) return regionsData;
     try{
@@ -1397,6 +1403,7 @@
     }
   }
 
+  // ==== YOSH / DARAJA ====
   function calcAge(birthDateStr){
     if (!birthDateStr) return null;
     const d = new Date(birthDateStr);
@@ -1418,27 +1425,63 @@
     return "Yangi foydalanuvchi";
   }
 
-  function renderView(){
-    if (!currentUser) return;
-    const d = currentUser.data || {};
-    const fullName = d.fullName || "Foydalanuvchi";
-    const idStr    = d.loginId ? ("ID: " + d.loginId) : "ID: —";
-    const age      = calcAge(d.birthDate);
-    const points   = Number(d.points || 0);
-    const rank     = calcRank(points);
-
-    pvFullname.textContent = fullName;
-    pvId.textContent       = idStr;
-    pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
-    pvPoints.textContent   = points + " ball";
-    pvRegion.textContent   = d.region   || "—";
-    pvDistrict.textContent = d.district || "—";
-    pvBirth.textContent    = d.birthDate || "—";
-    pvRank.textContent     = rank;
-
-    headerIdEl.textContent = "ID: " + (d.loginId || "—");
+  function isProfileComplete(p){
+    return !!(p && p.fullName && p.birthDate && p.region && p.district);
   }
 
+  // ==== Firestore: profilni o'qish/yozish ====
+  function getProfileDocIdFromUser(u){
+    const d = u && u.data ? u.data : {};
+    // loginId bo'lsa shuni ishlatamiz, bo'lmasa doc id
+    return String(d.loginId || u.id || '');
+  }
+
+  async function loadProfileForCurrent(){
+    if (!currentUser) return {};
+    const docId = getProfileDocIdFromUser(currentUser);
+    if (!docId) return {};
+    const ref = db.collection(PROFILES_COLL).doc(docId);
+    const snap = await ref.get();
+    return snap.exists ? snap.data() : {};
+  }
+
+  async function saveProfileForCurrent(payload){
+    if (!currentUser) throw new Error("User yo'q");
+    const docId = getProfileDocIdFromUser(currentUser);
+    if (!docId) throw new Error("Profil ID aniqlanmadi");
+    const ref = db.collection(PROFILES_COLL).doc(docId);
+    await ref.set(payload, { merge:true });
+    const snap = await ref.get();
+    profileData = snap.data() || payload;
+  }
+
+  // ==== VIEW ni chizish ====
+  function renderView(){
+    if (!currentUser) return;
+    const ud = currentUser.data || {};
+    const pd = profileData || {};
+
+    const fullName = pd.fullName || ud.fullName || "Foydalanuvchi";
+    const loginId  = ud.loginId || ud.id || currentUser.id || "—";
+    const birth    = pd.birthDate || ud.birthDate;
+    const region   = pd.region || ud.region;
+    const district = pd.district || ud.district;
+    const points   = Number(ud.points || 0);
+    const age      = calcAge(birth);
+
+    pvFullname.textContent = fullName;
+    pvId.textContent       = "ID: " + (loginId || "—");
+    pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
+    pvPoints.textContent   = points + " ball";
+    pvRegion.textContent   = region   || "—";
+    pvDistrict.textContent = district || "—";
+    pvBirth.textContent    = birth    || "—";
+    pvRank.textContent     = calcRank(points);
+
+    headerIdEl.textContent = "ID: " + (loginId || "—");
+  }
+
+  // ==== Rejimlar ====
   function setEditingMode(edit){
     isEditing = !!edit;
     viewBlock.style.display  = edit ? 'none' : 'block';
@@ -1470,7 +1513,8 @@
     await loadRegions();
     fillRegionSelect();
 
-    const d = currentUser.data || {};
+    const d = profileData || currentUser.data || {};
+
     pfFullname.value = d.fullName || '';
     pfBirth.value    = d.birthDate || '';
     pfRegion.value   = d.region || '';
@@ -1496,7 +1540,7 @@
     document.body.classList.remove('no-scroll');
   }
 
-  // === Eventlar ===
+  // ==== Eventlar ====
   if (profBtn){
     profBtn.addEventListener('click', ()=> openProfile(false));
   }
@@ -1509,7 +1553,7 @@
   if (profCancel){
     profCancel.addEventListener('click', ()=>{
       if (isMandatory) return;
-      const d = currentUser ? (currentUser.data || {}) : {};
+      const d = profileData || currentUser?.data || {};
       pfFullname.value = d.fullName || '';
       pfBirth.value    = d.birthDate || '';
       pfRegion.value   = d.region || '';
@@ -1582,13 +1626,23 @@
         district,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      if (newPass) payload.password = newPass;
 
       try{
-        await authLite.updateUserData(payload);
-        currentUser = await authLite.refreshUser();
+        // 1) Profil kolleksiyasiga yozamiz
+        await saveProfileForCurrent(payload);
+
+        // 2) Agar authLite.updateUserData bo'lsa va parol o'zgargan bo'lsa, u yerni ham yangilab qo'yamiz
+        if (newPass && typeof authLite.updateUserData === 'function'){
+          try{
+            await authLite.updateUserData({ password:newPass });
+          }catch(e2){
+            console.warn('Parolni yangilashda xatolik (authLite):', e2);
+          }
+        }
+
         renderView();
         alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
+
         if (isMandatory){
           isMandatory = false;
           closeProfile();
@@ -1602,57 +1656,28 @@
     });
   }
 
-  // === PWA install button ===
-  const installBtn = document.getElementById('btn-install-pwa');
-  let deferredPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault();
-    deferredPrompt = e;
-    if (installBtn) installBtn.style.display = 'inline-flex';
-  });
-
-  if (installBtn){
-    installBtn.addEventListener('click', async ()=>{
-      if (!deferredPrompt){
-        alert("Hozircha o‘rnatish imkoni yo‘q. Keyinroq urinib ko‘ring.");
-        return;
-      }
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      if (choice.outcome === 'accepted'){
-        installBtn.style.display = 'none';
-      }
-    });
-  }
-
-  // === Sahifa yuklanganda: session + profil + service worker ===
+  // ==== Sahifa yuklanganda: session + majburiy profil ====
   document.addEventListener('DOMContentLoaded', async ()=>{
     try{
-      const u = await authLite.requireSession();
+      const u = await authLite.requireSession(); // login bo'lmasa login.html ga yuboradi
       currentUser = u;
+      profileData = await loadProfileForCurrent();
       renderView();
 
-      const d = u ? (u.data || {}) : {};
-      const complete = !!(d.fullName && d.birthDate && d.region && d.district);
-      if (!complete){
-        openProfile(true);
+      if (!isProfileComplete(profileData)){
+        openProfile(true); // birinchi kirishda majburiy
       }
     }catch(e){
-      // requireSession login.html ga redirect qiladi
+      // requireSession o'zi redirect qilib yuboradi
     }
 
-    authLite.onUserChange(u=>{
+    // real-time user o'zgarishlari (ball va h.k.) bo'lsa
+    authLite.onUserChange(async u=>{
       currentUser = u;
       if (!u) return;
+      profileData = await loadProfileForCurrent();
       renderView();
     });
-
-    // PWA service worker
-    if ('serviceWorker' in navigator){
-      navigator.serviceWorker.register('service-worker.js').catch(console.error);
-    }
   });
 </script>
 </body>
