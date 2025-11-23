@@ -1286,14 +1286,13 @@
     </div>
   </div>
 </div>
-
 <script>
   /* =============== Firestore init =============== */
   const db = firebase.firestore();
   const USER_COLL = 'foydalanuvchilar';   // profil ham shu joyga yoziladi
 
   /* =============== IFRAME MODAL (sahifa ichida ochish) =============== */
-  const pageModal = document.getElementById('page-modal');
+  const pageModal  = document.getElementById('page-modal');
   const modalFrame = document.getElementById('modal-frame');
   const modalClose = document.getElementById('modal-close');
 
@@ -1307,19 +1306,23 @@
     });
   });
 
-  modalClose.addEventListener('click', () => {
-    pageModal.classList.remove('open');
-    modalFrame.src = '';
-    document.body.classList.remove('no-scroll');
-  });
-
-  pageModal.addEventListener('click', e => {
-    if (e.target === pageModal) {
+  if (modalClose) {
+    modalClose.addEventListener('click', () => {
       pageModal.classList.remove('open');
       modalFrame.src = '';
       document.body.classList.remove('no-scroll');
-    }
-  });
+    });
+  }
+
+  if (pageModal) {
+    pageModal.addEventListener('click', e => {
+      if (e.target === pageModal) {
+        pageModal.classList.remove('open');
+        modalFrame.src = '';
+        document.body.classList.remove('no-scroll');
+      }
+    });
+  }
 
   /* =============== PROFIL ELEMENTLAR =============== */
   const profOverlay  = document.getElementById('profile-overlay');
@@ -1433,12 +1436,13 @@
 
   // joriy userning foydalanuvchilar kolleksiyasidagi docId sini olish
   function getUserDocId(u) {
-    // authLite obyektida ko‘p hollarda id yoki uid bo‘ladi
     if (!u) return '';
-    if (u.id) return String(u.id);
+    const d = u.data || {};
+    // Auth + rules bilan mos: asosan Firebase Auth UID / doc.id ishlatiladi
+    if (u.id)  return String(u.id);
     if (u.uid) return String(u.uid);
-    // fallback: loginId bo‘yicha alohida doc emas, shunchaki identifikator
-    if (u.data && u.data.loginId) return String(u.data.loginId);
+    // agar kelajakda loginId bo‘yicha docId ishlatsak – fallback
+    if (d.loginId) return String(d.loginId);
     return '';
   }
 
@@ -1492,38 +1496,38 @@
     const points   = Number(ud.points || 0);
     const age      = calcAge(birth);
 
-    pvFullname.textContent = fullName;
-    pvId.textContent       = "ID: " + (loginId || "—");
-    pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
-    pvPoints.textContent   = points + " ball";
-    pvRegion.textContent   = region   || "—";
-    pvDistrict.textContent = district || "—";
-    pvBirth.textContent    = birth    || "—";
-    pvRank.textContent     = calcRank(points);
+    if (pvFullname) pvFullname.textContent = fullName;
+    if (pvId)       pvId.textContent       = "ID: " + (loginId || "—");
+    if (pvAge)      pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
+    if (pvPoints)   pvPoints.textContent   = points + " ball";
+    if (pvRegion)   pvRegion.textContent   = region   || "—";
+    if (pvDistrict) pvDistrict.textContent = district || "—";
+    if (pvBirth)    pvBirth.textContent    = birth    || "—";
+    if (pvRank)     pvRank.textContent     = calcRank(points);
 
-    headerIdEl.textContent = "ID: " + (loginId || "—");
+    if (headerIdEl) headerIdEl.textContent = "ID: " + (loginId || "—");
   }
 
   /* =============== Rejimlar (view / edit) =============== */
   function setEditingMode(edit) {
     isEditing = !!edit;
 
-    viewBlock.style.display  = edit ? 'none' : 'block';
-    profForm.style.display   = edit ? 'flex' : 'none';
+    if (viewBlock) viewBlock.style.display  = edit ? 'none' : 'block';
+    if (profForm)  profForm.style.display   = edit ? 'flex' : 'none';
 
-    profCloseV.style.display = edit ? 'none' : 'inline-flex';
-    profEditBtn.style.display= edit ? 'none' : 'inline-flex';
-    profCancel.style.display = edit ? 'inline-flex' : 'none';
-    document.getElementById('profile-save-btn').style.display =
-      edit ? 'inline-flex' : 'none';
+    if (profCloseV)   profCloseV.style.display   = edit ? 'none' : 'inline-flex';
+    if (profEditBtn)  profEditBtn.style.display  = edit ? 'none' : 'inline-flex';
+    if (profCancel)   profCancel.style.display   = edit ? 'inline-flex' : 'none';
+    const saveBtn = document.getElementById('profile-save-btn');
+    if (saveBtn)      saveBtn.style.display      = edit ? 'inline-flex' : 'none';
 
     if (isMandatory) {
-      profCloseX.style.display  = 'none';
-      profCloseV.style.display  = 'none';
-      profCancel.style.display  = 'none';
+      if (profCloseX) profCloseX.style.display  = 'none';
+      if (profCloseV) profCloseV.style.display  = 'none';
+      if (profCancel) profCancel.style.display  = 'none';
     } else {
-      profCloseX.style.display  = 'inline-flex';
-      if (!edit) profCloseV.style.display = 'inline-flex';
+      if (profCloseX) profCloseX.style.display  = 'inline-flex';
+      if (!edit && profCloseV) profCloseV.style.display = 'inline-flex';
     }
   }
 
@@ -1539,28 +1543,31 @@
 
     const d = profileData || currentUser.data || {};
 
-    pfFullname.value = d.fullName  || '';
-    pfBirth.value    = d.birthDate || '';
-    pfRegion.value   = d.region    || '';
+    if (pfFullname) pfFullname.value = d.fullName  || '';
+    if (pfBirth)    pfBirth.value    = d.birthDate || '';
+    if (pfRegion)   pfRegion.value   = d.region    || '';
+
     if (d.region) {
       fillDistrictSelect(d.region, d.district || '');
-    } else {
+    } else if (pfDistrict) {
       pfDistrict.disabled = true;
       pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
     }
-    pfNewPass.value  = '';
-    pfNewPass2.value = '';
+    if (pfNewPass)  pfNewPass.value  = '';
+    if (pfNewPass2) pfNewPass2.value = '';
 
     renderView();
     setEditingMode(!!mandatory);
 
-    profOverlay.classList.add('open');
-    document.body.classList.add('no-scroll');
+    if (profOverlay) {
+      profOverlay.classList.add('open');
+      document.body.classList.add('no-scroll');
+    }
   }
 
   function closeProfile() {
     if (isMandatory) return;  // majburiy rejimda yopib bo‘lmaydi
-    profOverlay.classList.remove('open');
+    if (profOverlay) profOverlay.classList.remove('open');
     document.body.classList.remove('no-scroll');
   }
 
@@ -1584,12 +1591,12 @@
     profCancel.addEventListener('click', () => {
       if (isMandatory) return;
       const d = profileData || currentUser?.data || {};
-      pfFullname.value = d.fullName  || '';
-      pfBirth.value    = d.birthDate || '';
-      pfRegion.value   = d.region    || '';
+      if (pfFullname) pfFullname.value = d.fullName  || '';
+      if (pfBirth)    pfBirth.value    = d.birthDate || '';
+      if (pfRegion)   pfRegion.value   = d.region    || '';
       if (d.region) fillDistrictSelect(d.region, d.district || '');
-      pfNewPass.value  = '';
-      pfNewPass2.value = '';
+      if (pfNewPass)  pfNewPass.value  = '';
+      if (pfNewPass2) pfNewPass2.value = '';
       setEditingMode(false);
     });
   }
@@ -1620,7 +1627,7 @@
   if (profLogout) {
     profLogout.addEventListener('click', () => {
       authLite.logout();
-      profOverlay.classList.remove('open');
+      if (profOverlay) profOverlay.classList.remove('open');
       document.body.classList.remove('no-scroll');
       window.location.href = 'login.html';
     });
@@ -1699,7 +1706,6 @@
         openProfile(true); // birinchi kirishda majburiy to‘ldirish
       }
     } catch (e) {
-      // requireSession o‘zi redirect qiladi
       console.warn('Session yo‘q yoki xatolik:', e);
     }
 
@@ -1713,56 +1719,54 @@
       });
     }
   });
-  // ==== PWA o'rnatish tugmasi (profil ichida) ====
-let deferredInstallPrompt = null;
-const pwaBtn = document.getElementById('pwa-install-btn');
 
-// Brauzer "install qilib bo'ladi" deb signal berganda
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();               // standart banner chiqmasin
-  deferredInstallPrompt = e;        // keyinroq ishlatamiz
+  /* =============== PWA o‘rnatish tugmasi (profil ichida) =============== */
+  let deferredInstallPrompt = null;
+  const pwaBtn = document.getElementById('pwa-install-btn');
 
-  if (pwaBtn) {
-    pwaBtn.style.display = 'inline-flex';  // profil ichidagi tugmani ko'rsatamiz
-  }
-});
+  // Brauzer "install qilib bo'ladi" deb signal berganda
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();          // standart banner chiqmasin
+    deferredInstallPrompt = e;   // keyinroq ishlatamiz
 
-// Allaqachon ilova sifatida o'rnatilgan bo'lsa, tugmani umuman ko'rsatmaymiz
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches
-         || window.navigator.standalone === true;
-}
-
-if (isStandalone() && pwaBtn) {
-  pwaBtn.style.display = 'none';
-}
-
-// Tugmani bosganda install prompt chiqadi
-if (pwaBtn) {
-  pwaBtn.addEventListener('click', async ()=>{
-    try{
-      if (!deferredInstallPrompt) {
-        alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring.");
-        return;
-      }
-
-      deferredInstallPrompt.prompt();
-      const choice = await deferredInstallPrompt.userChoice;
-
-      // Qabul qilsa – tugmani yashirib qo'yamiz
-      if (choice.outcome === 'accepted') {
-        pwaBtn.style.display = 'none';
-      }
-
-      deferredInstallPrompt = null;
-    }catch(err){
-      console.error('PWA o‘rnatish xatosi:', err);
+    if (pwaBtn && !isStandalone()) {
+      pwaBtn.style.display = 'inline-flex';  // profil ichidagi tugmani ko'rsatamiz
     }
   });
-}
 
+  // Allaqachon ilova sifatida o'rnatilgan bo'lsa, tugmani umuman ko'rsatmaymiz
+  function isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches
+           || window.navigator.standalone === true;
+  }
+
+  if (isStandalone() && pwaBtn) {
+    pwaBtn.style.display = 'none';
+  }
+
+  // Tugmani bosganda install prompt chiqadi
+  if (pwaBtn) {
+    pwaBtn.addEventListener('click', async () => {
+      try {
+        if (!deferredInstallPrompt) {
+          alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring.");
+          return;
+        }
+
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+
+        // Qabul qilsa – tugmani yashirib qo'yamiz
+        if (choice.outcome === 'accepted') {
+          pwaBtn.style.display = 'none';
+        }
+
+        deferredInstallPrompt = null;
+      } catch (err) {
+        console.error('PWA o‘rnatish xatosi:', err);
+      }
+    });
+  }
 </script>
-
-
 </body>
 </html>
