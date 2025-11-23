@@ -1713,6 +1713,54 @@
       });
     }
   });
+  // ==== PWA o'rnatish tugmasi (profil ichida) ====
+let deferredInstallPrompt = null;
+const pwaBtn = document.getElementById('pwa-install-btn');
+
+// Brauzer "install qilib bo'ladi" deb signal berganda
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();               // standart banner chiqmasin
+  deferredInstallPrompt = e;        // keyinroq ishlatamiz
+
+  if (pwaBtn) {
+    pwaBtn.style.display = 'inline-flex';  // profil ichidagi tugmani ko'rsatamiz
+  }
+});
+
+// Allaqachon ilova sifatida o'rnatilgan bo'lsa, tugmani umuman ko'rsatmaymiz
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+         || window.navigator.standalone === true;
+}
+
+if (isStandalone() && pwaBtn) {
+  pwaBtn.style.display = 'none';
+}
+
+// Tugmani bosganda install prompt chiqadi
+if (pwaBtn) {
+  pwaBtn.addEventListener('click', async ()=>{
+    try{
+      if (!deferredInstallPrompt) {
+        alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring.");
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+
+      // Qabul qilsa – tugmani yashirib qo'yamiz
+      if (choice.outcome === 'accepted') {
+        pwaBtn.style.display = 'none';
+      }
+
+      deferredInstallPrompt = null;
+    }catch(err){
+      console.error('PWA o‘rnatish xatosi:', err);
+    }
+  });
+}
+
 </script>
 
 
