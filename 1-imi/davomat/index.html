@@ -263,6 +263,11 @@
       border-color:rgba(239,68,68,.25);
       color:var(--danger);
     }
+    .badge-success{
+      background:rgba(16,185,129,.08);
+      border-color:rgba(16,185,129,.25);
+      color:var(--success);
+    }
 
     /* Sonlar ustunidagi rangli raqamlar */
     .cnt-present{color:var(--success);}
@@ -885,7 +890,7 @@
   const db = firebase.firestore();
   const davomatCol = db.collection("davomat");
 
-  // ============== CALENDAR CONFIG (weekend/holiday) ==============`
+  // ============== CALENDAR CONFIG (weekend/holiday) ==============
   let calendarConfig = {
     extraSchoolDays: [], // bu sanalarda dars bor (hatto hafta oxiri bo'lsa ham)
     holidays: []         // bu sanalarda ta'til (dars yo'q)
@@ -1057,7 +1062,7 @@
     return 90 - diff;
   }
 
-  // ============== DOM ==============`
+  // ============== DOM ==============
   const todayLabel = document.getElementById("today-label");
 
   const gTodayValue = document.getElementById("g-today-value");
@@ -1136,7 +1141,7 @@
   let currentTeacher = null;
   let currentDateStr = null;
 
-  // ============== sinf.json o'qish ==============`
+  // ============== sinf.json o'qish ==============
   async function loadClassesJson(){
     try{
       const res = await fetch("sinf.json?v=" + Date.now());
@@ -1149,7 +1154,7 @@
     }
   }
 
-  // ============== LOGIN ==============`
+  // ============== LOGIN ==============
   function showLoginError(msg){
     loginAlertText.textContent = msg;
     loginAlert.classList.remove("hidden");
@@ -1238,12 +1243,21 @@
     localStorage.removeItem("davomat_teacher_class");
   }
 
-  // ============== GLOBAL STATS ==============`
+  // ============== GLOBAL STATS ==============
   async function refreshGlobalStats(){
     const todayDate = new Date();
     const today = toDateStr(todayDate);
     const wr = weekRangeFor(today);
     const mr = monthRangeFor(today);
+
+    const isTodaySchoolDay = isSchoolDay(today);
+
+    // Agar bugun o‘quv kuni bo‘lmasa – global "Bugun" blokini dam olish deb ko‘rsatamiz
+    if(!isTodaySchoolDay){
+      gTodayValue.textContent = "Dam olish";
+      gTodayDetail.textContent = "Bugun dars yo‘q (dam olish / ta'til).";
+      setStackedBar(gTodayBarP,gTodayBarE,gTodayBarU,0,0,0,0);
+    }
 
     // Bugun maktab bo‘yicha (faqat yozilgan sinflar)
     const todaySnap = await davomatCol.where("date","==",today).get();
@@ -1256,13 +1270,13 @@
       const T = s.total || (P+E+U);
       tP+=P; tE+=E; tU+=Math.max(U,0); tT+=T;
     });
-    if(tT){
+    if(tT && isTodaySchoolDay){
       const percent = Math.round(tP*100/tT);
       gTodayValue.textContent = percent + "%";
       gTodayDetail.textContent =
         `Bor: ${tP}, Sababli: ${tE}, Sababsiz: ${tU}, Jami: ${tT}`;
       setStackedBar(gTodayBarP,gTodayBarE,gTodayBarU,tP,tE,tU,tT);
-    }else{
+    }else if(!tT && isTodaySchoolDay){
       gTodayValue.textContent = "—";
       gTodayDetail.textContent = "Bugun uchun davomat hali kiritilmagan.";
       setStackedBar(gTodayBarP,gTodayBarE,gTodayBarU,0,0,0,0);
@@ -1320,6 +1334,8 @@
 
     // Sinflar kesimida bugun
     gClassesTbody.innerHTML = "";
+    const isTodaySchoolDay2 = isSchoolDay(today);
+
     for(const cls of classesJson){
       const docId = `${today}_${cls.id}`;
       const snap = await davomatCol.doc(docId).get();
@@ -1362,7 +1378,9 @@
       // foiz
       const tdPercent = document.createElement("td");
       tdPercent.textContent = percentText;
-      if(!hasAttendance){
+
+      // faqat o‘quv kuni bo‘lsa va davomat yo‘q bo‘lsa – qizil
+      if(!hasAttendance && isTodaySchoolDay2){
         tdPercent.classList.add("text-danger");
       }
       tr.appendChild(tdPercent);
@@ -1413,10 +1431,19 @@
       // kelmaganlar
       const tdNames = document.createElement("td");
       if(!hasAttendance){
-        const span = document.createElement("span");
-        span.className = "badge badge-danger";
-        span.textContent = "To'ldirilmagan";
-        tdNames.appendChild(span);
+        if(!isTodaySchoolDay2){
+          // Dam olish / ta’til kunda – yashil badge, jarimasiz
+          const span = document.createElement("span");
+          span.className = "badge badge-success";
+          span.textContent = "Dam olish kuni";
+          tdNames.appendChild(span);
+        }else{
+          // Oddiy o‘quv kuni bo‘lib, sinf davomat bermagan bo‘lsa – qizil
+          const span = document.createElement("span");
+          span.className = "badge badge-danger";
+          span.textContent = "To'ldirilmagan";
+          tdNames.appendChild(span);
+        }
       }else if(!excusedNames.length && !unexcusedNames.length){
         const span = document.createElement("span");
         span.className = "badge badge-muted";
@@ -1462,6 +1489,14 @@
     const classMap = {};
     const activeDatesSet = new Set();
 
+    // faqat o‘quv kunlari bo‘yicha "aktiv kunlar" ro‘yxati (jarima shu kunlarga)
+    let cur = new Date(startDate);
+    while(cur <= todayDate){
+      const ds = toDateStr(cur);
+      if(isSchoolDay(ds)) activeDatesSet.add(ds);
+      cur.setDate(cur.getDate() + 1);
+    }
+
     // teacher + class bazasi
     classesJson.forEach(cls=>{
       if(cls.teacherLogin){
@@ -1492,9 +1527,7 @@
       const data = doc.data();
       const dateStr = data.date;
       if(!dateStr) return;
-      if(!isSchoolDay(dateStr)) return;
-
-      activeDatesSet.add(dateStr);
+      if(!isSchoolDay(dateStr)) return; // o‘quv bo‘lmagan kunlarni reytingga qo‘shmaymiz
 
       const clsId = data.classId;
       const stats = data.stats || {};
@@ -1526,7 +1559,7 @@
 
     const activeDates = Array.from(activeDatesSet);
 
-    // to'ldirilmagan aktiv kunlar uchun -90 XP
+    // to'ldirilmagan aktiv (o‘quv) kunlar uchun -90 XP
     Object.keys(teacherMap).forEach(login=>{
       const tm = teacherMap[login];
       const set = teacherDocDates[login] || new Set();
@@ -1600,7 +1633,7 @@
       });
 
       if(classList.length){
-        classList.slice(0,10).forEach((c,idx)=>{
+        classList.slice(0,20).forEach((c,idx)=>{
           const tr = document.createElement("tr");
 
           const tdRank = document.createElement("td");
@@ -1632,7 +1665,7 @@
     }
   }
 
-  // ============== TEACHER: KUN HOLATI ==============`
+  // ============== TEACHER: KUN HOLATI ==============
   async function renderDayState(){
     dayAlerts.innerHTML = "";
     if(!currentTeacher || !currentDateStr) return;
@@ -1672,7 +1705,7 @@
     saveBtn.disabled = false;
   }
 
-  // ============== TEACHER: O'QUVCHILAR JADVALI ==============`
+  // ============== TEACHER: O'QUVCHILAR JADVALI ==============
   async function renderStudents(){
     if(!currentTeacher || !currentDateStr) return;
 
@@ -1729,7 +1762,7 @@
     studentsTableWrap.classList.remove("hidden");
   }
 
-  // ============== TEACHER: SAQLASH ==============`
+  // ============== TEACHER: SAQLASH ==============
   async function saveAttendance(){
     if(!currentTeacher || !currentDateStr) return;
 
@@ -1798,7 +1831,7 @@
     }
   }
 
-  // ============== TEACHER: STATISTIKA ==============`
+  // ============== TEACHER: STATISTIKA ==============
   async function refreshTeacherStats(){
     if(!currentTeacher || !currentDateStr) return;
     const cls = currentTeacher.classObj;
@@ -1883,7 +1916,7 @@
     }
   }
 
-  // ============== MODAL FUNCTIONS (kelmaganlar) ==============`
+  // ============== MODAL FUNCTIONS (kelmaganlar) ==============
   function openAbsentsModal(className, excusedNames, unexcusedNames){
     absentModalTitle.textContent = className + " — kelmaganlar";
     let html = "";
@@ -1914,7 +1947,7 @@
     absentModalBackdrop.style.display = "none";
   }
 
-  // ============== INIT ==============`
+  // ============== INIT ==============
   document.addEventListener("DOMContentLoaded", async ()=>{
     const todayStr = toDateStr(new Date());
     todayLabel.textContent = "Bugun: " + formatDateLabel(todayStr);
