@@ -1,16 +1,9 @@
-// Firebase config - bu yerga o'zingizning project ma'lumotlaringizni qo'ying
-// Konsoldan (Project settings -> General -> SDK snippet -> Config) olingan ma'lumotlar:
+// TODO: fill your Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
 };
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-
-// Tizim bo'ylab ishlatilishi uchun global
-window.db = db;
