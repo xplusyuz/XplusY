@@ -618,6 +618,7 @@
   </div>
 </div>
 
+<script src="auth-utils.js"></script>
 <script>
   // Modal elementlari
   const loginModal = document.getElementById('login-modal');
@@ -647,7 +648,7 @@
   const btnCopyPass = document.getElementById('btn-copy-pass');
   const btnCredsGo = document.getElementById('btn-creds-continue');
 
-  // Modal ochish funksiyalari
+  // Modal funksiyalari
   function openModal(modal) {
     modal.classList.add('open');
     document.body.classList.add('no-scroll');
@@ -664,7 +665,7 @@
     openModal(credsModal);
   }
 
-  // Modal ochish/yopish event listenerlari
+  // Event listenerlar
   btnLoginModal.addEventListener('click', () => openModal(loginModal));
   btnRegisterModal.addEventListener('click', () => openModal(registerModal));
   
@@ -672,7 +673,6 @@
   closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
   closeCredsModal.addEventListener('click', () => closeModal(credsModal));
   
-  // Modal tashqarisiga bosganda yopish
   loginModal.addEventListener('click', (e) => {
     if (e.target === loginModal) closeModal(loginModal);
   });
@@ -685,7 +685,7 @@
     if (e.target === credsModal) closeModal(credsModal);
   });
 
-  // LOGIN
+  // LOGIN - BITTA DOCUMENT BILAN ISHLASH
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -702,14 +702,16 @@
         return;
       }
       
-      // Loading holatini ko'rsatish
+      // Loading holati
       const originalText = loginBtn.innerHTML;
       loginBtn.innerHTML = '<div class="loading"></div> Kirish...';
       loginBtn.disabled = true;
       
       try {
-        await authLite.loginWithIdPassword(id, pwd);
-        // oddiy redirect: login.html bilan bir papkada turgan index.html
+        // AuthUtils orqali login qilish
+        await authUtils.loginWithIdPassword(id, pwd);
+        
+        // Muvaffaqiyatli login - index sahifasiga o'tish
         window.location.href = 'index.html';
       } catch(err) {
         alert(err.message || "Kirishda xatolik.");
@@ -722,23 +724,25 @@
     });
   }
 
-  // AUTO REGISTER
+  // AUTO REGISTER - FAQAT BITTA DOCUMENT YARATISH
   if (btnAutoRegister) {
     btnAutoRegister.addEventListener('click', async () => {
-      // Loading holatini ko'rsatish
       const originalText = btnAutoRegister.innerHTML;
       btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
       btnAutoRegister.disabled = true;
       
       try {
-        const { loginId, password } = await authLite.registerAuto();
+        // Yangi foydalanuvchi yaratish - FAQAT BITTA DOCUMENT
+        const { loginId, password } = await authUtils.registerAuto();
+        
+        console.log('Yangi foydalanuvchi yaratildi:', loginId);
+        
         closeModal(registerModal);
         openCredsModal(loginId, password);
       } catch(err) {
+        console.error('Roʻyxatdan oʻtishda xatolik:', err);
         alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err));
-        console.error(err);
       } finally {
-        // Loading holatini olib tashlash
         btnAutoRegister.innerHTML = originalText;
         btnAutoRegister.disabled = false;
       }
@@ -774,13 +778,26 @@
     });
   }
 
-  // Modal yopib, portga o'tish
+  // Asosiy sahifaga o'tish
   if (btnCredsGo) {
     btnCredsGo.addEventListener('click', () => {
       closeModal(credsModal);
       window.location.href = 'index.html';
     });
   }
+
+  // Sahifa yuklanganda sessionni tekshirish
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const user = await authUtils.loadSession();
+      if (user) {
+        // Agar session mavjud bo'lsa, index sahifasiga o'tish
+        window.location.href = 'index.html';
+      }
+    } catch (error) {
+      console.log('Session mavjud emas, login sahifada qolamiz');
+    }
+  });
 </script>
 
 </body>

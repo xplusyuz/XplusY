@@ -1286,40 +1286,48 @@
   </div>
 </div>
 
+<script src="auth-utils.js"></script>
 <script>
-  /* =============== Firestore init =============== */
+  /* =============== FIREBASE INIT =============== */
   const db = firebase.firestore();
-  const USER_COLL = 'foydalanuvchilar';   // profil ham shu joyga yoziladi
+  const USER_COLL = 'foydalanuvchilar';
 
   /* =============== IFRAME MODAL (sahifa ichida ochish) =============== */
   const pageModal  = document.getElementById('page-modal');
   const modalFrame = document.getElementById('modal-frame');
   const modalClose = document.getElementById('modal-close');
 
+  // Modal ochish funksiyasi
+  function openPageModal(url) {
+    if (!url) return;
+    modalFrame.src = url;
+    pageModal.classList.add('open');
+    document.body.classList.add('no-scroll');
+  }
+
+  // Modal yopish funksiyasi
+  function closePageModal() {
+    pageModal.classList.remove('open');
+    modalFrame.src = '';
+    document.body.classList.remove('no-scroll');
+  }
+
+  // Modal event listenerlar
   document.querySelectorAll('[data-link]').forEach(btn => {
     btn.addEventListener('click', () => {
       const url = btn.dataset.link;
-      if (!url) return;
-      modalFrame.src = url;
-      pageModal.classList.add('open');
-      document.body.classList.add('no-scroll');
+      openPageModal(url);
     });
   });
 
   if (modalClose) {
-    modalClose.addEventListener('click', () => {
-      pageModal.classList.remove('open');
-      modalFrame.src = '';
-      document.body.classList.remove('no-scroll');
-    });
+    modalClose.addEventListener('click', closePageModal);
   }
 
   if (pageModal) {
     pageModal.addEventListener('click', e => {
       if (e.target === pageModal) {
-        pageModal.classList.remove('open');
-        modalFrame.src = '';
-        document.body.classList.remove('no-scroll');
+        closePageModal();
       }
     });
   }
@@ -1335,6 +1343,7 @@
   const profForm     = document.getElementById('profile-form');
   const viewBlock    = document.getElementById('profile-view');
 
+  // Form elementlari
   const pfFullname   = document.getElementById('pf-fullname');
   const pfBirth      = document.getElementById('pf-birthdate');
   const pfRegion     = document.getElementById('pf-region');
@@ -1342,6 +1351,7 @@
   const pfNewPass    = document.getElementById('pf-new-password');
   const pfNewPass2   = document.getElementById('pf-new-password2');
 
+  // Ko'rish elementlari
   const pvFullname   = document.getElementById('pv-fullname');
   const pvId         = document.getElementById('pv-id');
   const pvAge        = document.getElementById('pv-age');
@@ -1352,13 +1362,11 @@
   const pvRank       = document.getElementById('pv-rank');
   const headerIdEl   = document.getElementById('header-id');
 
-  let currentUser = null;   // authLite.requireSession() dan keladi
-  let profileData = null;   // foydalanuvchilar/{docId} dan o‘qilgan ma’lumot
   let regionsData = null;
   let isEditing   = false;
   let isMandatory = false;
 
-  /* =============== REGIONS (viloyat / tuman) =============== */
+  /* =============== VILOYAT/TUMAN MA'LUMOTLARI =============== */
   async function loadRegions() {
     if (regionsData) return regionsData;
     try {
@@ -1406,7 +1414,7 @@
     }
   }
 
-  /* =============== YOSH / DARAJA =============== */
+  /* =============== YOSH / DARAJA HISOBlASH =============== */
   function calcAge(birthDateStr) {
     if (!birthDateStr) return null;
     const d = new Date(birthDateStr);
@@ -1428,71 +1436,25 @@
     return "Yangi foydalanuvchi";
   }
 
-  function isProfileComplete(p) {
-    return !!(p && p.fullName && p.birthDate && p.region && p.district);
+  function isProfileComplete(profile) {
+    return !!(profile && profile.fullName && profile.birthDate && profile.region && profile.district);
   }
 
-  /* =============== Firestore: profilni o‘qish / yozish =============== */
-  function getUserDocId(u) {
-    if (!u) return '';
-    const d = u.data || {};
-    if (u.id)  return String(u.id);
-    if (u.uid) return String(u.uid);
-    if (d.loginId) return String(d.loginId);
-    return '';
-  }
-
-  async function loadProfileForCurrent() {
-    if (!currentUser) return {};
-    const docId = getUserDocId(currentUser);
-    if (!docId) return {};
-
-    const ref = db.collection(USER_COLL).doc(docId);
-    const snap = await ref.get();
-    return snap.exists ? snap.data() : {};
-  }
-
-  async function saveProfileForCurrent(payload) {
-    if (!currentUser) throw new Error("User yo'q");
-    const docId = getUserDocId(currentUser);
-    if (!docId) throw new Error("Profil ID aniqlanmadi");
-
-    const ref = db.collection(USER_COLL).doc(docId);
-    await ref.set(payload, { merge: true });
-
-    const snap = await ref.get();
-    profileData = snap.data() || payload;
-
-    if (typeof authLite.refreshUser === 'function') {
-      try {
-        currentUser = await authLite.refreshUser();
-      } catch (e) {
-        console.warn('authLite.refreshUser xatolik:', e);
-      }
-    } else {
-      currentUser = {
-        ...(currentUser || {}),
-        data: { ...(currentUser?.data || {}), ...profileData }
-      };
-    }
-  }
-
-  /* =============== VIEW ni chizish =============== */
+  /* =============== PROFIL MA'LUMOTLARINI CHIZISH =============== */
   function renderView() {
+    const currentUser = authUtils.getUser();
     if (!currentUser) return;
-    const ud = currentUser.data || {};
-    const pd = profileData || {};
+    
+    const userData = currentUser.data || {};
+    const loginId = authUtils.getConsistentUserId(currentUser) || "—";
+    const birth = userData.birthDate || "";
+    const region = userData.region || "";
+    const district = userData.district || "";
+    const points = Number(userData.points || 0);
+    const age = calcAge(birth);
 
-    const fullName = pd.fullName || ud.fullName || "Foydalanuvchi";
-    const loginId  = ud.loginId || ud.id || currentUser.id || "—";
-    const birth    = pd.birthDate || ud.birthDate || "";
-    const region   = pd.region || ud.region || "";
-    const district = pd.district || ud.district || "";
-    const points   = Number(ud.points || 0);
-    const age      = calcAge(birth);
-
-    if (pvFullname) pvFullname.textContent = fullName;
-    if (pvId)       pvId.textContent       = "ID: " + (loginId || "—");
+    if (pvFullname) pvFullname.textContent = userData.fullName || "Foydalanuvchi";
+    if (pvId)       pvId.textContent       = "ID: " + loginId;
     if (pvAge)      pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
     if (pvPoints)   pvPoints.textContent   = points + " ball";
     if (pvRegion)   pvRegion.textContent   = region   || "—";
@@ -1500,10 +1462,10 @@
     if (pvBirth)    pvBirth.textContent    = birth    || "—";
     if (pvRank)     pvRank.textContent     = calcRank(points);
 
-    if (headerIdEl) headerIdEl.textContent = "ID: " + (loginId || "—");
+    if (headerIdEl) headerIdEl.textContent = "ID: " + loginId;
   }
 
-  /* =============== Rejimlar (view / edit) =============== */
+  /* =============== REJIMLAR (VIEW / EDIT) =============== */
   function setEditingMode(edit) {
     isEditing = !!edit;
 
@@ -1527,27 +1489,30 @@
   }
 
   async function openProfile(mandatory) {
+    const currentUser = authUtils.getUser();
     if (!currentUser) {
       alert("Avval tizimga kiring.");
       return;
     }
+    
     isMandatory = !!mandatory;
 
     await loadRegions();
     fillRegionSelect();
 
-    const d = profileData || currentUser.data || {};
+    const userData = currentUser.data || {};
 
-    if (pfFullname) pfFullname.value = d.fullName  || '';
-    if (pfBirth)    pfBirth.value    = d.birthDate || '';
-    if (pfRegion)   pfRegion.value   = d.region    || '';
+    if (pfFullname) pfFullname.value = userData.fullName  || '';
+    if (pfBirth)    pfBirth.value    = userData.birthDate || '';
+    if (pfRegion)   pfRegion.value   = userData.region    || '';
 
-    if (d.region) {
-      fillDistrictSelect(d.region, d.district || '');
+    if (userData.region) {
+      fillDistrictSelect(userData.region, userData.district || '');
     } else if (pfDistrict) {
       pfDistrict.disabled = true;
       pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
     }
+    
     if (pfNewPass)  pfNewPass.value  = '';
     if (pfNewPass2) pfNewPass2.value = '';
 
@@ -1566,59 +1531,77 @@
     document.body.classList.remove('no-scroll');
   }
 
-  /* =============== Eventlar =============== */
+  /* =============== EVENT LISTENERLAR =============== */
   if (profBtn) {
     profBtn.addEventListener('click', () => openProfile(false));
   }
+  
   if (profCloseX) {
     profCloseX.addEventListener('click', closeProfile);
   }
+  
   if (profCloseV) {
     profCloseV.addEventListener('click', closeProfile);
   }
+  
   if (profCancel) {
     profCancel.addEventListener('click', () => {
       if (isMandatory) return;
-      const d = profileData || currentUser?.data || {};
-      if (pfFullname) pfFullname.value = d.fullName  || '';
-      if (pfBirth)    pfBirth.value    = d.birthDate || '';
-      if (pfRegion)   pfRegion.value   = d.region    || '';
-      if (d.region) fillDistrictSelect(d.region, d.district || '');
+      const currentUser = authUtils.getUser();
+      const userData = currentUser?.data || {};
+      
+      if (pfFullname) pfFullname.value = userData.fullName  || '';
+      if (pfBirth)    pfBirth.value    = userData.birthDate || '';
+      if (pfRegion)   pfRegion.value   = userData.region    || '';
+      if (userData.region) fillDistrictSelect(userData.region, userData.district || '');
       if (pfNewPass)  pfNewPass.value  = '';
       if (pfNewPass2) pfNewPass2.value = '';
       setEditingMode(false);
     });
   }
+  
   if (profOverlay) {
     profOverlay.addEventListener('click', e => {
       if (e.target === profOverlay) closeProfile();
     });
   }
+  
   if (pfRegion) {
     pfRegion.addEventListener('change', () => {
       fillDistrictSelect(pfRegion.value, '');
     });
   }
+  
   if (profEditBtn) {
     profEditBtn.addEventListener('click', () => {
       isMandatory = false;
       setEditingMode(true);
     });
   }
+  
   if (profLogout) {
     profLogout.addEventListener('click', () => {
-      authLite.logout();
+      authUtils.logout();
       if (profOverlay) profOverlay.classList.remove('open');
       document.body.classList.remove('no-scroll');
       window.location.href = 'login.html';
     });
   }
 
+  // PROFILNI SAQLASH - FAQAT BITTA DOCUMENTGA YOZISH
   if (profForm) {
     profForm.addEventListener('submit', async e => {
       e.preventDefault();
+      
+      const currentUser = authUtils.getUser();
       if (!currentUser) {
         alert("Avval tizimga kiring.");
+        return;
+      }
+
+      const userId = authUtils.getConsistentUserId(currentUser);
+      if (!userId) {
+        alert("Foydalanuvchi ID si aniqlanmadi.");
         return;
       }
 
@@ -1630,13 +1613,13 @@
       const newPass2  = pfNewPass2.value;
 
       if (!fullName || !birthDate || !region || !district) {
-        alert("Ism, tug‘ilgan sana, viloyat va tuman/shahar majburiy.");
+        alert("Ism, tug'ilgan sana, viloyat va tuman/shahar majburiy.");
         return;
       }
 
       if (newPass || newPass2) {
         if (newPass.length < 6) {
-          alert("Yangi parol kamida 6 ta belgidan iborat bo‘lishi kerak.");
+          alert("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak.");
           return;
         }
         if (newPass !== newPass2) {
@@ -1652,12 +1635,16 @@
         district,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
+      
+      // Parol yangilansa
       if (newPass) {
         payload.password = newPass;
       }
 
       try {
-        await saveProfileForCurrent(payload);
+        // FAQAT BITTA DOCUMENTGA YOZISH
+        await authUtils.updateUserData(payload);
+        
         renderView();
         alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
 
@@ -1668,45 +1655,50 @@
           setEditingMode(false);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Profil saqlash xatosi:', err);
         alert("Profilni saqlashda xatolik: " + (err.message || err));
       }
     });
   }
 
-  /* =============== Sahifa yuklanganda: session + majburiy profil =============== */
+  /* =============== SAHIFA YUKLANGANDA =============== */
   document.addEventListener('DOMContentLoaded', async () => {
     try {
-      const u = await authLite.requireSession();
-      currentUser = u;
-      profileData = await loadProfileForCurrent();
-      renderView();
+      // Sessionni tekshirish
+      const user = await authUtils.requireSession();
+      console.log('Foydalanuvchi:', user);
+      
+      if (user) {
+        renderView();
 
-      if (!isProfileComplete(profileData)) {
-        openProfile(true);
+        // Profil to'liq emasligini tekshirish
+        if (!isProfileComplete(user.data)) {
+          setTimeout(() => openProfile(true), 1000);
+        }
       }
     } catch (e) {
-      console.warn('Session yo‘q yoki xatolik:', e);
+      console.warn('Session yoʻq yoki xatolik:', e);
+      window.location.href = 'login.html';
     }
 
-    if (typeof authLite.onUserChange === 'function') {
-      authLite.onUserChange(async u2 => {
-        currentUser = u2;
-        if (!u2) return;
-        profileData = await loadProfileForCurrent();
-        renderView();
-      });
-    }
+    // Foydalanuvchi o'zgarishlarini kuzatish
+    authUtils.onUserChange((user) => {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+      renderView();
+    });
   });
 
-  /* =============== Service worker (PWA sharti) =============== */
+  /* =============== SERVICE WORKER (PWA) =============== */
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(err => {
       console.warn('SW register xatolik:', err);
     });
   }
 
-  /* =============== PWA o‘rnatish tugmasi (profil ichida) =============== */
+  /* =============== PWA O'RNATISH TUGMASI =============== */
   let deferredInstallPrompt = null;
   const pwaBtn = document.getElementById('btn-install-pwa');
 
@@ -1720,8 +1712,8 @@
   });
 
   function isStandalone() {
-    return window.matchMedia('(display-mode: standalone)').matches
-           || window.navigator.standalone === true;
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true;
   }
 
   if (isStandalone() && pwaBtn) {
@@ -1749,6 +1741,54 @@
       }
     });
   }
+
+  /* =============== QO'SHIMCHA FUNKSIYALAR =============== */
+
+  // Ball qo'shish funksiyasi
+  async function addPoints(points) {
+    try {
+      const currentUser = authUtils.getUser();
+      if (!currentUser) return false;
+
+      const currentPoints = Number(currentUser.data.points || 0);
+      const newPoints = currentPoints + Number(points);
+      
+      await authUtils.updateUserData({
+        points: newPoints
+      });
+      
+      renderView();
+      return true;
+    } catch (error) {
+      console.error('Ball qoʻshishda xatolik:', error);
+      return false;
+    }
+  }
+
+  // Profil ma'lumotlarini yangilash funksiyasi
+  async function updateProfile(data) {
+    try {
+      await authUtils.updateUserData(data);
+      renderView();
+      return true;
+    } catch (error) {
+      console.error('Profil yangilashda xatolik:', error);
+      return false;
+    }
+  }
+
+  // Global funksiyalar
+  window.appUtils = {
+    openPageModal,
+    closePageModal,
+    openProfile,
+    closeProfile,
+    addPoints,
+    updateProfile,
+    renderView
+  };
+
 </script>
+
 </body>
 </html>
