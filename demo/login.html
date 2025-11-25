@@ -617,318 +617,205 @@
     </div>
   </div>
 </div>
-
 <script>
-  /* =============== Firestore init =============== */
-  const db = firebase.firestore();
-  const USER_COLL = 'foydalanuvchilar';
+// login.js
+// Tashqi talab: firebase + authLite global ob'ektlari va db = firebase.firestore() bo'lishi kerak.
 
-  /* =============== MODAL ELEMENTLARI =============== */
-  const loginModal = document.getElementById('login-modal');
-  const registerModal = document.getElementById('register-modal');
-  const credsModal = document.getElementById('creds-modal');
-  
-  // Tugma elementlari
-  const btnLoginModal = document.getElementById('btn-login-modal');
-  const btnRegisterModal = document.getElementById('btn-register-modal');
-  const btnAutoRegister = document.getElementById('btn-auto-register');
-  const loginForm = document.getElementById('login-form');
-  const loginBtn = document.getElementById('login-btn');
-  
-  // Modal yopish tugmalari
-  const closeLoginModal = document.getElementById('close-login-modal');
-  const closeRegisterModal = document.getElementById('close-register-modal');
-  const closeCredsModal = document.getElementById('close-creds-modal');
-  
-  // Input elementlari
-  const inputId = document.getElementById('login-id');
-  const inputPw = document.getElementById('login-password');
-  
-  // Ma'lumotlar modal elementlari
-  const modalCredsId = document.getElementById('modal-creds-id');
-  const modalCredsPw = document.getElementById('modal-creds-pass');
-  const btnCopyId = document.getElementById('btn-copy-id');
-  const btnCopyPass = document.getElementById('btn-copy-pass');
-  const btnCredsGo = document.getElementById('btn-creds-continue');
+const USER_COLL = 'foydalanuvchilar';
 
-  /* =============== YAGONA FIRESTORE OPERATSIYALARI =============== */
+// DOM elementlar (login sahifa)
+const loginModal = document.getElementById('login-modal');
+const registerModal = document.getElementById('register-modal');
+const credsModal = document.getElementById('creds-modal');
 
-  // Foydalanuvchi ro'yxatdan o'tganda VA profili yaratish - BIRTA DOCUMENT
-  async function registerUserWithProfile() {
-    try {
-      // 1. Avval authLite orqali ro'yxatdan o'tish
-      const { loginId, password } = await authLite.registerAuto();
-      
-      // 2. Darhol yangi foydalanuvchi uchun to'liq profil yaratish - BIRTA DOCUMENT
-      const userData = {
-        loginId: loginId,
-        password: password,
-        fullName: "",
-        birthDate: "",
-        region: "",
-        district: "",
+const btnLoginModal = document.getElementById('btn-login-modal');
+const btnRegisterModal = document.getElementById('btn-register-modal');
+const btnAutoRegister = document.getElementById('btn-auto-register');
+
+const loginForm = document.getElementById('login-form');
+const loginBtn = document.getElementById('login-btn');
+
+const inputId = document.getElementById('login-id');
+const inputPw = document.getElementById('login-password');
+
+const modalCredsId = document.getElementById('modal-creds-id');
+const modalCredsPw = document.getElementById('modal-creds-pass');
+const btnCopyId = document.getElementById('btn-copy-id');
+const btnCopyPass = document.getElementById('btn-copy-pass');
+const btnCredsGo = document.getElementById('btn-creds-continue');
+
+function openModal(modal) {
+  if (!modal) return;
+  modal.classList.add('open');
+  document.body.classList.add('no-scroll');
+}
+function closeModal(modal) {
+  if (!modal) return;
+  modal.classList.remove('open');
+  document.body.classList.remove('no-scroll');
+}
+function openCredsModal(id, pass) {
+  if (modalCredsId) modalCredsId.textContent = id || '';
+  if (modalCredsPw) modalCredsPw.textContent = pass || '';
+  openModal(credsModal);
+}
+
+// docId olish: uid ustunlik bilan
+function getUserDocIdFromAuthObj(u) {
+  if (!u) return '';
+  if (u.uid) return String(u.uid);
+  if (u.id) return String(u.id);
+  if (u.data && u.data.loginId) return String(u.data.loginId);
+  return '';
+}
+
+// ensure profile: authdan keyin yagona doc yaratilishi uchun
+async function ensureProfileForUserFromSession() {
+  try {
+    const u = await authLite.requireSession();
+    if (!u) return;
+    const docId = getUserDocIdFromAuthObj(u);
+    if (!docId) return;
+    const ref = db.collection(USER_COLL).doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      // Agar yangi foydalanuvchi bo'lsa, yarating
+      const loginIdField = (u.data && u.data.loginId) || u.loginId || '';
+      await ref.set({
+        loginId: loginIdField,
         points: 0,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        isProfileComplete: false,
-        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      
-      // 3. Bitta documentga yozish - loginId asosida
-      const docRef = db.collection(USER_COLL).doc(loginId);
-      await docRef.set(userData);
-      
-      console.log("Yangi foydalanuvchi yaratildi:", loginId);
-      return { loginId, password, userData };
-      
-    } catch (error) {
-      console.error("Ro'yxatdan o'tishda xatolik:", error);
-      throw error;
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } else {
+      // mavjud bo'lsa lastSeen yangilang
+      await ref.set({ lastSeen: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     }
+  } catch (err) {
+    console.warn('ensureProfileForUserFromSession xatolik:', err);
   }
+}
 
-  // Login qilganda profil ma'lumotlarini yangilash - BIRTA DOCUMENT
-  async function loginAndUpdateProfile(id, password) {
+// Event: login form
+if (loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = inputId ? inputId.value.trim() : '';
+    const pwd = inputPw ? inputPw.value.trim() : '';
+
+    if (!id || id.length !== 6) {
+      alert('ID 6 xonali bo\'lishi kerak.');
+      return;
+    }
+    if (!pwd) {
+      alert('Parolni kiriting.');
+      return;
+    }
+
+    const originalText = loginBtn ? loginBtn.innerHTML : null;
+    if (loginBtn) {
+      loginBtn.innerHTML = '<div class="loading"></div> Kirish...';
+      loginBtn.disabled = true;
+    }
+
     try {
-      // 1. Auth Lite orqali login qilish
-      const user = await authLite.loginWithIdPassword(id, password);
-      
-      // 2. Profil ma'lumotlarini yangilash
-      const docRef = db.collection(USER_COLL).doc(id);
-      const userDoc = await docRef.get();
-      
-      if (userDoc.exists) {
-        // Document mavjud - faqat yangilanish vaqtini yangilash
-        await docRef.update({
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        console.log("Mavjud foydalanuvchi profili yangilandi:", id);
-      } else {
-        // Document mavjud emas - yangi yaratish
-        const userData = {
-          loginId: id,
-          password: password,
-          fullName: "",
-          birthDate: "",
-          region: "",
-          district: "",
-          points: 0,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          isProfileComplete: false,
-          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        await docRef.set(userData);
-        console.log("Yangi foydalanuvchi profili yaratildi (login paytida):", id);
-      }
-      
-      return user;
-      
-    } catch (error) {
-      console.error("Login qilishda xatolik:", error);
-      throw error;
-    }
-  }
-
-  /* =============== MODAL FUNKSIYALARI =============== */
-  function openModal(modal) {
-    if (modal) {
-      modal.classList.add('open');
-      document.body.classList.add('no-scroll');
-    }
-  }
-  
-  function closeModal(modal) {
-    if (modal) {
-      modal.classList.remove('open');
-      document.body.classList.remove('no-scroll');
-    }
-  }
-  
-  function openCredsModal(id, pass) {
-    if (modalCredsId) modalCredsId.textContent = id;
-    if (modalCredsPw) modalCredsPw.textContent = pass;
-    openModal(credsModal);
-  }
-
-  /* =============== EVENT LISTENERLARI =============== */
-
-  // Modal ochish/yopish event listenerlari
-  if (btnLoginModal) {
-    btnLoginModal.addEventListener('click', () => openModal(loginModal));
-  }
-  
-  if (btnRegisterModal) {
-    btnRegisterModal.addEventListener('click', () => openModal(registerModal));
-  }
-  
-  if (closeLoginModal) {
-    closeLoginModal.addEventListener('click', () => closeModal(loginModal));
-  }
-  
-  if (closeRegisterModal) {
-    closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
-  }
-  
-  if (closeCredsModal) {
-    closeCredsModal.addEventListener('click', () => closeModal(credsModal));
-  }
-  
-  // Modal tashqarisiga bosganda yopish
-  if (loginModal) {
-    loginModal.addEventListener('click', (e) => {
-      if (e.target === loginModal) closeModal(loginModal);
-    });
-  }
-  
-  if (registerModal) {
-    registerModal.addEventListener('click', (e) => {
-      if (e.target === registerModal) closeModal(registerModal);
-    });
-  }
-  
-  if (credsModal) {
-    credsModal.addEventListener('click', (e) => {
-      if (e.target === credsModal) closeModal(credsModal);
-    });
-  }
-
-  /* =============== LOGIN - YANGILANGAN =============== */
-  if (loginForm) {
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = inputId ? inputId.value.trim() : '';
-      const pwd = inputPw ? inputPw.value.trim() : '';
-      
-      if (id.length !== 6) {
-        alert("ID 6 xonali bo'lishi kerak.");
-        return;
-      }
-      
-      if (!pwd) {
-        alert("Parolni kiriting.");
-        return;
-      }
-      
-      // Loading holatini ko'rsatish
-      if (loginBtn) {
-        const originalText = loginBtn.innerHTML;
-        loginBtn.innerHTML = '<div class="loading"></div> Kirish...';
-        loginBtn.disabled = true;
-        
-        try {
-          // Yangi birlashtirilgan login funksiyasi
-          await loginAndUpdateProfile(id, pwd);
-          
-          // Session yangilanganligini tekshirish
-          const currentUser = await authLite.getSession();
-          if (currentUser) {
-            console.log("Login muvaffaqiyatli, foydalanuvchi:", currentUser);
-            // To'g'ridan-to'g'ri index sahifasiga o'tish
-            window.location.href = 'index.html';
-          } else {
-            throw new Error("Session yangilanmadi");
-          }
-          
-        } catch(err) {
-          alert(err.message || "Kirishda xatolik.");
-          console.error(err);
-        } finally {
-          // Loading holatini olib tashlash
-          loginBtn.innerHTML = originalText;
-          loginBtn.disabled = false;
-        }
-      }
-    });
-  }
-
-  /* =============== AUTO REGISTER - YANGILANGAN =============== */
-  if (btnAutoRegister) {
-    btnAutoRegister.addEventListener('click', async () => {
-      // Loading holatini ko'rsatish
-      const originalText = btnAutoRegister.innerHTML;
-      btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
-      btnAutoRegister.disabled = true;
-      
-      try {
-        // Yangi birlashtirilgan funksiyani chaqiramiz
-        const { loginId, password } = await registerUserWithProfile();
-        
-        closeModal(registerModal);
-        openCredsModal(loginId, password);
-        
-      } catch(err) {
-        alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err));
-        console.error(err);
-      } finally {
-        btnAutoRegister.innerHTML = originalText;
-        btnAutoRegister.disabled = false;
-      }
-    });
-  }
-
-  /* =============== COPY TUGMALARI =============== */
-  if (btnCopyId) {
-    btnCopyId.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(modalCredsId.textContent.trim());
-        btnCopyId.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
-        setTimeout(() => {
-          btnCopyId.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
-        }, 2000);
-      } catch(e) {
-        alert("ID ni nusxa olishda xatolik.");
-      }
-    });
-  }
-  
-  if (btnCopyPass) {
-    btnCopyPass.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(modalCredsPw.textContent.trim());
-        btnCopyPass.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
-        setTimeout(() => {
-          btnCopyPass.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
-        }, 2000);
-      } catch(e) {
-        alert("Parolni nusxa olishda xatolik.");
-      }
-    });
-  }
-
-  // Modal yopib, asosiy sahifaga o'tish
-  if (btnCredsGo) {
-    btnCredsGo.addEventListener('click', () => {
-      closeModal(credsModal);
+      await authLite.loginWithIdPassword(id, pwd);
+      // success -> ensure profile va redirect
+      await ensureProfileForUserFromSession();
       window.location.href = 'index.html';
-    });
-  }
-
-  /* =============== SAHIFA YUKLANGANDA TEKSHIRISH =============== */
-  document.addEventListener('DOMContentLoaded', async () => {
-    try {
-      // getSession ishlatamiz, requireSession emas (redirect loop oldini olish uchun)
-      const user = await authLite.getSession();
-      if (user) {
-        console.log("Avval kirilgan, index sahifasiga yo'naltirilmoqda...");
-        // To'g'ridan-to'g'ri yo'naltirish
-        window.location.replace('index.html');
-      } else {
-        console.log("Session yo'q, login sahifada");
-        // Login sahifada qolish
+    } catch (err) {
+      alert(err.message || 'Kirishda xatolik.');
+      console.error('login error', err);
+    } finally {
+      if (loginBtn) {
+        loginBtn.innerHTML = originalText;
+        loginBtn.disabled = false;
       }
-    } catch (e) {
-      console.log("Session tekshirishda xatolik, login sahifada qolamiz:", e);
     }
   });
+}
 
-  /* =============== SERVICE WORKER (PWA) =============== */
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(err => {
-      console.warn('SW register xatolik:', err);
-    });
+// Auto-register (server funksiyangiz registerAuto qaytsa)
+if (btnAutoRegister) {
+  btnAutoRegister.addEventListener('click', async () => {
+    const originalText = btnAutoRegister.innerHTML;
+    btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
+    btnAutoRegister.disabled = true;
+    try {
+      // registerAuto returns { loginId, password } in your system
+      const res = await authLite.registerAuto();
+      // Agar registerAuto avtomatik login ham qilsa, sessiyani tekshirish va profile yaratish:
+      try { await ensureProfileForUserFromSession(); } catch(e){ console.warn(e); }
+      closeModal(registerModal);
+      openCredsModal(res.loginId, res.password);
+    } catch (err) {
+      alert('Ro\'yxatdan o\'tishda xatolik: ' + (err.message || err));
+      console.error('registerAuto error', err);
+    } finally {
+      btnAutoRegister.innerHTML = originalText;
+      btnAutoRegister.disabled = false;
+    }
+  });
+}
+
+// Modal open/close handlers
+if (btnLoginModal) btnLoginModal.addEventListener('click', () => openModal(loginModal));
+if (btnRegisterModal) btnRegisterModal.addEventListener('click', () => openModal(registerModal));
+
+const closeLoginModal = document.getElementById('close-login-modal');
+const closeRegisterModal = document.getElementById('close-register-modal');
+const closeCredsModal = document.getElementById('close-creds-modal');
+
+if (closeLoginModal) closeLoginModal.addEventListener('click', () => closeModal(loginModal));
+if (closeRegisterModal) closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
+if (closeCredsModal) closeCredsModal.addEventListener('click', () => closeModal(credsModal));
+
+if (loginModal) loginModal.addEventListener('click', (e) => { if (e.target === loginModal) closeModal(loginModal); });
+if (registerModal) registerModal.addEventListener('click', (e) => { if (e.target === registerModal) closeModal(registerModal); });
+if (credsModal) credsModal.addEventListener('click', (e) => { if (e.target === credsModal) closeModal(credsModal); });
+
+// Copy buttons
+if (btnCopyId) {
+  btnCopyId.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(modalCredsId.textContent.trim());
+      btnCopyId.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+      setTimeout(() => { btnCopyId.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa'; }, 2000);
+    } catch (e) {
+      alert('ID ni nusxa olishda xatolik.');
+    }
+  });
+}
+if (btnCopyPass) {
+  btnCopyPass.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(modalCredsPw.textContent.trim());
+      btnCopyPass.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+      setTimeout(() => { btnCopyPass.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa'; }, 2000);
+    } catch (e) {
+      alert('Parolni nusxa olishda xatolik.');
+    }
+  });
+}
+if (btnCredsGo) {
+  btnCredsGo.addEventListener('click', () => {
+    closeModal(credsModal);
+    window.location.href = 'index.html';
+  });
+}
+
+// Agar sahifa yuklanishi bilan session bo'lsa (masalan to'g'ridan to'g'ri kirish), ensureProfile chaqirish
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const u = await authLite.requireSession();
+    if (u) {
+      await ensureProfileForUserFromSession();
+      // agar login sahifida bo'lsangiz, redirect qilish mumkin
+      // window.location.href = 'index.html';
+    }
+  } catch (e) {
+    // sessiya bo'lmasligi odatiy holat
   }
+});
 </script>
 
 </body>
