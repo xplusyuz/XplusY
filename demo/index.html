@@ -1287,11 +1287,12 @@
 </div>
 <script>
 // index.js
-// Tashqi talab: firebase + authLite global ob'ektlari va db = firebase.firestore() bo'lishi kerak.
+// Talab: firebase va authLite global ob'ektlari hamda `db = firebase.firestore()` mavjud bo'lishi kerak.
 
+// ---------- Konfiguratsiya ----------
 const USER_COLL = 'foydalanuvchilar';
 
-// Iframe modal (sahifa ichida sahifa ochish)
+// ---------- IFRAME modal (page links) ----------
 const pageModal  = document.getElementById('page-modal');
 const modalFrame = document.getElementById('modal-frame');
 const modalClose = document.getElementById('modal-close');
@@ -1316,13 +1317,13 @@ if (pageModal) {
   pageModal.addEventListener('click', e => {
     if (e.target === pageModal) {
       pageModal.classList.remove('open');
-      modalFrame.src = '';
+      if (modalFrame) modalFrame.src = '';
       document.body.classList.remove('no-scroll');
     }
   });
 }
 
-// Profile elements (DOM)
+// ---------- Profile elements ----------
 const profOverlay  = document.getElementById('profile-overlay');
 const profBtn      = document.getElementById('btn-profile');
 const profCloseX   = document.getElementById('profile-close-btn');
@@ -1349,6 +1350,7 @@ const pvDistrict   = document.getElementById('pv-district');
 const pvBirth      = document.getElementById('pv-birthdate');
 const pvRank       = document.getElementById('pv-rank');
 const headerIdEl   = document.getElementById('header-id');
+const pwaBtn       = document.getElementById('btn-install-pwa');
 
 let currentUser = null;
 let profileData = null;
@@ -1356,7 +1358,31 @@ let regionsData = null;
 let isEditing   = false;
 let isMandatory = false;
 
-// Regions loader
+// ---------- Safe redirect helpers (shared with login.js logic) ----------
+function savePostLoginRedirect(url) {
+  try {
+    const cur = url || (window.location.pathname + window.location.search + window.location.hash);
+    sessionStorage.setItem('postLoginRedirect', cur);
+  } catch (e) { console.warn('savePostLoginRedirect', e); }
+}
+function getPostLoginRedirect() {
+  try { return sessionStorage.getItem('postLoginRedirect'); } catch (e) { return null; }
+}
+function clearPostLoginRedirect() { try { sessionStorage.removeItem('postLoginRedirect'); } catch (e) {} }
+function performPostLoginRedirect(defaultUrl = '/demo/index.html') {
+  try {
+    const target = getPostLoginRedirect();
+    clearPostLoginRedirect();
+    if (target && typeof target === 'string' && target.length > 0 && target.length < 2000) {
+      const a = document.createElement('a');
+      a.href = target;
+      if (a.hostname === window.location.hostname) { window.location.href = target; return; }
+    }
+  } catch (e) { console.warn('performPostLoginRedirect', e); }
+  window.location.href = defaultUrl;
+}
+
+// ---------- Regions loader ----------
 async function loadRegions() {
   if (regionsData) return regionsData;
   try {
@@ -1397,7 +1423,7 @@ function fillDistrictSelect(regionName, selected) {
   if (selected) pfDistrict.value = selected;
 }
 
-// Yoshi va rank
+// ---------- Helpers: age / rank / profile completeness ----------
 function calcAge(birthDateStr) {
   if (!birthDateStr) return null;
   const d = new Date(birthDateStr);
@@ -1421,7 +1447,7 @@ function isProfileComplete(p) {
   return !!(p && p.fullName && p.birthDate && p.region && p.district);
 }
 
-// get docId (uid ustunlik bilan)
+// ---------- docId canonical (uid first) ----------
 function getUserDocId(u) {
   if (!u) return '';
   if (u.uid) return String(u.uid);
@@ -1430,7 +1456,7 @@ function getUserDocId(u) {
   return '';
 }
 
-// Firestore read/save
+// ---------- Firestore read/save ----------
 async function loadProfileForCurrent() {
   if (!currentUser) return {};
   const docId = getUserDocId(currentUser);
@@ -1439,7 +1465,6 @@ async function loadProfileForCurrent() {
   const snap = await ref.get();
   return snap.exists ? snap.data() : {};
 }
-
 async function saveProfileForCurrent(payload) {
   if (!currentUser) throw new Error("User yo'q");
   const docId = getUserDocId(currentUser);
@@ -1451,11 +1476,8 @@ async function saveProfileForCurrent(payload) {
   }, { merge: true });
   const snap = await ref.get();
   profileData = snap.exists ? snap.data() : payload;
-  // try refresh user data from authLite
   if (typeof authLite.refreshUser === 'function') {
-    try {
-      currentUser = await authLite.refreshUser();
-    } catch (e) {
+    try { currentUser = await authLite.refreshUser(); } catch (e) {
       currentUser = { ...(currentUser || {}), data: { ...(currentUser?.data || {}), ...profileData } };
     }
   } else {
@@ -1463,7 +1485,7 @@ async function saveProfileForCurrent(payload) {
   }
 }
 
-// Render view
+// ---------- Render view ----------
 function renderView() {
   if (!currentUser) return;
   const ud = currentUser.data || {};
@@ -1488,7 +1510,7 @@ function renderView() {
   if (headerIdEl) headerIdEl.textContent = "ID: " + (loginId || "—");
 }
 
-// Editing mode toggles
+// ---------- Edit mode ----------
 function setEditingMode(edit) {
   isEditing = !!edit;
   if (viewBlock) viewBlock.style.display  = edit ? 'none' : 'block';
@@ -1510,10 +1532,7 @@ function setEditingMode(edit) {
 }
 
 async function openProfile(mandatory) {
-  if (!currentUser) {
-    alert("Avval tizimga kiring.");
-    return;
-  }
+  if (!currentUser) { alert("Avval tizimga kiring."); return; }
   isMandatory = !!mandatory;
   await loadRegions();
   fillRegionSelect();
@@ -1531,14 +1550,13 @@ async function openProfile(mandatory) {
   setEditingMode(!!mandatory);
   if (profOverlay) { profOverlay.classList.add('open'); document.body.classList.add('no-scroll'); }
 }
-
 function closeProfile() {
   if (isMandatory) return;
   if (profOverlay) profOverlay.classList.remove('open');
   document.body.classList.remove('no-scroll');
 }
 
-// Event handlers
+// ---------- Events ----------
 if (profBtn) profBtn.addEventListener('click', () => openProfile(false));
 if (profCloseX) profCloseX.addEventListener('click', closeProfile);
 if (profCloseV) profCloseV.addEventListener('click', closeProfile);
@@ -1569,16 +1587,18 @@ if (profLogout) {
     authLite.logout();
     if (profOverlay) profOverlay.classList.remove('open');
     document.body.classList.remove('no-scroll');
-    window.location.href = 'login.html';
+    // save current page as post-login redirect so user returns here after future login
+    savePostLoginRedirect();
+    window.location.href = '/demo/login.html';
   });
 }
 
-// Profile save
+// ---------- Profile save ----------
 if (profForm) {
   profForm.addEventListener('submit', async e => {
     e.preventDefault();
     if (!currentUser) { alert("Avval tizimga kiring."); return; }
-    const fullName  = pfFullname.value.trim();
+    const fullName  = (pfFullname && pfFullname.value || '').trim();
     const birthDate = pfBirth.value;
     const region    = pfRegion.value;
     const district  = pfDistrict.value;
@@ -1594,24 +1614,14 @@ if (profForm) {
       if (newPass !== newPass2) { alert("Yangi parol va uning takrori mos emas."); return; }
     }
 
-    const payload = {
-      fullName,
-      birthDate,
-      region,
-      district
-    };
+    const payload = { fullName, birthDate, region, district };
     if (newPass) payload.password = newPass;
 
     try {
       await saveProfileForCurrent(payload);
       renderView();
       alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
-      if (isMandatory) {
-        isMandatory = false;
-        closeProfile();
-      } else {
-        setEditingMode(false);
-      }
+      if (isMandatory) { isMandatory = false; closeProfile(); } else { setEditingMode(false); }
     } catch (err) {
       console.error(err);
       alert("Profilni saqlashda xatolik: " + (err.message || err));
@@ -1619,16 +1629,15 @@ if (profForm) {
   });
 }
 
-// DOMContentLoaded: session olish va profile yuklash
+// ---------- DOMContentLoaded: session + profile loading (safe handling) ----------
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     const u = await authLite.requireSession();
     currentUser = u;
-    // load or ensure profile doc using uid
+    // ensure profile doc exists (uid canonical)
     if (currentUser) {
       const docId = getUserDocId(currentUser);
       if (docId) {
-        // ensure profile exists
         const ref = db.collection(USER_COLL).doc(docId);
         const snap = await ref.get();
         if (!snap.exists) {
@@ -1642,13 +1651,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         profileData = await loadProfileForCurrent();
       }
       renderView();
-      // agar profil to'liq bo'lmasa majburiy modal
-      if (!isProfileComplete(profileData)) {
-        openProfile(true);
-      }
+      if (!isProfileComplete(profileData)) openProfile(true);
     }
   } catch (e) {
     console.warn('Session yo‘q yoki xatolik:', e);
+    // if not authenticated, save current page and send to login without appending huge redirect param
+    savePostLoginRedirect();
+    // Do not force navigate here — let authLite or your nav decide.
+    // If you want to redirect to login automatically, uncomment next line:
+    // window.location.href = '/demo/login.html';
   }
 
   if (typeof authLite.onUserChange === 'function') {
@@ -1661,14 +1672,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// Service worker (PWA)
+// ---------- Service worker (PWA) ----------
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(err => { console.warn('SW register xatolik:', err); });
 }
 
-// PWA install button inside profile
+// ---------- PWA install button ----------
 let deferredInstallPrompt = null;
-const pwaBtn = document.getElementById('btn-install-pwa');
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
@@ -1681,21 +1691,15 @@ if (isStandalone() && pwaBtn) pwaBtn.style.display = 'none';
 if (pwaBtn) {
   pwaBtn.addEventListener('click', async () => {
     try {
-      if (!deferredInstallPrompt) {
-        alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring.");
-        return;
-      }
+      if (!deferredInstallPrompt) { alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring."); return; }
       deferredInstallPrompt.prompt();
       const choice = await deferredInstallPrompt.userChoice;
-      if (choice.outcome === 'accepted') {
-        pwaBtn.style.display = 'none';
-      }
+      if (choice.outcome === 'accepted') { pwaBtn.style.display = 'none'; }
       deferredInstallPrompt = null;
-    } catch (err) {
-      console.error('PWA o‘rnatish xatosi:', err);
-    }
+    } catch (err) { console.error('PWA o‘rnatish xatosi:', err); }
   });
 }
+
 </script>
 
 </body>
