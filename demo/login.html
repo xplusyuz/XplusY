@@ -617,266 +617,170 @@
     </div>
   </div>
 </div>
+
 <script>
-// login.js
-// Talab: firebase va authLite global ob'ektlari hamda `db = firebase.firestore()` mavjud bo'lishi kerak.
+  // Modal elementlari
+  const loginModal = document.getElementById('login-modal');
+  const registerModal = document.getElementById('register-modal');
+  const credsModal = document.getElementById('creds-modal');
+  
+  // Tugma elementlari
+  const btnLoginModal = document.getElementById('btn-login-modal');
+  const btnRegisterModal = document.getElementById('btn-register-modal');
+  const btnAutoRegister = document.getElementById('btn-auto-register');
+  const loginForm = document.getElementById('login-form');
+  const loginBtn = document.getElementById('login-btn');
+  
+  // Modal yopish tugmalari
+  const closeLoginModal = document.getElementById('close-login-modal');
+  const closeRegisterModal = document.getElementById('close-register-modal');
+  const closeCredsModal = document.getElementById('close-creds-modal');
+  
+  // Input elementlari
+  const inputId = document.getElementById('login-id');
+  const inputPw = document.getElementById('login-password');
+  
+  // Ma'lumotlar modal elementlari
+  const modalCredsId = document.getElementById('modal-creds-id');
+  const modalCredsPw = document.getElementById('modal-creds-pass');
+  const btnCopyId = document.getElementById('btn-copy-id');
+  const btnCopyPass = document.getElementById('btn-copy-pass');
+  const btnCredsGo = document.getElementById('btn-creds-continue');
 
-// ---------- Konfiguratsiya ----------
-const USER_COLL = 'foydalanuvchilar';
-
-// ---------- DOM elementlar ----------
-const loginModal = document.getElementById('login-modal');
-const registerModal = document.getElementById('register-modal');
-const credsModal = document.getElementById('creds-modal');
-
-const btnLoginModal = document.getElementById('btn-login-modal');
-const btnRegisterModal = document.getElementById('btn-register-modal');
-const btnAutoRegister = document.getElementById('btn-auto-register');
-
-const loginForm = document.getElementById('login-form');
-const loginBtn = document.getElementById('login-btn');
-
-const inputId = document.getElementById('login-id');
-const inputPw = document.getElementById('login-password');
-
-const modalCredsId = document.getElementById('modal-creds-id');
-const modalCredsPw = document.getElementById('modal-creds-pass');
-const btnCopyId = document.getElementById('btn-copy-id');
-const btnCopyPass = document.getElementById('btn-copy-pass');
-const btnCredsGo = document.getElementById('btn-creds-continue');
-
-const closeLoginModal = document.getElementById('close-login-modal');
-const closeRegisterModal = document.getElementById('close-register-modal');
-const closeCredsModal = document.getElementById('close-creds-modal');
-
-// ---------- Utility: safe redirect helpers ----------
-function savePostLoginRedirect(url) {
-  try {
-    const cur = url || (window.location.pathname + window.location.search + window.location.hash);
-    sessionStorage.setItem('postLoginRedirect', cur);
-  } catch (e) {
-    console.warn('savePostLoginRedirect error', e);
+  // Modal ochish funksiyalari
+  function openModal(modal) {
+    modal.classList.add('open');
+    document.body.classList.add('no-scroll');
   }
-}
-function getPostLoginRedirect() {
-  try {
-    return sessionStorage.getItem('postLoginRedirect');
-  } catch (e) {
-    return null;
+  
+  function closeModal(modal) {
+    modal.classList.remove('open');
+    document.body.classList.remove('no-scroll');
   }
-}
-function clearPostLoginRedirect() {
-  try { sessionStorage.removeItem('postLoginRedirect'); } catch (e) {}
-}
-function performPostLoginRedirect(defaultUrl = '/demo/index.html') {
-  try {
-    const target = getPostLoginRedirect();
-    clearPostLoginRedirect();
-    if (target && typeof target === 'string' && target.length > 0 && target.length < 2000) {
-      // security: only allow same-host redirects
-      const a = document.createElement('a');
-      a.href = target;
-      if (a.hostname === window.location.hostname) {
-        window.location.href = target;
+  
+  function openCredsModal(id, pass) {
+    modalCredsId.textContent = id;
+    modalCredsPw.textContent = pass;
+    openModal(credsModal);
+  }
+
+  // Modal ochish/yopish event listenerlari
+  btnLoginModal.addEventListener('click', () => openModal(loginModal));
+  btnRegisterModal.addEventListener('click', () => openModal(registerModal));
+  
+  closeLoginModal.addEventListener('click', () => closeModal(loginModal));
+  closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
+  closeCredsModal.addEventListener('click', () => closeModal(credsModal));
+  
+  // Modal tashqarisiga bosganda yopish
+  loginModal.addEventListener('click', (e) => {
+    if (e.target === loginModal) closeModal(loginModal);
+  });
+  
+  registerModal.addEventListener('click', (e) => {
+    if (e.target === registerModal) closeModal(registerModal);
+  });
+  
+  credsModal.addEventListener('click', (e) => {
+    if (e.target === credsModal) closeModal(credsModal);
+  });
+
+  // LOGIN
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = inputId.value.trim();
+      const pwd = inputPw.value.trim();
+      
+      if (id.length !== 6) {
+        alert("ID 6 xonali bo'lishi kerak.");
         return;
       }
-    }
-  } catch (e) {
-    console.warn('performPostLoginRedirect error', e);
+      
+      if (!pwd) {
+        alert("Parolni kiriting.");
+        return;
+      }
+      
+      // Loading holatini ko'rsatish
+      const originalText = loginBtn.innerHTML;
+      loginBtn.innerHTML = '<div class="loading"></div> Kirish...';
+      loginBtn.disabled = true;
+      
+      try {
+        await authLite.loginWithIdPassword(id, pwd);
+        // oddiy redirect: login.html bilan bir papkada turgan index.html
+        window.location.href = 'index.html';
+      } catch(err) {
+        alert(err.message || "Kirishda xatolik.");
+        console.error(err);
+      } finally {
+        // Loading holatini olib tashlash
+        loginBtn.innerHTML = originalText;
+        loginBtn.disabled = false;
+      }
+    });
   }
-  window.location.href = defaultUrl;
-}
 
-// ---------- docId helper (canonical uid first) ----------
-function getUserDocIdFromAuthObj(u) {
-  if (!u) return '';
-  if (u.uid) return String(u.uid);
-  if (u.id) return String(u.id);
-  if (u.data && u.data.loginId) return String(u.data.loginId);
-  return '';
-}
-
-// ---------- ensure profile exists (creates doc with uid as id) ----------
-async function ensureProfileForUserFromSession() {
-  try {
-    const u = await authLite.requireSession(); // if this redirects internally, see note below
-    if (!u) return;
-    const docId = getUserDocIdFromAuthObj(u);
-    if (!docId) return;
-    const ref = db.collection(USER_COLL).doc(docId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      const loginIdField = (u.data && u.data.loginId) || u.loginId || '';
-      await ref.set({
-        loginId: loginIdField,
-        points: 0,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-    } else {
-      await ref.set({ lastSeen: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    }
-  } catch (err) {
-    // authLite.requireSession() may redirect instead of throwing; we still catch unexpected errors
-    console.warn('ensureProfileForUserFromSession error', err);
+  // AUTO REGISTER
+  if (btnAutoRegister) {
+    btnAutoRegister.addEventListener('click', async () => {
+      // Loading holatini ko'rsatish
+      const originalText = btnAutoRegister.innerHTML;
+      btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
+      btnAutoRegister.disabled = true;
+      
+      try {
+        const { loginId, password } = await authLite.registerAuto();
+        closeModal(registerModal);
+        openCredsModal(loginId, password);
+      } catch(err) {
+        alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err));
+        console.error(err);
+      } finally {
+        // Loading holatini olib tashlash
+        btnAutoRegister.innerHTML = originalText;
+        btnAutoRegister.disabled = false;
+      }
+    });
   }
-}
 
-// ---------- Modal helpers ----------
-function openModal(modal) {
-  if (!modal) return;
-  modal.classList.add('open');
-  document.body.classList.add('no-scroll');
-}
-function closeModal(modal) {
-  if (!modal) return;
-  modal.classList.remove('open');
-  document.body.classList.remove('no-scroll');
-}
-function openCredsModal(id, pass) {
-  if (modalCredsId) modalCredsId.textContent = id || '';
-  if (modalCredsPw) modalCredsPw.textContent = pass || '';
-  openModal(credsModal);
-}
-
-// ---------- Prevent huge nested redirect in URL on login page ----------
-// If the page was opened with a huge redirect param (created by nested redirects),
-// move it into sessionStorage and remove it from the address bar.
-(function normalizeLoginUrl() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const r = params.get('redirect');
-    if (r && r.length > 2000) {
-      // store and remove from URL
-      sessionStorage.setItem('postLoginRedirect', r);
-      params.delete('redirect');
-      const base = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '');
-      history.replaceState(null, '', base);
-    } else if (r && r.length > 0) {
-      // A safe-size redirect exists: store it to sessionStorage and strip param to avoid re-encoding loops.
-      sessionStorage.setItem('postLoginRedirect', r);
-      params.delete('redirect');
-      const base = window.location.pathname + (params.toString() ? ('?' + params.toString()) : '');
-      history.replaceState(null, '', base);
-    }
-  } catch (e) {
-    console.warn('normalizeLoginUrl error', e);
+  // COPY tugmalari
+  if (btnCopyId) {
+    btnCopyId.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(modalCredsId.textContent.trim());
+        btnCopyId.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+        setTimeout(() => {
+          btnCopyId.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
+        }, 2000);
+      } catch(e) {
+        alert("ID ni nusxa olishda xatolik.");
+      }
+    });
   }
-})();
-
-// ---------- Event listeners: open/close modals ----------
-if (btnLoginModal) btnLoginModal.addEventListener('click', () => openModal(loginModal));
-if (btnRegisterModal) btnRegisterModal.addEventListener('click', () => openModal(registerModal));
-if (closeLoginModal) closeLoginModal.addEventListener('click', () => closeModal(loginModal));
-if (closeRegisterModal) closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
-if (closeCredsModal) closeCredsModal.addEventListener('click', () => closeModal(credsModal));
-if (loginModal) loginModal.addEventListener('click', (e) => { if (e.target === loginModal) closeModal(loginModal); });
-if (registerModal) registerModal.addEventListener('click', (e) => { if (e.target === registerModal) closeModal(registerModal); });
-if (credsModal) credsModal.addEventListener('click', (e) => { if (e.target === credsModal) closeModal(credsModal); });
-
-// ---------- Copy buttons ----------
-if (btnCopyId) {
-  btnCopyId.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText((modalCredsId.textContent || '').trim());
-      btnCopyId.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
-      setTimeout(() => { btnCopyId.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa'; }, 2000);
-    } catch (e) {
-      alert('ID ni nusxa olishda xatolik.');
-    }
-  });
-}
-if (btnCopyPass) {
-  btnCopyPass.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText((modalCredsPw.textContent || '').trim());
-      btnCopyPass.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
-      setTimeout(() => { btnCopyPass.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa'; }, 2000);
-    } catch (e) {
-      alert('Parolni nusxa olishda xatolik.');
-    }
-  });
-}
-if (btnCredsGo) {
-  btnCredsGo.addEventListener('click', () => {
-    closeModal(credsModal);
-    // Redirect to index after user presses continue
-    performPostLoginRedirect('/demo/index.html');
-  });
-}
-
-// ---------- LOGIN form submit ----------
-if (loginForm) {
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = (inputId && inputId.value || '').trim();
-    const pwd = (inputPw && inputPw.value || '').trim();
-
-    if (!id || id.length !== 6) {
-      alert("ID 6 xonali bo'lishi kerak.");
-      return;
-    }
-    if (!pwd) {
-      alert("Parolni kiriting.");
-      return;
-    }
-
-    const originalText = loginBtn ? loginBtn.innerHTML : '';
-    if (loginBtn) { loginBtn.innerHTML = '<div class="loading"></div> Kirish...'; loginBtn.disabled = true; }
-
-    try {
-      await authLite.loginWithIdPassword(id, pwd);
-      // After successful login, create/ensure profile doc (uses uid canonical)
-      try { await ensureProfileForUserFromSession(); } catch (err) { console.warn(err); }
-      // Redirect to saved location (from sessionStorage) or to default
-      performPostLoginRedirect('/demo/index.html');
-    } catch (err) {
-      alert(err && err.message ? err.message : 'Kirishda xatolik.');
-      console.error('login error', err);
-    } finally {
-      if (loginBtn) { loginBtn.innerHTML = originalText; loginBtn.disabled = false; }
-    }
-  });
-}
-
-// ---------- AUTO REGISTER ----------
-if (btnAutoRegister) {
-  btnAutoRegister.addEventListener('click', async () => {
-    const originalText = btnAutoRegister.innerHTML;
-    btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
-    btnAutoRegister.disabled = true;
-    try {
-      // registerAuto expectation: returns { loginId, password } and ideally logs user in
-      const res = await authLite.registerAuto();
-      // ensure profile if registerAuto provided a session
-      try { await ensureProfileForUserFromSession(); } catch (e) { console.warn(e); }
-      closeModal(registerModal);
-      openCredsModal(res.loginId, res.password);
-    } catch (err) {
-      alert("Ro'yxatdan o'tishda xatolik: " + (err && err.message ? err.message : err));
-      console.error('registerAuto error', err);
-    } finally {
-      btnAutoRegister.innerHTML = originalText;
-      btnAutoRegister.disabled = false;
-    }
-  });
-}
-
-// ---------- If page loaded while already logged-in, ensure profile exists ----------
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    // If requireSession redirects internally, this may never return; if it throws, we catch.
-    const u = await authLite.requireSession();
-    if (u) {
-      try { await ensureProfileForUserFromSession(); } catch (e) { console.warn(e); }
-      // If user is on login page but already authenticated, redirect to saved or index
-      performPostLoginRedirect('/demo/index.html');
-    }
-  } catch (e) {
-    // no session — do nothing (user will log in)
-    // But save current page as post-login redirect so authLite's own redirect won't need to encode it.
-    try { savePostLoginRedirect(); } catch (er) {}
+  
+  if (btnCopyPass) {
+    btnCopyPass.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(modalCredsPw.textContent.trim());
+        btnCopyPass.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+        setTimeout(() => {
+          btnCopyPass.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
+        }, 2000);
+      } catch(e) {
+        alert("Parolni nusxa olishda xatolik.");
+      }
+    });
   }
-});
+
+  // Modal yopib, portga o'tish
+  if (btnCredsGo) {
+    btnCredsGo.addEventListener('click', () => {
+      closeModal(credsModal);
+      window.location.href = 'index.html';
+    });
+  }
 </script>
 
 </body>
