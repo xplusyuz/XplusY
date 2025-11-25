@@ -623,445 +623,303 @@
   const db = firebase.firestore();
   const USER_COLL = 'foydalanuvchilar';
 
-  /* =============== IFRAME MODAL (sahifa ichida ochish) =============== */
-  const pageModal  = document.getElementById('page-modal');
-  const modalFrame = document.getElementById('modal-frame');
-  const modalClose = document.getElementById('modal-close');
+  /* =============== MODAL ELEMENTLARI =============== */
+  const loginModal = document.getElementById('login-modal');
+  const registerModal = document.getElementById('register-modal');
+  const credsModal = document.getElementById('creds-modal');
+  
+  // Tugma elementlari
+  const btnLoginModal = document.getElementById('btn-login-modal');
+  const btnRegisterModal = document.getElementById('btn-register-modal');
+  const btnAutoRegister = document.getElementById('btn-auto-register');
+  const loginForm = document.getElementById('login-form');
+  const loginBtn = document.getElementById('login-btn');
+  
+  // Modal yopish tugmalari
+  const closeLoginModal = document.getElementById('close-login-modal');
+  const closeRegisterModal = document.getElementById('close-register-modal');
+  const closeCredsModal = document.getElementById('close-creds-modal');
+  
+  // Input elementlari
+  const inputId = document.getElementById('login-id');
+  const inputPw = document.getElementById('login-password');
+  
+  // Ma'lumotlar modal elementlari
+  const modalCredsId = document.getElementById('modal-creds-id');
+  const modalCredsPw = document.getElementById('modal-creds-pass');
+  const btnCopyId = document.getElementById('btn-copy-id');
+  const btnCopyPass = document.getElementById('btn-copy-pass');
+  const btnCredsGo = document.getElementById('btn-creds-continue');
 
-  document.querySelectorAll('[data-link]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = btn.dataset.link;
-      if (!url) return;
-      modalFrame.src = url;
-      pageModal.classList.add('open');
-      document.body.classList.add('no-scroll');
-    });
-  });
+  /* =============== YAGONA FIRESTORE OPERATSIYALARI =============== */
 
-  if (modalClose) {
-    modalClose.addEventListener('click', () => {
-      pageModal.classList.remove('open');
-      modalFrame.src = '';
-      document.body.classList.remove('no-scroll');
-    });
-  }
-
-  if (pageModal) {
-    pageModal.addEventListener('click', e => {
-      if (e.target === pageModal) {
-        pageModal.classList.remove('open');
-        modalFrame.src = '';
-        document.body.classList.remove('no-scroll');
-      }
-    });
-  }
-
-  /* =============== PROFIL ELEMENTLARI =============== */
-  const profOverlay  = document.getElementById('profile-overlay');
-  const profBtn      = document.getElementById('btn-profile');
-  const profCloseX   = document.getElementById('profile-close-btn');
-  const profCloseV   = document.getElementById('profile-close-view-btn');
-  const profEditBtn  = document.getElementById('profile-edit-btn');
-  const profCancel   = document.getElementById('profile-cancel-btn');
-  const profLogout   = document.getElementById('profile-logout-btn');
-  const profForm     = document.getElementById('profile-form');
-  const viewBlock    = document.getElementById('profile-view');
-
-  const pfFullname   = document.getElementById('pf-fullname');
-  const pfBirth      = document.getElementById('pf-birthdate');
-  const pfRegion     = document.getElementById('pf-region');
-  const pfDistrict   = document.getElementById('pf-district');
-  const pfNewPass    = document.getElementById('pf-new-password');
-  const pfNewPass2   = document.getElementById('pf-new-password2');
-
-  const pvFullname   = document.getElementById('pv-fullname');
-  const pvId         = document.getElementById('pv-id');
-  const pvAge        = document.getElementById('pv-age');
-  const pvPoints     = document.getElementById('pv-points');
-  const pvRegion     = document.getElementById('pv-region');
-  const pvDistrict   = document.getElementById('pv-district');
-  const pvBirth      = document.getElementById('pv-birthdate');
-  const pvRank       = document.getElementById('pv-rank');
-  const headerIdEl   = document.getElementById('header-id');
-
-  let currentUser = null;
-  let profileData = null;
-  let regionsData = null;
-  let isEditing   = false;
-  let isMandatory = false;
-
-  /* =============== YAGONA PROFIL OPERATSIYALARI =============== */
-
-  // Foydalanuvchi document ID sini olish
-  function getUserDocId(u) {
-    if (!u) return '';
-    const d = u.data || {};
-    if (u.id)  return String(u.id);
-    if (u.uid) return String(u.uid);
-    if (d.loginId) return String(d.loginId);
-    return '';
-  }
-
-  // Profil ma'lumotlarini o'qish - BIRTA DOCUMENT
-  async function loadProfileForCurrent() {
-    if (!currentUser) return {};
-    const docId = getUserDocId(currentUser);
-    if (!docId) return {};
-
-    const ref = db.collection(USER_COLL).doc(docId);
-    const snap = await ref.get();
-    
-    if (snap.exists) {
-      console.log("Profil ma'lumotlari o'qildi:", docId);
-      return snap.data();
-    } else {
-      console.log("Profil topilmadi, yangi yaratish kerak:", docId);
-      return {};
-    }
-  }
-
-  // Profilni saqlash - BIRTA DOCUMENT
-  async function saveProfileForCurrent(payload) {
-    if (!currentUser) throw new Error("User yo'q");
-    const docId = getUserDocId(currentUser);
-    if (!docId) throw new Error("Profil ID aniqlanmadi");
-
-    const ref = db.collection(USER_COLL).doc(docId);
-    
-    // Bitta operatsiya bilan barcha maydonlarni yangilash
-    const updateData = {
-      ...payload,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      isProfileComplete: !!(payload.fullName && payload.birthDate && payload.region && payload.district)
-    };
-    
-    await ref.set(updateData, { merge: true });
-    
-    // Yangilangan ma'lumotlarni o'qib olish
-    const snap = await ref.get();
-    profileData = snap.data() || updateData;
-
-    console.log("Profil yangilandi:", docId);
-
-    // Session yangilash
-    if (typeof authLite.refreshUser === 'function') {
-      try {
-        currentUser = await authLite.refreshUser();
-      } catch (e) {
-        console.warn('authLite.refreshUser xatolik:', e);
-      }
-    }
-    
-    return profileData;
-  }
-
-  /* =============== REGIONS (viloyat / tuman) =============== */
-  async function loadRegions() {
-    if (regionsData) return regionsData;
+  // Foydalanuvchi ro'yxatdan o'tganda VA profili yaratish - BIRTA DOCUMENT
+  async function registerUserWithProfile() {
     try {
-      const res = await fetch('region.json');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      regionsData = await res.json();
-    } catch (err) {
-      console.error('region.json yuklashda xatolik:', err);
-      regionsData = { regions: [] };
-    }
-    return regionsData;
-  }
-
-  function fillRegionSelect() {
-    if (!pfRegion || !regionsData) return;
-    pfRegion.innerHTML = '<option value="">Tanlang</option>';
-    (regionsData.regions || []).forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r.name;
-      opt.textContent = r.name;
-      pfRegion.appendChild(opt);
-    });
-  }
-
-  function fillDistrictSelect(regionName, selected) {
-    if (!pfDistrict) return;
-    pfDistrict.disabled = true;
-    pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
-
-    if (!regionName || !regionsData) return;
-    const reg = (regionsData.regions || []).find(r => r.name === regionName);
-    if (!reg) return;
-
-    pfDistrict.disabled = false;
-    pfDistrict.innerHTML = '<option value="">Tuman/shaharni tanlang</option>';
-    (reg.districts || []).forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d.name;
-      opt.textContent = d.name;
-      pfDistrict.appendChild(opt);
-    });
-
-    if (selected) {
-      pfDistrict.value = selected;
+      // 1. Avval authLite orqali ro'yxatdan o'tish
+      const { loginId, password } = await authLite.registerAuto();
+      
+      // 2. Darhol yangi foydalanuvchi uchun to'liq profil yaratish - BIRTA DOCUMENT
+      const userData = {
+        loginId: loginId,
+        password: password,
+        fullName: "",
+        birthDate: "",
+        region: "",
+        district: "",
+        points: 0,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        isProfileComplete: false,
+        lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      
+      // 3. Bitta documentga yozish - loginId asosida
+      const docRef = db.collection(USER_COLL).doc(loginId);
+      await docRef.set(userData);
+      
+      console.log("Yangi foydalanuvchi yaratildi:", loginId);
+      return { loginId, password, userData };
+      
+    } catch (error) {
+      console.error("Ro'yxatdan o'tishda xatolik:", error);
+      throw error;
     }
   }
 
-  /* =============== YOSH / DARAJA =============== */
-  function calcAge(birthDateStr) {
-    if (!birthDateStr) return null;
-    const d = new Date(birthDateStr);
-    if (isNaN(d.getTime())) return null;
-    const now = new Date();
-    let age = now.getFullYear() - d.getFullYear();
-    const m = now.getMonth() - d.getMonth();
-    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-    return age >= 0 ? age : null;
-  }
-
-  function calcRank(points) {
-    const p = Number(points || 0);
-    if (p >= 1000) return "Legend";
-    if (p >= 500)  return "Ustoz";
-    if (p >= 200)  return "Faol talaba";
-    if (p >= 50)   return "Faol foydalanuvchi";
-    if (p > 0)     return "Yangi ishtirokchi";
-    return "Yangi foydalanuvchi";
-  }
-
-  function isProfileComplete(p) {
-    return !!(p && p.fullName && p.birthDate && p.region && p.district);
-  }
-
-  /* =============== VIEW ni chizish =============== */
-  function renderView() {
-    if (!currentUser) return;
-    const ud = currentUser.data || {};
-    const pd = profileData || {};
-
-    const fullName = pd.fullName || ud.fullName || "Foydalanuvchi";
-    const loginId  = ud.loginId || ud.id || currentUser.id || "—";
-    const birth    = pd.birthDate || ud.birthDate || "";
-    const region   = pd.region || ud.region || "";
-    const district = pd.district || ud.district || "";
-    const points   = Number(ud.points || pd.points || 0);
-    const age      = calcAge(birth);
-
-    if (pvFullname) pvFullname.textContent = fullName;
-    if (pvId)       pvId.textContent       = "ID: " + (loginId || "—");
-    if (pvAge)      pvAge.textContent      = age != null ? ("Yoshi: " + age) : "Yoshi: —";
-    if (pvPoints)   pvPoints.textContent   = points + " ball";
-    if (pvRegion)   pvRegion.textContent   = region   || "—";
-    if (pvDistrict) pvDistrict.textContent = district || "—";
-    if (pvBirth)    pvBirth.textContent    = birth    || "—";
-    if (pvRank)     pvRank.textContent     = calcRank(points);
-
-    if (headerIdEl) headerIdEl.textContent = "ID: " + (loginId || "—");
-  }
-
-  /* =============== Rejimlar (view / edit) =============== */
-  function setEditingMode(edit) {
-    isEditing = !!edit;
-
-    if (viewBlock) viewBlock.style.display  = edit ? 'none' : 'block';
-    if (profForm)  profForm.style.display   = edit ? 'flex' : 'none';
-
-    if (profCloseV)   profCloseV.style.display   = edit ? 'none' : 'inline-flex';
-    if (profEditBtn)  profEditBtn.style.display  = edit ? 'none' : 'inline-flex';
-    if (profCancel)   profCancel.style.display   = edit ? 'inline-flex' : 'none';
-    const saveBtn = document.getElementById('profile-save-btn');
-    if (saveBtn)      saveBtn.style.display      = edit ? 'inline-flex' : 'none';
-
-    if (isMandatory) {
-      if (profCloseX) profCloseX.style.display  = 'none';
-      if (profCloseV) profCloseV.style.display  = 'none';
-      if (profCancel) profCancel.style.display  = 'none';
-    } else {
-      if (profCloseX) profCloseX.style.display  = 'inline-flex';
-      if (!edit && profCloseV) profCloseV.style.display = 'inline-flex';
+  // Login qilganda profil ma'lumotlarini yangilash - BIRTA DOCUMENT
+  async function loginAndUpdateProfile(id, password) {
+    try {
+      // 1. Auth Lite orqali login qilish
+      const user = await authLite.loginWithIdPassword(id, password);
+      
+      // 2. Profil ma'lumotlarini yangilash
+      const docRef = db.collection(USER_COLL).doc(id);
+      const userDoc = await docRef.get();
+      
+      if (userDoc.exists) {
+        // Document mavjud - faqat yangilanish vaqtini yangilash
+        await docRef.update({
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("Mavjud foydalanuvchi profili yangilandi:", id);
+      } else {
+        // Document mavjud emas - yangi yaratish
+        const userData = {
+          loginId: id,
+          password: password,
+          fullName: "",
+          birthDate: "",
+          region: "",
+          district: "",
+          points: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          isProfileComplete: false,
+          lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await docRef.set(userData);
+        console.log("Yangi foydalanuvchi profili yaratildi (login paytida):", id);
+      }
+      
+      return user;
+      
+    } catch (error) {
+      console.error("Login qilishda xatolik:", error);
+      throw error;
     }
   }
 
-  async function openProfile(mandatory) {
-    if (!currentUser) {
-      alert("Avval tizimga kiring.");
-      window.location.href = 'login.html';
-      return;
-    }
-    isMandatory = !!mandatory;
-
-    await loadRegions();
-    fillRegionSelect();
-
-    const d = profileData || currentUser.data || {};
-
-    if (pfFullname) pfFullname.value = d.fullName  || '';
-    if (pfBirth)    pfBirth.value    = d.birthDate || '';
-    if (pfRegion)   pfRegion.value   = d.region    || '';
-
-    if (d.region) {
-      fillDistrictSelect(d.region, d.district || '');
-    } else if (pfDistrict) {
-      pfDistrict.disabled = true;
-      pfDistrict.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
-    }
-    if (pfNewPass)  pfNewPass.value  = '';
-    if (pfNewPass2) pfNewPass2.value = '';
-
-    renderView();
-    setEditingMode(!!mandatory);
-
-    if (profOverlay) {
-      profOverlay.classList.add('open');
+  /* =============== MODAL FUNKSIYALARI =============== */
+  function openModal(modal) {
+    if (modal) {
+      modal.classList.add('open');
       document.body.classList.add('no-scroll');
     }
   }
-
-  function closeProfile() {
-    if (isMandatory) return;
-    if (profOverlay) profOverlay.classList.remove('open');
-    document.body.classList.remove('no-scroll');
-  }
-
-  /* =============== EVENTLAR =============== */
-  if (profBtn) {
-    profBtn.addEventListener('click', () => openProfile(false));
-  }
-  if (profCloseX) {
-    profCloseX.addEventListener('click', closeProfile);
-  }
-  if (profCloseV) {
-    profCloseV.addEventListener('click', closeProfile);
-  }
-  if (profCancel) {
-    profCancel.addEventListener('click', () => {
-      if (isMandatory) return;
-      const d = profileData || currentUser?.data || {};
-      if (pfFullname) pfFullname.value = d.fullName  || '';
-      if (pfBirth)    pfBirth.value    = d.birthDate || '';
-      if (pfRegion)   pfRegion.value   = d.region    || '';
-      if (d.region) fillDistrictSelect(d.region, d.district || '');
-      if (pfNewPass)  pfNewPass.value  = '';
-      if (pfNewPass2) pfNewPass2.value = '';
-      setEditingMode(false);
-    });
-  }
-  if (profOverlay) {
-    profOverlay.addEventListener('click', e => {
-      if (e.target === profOverlay) closeProfile();
-    });
-  }
-  if (pfRegion) {
-    pfRegion.addEventListener('change', () => {
-      fillDistrictSelect(pfRegion.value, '');
-    });
-  }
-  if (profEditBtn) {
-    profEditBtn.addEventListener('click', () => {
-      isMandatory = false;
-      setEditingMode(true);
-    });
-  }
-  if (profLogout) {
-    profLogout.addEventListener('click', () => {
-      authLite.logout();
-      if (profOverlay) profOverlay.classList.remove('open');
+  
+  function closeModal(modal) {
+    if (modal) {
+      modal.classList.remove('open');
       document.body.classList.remove('no-scroll');
-      window.location.href = 'login.html';
+    }
+  }
+  
+  function openCredsModal(id, pass) {
+    if (modalCredsId) modalCredsId.textContent = id;
+    if (modalCredsPw) modalCredsPw.textContent = pass;
+    openModal(credsModal);
+  }
+
+  /* =============== EVENT LISTENERLARI =============== */
+
+  // Modal ochish/yopish event listenerlari
+  if (btnLoginModal) {
+    btnLoginModal.addEventListener('click', () => openModal(loginModal));
+  }
+  
+  if (btnRegisterModal) {
+    btnRegisterModal.addEventListener('click', () => openModal(registerModal));
+  }
+  
+  if (closeLoginModal) {
+    closeLoginModal.addEventListener('click', () => closeModal(loginModal));
+  }
+  
+  if (closeRegisterModal) {
+    closeRegisterModal.addEventListener('click', () => closeModal(registerModal));
+  }
+  
+  if (closeCredsModal) {
+    closeCredsModal.addEventListener('click', () => closeModal(credsModal));
+  }
+  
+  // Modal tashqarisiga bosganda yopish
+  if (loginModal) {
+    loginModal.addEventListener('click', (e) => {
+      if (e.target === loginModal) closeModal(loginModal);
+    });
+  }
+  
+  if (registerModal) {
+    registerModal.addEventListener('click', (e) => {
+      if (e.target === registerModal) closeModal(registerModal);
+    });
+  }
+  
+  if (credsModal) {
+    credsModal.addEventListener('click', (e) => {
+      if (e.target === credsModal) closeModal(credsModal);
     });
   }
 
-  if (profForm) {
-    profForm.addEventListener('submit', async e => {
+  /* =============== LOGIN - YANGILANGAN =============== */
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!currentUser) {
-        alert("Avval tizimga kiring.");
-        window.location.href = 'login.html';
+      const id = inputId ? inputId.value.trim() : '';
+      const pwd = inputPw ? inputPw.value.trim() : '';
+      
+      if (id.length !== 6) {
+        alert("ID 6 xonali bo'lishi kerak.");
         return;
       }
-
-      const fullName  = pfFullname.value.trim();
-      const birthDate = pfBirth.value;
-      const region    = pfRegion.value;
-      const district  = pfDistrict.value;
-      const newPass   = pfNewPass.value;
-      const newPass2  = pfNewPass2.value;
-
-      if (!fullName || !birthDate || !region || !district) {
-        alert("Ism, tug'ilgan sana, viloyat va tuman/shahar majburiy.");
+      
+      if (!pwd) {
+        alert("Parolni kiriting.");
         return;
       }
-
-      if (newPass || newPass2) {
-        if (newPass.length < 6) {
-          alert("Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak.");
-          return;
+      
+      // Loading holatini ko'rsatish
+      if (loginBtn) {
+        const originalText = loginBtn.innerHTML;
+        loginBtn.innerHTML = '<div class="loading"></div> Kirish...';
+        loginBtn.disabled = true;
+        
+        try {
+          // Yangi birlashtirilgan login funksiyasi
+          await loginAndUpdateProfile(id, pwd);
+          
+          // Session yangilanganligini tekshirish
+          const currentUser = await authLite.getSession();
+          if (currentUser) {
+            console.log("Login muvaffaqiyatli, foydalanuvchi:", currentUser);
+            // To'g'ridan-to'g'ri index sahifasiga o'tish
+            window.location.href = 'index.html';
+          } else {
+            throw new Error("Session yangilanmadi");
+          }
+          
+        } catch(err) {
+          alert(err.message || "Kirishda xatolik.");
+          console.error(err);
+        } finally {
+          // Loading holatini olib tashlash
+          loginBtn.innerHTML = originalText;
+          loginBtn.disabled = false;
         }
-        if (newPass !== newPass2) {
-          alert("Yangi parol va uning takrori mos emas.");
-          return;
-        }
-      }
-
-      const payload = {
-        fullName,
-        birthDate,
-        region,
-        district,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      if (newPass) {
-        payload.password = newPass;
-      }
-
-      try {
-        await saveProfileForCurrent(payload);
-        renderView();
-        alert("Profil saqlandi" + (newPass ? " va parol yangilandi." : "."));
-
-        if (isMandatory) {
-          isMandatory = false;
-          closeProfile();
-        } else {
-          setEditingMode(false);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("Profilni saqlashda xatolik: " + (err.message || err));
       }
     });
   }
 
-  /* =============== SAHIFA YUKLANGANDA: session + majburiy profil =============== */
+  /* =============== AUTO REGISTER - YANGILANGAN =============== */
+  if (btnAutoRegister) {
+    btnAutoRegister.addEventListener('click', async () => {
+      // Loading holatini ko'rsatish
+      const originalText = btnAutoRegister.innerHTML;
+      btnAutoRegister.innerHTML = '<div class="loading"></div> ID yaratilmoqda...';
+      btnAutoRegister.disabled = true;
+      
+      try {
+        // Yangi birlashtirilgan funksiyani chaqiramiz
+        const { loginId, password } = await registerUserWithProfile();
+        
+        closeModal(registerModal);
+        openCredsModal(loginId, password);
+        
+      } catch(err) {
+        alert("Ro'yxatdan o'tishda xatolik: " + (err.message || err));
+        console.error(err);
+      } finally {
+        btnAutoRegister.innerHTML = originalText;
+        btnAutoRegister.disabled = false;
+      }
+    });
+  }
+
+  /* =============== COPY TUGMALARI =============== */
+  if (btnCopyId) {
+    btnCopyId.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(modalCredsId.textContent.trim());
+        btnCopyId.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+        setTimeout(() => {
+          btnCopyId.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
+        }, 2000);
+      } catch(e) {
+        alert("ID ni nusxa olishda xatolik.");
+      }
+    });
+  }
+  
+  if (btnCopyPass) {
+    btnCopyPass.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(modalCredsPw.textContent.trim());
+        btnCopyPass.innerHTML = '<i class="fas fa-check"></i> Nusxa olindi';
+        setTimeout(() => {
+          btnCopyPass.innerHTML = '<i class="fa-solid fa-copy"></i> Nusxa';
+        }, 2000);
+      } catch(e) {
+        alert("Parolni nusxa olishda xatolik.");
+      }
+    });
+  }
+
+  // Modal yopib, asosiy sahifaga o'tish
+  if (btnCredsGo) {
+    btnCredsGo.addEventListener('click', () => {
+      closeModal(credsModal);
+      window.location.href = 'index.html';
+    });
+  }
+
+  /* =============== SAHIFA YUKLANGANDA TEKSHIRISH =============== */
   document.addEventListener('DOMContentLoaded', async () => {
     try {
-      const u = await authLite.requireSession();
-      currentUser = u;
-      console.log("Current user session:", currentUser);
-      
-      profileData = await loadProfileForCurrent();
-      console.log("Loaded profile data:", profileData);
-      
-      renderView();
-
-      // Agar profil to'liq to'ldirilmagan bo'lsa, majburiy ravishda ochish
-      if (!isProfileComplete(profileData)) {
-        console.log("Profil to'liq emas, majburiy ochish...");
-        openProfile(true);
+      // getSession ishlatamiz, requireSession emas (redirect loop oldini olish uchun)
+      const user = await authLite.getSession();
+      if (user) {
+        console.log("Avval kirilgan, index sahifasiga yo'naltirilmoqda...");
+        // To'g'ridan-to'g'ri yo'naltirish
+        window.location.replace('index.html');
+      } else {
+        console.log("Session yo'q, login sahifada");
+        // Login sahifada qolish
       }
     } catch (e) {
-      console.warn('Session yo\'q yoki xatolik:', e);
-      // Session yo'q bo'lsa, login sahifasiga yo'naltirish
-      window.location.href = 'login.html';
-    }
-
-    // User o'zgarishlarini kuzatish
-    if (typeof authLite.onUserChange === 'function') {
-      authLite.onUserChange(async u2 => {
-        currentUser = u2;
-        if (!u2) {
-          window.location.href = 'login.html';
-          return;
-        }
-        profileData = await loadProfileForCurrent();
-        renderView();
-      });
+      console.log("Session tekshirishda xatolik, login sahifada qolamiz:", e);
     }
   });
 
@@ -1069,50 +927,6 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(err => {
       console.warn('SW register xatolik:', err);
-    });
-  }
-
-  /* =============== PWA O'RNATISH TUGMASI =============== */
-  let deferredInstallPrompt = null;
-  const pwaBtn = document.getElementById('btn-install-pwa');
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-
-    if (pwaBtn && !isStandalone()) {
-      pwaBtn.style.display = 'inline-flex';
-    }
-  });
-
-  function isStandalone() {
-    return window.matchMedia('(display-mode: standalone)').matches
-           || window.navigator.standalone === true;
-  }
-
-  if (isStandalone() && pwaBtn) {
-    pwaBtn.style.display = 'none';
-  }
-
-  if (pwaBtn) {
-    pwaBtn.addEventListener('click', async () => {
-      try {
-        if (!deferredInstallPrompt) {
-          alert("Hozircha ilovani o'rnatish mumkin emas. Bir ozdan keyin qayta urinib ko'ring.");
-          return;
-        }
-
-        deferredInstallPrompt.prompt();
-        const choice = await deferredInstallPrompt.userChoice;
-
-        if (choice.outcome === 'accepted') {
-          pwaBtn.style.display = 'none';
-        }
-
-        deferredInstallPrompt = null;
-      } catch (err) {
-        console.error('PWA o\'rnatish xatosi:', err); // <- Tuzatilgan joy
-      }
     });
   }
 </script>

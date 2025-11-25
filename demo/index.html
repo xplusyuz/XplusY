@@ -1296,25 +1296,25 @@
   const modalFrame = document.getElementById('modal-frame');
   const modalClose = document.getElementById('modal-close');
 
-  document.querySelectorAll('[data-link]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = btn.dataset.link;
-      if (!url) return;
-      modalFrame.src = url;
-      pageModal.classList.add('open');
-      document.body.classList.add('no-scroll');
+  if (pageModal && modalFrame) {
+    document.querySelectorAll('[data-link]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.dataset.link;
+        if (!url) return;
+        modalFrame.src = url;
+        pageModal.classList.add('open');
+        document.body.classList.add('no-scroll');
+      });
     });
-  });
 
-  if (modalClose) {
-    modalClose.addEventListener('click', () => {
-      pageModal.classList.remove('open');
-      modalFrame.src = '';
-      document.body.classList.remove('no-scroll');
-    });
-  }
+    if (modalClose) {
+      modalClose.addEventListener('click', () => {
+        pageModal.classList.remove('open');
+        modalFrame.src = '';
+        document.body.classList.remove('no-scroll');
+      });
+    }
 
-  if (pageModal) {
     pageModal.addEventListener('click', e => {
       if (e.target === pageModal) {
         pageModal.classList.remove('open');
@@ -1352,8 +1352,8 @@
   const pvRank       = document.getElementById('pv-rank');
   const headerIdEl   = document.getElementById('header-id');
 
-  let currentUser = null;   // authLite.requireSession() dan keladi
-  let profileData = null;   // foydalanuvchilar/{docId} dan o'qilgan ma'lumot
+  let currentUser = null;
+  let profileData = null;
   let regionsData = null;
   let isEditing   = false;
   let isMandatory = false;
@@ -1644,12 +1644,12 @@
         return;
       }
 
-      const fullName  = pfFullname.value.trim();
-      const birthDate = pfBirth.value;
-      const region    = pfRegion.value;
-      const district  = pfDistrict.value;
-      const newPass   = pfNewPass.value;
-      const newPass2  = pfNewPass2.value;
+      const fullName  = pfFullname ? pfFullname.value.trim() : '';
+      const birthDate = pfBirth ? pfBirth.value : '';
+      const region    = pfRegion ? pfRegion.value : '';
+      const district  = pfDistrict ? pfDistrict.value : '';
+      const newPass   = pfNewPass ? pfNewPass.value : '';
+      const newPass2  = pfNewPass2 ? pfNewPass2.value : '';
 
       if (!fullName || !birthDate || !region || !district) {
         alert("Ism, tug'ilgan sana, viloyat va tuman/shahar majburiy.");
@@ -1699,7 +1699,15 @@
   /* =============== SAHIFA YUKLANGANDA: session + majburiy profil =============== */
   document.addEventListener('DOMContentLoaded', async () => {
     try {
-      const u = await authLite.requireSession();
+      // requireSession o'rniga getSession ishlatamiz (redirect loop oldini olish uchun)
+      const u = await authLite.getSession();
+      if (!u) {
+        // Session yo'q bo'lsa, login sahifasiga yo'naltirish
+        console.log("Session yo'q, login sahifasiga yo'naltirilmoqda...");
+        window.location.href = 'login.html';
+        return;
+      }
+
       currentUser = u;
       console.log("Current user session:", currentUser);
       
@@ -1711,10 +1719,12 @@
       // Agar profil to'liq to'ldirilmagan bo'lsa, majburiy ravishda ochish
       if (!isProfileComplete(profileData)) {
         console.log("Profil to'liq emas, majburiy ochish...");
-        openProfile(true);
+        setTimeout(() => {
+          openProfile(true);
+        }, 1000); // 1 soniya kutib, keyin ochish
       }
     } catch (e) {
-      console.warn('Session yo\'q yoki xatolik:', e);
+      console.warn('Session tekshirishda xatolik:', e);
       // Session yo'q bo'lsa, login sahifasiga yo'naltirish
       window.location.href = 'login.html';
     }
@@ -1779,8 +1789,8 @@
 
         deferredInstallPrompt = null;
       } catch (err) {
-  console.error("PWA o'rnatish xatosi:", err);
-}
+        console.error('PWA o\'rnatish xatosi:', err);
+      }
     });
   }
 </script>
