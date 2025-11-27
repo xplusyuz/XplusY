@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Tenglamalar — Viet Usuli Simulyatori</title>
     <style>
-        /* (Siz bergan styling asosida ozgina optimizatsiya qilindi) */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body {
             background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
@@ -159,7 +158,7 @@
                     <p><strong>Savollar:</strong> <span id="final-questions">0</span></p>
                     <p><strong>To'g'ri javoblar:</strong> <span id="final-correct">0</span></p>
                     <p><strong>XP:</strong> <span id="final-xp">0</span></p>
-                    <button class="restart-btn" onclick="restartGame()">Qayta boshlash</button>
+                    <button class="restart-btn" id="restart-btn">Qayta boshlash</button>
                 </div>
 
                 <div class="xp-system" aria-hidden="false">
@@ -188,7 +187,13 @@
             <div class="sidebar">
                 <div class="leaderboard">
                     <h3>Reyting Jadvali</h3>
-                    <div class="leaderboard-list" id="leaderboard-list"></div>
+                    <div class="leaderboard-list" id="leaderboard-list">
+                        <div class="leaderboard-item">
+                            <div class="leaderboard-rank">1</div>
+                            <div class="leaderboard-name">Namuna Foydalanuvchi</div>
+                            <div class="leaderboard-score">100</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="explanation">
@@ -204,14 +209,13 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (sizning original faylingizga mos versiya) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
 
-    <!-- Sizning config va AuthUtils skriptlaringiz -->
-    <script src="/demo/firebase-config.js"></script>
-    <script src="/demo/auth-utils.js"></script>
+    <!-- Config va AuthUtils skriptlari -->
+    <script src="firebase-config.js"></script>
+    <script src="auth-utils.js"></script>
 
     <script>
     // --- O'yin holati o'zgaruvchilari ---
@@ -235,19 +239,21 @@
         // Elementlarni olinishi
         const logoutBtn = document.getElementById('logout-btn');
         const checkBtn = document.getElementById('check-btn');
+        const x1Input = document.getElementById('x1');
         const x2Input = document.getElementById('x2');
+        const restartBtn = document.getElementById('restart-btn');
 
-        // Defensiv: elementlar mavjudligini tekshirish
+        // Tugmalarga event listenerlar qo'shish
         if (logoutBtn) {
             logoutBtn.addEventListener('click', async () => {
-                if (typeof AuthUtils !== 'undefined' && AuthUtils.signOut) {
+                if (typeof authUtils !== 'undefined' && authUtils.logout) {
                     try {
-                        await AuthUtils.signOut();
+                        await authUtils.logout();
                     } catch (err) {
-                        console.warn('Sign out error:', err);
+                        console.warn('Logout error:', err);
                     }
                 }
-                window.location.reload();
+                window.location.href = 'login.html';
             });
         }
 
@@ -261,49 +267,46 @@
             });
         }
 
+        if (restartBtn) {
+            restartBtn.addEventListener('click', restartGame);
+        }
+
         // Avval hayot holatini yangilash
         updateLives();
 
-        // Foydalanuvchi holatini kuzatish (AuthUtils kerak)
-        if (typeof AuthUtils !== 'undefined' && AuthUtils.onAuthStateChanged) {
-            AuthUtils.onAuthStateChanged(async (user) => {
+        // Foydalanuvchi holatini kuzatish
+        if (typeof authUtils !== 'undefined' && authUtils.onUserChange) {
+            authUtils.onUserChange(async (user) => {
                 if (user) {
                     currentUser = user;
                     try {
-                        const result = await AuthUtils.getUserData(user.uid);
-                        if (result && result.success) {
-                            userData = result.data;
-                            const userNameEl = document.getElementById('user-name');
-                            const userInfoEl = document.getElementById('user-info');
-                            if (userNameEl) userNameEl.textContent = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-                            if (userInfoEl) userInfoEl.style.display = 'flex';
-                            if (typeof loadLeaderboard === "function") loadLeaderboard();
-                        }
+                        userData = user.data;
+                        const userNameEl = document.getElementById('user-name');
+                        const userInfoEl = document.getElementById('user-info');
+                        if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
+                        if (userInfoEl) userInfoEl.style.display = 'flex';
+                        
+                        // Reyting jadvalini yuklash
+                        loadLeaderboard();
+                        
+                        // O'yinni boshlash
+                        startGameInitial();
                     } catch (err) {
                         console.error("Foydalanuvchi yuklash xatosi:", err);
                     }
                 } else {
-                    // Agar siz xohlasangiz anonim rejimga o'tish yoki loginga yo'naltirish
-                    // hozirgi talablarga ko'ra login sahifasiga yo'naltiramiz
-                    window.location.href = '/demo/login.html';
+                    // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
+                    window.location.href = 'login.html';
                 }
             });
         } else {
             console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
             // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
-            newQuestion();
-        }
-
-        // Birinchi savolni yaratish (agar AuthUtils bo'lsa onAuthStateChanged ichida ham chaqiriladi,
-        // ammo AuthUtils yo'q bo'lsa yuqorida chaqiriladi) 
-        if (typeof AuthUtils === 'undefined') {
-            // agar AuthUtils yo'q bo'lsa, biz local testing uchun boshlaymiz
             startGameInitial();
         }
     });
 
-    // Agar AuthUtils mavjud bo'lsa onAuthStateChanged ichida ham chaqirilishi mumkin,
-    // lekin local test rejimi uchun alohida funksiya
+    // O'yinni boshlash
     function startGameInitial() {
         updateUIStats();
         updateLives();
@@ -386,6 +389,9 @@
         resetTimer();
         startTimer();
         updateProgressBar();
+        
+        // Birinchi inputga fokus qo'yish
+        if (x1El) x1El.focus();
     }
 
     // --- Qiyinlik darajasini yangilash ---
@@ -448,11 +454,11 @@
         }
     }
 
-    // --- Reyting jadvalini yuklash (AuthUtils.getLeaderboard ga bog'liq) ---
+    // --- Reyting jadvalini yuklash ---
     async function loadLeaderboard() {
-        if (typeof AuthUtils === 'undefined' || !AuthUtils.getLeaderboard) return;
+        if (typeof authUtils === 'undefined' || !authUtils.getLeaderboard) return;
         try {
-            const result = await AuthUtils.getLeaderboard();
+            const result = await authUtils.getLeaderboard();
             if (result && result.success) {
                 const leaderboardList = document.getElementById('leaderboard-list');
                 if (!leaderboardList) return;
@@ -460,17 +466,17 @@
                 (result.leaderboard || []).forEach((item, index) => {
                     const leaderboardItem = document.createElement('div');
                     leaderboardItem.className = 'leaderboard-item';
-                    if (currentUser && item.id === currentUser.uid) leaderboardItem.classList.add('current-user');
+                    if (currentUser && item.id === currentUser.docId) leaderboardItem.classList.add('current-user');
                     leaderboardItem.innerHTML = `
                         <div class="leaderboard-rank">${index + 1}</div>
-                        <div class="leaderboard-name">${(item.firstName || '')} ${(item.lastName || '')}</div>
-                        <div class="leaderboard-score">${item.bestScore ?? 0}</div>
+                        <div class="leaderboard-name">${item.fullName || 'Foydalanuvchi'}</div>
+                        <div class="leaderboard-score">${item.bestScore || 0}</div>
                     `;
                     leaderboardList.appendChild(leaderboardItem);
                 });
             }
         } catch (err) {
-            console.error('Leaderboard yuklash xatosi:', err);
+            console.error('Reyting jadvalini yuklashda xatolik:', err);
         }
     }
 
@@ -481,29 +487,54 @@
         const checkBtn = document.getElementById("check-btn");
         if (checkBtn) checkBtn.disabled = true;
 
+        // Natijalarni hisoblash
+        const endTime = new Date();
+        const totalTime = startTime ? (endTime - startTime) / 1000 : 0;
+        
+        const finalStats = {
+            score: xpCount,
+            correctAnswers: correctCount,
+            totalQuestions: questionCount,
+            difficulty: difficultyLevel,
+            xpEarned: xpCount,
+            timeSpent: totalTime
+        };
+
+        // Firebasega natijalarni saqlash
+        if (currentUser && typeof authUtils !== 'undefined') {
+            try {
+                // O'yin natijasini saqlash
+                await authUtils.saveGameResult(finalStats);
+                
+                // Eng yaxshi natijani yangilash
+                const bestScoreResult = await authUtils.updateBestScore(xpCount);
+                
+                // Yangi rekord bo'lsa bildirish
+                if (bestScoreResult && bestScoreResult.isNewRecord) {
+                    const gameOverEl = document.getElementById("game-over");
+                    if (gameOverEl) {
+                        const recordNote = document.createElement('div');
+                        recordNote.className = 'result correct';
+                        recordNote.style.marginTop = '10px';
+                        recordNote.innerHTML = `<h3>🎉 Yangi rekord!</h3><p>Siz o'z rekordingizni yangiladingiz: ${xpCount} XP</p>`;
+                        gameOverEl.appendChild(recordNote);
+                    }
+                }
+                
+                // Reyting jadvalini yangilash
+                loadLeaderboard();
+            } catch (error) {
+                console.error('Natijalarni saqlashda xatolik:', error);
+            }
+        }
+
+        // UI ni yangilash
         document.getElementById("final-questions").textContent = questionCount;
         document.getElementById("final-correct").textContent = correctCount;
         document.getElementById("final-xp").textContent = xpCount;
 
         const gameOverEl = document.getElementById("game-over");
         if (gameOverEl) gameOverEl.style.display = 'block';
-
-        if (currentUser && userData && typeof AuthUtils !== 'undefined' && AuthUtils.updateBestScore) {
-            try {
-                const result = await AuthUtils.updateBestScore(currentUser.uid, userData, xpCount);
-                if (result && result.success && result.isNewRecord) {
-                    const note = document.createElement('div');
-                    note.className = 'result correct';
-                    note.style.marginTop = '12px';
-                    note.innerHTML = `<h3>🎉 Yangi rekord!</h3><p>Siz o'z rekordingizni yangiladingiz: ${xpCount} XP</p>`;
-                    gameOverEl.appendChild(note);
-                }
-                // Reytingni yangilash
-                loadLeaderboard();
-            } catch (err) {
-                console.warn('Best score update xatosi:', err);
-            }
-        }
     }
 
     // --- Qayta boshlash ---

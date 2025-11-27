@@ -325,5 +325,103 @@
 
   // authLite bilan moslik uchun
   window.authLite = window.authUtils;
+// auth-utils.js fayliga quyidagi funksiyalarni qo'shing
 
+// O'yin natijasini saqlash
+async function saveGameResult(gameData) {
+  const dbi = ensureDb();
+  if (!dbi) throw new Error('Firestore mavjud emas');
+  
+  if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
+
+  const resultData = {
+    userId: currentUser.docId,
+    gameType: 'viet1',
+    score: gameData.score || 0,
+    correctAnswers: gameData.correctAnswers || 0,
+    totalQuestions: gameData.totalQuestions || 0,
+    timeSpent: gameData.timeSpent || 0,
+    difficulty: gameData.difficulty || 1,
+    xpEarned: gameData.xpEarned || 0,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try {
+    await dbi.collection('gameResults').add(resultData);
+    return { success: true };
+  } catch (error) {
+    console.error('Natijani saqlashda xatolik:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Eng yaxshi natijani yangilash
+async function updateBestScore(newScore) {
+  if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
+  
+  const dbi = ensureDb();
+  if (!dbi) throw new Error('Firestore mavjud emas');
+
+  const userRef = dbi.collection('foydalanuvchilar').doc(currentUser.docId);
+  const userDoc = await userRef.get();
+  
+  if (!userDoc.exists) {
+    throw new Error('Foydalanuvchi topilmadi');
+  }
+
+  const currentBest = userDoc.data().bestScore || 0;
+  let isNewRecord = false;
+
+  if (newScore > currentBest) {
+    await userRef.update({
+      bestScore: newScore,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    isNewRecord = true;
+    
+    // Local ma'lumotlarni yangilash
+    currentUser.data.bestScore = newScore;
+    notify();
+  }
+
+  return { success: true, isNewRecord, bestScore: Math.max(currentBest, newScore) };
+}
+
+// Reyting jadvalini olish
+async function getLeaderboard(limit = 10) {
+  const dbi = ensureDb();
+  if (!dbi) throw new Error('Firestore mavjud emas');
+
+  try {
+    const snapshot = await dbi.collection('foydalanuvchilar')
+      .orderBy('bestScore', 'desc')
+      .limit(limit)
+      .get();
+
+    const leaderboard = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      leaderboard.push({
+        id: doc.id,
+        fullName: data.fullName || 'Foydalanuvchi',
+        bestScore: data.bestScore || 0
+      });
+    });
+
+    return { success: true, leaderboard };
+  } catch (error) {
+    console.error('Reyting jadvalini olishda xatolik:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// authUtils obyektiga qo'shing
+window.authUtils = {
+  // ... existing functions ...
+  
+  // Yangi funksiyalar
+  saveGameResult,
+  updateBestScore,
+  getLeaderboard
+};
 })();
