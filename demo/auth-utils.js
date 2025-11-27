@@ -1,4 +1,4 @@
-// auth-utils.js - Bitta foydalanuvchi uchun bitta document yaratishni ta'minlaydi
+// auth-utils.js - Foydalanuvchi uchun bitta document yaratish, session boshqarish, o'yin natijalari
 (function(){
   const STORAGE_KEY = 'imiFoydalanuvchiDocId';
   const COL = 'foydalanuvchilar';
@@ -22,22 +22,11 @@
   // Foydalanuvchi ID sini izchil olish
   function getConsistentUserId(user) {
     if (!user) return null;
-    
-    // 1. authLite'ning asosiy ID si
     if (user.id) return String(user.id);
-    
-    // 2. Firebase UID
     if (user.uid) return String(user.uid);
-    
-    // 3. Ma'lumotlar ichidagi loginId
     if (user.data?.loginId) return String(user.data.loginId);
-    
-    // 4. Ma'lumotlar ichidagi id
     if (user.data?.id) return String(user.data.id);
-    
-    // 5. Document ID
     if (user.docId) return String(user.docId);
-    
     console.warn('Foydalanuvchi ID si topilmadi:', user);
     return null;
   }
@@ -63,16 +52,14 @@
     if (!dbi) return null;
     
     let docId = null;
-    try{
-      docId = localStorage.getItem(STORAGE_KEY);
-    }catch(e){}
-    
+    try{ docId = localStorage.getItem(STORAGE_KEY); }catch(e){}
+
     if (!docId){
       currentUser = null;
       notify();
       return null;
     }
-    
+
     try{
       const snap = await dbi.collection(COL).doc(docId).get();
       if (!snap.exists){
@@ -83,7 +70,7 @@
       }
       currentUser = { 
         docId: snap.id, 
-        id: snap.id, // authLite bilan moslashtirish uchun
+        id: snap.id,
         data: snap.data() || {} 
       };
       notify();
@@ -96,14 +83,12 @@
 
   async function requireSession(){
     ensureDb();
-    if (!currentUser){
-      await loadSession();
-    }
+    if (!currentUser) await loadSession();
     if (currentUser) return currentUser;
 
     const redirect = encodeURIComponent(location.pathname + location.search + location.hash);
     location.href = 'login.html?redirect=' + redirect;
-    return new Promise(()=>{});
+    return new Promise(()=>{}); // hech qachon resolve bo‘lmaydi
   }
 
   /* =============== LOGIN & REGISTER =============== */
@@ -116,7 +101,6 @@
     const pass = (password || '').trim();
     if (!id || !pass) throw new Error('ID va parol talab qilinadi');
 
-    // loginId bo'yicha qidirish
     const snap = await dbi.collection(COL)
       .where('loginId','==',id)
       .limit(1)
@@ -131,14 +115,11 @@
       throw new Error('Parol noto‘g‘ri');
     }
 
-    // Sessionni saqlash - FAQAT BITTA DOCUMENT ID
-    try{
-      localStorage.setItem(STORAGE_KEY, doc.id);
-    }catch(e){}
+    try{ localStorage.setItem(STORAGE_KEY, doc.id); }catch(e){}
 
     currentUser = { 
       docId: doc.id, 
-      id: doc.id, // authLite bilan moslashtirish
+      id: doc.id,
       data: data 
     };
     notify();
@@ -168,7 +149,6 @@
     return s;
   }
 
-  // BITTA DOCUMENT YARATISHNI TA'MINLASH
   async function registerAuto(){
     const dbi = ensureDb();
     if (!dbi) throw new Error('Firestore mavjud emas');
@@ -176,7 +156,6 @@
     const loginId = await generateUniqueId();
     const password = generatePassword(8);
 
-    // Document payload
     const payload = {
       loginId,
       password,
@@ -186,18 +165,14 @@
       district: '',
       points: 0,
       rank: 'Yangi foydalanuvchi',
+      bestScore: 0,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
 
-    // BITTA DOCUMENT YARATISH
-    // loginId ni document ID sifatida ishlatamiz yoki avtomatik ID
     const docRef = await dbi.collection(COL).add(payload);
 
-    // Sessionni saqlash
-    try{
-      localStorage.setItem(STORAGE_KEY, docRef.id);
-    }catch(e){}
+    try{ localStorage.setItem(STORAGE_KEY, docRef.id); }catch(e){}
 
     currentUser = { 
       docId: docRef.id, 
@@ -212,9 +187,7 @@
   /* =============== PROFIL BOSHQARISH =============== */
 
   async function logout(){
-    try{
-      localStorage.removeItem(STORAGE_KEY);
-    }catch(e){}
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
     currentUser = null;
     notify();
   }
@@ -251,7 +224,6 @@
     
     await dbi.collection(COL).doc(currentUser.docId).set(updateData, { merge: true });
     
-    // Local ma'lumotlarni yangilash
     currentUser = {
       docId: currentUser.docId,
       id: currentUser.docId,
@@ -261,7 +233,6 @@
     return currentUser;
   }
 
-  // Foydalanuvchi ma'lumotlarini o'qish
   async function getUserProfile(userId = null) {
     const dbi = ensureDb();
     if (!dbi) return null;
@@ -278,7 +249,6 @@
     }
   }
 
-  // Foydalanuvchi mavjudligini tekshirish
   async function checkUserExists(userId) {
     if (!userId) return false;
     const dbi = ensureDb();
@@ -293,9 +263,86 @@
     }
   }
 
-  /* =============== INIT =============== */
+  /* =============== O'YIN NATIJALARI =============== */
 
-  // Dastlabki sessionni yuklab olish
+  async function saveGameResult(gameData) {
+    const dbi = ensureDb();
+    if (!dbi) throw new Error('Firestore mavjud emas');
+    if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
+
+    const resultData = {
+      userId: currentUser.docId,
+      gameType: 'viet1',
+      score: gameData.score || 0,
+      correctAnswers: gameData.correctAnswers || 0,
+      totalQuestions: gameData.totalQuestions || 0,
+      timeSpent: gameData.timeSpent || 0,
+      difficulty: gameData.difficulty || 1,
+      xpEarned: gameData.xpEarned || 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    try {
+      await dbi.collection('gameResults').add(resultData);
+      return { success: true };
+    } catch (error) {
+      console.error('Natijani saqlashda xatolik:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async function updateBestScore(newScore) {
+    if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
+    const dbi = ensureDb();
+    if (!dbi) throw new Error('Firestore mavjud emas');
+
+    const userRef = dbi.collection(COL).doc(currentUser.docId);
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) throw new Error('Foydalanuvchi topilmadi');
+
+    const currentBest = userDoc.data().bestScore || 0;
+    let isNewRecord = false;
+
+    if (newScore > currentBest) {
+      await userRef.update({
+        bestScore: newScore,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      isNewRecord = true;
+      currentUser.data.bestScore = newScore;
+      notify();
+    }
+
+    return { success: true, isNewRecord, bestScore: Math.max(currentBest, newScore) };
+  }
+
+  async function getLeaderboard(limit = 10) {
+    const dbi = ensureDb();
+    if (!dbi) throw new Error('Firestore mavjud emas');
+
+    try {
+      const snapshot = await dbi.collection(COL)
+        .orderBy('bestScore', 'desc')
+        .limit(limit)
+        .get();
+
+      const leaderboard = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          fullName: data.fullName || 'Foydalanuvchi',
+          bestScore: data.bestScore || 0
+        };
+      });
+
+      return { success: true, leaderboard };
+    } catch (error) {
+      console.error('Reyting jadvalini olishda xatolik:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /* =============== INIT =============== */
   loadSession();
 
   // Global object
@@ -318,110 +365,17 @@
     checkUserExists,
     getConsistentUserId,
     
+    // Game results
+    saveGameResult,
+    updateBestScore,
+    getLeaderboard,
+    
     // Utilities
     generatePassword,
     generateUniqueId
   };
 
-  // authLite bilan moslik uchun
+  // authLite bilan moslik
   window.authLite = window.authUtils;
-// auth-utils.js fayliga quyidagi funksiyalarni qo'shing
 
-// O'yin natijasini saqlash
-async function saveGameResult(gameData) {
-  const dbi = ensureDb();
-  if (!dbi) throw new Error('Firestore mavjud emas');
-  
-  if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
-
-  const resultData = {
-    userId: currentUser.docId,
-    gameType: 'viet1',
-    score: gameData.score || 0,
-    correctAnswers: gameData.correctAnswers || 0,
-    totalQuestions: gameData.totalQuestions || 0,
-    timeSpent: gameData.timeSpent || 0,
-    difficulty: gameData.difficulty || 1,
-    xpEarned: gameData.xpEarned || 0,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
-
-  try {
-    await dbi.collection('gameResults').add(resultData);
-    return { success: true };
-  } catch (error) {
-    console.error('Natijani saqlashda xatolik:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Eng yaxshi natijani yangilash
-async function updateBestScore(newScore) {
-  if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
-  
-  const dbi = ensureDb();
-  if (!dbi) throw new Error('Firestore mavjud emas');
-
-  const userRef = dbi.collection('foydalanuvchilar').doc(currentUser.docId);
-  const userDoc = await userRef.get();
-  
-  if (!userDoc.exists) {
-    throw new Error('Foydalanuvchi topilmadi');
-  }
-
-  const currentBest = userDoc.data().bestScore || 0;
-  let isNewRecord = false;
-
-  if (newScore > currentBest) {
-    await userRef.update({
-      bestScore: newScore,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    isNewRecord = true;
-    
-    // Local ma'lumotlarni yangilash
-    currentUser.data.bestScore = newScore;
-    notify();
-  }
-
-  return { success: true, isNewRecord, bestScore: Math.max(currentBest, newScore) };
-}
-
-// Reyting jadvalini olish
-async function getLeaderboard(limit = 10) {
-  const dbi = ensureDb();
-  if (!dbi) throw new Error('Firestore mavjud emas');
-
-  try {
-    const snapshot = await dbi.collection('foydalanuvchilar')
-      .orderBy('bestScore', 'desc')
-      .limit(limit)
-      .get();
-
-    const leaderboard = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      leaderboard.push({
-        id: doc.id,
-        fullName: data.fullName || 'Foydalanuvchi',
-        bestScore: data.bestScore || 0
-      });
-    });
-
-    return { success: true, leaderboard };
-  } catch (error) {
-    console.error('Reyting jadvalini olishda xatolik:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// authUtils obyektiga qo'shing
-window.authUtils = {
-  // ... existing functions ...
-  
-  // Yangi funksiyalar
-  saveGameResult,
-  updateBestScore,
-  getLeaderboard
-};
 })();
