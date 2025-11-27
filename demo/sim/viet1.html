@@ -572,25 +572,43 @@
         let userData = null;
         
         // Dastur yuklanganda
-        window.onload = function() {
-            // Foydalanuvchi holatini kuzatish
-            AuthUtils.onAuthStateChanged(async (user) => {
-                if (user) {
-                    currentUser = user;
-                    const result = await AuthUtils.getUserData(user.uid);
-                    if (result.success) {
-                        userData = result.data;
-                        document.getElementById('user-name').textContent = `${userData.firstName} ${userData.lastName}`;
-                        document.getElementById('user-info').style.display = 'flex';
-                        
-                        // Reyting jadvalini yuklash
+        window.onload = () => {
+    // Foydalanuvchi holatini kuzatish
+    AuthUtils.onAuthStateChanged(async (user) => {
+        if (user) {
+            try {
+                currentUser = user;
+
+                const result = await AuthUtils.getUserData(user.uid);
+                if (result && result.success) {
+                    userData = result.data;
+
+                    const userNameEl = document.getElementById('user-name');
+                    const userInfoEl = document.getElementById('user-info');
+
+                    if (userNameEl) {
+                        userNameEl.textContent = `${userData.firstName} ${userData.lastName}`;
+                    }
+                    if (userInfoEl) {
+                        userInfoEl.style.display = 'flex';
+                    }
+
+                    // Reyting jadvalini yuklash
+                    if (typeof loadLeaderboard === "function") {
                         loadLeaderboard();
                     }
-                } else {
-                    // Foydalanuvchi tizimga kirmagan, login sahifasiga yo'naltirish
-                    window.location.href = 'login.html';
                 }
-            });
+            } catch (err) {
+                console.error("Foydalanuvchi yuklash xatosi:", err);
+            }
+
+        } else {
+            // Foydalanuvchi tizimga kirmagan — login sahifasiga yo'naltirish
+            window.location.href = '/demo/login.html';
+        }
+    });
+};
+
             
             // Chiqish tugmasi
             document.getElementById('logout-btn').addEventListener('click', async () => {
