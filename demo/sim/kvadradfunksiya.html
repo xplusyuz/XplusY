@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Funksiya Grafigi</title>
     <style>
-        /* Oldingi CSS kodlar o'zgarishsiz qoldi, faqat kerakli qismlar qo'shildi */
         :root {
             --primary: #4361ee;
             --primary-dark: #3a56d4;
@@ -228,7 +227,6 @@
             font-size: 0.8rem;
         }
         
-        /* changed to text inputs to allow fractions; special handling in JS */
         input[type="text"] { 
             width: 100%; 
             padding: 8px 10px; 
@@ -493,7 +491,6 @@
             to { opacity: 1 } 
         }
         
-        /* Reyting jadvali - faqat kerak bo'lganda ko'rsatiladi */
         .leaderboard-toggle {
             text-align: center;
             margin: 8px 0;
@@ -570,7 +567,6 @@
             font-weight: 600;
         }
         
-        /* Canvas uchun */
         .graph-canvas {
             width: 100%;
             height: 200px;
@@ -580,7 +576,6 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         
-        /* PC da klaviatura ko'rinmasin */
         @media (min-width: 769px) {
             .keyboard-toggle {
                 display: none;
@@ -664,21 +659,26 @@
             </div>
 
             <div class="graph-container" aria-live="polite">
-                <div class="question" id="question">Parabolaning vertex nuqtasi koordinatalarini toping</div>
+                <div class="question" id="question">Parabolaning tenglamasini toping</div>
                 <div class="difficulty-indicator" id="difficulty-indicator">Boshlang'ich daraja</div>
                 <canvas class="graph-canvas" id="graph-canvas" width="300" height="200"></canvas>
             </div>
 
             <div class="input-container">
                 <div class="input-group">
-                    <label for="answer1">Javob 1</label>
+                    <label for="answer1">a</label>
                     <input type="text" id="answer1" />
                     <button class="keyboard-toggle" data-target="answer1">⌨</button>
                 </div>
                 <div class="input-group">
-                    <label for="answer2">Javob 2</label>
+                    <label for="answer2">b</label>
                     <input type="text" id="answer2" />
                     <button class="keyboard-toggle" data-target="answer2">⌨</button>
+                </div>
+                <div class="input-group">
+                    <label for="answer3">c</label>
+                    <input type="text" id="answer3" />
+                    <button class="keyboard-toggle" data-target="answer3">⌨</button>
                 </div>
             </div>
 
@@ -788,14 +788,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-
-    <!-- Config va AuthUtils skriptlari -->
-    <script src="/demo/firebase-config.js"></script>
-    <script src="/demo/auth-utils.js"></script>
-
     <script>
       // --- O'yin holati o'zgaruvchilari ---
       let questionCount = 0;
@@ -814,12 +806,13 @@
       let activeInput = null;
       let timeUpTimeout = null;
       let questionTypes = [
-        "vertex",
-        "axis",
-        "yIntercept",
-        "xIntercepts",
-        "direction",
-        "minMax"
+        "equation",      // Tenglamani toping
+        "vertex",        // Vertex nuqtasini toping
+        "axis",          // Simmetriya o'qini toping
+        "yIntercept",    // Y o'qi bilan kesishish nuqtasini toping
+        "xIntercepts",   // X o'qi bilan kesishish nuqtalarini toping
+        "direction",     // Parabolaning ochilish yo'nalishini toping
+        "minMax"         // Maksimum/Minimum qiymatini toping
       ];
 
       // --- Yordamchi funksiyalar ---
@@ -915,6 +908,28 @@
           ctx.fillStyle = '#e74c3c';
           ctx.arc(width/2 + h * scale, height/2 - k * scale, 4, 0, Math.PI * 2);
           ctx.fill();
+          
+          // X o'qi bilan kesishish nuqtalarini chizish
+          const discriminant = b*b - 4*a*c;
+          if (discriminant >= 0) {
+              const x1 = (-b - Math.sqrt(discriminant))/(2*a);
+              const x2 = (-b + Math.sqrt(discriminant))/(2*a);
+              
+              ctx.beginPath();
+              ctx.fillStyle = '#2ecc71';
+              ctx.arc(width/2 + x1 * scale, height/2, 4, 0, Math.PI * 2);
+              ctx.fill();
+              
+              ctx.beginPath();
+              ctx.arc(width/2 + x2 * scale, height/2, 4, 0, Math.PI * 2);
+              ctx.fill();
+          }
+          
+          // Y o'qi bilan kesishish nuqtasini chizish
+          ctx.beginPath();
+          ctx.fillStyle = '#f39c12';
+          ctx.arc(width/2, height/2 - c * scale, 4, 0, Math.PI * 2);
+          ctx.fill();
       }
 
       // Yangi savol yaratish
@@ -975,37 +990,54 @@
           }
           
           // Savol va javobni tayyorlash
-          let questionText, correctAnswer1, correctAnswer2, answerLabel1, answerLabel2;
+          let questionText, correctAnswer1, correctAnswer2, correctAnswer3, answerLabel1, answerLabel2, answerLabel3;
           
           switch (questionType) {
+              case "equation":
+                  questionText = "Parabolaning tenglamasini toping: y = ax² + bx + c";
+                  correctAnswer1 = a;
+                  correctAnswer2 = b;
+                  correctAnswer3 = c;
+                  answerLabel1 = "a";
+                  answerLabel2 = "b";
+                  answerLabel3 = "c";
+                  break;
               case "vertex":
                   questionText = "Parabolaning vertex nuqtasi koordinatalarini toping";
                   correctAnswer1 = h;
                   correctAnswer2 = k;
+                  correctAnswer3 = null;
                   answerLabel1 = "x";
                   answerLabel2 = "y";
+                  answerLabel3 = "";
                   break;
               case "axis":
                   questionText = "Parabolaning simmetriya o'qi tenglamasini toping";
                   correctAnswer1 = h;
                   correctAnswer2 = null;
+                  correctAnswer3 = null;
                   answerLabel1 = "x =";
                   answerLabel2 = "";
+                  answerLabel3 = "";
                   break;
               case "yIntercept":
                   questionText = "Parabolaning Y o'qi bilan kesishish nuqtasini toping";
                   correctAnswer1 = c;
                   correctAnswer2 = null;
+                  correctAnswer3 = null;
                   answerLabel1 = "y =";
                   answerLabel2 = "";
+                  answerLabel3 = "";
                   break;
               case "xIntercepts":
                   if (discriminant >= 0) {
                       questionText = "Parabolaning X o'qi bilan kesishish nuqtalarini toping";
                       correctAnswer1 = x1;
                       correctAnswer2 = x2;
+                      correctAnswer3 = null;
                       answerLabel1 = "x₁";
                       answerLabel2 = "x₂";
+                      answerLabel3 = "";
                   } else {
                       // Agar ildizlar mavjud bo'lmasa, boshqa savol beramiz
                       return generateQuestion();
@@ -1015,23 +1047,27 @@
                   questionText = "Parabola qaysi tomonga ochiladi? (yuqori/pastga)";
                   correctAnswer1 = a > 0 ? "yuqori" : "pastga";
                   correctAnswer2 = null;
+                  correctAnswer3 = null;
                   answerLabel1 = "Yo'nalish";
                   answerLabel2 = "";
+                  answerLabel3 = "";
                   break;
               case "minMax":
                   questionText = "Parabolaning eng katta/eng kichik qiymatini toping";
                   correctAnswer1 = k;
                   correctAnswer2 = null;
+                  correctAnswer3 = null;
                   answerLabel1 = a > 0 ? "Minimum" : "Maksimum";
                   answerLabel2 = "";
+                  answerLabel3 = "";
                   break;
           }
           
           currentQuestion = {
               type: questionType,
               a, b, c,
-              correctAnswer1, correctAnswer2,
-              answerLabel1, answerLabel2
+              correctAnswer1, correctAnswer2, correctAnswer3,
+              answerLabel1, answerLabel2, answerLabel3
           };
           
           // Savolni ko'rsatish
@@ -1040,14 +1076,16 @@
           // Input label'larini yangilash
           document.querySelector('label[for="answer1"]').textContent = answerLabel1;
           document.querySelector('label[for="answer2"]').textContent = answerLabel2;
+          document.querySelector('label[for="answer3"]').textContent = answerLabel3;
           
-          // Agar ikkinchi javob kerak bo'lmasa, ikkinchi inputni yashirish
+          // Inputlarni ko'rsatish/yashirish
+          const answer1Group = document.querySelector('.input-group:nth-child(1)');
           const answer2Group = document.querySelector('.input-group:nth-child(2)');
-          if (correctAnswer2 === null) {
-              answer2Group.style.display = 'none';
-          } else {
-              answer2Group.style.display = 'block';
-          }
+          const answer3Group = document.querySelector('.input-group:nth-child(3)');
+          
+          answer1Group.style.display = correctAnswer1 !== null ? 'block' : 'none';
+          answer2Group.style.display = correctAnswer2 !== null ? 'block' : 'none';
+          answer3Group.style.display = correctAnswer3 !== null ? 'block' : 'none';
           
           // Grafikni chizish
           drawParabola(a, b, c);
@@ -1056,10 +1094,10 @@
       // DOMContentLoaded — sahifa DOM to'liq yuklangandan keyin ishlaydi
       document.addEventListener('DOMContentLoaded', () => {
           // Elementlarni olinishi
-          const logoutBtn = document.getElementById('logout-btn');
           const checkBtn = document.getElementById('check-btn');
           const answer1Input = document.getElementById('answer1');
           const answer2Input = document.getElementById('answer2');
+          const answer3Input = document.getElementById('answer3');
           const restartBtn = document.getElementById('restart-btn');
           const leaderboardToggle = document.getElementById('leaderboard-toggle');
           const leaderboard = document.getElementById('leaderboard');
@@ -1071,7 +1109,7 @@
 
           // Agar mobil bo'lsa — device klaviaturasini ko'rsatmaslik uchun inputlarni readonly qilamiz
           if (mobile) {
-              [answer1Input, answer2Input].forEach(inp => {
+              [answer1Input, answer2Input, answer3Input].forEach(inp => {
                   if (inp) {
                       inp.setAttribute('readonly', 'true');
                       inp.setAttribute('inputmode', 'none');
@@ -1085,7 +1123,7 @@
               });
           } else {
               // Desktop uchun inputlar tahrirlanishi mumkin bo'lsin
-              [answer1Input, answer2Input].forEach(inp => {
+              [answer1Input, answer2Input, answer3Input].forEach(inp => {
                   if (inp) {
                       inp.removeAttribute('readonly');
                   }
@@ -1119,8 +1157,11 @@
                           activeInput.value = '';
                           break;
                       case 'switch':
+                          // Inputlar orasida almashtirish
                           if (activeInput.id === 'answer1') {
                               activeInput = document.getElementById('answer2');
+                          } else if (activeInput.id === 'answer2') {
+                              activeInput = document.getElementById('answer3');
                           } else {
                               activeInput = document.getElementById('answer1');
                           }
@@ -1153,7 +1194,7 @@
 
           // Inputlarni bosganda (desktop)
           if (!mobile) {
-              [answer1Input, answer2Input].forEach(input => {
+              [answer1Input, answer2Input, answer3Input].forEach(input => {
                   input.addEventListener('focus', () => {
                       activeInput = input;
                   });
@@ -1165,6 +1206,7 @@
               if (!mathKeyboard.contains(e.target) && 
                   !answer1Input.contains(e.target) && 
                   !answer2Input.contains(e.target) &&
+                  !answer3Input.contains(e.target) &&
                   !e.target.classList.contains('keyboard-toggle')) {
                   mathKeyboard.style.display = 'none';
                   mathKeyboard.setAttribute('aria-hidden', 'true');
@@ -1189,25 +1231,12 @@
           }
 
           // Tugmalarga event listenerlar qo'shish
-          if (logoutBtn) {
-              logoutBtn.addEventListener('click', async () => {
-                  if (typeof authUtils !== 'undefined' && authUtils.logout) {
-                      try {
-                          await authUtils.logout();
-                      } catch (err) {
-                          console.warn('Logout error:', err);
-                      }
-                  }
-                  window.location.href = '/demo/login.html';
-              });
-          }
-
           if (checkBtn) {
               checkBtn.addEventListener('click', checkAnswer);
           }
 
-          if (answer2Input) {
-              answer2Input.addEventListener('keypress', (e) => {
+          if (answer3Input) {
+              answer3Input.addEventListener('keypress', (e) => {
                   if (e.key === 'Enter') checkAnswer();
               });
           }
@@ -1219,36 +1248,8 @@
           // Avval hayot holatini yangilash
           updateLives();
 
-          // Foydalanuvchi holatini kuzatish
-          if (typeof authUtils !== 'undefined' && authUtils.onUserChange) {
-              authUtils.onUserChange(async (user) => {
-                  if (user) {
-                      currentUser = user;
-                      try {
-                          userData = user.data;
-                          const userNameEl = document.getElementById('user-name');
-                          const userInfoEl = document.getElementById('user-info');
-                          if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
-                          if (userInfoEl) userInfoEl.style.display = 'flex';
-                          
-                          // Reyting jadvalini yuklash
-                          loadLeaderboard();
-                          
-                          // O'yinni boshlash
-                          startGameInitial();
-                      } catch (err) {
-                          console.error("Foydalanuvchi yuklash xatosi:", err);
-                      }
-                  } else {
-                      // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
-                      window.location.href = '/demo/login.html';
-                  }
-              });
-          } else {
-              console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
-              // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
-              startGameInitial();
-          }
+          // O'yinni boshlash
+          startGameInitial();
       });
 
       // O'yinni boshlash
@@ -1270,8 +1271,10 @@
           // Inputlarni tozalash
           const answer1El = document.getElementById("answer1");
           const answer2El = document.getElementById("answer2");
+          const answer3El = document.getElementById("answer3");
           if (answer1El) answer1El.value = "";
           if (answer2El) answer2El.value = "";
+          if (answer3El) answer3El.value = "";
 
           const resultDiv = document.getElementById("result");
           if (resultDiv) {
@@ -1295,7 +1298,6 @@
           }, 60000);
           
           // Birinchi inputga fokus qo'yish
-          const answer1El = document.getElementById("answer1");
           if (answer1El) answer1El.focus();
       }
 
@@ -1311,6 +1313,9 @@
               
               let correctAnswerText = "";
               switch (currentQuestion.type) {
+                  case "equation":
+                      correctAnswerText = `To'g'ri javob: y = ${currentQuestion.a}x² + ${currentQuestion.b}x + ${currentQuestion.c}`;
+                      break;
                   case "vertex":
                       correctAnswerText = `To'g'ri javob: (${currentQuestion.correctAnswer1}, ${currentQuestion.correctAnswer2})`;
                       break;
@@ -1411,32 +1416,6 @@
           }
       }
 
-      // --- Reyting jadvalini yuklash ---
-      async function loadLeaderboard() {
-          if (typeof authUtils === 'undefined' || !authUtils.getLeaderboard) return;
-          try {
-              const result = await authUtils.getLeaderboard();
-              if (result && result.success) {
-                  const leaderboardList = document.getElementById('leaderboard-list');
-                  if (!leaderboardList) return;
-                  leaderboardList.innerHTML = '';
-                  (result.leaderboard || []).forEach((item, index) => {
-                      const leaderboardItem = document.createElement('div');
-                      leaderboardItem.className = 'leaderboard-item';
-                      if (currentUser && item.id === currentUser.docId) leaderboardItem.classList.add('current-user');
-                      leaderboardItem.innerHTML = `
-                          <div class="leaderboard-rank">${index + 1}</div>
-                          <div class="leaderboard-name">${item.fullName || 'Foydalanuvchi'}</div>
-                          <div class="leaderboard-score">${item.bestScore || 0}</div>
-                      `;
-                      leaderboardList.appendChild(leaderboardItem);
-                  });
-              }
-          } catch (err) {
-              console.error('Reyting jadvalini yuklashda xatolik:', err);
-          }
-      }
-
       // --- O'yinni tugatish ---
       async function endGame() {
           gameActive = false;
@@ -1457,34 +1436,6 @@
               xpEarned: xpCount,
               timeSpent: totalTime
           };
-
-          // Firebasega natijalarni saqlash
-          if (currentUser && typeof authUtils !== 'undefined') {
-              try {
-                  // O'yin natijasini saqlash
-                  await authUtils.saveGameResult(finalStats);
-                  
-                  // Eng yaxshi natijani yangilash
-                  const bestScoreResult = await authUtils.updateBestScore(xpCount);
-                  
-                  // Yangi rekord bo'lsa bildirish
-                  if (bestScoreResult && bestScoreResult.isNewRecord) {
-                      const gameOverEl = document.getElementById("game-over");
-                      if (gameOverEl) {
-                          const recordNote = document.createElement('div');
-                          recordNote.className = 'result correct';
-                          recordNote.style.marginTop = '10px';
-                          recordNote.innerHTML = `<h3>🎉 Yangi rekord!</h3><p>Siz o'z rekordingizni yangiladingiz: ${xpCount} XP</p>`;
-                          gameOverEl.appendChild(recordNote);
-                      }
-                  }
-                  
-                  // Reyting jadvalini yangilash
-                  loadLeaderboard();
-              } catch (error) {
-                  console.error('Natijalarni saqlashda xatolik:', error);
-              }
-          }
 
           // UI ni yangilash
           document.getElementById("final-questions").textContent = questionCount;
@@ -1523,10 +1474,28 @@
 
           // Kiritilgan qiymatlarni olish
           const userAnswer1Raw = document.getElementById("answer1")?.value;
-          let userAnswer1, userAnswer2;
+          let userAnswer1, userAnswer2, userAnswer3;
 
           // Savol turiga qarab javoblarni tekshirish
           switch (currentQuestion.type) {
+              case "equation":
+                  userAnswer1 = parseFractionalNumber(userAnswer1Raw);
+                  const userAnswer2Raw = document.getElementById("answer2")?.value;
+                  userAnswer2 = parseFractionalNumber(userAnswer2Raw);
+                  const userAnswer3Raw = document.getElementById("answer3")?.value;
+                  userAnswer3 = parseFractionalNumber(userAnswer3Raw);
+                  
+                  if (!isFinite(userAnswer1) || !isFinite(userAnswer2) || !isFinite(userAnswer3)) {
+                      alert("Iltimos, barcha koeffitsiyentlarni to'g'ri kiriting (butun son, onlik yoki kasr).");
+                      timeUpTimeout = setTimeout(() => {
+                          if (gameActive) {
+                              timeUpAutoCheck();
+                          }
+                      }, 60000);
+                      return;
+                  }
+                  break;
+                  
               case "vertex":
               case "xIntercepts":
                   userAnswer1 = parseFractionalNumber(userAnswer1Raw);
@@ -1590,13 +1559,24 @@
           let correct = false;
           
           switch (currentQuestion.type) {
+              case "equation":
+                  correct = nearlyEqual(userAnswer1, currentQuestion.a) && 
+                           nearlyEqual(userAnswer2, currentQuestion.b) && 
+                           nearlyEqual(userAnswer3, currentQuestion.c);
+                  break;
+                  
               case "vertex":
-              case "xIntercepts":
                   const matchA = nearlyEqual(userAnswer1, currentQuestion.correctAnswer1) && 
                                nearlyEqual(userAnswer2, currentQuestion.correctAnswer2);
-                  const matchB = nearlyEqual(userAnswer1, currentQuestion.correctAnswer2) && 
+                  correct = matchA;
+                  break;
+                  
+              case "xIntercepts":
+                  const matchB = nearlyEqual(userAnswer1, currentQuestion.correctAnswer1) && 
+                               nearlyEqual(userAnswer2, currentQuestion.correctAnswer2);
+                  const matchC = nearlyEqual(userAnswer1, currentQuestion.correctAnswer2) && 
                                nearlyEqual(userAnswer2, currentQuestion.correctAnswer1);
-                  correct = matchA || matchB;
+                  correct = matchB || matchC;
                   break;
                   
               case "axis":
@@ -1636,6 +1616,9 @@
                   
                   let correctAnswerText = "";
                   switch (currentQuestion.type) {
+                      case "equation":
+                          correctAnswerText = `To'g'ri javob: y = ${currentQuestion.a}x² + ${currentQuestion.b}x + ${currentQuestion.c}`;
+                          break;
                       case "vertex":
                           correctAnswerText = `To'g'ri javob: (${currentQuestion.correctAnswer1}, ${currentQuestion.correctAnswer2})`;
                           break;
