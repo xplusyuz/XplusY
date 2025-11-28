@@ -239,7 +239,8 @@
             font-size: 0.8rem;
         }
         
-        input[type="number"] { 
+        /* changed to text inputs to allow fractions; special handling in JS */
+        input[type="text"] { 
             width: 100%; 
             padding: 8px 10px; 
             font-size: 1rem; 
@@ -265,13 +266,13 @@
             color: white;
             border: none;
             border-radius: 4px;
-            width: 24px;
-            height: 24px;
+            width: 36px;
+            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            font-size: 0.7rem;
+            font-size: 0.9rem;
             transition: var(--transition);
         }
         
@@ -304,20 +305,6 @@
             font-weight: 600;
             color: var(--dark);
             font-size: 0.9rem;
-        }
-        
-        .close-keyboard {
-            background: var(--danger);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 0.7rem;
         }
         
         .keyboard-grid {
@@ -633,6 +620,17 @@
             font-weight: 600;
         }
         
+        /* PC da klaviatura ko'rinmasin */
+        @media (min-width: 769px) {
+            .keyboard-toggle {
+                display: none;
+            }
+            
+            .math-keyboard {
+                display: none !important;
+            }
+        }
+        
         @media (max-width: 480px) {
             body {
                 padding: 8px;
@@ -745,38 +743,42 @@
             <div class="input-container">
                 <div class="input-group">
                     <label for="x1">x₁ (1-ildiz)</label>
-                    <input type="number" id="x1" inputmode="numeric" />
+                    <!-- changed to text to allow fractions; JS will set readonly on mobile -->
+                    <input type="text" id="x1" />
                     <button class="keyboard-toggle" data-target="x1">⌨</button>
                 </div>
                 <div class="input-group">
                     <label for="x2">x₂ (2-ildiz)</label>
-                    <input type="number" id="x2" inputmode="numeric" />
+                    <input type="text" id="x2" />
                     <button class="keyboard-toggle" data-target="x2">⌨</button>
                 </div>
             </div>
 
-            <!-- Matematik Klaviatura -->
-            <div class="math-keyboard" id="math-keyboard">
+            <!-- Matematik Klaviatura (faqat mobil uchun) -->
+            <div class="math-keyboard" id="math-keyboard" aria-hidden="true">
                 <div class="keyboard-header">
                     <div class="keyboard-title">Matematik Klaviatura</div>
-                    <button class="close-keyboard" id="close-keyboard">✕</button>
                 </div>
                 <div class="keyboard-grid">
-                    <button class="keyboard-btn" data-value="1">1</button>
-                    <button class="keyboard-btn" data-value="2">2</button>
-                    <button class="keyboard-btn" data-value="3">3</button>
-                    <button class="keyboard-btn" data-value="4">4</button>
-                    <button class="keyboard-btn" data-value="5">5</button>
-                    <button class="keyboard-btn" data-value="6">6</button>
                     <button class="keyboard-btn" data-value="7">7</button>
                     <button class="keyboard-btn" data-value="8">8</button>
                     <button class="keyboard-btn" data-value="9">9</button>
-                    <button class="keyboard-btn" data-value="0">0</button>
-                    <button class="keyboard-btn" data-value="-">-</button>
                     <button class="keyboard-btn" data-value="backspace">⌫</button>
-                    <button class="keyboard-btn primary" data-value="clear">Tozalash</button>
-                    <button class="keyboard-btn primary" data-value="switch">Almashtirish</button>
-                    <button class="keyboard-btn danger" data-value="close">Yopish</button>
+                    
+                    <button class="keyboard-btn" data-value="4">4</button>
+                    <button class="keyboard-btn" data-value="5">5</button>
+                    <button class="keyboard-btn" data-value="6">6</button>
+                    <button class="keyboard-btn" data-value="-">-</button>
+                    
+                    <button class="keyboard-btn" data-value="1">1</button>
+                    <button class="keyboard-btn" data-value="2">2</button>
+                    <button class="keyboard-btn" data-value="3">3</button>
+                    <button class="keyboard-btn" data-value="/">/</button>
+                    
+                    <button class="keyboard-btn" data-value="0">0</button>
+                    <button class="keyboard-btn" data-value=".">.</button>
+                    <button class="keyboard-btn primary" data-value="switch">↔</button>
+                    <button class="keyboard-btn primary" data-value="clear">C</button>
                 </div>
             </div>
 
@@ -887,6 +889,38 @@
     let userData = null;
     let activeInput = null;
 
+    // --- Yordamchi funksiyalar ---
+    function isMobileDevice() {
+        // keng qamrovli tekshiruv: userAgent yoki kichik ekran
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    }
+
+    // qatorni (masalan "3/2" yoki "-1/4" yoki "2.5" yoki "3") songa aylantiradi
+    function parseFractionalNumber(str) {
+        if (typeof str !== 'string') return NaN;
+        const s = str.trim();
+        if (s === '') return NaN;
+
+        // agar bo'linma belgisi mavjud bo'lsa
+        if (s.includes('/')) {
+            const parts = s.split('/');
+            if (parts.length !== 2) return NaN;
+            const a = parseFloat(parts[0]);
+            const b = parseFloat(parts[1]);
+            if (!isFinite(a) || !isFinite(b) || b === 0) return NaN;
+            return a / b;
+        } else {
+            const v = parseFloat(s);
+            if (!isFinite(v)) return NaN;
+            return v;
+        }
+    }
+
+    // tenglikni aniqlashda kichik xatolarni ruxsat etish
+    function nearlyEqual(a, b, eps = 1e-9) {
+        return Math.abs(a - b) <= eps;
+    }
+
     // DOMContentLoaded — sahifa DOM to'liq yuklangandan keyin ishlaydi
     document.addEventListener('DOMContentLoaded', () => {
         // Elementlarni olinishi
@@ -898,42 +932,66 @@
         const leaderboardToggle = document.getElementById('leaderboard-toggle');
         const leaderboard = document.getElementById('leaderboard');
         const keyboardToggleBtns = document.querySelectorAll('.keyboard-toggle');
-        const closeKeyboardBtn = document.getElementById('close-keyboard');
         const keyboardBtns = document.querySelectorAll('.keyboard-btn');
         const mathKeyboard = document.getElementById('math-keyboard');
+
+        const mobile = isMobileDevice();
+
+        // Agar mobil bo'lsa — device klaviaturasini ko'rsatmaslik uchun inputlarni readonly qilamiz
+        if (mobile) {
+            [x1Input, x2Input].forEach(inp => {
+                if (inp) {
+                    inp.setAttribute('readonly', 'true'); // mobil qurilmalarda natijaviy: native keyboard chiqmaydi
+                    inp.setAttribute('inputmode', 'none'); // ba'zi brauzerlarga signal
+                    // agar kerak bo'lsa, uskunada fokus olinsin, lekin native klaviatura chiqmaydi
+                    inp.addEventListener('touchstart', (e) => {
+                        // fokus va math klaviaturani ko'rsatish
+                        activeInput = inp;
+                        mathKeyboard.style.display = 'block';
+                        inp.focus();
+                        e.preventDefault();
+                    }, {passive:false});
+                }
+            });
+        } else {
+            // Desktop uchun inputlar tahrirlanishi mumkin bo'lsin
+            [x1Input, x2Input].forEach(inp => {
+                if (inp) {
+                    inp.removeAttribute('readonly');
+                }
+            });
+        }
 
         // Matematik klaviatura funksiyalari
         keyboardToggleBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const targetId = btn.getAttribute('data-target');
                 activeInput = document.getElementById(targetId);
+                // show keyboard on mobile; on desktop also show custom keyboard when pressed
                 mathKeyboard.style.display = 'block';
-                activeInput.focus();
+                mathKeyboard.setAttribute('aria-hidden', 'false');
+                // fokus lekin agar readonly bo'lsa native keyboard chiqmaydi
+                if (activeInput) activeInput.focus();
             });
         });
 
-        closeKeyboardBtn.addEventListener('click', () => {
-            mathKeyboard.style.display = 'none';
-            if (activeInput) {
-                activeInput.blur();
-                activeInput = null;
-            }
-        });
-
+        // Klaviatura tugmalari - kasr/nuqta/qatorlarni yaxshi qo'llab-quvvatlash bilan
         keyboardBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!activeInput) return;
                 
                 const value = btn.getAttribute('data-value');
-                
+                const cur = activeInput.value || '';
+
                 switch(value) {
                     case 'backspace':
-                        activeInput.value = activeInput.value.slice(0, -1);
+                        activeInput.value = cur.slice(0, -1);
                         break;
                     case 'clear':
                         activeInput.value = '';
                         break;
                     case 'switch':
+                        // inputlar orasida almashtirish
                         if (activeInput.id === 'x1') {
                             activeInput = document.getElementById('x2');
                         } else {
@@ -941,26 +999,66 @@
                         }
                         activeInput.focus();
                         break;
-                    case 'close':
-                        mathKeyboard.style.display = 'none';
-                        activeInput.blur();
-                        activeInput = null;
+                    case '/':
+                        // faqat bitta slash ruxsat etilsin
+                        if (!cur.includes('/')) {
+                            // agar bo'sh bo'lsa, qo'yishga ruxsat bermaymiz (numerator bo'sh bo'lsa noaniq)
+                            if (cur === '' || cur === '-') {
+                                // agar faqat '-' bo'lsa numerator bo'sh: kiritishga ruxsat bermaymiz
+                                // lekin agar '-' va siz istasangiz, foydalanuvchi undan keyin raqam kiritadi — hozir ruxsat bermaymiz
+                                // yaxshiroq: agar mavjud qiymat manfiy belgidan iborat bo'lsa, qo'shamiz bo'lishi mumkin
+                                // ammo oddiy holatda slash oldidan raqam bo'lishi kerak
+                                // shuning uchun qabul qilmaysiz
+                            } else {
+                                activeInput.value = cur + '/';
+                            }
+                        }
+                        break;
+                    case '.':
+                        // nuqtani faqat hozirgi segmentda bittagina qo'yish
+                        const segDot = cur.includes('/') ? cur.split('/').pop() : cur;
+                        if (!segDot.includes('.')) activeInput.value = cur + '.';
+                        break;
+                    case '-':
+                        // '-' faqat segment boshida yoki slashdan keyin ruxsat etilsin
+                        if (cur === '') activeInput.value = '-';
+                        else if (cur.endsWith('/')) activeInput.value = cur + '-';
                         break;
                     default:
-                        activeInput.value += value;
+                        // raqam qo'shamiz
+                        activeInput.value = cur + value;
                 }
                 
                 // Input qiymatini yangilash
                 activeInput.dispatchEvent(new Event('input', { bubbles: true }));
+                activeInput.focus();
             });
         });
 
-        // Inputlarni bosganda klaviatura ko'rsatish
-        [x1Input, x2Input].forEach(input => {
-            input.addEventListener('focus', () => {
-                activeInput = input;
-                mathKeyboard.style.display = 'block';
+        // Inputlarni bosganda (desktop) klaviaturani natija sifatida ko'rsatish yoki math klaviaturani ham ko'rsatish
+        if (!mobile) {
+            [x1Input, x2Input].forEach(input => {
+                input.addEventListener('focus', () => {
+                    // desktop - math-keyni ko'rsatmaslik mumkin, lekin istasangiz ko'rsatamiz:
+                    // mathKeyboard.style.display = 'block';
+                    activeInput = input;
+                });
             });
+        }
+
+        // Ekranning boshqa joyiga bosganda klaviatura yopiladi
+        document.addEventListener('click', (e) => {
+            if (!mathKeyboard.contains(e.target) && 
+                !x1Input.contains(e.target) && 
+                !x2Input.contains(e.target) &&
+                !e.target.classList.contains('keyboard-toggle')) {
+                mathKeyboard.style.display = 'none';
+                mathKeyboard.setAttribute('aria-hidden', 'true');
+                if (activeInput) {
+                    try { activeInput.blur(); } catch(e){/*ignore*/ }
+                    activeInput = null;
+                }
+            }
         });
 
         // Reyting jadvalini ko'rsatish/yashirish
@@ -1294,14 +1392,15 @@
     async function checkAnswer() {
         if (!gameActive) return;
 
-        // Kiritilgan qiymatlarni Number() bilan olish
+        // Kiritilgan qiymatlarni parseFractionalNumber bilan olish
         const userX1Raw = document.getElementById("x1")?.value;
         const userX2Raw = document.getElementById("x2")?.value;
-        const userX1 = (userX1Raw === '' || userX1Raw == null) ? NaN : Number(userX1Raw);
-        const userX2 = (userX2Raw === '' || userX2Raw == null) ? NaN : Number(userX2Raw);
 
-        if (isNaN(userX1) || isNaN(userX2)) {
-            alert("Iltimos, ikkala ildizni ham kiriting!");
+        const userX1 = parseFractionalNumber(userX1Raw);
+        const userX2 = parseFractionalNumber(userX2Raw);
+
+        if (!isFinite(userX1) || !isFinite(userX2)) {
+            alert("Iltimos, ikkala ildizni ham to'g'ri kiriting (butun son, onlik yoki kasr, masalan 3/2).");
             return;
         }
 
@@ -1314,8 +1413,14 @@
         else if (timeDiff <= 20) xpEarned = 10;
         else if (timeDiff <= 30) xpEarned = 5;
 
-        const correct = (userX1 === currentEquation.x1 && userX2 === currentEquation.x2)
-                     || (userX1 === currentEquation.x2 && userX2 === currentEquation.x1);
+        // ildizlar integer bo'lsa, ularni sonlarga aylantiramiz
+        const correct1 = currentEquation.x1;
+        const correct2 = currentEquation.x2;
+
+        const matchA = nearlyEqual(userX1, correct1) && nearlyEqual(userX2, correct2);
+        const matchB = nearlyEqual(userX1, correct2) && nearlyEqual(userX2, correct1);
+
+        const correct = matchA || matchB;
 
         const resultDiv = document.getElementById("result");
         if (resultDiv) {
