@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MathLeague — MathCup (LeaderMath)</title>
+
+  <!-- MathJax (LaTeX rendering) -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <!-- Styling (soddalashtirilgan va moslashuvchan) -->
+  <style>
+    :root{
+      --bg1: linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d);
+      --card: rgba(255,255,255,0.08);
+      --accent: #fdbb2d;
+      --muted: rgba(255,255,255,0.8);
+      --glass: rgba(255,255,255,0.06);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0}
+    body{background:var(--bg1);color:#fff;padding:18px}
+    .container{max-width:1100px;margin:0 auto}
+    header{text-align:center;margin-bottom:18px}
+    h1{font-size:28px;margin:6px 0}
+    p.lead{opacity:0.95;margin:0;color:var(--muted)}
+    .grid{display:flex;gap:18px;flex-wrap:wrap}
+    .card{background:var(--card);border-radius:12px;padding:18px;flex:1;min-width:280px;box-shadow:0 8px 30px rgba(0,0,0,0.25)}
+    .big{font-size:40px;font-weight:700;color:var(--accent);text-align:center}
+    .small{font-size:13px;color:var(--muted)}
+    button.btn{padding:12px 18px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+    button.primary{background:linear-gradient(90deg,#ff8a00,#da1b60);color:#fff}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.12);color:#fff}
+    .countdown{font-size:28px;text-align:center;margin:12px 0}
+    .progress-wrap{background:rgba(255,255,255,0.06);height:12px;border-radius:8px;overflow:hidden}
+    .progress{height:100%;background:linear-gradient(90deg,#ff8a00,#da1b60);width:0%}
+    .question{margin-top:12px;background:rgba(0,0,0,0.18);padding:12px;border-radius:8px}
+    textarea.answer, input.answer{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit}
+    .lead-block{margin-bottom:10px}
+    .muted{color:rgba(255,255,255,0.75);font-size:13px}
+    .hidden{display:none}
+    ul.leader{list-style:none;padding:0;margin:0}
+    li.lead-item{display:flex;justify-content:space-between;padding:10px;border-radius:8px;margin-bottom:8px;background:rgba(0,0,0,0.12)}
+    @media (max-width:800px){ .grid{flex-direction:column} }
+  </style>
+
+  <!-- Firebase (siz yuklagan firebase-config.js bu sahifa bilan birga bo'lishi kerak) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <!-- Auth utilities (siz oldin yuklagan auth-utils.js) -->
+  <script src="auth-utils.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MathLeague / MathCup — LeaderMath</h1>
+      <p class="lead">Har shanba 20:00 da onlayn musobaqa. Kirish 20:05 gacha ochiq.</p>
+    </header>
+
+    <div class="grid">
+      <!-- Timer / Join -->
+      <div class="card" id="card-timer">
+        <h3>Keyingi raund</h3>
+        <div class="countdown" id="bigTimer">--:--:--</div>
+        <div class="small muted" id="subText">Yuklanmoqda...</div>
+
+        <div style="margin:12px 0" class="progress-wrap">
+          <div id="weekProgress" class="progress"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:12px">
+          <button id="enterBtn" class="btn primary" disabled>Kirish uchun ariza yuborish</button>
+          <button id="loginBtn" class="btn ghost">Kirish / Profil</button>
+        </div>
+
+        <div style="margin-top:12px" class="muted small" id="joinStatus"></div>
+      </div>
+
+      <!-- Competition / Questions -->
+      <div class="card" id="card-quiz" style="flex:2">
+        <h3>Musobaqa</h3>
+        <div id="infoBlock" class="lead-block">
+          <div class="small muted">Savollar Firestore'dan olinadi. Javoblar variantlarsiz yoziladi. Ball tezlikka qarab hisoblanadi.</div>
+          <ul class="small muted">
+            <li>1-savol: 180 s — maksimal 180 ball</li>
+            <li>2-savol: 240 s — maksimal 240 ball</li>
+            <li>3-5-savollar: 300 s — maksimal 300 ball har biri</li>
+          </ul>
+        </div>
+
+        <div id="quizArea" class="hidden">
+          <div id="qMeta" class="small muted">Savol <span id="qIndex">1</span> / 5 — Qoldi: <span id="qTimer">00:00</span></div>
+          <div class="question" id="qText">Matn yuklanmoqda...</div>
+
+          <div style="margin-top:10px">
+            <input id="answerInput" class="answer" placeholder="Javobni yozing (variantlarsiz)">
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <button id="submitAnswer" class="btn primary">Javobni yuborish</button>
+            <button id="nextQuestion" class="btn ghost hidden">Keyingi</button>
+            <div style="margin-left:auto" class="small muted" id="qPoints">Bu savol uchun maksimal: —</div>
+          </div>
+
+          <div id="feedback" class="small muted" style="margin-top:10px"></div>
+        </div>
+
+        <div id="afterBlock" class="hidden" style="margin-top:14px">
+          <div class="small muted" id="finalScore">Sizning ballingiz: <strong id="scoreValue">0</strong></div>
+          <div style="margin-top:8px">
+            <button id="toLeaderboard" class="btn primary">Reytingga o'tish</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboard -->
+      <div class="card" id="card-leader">
+        <h3>Umumiy reyting</h3>
+        <div class="small muted">So'nggi natijalar asosida</div>
+        <ul id="leaderList" class="leader" style="margin-top:10px">
+          <li class="lead-item"><span>1. —</span><span>-</span></li>
+        </ul>
+        <div style="margin-top:12px" class="small muted">Admin uchun: savollarni Firestore `MathCup` → `questions` hujjatiga joylang.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ========= Global / Config ========= */
+const db = window.db; // firebase-config.js bilan global db o'rnatilgan
+const ADMIN_EMAILS = []; // agar admin funktsiyalar kerak bo'lsa bu joyga kiriting
+
+/* ========= DOM ========= */
+const bigTimer = document.getElementById('bigTimer');
+const subText = document.getElementById('subText');
+const weekProgress = document.getElementById('weekProgress');
+const enterBtn = document.getElementById('enterBtn');
+const loginBtn = document.getElementById('loginBtn');
+const joinStatus = document.getElementById('joinStatus');
+
+const quizArea = document.getElementById('quizArea');
+const qIndexEl = document.getElementById('qIndex');
+const qTimerEl = document.getElementById('qTimer');
+const qTextEl = document.getElementById('qText');
+const answerInput = document.getElementById('answerInput');
+const submitAnswerBtn = document.getElementById('submitAnswer');
+const nextQuestionBtn = document.getElementById('nextQuestion');
+const qPointsEl = document.getElementById('qPoints');
+const feedbackEl = document.getElementById('feedback');
+const afterBlock = document.getElementById('afterBlock');
+const scoreValue = document.getElementById('scoreValue');
+
+const leaderList = document.getElementById('leaderList');
+const toLeaderboardBtn = document.getElementById('toLeaderboard');
+
+/* ========= State ========= */
+let currentUser = null;
+let joined = false;
+let eventId = null; // MathCup_YYYY-MM-DD
+let questions = null; // loaded from Firestore questions doc
+let currentQ = 0;
+let questionTimer = null;
+let questionRemaining = 0;
+let perQuestionScores = {};
+let totalScore = 0;
+
+/* Question timing & max points */
+const Q_TIMES = {1:180,2:240,3:300,4:300,5:300};
+const Q_MAX = {1:180,2:240,3:300,4:300,5:300};
+
+/* ========= Helpers ========= */
+function pad(n){ return String(n).padStart(2,'0'); }
+function getNextSaturday20(now = new Date()){
+  // returns Date() for next Saturday 20:00 (if today is Saturday before 20:00 -> today's 20:00)
+  const day = now.getDay(); // 0 Sun ... 6 Sat
+  let daysUntilSat = (6 - day + 7) % 7;
+  const target = new Date(now);
+  target.setDate(now.getDate() + daysUntilSat);
+  target.setHours(20,0,0,0);
+  // if today is saturday and time passed, pick next week
+  if(day === 6 && now > target){
+    target.setDate(target.getDate() + 7);
+  }
+  return target;
+}
+function getEventIdForDate(date){
+  const y = date.getFullYear();
+  const m = String(date.getMonth()+1).padStart(2,'0');
+  const d = String(date.getDate()).padStart(2,'0');
+  return `MathCup_${y}-${m}-${d}`;
+}
+
+/* ========= Auth / Session ========= */
+async function initAuth(){
+  try{
+    currentUser = await authUtils.loadSession();
+  }catch(e){
+    currentUser = null;
+  }
+  renderUserState();
+  authUtils.onUserChange(u=>{
+    currentUser = u;
+    renderUserState();
+  });
+}
+function renderUserState(){
+  loginBtn.textContent = currentUser ? (currentUser.data.fullName || currentUser.data.loginId || 'Profil') : 'Kirish / Profil';
+}
+
+/* Quick sign-in/register UI */
+loginBtn.addEventListener('click', async ()=>{
+  // Agar tizimga kirmagan bo'lsa, yangi ID olish yoki login sahifasiga o‘tish mumkin.
+  try{
+    if(!currentUser){
+      // taklif: ochiq login sahifasi (login.html) ishlatilgan bo'lsa redirect
+      window.location.href = 'login.html';
+    } else {
+      // profil sahifasi bo'lmasa, logout uchun menyu ochish (soddalashtirilgan)
+      if(confirm('Chiqishni xohlaysizmi?')){
+        await authUtils.logout();
+        currentUser = null;
+        renderUserState();
+      }
+    }
+  }catch(e){
+    console.error(e);
+  }
+});
+
+/* ========= Timers: main countdown & UI ========= */
+function startMainTimer(){
+  updateMainTimer();
+  setInterval(updateMainTimer, 1000);
+}
+async function updateMainTimer(){
+  const now = new Date();
+  const nextSat = getNextSaturday20(now);
+  const diff = nextSat - now;
+  const days = Math.floor(diff / (24*3600*1000));
+  const hours = Math.floor((diff % (24*3600*1000)) / (3600*1000));
+  const minutes = Math.floor((diff % (3600*1000)) / (60*1000));
+  const seconds = Math.floor((diff % (60*1000)) / 1000);
+
+  // show large time until start
+  if(days > 0){
+    bigTimer.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  } else {
+    bigTimer.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+
+  // eventId for the target Saturday (if today is Sat before 20:00 it will be that day)
+  eventId = getEventIdForDate(nextSat);
+
+  // Check if competition is open: Saturday between 20:00 and 20:05 local time
+  const nowDay = now.getDay();
+  const isOpen = (nowDay === 6 && now.getHours() === 20 && now.getMinutes() < 5);
+
+  if(isOpen){
+    subText.textContent = 'Musobaqa HOZIR ochiq! 20:05 gacha ro‘yxatdan o‘tish mumkin.';
+    enterBtn.disabled = false;
+    // compute progress to 20:05
+    const start = new Date(now); start.setHours(20,0,0,0);
+    const close = new Date(now); close.setHours(20,5,0,0);
+    const total = close - start;
+    const left = close - now;
+    const pct = Math.min(100, Math.max(0, (1 - left/total)*100));
+    weekProgress.style.width = pct + '%';
+  } else {
+    enterBtn.disabled = true;
+    // show remaining to next event
+    if(days > 0){
+      subText.textContent = `Keyingi raund: ${days} kun ${hours} soat ${minutes} min ${seconds} sek qoldi (Shanba 20:00).`;
+    } else {
+      subText.textContent = `Keyingi raund: ${pad(hours)}:${pad(minutes)}:${pad(seconds)} (Shanba 20:00).`;
+    }
+    // week progress: fraction of week passed toward Saturday
+    // compute days until saturday for week progress visualization
+    const nowDayNum = now.getDay();
+    const daysUntilSat = (6 - nowDayNum + 7) % 7;
+    const pctWeek = ((7 - daysUntilSat) / 7) * 100;
+    weekProgress.style.width = `${pctWeek}%`;
+  }
+
+  // if event just started and user joined earlier, auto-start quiz flow: we'll check participant record when start click happens
+}
+
+/* ========= Joining flow ========= */
+enterBtn.addEventListener('click', async ()=>{
+  // require session and add participant doc for this event
+  try{
+    const user = await authUtils.requireSession();
+    currentUser = user;
+    renderUserState();
+
+    // add participant doc under event
+    await db.collection('MathCup').doc(eventId).set({updated: firebase.firestore.FieldValue.serverTimestamp()}, {merge:true});
+    await db.collection('MathCup').doc(eventId).collection('participants').doc(currentUser.docId).set({
+      name: currentUser.data.fullName || currentUser.data.loginId || 'Anonim',
+      joinedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    joined = true;
+    joinStatus.textContent = 'Siz ro‘yxatga olindingiz. Musobaqa boshlanganda avtomatik testga kiritilasiz (agar vaqt keldi).';
+    enterBtn.disabled = true;
+
+    // If competition already open (i.e., we joined during 20:00-20:05), start quiz immediately
+    const now = new Date();
+    if(now.getDay() === 6 && now.getHours() === 20 && now.getMinutes() < 5){
+      // show waiting message until 20:05 or quiz start
+      joinStatus.textContent = 'Ro‘yxatga olindingiz — musobaqa 20:05 da boshlaydi (kirish tugadi) yoki admin boshlaydi.';
+      // we'll wait for start by checking time; when time >= 20:05 start quiz for participants
+      watchStartForParticipant();
+    }
+  }catch(e){
+    console.error(e);
+    alert('Kirish yoki roʻyxatdan oʻtishda xatolik: ' + (e.message || e));
+  }
+});
+
+/* When participant has joined and event moves into "in progress" (after 20:05), start quiz */
+function watchStartForParticipant(){
+  const interval = setInterval(async ()=>{
+    const now = new Date();
+    const start = getNextSaturday20();
+    // If now is at or after start (>= 20:00) and after join window (>= 20:05) -> start
+    if(now >= new Date(start.getTime() + 5*60*1000) || (now.getDay() === 6 && now.getHours() === 20 && now.getMinutes() >= 5)){
+      clearInterval(interval);
+      // check participant doc still exists
+      const doc = await db.collection('MathCup').doc(eventId).collection('participants').doc(currentUser.docId).get();
+      if(doc.exists){
+        // load questions and start quiz
+        await loadQuestions();
+        startQuizIfParticipant();
+      } else {
+        joinStatus.textContent = 'Siz ro‘yxatdan o‘tmagansiz — quizga kira olmaysiz.';
+      }
+    }
+  }, 2000);
+}
+
+/* ========= Questions loading ========= */
+async function loadQuestions(){
+  try{
+    const snap = await db.collection('MathCup').doc('questions').get();
+    if(!snap.exists){
+      questions = null;
+      alert('Admin hali savollarni joylamagan (MathCup -> questions hujjati yo‘q).');
+      return;
+    }
+    questions = snap.data();
+    // adopt into array indexed 1..5 for convenience
+    const arr = [];
+    for(let i=1;i<=5;i++){
+      arr.push({
+        text: questions['q'+i] || `Savol ${i} yo'q`,
+        answer: questions['a'+i] || '',
+        timeLimit: Q_TIMES[i],
+        maxPoints: Q_MAX[i]
+      });
+    }
+    questions = arr;
+  }catch(e){
+    console.error('Savollar yuklashda xato', e);
+    alert('Savollarni olishda xatolik: ' + (e.message || e));
+  }
+}
+
+/* ========= Quiz flow (participant) ========= */
+async function startQuizIfParticipant(){
+  // only allow participants to actually answer; others see read-only
+  // fetch participant doc to ensure
+  try{
+    const pdoc = await db.collection('MathCup').doc(eventId).collection('participants').doc(currentUser.docId).get();
+    if(!pdoc.exists){
+      joinStatus.textContent = 'Siz bu raund uchun ro‘yxatdan o‘tmagansiz.';
+      return;
+    }
+  }catch(e){
+    console.error(e);
+    return;
+  }
+
+  // show quiz area
+  document.getElementById('infoBlock').classList.add('hidden');
+  quizArea.classList.remove('hidden');
+  currentQ = 0;
+  perQuestionScores = {};
+  totalScore = 0;
+
+  // start first question
+  loadQuestion(0);
+}
+
+function renderMath(){
+  if(window.MathJax && MathJax.typesetPromise){
+    MathJax.typesetPromise();
+  }
+}
+
+function loadQuestion(idx){
+  if(!questions || idx >= questions.length){
+    finishQuiz();
+    return;
+  }
+  currentQ = idx;
+  const q = questions[idx];
+  qIndexEl.textContent = (idx + 1);
+  qTextEl.innerHTML = q.text; // LaTeX inside; MathJax will render
+  qPointsEl.textContent = `Maks: ${q.maxPoints} ball`;
+  answerInput.value = '';
+  feedbackEl.textContent = '';
+  nextQuestionBtn.classList.add('hidden');
+  submitAnswerBtn.classList.remove('hidden');
+
+  // start timer
+  if(questionTimer) clearInterval(questionTimer);
+  questionRemaining = q.timeLimit;
+  qTimerEl.textContent = `${questionRemaining}s`;
+  questionTimer = setInterval(()=>{
+    questionRemaining--;
+    qTimerEl.textContent = `${questionRemaining}s`;
+    if(questionRemaining <= 0){
+      clearInterval(questionTimer);
+      autoSubmitEmpty();
+    }
+  }, 1000);
+
+  // render LaTeX
+  renderMath();
+}
+
+async function autoSubmitEmpty(){
+  // treat as empty answer with 0 points (remaining = 0)
+  computeAndShowScore('');
+}
+
+submitAnswerBtn.addEventListener('click', async ()=>{
+  const ans = answerInput.value.trim();
+  // disable to prevent double click
+  submitAnswerBtn.disabled = true;
+  await computeAndShowScore(ans);
+  submitAnswerBtn.disabled = false;
+});
+
+async function computeAndShowScore(ans){
+  clearInterval(questionTimer);
+  const idx = currentQ;
+  const q = questions[idx];
+  const rem = Math.max(0, questionRemaining);
+  // score proportional to remaining time
+  const sc = Math.round((rem / q.timeLimit) * q.maxPoints);
+  perQuestionScores['q' + (idx+1)] = {score: sc, given: ans, timeLeft: rem};
+  totalScore += sc;
+
+  feedbackEl.textContent = `Siz bu savol uchun ${sc} ball to‘pladingiz. (Qoldi: ${rem}s)`;
+  feedbackEl.className = 'small muted';
+  submitAnswerBtn.classList.add('hidden');
+  nextQuestionBtn.classList.remove('hidden');
+
+  // save answers progressively to local variable; final save to Firestore at end
+}
+
+nextQuestionBtn.addEventListener('click', ()=>{
+  loadQuestion(currentQ + 1);
+});
+
+/* ========= Finish & Save results ========= */
+async function finishQuiz(){
+  quizArea.classList.add('hidden');
+  afterBlock.classList.remove('hidden');
+  scoreValue.textContent = totalScore;
+
+  // save to Firestore: add entry to MathCup -> natijalar entries array via transaction
+  if(!currentUser){
+    alert('Siz tizimga kirmagansiz. Natija saqlanmadi.');
+    return;
+  }
+
+  try{
+    const entry = {
+      uid: currentUser.docId,
+      name: currentUser.data.fullName || currentUser.data.loginId || 'Anonim',
+      score: totalScore,
+      perQuestion: perQuestionScores,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    const natRef = db.collection('MathCup').doc('natijalar');
+    await db.runTransaction(async tx=>{
+      const snap = await tx.get(natRef);
+      const cur = snap.exists ? (snap.data().entries || []) : [];
+      cur.push(entry);
+      tx.set(natRef, {entries: cur}, {merge:true});
+    });
+
+    feedbackEl.textContent = 'Natijangiz saqlandi. Rahmat!';
+  }catch(e){
+    console.error('Natijani saqlash xatosi', e);
+    feedbackEl.textContent = 'Natijani saqlashda xatolik: ' + (e.message || e);
+  }
+
+  // refresh leaderboard
+  loadLeaderboard();
+}
+
+/* ========= Leaderboard ========= */
+async function loadLeaderboard(){
+  try{
+    const snap = await db.collection('MathCup').doc('natijalar').get();
+    const data = snap.exists ? (snap.data().entries || []) : [];
+    // aggregate best scores per uid
+    const map = {};
+    for(const e of data){
+      if(!map[e.uid] || (e.score > map[e.uid].score)){
+        map[e.uid] = {name: e.name, score: e.score, ts: e.timestamp};
+      }
+    }
+    const arr = Object.values(map).sort((a,b)=>b.score - a.score).slice(0,10);
+    // render
+    leaderList.innerHTML = '';
+    if(arr.length === 0){
+      leaderList.innerHTML = '<li class="lead-item"><span>—</span><span>—</span></li>';
+      return;
+    }
+    arr.forEach((it, i)=>{
+      const li = document.createElement('li');
+      li.className = 'lead-item';
+      li.innerHTML = `<span>${i+1}. ${escapeHtml(it.name)}</span><span>${it.score} ball</span>`;
+      leaderList.appendChild(li);
+    });
+  }catch(e){
+    console.error('Leaderboard yuklash xatosi', e);
+  }
+}
+
+/* ========= Utility ========= */
+function escapeHtml(s){ return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+/* ========= Init sequence ========= */
+(async function(){
+  if(!db){
+    alert('Firestore topilmadi. Iltimos firebase-config.js faylingizni tekshiring.');
+    return;
+  }
+
+  await initAuth();
+  startMainTimer();
+  loadLeaderboard();
+
+  // If user already joined earlier and now it's time to start, auto-run watch and start quiz
+  // We also add a small poll that checks at event start whether participant should start
+  setInterval(async ()=>{
+    try{
+      const now = new Date();
+      // if it's after start (>= 20:05 on Saturday) and user is joined, ensure we start
+      if(currentUser){
+        // check participant record
+        const pdoc = await db.collection('MathCup').doc(eventId).collection('participants').doc(currentUser.docId).get();
+        if(pdoc.exists){
+          const start = getNextSaturday20();
+          if(now >= new Date(start.getTime() + 5*60*1000)){
+            // load questions if not loaded and start quiz if not started and not finished
+            if(!questions && document.getElementById('infoBlock').classList.contains('hidden') === false){
+              await loadQuestions();
+              startQuizIfParticipant();
+            }
+          }
+        }
+      }
+    }catch(e){
+      // ignore poll errors
+    }
+  }, 5000);
+
+  // allow direct "go to leaderboard" after finishing
+  toLeaderboardBtn.addEventListener('click', ()=>{ 
+    // show leaderboard card (we already update it)
+    document.getElementById('card-leader').scrollIntoView({behavior:'smooth'});
+  });
+
+})();
+</script>
+</body>
+</html>
