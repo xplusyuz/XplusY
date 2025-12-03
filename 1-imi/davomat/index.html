@@ -268,278 +268,347 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 
 <script>
-  // Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.firebasestorage.app",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const davomatCol = db.collection("davomat");
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-  // DOM elements
-  const loginSection = document.getElementById("login-section");
-  const loginSelect = document.getElementById("login-select");
-  const startBtn = document.getElementById("start-btn");
-  const errorAlert = document.getElementById("error-alert");
-  const errorText = document.getElementById("error-text");
-  const attendanceSection = document.getElementById("attendance-section");
-  const teacherName = document.getElementById("teacher-name");
-  const classInfo = document.getElementById("class-info");
-  const logoutBtn = document.getElementById("logout-btn");
-  const infoAlert = document.getElementById("info-alert");
-  const studentsTbody = document.getElementById("students-tbody");
-  const saveBtn = document.getElementById("save-btn");
+// DOM elements
+const loginSection = document.getElementById("login-section");
+const loginSelect = document.getElementById("login-select");
+const startBtn = document.getElementById("start-btn");
+const errorAlert = document.getElementById("error-alert");
+const errorText = document.getElementById("error-text");
+const attendanceSection = document.getElementById("attendance-section");
+const teacherName = document.getElementById("teacher-name");
+const classInfo = document.getElementById("class-info");
+const logoutBtn = document.getElementById("logout-btn");
+const infoAlert = document.getElementById("info-alert");
+const studentsTbody = document.getElementById("students-tbody");
+const saveBtn = document.getElementById("save-btn");
 
-  let classesJson = [];
-  let currentTeacher = null;
+let classesData = [];
+let currentTeacher = null;
 
-  // Format date to YYYY-MM-DD
-  function toDateStr() {
-    const today = new Date();
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, "0");
-    const d = String(today.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
+// Format date to YYYY-MM-DD
+function toDateStr() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-  // Load classes data from sinf.json
-  async function loadClassesData() {
+// Load classes data from Firestore (davomat collection)
+async function loadClassesData() {
   try {
-    const docRef = db.collection("davomat").doc("sinf");
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
-      console.error("davomat/sinf hujjati topilmadi");
-      classesJson = [];
-      return;
+    console.log("Firestore'dan sinf ma'lumotlari yuklanmoqda...");
+    
+    // Avval sinf hujjatini tekshiramiz
+    const sinfDocRef = db.collection("davomat").doc("sinf");
+    const sinfDocSnap = await sinfDocRef.get();
+    
+    if (sinfDocSnap.exists) {
+      // Agar davomat/sinf hujjati mavjud bo'lsa, undan o'qiymiz
+      const data = sinfDocSnap.data();
+      classesData = data.classes || [];
+      console.log("Sinf ma'lumotlari davomat/sinf dan yuklandi:", classesData);
+    } else {
+      // Agar davomat/sinf yo'q bo'lsa, sinflarni alohida collectiondan o'qiymiz
+      console.log("davomat/sinf hujjati topilmadi, sinflar collectionidan o'qilmoqda...");
+      
+      const sinflarColRef = db.collection("sinflar");
+      const sinflarSnapshot = await sinflarColRef.get();
+      
+      if (sinflarSnapshot.empty) {
+        console.log("sinflar collection'ida hujjat yo'q");
+        classesData = [];
+        return;
+      }
+      
+      // Har bir sinfni o'qiymiz
+      const classesPromises = [];
+      sinflarSnapshot.forEach(doc => {
+        classesPromises.push(Promise.resolve({ id: doc.id, ...doc.data() }));
+      });
+      
+      classesData = await Promise.all(classesPromises);
+      console.log("Sinf ma'lumotlari sinflar collectionidan yuklandi:", classesData);
     }
-
-    const data = docSnap.data();
-    classesJson = data.classes || []; // classes massivini olish
-
-    console.log("Sinflar yuklandi:", classesJson);
-
+    
+    if (classesData.length === 0) {
+      console.warn("Hech qanday sinf ma'lumoti topilmadi!");
+    }
+    
   } catch (error) {
-    console.error("Xatolik:", error);
+    console.error("Xatolik sinf ma'lumotlarini yuklashda:", error);
+    classesData = [];
   }
 }
 
-  // Fill login select with teachers from sinf.json
-  function fillLoginSelect() {
-    loginSelect.innerHTML = '<option value="">Sinf rahbarini tanlang</option>';
-    
-    if (!classesJson.length) {
-      loginSelect.innerHTML += '<option value="" disabled>sinf.json bo\'sh yoki xato</option>';
-      return;
-    }
-    
-    classesJson.forEach(cls => {
-      const login = cls.teacherLogin || "";
-      const name = cls.teacherName || "Noma'lum";
-      const className = cls.name || cls.id || "Noma'lum sinf";
-      
-      if (login) {
-        const option = document.createElement("option");
-        option.value = login;
-        option.textContent = `${name} (${className})`;
-        loginSelect.appendChild(option);
-      }
-    });
-  }
-
-  // Show/hide error
-  function showError(msg) {
-    errorText.textContent = msg;
-    errorAlert.classList.remove("hidden");
+// Fill login select with teachers from loaded data
+function fillLoginSelect() {
+  loginSelect.innerHTML = '<option value="">Sinf rahbarini tanlang</option>';
+  
+  if (!classesData.length) {
+    loginSelect.innerHTML += '<option value="" disabled>Sinflar topilmadi. Iltimos, Firebase\'da sinf ma\'lumotlarini yuklang.</option>';
+    return;
   }
   
-  function hideError() {
-    errorAlert.classList.add("hidden");
-  }
+  classesData.forEach(cls => {
+    const login = cls.teacherLogin || cls.id || "";
+    const name = cls.teacherName || "Noma'lum o'qituvchi";
+    const className = cls.name || cls.id || "Noma'lum sinf";
+    
+    if (login && name && className) {
+      const option = document.createElement("option");
+      option.value = login;
+      option.textContent = `${name} (${className})`;
+      loginSelect.appendChild(option);
+    }
+  });
+}
 
-  // Login with selected teacher
-  async function handleLogin() {
-    hideError();
-    const selectedLogin = loginSelect.value;
-    
-    if (!selectedLogin) {
-      showError("Sinf rahbarini tanlang");
-      return;
-    }
-    
-    // Find teacher by login
-    const cls = classesJson.find(c => c.teacherLogin === selectedLogin);
-    
-    if (!cls) {
-      showError("Tanlangan login bilan sinf topilmadi");
-      return;
-    }
-    
-    currentTeacher = {
-      login: selectedLogin,
-      teacherName: cls.teacherName || selectedLogin,
-      classObj: cls
-    };
-    
-    // Show attendance section
-    teacherName.textContent = cls.teacherName || selectedLogin;
-    classInfo.textContent = `${cls.name || cls.id} sinfi • ${cls.students?.length || 0} ta o'quvchi`;
-    loginSection.classList.add("hidden");
-    attendanceSection.classList.remove("hidden");
-    
-    // Load students
-    await loadStudents();
-  }
+// Show/hide error
+function showError(msg) {
+  errorText.textContent = msg;
+  errorAlert.classList.remove("hidden");
+}
 
-  // Load students for the class
-  async function loadStudents() {
-    if (!currentTeacher) return;
-    
-    const cls = currentTeacher.classObj;
-    const students = cls.students || [];
-    const today = toDateStr();
-    
-    if (!students.length) {
-      studentsTbody.innerHTML = '<tr><td colspan="3" class="text-center">O\'quvchilar ro\'yxati topilmadi</td></tr>';
-      return;
-    }
-    
-    // Load existing attendance for today
-    const docId = `${today}_${cls.id}`;
-    const snap = await davomatCol.doc(docId).get();
-    const existingMap = {};
-    
-    if (snap.exists) {
-      (snap.data().students || []).forEach(st => {
-        existingMap[st.id] = st.status;
-      });
-    }
-    
-    // Render students table
-    studentsTbody.innerHTML = "";
-    students.forEach((st, idx) => {
-      const tr = document.createElement("tr");
-      const status = existingMap[st.id] || "present";
-      
-      tr.innerHTML = `
-        <td>${idx + 1}</td>
-        <td>${st.fullName || `O'quvchi ${idx + 1}`}</td>
-        <td>
-          <select class="status-select" data-student-id="${st.id}">
-            <option value="present">Bor</option>
-            <option value="excused">Sababli yo'q</option>
-            <option value="unexcused">Sababsiz yo'q</option>
-          </select>
-        </td>
-      `;
-      
-      studentsTbody.appendChild(tr);
-      const sel = tr.querySelector("select");
-      sel.value = (status === "absent" ? "unexcused" : status);
+function hideError() {
+  errorAlert.classList.add("hidden");
+}
+
+// Login with selected teacher
+async function handleLogin() {
+  hideError();
+  const selectedLogin = loginSelect.value;
+  
+  if (!selectedLogin) {
+    showError("Sinf rahbarini tanlang");
+    return;
+  }
+  
+  // Find teacher by login
+  const cls = classesData.find(c => 
+    c.teacherLogin === selectedLogin || c.id === selectedLogin
+  );
+  
+  if (!cls) {
+    showError("Tanlangan login bilan sinf topilmadi");
+    return;
+  }
+  
+  currentTeacher = {
+    login: selectedLogin,
+    teacherName: cls.teacherName || selectedLogin,
+    classObj: cls
+  };
+  
+  // Show attendance section
+  teacherName.textContent = cls.teacherName || selectedLogin;
+  classInfo.textContent = `${cls.name || cls.id} sinfi • ${cls.students?.length || 0} ta o'quvchi`;
+  loginSection.classList.add("hidden");
+  attendanceSection.classList.remove("hidden");
+  
+  // Load students
+  await loadStudents();
+}
+
+// Load students for the class
+async function loadStudents() {
+  if (!currentTeacher) return;
+  
+  const cls = currentTeacher.classObj;
+  const students = cls.students || [];
+  const today = toDateStr();
+  
+  if (!students.length) {
+    studentsTbody.innerHTML = '<tr><td colspan="3" class="text-center">O\'quvchilar ro\'yxati topilmadi</td></tr>';
+    return;
+  }
+  
+  // Load existing attendance for today from davomat collection
+  const docId = `${today}_${cls.id}`;
+  const davomatDocRef = db.collection("davomat").doc(docId);
+  const snap = await davomatDocRef.get();
+  const existingMap = {};
+  
+  if (snap.exists) {
+    (snap.data().students || []).forEach(st => {
+      existingMap[st.id] = st.status;
     });
   }
+  
+  // Render students table
+  studentsTbody.innerHTML = "";
+  students.forEach((st, idx) => {
+    const tr = document.createElement("tr");
+    const status = existingMap[st.id] || "present";
+    
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${st.fullName || st.fullname || `O'quvchi ${idx + 1}`}</td>
+      <td>
+        <select class="status-select" data-student-id="${st.id}">
+          <option value="present" ${status === 'present' ? 'selected' : ''}>Bor</option>
+          <option value="excused" ${status === 'excused' ? 'selected' : ''}>Sababli yo'q</option>
+          <option value="unexcused" ${status === 'unexcused' ? 'selected' : ''}>Sababsiz yo'q</option>
+        </select>
+      </td>
+    `;
+    
+    studentsTbody.appendChild(tr);
+  });
+}
 
-  // Save attendance
-  async function saveAttendance() {
-    if (!currentTeacher) return;
-    
-    const cls = currentTeacher.classObj;
-    const students = cls.students || [];
-    const today = toDateStr();
-    
-    if (!students.length) {
-      alert("O'quvchilar ro'yxati yo'q");
-      return;
-    }
-    
-    const rows = studentsTbody.querySelectorAll("tr");
-    const resStudents = [];
-    
-    students.forEach((st, idx) => {
-      const row = rows[idx];
-      const sel = row.querySelector("select");
-      let status = sel.value;
-      if (status === "absent") status = "unexcused";
-      resStudents.push({ 
-        id: st.id, 
-        fullName: st.fullName || `O'quvchi ${idx + 1}`,
-        status 
-      });
-    });
-    
-    const docId = `${today}_${cls.id}`;
-    
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...';
-    
-    try {
-      await davomatCol.doc(docId).set({
-        date: today,
-        classId: cls.id,
-        className: cls.name || cls.id,
-        teacherLogin: currentTeacher.login,
-        teacherName: currentTeacher.teacherName,
-        students: resStudents,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      
-      alert("Davomat saqlandi!");
-    } catch(e) {
-      console.error(e);
-      alert("Saqlashda xatolik: " + e.message);
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = '<i class="fas fa-save"></i> Davomatni saqlash';
-    }
+// Save attendance to Firestore
+async function saveAttendance() {
+  if (!currentTeacher) return;
+  
+  const cls = currentTeacher.classObj;
+  const students = cls.students || [];
+  const today = toDateStr();
+  
+  if (!students.length) {
+    alert("O'quvchilar ro'yxati yo'q");
+    return;
   }
-
-  // Logout
-  function logout() {
-    currentTeacher = null;
-    attendanceSection.classList.add("hidden");
-    loginSection.classList.remove("hidden");
-    hideError();
-    loginSelect.value = "";
-  }
-
-  // Initialize
-  document.addEventListener("DOMContentLoaded", async () => {
-    await loadClassesJson();
+  
+  const rows = studentsTbody.querySelectorAll("tr");
+  const resStudents = [];
+  
+  students.forEach((st, idx) => {
+    const row = rows[idx];
+    if (!row) return;
     
-    // Event listeners
-    startBtn.addEventListener("click", handleLogin);
+    const sel = row.querySelector("select");
+    let status = sel ? sel.value : "present";
     
-    loginSelect.addEventListener("keydown", e => {
-      if (e.key === "Enter") handleLogin();
-    });
+    // Agar oldingi versiyada "absent" bo'lsa, uni "unexcused" ga o'zgartiramiz
+    if (status === "absent") status = "unexcused";
     
-    logoutBtn.addEventListener("click", logout);
-    saveBtn.addEventListener("click", saveAttendance);
-    
-    // Auto-login from localStorage if exists
-    const savedLogin = localStorage.getItem("davomat_last_login");
-    if (savedLogin) {
-      loginSelect.value = savedLogin;
-      // Auto-login after a short delay
-      setTimeout(() => {
-        if (loginSelect.value === savedLogin) {
-          handleLogin();
-        }
-      }, 100);
-    }
-    
-    // Save login to localStorage on successful login
-    startBtn.addEventListener("click", () => {
-      if (loginSelect.value) {
-        localStorage.setItem("davomat_last_login", loginSelect.value);
-      }
+    resStudents.push({ 
+      id: st.id, 
+      fullName: st.fullName || st.fullname || `O'quvchi ${idx + 1}`,
+      status 
     });
   });
+  
+  const docId = `${today}_${cls.id}`;
+  
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...';
+  
+  try {
+    await db.collection("davomat").doc(docId).set({
+      date: today,
+      classId: cls.id,
+      className: cls.name || cls.id,
+      teacherLogin: currentTeacher.login,
+      teacherName: currentTeacher.teacherName,
+      students: resStudents,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    // Ma'lumot saqlandi haqida xabar
+    infoAlert.innerHTML = `
+      <div class="alert-icon">✅</div>
+      <div>Davomat saqlandi! Sana: ${today}</div>
+    `;
+    infoAlert.className = "alert alert-success";
+    
+    // 3 soniyadan so'ng asl holatiga qaytarish
+    setTimeout(() => {
+      infoAlert.innerHTML = `
+        <div class="alert-icon">✅</div>
+        <div>Davomatni har qanday vaqtda kiritishingiz mumkin</div>
+      `;
+    }, 3000);
+    
+  } catch(e) {
+    console.error("Saqlashda xatolik:", e);
+    infoAlert.innerHTML = `
+      <div class="alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <div>Saqlashda xatolik: ${e.message}</div>
+    `;
+    infoAlert.className = "alert alert-error";
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="fas fa-save"></i> Davomatni saqlash';
+  }
+}
+
+// Logout
+function logout() {
+  currentTeacher = null;
+  attendanceSection.classList.add("hidden");
+  loginSection.classList.remove("hidden");
+  hideError();
+  loginSelect.value = "";
+  localStorage.removeItem("davomat_last_login");
+}
+
+// Initialize
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("Ilova yuklanmoqda...");
+  
+  try {
+    await loadClassesData();
+    fillLoginSelect();
+  } catch (error) {
+    console.error("Dasturni ishga tushirishda xatolik:", error);
+    showError("Dasturni yuklashda xatolik. Internet aloqasini tekshiring.");
+  }
+  
+  // Event listeners
+  startBtn.addEventListener("click", handleLogin);
+  
+  loginSelect.addEventListener("keydown", e => {
+    if (e.key === "Enter") handleLogin();
+  });
+  
+  logoutBtn.addEventListener("click", logout);
+  saveBtn.addEventListener("click", saveAttendance);
+  
+  // Auto-login from localStorage if exists
+  const savedLogin = localStorage.getItem("davomat_last_login");
+  if (savedLogin) {
+    loginSelect.value = savedLogin;
+    // Auto-login after a short delay
+    setTimeout(() => {
+      if (loginSelect.value === savedLogin) {
+        handleLogin();
+      }
+    }, 300);
+  }
+  
+  // Save login to localStorage on successful login
+  startBtn.addEventListener("click", () => {
+    if (loginSelect.value) {
+      localStorage.setItem("davomat_last_login", loginSelect.value);
+    }
+  });
+  
+  // Status o'zgarishini kuzatish
+  studentsTbody.addEventListener("change", (e) => {
+    if (e.target.classList.contains('status-select')) {
+      // Status o'zgarganda ma'lumot o'zgarganligini ko'rsatish
+      infoAlert.innerHTML = `
+        <div class="alert-icon"><i class="fas fa-edit"></i></div>
+        <div>O'zgartirishlar kiritildi. Saqlashni unutmang!</div>
+      `;
+      infoAlert.className = "alert alert-warning";
+    }
+  });
+});
 </script>
 </body>
 </html>
