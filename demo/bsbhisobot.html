@@ -1914,35 +1914,17 @@
             showRoleSelection();
             
             // Firebase auth holatini kuzatish
-           auth.onAuthStateChanged(user => {
-  if (!user) {
-    // Hech kim kirmagan
-    console.log('Foydalanuvchi tizimda emas');
-    return;
-  }
-
-  // Agar siz hali ham tashqi currentUserRole ga ishonayotgan bo'lsangiz,
-  // uni aniqligini tekshiring. Aks holda rolni Firestore'dan oling:
-  // Misol: db.collection('teachers').doc(user.uid).get() -> agar mavjud bo'lsa teacher.
-  db.collection('teachers').doc(user.uid).get()
-    .then(doc => {
-      if (doc.exists) {
-        // Bu foydalanuvchi o'qituvchi ekanligi aniqlandi
-        const name = doc.data().name || 'O\'qituvchi';
-        showTeacherDashboard(name);
-        loadTeacherBSBs();
-        loadBSBsForSelects();
-        setupRealtimeListeners();
-      } else {
-        // teacher hujjati topilmadi — ehtimol o'quvchi yoki rol boshqacha
-        console.log('Bu foydalanuvchi teachers to‘plamida yo‘q. currentUserRole:', currentUserRole);
-        // agar siz currentUserRole orqali tekshirmoqchi bo'lsangiz:
-        if (currentUserRole === 'teacher') {
-          console.warn('currentUserRole=teacher, ammo teachers doc topilmadi.');
-        } else {
-          // boshqa rol uchun ish tarmoqlari
-          showStudentView?.();
-        }    
+            auth.onAuthStateChanged(user => {
+                if (user && currentUserRole === 'teacher') {
+                    // Avtomatik kirish saqlangan
+                    db.collection('teachers').doc(user.uid).get()
+                        .then(doc => {
+                            if (doc.exists) {
+                                showTeacherDashboard(doc.data().name);
+                                loadTeacherBSBs();
+                                loadBSBsForSelects();
+                                setupRealtimeListeners();
+                            }
                         });
                 }
             });
