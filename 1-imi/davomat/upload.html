@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <title>sinf.json yuklash</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+  <style>
+    body { font-family: Arial; padding: 40px; }
+    .box { padding: 20px; background: #f3f3f3; border-radius: 10px; width: 400px; }
+    button { padding: 10px 20px; cursor: pointer; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <div class="box">
+    <h3><b>sinf.json</b> faylini Firestore'ga yuklash</h3>
+
+    <input type="file" id="uploadJson" accept=".json">
+    <br>
+    <button onclick="uploadSinfJson()">Yuklash</button>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
+    // Firebase config (sizniki bilan almashtiring)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+
+    // JSON UPLOAD FUNCTION
+    async function uploadSinfJson() {
+      const fileInput = document.getElementById("uploadJson");
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert("sinf.json faylini tanlang!");
+        return;
+      }
+
+      document.getElementById("status").innerText = "Yuklanmoqda...";
+
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+
+        if (!json.classes) {
+          alert("JSON format xato! 'classes' massivi topilmadi.");
+          return;
+        }
+
+        // Firestore'ga yozish
+        await db.collection("davomat").doc("sinf").set({
+          classes: json.classes
+        });
+
+        document.getElementById("status").innerText =
+          "Muvaffaqiyatli yuklandi! (davomat/sinf)";
+        alert("sinf.json Firestore'ga yuklandi!");
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById("status").innerText = "Xatolik: " + err.message;
+      }
+    }
+  </script>
+
+</body>
+</html>
