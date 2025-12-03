@@ -114,7 +114,7 @@
       margin-bottom:.3rem;
       color:var(--gray-700);
     }
-    input,select{
+    select{
       width:100%;
       padding:.7rem;
       border:1px solid var(--gray-300);
@@ -123,7 +123,7 @@
       transition:.2s ease;
       background:var(--white);
     }
-    input:focus,select:focus{
+    select:focus{
       outline:none;
       border-color:var(--primary);
       box-shadow:0 0 0 2px rgba(37,99,235,.12);
@@ -205,41 +205,43 @@
 </header>
 
 <main class="container">
-  <div class="card">
-    <h2 class="card-title">Davomat berish</h2>
+  <!-- Login qismi -->
+  <div id="login-section" class="card">
+    <h2 class="card-title">Tizimga kirish</h2>
     
     <div class="form-group">
-      <label for="login-input">Login (F.I.Sh.)</label>
-      <input id="login-input" type="text" placeholder="Ismingizni kiriting" autocomplete="off">
+      <label for="login-select">Sinf rahbarini tanlang</label>
+      <select id="login-select">
+        <option value="">Sinf rahbarini tanlang</option>
+        <!-- Loginlar avtomatik to'ldiriladi -->
+      </select>
     </div>
     
     <button id="start-btn" class="btn" style="width:100%;justify-content:center;">
-      <i class="fas fa-clipboard-check"></i> Davomatni boshlash
+      <i class="fas fa-sign-in-alt"></i> Kirish
     </button>
     
     <div id="error-alert" class="alert alert-error hidden mt-3">
       <div class="alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
-      <div id="error-text">Login noto'g'ri</div>
+      <div id="error-text">Sinf rahbarini tanlang</div>
     </div>
   </div>
   
-  <!-- Davomat oynasi -->
+  <!-- Davomat qismi -->
   <div id="attendance-section" class="card hidden">
-    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-      <span id="teacher-name">Sinf rahbari</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <div>
+        <h2 class="card-title" id="teacher-name">Sinf rahbari</h2>
+        <p style="font-size:.85rem;color:var(--gray-600);" id="class-info"></p>
+      </div>
       <button id="logout-btn" class="btn" style="padding:.4rem .7rem;font-size:.8rem;">
         <i class="fas fa-sign-out-alt"></i> Chiqish
       </button>
     </div>
     
-    <div class="form-group">
-      <label for="date-input">Sana</label>
-      <input id="date-input" type="date">
-    </div>
-    
-    <div id="info-alert" class="alert">
-      <div class="alert-icon">ℹ️</div>
-      <div id="info-text">Davomatni faqat o'sha kuni 07:30-09:00 oralig'ida kiritish mumkin</div>
+    <div id="info-alert" class="alert alert-success">
+      <div class="alert-icon">✅</div>
+      <div>Davomatni har qanday vaqtda kiritishingiz mumkin</div>
     </div>
     
     <div class="table-container">
@@ -280,78 +282,69 @@
   const davomatCol = db.collection("davomat");
 
   // DOM elements
-  const loginInput = document.getElementById("login-input");
+  const loginSection = document.getElementById("login-section");
+  const loginSelect = document.getElementById("login-select");
   const startBtn = document.getElementById("start-btn");
   const errorAlert = document.getElementById("error-alert");
   const errorText = document.getElementById("error-text");
   const attendanceSection = document.getElementById("attendance-section");
   const teacherName = document.getElementById("teacher-name");
+  const classInfo = document.getElementById("class-info");
   const logoutBtn = document.getElementById("logout-btn");
-  const dateInput = document.getElementById("date-input");
   const infoAlert = document.getElementById("info-alert");
-  const infoText = document.getElementById("info-text");
   const studentsTbody = document.getElementById("students-tbody");
   const saveBtn = document.getElementById("save-btn");
 
   let classesJson = [];
   let currentTeacher = null;
-  let currentDateStr = null;
 
   // Format date to YYYY-MM-DD
-  function toDateStr(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+  function toDateStr() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const d = String(today.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
 
-  // Load classes data
+  // Load classes data from sinf.json
   async function loadClassesJson() {
     try {
       const res = await fetch("sinf.json?v=" + Date.now());
       if (!res.ok) throw new Error("sinf.json topilmadi");
       const data = await res.json();
       classesJson = (data && data.classes) ? data.classes : [];
+      
+      // Fill login select dropdown
+      fillLoginSelect();
     } catch(e) {
-      console.warn("sinf.json o'qishda xato:", e.message);
+      console.error("sinf.json o'qishda xato:", e.message);
+      showError("sinf.json fayli topilmadi yoki xato formatda");
       classesJson = [];
     }
   }
 
-  // Check time restriction
-  function getTimeRestriction(dateStr) {
-    const today = new Date();
-    const todayStr = toDateStr(today);
+  // Fill login select with teachers from sinf.json
+  function fillLoginSelect() {
+    loginSelect.innerHTML = '<option value="">Sinf rahbarini tanlang</option>';
     
-    // Check if date is today
-    if (dateStr !== todayStr) {
-      return {
-        allowed: false,
-        message: "Davomatni faqat bugun (o'sha kuni) kiritish mumkin"
-      };
+    if (!classesJson.length) {
+      loginSelect.innerHTML += '<option value="" disabled>sinf.json bo\'sh yoki xato</option>';
+      return;
     }
     
-    // Check time window (07:30-09:00)
-    const hour = today.getHours();
-    const minute = today.getMinutes();
-    const beforeWindow = (hour < 7) || (hour === 7 && minute < 30);
-    const afterWindow = (hour > 9) || (hour === 9 && minute >= 0);
-    
-    if (beforeWindow) {
-      return {
-        allowed: false,
-        message: "Davomat oynasi 07:30 dan keyin ochiladi"
-      };
-    }
-    
-    if (afterWindow) {
-      return {
-        allowed: false,
-        message: "Davomat oynasi 09:00 da yopiladi"
-      };
-    }
-    
-    return { allowed: true, message: "Davomat kiritish vaqti" };
+    classesJson.forEach(cls => {
+      const login = cls.teacherLogin || "";
+      const name = cls.teacherName || "Noma'lum";
+      const className = cls.name || cls.id || "Noma'lum sinf";
+      
+      if (login) {
+        const option = document.createElement("option");
+        option.value = login;
+        option.textContent = `${name} (${className})`;
+        loginSelect.appendChild(option);
+      }
+    });
   }
 
   // Show/hide error
@@ -359,46 +352,40 @@
     errorText.textContent = msg;
     errorAlert.classList.remove("hidden");
   }
+  
   function hideError() {
     errorAlert.classList.add("hidden");
   }
 
-  // Login (only by name)
+  // Login with selected teacher
   async function handleLogin() {
     hideError();
-    const login = loginInput.value.trim();
+    const selectedLogin = loginSelect.value;
     
-    if (!login) {
-      showError("Loginni (F.I.Sh.) kiriting");
+    if (!selectedLogin) {
+      showError("Sinf rahbarini tanlang");
       return;
     }
     
-    // Find teacher by name (case-insensitive partial match)
-    const cls = classesJson.find(c => 
-      c.teacherName && c.teacherName.toLowerCase().includes(login.toLowerCase())
-    );
+    // Find teacher by login
+    const cls = classesJson.find(c => c.teacherLogin === selectedLogin);
     
     if (!cls) {
-      showError("Bu login bilan sinf topilmadi");
+      showError("Tanlangan login bilan sinf topilmadi");
       return;
     }
     
     currentTeacher = {
-      login,
-      teacherName: cls.teacherName || login,
+      login: selectedLogin,
+      teacherName: cls.teacherName || selectedLogin,
       classObj: cls
     };
     
     // Show attendance section
-    teacherName.textContent = cls.teacherName + " • " + (cls.name || cls.id);
+    teacherName.textContent = cls.teacherName || selectedLogin;
+    classInfo.textContent = `${cls.name || cls.id} sinfi • ${cls.students?.length || 0} ta o'quvchi`;
+    loginSection.classList.add("hidden");
     attendanceSection.classList.remove("hidden");
-    loginInput.value = "";
-    
-    // Set today's date
-    const today = new Date();
-    currentDateStr = toDateStr(today);
-    dateInput.value = currentDateStr;
-    dateInput.max = currentDateStr; // Can't select future dates
     
     // Load students
     await loadStudents();
@@ -406,30 +393,19 @@
 
   // Load students for the class
   async function loadStudents() {
-    if (!currentTeacher || !currentDateStr) return;
+    if (!currentTeacher) return;
     
     const cls = currentTeacher.classObj;
     const students = cls.students || [];
+    const today = toDateStr();
     
     if (!students.length) {
-      studentsTbody.innerHTML = '<tr><td colspan="3" class="text-center">O\'quvchilar topilmadi</td></tr>';
+      studentsTbody.innerHTML = '<tr><td colspan="3" class="text-center">O\'quvchilar ro\'yxati topilmadi</td></tr>';
       return;
     }
     
-    // Check time restriction
-    const timeCheck = getTimeRestriction(currentDateStr);
-    infoText.textContent = timeCheck.message;
-    
-    if (!timeCheck.allowed) {
-      infoAlert.className = "alert alert-error";
-      saveBtn.disabled = true;
-    } else {
-      infoAlert.className = "alert alert-success";
-      saveBtn.disabled = false;
-    }
-    
-    // Load existing attendance
-    const docId = `${currentDateStr}_${cls.id}`;
+    // Load existing attendance for today
+    const docId = `${today}_${cls.id}`;
     const snap = await davomatCol.doc(docId).get();
     const existingMap = {};
     
@@ -447,9 +423,9 @@
       
       tr.innerHTML = `
         <td>${idx + 1}</td>
-        <td>${st.fullName || ""}</td>
+        <td>${st.fullName || `O'quvchi ${idx + 1}`}</td>
         <td>
-          <select class="status-select" data-student-id="${st.id}" ${!timeCheck.allowed ? 'disabled' : ''}>
+          <select class="status-select" data-student-id="${st.id}">
             <option value="present">Bor</option>
             <option value="excused">Sababli yo'q</option>
             <option value="unexcused">Sababsiz yo'q</option>
@@ -465,16 +441,11 @@
 
   // Save attendance
   async function saveAttendance() {
-    if (!currentTeacher || !currentDateStr) return;
-    
-    const timeCheck = getTimeRestriction(currentDateStr);
-    if (!timeCheck.allowed) {
-      alert(timeCheck.message);
-      return;
-    }
+    if (!currentTeacher) return;
     
     const cls = currentTeacher.classObj;
     const students = cls.students || [];
+    const today = toDateStr();
     
     if (!students.length) {
       alert("O'quvchilar ro'yxati yo'q");
@@ -489,19 +460,24 @@
       const sel = row.querySelector("select");
       let status = sel.value;
       if (status === "absent") status = "unexcused";
-      resStudents.push({ id: st.id, fullName: st.fullName, status });
+      resStudents.push({ 
+        id: st.id, 
+        fullName: st.fullName || `O'quvchi ${idx + 1}`,
+        status 
+      });
     });
     
-    const docId = `${currentDateStr}_${cls.id}`;
+    const docId = `${today}_${cls.id}`;
     
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...';
     
     try {
       await davomatCol.doc(docId).set({
-        date: currentDateStr,
+        date: today,
         classId: cls.id,
         className: cls.name || cls.id,
+        teacherLogin: currentTeacher.login,
         teacherName: currentTeacher.teacherName,
         students: resStudents,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -521,32 +497,43 @@
   function logout() {
     currentTeacher = null;
     attendanceSection.classList.add("hidden");
+    loginSection.classList.remove("hidden");
     hideError();
+    loginSelect.value = "";
   }
 
   // Initialize
   document.addEventListener("DOMContentLoaded", async () => {
     await loadClassesJson();
     
-    // Set today's date as default
-    dateInput.value = toDateStr(new Date());
-    dateInput.max = toDateStr(new Date());
-    
     // Event listeners
     startBtn.addEventListener("click", handleLogin);
-    loginInput.addEventListener("keydown", e => {
+    
+    loginSelect.addEventListener("keydown", e => {
       if (e.key === "Enter") handleLogin();
     });
     
     logoutBtn.addEventListener("click", logout);
-    
-    dateInput.addEventListener("change", async () => {
-      if (!dateInput.value) return;
-      currentDateStr = dateInput.value;
-      await loadStudents();
-    });
-    
     saveBtn.addEventListener("click", saveAttendance);
+    
+    // Auto-login from localStorage if exists
+    const savedLogin = localStorage.getItem("davomat_last_login");
+    if (savedLogin) {
+      loginSelect.value = savedLogin;
+      // Auto-login after a short delay
+      setTimeout(() => {
+        if (loginSelect.value === savedLogin) {
+          handleLogin();
+        }
+      }, 100);
+    }
+    
+    // Save login to localStorage on successful login
+    startBtn.addEventListener("click", () => {
+      if (loginSelect.value) {
+        localStorage.setItem("davomat_last_login", loginSelect.value);
+      }
+    });
   });
 </script>
 </body>
