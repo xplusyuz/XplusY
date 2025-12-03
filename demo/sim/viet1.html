@@ -581,6 +581,12 @@
         background: var(--white);
         box-shadow: var(--shadow-md);
         font-family: 'JetBrains Mono', monospace;
+        cursor: pointer;
+        }
+
+        /* Mobil uchun input - faqat bizning klaviaturani ishlatish */
+        input[type="text"].mobile-input {
+        caret-color: transparent; /* Kursorni yashirish */
         }
 
         input[type="text"]:focus {
@@ -612,7 +618,7 @@
         cursor: pointer;
         transition: var(--transition-normal);
         box-shadow: var(--shadow-sm);
-        display: flex;
+        display: none; /* Boshlang'ichda yashirish */
         align-items: center;
         justify-content: center;
         z-index: 10;
@@ -623,10 +629,15 @@
         box-shadow: var(--shadow-primary);
         }
 
-        /* PC uchun klaviatura tugmasini yashirish */
-        @media (min-width: 769px) {
+        /* Mobil ekranlarda klaviatura tugmasini ko'rsatish */
+        @media (max-width: 768px) {
         .keyboard-toggle {
-            display: none;
+            display: flex;
+        }
+        
+        /* Mobil uchun inputga qo'shimcha joy */
+        input[type="text"] {
+            padding-right: 60px;
         }
         }
 
@@ -1528,11 +1539,6 @@
             display: flex;
         }
 
-        /* PC uchun inputni to'liq qilish */
-        input[type="text"] {
-            padding-right: 60px; /* Klaviatura tugmasi uchun joy */
-        }
-
         /* Reyting modal mobil */
         .leaderboard-modal {
             max-height: 85vh;
@@ -1810,13 +1816,13 @@
             <div class="input-container">
                 <div class="input-group">
                     <label for="x1">x₁ (1-ildiz)</label>
-                    <input type="text" id="x1" placeholder="Masalan: -2 yoki 3/2" />
+                    <input type="text" id="x1" placeholder="Masalan: -2 yoki 3/2" class="mobile-input" readonly />
                     <!-- Klaviatura tugmasi faqat mobil uchun -->
                     <button class="keyboard-toggle" data-target="x1">⌨</button>
                 </div>
                 <div class="input-group">
                     <label for="x2">x₂ (2-ildiz)</label>
-                    <input type="text" id="x2" placeholder="Masalan: -3 yoki -1/4" />
+                    <input type="text" id="x2" placeholder="Masalan: -3 yoki -1/4" class="mobile-input" readonly />
                     <!-- Klaviatura tugmasi faqat mobil uchun -->
                     <button class="keyboard-toggle" data-target="x2">⌨</button>
                 </div>
@@ -1985,9 +1991,10 @@
         let activeInput = null;
         let timeUpTimeout = null;
         let highestLevelReached = 1;
+        let isMobile = false;
 
         // --- Yordamchi funksiyalar ---
-        function isMobileDevice() {
+        function checkMobileDevice() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
         }
 
@@ -2042,39 +2049,77 @@
             const keyboardBtns = document.querySelectorAll('.keyboard-btn');
             const mathKeyboard = document.getElementById('math-keyboard');
             const closeKeyboardBtn = document.getElementById('close-keyboard');
-            const mobile = isMobileDevice();
+            
+            // Mobil yoki PC ekanligini aniqlash
+            isMobile = checkMobileDevice();
+            
+            console.log("Mobil qurilma:", isMobile);
 
-            // Mobile inputlarni sozlash
-            if (mobile) {
+            // Mobile inputlarni to'liq sozlash
+            if (isMobile) {
                 [x1Input, x2Input].forEach(inp => {
                     if (inp) {
+                        // READONLY va DISABLED attributlarni qo'shish
+                        inp.setAttribute('readonly', 'true');
+                        inp.setAttribute('disabled', 'true');
+                        inp.classList.add('mobile-input');
+                        
                         // Klaviatura tugmasini ko'rsatish
-                        inp.nextElementSibling.style.display = 'flex';
+                        const toggleBtn = inp.nextElementSibling;
+                        if (toggleBtn) {
+                            toggleBtn.style.display = 'flex';
+                        }
                         
-                        // Inputga bosilganda standart klaviatura chiqmasligi
-                        inp.addEventListener('focus', function(e) {
+                        // Inputga bosilganda faqat bizning klaviaturani ochish
+                        inp.addEventListener('click', function(e) {
                             e.preventDefault();
-                            if (!mathKeyboard.classList.contains('visible')) {
-                                const targetId = this.id;
-                                activeInput = this;
-                                showKeyboard();
-                            }
-                        });
-                        
-                        // Touch uchun
-                        inp.addEventListener('touchstart', function(e) {
-                            e.preventDefault();
+                            e.stopPropagation();
+                            
                             const targetId = this.id;
                             activeInput = this;
                             showKeyboard();
-                            this.focus();
+                            
+                            // Focus qilish lekin standart klaviatura chiqmasligi uchun
+                            setTimeout(() => {
+                                this.focus({preventScroll: true});
+                            }, 100);
+                        });
+                        
+                        // Touch event uchun
+                        inp.addEventListener('touchstart', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            const targetId = this.id;
+                            activeInput = this;
+                            showKeyboard();
+                            
+                            // Focus qilish
+                            setTimeout(() => {
+                                this.focus({preventScroll: true});
+                            }, 100);
                         }, {passive: false});
                     }
                 });
+                
+                // Inputlarga tab bilan o'tishni o'chirish
+                [x1Input, x2Input].forEach(inp => {
+                    inp.setAttribute('tabindex', '-1');
+                });
             } else {
-                // PC da klaviatura tugmalarini yashirish
+                // PC da klaviatura tugmalarini yashirish va inputlarni oddiy qilish
                 keyboardToggleBtns.forEach(btn => {
                     btn.style.display = 'none';
+                });
+                
+                // PC da inputlarni normal holatga keltirish
+                [x1Input, x2Input].forEach(inp => {
+                    if (inp) {
+                        inp.removeAttribute('readonly');
+                        inp.removeAttribute('disabled');
+                        inp.classList.remove('mobile-input');
+                        inp.setAttribute('tabindex', '0');
+                    }
                 });
             }
 
@@ -2088,19 +2133,26 @@
                     
                     if (activeInput) {
                         showKeyboard();
-                        activeInput.focus();
+                        setTimeout(() => {
+                            activeInput.focus({preventScroll: true});
+                        }, 100);
                     }
                 });
             });
 
             // Klaviatura yopish tugmasi
-            closeKeyboardBtn.addEventListener('click', () => {
+            closeKeyboardBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 hideKeyboard();
             });
 
             // Klaviatura tugmalariga event listenerlar
             keyboardBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
                     if (!activeInput) return;
                     
                     const value = btn.getAttribute('data-value');
@@ -2119,7 +2171,9 @@
                             } else {
                                 activeInput = document.getElementById('x1');
                             }
-                            activeInput.focus();
+                            setTimeout(() => {
+                                activeInput.focus({preventScroll: true});
+                            }, 100);
                             break;
                         case '/':
                             if (!cur.includes('/')) {
@@ -2133,20 +2187,31 @@
                             if (!segDot.includes('.')) activeInput.value = cur + '.';
                             break;
                         case '-':
-                            if (cur === '') activeInput.value = '-';
-                            else if (cur.endsWith('/')) activeInput.value = cur + '-';
+                            if (cur === '') {
+                                activeInput.value = '-';
+                            } else if (cur.endsWith('/')) {
+                                activeInput.value = cur + '-';
+                            } else if (!cur.includes('-')) {
+                                // Agar minus bosilganda, boshiga minus qo'shish
+                                activeInput.value = '-' + cur;
+                            }
                             break;
                         default:
                             activeInput.value = cur + value;
                     }
                     
+                    // Input event trigger
                     activeInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    activeInput.focus();
+                    
+                    // Focus qayta o'rnatish
+                    setTimeout(() => {
+                        activeInput.focus({preventScroll: true});
+                    }, 50);
                 });
             });
 
             // Inputlarga focus bo'lganda (faqat PC uchun)
-            if (!mobile) {
+            if (!isMobile) {
                 [x1Input, x2Input].forEach(input => {
                     input.addEventListener('focus', () => {
                         activeInput = input;
@@ -2172,9 +2237,14 @@
 
             // Tugmalarga event listenerlar
             if (checkBtn) checkBtn.addEventListener('click', checkAnswer);
-            if (x2Input) x2Input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') checkAnswer();
-            });
+            
+            // PC da Enter tugmasi bilan tekshirish
+            if (!isMobile && x2Input) {
+                x2Input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') checkAnswer();
+                });
+            }
+            
             if (restartBtn) restartBtn.addEventListener('click', restartGame);
             
             // "i" tugmasi uchun reyting jadvalini ochish
@@ -2226,6 +2296,8 @@
 
         // Klaviatura ko'rsatish funksiyasi
         function showKeyboard() {
+            if (!isMobile) return;
+            
             const keyboard = document.getElementById('math-keyboard');
             keyboard.style.display = 'block';
             setTimeout(() => {
@@ -2235,6 +2307,20 @@
             
             // Klaviatura chiqqanda body scroll ni bloklash
             document.body.style.overflow = 'hidden';
+            document.body.style.position = 'fixed';
+            document.body.style.width = '100%';
+            
+            // Inputni active qilish
+            if (activeInput) {
+                // READONLY va DISABLED ni vaqtincha olib tashlash
+                activeInput.removeAttribute('readonly');
+                activeInput.removeAttribute('disabled');
+                
+                // Focus qilish
+                setTimeout(() => {
+                    activeInput.focus({preventScroll: true});
+                }, 300);
+            }
         }
 
         // Klaviatura yashirish funksiyasi
@@ -2245,12 +2331,23 @@
             setTimeout(() => {
                 keyboard.style.display = 'none';
                 keyboard.setAttribute('aria-hidden', 'true');
-                if (activeInput) {
-                    try { activeInput.blur(); } catch(e){}
-                    activeInput = null;
-                }
+                
                 // Klaviatura yopilganda body scroll ni qayta yoqish
                 document.body.style.overflow = '';
+                document.body.style.position = '';
+                document.body.style.width = '';
+                
+                if (activeInput) {
+                    // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
+                    if (isMobile) {
+                        activeInput.setAttribute('readonly', 'true');
+                        activeInput.setAttribute('disabled', 'true');
+                    }
+                    
+                    // Focus dan chiqarish
+                    activeInput.blur();
+                    activeInput = null;
+                }
             }, 300);
         }
 
@@ -2398,8 +2495,22 @@
             // Inputlarni tozalash
             const x1El = document.getElementById("x1");
             const x2El = document.getElementById("x2");
-            if (x1El) x1El.value = "";
-            if (x2El) x2El.value = "";
+            if (x1El) {
+                x1El.value = "";
+                // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
+                if (isMobile) {
+                    x1El.setAttribute('readonly', 'true');
+                    x1El.setAttribute('disabled', 'true');
+                }
+            }
+            if (x2El) {
+                x2El.value = "";
+                // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
+                if (isMobile) {
+                    x2El.setAttribute('readonly', 'true');
+                    x2El.setAttribute('disabled', 'true');
+                }
+            }
 
             const resultDiv = document.getElementById("result");
             if (resultDiv) {
@@ -2423,7 +2534,13 @@
             }, 60000);
             
             // Birinchi inputga fokus qo'yish
-            if (x1El) x1El.focus();
+            if (x1El) {
+                if (isMobile) {
+                    // Mobil uchun faqat click event ishlaydi
+                } else {
+                    x1El.focus();
+                }
+            }
         }
 
         // --- Daraja ko'rsatkichlarini yangilash ---
