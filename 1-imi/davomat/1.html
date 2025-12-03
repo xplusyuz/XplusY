@@ -85,6 +85,27 @@
       align-items:center;
       gap:.75rem;
     }
+    
+    .user-info{
+      display:flex;
+      align-items:center;
+      gap:.5rem;
+    }
+    .user-avatar{
+      width:36px;
+      height:36px;
+      border-radius:50%;
+      background:var(--white);
+      color:var(--primary);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:bold;
+    }
+    .user-name{
+      font-size:.85rem;
+      font-weight:600;
+    }
 
     /* Main Layout */
     .dashboard{
@@ -251,6 +272,14 @@
     .btn-success:hover{
       background:#0da271;
     }
+    .btn-google{
+      background:#ffffff;
+      color:#757575;
+      border:1px solid #ddd;
+    }
+    .btn-google:hover{
+      background:#f5f5f5;
+    }
     .btn[disabled]{
       opacity:.6;
       cursor:default;
@@ -265,6 +294,76 @@
       width:36px;
       height:36px;
       justify-content:center;
+    }
+
+    /* Login Styles */
+    .login-card{
+      max-width:400px;
+      margin:2rem auto;
+      text-align:center;
+    }
+    .login-logo{
+      width:80px;
+      height:80px;
+      background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+      border-radius:var(--radius-xl);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin:0 auto 1.5rem;
+      color:white;
+      font-size:2rem;
+    }
+    .login-title{
+      font-size:1.5rem;
+      font-weight:700;
+      margin-bottom:.5rem;
+    }
+    .login-subtitle{
+      color:var(--gray-600);
+      margin-bottom:2rem;
+    }
+    .google-login-btn{
+      width:100%;
+      justify-content:center;
+      margin-bottom:1rem;
+    }
+    .divider{
+      display:flex;
+      align-items:center;
+      margin:1.5rem 0;
+      color:var(--gray-500);
+    }
+    .divider::before,
+    .divider::after{
+      content:"";
+      flex:1;
+      height:1px;
+      background:var(--gray-300);
+    }
+    .divider span{
+      padding:0 1rem;
+      font-size:.85rem;
+    }
+    .admin-list{
+      background:var(--gray-50);
+      border-radius:var(--radius);
+      padding:1rem;
+      margin-top:1.5rem;
+      text-align:left;
+    }
+    .admin-list h4{
+      font-size:.9rem;
+      margin-bottom:.5rem;
+      color:var(--gray-700);
+    }
+    .admin-list ul{
+      list-style:none;
+      font-size:.85rem;
+      color:var(--gray-600);
+    }
+    .admin-list li{
+      padding:.25rem 0;
     }
 
     /* Form */
@@ -590,14 +689,11 @@
         <div class="logo-icon"><i class="fas fa-user-shield"></i></div>
         <div class="logo-text">
           <h1>Maktab Davomati</h1>
-          <p>Admin paneli</p>
+          <p id="header-subtitle">Admin paneli</p>
         </div>
       </div>
-      <div class="header-actions">
-        <span id="current-date" class="text-sm"></span>
-        <button id="logout-btn" class="btn btn-secondary btn-sm">
-          <i class="fas fa-sign-out-alt"></i> Chiqish
-        </button>
+      <div class="header-actions" id="header-actions">
+        <!-- Foydalanuvchi tizimga kirmaganda header bo'sh bo'ladi -->
       </div>
     </div>
   </div>
@@ -605,9 +701,21 @@
 
 <main class="container">
   <!-- Kirish qismi -->
-  <div id="login-section" class="card">
-    <h2 class="card-title text-center">Admin Paneli</h2>
-    <p class="text-center mb-4 text-sm" style="color:var(--gray-600)">Kirish huquqi faqat admin hisoblariga</p>
+  <div id="login-section" class="card login-card">
+    <div class="login-logo">
+      <i class="fas fa-user-shield"></i>
+    </div>
+    
+    <h2 class="login-title">Admin Paneli</h2>
+    <p class="login-subtitle">Kirish uchun Google hisobingizdan foydalaning</p>
+    
+    <button id="google-login-btn" class="btn btn-google google-login-btn">
+      <i class="fab fa-google"></i> Google bilan kirish
+    </button>
+    
+    <div class="divider">
+      <span>yoki</span>
+    </div>
     
     <div class="form-group">
       <label for="admin-email">Email manzil</label>
@@ -626,6 +734,15 @@
     <div id="login-error" class="alert alert-error hidden mt-3">
       <div class="alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
       <div id="login-error-text">Noto'g'ri email yoki parol</div>
+    </div>
+    
+    <div class="admin-list">
+      <h4>Ruxsat etilgan adminlar:</h4>
+      <ul>
+        <li>sohibjonmath@gmail.com</li>
+        <li>gavhar1379@gmail.com</li>
+      </ul>
+      <p class="text-xs mt-2">Yoki Google hisobi bilan kirishingiz mumkin</p>
     </div>
   </div>
   
@@ -957,6 +1074,7 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <script>
@@ -972,9 +1090,10 @@
   
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  const auth = firebase.auth();
   const davomatCol = db.collection("davomat");
 
-  // Admin hisoblari
+  // Admin hisoblari (faqat email-parol kirish uchun)
   const ADMIN_ACCOUNTS = [
     { email: "sohibjonmath@gmail.com", password: "admin123", name: "Sohibjon" },
     { email: "gavhar1379@gmail.com", password: "admin456", name: "Gavhar" }
@@ -985,12 +1104,13 @@
   const adminEmailInput = document.getElementById("admin-email");
   const adminPasswordInput = document.getElementById("admin-password");
   const loginBtn = document.getElementById("login-btn");
+  const googleLoginBtn = document.getElementById("google-login-btn");
   const loginError = document.getElementById("login-error");
   const loginErrorText = document.getElementById("login-error-text");
   
   const adminSection = document.getElementById("admin-section");
-  const logoutBtn = document.getElementById("logout-btn");
-  const currentDateSpan = document.getElementById("current-date");
+  const headerActions = document.getElementById("header-actions");
+  const headerSubtitle = document.getElementById("header-subtitle");
   
   // Tab elementlari
   const navLinks = document.querySelectorAll(".nav-link");
@@ -1045,7 +1165,7 @@
   let classesJson = [];
   let allTeachers = [];
   let allStudents = [];
-  let currentAdmin = null;
+  let currentUser = null;
   let selectedDate = new Date().toISOString().split('T')[0]; // Bugungi sana
   
   // Format date to YYYY-MM-DD
@@ -1068,7 +1188,6 @@
   function setCurrentDate() {
     const today = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    currentDateSpan.textContent = today.toLocaleDateString('uz-UZ', options);
     
     // Barcha sana inputlariga bugungi sana qiymatini o'rnatish
     statsDateInput.value = selectedDate;
@@ -1079,40 +1198,76 @@
     reportEndDate.value = selectedDate;
   }
   
-  // Sinflar ma'lumotlarini yuklash
+  // Sinflar ma'lumotlarini Firebase Firestore'dan yuklash
   async function loadClassesData() {
-  try {
-    const docRef = db.collection("davomat").doc("sinf");
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
-      console.error("davomat/sinf hujjati topilmadi");
-      classesJson = [];
-      return;
-    }
-
-    const data = docSnap.data();
-    classesJson = data.classes || []; // classes massivini olish
-
-    console.log("Sinflar yuklandi:", classesJson);
-
-  } catch (error) {
-    console.error("Xatolik:", error);
-  }
-}
-
+    try {
+      console.log("Firestore'dan sinf ma'lumotlari yuklanmoqda...");
       
-      // Sinf rahbarlarini yig'ish
+      // 1. Avval sinf hujjatini tekshiramiz
+      const sinfDocRef = db.collection("davomat").doc("sinf");
+      const sinfDocSnap = await sinfDocRef.get();
+      
+      if (sinfDocSnap.exists) {
+        // Agar davomat/sinf hujjati mavjud bo'lsa, undan o'qiymiz
+        const data = sinfDocSnap.data();
+        classesJson = data.classes || [];
+        console.log("Sinf ma'lumotlari davomat/sinf dan yuklandi:", classesJson.length + " ta sinf");
+      } else {
+        // 2. Agar davomat/sinf yo'q bo'lsa, sinflar collection'idan o'qiymiz
+        console.log("davomat/sinf hujjati topilmadi, sinflar collection'idan o'qilmoqda...");
+        
+        try {
+          const sinflarColRef = db.collection("sinflar");
+          const sinflarSnapshot = await sinflarColRef.get();
+          
+          if (!sinflarSnapshot.empty) {
+            const classesPromises = [];
+            sinflarSnapshot.forEach(doc => {
+              classesPromises.push(Promise.resolve({ id: doc.id, ...doc.data() }));
+            });
+            
+            classesJson = await Promise.all(classesPromises);
+            console.log("Sinf ma'lumotlari sinflar collection'idan yuklandi:", classesJson.length + " ta sinf");
+          } else {
+            // 3. Agar hech qayerda topilmasa, "classes" collection'idan o'qiymiz
+            console.log("sinflar collection'ida hujjat yo'q, classes collection'idan o'qilmoqda...");
+            
+            const classesColRef = db.collection("classes");
+            const classesSnapshot = await classesColRef.get();
+            
+            if (!classesSnapshot.empty) {
+              const classesPromises = [];
+              classesSnapshot.forEach(doc => {
+                classesPromises.push(Promise.resolve({ id: doc.id, ...doc.data() }));
+              });
+              
+              classesJson = await Promise.all(classesPromises);
+              console.log("Sinf ma'lumotlari classes collection'idan yuklandi:", classesJson.length + " ta sinf");
+            } else {
+              console.warn("Hech qanday sinf ma'lumoti topilmadi!");
+              classesJson = [];
+              showLoginError("Firebase'da sinf ma'lumotlari topilmadi. Iltimos, sinflarni qo'shing.");
+              return false;
+            }
+          }
+        } catch (collectionError) {
+          console.error("Collection'larni o'qishda xatolik:", collectionError);
+          classesJson = [];
+          return false;
+        }
+      }
+      
+      // Sinf rahbarlarini va o'quvchilarni yig'ish
       allTeachers = [];
       allStudents = [];
       
       classesJson.forEach(cls => {
         // Sinf rahbari ma'lumotlari
-        if (cls.teacherLogin && cls.teacherName) {
+        if (cls.teacherLogin || cls.teacherName) {
           allTeachers.push({
-            id: cls.teacherLogin,
-            name: cls.teacherName,
-            className: cls.name || cls.id,
+            id: cls.teacherLogin || cls.id,
+            name: cls.teacherName || "Noma'lum o'qituvchi",
+            className: cls.name || cls.id || "Noma'lum sinf",
             classId: cls.id,
             phone: cls.teacherPhone || "Mavjud emas",
             studentsCount: cls.students ? cls.students.length : 0
@@ -1124,7 +1279,7 @@
           cls.students.forEach(student => {
             allStudents.push({
               id: student.id,
-              fullName: student.fullName || `O'quvchi ${student.id}`,
+              fullName: student.fullName || student.fullname || `O'quvchi ${student.id}`,
               classId: cls.id,
               className: cls.name || cls.id,
               teacherName: cls.teacherName || "Noma'lum"
@@ -1133,13 +1288,15 @@
         }
       });
       
+      console.log(`Yuklandi: ${allTeachers.length} ta sinf rahbari, ${allStudents.length} ta o'quvchi`);
+      
       // Filter dropdownlarni to'ldirish
       fillFilterDropdowns();
       
       return true;
     } catch(e) {
-      console.error("sinf.json o'qishda xato:", e.message);
-      showLoginError("sinf.json fayli topilmadi yoki xato formatda");
+      console.error("Firestore'dan ma'lumot olishda xato:", e.message);
+      showLoginError("Firebase bilan ulanishda xatolik. Internet aloqasini tekshiring.");
       classesJson = [];
       return false;
     }
@@ -1158,8 +1315,39 @@
     reportClassFilter.innerHTML = classOptions.join('');
   }
   
-  // Admin login qilish
-  function handleAdminLogin() {
+  // Google bilan kirish
+  async function handleGoogleLogin() {
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      // Qo'shimcha so'rovlar
+      provider.addScope('email');
+      provider.addScope('profile');
+      
+      const result = await auth.signInWithPopup(provider);
+      const user = result.user;
+      
+      console.log("Google bilan kirish muvaffaqiyatli:", user.email);
+      
+      // Admin ekanligini tekshirish
+      const isAdmin = await checkIfAdmin(user.email);
+      
+      if (isAdmin) {
+        // Admin panelini ko'rsatish
+        showAdminPanel(user);
+      } else {
+        // Admin emas, chiqarish
+        showLoginError("Sizda admin huquqlari yo'q. Faqat ruxsat etilgan adminlar kirishi mumkin.");
+        await auth.signOut();
+      }
+      
+    } catch (error) {
+      console.error("Google login xatosi:", error);
+      showLoginError("Google bilan kirishda xatolik: " + error.message);
+    }
+  }
+  
+  // Email-parol bilan kirish
+  function handleEmailLogin() {
     const email = adminEmailInput.value.trim();
     const password = adminPasswordInput.value.trim();
     
@@ -1180,14 +1368,46 @@
       return;
     }
     
-    // Login muvaffaqiyatli
-    currentAdmin = admin;
+    // Login muvaffaqiyatli - Firebase Authentication bilan bog'lamaymiz
+    // Faqat lokal tekshirish
+    const fakeUser = {
+      displayName: admin.name,
+      email: admin.email,
+      photoURL: null
+    };
+    
+    showAdminPanel(fakeUser);
+  }
+  
+  // Admin ekanligini tekshirish
+  async function checkIfAdmin(email) {
+    // Ruxsat etilgan adminlar ro'yxati
+    const allowedAdmins = [
+      "sohibjonmath@gmail.com",
+      "gavhar1379@gmail.com"
+    ];
+    
+    return allowedAdmins.includes(email);
+  }
+  
+  // Admin panelini ko'rsatish
+  async function showAdminPanel(user) {
+    currentUser = user;
+    
+    // Header ni yangilash
+    updateHeader(user);
+    
+    // Login qismini yashirish, admin panelini ko'rsatish
     loginSection.classList.add("hidden");
     adminSection.classList.remove("hidden");
     
     // Sana va ma'lumotlarni o'rnatish
     setCurrentDate();
-    loadClassesData().then(() => {
+    
+    // Ma'lumotlarni yuklash
+    const dataLoaded = await loadClassesData();
+    
+    if (dataLoaded) {
       // Dashboard statistikalarini yangilash
       updateDashboardStats();
       // Sinflar davomati jadvalini yangilash
@@ -1196,14 +1416,57 @@
       updateTeachersList();
       // O'quvchilar davomati jadvalini yangilash
       updateStudentsAttendance();
-    });
+    }
   }
   
-  // Admin logout qilish
-  function handleLogout() {
-    currentAdmin = null;
+  // Header ni yangilash
+  function updateHeader(user) {
+    const userName = user.displayName || user.email.split('@')[0];
+    const userInitial = userName.charAt(0).toUpperCase();
+    
+    headerActions.innerHTML = `
+      <div class="user-info">
+        <div class="user-avatar">
+          ${user.photoURL ? `<img src="${user.photoURL}" alt="${userName}" style="width:100%;height:100%;border-radius:50%;">` : userInitial}
+        </div>
+        <div>
+          <div class="user-name">${userName}</div>
+          <div class="text-xs">Admin</div>
+        </div>
+      </div>
+      <button id="logout-btn" class="btn btn-secondary btn-sm">
+        <i class="fas fa-sign-out-alt"></i> Chiqish
+      </button>
+    `;
+    
+    // Logout tugmasi uchun event listener qo'shish
+    setTimeout(() => {
+      const logoutBtn = document.getElementById("logout-btn");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", handleLogout);
+      }
+    }, 100);
+  }
+  
+  // Logout qilish
+  async function handleLogout() {
+    try {
+      // Firebase Authentication bilan chiqish
+      await auth.signOut();
+    } catch (error) {
+      console.error("Logout xatosi:", error);
+    }
+    
+    // Local state ni tozalash
+    currentUser = null;
     adminSection.classList.add("hidden");
     loginSection.classList.remove("hidden");
+    
+    // Header ni tozalash
+    headerActions.innerHTML = '';
+    headerSubtitle.textContent = 'Admin paneli';
+    
+    // Formani tozalash
     adminEmailInput.value = "";
     adminPasswordInput.value = "";
     hideLoginError();
@@ -1422,15 +1685,7 @@
         statusHTML = `<span class="status-unexcused status-badge"><i class="fas fa-times"></i> Davomat kiritmagan</span>`;
         
         // Oxirgi davomat sanasini topish
-        const lastWeek = new Date();
-        lastWeek.setDate(lastWeek.getDate() - 7);
-        
-        const lastWeekStr = formatDate(lastWeek);
-        const todayStr = formatDate(new Date());
-        
-        // Oxirgi 7 kun ichida davomat kiritganmi?
-        let lastRecord = null;
-        for (let i = 0; i < 7; i++) {
+        for (let i = 1; i <= 7; i++) {
           const checkDate = new Date();
           checkDate.setDate(checkDate.getDate() - i);
           const checkDateStr = formatDate(checkDate);
@@ -1439,13 +1694,9 @@
           const checkSnap = await davomatCol.doc(checkDocId).get();
           
           if (checkSnap.exists) {
-            lastRecord = checkDateStr;
+            lastAttendanceDate = formatDateReadable(checkDateStr);
             break;
           }
-        }
-        
-        if (lastRecord) {
-          lastAttendanceDate = formatDateReadable(lastRecord);
         }
       }
       
@@ -1705,7 +1956,7 @@
         modalHTML += `
           <tr>
             <td>${idx + 1}</td>
-            <td>${st.fullName || `O'quvchi ${idx + 1}`}</td>
+            <td>${st.fullName || st.fullname || `O'quvchi ${idx + 1}`}</td>
             <td><span class="status-badge status-absent">Kiritilmagan</span></td>
           </tr>
         `;
@@ -1815,9 +2066,6 @@
   // Eslatma yuborish (simulyatsiya)
   function sendReminder(teacherId, teacherName) {
     alert(`Eslatma ${teacherName} ga yuborildi! (Simulyatsiya)`);
-    
-    // Haqiqiy loyihada: Email yoki SMS yuborish funksiyasi
-    // Bu erda faqat simulyatsiya qilinyapti
   }
   
   // Modalni yopish
@@ -1825,7 +2073,6 @@
     const modal = document.querySelector(modalId);
     if (modal) {
       modal.classList.remove("active");
-      // 0.3 sekunddan keyin DOM'dan o'chirish
       setTimeout(() => {
         if (modal.parentNode) {
           modal.parentNode.removeChild(modal);
@@ -1859,7 +2106,7 @@
           <li><strong>Sinf:</strong> ${classId || "Barcha sinflar"}</li>
           <li><strong>Hisobot turi:</strong> ${reportTypeSelect.options[reportTypeSelect.selectedIndex].text}</li>
           <li><strong>Yaratilgan vaqt:</strong> ${new Date().toLocaleString('uz-UZ')}</li>
-          <li><strong>Admin:</strong> ${currentAdmin.name}</li>
+          <li><strong>Admin:</strong> ${currentUser ? currentUser.displayName || currentUser.email.split('@')[0] : "Noma'lum"}</li>
         </ul>
       </div>
       <div class="mt-4">
@@ -1876,7 +2123,6 @@
   // Chop etish funksiyasi
   function printReport() {
     alert("Chop etish funksiyasi ishlab chiqilmoqda...");
-    // Haqiqiy loyihada: window.print() yoki maxsus formatda chop etish
   }
   
   // Sana o'zgartirilganda statistikani yangilash
@@ -1900,21 +2146,46 @@
     }
   }
   
+  // Foydalanuvchi avtorizatsiya holatini kuzatish
+  function setupAuthListener() {
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        console.log("Foydalanuvchi avtorizatsiyadan o'tdi:", user.email);
+        
+        // Admin ekanligini tekshirish
+        const isAdmin = await checkIfAdmin(user.email);
+        
+        if (isAdmin) {
+          showAdminPanel(user);
+        } else {
+          // Admin emas, chiqarish
+          console.log("Foydalanuvchi admin emas, chiqarilmoqda...");
+          await auth.signOut();
+          showLoginError("Sizda admin huquqlari yo'q. Faqat ruxsat etilgan adminlar kirishi mumkin.");
+        }
+      } else {
+        console.log("Foydalanuvchi chiqdi");
+      }
+    });
+  }
+  
   // Dasturni ishga tushirish
   document.addEventListener("DOMContentLoaded", () => {
+    // Avtorizatsiya listener'ini o'rnatish
+    setupAuthListener();
+    
     // Sana inputlarini flatpickr bilan bog'lash
     [statsDateInput, classesDateInput, teachersDateInput, studentsDateInput].forEach(input => {
       input.addEventListener("change", handleDateChange);
     });
     
     // Login uchun event listener'lar
-    loginBtn.addEventListener("click", handleAdminLogin);
-    adminPasswordInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") handleAdminLogin();
-    });
+    googleLoginBtn.addEventListener("click", handleGoogleLogin);
+    loginBtn.addEventListener("click", handleEmailLogin);
     
-    // Logout
-    logoutBtn.addEventListener("click", handleLogout);
+    adminPasswordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleEmailLogin();
+    });
     
     // Tab o'zgartirish
     navLinks.forEach(link => {
