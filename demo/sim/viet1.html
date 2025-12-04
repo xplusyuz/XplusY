@@ -2037,6 +2037,58 @@
             return rounded.toString();
         }
 
+        // --- Klaviatura funksiyalari ---
+        function showKeyboard() {
+            if (!isMobile) return;
+            
+            const keyboard = document.getElementById('math-keyboard');
+            keyboard.style.display = 'block';
+            setTimeout(() => {
+                keyboard.classList.add('visible');
+            }, 10);
+            keyboard.setAttribute('aria-hidden', 'false');
+            
+            // Klaviatura chiqqanda body scroll ni bloklash
+            document.body.style.overflow = 'hidden';
+            
+            // Inputni active qilish
+            if (activeInput) {
+                // READONLY va DISABLED ni vaqtincha olib tashlash
+                activeInput.readOnly = false;
+                activeInput.disabled = false;
+                
+                // Focus qilish
+                setTimeout(() => {
+                    activeInput.focus({preventScroll: true});
+                }, 300);
+            }
+        }
+
+        function hideKeyboard() {
+            const keyboard = document.getElementById('math-keyboard');
+            keyboard.classList.remove('visible');
+            
+            setTimeout(() => {
+                keyboard.style.display = 'none';
+                keyboard.setAttribute('aria-hidden', 'true');
+                
+                // Klaviatura yopilganda body scroll ni qayta yoqish
+                document.body.style.overflow = '';
+                
+                if (activeInput) {
+                    // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
+                    if (isMobile) {
+                        activeInput.readOnly = true;
+                        activeInput.disabled = true;
+                    }
+                    
+                    // Focus dan chiqarish
+                    activeInput.blur();
+                    activeInput = null;
+                }
+            }, 300);
+        }
+
         // --- DOMContentLoaded ---
         document.addEventListener('DOMContentLoaded', () => {
             const checkBtn = document.getElementById('check-btn');
@@ -2055,13 +2107,83 @@
             
             console.log("Mobil qurilma:", isMobile);
 
+            // Foydalanuvchi ma'lumotlarini sozlash
+            setupUserInfo();
+
+            // Inputlar va klaviatura sozlash
+            setupInputsAndKeyboard(x1Input, x2Input, keyboardToggleBtns, keyboardBtns, 
+                                  mathKeyboard, closeKeyboardBtn, isMobile);
+
+            // Tugmalarga event listenerlar
+            if (checkBtn) checkBtn.addEventListener('click', checkAnswer);
+            
+            // PC da Enter tugmasi bilan tekshirish
+            if (!isMobile && x2Input) {
+                x2Input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') checkAnswer();
+                });
+            }
+            
+            if (restartBtn) restartBtn.addEventListener('click', restartGame);
+            
+            // Reyting tugmasi uchun event listener
+            if (levelInfoBtn) {
+                levelInfoBtn.addEventListener('click', () => {
+                    renderLeaderboard();
+                    document.getElementById('leaderboard-modal').style.display = 'flex';
+                });
+            }
+            
+            // Reyting modal yopish
+            if (leaderboardModalClose) {
+                leaderboardModalClose.addEventListener('click', () => {
+                    document.getElementById('leaderboard-modal').style.display = 'none';
+                });
+            }
+
+            // Modal tashqarisiga bosilganda yopish
+            document.getElementById('leaderboard-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'leaderboard-modal') {
+                    document.getElementById('leaderboard-modal').style.display = 'none';
+                }
+            });
+
+            // O'yinni boshlash
+            setTimeout(() => {
+                startGameInitial();
+            }, 500);
+        });
+
+        // --- Foydalanuvchi ma'lumotlarini sozlash ---
+        function setupUserInfo() {
+            // localStorage dan foydalanuvchi ma'lumotlarini olish
+            let userName = localStorage.getItem('viet_game_username');
+            if (!userName) {
+                userName = prompt("Ismingizni kiriting:", "Foydalanuvchi");
+                if (userName) {
+                    localStorage.setItem('viet_game_username', userName);
+                } else {
+                    userName = "Foydalanuvchi";
+                }
+            }
+            
+            // Foydalanuvchi ma'lumotlarini ko'rsatish
+            const userNameEl = document.getElementById('user-name');
+            const userInfoEl = document.getElementById('user-info');
+            if (userNameEl) userNameEl.textContent = userName;
+            if (userInfoEl) userInfoEl.style.display = 'flex';
+        }
+
+        // --- Input va klaviatura sozlash ---
+        function setupInputsAndKeyboard(x1Input, x2Input, keyboardToggleBtns, keyboardBtns, 
+                                       mathKeyboard, closeKeyboardBtn, isMobile) {
             // Mobile inputlarni to'liq sozlash
             if (isMobile) {
                 [x1Input, x2Input].forEach(inp => {
                     if (inp) {
                         // READONLY va DISABLED attributlarni qo'shish
-                        inp.setAttribute('readonly', 'true');
-                        inp.setAttribute('disabled', 'true');
+                        inp.readOnly = true;
+                        inp.disabled = true;
                         inp.classList.add('mobile-input');
                         
                         // Klaviatura tugmasini ko'rsatish
@@ -2075,7 +2197,6 @@
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            const targetId = this.id;
                             activeInput = this;
                             showKeyboard();
                             
@@ -2090,7 +2211,6 @@
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            const targetId = this.id;
                             activeInput = this;
                             showKeyboard();
                             
@@ -2115,8 +2235,8 @@
                 // PC da inputlarni normal holatga keltirish
                 [x1Input, x2Input].forEach(inp => {
                     if (inp) {
-                        inp.removeAttribute('readonly');
-                        inp.removeAttribute('disabled');
+                        inp.readOnly = false;
+                        inp.disabled = false;
                         inp.classList.remove('mobile-input');
                         inp.setAttribute('tabindex', '0');
                     }
@@ -2234,121 +2354,6 @@
                     hideKeyboard();
                 }
             });
-
-            // Tugmalarga event listenerlar
-            if (checkBtn) checkBtn.addEventListener('click', checkAnswer);
-            
-            // PC da Enter tugmasi bilan tekshirish
-            if (!isMobile && x2Input) {
-                x2Input.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') checkAnswer();
-                });
-            }
-            
-            if (restartBtn) restartBtn.addEventListener('click', restartGame);
-            
-            // "i" tugmasi uchun reyting jadvalini ochish
-            if (levelInfoBtn) {
-                levelInfoBtn.addEventListener('click', () => {
-                    renderLeaderboard();
-                    document.getElementById('leaderboard-modal').style.display = 'flex';
-                });
-            }
-            
-            // Reyting modal yopish
-            if (leaderboardModalClose) {
-                leaderboardModalClose.addEventListener('click', () => {
-                    document.getElementById('leaderboard-modal').style.display = 'none';
-                });
-            }
-
-            // Foydalanuvchi holatini kuzatish (agar Firebase mavjud bo'lsa)
-            if (typeof authUtils !== 'undefined' && authUtils.onUserChange) {
-                authUtils.onUserChange(async (user) => {
-                    if (user) {
-                        currentUser = user;
-                        try {
-                            userData = user.data;
-                            const userNameEl = document.getElementById('user-name');
-                            const userInfoEl = document.getElementById('user-info');
-                            if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
-                            if (userInfoEl) userInfoEl.style.display = 'flex';
-                            
-                            // Reyting jadvalini yuklash
-                            loadLeaderboard();
-                            
-                            // O'yinni boshlash
-                            startGameInitial();
-                        } catch (err) {
-                            console.error("Foydalanuvchi yuklash xatosi:", err);
-                        }
-                    } else {
-                        // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
-                        window.location.href = '/demo/login.html';
-                    }
-                });
-            } else {
-                console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
-                // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
-                startGameInitial();
-            }
-        });
-
-        // Klaviatura ko'rsatish funksiyasi
-        function showKeyboard() {
-            if (!isMobile) return;
-            
-            const keyboard = document.getElementById('math-keyboard');
-            keyboard.style.display = 'block';
-            setTimeout(() => {
-                keyboard.classList.add('visible');
-            }, 10);
-            keyboard.setAttribute('aria-hidden', 'false');
-            
-            // Klaviatura chiqqanda body scroll ni bloklash
-            document.body.style.overflow = 'hidden';
-            document.body.style.position = 'fixed';
-            document.body.style.width = '100%';
-            
-            // Inputni active qilish
-            if (activeInput) {
-                // READONLY va DISABLED ni vaqtincha olib tashlash
-                activeInput.removeAttribute('readonly');
-                activeInput.removeAttribute('disabled');
-                
-                // Focus qilish
-                setTimeout(() => {
-                    activeInput.focus({preventScroll: true});
-                }, 300);
-            }
-        }
-
-        // Klaviatura yashirish funksiyasi
-        function hideKeyboard() {
-            const keyboard = document.getElementById('math-keyboard');
-            keyboard.classList.remove('visible');
-            
-            setTimeout(() => {
-                keyboard.style.display = 'none';
-                keyboard.setAttribute('aria-hidden', 'true');
-                
-                // Klaviatura yopilganda body scroll ni qayta yoqish
-                document.body.style.overflow = '';
-                document.body.style.position = '';
-                document.body.style.width = '';
-                
-                if (activeInput) {
-                    // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
-                    if (isMobile) {
-                        activeInput.setAttribute('readonly', 'true');
-                        activeInput.setAttribute('disabled', 'true');
-                    }
-                    
-                    // Focus dan chiqarish
-                    activeInput.blur();
-                    activeInput = null;
-                }
-            }, 300);
         }
 
         // O'yinni boshlash
@@ -2499,16 +2504,16 @@
                 x1El.value = "";
                 // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
                 if (isMobile) {
-                    x1El.setAttribute('readonly', 'true');
-                    x1El.setAttribute('disabled', 'true');
+                    x1El.readOnly = true;
+                    x1El.disabled = true;
                 }
             }
             if (x2El) {
                 x2El.value = "";
                 // Mobil bo'lsa, READONLY va DISABLED ni qayta qo'yish
                 if (isMobile) {
-                    x2El.setAttribute('readonly', 'true');
-                    x2El.setAttribute('disabled', 'true');
+                    x2El.readOnly = true;
+                    x2El.disabled = true;
                 }
             }
 
@@ -2607,50 +2612,25 @@
         }
 
         // --- Reyting jadvalini yuklash ---
-        async function loadLeaderboard() {
-            if (typeof authUtils === 'undefined' || !authUtils.getLeaderboard) {
-                // Agar Firebase mavjud bo'lmasa, lokal reyting yaratamiz
-                createLocalLeaderboard();
-                return;
-            }
-            
-            try {
-                const result = await authUtils.getLeaderboard();
-                if (result && result.success) {
-                    renderFirebaseLeaderboard(result.leaderboard || []);
-                }
-            } catch (err) {
-                console.error('Reyting jadvalini yuklashda xatolik:', err);
-                createLocalLeaderboard();
-            }
+        function loadLeaderboard() {
+            // Agar Firebase mavjud bo'lmasa, lokal reyting yaratamiz
+            createLocalLeaderboard();
         }
 
         // Lokal reyting yaratish
         function createLocalLeaderboard() {
+            const userName = localStorage.getItem('viet_game_username') || 'Foydalanuvchi';
             const sampleData = [
                 { id: 1, fullName: "Ali", bestScore: 1250, level: 15, accuracy: 92 },
                 { id: 2, fullName: "Vali", bestScore: 980, level: 12, accuracy: 85 },
                 { id: 3, fullName: "Hasan", bestScore: 870, level: 10, accuracy: 78 },
                 { id: 4, fullName: "Husan", bestScore: 750, level: 9, accuracy: 82 },
                 { id: 5, fullName: "Olim", bestScore: 650, level: 8, accuracy: 75 },
-                { id: 999, fullName: "Siz", bestScore: xpCount, level: currentLevel, accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0 }
+                { id: 999, fullName: userName, bestScore: xpCount, level: currentLevel, 
+                  accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0 }
             ];
             
             renderLeaderboardData(sampleData);
-        }
-
-        // Firebase reytingini ko'rsatish
-        function renderFirebaseLeaderboard(leaderboard) {
-            // O'z ma'lumotlarimizni qo'shamiz
-            leaderboard.push({
-                id: 999,
-                fullName: "Siz",
-                bestScore: xpCount,
-                level: currentLevel,
-                accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
-            });
-            
-            renderLeaderboardData(leaderboard);
         }
 
         // Reyting ma'lumotlarini ko'rsatish
@@ -2675,7 +2655,7 @@
             let html = '';
             data.forEach((player, index) => {
                 const rank = index + 1;
-                const rankClass = `rank-${rank}`;
+                const rankClass = rank <= 3 ? `rank-${rank}` : '';
                 const isCurrentUser = player.id === 999 ? 'current-user' : '';
                 const avatarLetter = player.fullName.charAt(0).toUpperCase();
                 
@@ -2707,10 +2687,7 @@
 
         // Reyting jadvalini ko'rsatish
         function renderLeaderboard() {
-            // Agar Firebase mavjud bo'lsa, yangi ma'lumotlarni yuklaymiz
-            if (typeof authUtils !== 'undefined' && authUtils.getLeaderboard) {
-                loadLeaderboard();
-            }
+            loadLeaderboard();
         }
 
         // --- Darajani yangilash ---
@@ -2729,8 +2706,8 @@
             resultDiv.className = "result incorrect";
             resultDiv.innerHTML = `<h3>⏰ Vaqt tugadi!</h3>
                 <p>60 soniya ichida javob berolmadingiz.</p>
-                <p>To'g'ri ildizlar: x₁ = ${currentEquation.x1}, x₂ = ${currentEquation.x2}</p>
-                <p>Viet formulalari: x₁ + x₂ = ${-currentEquation.b}, x₁ · x₂ = ${currentEquation.c}</p>`;
+                <p>To'g'ri ildizlar: x₁ = ${formatNumber(currentEquation.x1)}, x₂ = ${formatNumber(currentEquation.x2)}</p>
+                <p>Viet formulalari: x₁ + x₂ = ${formatNumber(-currentEquation.b)}, x₁ · x₂ = ${formatNumber(currentEquation.c)}</p>`;
 
             incorrectCount++;
             levelQuestionsAnswered++;
@@ -2805,7 +2782,7 @@
                 resultDiv.className = "result correct";
                 resultDiv.innerHTML = `<h3>✅ To'g'ri javob!</h3>
                     <p>Siz ${timeDiff.toFixed(1)} soniyada javob berdingiz va ${xpEarned} XP qo'lga kiritdingiz!</p>
-                    <p>To'g'ri ildizlar: x₁ = ${currentEquation.x1}, x₂ = ${currentEquation.x2}</p>`;
+                    <p>To'g'ri ildizlar: x₁ = ${formatNumber(currentEquation.x1)}, x₂ = ${formatNumber(currentEquation.x2)}</p>`;
 
                 correctCount++;
                 xpCount += xpEarned;
@@ -2825,8 +2802,8 @@
             } else {
                 resultDiv.className = "result incorrect";
                 resultDiv.innerHTML = `<h3>❌ Noto'g'ri javob</h3>
-                    <p>To'g'ri ildizlar: x₁ = ${currentEquation.x1}, x₂ = ${currentEquation.x2}</p>
-                    <p>Viet formulalari: x₁ + x₂ = ${-currentEquation.b}, x₁ · x₂ = ${currentEquation.c}</p>`;
+                    <p>To'g'ri ildizlar: x₁ = ${formatNumber(currentEquation.x1)}, x₂ = ${formatNumber(currentEquation.x2)}</p>
+                    <p>Viet formulalari: x₁ + x₂ = ${formatNumber(-currentEquation.b)}, x₁ · x₂ = ${formatNumber(currentEquation.c)}</p>`;
 
                 incorrectCount++;
                 levelQuestionsAnswered++;
@@ -2850,23 +2827,42 @@
             updateUIStats();
             updateLevelDisplay();
             
-            // Firebasega natijalarni saqlash
-            if (currentUser && typeof authUtils !== 'undefined') {
-                try {
-                    const finalStats = {
-                        score: xpCount,
-                        correctAnswers: correctCount,
-                        totalQuestions: questionCount,
-                        difficulty: currentLevel,
-                        xpEarned: xpCount,
-                        timeSpent: timeDiff
-                    };
-                    
-                    await authUtils.saveGameResult(finalStats);
-                    await authUtils.updateBestScore(xpCount);
-                } catch (error) {
-                    console.error('Natijalarni saqlashda xatolik:', error);
+            // LocalStorage ga natijalarni saqlash
+            saveLocalGameData();
+        }
+
+        // --- LocalStorage ga o'yin ma'lumotlarini saqlash ---
+        function saveLocalGameData() {
+            const gameData = {
+                xpCount: xpCount,
+                correctCount: correctCount,
+                questionCount: questionCount,
+                currentLevel: currentLevel,
+                highestLevelReached: highestLevelReached,
+                lastPlayed: new Date().toISOString()
+            };
+            
+            try {
+                localStorage.setItem('viet_game_data', JSON.stringify(gameData));
+            } catch (e) {
+                console.log("LocalStorage ga saqlashda xatolik:", e);
+            }
+        }
+
+        // --- LocalStorage dan o'yin ma'lumotlarini yuklash ---
+        function loadLocalGameData() {
+            try {
+                const savedData = localStorage.getItem('viet_game_data');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    xpCount = data.xpCount || 0;
+                    correctCount = data.correctCount || 0;
+                    questionCount = data.questionCount || 0;
+                    currentLevel = data.currentLevel || 1;
+                    highestLevelReached = data.highestLevelReached || 1;
                 }
+            } catch (e) {
+                console.log("LocalStorage dan yuklashda xatolik:", e);
             }
         }
 
@@ -2896,6 +2892,9 @@
             updateLives();
             updateLevelDisplay();
             newQuestion();
+            
+            // Ma'lumotlarni saqlash
+            saveLocalGameData();
         }
 
         // --- O'yinni tugatish ---
@@ -2914,29 +2913,10 @@
             document.getElementById("final-correct").textContent = correctCount;
             document.getElementById("final-xp").textContent = xpCount;
 
-            // Firebasega natijalarni saqlash
-            if (currentUser && typeof authUtils !== 'undefined') {
-                try {
-                    const endTime = new Date();
-                    const totalTime = startTime ? (endTime - startTime) / 1000 : 0;
-                    
-                    const finalStats = {
-                        score: xpCount,
-                        correctAnswers: correctCount,
-                        totalQuestions: questionCount,
-                        difficulty: highestLevelReached,
-                        xpEarned: xpCount,
-                        timeSpent: totalTime
-                    };
-                    
-                    await authUtils.saveGameResult(finalStats);
-                    await authUtils.updateBestScore(xpCount);
-                } catch (error) {
-                    console.error('Natijalarni saqlashda xatolik:', error);
-                }
-            }
-
             document.getElementById("game-over").style.display = 'block';
+            
+            // Ma'lumotlarni saqlash
+            saveLocalGameData();
         }
 
         // --- Qayta boshlash ---
@@ -2961,6 +2941,9 @@
             updateUIStats();
             updateLevelDisplay();
             newQuestion();
+            
+            // Ma'lumotlarni saqlash
+            saveLocalGameData();
         }
 
         // --- UI statistika yangilash ---
@@ -2975,6 +2958,12 @@
             clearInterval(timerInterval);
             clearTimeout(autoNextTimeout);
             clearTimeout(timeUpTimeout);
+            saveLocalGameData();
+        });
+
+        // Sayt yuklanganda avvalgi o'yin ma'lumotlarini yuklash
+        window.addEventListener('load', () => {
+            loadLocalGameData();
         });
     </script>
 </body>
