@@ -623,40 +623,54 @@ input[type="text"]::placeholder {
 }
 
 /* ====== MATH KEYBOARD ====== */
+/* ====== MATH KEYBOARD ====== */
 .math-keyboard {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--glass-bg);
-  border-top: 1px solid var(--glass-border);
-  padding: 25px 20px;
-  box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
-  border-radius: 30px 30px 0 0;
-  backdrop-filter: var(--blur-lg);
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--glass-bg);
+    border-top: 1px solid var(--glass-border);
+    padding: 25px 20px;
+    box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.2);
+    z-index: 9999; /* Eng yuqori z-index */
+    border-radius: 30px 30px 0 0;
+    backdrop-filter: var(--blur-lg);
+    max-height: 50vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-.keyboard-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-}
-
-.keyboard-btn {
-  background: var(--white);
-  border: 1px solid var(--light-gray);
-  border-radius: var(--radius-sm);
-  padding: 18px 10px;
-  font-size: 1.3rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: var(--transition-normal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-sm);
+/* Mobil qurilmalarda klaviatura ko'rinishi uchun media query */
+@media (max-width: 768px) {
+    .math-keyboard {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--glass-bg);
+        border-top: 1px solid var(--glass-border);
+        padding: 20px 15px;
+        box-shadow: 0 -15px 40px rgba(0, 0, 0, 0.2);
+        z-index: 9999;
+        border-radius: 20px 20px 0 0;
+        backdrop-filter: var(--blur-lg);
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    
+    .keyboard-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+    }
+    
+    .keyboard-btn {
+        padding: 15px 8px;
+        font-size: 1.2rem;
+        min-height: 50px;
+    }
 }
 
 .keyboard-btn:hover {
@@ -1966,103 +1980,67 @@ button:active {
             const mobile = isMobileDevice();
 
             // Mobil klaviatura sozlash
-            if (mobile) {
-                [x1Input, x2Input].forEach(inp => {
-                    if (inp) {
-                        inp.setAttribute('readonly', 'true');
-                        inp.setAttribute('inputmode', 'none');
-                        inp.addEventListener('touchstart', (e) => {
-                            activeInput = inp;
-                            mathKeyboard.style.display = 'block';
-                            inp.focus();
-                            e.preventDefault();
-                        }, {passive:false});
-                    }
-                });
-            } else {
-                [x1Input, x2Input].forEach(inp => {
-                    if (inp) inp.removeAttribute('readonly');
-                });
+            // Mobil klaviatura sozlash
+if (mobile) {
+    [x1Input, x2Input].forEach(inp => {
+        if (inp) {
+            inp.setAttribute('readonly', 'true');
+            inp.setAttribute('inputmode', 'none');
+            inp.addEventListener('touchstart', (e) => {
+                activeInput = inp;
+                mathKeyboard.style.display = 'block';
+                mathKeyboard.style.zIndex = '9999';
+                inp.focus();
+                e.preventDefault();
+            }, {passive:false});
+            
+            inp.addEventListener('focus', () => {
+                activeInput = inp;
+                mathKeyboard.style.display = 'block';
+                mathKeyboard.style.zIndex = '9999';
+            });
+        }
+    });
+    
+    // Klaviatura yopish uchun tashqariga bosganda
+    document.addEventListener('touchstart', (e) => {
+        if (!mathKeyboard.contains(e.target) && 
+            !x1Input.contains(e.target) && 
+            !x2Input.contains(e.target) &&
+            !e.target.classList.contains('keyboard-toggle')) {
+            mathKeyboard.style.display = 'none';
+            mathKeyboard.setAttribute('aria-hidden', 'true');
+            if (activeInput) {
+                try { activeInput.blur(); } catch(e){}
+                activeInput = null;
             }
-
-            // Klaviatura eventlari
-            keyboardToggleBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.getAttribute('data-target');
-                    activeInput = document.getElementById(targetId);
-                    mathKeyboard.style.display = 'block';
-                    mathKeyboard.setAttribute('aria-hidden', 'false');
-                    if (activeInput) activeInput.focus();
-                });
+        }
+    });
+} else {
+    // Desktop uchun
+    [x1Input, x2Input].forEach(inp => {
+        if (inp) {
+            inp.removeAttribute('readonly');
+            inp.addEventListener('focus', () => {
+                activeInput = inp;
+                // Desktopda klaviaturani ko'rsatmaymiz
+                mathKeyboard.style.display = 'none';
             });
+        }
+    });
+}
 
-            keyboardBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    if (!activeInput) return;
-                    
-                    const value = btn.getAttribute('data-value');
-                    const cur = activeInput.value || '';
-
-                    switch(value) {
-                        case 'backspace':
-                            activeInput.value = cur.slice(0, -1);
-                            break;
-                        case 'clear':
-                            activeInput.value = '';
-                            break;
-                        case 'switch':
-                            if (activeInput.id === 'x1') {
-                                activeInput = document.getElementById('x2');
-                            } else {
-                                activeInput = document.getElementById('x1');
-                            }
-                            activeInput.focus();
-                            break;
-                        case '/':
-                            if (!cur.includes('/')) {
-                                if (cur !== '' && cur !== '-') {
-                                    activeInput.value = cur + '/';
-                                }
-                            }
-                            break;
-                        case '.':
-                            const segDot = cur.includes('/') ? cur.split('/').pop() : cur;
-                            if (!segDot.includes('.')) activeInput.value = cur + '.';
-                            break;
-                        case '-':
-                            if (cur === '') activeInput.value = '-';
-                            else if (cur.endsWith('/')) activeInput.value = cur + '-';
-                            break;
-                        default:
-                            activeInput.value = cur + value;
-                    }
-                    
-                    activeInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    activeInput.focus();
-                });
-            });
-
-            if (!mobile) {
-                [x1Input, x2Input].forEach(input => {
-                    input.addEventListener('focus', () => {
-                        activeInput = input;
-                    });
-                });
-            }
-
-            document.addEventListener('click', (e) => {
-                if (!mathKeyboard.contains(e.target) && 
-                    !x1Input.contains(e.target) && 
-                    !x2Input.contains(e.target) &&
-                    !e.target.classList.contains('keyboard-toggle')) {
-                    mathKeyboard.style.display = 'none';
-                    mathKeyboard.setAttribute('aria-hidden', 'true');
-                    if (activeInput) {
-                        try { activeInput.blur(); } catch(e){}
-                        activeInput = null;
-                    }
-                }
-            });
+// Klaviatura yopish uchun "ESC" tugmasi
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && mathKeyboard.style.display === 'block') {
+        mathKeyboard.style.display = 'none';
+        mathKeyboard.setAttribute('aria-hidden', 'true');
+        if (activeInput) {
+            activeInput.blur();
+            activeInput = null;
+        }
+    }
+});
 
             // Tugmalarga event listenerlar
             if (checkBtn) checkBtn.addEventListener('click', checkAnswer);
@@ -2368,87 +2346,137 @@ button:active {
                 createLocalLeaderboard();
             }
         }
-
-        // Lokal reyting yaratish
-        function createLocalLeaderboard() {
-            const sampleData = [
-                { id: 1, fullName: "Ali", bestScore: 1250, level: 15, accuracy: 92 },
-                { id: 2, fullName: "Vali", bestScore: 980, level: 12, accuracy: 85 },
-                { id: 3, fullName: "Hasan", bestScore: 870, level: 10, accuracy: 78 },
-                { id: 4, fullName: "Husan", bestScore: 750, level: 9, accuracy: 82 },
-                { id: 5, fullName: "Olim", bestScore: 650, level: 8, accuracy: 75 },
-                { id: 999, fullName: "Siz", bestScore: xpCount, level: currentLevel, accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0 }
-            ];
-            
-            renderLeaderboardData(sampleData);
-        }
-
         // Firebase reytingini ko'rsatish
-        function renderFirebaseLeaderboard(leaderboard) {
-            // O'z ma'lumotlarimizni qo'shamiz
-            leaderboard.push({
-                id: 999,
-                fullName: "Siz",
-                bestScore: xpCount,
-                level: currentLevel,
-                accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
-            });
-            
-            renderLeaderboardData(leaderboard);
-        }
+        // Firebase reytingini ko'rsatish
+function renderFirebaseLeaderboard(leaderboard) {
+    if (!Array.isArray(leaderboard)) {
+        createLocalLeaderboard();
+        return;
+    }
+    
+    // O'z ma'lumotlarimizni qo'shamiz
+    const currentPlayer = {
+        id: 999,
+        fullName: userData?.fullName || "Siz",
+        bestScore: xpCount,
+        level: currentLevel,
+        accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
+    };
+    
+    // Mavjud ma'lumotlarni birlashtirish
+    const allPlayers = [...leaderboard];
+    
+    // Agar bizning ma'lumotlarimiz allaqachon mavjud bo'lsa, yangilaymiz
+    const existingIndex = allPlayers.findIndex(p => p.uid === currentUser?.uid);
+    if (existingIndex !== -1) {
+        allPlayers[existingIndex] = {
+            ...allPlayers[existingIndex],
+            bestScore: Math.max(allPlayers[existingIndex].bestScore || 0, xpCount),
+            level: Math.max(allPlayers[existingIndex].level || 1, currentLevel),
+            accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
+        };
+    } else {
+        allPlayers.push(currentPlayer);
+    }
+    
+    renderLeaderboardData(allPlayers);
+}
 
         // Reyting ma'lumotlarini ko'rsatish
-        function renderLeaderboardData(data) {
-            // XP bo'yicha tartiblash
-            data.sort((a, b) => b.bestScore - a.bestScore);
-            
-            const leaderboardList = document.getElementById('leaderboard-list');
-            if (!leaderboardList) return;
-            
-            if (data.length === 0) {
-                leaderboardList.innerHTML = `
-                    <div class="empty-leaderboard">
-                        <div class="empty-leaderboard-icon">🏆</div>
-                        <h3>Hali reyting mavjud emas</h3>
-                        <p>Siz birinchi bo'ling!</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            let html = '';
-            data.forEach((player, index) => {
-                const rank = index + 1;
-                const rankClass = `rank-${rank}`;
-                const isCurrentUser = player.id === 999 ? 'current-user' : '';
-                const avatarLetter = player.fullName.charAt(0).toUpperCase();
-                
-                html += `
-                    <div class="leaderboard-item ${rankClass} ${isCurrentUser}">
-                        <div class="leaderboard-rank">${rank}</div>
-                        <div class="leaderboard-avatar">${avatarLetter}</div>
-                        <div class="leaderboard-user-info">
-                            <div class="leaderboard-user-name">${player.fullName}</div>
-                            <div class="leaderboard-user-level">Daraja ${player.level || 1}</div>
-                        </div>
-                        <div class="leaderboard-user-stats">
-                            <div class="leaderboard-user-xp">${player.bestScore} XP</div>
-                            <div class="leaderboard-user-accuracy">${player.accuracy || 0}% to'g'ri</div>
-                        </div>
-                    </div>
-                `;
-                
-                // Agar bu biz bo'lsa, reytingimizni saqlaymiz
-                if (player.id === 999) {
-                    document.getElementById('user-rank').textContent = `${rank}-o'rin`;
-                    document.getElementById('user-total-xp').textContent = player.bestScore;
-                    document.getElementById('user-highest-level').textContent = Math.max(highestLevelReached, currentLevel);
-                }
-            });
-            
-            leaderboardList.innerHTML = html;
-        }
-
+// Reyting ma'lumotlarini ko'rsatish
+function renderLeaderboardData(data) {
+    // XP bo'yicha tartiblash
+    data.sort((a, b) => b.bestScore - a.bestScore);
+    
+    const leaderboardList = document.getElementById('leaderboard-list');
+    if (!leaderboardList) return;
+    
+    if (data.length === 0) {
+        leaderboardList.innerHTML = `
+            <div class="empty-leaderboard">
+                <div class="empty-leaderboard-icon">🏆</div>
+                <h3>Hali reyting mavjud emas</h3>
+                <p>Siz birinchi bo'ling!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Foydalanuvchining o'zini topish
+    const currentUserData = data.find(player => player.id === 999);
+    const currentUserRank = data.findIndex(player => player.id === 999) + 1;
+    
+    // Faqat top 10 ni ko'rsatish
+    const topPlayers = data.slice(0, 10);
+    
+    // Agar foydalanuvchi top 10 ichida bo'lmasa, 10-o'rindan keyingi o'rnini ko'rsatamiz
+    let showCurrentUserSeparately = false;
+    if (currentUserRank > 10) {
+        showCurrentUserSeparately = true;
+    }
+    
+    let html = '';
+    
+    // Top 10 ni ko'rsatish
+    topPlayers.forEach((player, index) => {
+        const rank = index + 1;
+        const rankClass = `rank-${rank}`;
+        const isCurrentUser = player.id === 999 ? 'current-user' : '';
+        const avatarLetter = (player.fullName || 'U').charAt(0).toUpperCase();
+        
+        html += `
+            <div class="leaderboard-item ${rankClass} ${isCurrentUser}">
+                <div class="leaderboard-rank">${rank}</div>
+                <div class="leaderboard-avatar">${avatarLetter}</div>
+                <div class="leaderboard-user-info">
+                    <div class="leaderboard-user-name">${player.fullName || 'Noma\'lum'}</div>
+                    <div class="leaderboard-user-level">Daraja ${player.level || 1}</div>
+                </div>
+                <div class="leaderboard-user-stats">
+                    <div class="leaderboard-user-xp">${player.bestScore || 0} XP</div>
+                    <div class="leaderboard-user-accuracy">${player.accuracy || 0}% to'g'ri</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    // Agar foydalanuvchi top 10 ichida bo'lmasa, alohida qator qo'shamiz
+    if (showCurrentUserSeparately && currentUserData) {
+        const avatarLetter = (currentUserData.fullName || 'U').charAt(0).toUpperCase();
+        html += `
+            <div class="leaderboard-separator" style="text-align: center; padding: 10px; color: var(--gray); font-style: italic;">
+                ...
+            </div>
+            <div class="leaderboard-item current-user">
+                <div class="leaderboard-rank">${currentUserRank}</div>
+                <div class="leaderboard-avatar">${avatarLetter}</div>
+                <div class="leaderboard-user-info">
+                    <div class="leaderboard-user-name">${currentUserData.fullName || 'Siz'}</div>
+                    <div class="leaderboard-user-level">Daraja ${currentUserData.level || currentLevel}</div>
+                </div>
+                <div class="leaderboard-user-stats">
+                    <div class="leaderboard-user-xp">${currentUserData.bestScore || xpCount} XP</div>
+                    <div class="leaderboard-user-accuracy">${currentUserData.accuracy || (questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0)}% to'g'ri</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    leaderboardList.innerHTML = html;
+    
+    // Reyting statistikalarini yangilash
+    if (currentUserData) {
+        document.getElementById('user-rank').textContent = 
+            currentUserRank <= 10 ? `${currentUserRank}-o'rin` : `${currentUserRank}-o'rin (top 10 dan tashqari)`;
+        document.getElementById('user-total-xp').textContent = currentUserData.bestScore || xpCount;
+        document.getElementById('user-highest-level').textContent = 
+            Math.max(highestLevelReached, currentLevel, currentUserData.level || 1);
+    } else {
+        document.getElementById('user-rank').textContent = 'Yuklanmoqda...';
+        document.getElementById('user-total-xp').textContent = xpCount;
+        document.getElementById('user-highest-level').textContent = Math.max(highestLevelReached, currentLevel);
+    }
+}
         // Reyting jadvalini ko'rsatish
         function renderLeaderboard() {
             // Agar Firebase mavjud bo'lsa, yangi ma'lumotlarni yuklaymiz
@@ -2500,117 +2528,115 @@ button:active {
         }
 
         // --- Javobni tekshirish ---
-        async function checkAnswer() {
-            if (!gameActive) return;
-            clearTimeout(timeUpTimeout);
+  async function checkAnswer() {
+    if (!gameActive) return;
+    clearTimeout(timeUpTimeout);
 
-            const userX1Raw = document.getElementById("x1")?.value;
-            const userX2Raw = document.getElementById("x2")?.value;
+    const userX1Raw = document.getElementById("x1")?.value;
+    const userX2Raw = document.getElementById("x2")?.value;
 
-            const userX1 = parseFractionalNumber(userX1Raw);
-            const userX2 = parseFractionalNumber(userX2Raw);
+    const userX1 = parseFractionalNumber(userX1Raw);
+    const userX2 = parseFractionalNumber(userX2Raw);
 
-            if (!isFinite(userX1) || !isFinite(userX2)) {
-                alert("Iltimos, ikkala ildizni ham to'g'ri kiriting (butun son, onlik yoki kasr, masalan 3/2).");
-                timeUpTimeout = setTimeout(() => {
-                    if (gameActive) timeUpAutoCheck();
-                }, 60000);
-                return;
-            }
+    if (!isFinite(userX1) || !isFinite(userX2)) {
+        alert("Iltimos, ikkala ildizni ham to'g'ri kiriting (butun son, onlik yoki kasr, masalan 3/2).");
+        return;
+    }
 
-            stopTimer();
-            const endTime = new Date();
-            const timeDiff = startTime ? (endTime - startTime) / 1000 : 9999;
+    stopTimer();
+    const endTime = new Date();
+    const timeDiff = startTime ? (endTime - startTime) / 1000 : 9999;
 
-            // XP hisoblash
-            let xpEarned = 0;
-            if (timeDiff <= 60) {
-                xpEarned = Math.max(1, 61 - Math.ceil(timeDiff));
-            } else {
-                xpEarned = 1;
-            }
+    // XP hisoblash
+    let xpEarned = 0;
+    if (timeDiff <= 60) {
+        xpEarned = Math.max(1, 61 - Math.ceil(timeDiff));
+    } else {
+        xpEarned = 1;
+    }
 
-            // Daraja koefitsienti
-            xpEarned = Math.floor(xpEarned * (1 + (currentLevel * 0.05)));
+    // Daraja koefitsienti
+    xpEarned = Math.floor(xpEarned * (1 + (currentLevel * 0.05)));
 
-            const correct1 = currentEquation.x1;
-            const correct2 = currentEquation.x2;
+    const correct1 = currentEquation.x1;
+    const correct2 = currentEquation.x2;
 
-            const matchA = nearlyEqual(userX1, correct1) && nearlyEqual(userX2, correct2);
-            const matchB = nearlyEqual(userX1, correct2) && nearlyEqual(userX2, correct1);
-            const correct = matchA || matchB;
+    const matchA = nearlyEqual(userX1, correct1) && nearlyEqual(userX2, correct2);
+    const matchB = nearlyEqual(userX1, correct2) && nearlyEqual(userX2, correct1);
+    const correct = matchA || matchB;
 
-            const resultDiv = document.getElementById("result");
-            resultDiv.style.display = "block";
+    const resultDiv = document.getElementById("result");
+    resultDiv.style.display = "block";
 
-            if (correct) {
-                resultDiv.className = "result correct";
-                resultDiv.innerHTML = `<h3>✅ To'g'ri javob!</h3>
-                    <p>Siz ${timeDiff.toFixed(1)} soniyada javob berdingiz va ${xpEarned} XP qo'lga kiritdingiz!</p>
-                    <p>To'g'ri ildizlar: x₁ = ${currentEquation.x1}, x₂ = ${currentEquation.x2}</p>`;
+    if (correct) {
+        resultDiv.className = "result correct";
+        resultDiv.innerHTML = `<h3>✅ To'g'ri javob!</h3>
+            <p>Siz ${timeDiff.toFixed(1)} soniyada javob berdingiz va ${xpEarned} XP qo'lga kiritdingiz!</p>
+            <p>To'g'ri ildizlar: x₁ = ${formatNumber(currentEquation.x1)}, x₂ = ${formatNumber(currentEquation.x2)}</p>`;
 
-                correctCount++;
-                xpCount += xpEarned;
-                levelXP += xpEarned;
-                levelQuestionsAnswered++;
+        correctCount++;
+        xpCount += xpEarned;
+        levelXP += xpEarned;
+        levelQuestionsAnswered++;
 
-                const checkBtn = document.getElementById("check-btn");
-                if (checkBtn) checkBtn.disabled = true;
+        const checkBtn = document.getElementById("check-btn");
+        if (checkBtn) checkBtn.disabled = true;
 
-                // Daraja tugashini tekshirish
-                const config = LEVEL_CONFIG[currentLevel];
-                if (levelQuestionsAnswered >= config.questions && levelXP >= config.xpToNext) {
-                    completeLevel();
-                } else {
-                    autoNextTimeout = setTimeout(newQuestion, 1500);
-                }
-            } else {
-                resultDiv.className = "result incorrect";
-                resultDiv.innerHTML = `<h3>❌ Noto'g'ri javob</h3>
-                    <p>To'g'ri ildizlar: x₁ = ${currentEquation.x1}, x₂ = ${currentEquation.x2}</p>
-                    <p>Viet formulalari: x₁ + x₂ = ${-currentEquation.b}, x₁ · x₂ = ${currentEquation.c}</p>`;
-
-                incorrectCount++;
-                levelQuestionsAnswered++;
-                updateLives();
-
-                if (incorrectCount >= maxIncorrect) {
-                    endGame();
-                    return;
-                }
-
-                // Daraja tugashini tekshirish
-                const config = LEVEL_CONFIG[currentLevel];
-                if (levelQuestionsAnswered >= config.questions) {
-                    completeLevel();
-                } else {
-                    autoNextTimeout = setTimeout(newQuestion, 2000);
-                }
-            }
-
-            questionCount++;
-            updateUIStats();
-            updateLevelDisplay();
-            
-            // Firebasega natijalarni saqlash
-            if (currentUser && typeof authUtils !== 'undefined') {
-                try {
-                    const finalStats = {
-                        score: xpCount,
-                        correctAnswers: correctCount,
-                        totalQuestions: questionCount,
-                        difficulty: currentLevel,
-                        xpEarned: xpCount,
-                        timeSpent: timeDiff
-                    };
-                    
-                    await authUtils.saveGameResult(finalStats);
-                    await authUtils.updateBestScore(xpCount);
-                } catch (error) {
-                    console.error('Natijalarni saqlashda xatolik:', error);
-                }
-            }
+        // Daraja tugashini tekshirish
+        const config = LEVEL_CONFIG[currentLevel];
+        if (levelQuestionsAnswered >= config.questions && levelXP >= config.xpToNext) {
+            completeLevel();
+        } else {
+            autoNextTimeout = setTimeout(newQuestion, 1500);
         }
+    } else {
+        resultDiv.className = "result incorrect";
+        resultDiv.innerHTML = `<h3>❌ Noto'g'ri javob</h3>
+            <p>To'g'ri ildizlar: x₁ = ${formatNumber(currentEquation.x1)}, x₂ = ${formatNumber(currentEquation.x2)}</p>
+            <p>Viet formulalari: x₁ + x₂ = ${formatNumber(-currentEquation.b)}, x₁ · x₂ = ${formatNumber(currentEquation.c)}</p>`;
+
+        incorrectCount++;
+        levelQuestionsAnswered++;
+        updateLives();
+
+        if (incorrectCount >= maxIncorrect) {
+            endGame();
+            return;
+        }
+
+        // Daraja tugashini tekshirish
+        const config = LEVEL_CONFIG[currentLevel];
+        if (levelQuestionsAnswered >= config.questions) {
+            completeLevel();
+        } else {
+            autoNextTimeout = setTimeout(newQuestion, 2000);
+        }
+    }
+
+    questionCount++;
+    updateUIStats();
+    updateLevelDisplay();
+    
+    // Firebasega natijalarni saqlash
+    if (currentUser && typeof authUtils !== 'undefined' && typeof authUtils.saveGameResult !== 'undefined') {
+        try {
+            const finalStats = {
+                score: xpCount,
+                correctAnswers: correctCount,
+                totalQuestions: questionCount,
+                difficulty: currentLevel,
+                xpEarned: xpEarned,
+                timeSpent: timeDiff
+            };
+            
+            await authUtils.saveGameResult(finalStats);
+            // Reyting jadvalini yangilash
+            await loadLeaderboard();
+        } catch (error) {
+            console.error('Natijalarni saqlashda xatolik:', error);
+        }
+    }
+}
 
         // --- Daraja yakunlash ---
         function completeLevel() {
