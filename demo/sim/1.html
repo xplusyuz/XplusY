@@ -1732,6 +1732,58 @@
     </style>
 </head>
 <body>
+<!-- Auto-login override: prevent redirects and perform auto sign-in on this page -->
+<script>
+(function(){
+    // Prevent any code from redirecting the page to login.html by overriding location.href setter temporarily
+    try {
+        Object.defineProperty(window.location, 'href', {
+            configurable: true,
+            set: function(val) {
+                if (typeof val === 'string' && val.includes('login.html')) {
+                    console.warn('Blocked redirect to', val);
+                    return;
+                }
+                // allow other redirects if necessary
+                Location.prototype.href = val;
+            }
+        });
+    } catch(e) {
+        // Some browsers may not allow overriding; fallback: intercept before assigning
+        console.warn('Could not override location.href:', e);
+    }
+
+    // On DOMContentLoaded try to load real session, otherwise use mock and mark as auto-logged-in
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            if (typeof authUtils !== 'undefined' && typeof authUtils.loadSession === 'function') {
+                const user = await authUtils.loadSession();
+                if (user) {
+                    window.currentUser = user;
+                    console.info('Auto-signed in via authUtils:', user);
+                } else {
+                    console.info('No session found via authUtils — creating local auto-user');
+                    window.currentUser = { uid: 'auto-local-user', displayName: 'Auto User' };
+                }
+            } else {
+                console.info('authUtils not found — using auto-local-user');
+                window.currentUser = { uid: 'auto-local-user', displayName: 'Auto User' };
+            }
+        } catch(err) {
+            console.warn('Auto-login failed, using fallback user', err);
+            window.currentUser = window.currentUser || { uid: 'auto-local-user', displayName: 'Auto User' };
+        }
+
+        // Expose a flag for debugging
+        window.__AUTO_LOGIN_DONE = true;
+
+        // If initializeGame exists, call it (safe call)
+        if (typeof initializeGame === 'function') {
+            try { initializeGame(); } catch(e) { console.error('initializeGame error', e); }
+        }
+    });
+})();
+</script>
     <!-- Reyting jadvali modal oynasi -->
     <div id="leaderboard-modal" class="modal-overlay">
         <div class="modal-content leaderboard-modal">
@@ -1934,7 +1986,7 @@
             // AuthUtils mavjudligini tekshirish
             if (typeof authUtils === 'undefined') {
                 console.error('AuthUtils mavjud emas. Login sahifasiga yo\'naltirilmoqda...');
-                window.location.href = '../login.html';
+                console.warn('Redirect to login prevented.');
                 return;
             }
 
@@ -1944,7 +1996,7 @@
                 if (!user) {
                     // Agar foydalanuvchi kirish qilmagan bo'lsa, login sahifasiga yo'naltirish
                     // viet1.html /demo/sim/viet1.html da, login esa /demo/login.html da
-                    window.location.href = '../login.html';
+                    console.warn('Redirect to login prevented.');
                     return;
                 }
                 
@@ -1953,7 +2005,7 @@
                 initializeGame();
             } catch (error) {
                 console.error('Session tekshirishda xatolik:', error);
-                window.location.href = '../login.html';
+                console.warn('Redirect to login prevented.');
                 return;
             }
         });
@@ -2090,7 +2142,7 @@
                         }
                     } else {
                         // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
-                        window.location.href = '../login.html';
+                        console.warn('Redirect to login prevented.');
                     }
                 });
             } else {

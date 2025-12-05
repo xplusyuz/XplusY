@@ -1,1 +1,0 @@
-Updated package: includes injected keyboard.js, leaderboard.js and auth fallback. Integrate as needed.
