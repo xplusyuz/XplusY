@@ -1719,6 +1719,7 @@ input[type="text"]:focus {
         let activeInput = null;
         let timeUpTimeout = null;
         let highestLevelReached = 1;
+        let isInitialized = false;
 
         // --- Yordamchi funksiyalar ---
         function isMobileDevice() {
@@ -1835,6 +1836,36 @@ input[type="text"]:focus {
             });
         }
 
+        // --- Reyting funksiyalari ---
+        async function updateUserStatsInModal() {
+            // Modal ichidagi statistikani yangilash
+            document.getElementById('user-total-xp').textContent = xpCount;
+            document.getElementById('user-highest-level').textContent = highestLevelReached;
+            
+            // Reyting pozitsiyasini hisoblash
+            const userRank = await calculateUserRank();
+            document.getElementById('user-rank').textContent = userRank;
+            
+            // Reyting jadvalini yangilash
+            await loadLeaderboard();
+        }
+
+        async function calculateUserRank() {
+            // Agar Firebase bo'lsa, haqiqiy reytingni olish
+            if (typeof authUtils !== 'undefined' && authUtils.getUserRank) {
+                try {
+                    const rank = await authUtils.getUserRank(xpCount);
+                    return rank !== undefined ? `${rank}-o'rin` : "Noma'lum";
+                } catch (error) {
+                    console.error('Reytingni hisoblashda xato:', error);
+                    return "Noma'lum";
+                }
+            }
+            
+            // Agar Firebase bo'lmasa, local hisoblash
+            return "1-o'rin"; // Demo uchun
+        }
+
         // --- DOMContentLoaded ---
         document.addEventListener('DOMContentLoaded', () => {
             const checkBtn = document.getElementById('check-btn');
@@ -1842,7 +1873,6 @@ input[type="text"]:focus {
             const ratingBtn = document.getElementById('rating-btn');
             const leaderboardModalClose = document.getElementById('leaderboard-modal-close');
             const resultNextBtn = document.getElementById('result-next-btn');
-            const resultContainer = document.getElementById('result-container');
             
             // Klaviaturani sozlash
             setupKeyboard();
@@ -1860,8 +1890,9 @@ input[type="text"]:focus {
             
             // Reyting tugmasi
             if (ratingBtn) {
-                ratingBtn.addEventListener('click', () => {
-                    renderLeaderboard();
+                ratingBtn.addEventListener('click', async () => {
+                    // Modal ochilganda statistikani yangilash
+                    await updateUserStatsInModal();
                     document.getElementById('leaderboard-modal').style.display = 'flex';
                 });
             }
@@ -1892,11 +1923,20 @@ input[type="text"]:focus {
                             if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
                             if (userInfoEl) userInfoEl.style.display = 'flex';
                             
+                            // Reyting jadvalini yuklash
+                            await loadLeaderboard();
+                            
                             // O'yinni boshlash
-                            startGameInitial();
+                            if (!isInitialized) {
+                                startGameInitial();
+                                isInitialized = true;
+                            }
                         } catch (err) {
                             console.error("Foydalanuvchi yuklash xatosi:", err);
-                            startGameInitial();
+                            if (!isInitialized) {
+                                startGameInitial();
+                                isInitialized = true;
+                            }
                         }
                     } else {
                         // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
@@ -1906,7 +1946,10 @@ input[type="text"]:focus {
             } else {
                 console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
                 // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
-                startGameInitial();
+                if (!isInitialized) {
+                    startGameInitial();
+                    isInitialized = true;
+                }
             }
         });
 
@@ -1923,8 +1966,9 @@ input[type="text"]:focus {
             if (!gameActive) return;
             
             // Natija oynasini yashirish
-            document.getElementById('result-container').classList.remove('show');
-            document.getElementById('result-container').style.display = 'none';
+            const resultContainer = document.getElementById('result-container');
+            resultContainer.classList.remove('show');
+            resultContainer.style.display = 'none';
             
             // Daraja ma'lumotlarini yangilash
             updateDifficulty();
@@ -2143,9 +2187,24 @@ input[type="text"]:focus {
 
         // --- Reyting jadvalini yuklash ---
         async function loadLeaderboard() {
+            const leaderboardList = document.getElementById('leaderboard-list');
+            if (!leaderboardList) return;
+            
+            // Yuklanayotgan holatni ko'rsatish
+            leaderboardList.innerHTML = `
+                <div class="empty-leaderboard">
+                    <div class="empty-leaderboard-icon">🏆</div>
+                    <h3>Reyting yuklanmoqda...</h3>
+                    <p>Bir oz kuting</p>
+                </div>
+            `;
+
+            // Agar Firebase mavjud bo'lmasa, lokal reyting yaratamiz
             if (typeof authUtils === 'undefined' || !authUtils.getLeaderboard) {
-                // Agar Firebase mavjud bo'lmasa, lokal reyting yaratamiz
-                createLocalLeaderboard();
+                // Kichik kutish vaqtidan keyin lokal reytingni ko'rsatish
+                setTimeout(() => {
+                    createLocalLeaderboard();
+                }, 500);
                 return;
             }
             
@@ -2153,6 +2212,8 @@ input[type="text"]:focus {
                 const result = await authUtils.getLeaderboard();
                 if (result && result.success) {
                     renderFirebaseLeaderboard(result.leaderboard || []);
+                } else {
+                    createLocalLeaderboard();
                 }
             } catch (err) {
                 console.error('Reyting jadvalini yuklashda xatolik:', err);
@@ -2175,7 +2236,36 @@ input[type="text"]:focus {
                 { uid: 'user10', fullName: "Sher Sheraliyev", bestScore: 450, level: 2, accuracy: 70 }
             ];
             
-            renderLeaderboardData(sampleData);
+            // Current user ma'lumotlarini qo'shamiz
+            const currentPlayer = {
+                uid: currentUser?.uid || 'current',
+                fullName: userData?.fullName || "Siz",
+                bestScore: xpCount,
+                level: highestLevelReached,
+                accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
+            };
+            
+            // Joriy foydalanuvchini qo'shamiz
+            let allData = [...sampleData];
+            const existingIndex = allData.findIndex(p => p.uid === currentUser?.uid);
+            
+            if (existingIndex !== -1) {
+                // Agar allaqachon mavjud bo'lsa, yangilaymiz
+                allData[existingIndex] = {
+                    ...allData[existingIndex],
+                    bestScore: Math.max(allData[existingIndex].bestScore, xpCount),
+                    level: Math.max(allData[existingIndex].level, highestLevelReached),
+                    accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : allData[existingIndex].accuracy
+                };
+            } else if (currentUser) {
+                // Agar yangi bo'lsa, qo'shamiz
+                allData.push(currentPlayer);
+            }
+            
+            // Tartiblash
+            allData.sort((a, b) => b.bestScore - a.bestScore);
+            
+            renderLeaderboardData(allData);
         }
 
         // Firebase reytingini ko'rsatish
@@ -2202,47 +2292,20 @@ input[type="text"]:focus {
                 return;
             }
             
-            // O'zimizning ma'lumotlarimizni qo'shamiz
-            const currentPlayer = {
-                uid: currentUser?.uid || 'current',
-                fullName: userData?.fullName || "Siz",
-                bestScore: xpCount,
-                level: currentLevel,
-                accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
-            };
+            // Joriy foydalanuvchini topamiz
+            const currentPlayerIndex = data.findIndex(p => p.uid === currentUser?.uid);
+            const currentUserRank = currentPlayerIndex !== -1 ? currentPlayerIndex + 1 : "Noma'lum";
             
-            // Bizning ma'lumotlarimizni topamiz yoki qo'shamiz
-            let currentPlayerIndex = data.findIndex(p => p.uid === currentUser?.uid);
-            if (currentPlayerIndex === -1) {
-                // Agar mavjud bo'lmasa, qo'shamiz
-                data.push(currentPlayer);
-                // Qayta tartiblash
-                data.sort((a, b) => b.bestScore - a.bestScore);
-                currentPlayerIndex = data.findIndex(p => p.uid === currentUser?.uid || p.uid === 'current');
-            } else {
-                // Agar mavjud bo'lsa, yangilaymiz
-                data[currentPlayerIndex] = {
-                    ...data[currentPlayerIndex],
-                    bestScore: Math.max(data[currentPlayerIndex].bestScore || 0, xpCount),
-                    level: Math.max(data[currentPlayerIndex].level || 1, currentLevel),
-                    accuracy: questionCount > 0 ? Math.round((correctCount / questionCount) * 100) : 0
-                };
-                // Qayta tartiblash
-                data.sort((a, b) => b.bestScore - a.bestScore);
-                currentPlayerIndex = data.findIndex(p => p.uid === currentUser?.uid);
-            }
-            
-            // Faqat top 10 ni ko'rsatish
-            const topPlayers = data.slice(0, 10);
-            const currentUserRank = currentPlayerIndex + 1;
+            // Top 10 ni ko'rsatish (agar mavjud bo'lsa)
+            const topPlayers = data.slice(0, Math.min(10, data.length));
             
             let html = '';
             
-            // Top 10 ni ko'rsatish
+            // Top o'yinchilarni ko'rsatish
             topPlayers.forEach((player, index) => {
                 const rank = index + 1;
                 const rankClass = `rank-${rank}`;
-                const isCurrentUser = player.uid === currentUser?.uid || player.uid === 'current';
+                const isCurrentUser = player.uid === currentUser?.uid;
                 const userClass = isCurrentUser ? 'current-user' : '';
                 const avatarLetter = (player.fullName || 'U').charAt(0).toUpperCase();
                 
@@ -2262,9 +2325,11 @@ input[type="text"]:focus {
                 `;
             });
             
-            // Agar foydalanuvchi top 10 ichida bo'lmasa, alohida ko'rsatamiz
-            if (currentUserRank > 10) {
+            // Agar foydalanuvchi top 10 ichida bo'lmasa va mavjud bo'lsa, alohida ko'rsatamiz
+            if (currentPlayerIndex >= 10 && currentPlayerIndex !== -1) {
+                const currentPlayer = data[currentPlayerIndex];
                 const avatarLetter = (currentPlayer.fullName || 'U').charAt(0).toUpperCase();
+                
                 html += `
                     <div class="leaderboard-separator" style="text-align: center; padding: 10px; color: var(--gray); font-style: italic;">
                         ...
@@ -2274,7 +2339,7 @@ input[type="text"]:focus {
                         <div class="leaderboard-avatar">${avatarLetter}</div>
                         <div class="leaderboard-user-info">
                             <div class="leaderboard-user-name">${currentPlayer.fullName || 'Siz'}</div>
-                            <div class="leaderboard-user-level">Daraja ${currentPlayer.level || currentLevel}</div>
+                            <div class="leaderboard-user-level">Daraja ${currentPlayer.level || highestLevelReached}</div>
                         </div>
                         <div class="leaderboard-user-stats">
                             <div class="leaderboard-user-xp">${currentPlayer.bestScore || xpCount} XP</div>
@@ -2285,22 +2350,6 @@ input[type="text"]:focus {
             }
             
             leaderboardList.innerHTML = html;
-            
-            // Reyting statistikalarini yangilash
-            document.getElementById('user-rank').textContent = `${currentUserRank}-o'rin`;
-            document.getElementById('user-total-xp').textContent = currentPlayer.bestScore || xpCount;
-            document.getElementById('user-highest-level').textContent = Math.max(highestLevelReached, currentLevel, currentPlayer.level || 1);
-        }
-
-        // Reyting jadvalini ko'rsatish
-        function renderLeaderboard() {
-            // Agar Firebase mavjud bo'lsa, yangi ma'lumotlarni yuklaymiz
-            if (typeof authUtils !== 'undefined' && authUtils.getLeaderboard) {
-                loadLeaderboard();
-            } else {
-                // Local reyting
-                createLocalLeaderboard();
-            }
         }
 
         // --- Darajani yangilash ---
@@ -2317,7 +2366,7 @@ input[type="text"]:focus {
         }
 
         // --- Natijani ko'rsatish ---
-        function showResult(isCorrect, isTimeUp = false) {
+        async function showResult(isCorrect, isTimeUp = false) {
             const endTime = new Date();
             const timeDiff = startTime ? (endTime - startTime) / 1000 : 9999;
             
@@ -2387,11 +2436,6 @@ input[type="text"]:focus {
             updateUIStats();
             updateLevelDisplay();
             
-            // Bir oz kutib, natijani ko'rsatish
-            setTimeout(() => {
-                resultContainer.classList.add('show');
-            }, 50);
-            
             // Firebasega natijalarni saqlash
             if (isCorrect && currentUser && typeof authUtils !== 'undefined' && typeof authUtils.saveGameResult !== 'undefined') {
                 try {
@@ -2404,13 +2448,19 @@ input[type="text"]:focus {
                         timeSpent: timeDiff
                     };
                     
-                    authUtils.saveGameResult(finalStats);
+                    await authUtils.saveGameResult(finalStats);
+                    
                     // Reyting jadvalini yangilash
-                    loadLeaderboard();
+                    await updateUserStatsInModal();
                 } catch (error) {
                     console.error('Natijalarni saqlashda xatolik:', error);
                 }
             }
+            
+            // Bir oz kutib, natijani ko'rsatish
+            setTimeout(() => {
+                resultContainer.classList.add('show');
+            }, 50);
         }
 
         // --- Keyingi savolga o'tish ---
@@ -2513,6 +2563,9 @@ input[type="text"]:focus {
                     
                     await authUtils.saveGameResult(finalStats);
                     await authUtils.updateBestScore(xpCount);
+                    
+                    // Modal statistikani yangilash
+                    await updateUserStatsInModal();
                 } catch (error) {
                     console.error('Natijalarni saqlashda xatolik:', error);
                 }
@@ -2543,6 +2596,9 @@ input[type="text"]:focus {
             updateUIStats();
             updateLevelDisplay();
             newQuestion();
+            
+            // Modal statistikani yangilash
+            updateUserStatsInModal();
         }
 
         // --- UI statistika yangilash ---
@@ -2550,6 +2606,7 @@ input[type="text"]:focus {
             document.getElementById("question-count").textContent = questionCount;
             document.getElementById("correct-count").textContent = correctCount;
             document.getElementById("xp-count").textContent = xpCount;
+            document.getElementById("difficulty-level").textContent = currentLevel;
         }
 
         // --- sahifa tozalanayotganda interval va timeoutlarni tozalash ---
