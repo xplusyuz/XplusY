@@ -15,8 +15,27 @@
     <script src="../auth-utils.js"></script>
     
     <!-- MathJax for LaTeX -->
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['\\(', '\\)']],
+                displayMath: [['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+                ignoreHtmlClass: 'tex2jax_ignore'
+            },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                    if (window.mathJaxReady) window.mathJaxReady();
+                }
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
     
     <style>
         /* ROOT VARIABLES */
@@ -302,9 +321,6 @@
           font-weight: 900;
           color: var(--dark);
           margin: 3px 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
         }
 
         .difficulty-mini {
@@ -318,7 +334,7 @@
           margin-top: 4px;
         }
 
-        /* INPUT ROW - Yangi dizayn */
+        /* INPUT ROW */
         .input-row {
             display: grid;
             grid-template-columns: 1fr auto 1fr;
@@ -329,7 +345,6 @@
             padding: 10px;
             border-radius: var(--radius-sm);
             box-shadow: var(--shadow-sm);
-            position: relative;
         }
 
         .input-group {
@@ -338,7 +353,6 @@
             transition: all 0.3s ease;
             border-radius: var(--radius-sm);
             padding: 8px;
-            position: relative;
         }
 
         .input-group:hover {
@@ -472,16 +486,9 @@
             border: none;
         }
 
-        /* Switch button ko'rinishi */
-        .switch-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-        }
-
-        .switch-btn::before {
-            content: "⇄";
+        /* O'tish (focus) tugmasi */
+        .focus-btn::before {
+            content: "⤓";
             font-size: 1.2rem;
         }
 
@@ -529,9 +536,10 @@
             background: rgba(247, 37, 133, 0.05);
         }
 
-        .result-equation {
-            font-size: 1rem;
-            margin: 5px 0;
+        /* MathJax uchun maxsus */
+        .math-equation {
+            font-size: 1.2rem;
+            margin: 10px 0;
             color: var(--dark);
             font-weight: 700;
         }
@@ -850,16 +858,6 @@
                 font-size: 1rem;
             }
         }
-
-        /* MathJax uchun qo'shimcha sozlamalar */
-        .MathJax {
-            font-size: 1.1rem !important;
-        }
-
-        mjx-container[jax="CHTML"] {
-            text-align: center !important;
-            display: inline-block !important;
-        }
     </style>
 </head>
 <body>
@@ -976,7 +974,7 @@
                         <button class="key-btn" data-value="4">4</button>
                         <button class="key-btn" data-value="5">5</button>
                         <button class="key-btn" data-value="6">6</button>
-                        <button class="key-btn warning switch-btn" data-value="switch" id="switch-btn">↔</button>
+                        <button class="key-btn warning focus-btn" data-value="focus" id="focus-btn">⤓</button>
                         
                         <!-- 3-qator -->
                         <button class="key-btn" data-value="1">1</button>
@@ -1001,7 +999,7 @@
                 <div class="result-mini" id="result-container">
                     <div class="result-header-mini" id="result-header"></div>
                     <div class="result-content-mini" id="result-content">
-                        <div class="result-equation" id="result-equation"></div>
+                        <div class="math-equation" id="result-equation"></div>
                         <div id="result-roots"></div>
                     </div>
                     <div class="auto-next-notice" id="auto-next-notice">
@@ -1123,7 +1121,7 @@
             return Math.abs(a - b) <= eps;
         }
 
-        // Yangi formatNumber funksiyasi - LaTeX formatida qaytaradi
+        // Sonni LaTeX formatida formatlash
         function formatNumber(num) {
             if (Number.isInteger(num)) return num.toString();
             
@@ -1132,17 +1130,15 @@
                 const numerator = Math.round(num * denominator);
                 if (Math.abs(num - numerator/denominator) < tolerance) {
                     if (denominator === 1) return numerator.toString();
-                    // Kasr uchun LaTeX formatida qaytaramiz
                     return `\\frac{${numerator}}{${denominator}}`;
                 }
             }
             
-            // O'nli kasr uchun
             const rounded = Math.round(num * 100) / 100;
             return rounded.toString();
         }
 
-        // Sonni display uchun formatlash (inputda ko'rsatish)
+        // Sonni oddiy formatda (display uchun)
         function formatForDisplay(num) {
             if (Number.isInteger(num)) return num.toString();
             
@@ -1184,6 +1180,15 @@
             }
         }
 
+        // Fokusni boshqa inputga o'tkazish (qiymatlarni almashtirmay)
+        function moveFocus() {
+            if (activeInput === 'x1') {
+                setActiveInput('x2');
+            } else {
+                setActiveInput('x1');
+            }
+        }
+
         function updateInputDisplay() {
             const x1Display = document.getElementById('x1-display');
             const x2Display = document.getElementById('x2-display');
@@ -1212,23 +1217,6 @@
                 activeDisplay.classList.remove('placeholder');
             } else {
                 activeDisplay.classList.add('placeholder');
-            }
-        }
-
-        function switchInputs() {
-            // Qiymatlarni almashtiramiz
-            const temp = inputValues.x1;
-            inputValues.x1 = inputValues.x2;
-            inputValues.x2 = temp;
-            
-            // Displayni yangilaymiz
-            updateInputDisplay();
-            
-            // Agar biror inputda fokus bo'lsa, uni o'zgartiramiz
-            if (activeInput === 'x1') {
-                setActiveInput('x2');
-            } else {
-                setActiveInput('x1');
             }
         }
 
@@ -1318,19 +1306,19 @@
                 // Darajaga qarab turli xil ildiz turlari
                 if (config.type === "integer") {
                     // 1-10 darajalar: oddiy butun sonlar
-                    x1 = Math.floor(Math.random() * 7) - 3; // -3 dan 3 gacha
+                    x1 = Math.floor(Math.random() * 7) - 3;
                     x2 = Math.floor(Math.random() * 7) - 3;
                 } else if (config.type === "integer_medium") {
                     // 11-20 darajalar: kattaroq butun sonlar
-                    x1 = Math.floor(Math.random() * 11) - 5; // -5 dan 5 gacha
+                    x1 = Math.floor(Math.random() * 11) - 5;
                     x2 = Math.floor(Math.random() * 11) - 5;
                 } else if (config.type === "integer_hard") {
                     // 21-30 darajalar: manfiy va katta sonlar
-                    x1 = Math.floor(Math.random() * 15) - 7; // -7 dan 7 gacha
+                    x1 = Math.floor(Math.random() * 15) - 7;
                     x2 = Math.floor(Math.random() * 15) - 7;
                 } else if (config.type === "fraction_simple") {
                     // 31-40 darajalar: oddiy kasrlar
-                    const denom = Math.floor(Math.random() * 4) + 2; // 2,3,4,5
+                    const denom = Math.floor(Math.random() * 4) + 2;
                     const numer1 = Math.floor(Math.random() * denom) + 1;
                     const numer2 = Math.floor(Math.random() * denom) + 1;
                     x1 = Math.random() > 0.5 ? numer1/denom : -numer1/denom;
@@ -1360,10 +1348,6 @@
                     const denom2 = Math.floor(Math.random() * 8) + 2;
                     const numer2 = Math.floor(Math.random() * (denom2*2)) - denom2;
                     x2 = numer2/denom2;
-                    
-                    // Ildizlar butun son bo'lmasligini ta'minlaymiz
-                    if (Number.isInteger(x1)) x1 += 0.5;
-                    if (Number.isInteger(x2)) x2 += 0.5;
                 } else if (config.type === "mixed_fraction") {
                     // 71-90 darajalar: aralash kasrlar
                     const whole1 = Math.floor(Math.random() * 3) - 1;
@@ -1404,7 +1388,6 @@
                 if (b > 0) {
                     equationText += ` + ${bFormatted}x`;
                 } else {
-                    // b manfiy bo'lsa, bFormatted ham manfiy bo'ladi, shuning uchun minus belgisini olib tashlaymiz
                     const absB = bFormatted.startsWith('-') ? bFormatted.substring(1) : bFormatted;
                     equationText += ` - ${absB}x`;
                 }
@@ -1422,13 +1405,8 @@
             
             equationText += " = 0";
             
-            // MathJax bilan tenglamani ko'rsatamiz
+            // Tenglamani ko'rsatamiz
             document.getElementById("equation").innerHTML = `\\(${equationText}\\)`;
-            
-            // MathJax ni yangilaymiz
-            if (window.MathJax) {
-                MathJax.typesetPromise([document.getElementById("equation")]);
-            }
             
             // Timer ni qayta boshlaymiz
             resetTimer();
@@ -1444,6 +1422,11 @@
             
             // Birinchi inputga fokus qilamiz
             setActiveInput('x1');
+            
+            // MathJax ni yangilaymiz
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typeset();
+            }
         }
 
         function timeUpAutoCheck() {
@@ -1465,9 +1448,9 @@
                     inputValues.x1 = '';
                     inputValues.x2 = '';
                     break;
-                case 'switch':
-                    switchInputs();
-                    return; // switchInputs o'zicha updateInputDisplay chaqiradi
+                case 'focus':
+                    moveFocus();
+                    return;
                 case 'ok':
                     checkAnswer();
                     return;
@@ -1540,7 +1523,6 @@
             
             const resultContainer = document.getElementById('result-container');
             const resultHeader = document.getElementById('result-header');
-            const resultContent = document.getElementById('result-content');
             const resultEquation = document.getElementById('result-equation');
             const resultRoots = document.getElementById('result-roots');
             
@@ -1639,8 +1621,8 @@
             updateLevelDisplay();
             
             // MathJax ni yangilaymiz
-            if (window.MathJax) {
-                MathJax.typesetPromise([resultEquation, resultRoots]);
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typeset();
             }
             
             // Natijani ko'rsatamiz
@@ -1887,18 +1869,19 @@
                     handleKeyboardInput('clear');
                 }
                 
-                // Tab - inputlarni almashtirish
+                // Tab - fokusni o'tkazish
                 if (e.key === 'Tab') {
                     e.preventDefault();
-                    handleKeyboardInput('switch');
-                }
-                
-                // Space - inputlarni almashtirish
-                if (e.key === ' ') {
-                    e.preventDefault();
-                    handleKeyboardInput('switch');
+                    handleKeyboardInput('focus');
                 }
             });
+            
+            // MathJax ready bo'lganda
+            window.mathJaxReady = function() {
+                if (window.MathJax && window.MathJax.typeset) {
+                    MathJax.typeset();
+                }
+            };
         });
 
         // Cleanup on page unload
