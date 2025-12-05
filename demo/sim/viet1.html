@@ -968,43 +968,13 @@ h1 {
     </div>
 
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js">
-// Logout
-document.getElementById("logoutBtn").addEventListener("click", async ()=>{
-    await authUtils.clearSession();
-    window.location.href="login.html";
-});
-
-// XP animation
-function showXP(xp){
- const el=document.getElementById("xp-float");
- el.textContent = "+"+xp+" XP";
- el.style.opacity=1;
- el.style.transform="translate(-50%,-60%) scale(1.4)";
- setTimeout(()=>{
-  el.style.opacity=0;
-  el.style.transform="translate(-50%,-50%) scale(1)";
- },600);
-}
-
-// 100-level question generator
-function randomInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
-function generateLevelQuestion(level){
- const base=Math.min(level,100);
- const x1=randomInt(-base,base);
- const x2=randomInt(-base,base);
- const S=x1+x2, P=x1*x2;
- const eq = `x² ${S>=0?'- '+S:'+ '+Math.abs(S)}x ${P>=0?'+ '+P:'- '+Math.abs(P)} = 0`;
- return {equation:eq, answer1:x1, answer2:x2};
-}
-
-</script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
-
-    <script>
-        // Firebase konfiguratsiyasi
-        const firebaseConfig = {
+    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"> // Logout document.getElementById("logoutBtn").addEventListener("click", async ()=>{ await authUtils.clearSession(); window.location.href="login.html"; }); // XP animation function showXP(xp){ const el=document.getElementById("xp-float"); el.textContent = "+"+xp+" XP"; el.style.opacity=1; el.style.transform="translate(-50%,-60%) scale(1.4)"; setTimeout(()=>{ el.style.opacity=0; el.style.transform="translate(-50%,-50%) scale(1)"; },600); } // 100-level question generator function randomInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; } function generateLevelQuestion(level){ const base=Math.min(level,100); const x1=randomInt(-base,base); const x2=randomInt(-base,base); const S=x1+x2, P=x1*x2; const eq = x² ${S>=0?'- '+S:'+ '+Math.abs(S)}x ${P>=0?'+ '+P:'- '+Math.abs(P)} = 0; return {equation:eq, answer1:x1, answer2:x2}; } </script> <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script> <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
+    </script>
+	<script>
+/* ---------------------------
+  Firebase init (compat)
+---------------------------- */
+const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
   projectId: "xplusy-760fa",
@@ -1013,729 +983,511 @@ function generateLevelQuestion(level){
   appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
   measurementId: "G-459PLJ7P7L"
 };
-
-        // Firebase ni ishga tushirish
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-
-        // Game Configuration
-        const MAX_LEVEL = 100;
-        const LEVEL_CONFIG = {};
-        for (let i = 1; i <= MAX_LEVEL; i++) {
-            LEVEL_CONFIG[i] = {
-                name: `Daraja ${i}`,
-                questions: Math.min(10, 5 + Math.floor(i/3)),
-                xpToNext: 50 + (i * 20),
-                minRoot: -5 - Math.floor(i/4),
-                maxRoot: 5 + Math.floor(i/4),
-                type: i % 10 < 3 ? "integer" : 
-                      i % 10 < 6 ? "fraction_simple" : 
-                      i % 10 < 9 ? "fraction_complex" : "mixed"
-            };
-        }
-
-        // Game State
-        let currentUser = null;
-        let userData = null;
-        let gameState = {
-            questionCount: 0,
-            correctCount: 0,
-            xpCount: 0,
-            currentLevel: 1,
-            levelQuestionsAnswered: 0,
-            levelXP: 0,
-            incorrectCount: 0,
-            gameActive: true,
-            highestLevelReached: 1,
-            askedEquations: new Set()
-        };
-
-        let currentEquation = {};
-        let startTime = null;
-        let timerInterval = null;
-        let timeUpTimeout = null;
-        let activeInput = 'x1';
-        let autoNextTimeout = null;
-
-        // Random ism generator
-        const RANDOM_NAMES = [
-            "Matematik O'quvchi", "Tenglamalar Qiroli", "Algebrachi", "Geometriya Sehri",
-            "Raqamlar Ustasi", "Viet Tekshiruvchi", "Kvadrat Javobchi", "Ildiz Topuvchi",
-            "Aqliy Hisobchi", "Matematika Sevargusi", "Raqamlar Bobosi", "Algebra Masteri",
-            "Hisob-kitobchi", "Tenglamalar Sehrgari", "Kvadrat Eksperti", "Viet Usuli Mutaxassisi"
-        ];
-
-        function getRandomName() {
-            return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
-        }
-
-        // Helper Functions
-        function parseFractionalNumber(str) {
-            if (typeof str !== 'string') return NaN;
-            const s = str.trim();
-            if (s === '') return NaN;
-
-            if (s.includes('/')) {
-                const parts = s.split('/');
-                if (parts.length !== 2) return NaN;
-                const a = parseFloat(parts[0]);
-                const b = parseFloat(parts[1]);
-                if (!isFinite(a) || !isFinite(b) || b === 0) return NaN;
-                return a / b;
-            } else {
-                const v = parseFloat(s);
-                if (!isFinite(v)) return NaN;
-                return v;
-            }
-        }
-
-        function nearlyEqual(a, b, eps = 1e-9) {
-            return Math.abs(a - b) <= eps;
-        }
-
-        function formatNumber(num) {
-            if (Number.isInteger(num)) return num.toString();
-            
-            const tolerance = 1.0E-6;
-            for (let denominator = 1; denominator <= 12; denominator++) {
-                const numerator = Math.round(num * denominator);
-                if (Math.abs(num - numerator/denominator) < tolerance) {
-                    if (denominator === 1) return numerator.toString();
-                    return `${numerator}/${denominator}`;
-                }
-            }
-            
-            const rounded = Math.round(num * 100) / 100;
-            return rounded.toString();
-        }
-
-        // Firebase Functions
-        async function saveGameResult(result) {
-    if (!currentUser) return;
-    try {
-        await db.collection("games").add({
-            userId: currentUser.uid,
-            userName: userData.fullName,
-            ...result,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        await db.collection("games").doc(currentUser.uid).set({
-            userId: currentUser.uid,
-            userName: userData.fullName,
-            xp: result.xpCount,
-            highestLevel: result.highestLevel,
-            lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-    } catch (error) {
-        console.error("Game result save error:", error);
-    }
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
 }
-            } catch (error) {
-                console.error('Game result save error:', error);
-            }
-        }
+const db = firebase.firestore();
+const auth = firebase.auth(); // (faylda ishlatilishi mumkin bo'lsa qoldirdim)
 
-        async function updateUserBestScore(score, level) {
-            if (!currentUser) return;
-            
-            try {
-                const userRef = db.collection('users').doc(currentUser.uid);
-                const userDoc = await userRef.get();
-                
-                if (userDoc.exists) {
-                    const user = userDoc.data();
-                    const currentBest = user.bestScore || 0;
-                    const currentLevel = user.bestLevel || 1;
-                    
-                    if (score > currentBest || level > currentLevel) {
-                        await userRef.update({
-                            bestScore: Math.max(score, currentBest),
-                            bestLevel: Math.max(level, currentLevel),
-                            lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Update best score error:', error);
-            }
-        }
-
-        async function loadLeaderboard(){
-    try{
-        const snap = await db.collection("games").orderBy("xp","desc").limit(20).get();
-        const arr=[];
-        snap.forEach(doc=>{
-            const d=doc.data();
-            if(d.xp!==undefined) arr.push(d);
-        });
-        displayLeaderboard(arr);
-    }catch(error){
-        console.error("Leaderboard error:", error);
-    }
+/* ---------------------------
+  Global state
+---------------------------- */
+const MAX_LEVEL = 100;
+const LEVEL_CONFIG = {};
+for (let i = 1; i <= MAX_LEVEL; i++) {
+  LEVEL_CONFIG[i] = {
+    name: `Daraja ${i}`,
+    questions: Math.min(10, 5 + Math.floor(i/3)),
+    xpToNext: 50 + (i * 20),
+    minRoot: -5 - Math.floor(i/4),
+    maxRoot: 5 + Math.floor(i/4),
+    type: i % 10 < 3 ? "integer" :
+          i % 10 < 6 ? "fraction_simple" :
+          i % 10 < 9 ? "fraction_complex" : "mixed"
+  };
 }
-        }
 
-        function displayLeaderboard(leaderboard) {
-            const content = document.getElementById('leaderboard-content');
-            
-            if (leaderboard.length === 0) {
-                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Hali reyting mavjud emas</div>';
-                return;
-            }
-            
-            let html = '';
-            leaderboard.forEach((user, index) => {
-                const isCurrent = currentUser && user.id === currentUser.uid;
-                const rankClass = `rank-${index + 1}`;
-                const itemClass = isCurrent ? 'leaderboard-item current-user-item' : 'leaderboard-item';
-                const avatarLetter = (user.name || 'U').charAt(0).toUpperCase();
-                
-                html += `
-                    <div class="${itemClass}">
-                        <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
-                        <div class="leaderboard-avatar">${avatarLetter}</div>
-                        <div class="leaderboard-user-info">
-                            <div class="leaderboard-user-name">${user.name || 'Noma\'lum'}</div>
-                            <div class="leaderboard-user-stats">
-                                <div class="leaderboard-stat">XP: <strong>${user.bestScore || 0}</strong></div>
-                                <div class="leaderboard-stat">Daraja: <strong>${user.bestLevel || 1}</strong></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            content.innerHTML = html;
-        }
+let currentUser = null;
+let userData = null;
+let gameState = {
+  questionCount: 0,
+  correctCount: 0,
+  xpCount: 0,
+  currentLevel: 1,
+  levelQuestionsAnswered: 0,
+  levelXP: 0,
+  incorrectCount: 0,
+  gameActive: true,
+  highestLevelReached: 1,
+  askedEquations: new Set()
+};
 
-        // Asosiy login funksiyasi - avtomatik kirish
-        async function autoLogin() {
-            try {
-                // 1. Avtomatik anonymous login
-                const userCredential = await auth.signInAnonymously();
-                currentUser = userCredential.user;
-                
-                // 2. Firestore'dan foydalanuvchi ma'lumotlarini olish
-                const userDoc = await db.collection('users').doc(currentUser.uid).get();
-                
-                if (userDoc.exists) {
-                    // Agar foydalanuvchi mavjud bo'lsa
-                    userData = userDoc.data();
-                    console.log("Mavjud foydalanuvchi:", userData.name);
-                } else {
-                    // Yangi foydalanuvchi bo'lsa
-                    const randomName = getRandomName();
-                    userData = {
-                        name: randomName,
-                        createdAt: new Date().toISOString(),
-                        bestScore: 0,
-                        bestLevel: 1
-                    };
-                    
-                    // Firestore'ga saqlash
-                    await db.collection('users').doc(currentUser.uid).set({
-                        ...userData,
-                        lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    console.log("Yangi foydalanuvchi yaratildi:", randomName);
-                }
-                
-                // 3. UI yangilash
-                document.getElementById('user-name').textContent = userData.name;
-                
-                // 4. O'yin ekranini ko'rsatish
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('game-screen').style.display = 'block';
-                
-                // 5. O'yinni boshlash
-                startGame();
-                
-            } catch (error) {
-                console.error('Auto login error:', error);
-                // Xatolik yuz bersa, offline holatda o'ynash
-                handleOfflineMode();
-            }
-        }
+let currentEquation = {};
+let startTime = null;
+let timerInterval = null;
+let timeUpTimeout = null;
+let activeInput = 'x1';
+let autoNextTimeout = null;
 
-        // Offline mode
-        function handleOfflineMode() {
-            const offlineName = getRandomName();
-            userData = { name: offlineName };
-            
-            document.getElementById('user-name').textContent = offlineName;
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('game-screen').style.display = 'block';
-            
-            startGame();
-        }
+/* ---------------------------
+  Utilities
+---------------------------- */
+const RANDOM_NAMES = [
+  "Matematik O'quvchi","Tenglamalar Qiroli","Algebrachi","Geometriya Sehri",
+  "Raqamlar Ustasi","Viet Tekshiruvchi","Kvadrat Javobchi","Ildiz Topuvchi",
+  "Aqliy Hisobchi","Matematika Sevargusi","Raqamlar Bobosi","Algebra Masteri",
+  "Hisob-kitobchi","Tenglamalar Sehrgari","Kvadrat Eksperti","Viet Usuli Mutaxassisi"
+];
+function getRandomName(){ return RANDOM_NAMES[Math.floor(Math.random()*RANDOM_NAMES.length)]; }
 
-        // DOM Ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // Avtomatik login
-            autoLogin();
-            
-            // Logout button
-            document.getElementById('logout-btn').addEventListener('click', handleLogout);
-            
-            // Rating button
-            document.getElementById('rating-btn').addEventListener('click', () => {
-                loadLeaderboard();
-                document.getElementById('leaderboard-modal').style.display = 'flex';
-            });
-            
-            // Modal close button
-            document.getElementById('modal-close').addEventListener('click', () => {
-                document.getElementById('leaderboard-modal').style.display = 'none';
-            });
-            
-            // Keyboard buttons
-            document.querySelectorAll('.key-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const value = btn.getAttribute('data-value');
-                    const input = document.getElementById(activeInput);
-                    const cur = input.value || '';
+function parseFractionalNumber(str) {
+  if (typeof str !== 'string') return NaN;
+  const s = str.trim();
+  if (s === '') return NaN;
+  if (s.includes('/')) {
+    const parts = s.split('/');
+    if (parts.length !== 2) return NaN;
+    const a = parseFloat(parts[0]);
+    const b = parseFloat(parts[1]);
+    if (!isFinite(a) || !isFinite(b) || b === 0) return NaN;
+    return a / b;
+  } else {
+    const v = parseFloat(s);
+    if (!isFinite(v)) return NaN;
+    return v;
+  }
+}
 
-                    switch(value) {
-                        case 'backspace':
-                            input.value = cur.slice(0, -1);
-                            break;
-                        case 'clear':
-                            input.value = '';
-                            break;
-                        case 'switch':
-                            switchInputs();
-                            break;
-                        case 'ok':
-                            checkAnswer();
-                            break;
-                        case '/':
-                            if (!cur.includes('/')) {
-                                if (cur !== '' && cur !== '-') {
-                                    input.value = cur + '/';
-                                }
-                            }
-                            break;
-                        case '.':
-                            const segDot = cur.includes('/') ? cur.split('/').pop() : cur;
-                            if (!segDot.includes('.')) input.value = cur + '.';
-                            break;
-                        case '-':
-                            if (cur === '') input.value = '-';
-                            else if (cur.endsWith('/')) input.value = cur + '-';
-                            break;
-                        default:
-                            input.value = cur + value;
-                    }
-                    
-                    // focus suppressed to avoid native mobile keyboard
-                });
-            });
+function nearlyEqual(a, b, eps = 1e-9) { return Math.abs(a - b) <= eps; }
+function formatNumber(num) {
+  if (Number.isInteger(num)) return num.toString();
+  const tolerance = 1.0E-6;
+  for (let denominator = 1; denominator <= 12; denominator++) {
+    const numerator = Math.round(num * denominator);
+    if (Math.abs(num - numerator/denominator) < tolerance) {
+      if (denominator === 1) return numerator.toString();
+      return `${numerator}/${denominator}`;
+    }
+  }
+  const rounded = Math.round(num * 100) / 100;
+  return rounded.toString();
+}
 
-            // Enter key for checking
-            document.getElementById('x2').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') checkAnswer();
-            });
+/* ---------------------------
+  Firebase helpers
+---------------------------- */
+async function saveGameResult(result) {
+  if (!currentUser) return;
+  try {
+    // log history
+    await db.collection("games").add({
+      userId: currentUser.uid,
+      userName: (userData && (userData.fullName || userData.name)) || null,
+      ...result,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
 
-            // Restart button
-            document.getElementById('restart-btn').addEventListener('click', restartGame);
+    // per-user summary (doc id = uid)
+    await db.collection("games").doc(currentUser.uid).set({
+      userId: currentUser.uid,
+      userName: (userData && (userData.fullName || userData.name)) || null,
+      xp: result.xpCount || 0,
+      highestLevel: result.highestLevel || 1,
+      lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error("Game result save error:", error);
+  }
+}
+
+async function updateUserBestScore(score, level) {
+  if (!currentUser) return;
+  try {
+    const userRef = db.collection('users').doc(currentUser.uid);
+    const userDoc = await userRef.get();
+    if (userDoc.exists) {
+      const user = userDoc.data();
+      const currentBest = user.bestScore || 0;
+      const currentLevel = user.bestLevel || 1;
+      if (score > currentBest || level > currentLevel) {
+        await userRef.update({
+          bestScore: Math.max(score, currentBest),
+          bestLevel: Math.max(level, currentLevel),
+          lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
         });
+      }
+    }
+  } catch (error) {
+    console.error('Update best score error:', error);
+  }
+}
 
-        // Logout handler
-        async function handleLogout() {
-            if (confirm('O\'yindan chiqishni xohlaysizmi? Keyin qayta kiring.')) {
-                await auth.signOut();
-                currentUser = null;
-                userData = null;
-                
-                // Reset game state
-                Object.assign(gameState, {
-                    questionCount: 0,
-                    correctCount: 0,
-                    xpCount: 0,
-                    currentLevel: 1,
-                    levelQuestionsAnswered: 0,
-                    levelXP: 0,
-                    incorrectCount: 0,
-                    gameActive: true,
-                    highestLevelReached: 1,
-                    askedEquations: new Set()
-                });
-                
-                // Hide game and show loading
-                document.getElementById('game-screen').style.display = 'none';
-                document.getElementById('loading-screen').style.display = 'flex';
-                
-                // Auto login again
-                autoLogin();
-            }
-        }
+async function loadLeaderboard() {
+  try {
+    const snap = await db.collection("games").orderBy("xp","desc").limit(20).get();
+    const arr = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      d._id = doc.id;
+      if (d.xp !== undefined) arr.push(d);
+    });
+    displayLeaderboard(arr);
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+  }
+}
 
-        // Game Functions
-        function setActiveInput(inputId) {
-            // switch active target for custom keyboard without focusing native input
-            activeInput = inputId;
-            // keep native keyboard closed by not focusing the real input
-        }
+function displayLeaderboard(leaderboard) {
+  const content = document.getElementById('leaderboard-content');
+  if (!content) return;
+  if (leaderboard.length === 0) {
+    content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray);">Hali reyting mavjud emas</div>';
+    return;
+  }
+  let html = '';
+  leaderboard.forEach((user, index) => {
+    const isCurrent = currentUser && user.userId === currentUser.uid;
+    const rankClass = `rank-${index + 1}`;
+    const itemClass = isCurrent ? 'leaderboard-item current-user-item' : 'leaderboard-item';
+    const avatarLetter = ((user.userName || user.name || 'U') + '').charAt(0).toUpperCase();
+    html += `
+      <div class="${itemClass}">
+        <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
+        <div class="leaderboard-avatar">${avatarLetter}</div>
+        <div class="leaderboard-user-info">
+          <div class="leaderboard-user-name">${user.userName || user.name || 'Noma\\'lum'}</div>
+          <div class="leaderboard-user-stats">
+            <div class="leaderboard-stat">XP: <strong>${user.xp || 0}</strong></div>
+            <div class="leaderboard-stat">Daraja: <strong>${user.highestLevel || 1}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  content.innerHTML = html;
+}
 
-        function switchInputs() {
-            const x1Value = document.getElementById('x1').value;
-            const x2Value = document.getElementById('x2').value;
-            
-            document.getElementById('x1').value = x2Value;
-            document.getElementById('x2').value = x1Value;
-            
-            if (activeInput === 'x1') {
-                setActiveInput('x2');
-            } else {
-                setActiveInput('x1');
-            }
-        }
+/* ---------------------------
+  Auth / Session (auto login)
+  Uses authUtils.loadSession()
+---------------------------- */
+async function autoLogin() {
+  try {
+    if (typeof authUtils === 'undefined' || typeof authUtils.loadSession !== 'function') {
+      console.warn("authUtils.loadSession() mavjud emas — login.html ga yo'naltiramiz.");
+      window.location.href = "login.html";
+      return;
+    }
+    const session = await authUtils.loadSession();
+    if (!session || !session.docId) {
+      window.location.href = "login.html";
+      return;
+    }
+    currentUser = { uid: session.docId };
+    userData = session.data || session;
+    const nameEl = document.getElementById('user-name');
+    if (nameEl) nameEl.textContent = userData.fullName || userData.name || getRandomName();
+    // show game screen
+    const loading = document.getElementById('loading-screen');
+    const gameScreen = document.getElementById('game-screen');
+    if (loading) loading.style.display = 'none';
+    if (gameScreen) gameScreen.style.display = 'block';
+    startGame();
+  } catch (error) {
+    console.error("autoLogin error:", error);
+    window.location.href = "login.html";
+  }
+}
 
-        function startGame() {
-            updateUIStats();
-            updateLives();
-            updateLevelDisplay();
-            newQuestion();
-        }
+/* ---------------------------
+  Logout (authUtils)
+---------------------------- */
+async function doLogout() {
+  try {
+    if (typeof authUtils !== 'undefined' && typeof authUtils.clearSession === 'function') {
+      await authUtils.clearSession();
+    } else if (auth && typeof auth.signOut === 'function') {
+      await auth.signOut();
+    }
+  } catch (e) {
+    console.warn("Logout clear error:", e);
+  } finally {
+    window.location.href = "login.html";
+  }
+}
 
-        function newQuestion() {
-            if (!gameState.gameActive) return;
-            
-            // Hide result
-            const resultContainer = document.getElementById('result-container');
-            resultContainer.classList.remove('show');
-            resultContainer.style.display = 'none';
-            
-            // Create new question
-            const config = LEVEL_CONFIG[gameState.currentLevel];
-            let x1, x2, b, c;
-            let attempts = 0;
-            const maxAttempts = 100;
+/* ---------------------------
+  XP animation + question generator
+---------------------------- */
+function showXP(xp) {
+  const el = document.getElementById("xp-float");
+  if (!el) return;
+  el.textContent = `+${xp} XP`;
+  el.style.opacity = 1;
+  el.style.transform = "translate(-50%,-60%) scale(1.4)";
+  setTimeout(() => {
+    el.style.opacity = 0;
+    el.style.transform = "translate(-50%,-50%) scale(1)";
+  }, 600);
+}
 
-            do {
-                if (config.type === "integer") {
-                    x1 = Math.floor(Math.random() * (config.maxRoot - config.minRoot + 1)) + config.minRoot;
-                    x2 = Math.floor(Math.random() * (config.maxRoot - config.minRoot + 1)) + config.minRoot;
-                } else if (config.type === "fraction_simple") {
-                    if (Math.random() > 0.5) {
-                        x1 = Math.floor(Math.random() * (config.maxRoot - config.minRoot + 1)) + config.minRoot;
-                        const denom = Math.floor(Math.random() * 3) + 2;
-                        const numer = Math.floor(Math.random() * (denom-1)) + 1;
-                        x2 = Math.random() > 0.5 ? numer/denom : -numer/denom;
-                    } else {
-                        const denom1 = Math.floor(Math.random() * 3) + 2;
-                        const numer1 = Math.floor(Math.random() * (denom1-1)) + 1;
-                        x1 = Math.random() > 0.5 ? numer1/denom1 : -numer1/denom1;
-                        
-                        const denom2 = Math.floor(Math.random() * 3) + 2;
-                        const numer2 = Math.floor(Math.random() * (denom2-1)) + 1;
-                        x2 = Math.random() > 0.5 ? numer2/denom2 : -numer2/denom2;
-                    }
-                } else {
-                    x1 = Math.floor(Math.random() * 5) - 2;
-                    x1 += Math.floor(Math.random() * 3) / 4;
-                    x2 = Math.floor(Math.random() * 5) - 2;
-                    x2 += Math.floor(Math.random() * 3) / 4;
-                }
+function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function generateLevelQuestion(level) {
+  const base = Math.min(level, 100);
+  const x1 = randomInt(-base, base);
+  const x2 = randomInt(-base, base);
+  const S = x1 + x2, P = x1 * x2;
+  const eq = `x² ${S >= 0 ? '- ' + S : '+ ' + Math.abs(S)}x ${P >= 0 ? '+ ' + P : '- ' + Math.abs(P)} = 0`;
+  return { equation: eq, answer1: x1, answer2: x2 };
+}
 
-                b = -(x1 + x2);
-                c = x1 * x2;
+/* ---------------------------
+  Game core (keeps original functions, cleaned)
+  Note: these functions reference DOM ids that should exist in HTML.
+---------------------------- */
+function setActiveInput(inputId) { activeInput = inputId; }
+function switchInputs() {
+  const x1El = document.getElementById('x1');
+  const x2El = document.getElementById('x2');
+  if (!x1El || !x2El) return;
+  const tmp = x1El.value;
+  x1El.value = x2El.value;
+  x2El.value = tmp;
+  setActiveInput(activeInput === 'x1' ? 'x2' : 'x1');
+}
 
-                attempts++;
-                if (attempts >= maxAttempts) break;
-            } while (gameState.askedEquations.has(`${b},${c}`));
+/* --- timer / UI helpers: kept as in your file (assumes those DOM elements exist) --- */
+function startTimer(){ startTime = new Date(); clearInterval(timerInterval); timerInterval = setInterval(updateTimer,100); }
+function updateTimer(){ if(!startTime) return; const timeDiff = (new Date() - startTime)/1000; const tEl = document.getElementById("timer"); if(tEl) tEl.textContent = timeDiff.toFixed(1); }
+function stopTimer(){ clearInterval(timerInterval); }
+function resetTimer(){ stopTimer(); startTime = null; const tEl = document.getElementById("timer"); if(tEl) tEl.textContent = "0.0"; }
 
-            gameState.askedEquations.add(`${b},${c}`);
-            currentEquation = { x1, x2, b, c };
+/* --- Example newQuestion / showResult / checkAnswer kept minimal and compatible --- */
+function newQuestion(){
+  if(!gameState.gameActive) return;
+  const config = LEVEL_CONFIG[gameState.currentLevel];
+  // try to generate unique equation
+  let attempts = 0;
+  let x1, x2, b, c;
+  do {
+    if (config.type === "integer") {
+      x1 = randomInt(config.minRoot, config.maxRoot);
+      x2 = randomInt(config.minRoot, config.maxRoot);
+    } else if (config.type === "fraction_simple") {
+      const denom = randomInt(2,4);
+      x1 = randomInt(config.minRoot, config.maxRoot) / denom;
+      x2 = randomInt(config.minRoot, config.maxRoot) / denom;
+    } else {
+      x1 = randomInt(config.minRoot, config.maxRoot) + (Math.random() < 0.5 ? 0 : 0.5);
+      x2 = randomInt(config.minRoot, config.maxRoot) + (Math.random() < 0.5 ? 0 : 0.25);
+    }
+    b = -(x1 + x2);
+    c = x1 * x2;
+    attempts++;
+    if (attempts > 200) break;
+  } while (gameState.askedEquations.has(`${b},${c}`));
+  gameState.askedEquations.add(`${b},${c}`);
+  currentEquation = { x1, x2, b, c };
+  // render equation
+  let equationText = "x²";
+  if (b !== 0) equationText += (b > 0 ? ` + ${formatNumber(b)}x` : ` - ${formatNumber(-b)}x`);
+  if (c !== 0) equationText += (c > 0 ? ` + ${formatNumber(c)}` : ` - ${formatNumber(-c)}`);
+  equationText += " = 0";
+  const eqEl = document.getElementById("equation");
+  if (eqEl) eqEl.textContent = equationText;
+  const x1El = document.getElementById("x1"), x2El = document.getElementById("x2");
+  if (x1El) x1El.value = "";
+  if (x2El) x2El.value = "";
+  resetTimer();
+  startTimer();
+  clearTimeout(timeUpTimeout);
+  timeUpTimeout = setTimeout(()=>{ if(gameState.gameActive) showResult(false, true); }, 60000);
+  setActiveInput('x1');
+}
 
-            // Update equation text
-            let equationText = "x²";
-            if (b !== 0) equationText += (b > 0 ? ` + ${formatNumber(b)}x` : ` - ${formatNumber(-b)}x`);
-            if (c !== 0) equationText += (c > 0 ? ` + ${formatNumber(c)}` : ` - ${formatNumber(-c)}`);
-            equationText += " = 0";
+function showResult(isCorrect, isTimeUp = false) {
+  stopTimer();
+  const endTime = new Date();
+  const timeDiff = startTime ? (endTime - startTime)/1000 : 9999;
+  const resultContainer = document.getElementById('result-container');
+  const resultHeader = document.getElementById('result-header');
+  const resultContent = document.getElementById('result-content');
+  if (resultContainer) resultContainer.style.display = 'block';
+  let xpEarned = 0;
+  if (isCorrect) {
+    if (timeDiff <= 60) xpEarned = Math.max(1, 61 - Math.ceil(timeDiff));
+    else xpEarned = 1;
+    xpEarned = Math.floor(xpEarned * (1 + (gameState.currentLevel * 0.05)));
+    if (resultHeader) resultHeader.innerHTML = '✅ To\\'g\\'ri javob!';
+    if (resultContent) resultContent.innerHTML = `<p>${timeDiff.toFixed(1)} soniya • ${xpEarned} XP</p>
+      <p><strong>x₁ = ${formatNumber(currentEquation.x1)}</strong></p>
+      <p><strong>x₂ = ${formatNumber(currentEquation.x2)}</strong></p>`;
+    gameState.correctCount++;
+    gameState.xpCount += xpEarned;
+    gameState.levelXP += xpEarned;
+    gameState.levelQuestionsAnswered++;
+    showXP(xpEarned);
+  } else {
+    if (resultHeader) resultHeader.innerHTML = isTimeUp ? '⏰ Vaqt tugadi!' : '❌ Noto\\'g\\'ri javob';
+    if (resultContent) resultContent.innerHTML = `<p><strong>x₁ = ${formatNumber(currentEquation.x1)}</strong></p>
+      <p><strong>x₂ = ${formatNumber(currentEquation.x2)}</strong></p>`;
+    gameState.incorrectCount++;
+    gameState.levelQuestionsAnswered++;
+    if (gameState.incorrectCount >= 3) { endGame(); return; }
+  }
+  gameState.questionCount++;
+  gameState.highestLevelReached = Math.max(gameState.highestLevelReached, gameState.currentLevel);
+  // save result summary
+  if (currentUser) {
+    saveGameResult({
+      xpCount: gameState.xpCount,
+      highestLevel: gameState.highestLevelReached,
+      correctAnswers: gameState.correctCount,
+      totalQuestions: gameState.questionCount,
+      level: gameState.currentLevel,
+      xpEarned,
+      timeSpent: timeDiff,
+      isCorrect
+    });
+    updateUserBestScore(gameState.xpCount, gameState.highestLevelReached);
+  }
+  // auto next
+  clearTimeout(autoNextTimeout);
+  autoNextTimeout = setTimeout(()=>{
+    const config = LEVEL_CONFIG[gameState.currentLevel];
+    if (gameState.levelQuestionsAnswered >= config.questions && gameState.levelXP >= config.xpToNext) {
+      // level complete
+      gameState.currentLevel = Math.min(MAX_LEVEL, gameState.currentLevel + 1);
+      gameState.levelQuestionsAnswered = 0;
+      gameState.levelXP = 0;
+      gameState.incorrectCount = 0;
+      gameState.askedEquations.clear();
+      newQuestion();
+    } else {
+      newQuestion();
+    }
+  }, 1200);
+}
 
-            document.getElementById("equation").textContent = equationText;
-            
-            // Clear inputs
-            document.getElementById("x1").value = "";
-            document.getElementById("x2").value = "";
-            
-            // Reset timer
-            resetTimer();
-            startTimer();
-            updateProgressBar();
-            
-            // Time limit
-            clearTimeout(timeUpTimeout);
-            timeUpTimeout = setTimeout(() => {
-                if (gameState.gameActive) timeUpAutoCheck();
-            }, 60000);
-            
-            // Focus first input
-            setActiveInput('x1');
-        }
+function checkAnswer() {
+  if (!gameState.gameActive) return;
+  clearTimeout(timeUpTimeout);
+  const userX1Raw = (document.getElementById("x1")||{}).value || '';
+  const userX2Raw = (document.getElementById("x2")||{}).value || '';
+  const userX1 = parseFractionalNumber(userX1Raw);
+  const userX2 = parseFractionalNumber(userX2Raw);
+  if (!isFinite(userX1) || !isFinite(userX2)) {
+    alert("Iltimos, ikkala ildizni ham to'g'ri kiriting (masalan: 3, -2, 1/2)");
+    timeUpTimeout = setTimeout(()=>{ if(gameState.gameActive) showResult(false, true); }, 60000);
+    return;
+  }
+  const correct1 = currentEquation.x1;
+  const correct2 = currentEquation.x2;
+  const matchA = nearlyEqual(userX1, correct1) && nearlyEqual(userX2, correct2);
+  const matchB = nearlyEqual(userX1, correct2) && nearlyEqual(userX2, correct1);
+  const correct = matchA || matchB;
+  showResult(correct);
+}
 
-        function updateLevelDisplay() {
-            const config = LEVEL_CONFIG[gameState.currentLevel];
-            document.getElementById('level-number').textContent = gameState.currentLevel;
-            document.getElementById('difficulty-level').textContent = gameState.currentLevel;
-            document.getElementById('level-questions').textContent = 
-                `${gameState.levelQuestionsAnswered}/${config.questions}`;
-            document.getElementById('level-xp').textContent = 
-                `${gameState.levelXP}/${config.xpToNext}`;
-            
-            const progressPercent = Math.min(100, (gameState.levelXP / config.xpToNext) * 100);
-            document.getElementById('level-progress').style.width = `${progressPercent}%`;
-            
-            document.getElementById("difficulty-indicator").textContent = 
-                `Daraja ${gameState.currentLevel}: ${config.name}`;
-        }
+function endGame() {
+  gameState.gameActive = false;
+  stopTimer();
+  clearTimeout(timeUpTimeout);
+  clearTimeout(autoNextTimeout);
+  const finalLevel = document.getElementById('final-level');
+  const finalQuestions = document.getElementById('final-questions');
+  const finalCorrect = document.getElementById('final-correct');
+  const finalXp = document.getElementById('final-xp');
+  if (finalLevel) finalLevel.textContent = gameState.highestLevelReached;
+  if (finalQuestions) finalQuestions.textContent = gameState.questionCount;
+  if (finalCorrect) finalCorrect.textContent = gameState.correctCount;
+  if (finalXp) finalXp.textContent = gameState.xpCount;
+  const over = document.getElementById('game-over');
+  if (over) over.style.display = 'block';
+}
 
-        function updateProgressBar() {
-            const config = LEVEL_CONFIG[gameState.currentLevel];
-            const progress = (gameState.levelQuestionsAnswered / config.questions) * 100;
-            document.getElementById('level-progress').style.width = `${progress}%`;
-        }
+function restartGame() {
+  Object.assign(gameState, {
+    questionCount: 0, correctCount: 0, xpCount: 0, currentLevel: 1,
+    levelQuestionsAnswered: 0, levelXP: 0, incorrectCount: 0,
+    gameActive: true, highestLevelReached: 1, askedEquations: new Set()
+  });
+  const over = document.getElementById('game-over');
+  if (over) over.style.display = 'none';
+  updateUIStats();
+  updateLives();
+  updateLevelDisplay();
+  newQuestion();
+}
 
-        function startTimer() {
-            startTime = new Date();
-            clearInterval(timerInterval);
-            timerInterval = setInterval(updateTimer, 100);
-        }
-        
-        function updateTimer() {
-            if (!startTime) return;
-            const timeDiff = (new Date() - startTime) / 1000;
-            document.getElementById("timer").textContent = timeDiff.toFixed(1);
-        }
-        
-        function stopTimer() { 
-            clearInterval(timerInterval); 
-        }
-        
-        function resetTimer() {
-            stopTimer();
-            startTime = null;
-            document.getElementById("timer").textContent = "0.0";
-        }
+function updateUIStats(){ const q = document.getElementById("question-count"); if(q) q.textContent = gameState.questionCount; const c = document.getElementById("correct-count"); if(c) c.textContent = gameState.correctCount; const xp = document.getElementById("xp-count"); if(xp) xp.textContent = gameState.xpCount; }
+function updateLives(){ for (let i=1;i<=3;i++){ const life = document.getElementById(`life-${i}`); if(!life) continue; if(i <= (3 - gameState.incorrectCount)) life.classList.remove('lost'); else life.classList.add('lost'); } }
+function updateLevelDisplay(){ const cfg = LEVEL_CONFIG[gameState.currentLevel]; const lvl = document.getElementById('level-number'); if(lvl) lvl.textContent = gameState.currentLevel; const qCnt = document.getElementById('level-questions'); if(qCnt) qCnt.textContent = `${gameState.levelQuestionsAnswered}/${cfg.questions}`; const xpEl = document.getElementById('level-xp'); if(xpEl) xpEl.textContent = `${gameState.levelXP}/${cfg.xpToNext}`; const prog = document.getElementById('level-progress'); if(prog) prog.style.width = `${Math.min(100,(gameState.levelXP/cfg.xpToNext)*100)}%`; }
 
-        function updateLives() {
-            for (let i = 1; i <= 3; i++) {
-                const lifeElement = document.getElementById(`life-${i}`);
-                if (i <= (3 - gameState.incorrectCount)) {
-                    lifeElement.classList.remove('lost');
-                } else {
-                    lifeElement.classList.add('lost');
-                }
-            }
-        }
+/* ---------------------------
+  DOM Ready
+---------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+  // auto login via authUtils
+  autoLogin();
 
-        function timeUpAutoCheck() {
-            if (!gameState.gameActive) return;
-            stopTimer();
-            showResult(false, true);
-        }
+  // attach logout if exists
+  const logoutBtn = document.getElementById("logoutBtn") || document.getElementById("logout-btn");
+  if (logoutBtn) logoutBtn.addEventListener("click", () => {
+    if (confirm("O'yindan chiqishni xohlaysizmi?")) doLogout();
+  });
 
-        async function showResult(isCorrect, isTimeUp = false) {
-            const endTime = new Date();
-            const timeDiff = startTime ? (endTime - startTime) / 1000 : 9999;
-            
-            const resultContainer = document.getElementById('result-container');
-            const resultHeader = document.getElementById('result-header');
-            const resultContent = document.getElementById('result-content');
-            
-            resultContainer.style.display = 'block';
-            resultContainer.classList.remove('result-correct', 'result-incorrect');
-            
-            let xpEarned = 0;
-            
-            if (isCorrect) {
-                // Calculate XP
-                if (timeDiff <= 60) {
-                    xpEarned = Math.max(1, 61 - Math.ceil(timeDiff));
-                } else {
-                    xpEarned = 1;
-                }
-                
-                xpEarned = Math.floor(xpEarned * (1 + (gameState.currentLevel * 0.05)));
-                
-                resultContainer.classList.add('result-correct');
-                resultHeader.innerHTML = '✅ To\'g\'ri javob!';
-                resultContent.innerHTML = `
-                    <p>${timeDiff.toFixed(1)} soniya • ${xpEarned} XP</p>
-                    <p><strong>x₁ = ${formatNumber(currentEquation.x1)}</strong></p>
-                    <p><strong>x₂ = ${formatNumber(currentEquation.x2)}</strong></p>
-                `;
-                
-                gameState.correctCount++;
-                gameState.xpCount += xpEarned;
-                gameState.levelXP += xpEarned;
-                gameState.levelQuestionsAnswered++;
-                
-            } else {
-                resultContainer.classList.add('result-incorrect');
-                
-                if (isTimeUp) {
-                    resultHeader.innerHTML = '⏰ Vaqt tugadi!';
-                    resultContent.innerHTML = `
-                        <p><strong>x₁ = ${formatNumber(currentEquation.x1)}</strong></p>
-                        <p><strong>x₂ = ${formatNumber(currentEquation.x2)}</strong></p>
-                    `;
-                } else {
-                    resultHeader.innerHTML = '❌ Noto\'g\'ri javob';
-                    resultContent.innerHTML = `
-                        <p><strong>x₁ = ${formatNumber(currentEquation.x1)}</strong></p>
-                        <p><strong>x₂ = ${formatNumber(currentEquation.x2)}</strong></p>
-                    `;
-                }
-                
-                gameState.incorrectCount++;
-                gameState.levelQuestionsAnswered++;
-                updateLives();
-                
-                if (gameState.incorrectCount >= 3) {
-                    endGame();
-                    return;
-                }
-            }
-            
-            gameState.questionCount++;
-            gameState.highestLevelReached = Math.max(gameState.highestLevelReached, gameState.currentLevel);
-            updateUIStats();
-            updateLevelDisplay();
-            
-            // Save game result to Firebase
-            if (currentUser) {
-                await saveGameResult({
-                    xpCount: gameState.xpCount,
-                    highestLevel: gameState.highestLevelReached,
-                    correctAnswers: gameState.correctCount,
-                    totalQuestions: gameState.questionCount,
-                    level: gameState.currentLevel,
-                    xpEarned: xpEarned,
-                    timeSpent: timeDiff,
-                    isCorrect: isCorrect
-                });
-            }
-            
-            // Show result
-            setTimeout(() => {
-                resultContainer.classList.add('show');
-            }, 50);
-            
-            // Auto next question after 1.5 seconds
-            clearTimeout(autoNextTimeout);
-            autoNextTimeout = setTimeout(() => {
-                const config = LEVEL_CONFIG[gameState.currentLevel];
-                if (gameState.levelQuestionsAnswered >= config.questions && gameState.levelXP >= config.xpToNext) {
-                    completeLevel();
-                } else {
-                    newQuestion();
-                }
-            }, 1500);
-        }
+  // rating / leaderboard button
+  const ratingBtn = document.getElementById('rating-btn');
+  if (ratingBtn) {
+    ratingBtn.addEventListener('click', () => {
+      loadLeaderboard();
+      const modal = document.getElementById('leaderboard-modal');
+      if (modal) modal.style.display = 'flex';
+    });
+  }
+  const modalClose = document.getElementById('modal-close');
+  if (modalClose) modalClose.addEventListener('click', () => {
+    const modal = document.getElementById('leaderboard-modal');
+    if (modal) modal.style.display = 'none';
+  });
 
-        function checkAnswer() {
-            if (!gameState.gameActive) return;
-            clearTimeout(timeUpTimeout);
+  // keyboard keys
+  document.querySelectorAll('.key-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.getAttribute('data-value');
+      const input = document.getElementById(activeInput);
+      if (!input) return;
+      const cur = input.value || '';
+      switch(value) {
+        case 'backspace': input.value = cur.slice(0, -1); break;
+        case 'clear': input.value = ''; break;
+        case 'switch': switchInputs(); break;
+        case 'ok': checkAnswer(); break;
+        case '/': if (!cur.includes('/')) { if (cur !== '' && cur !== '-') input.value = cur + '/'; } break;
+        case '.': const segDot = cur.includes('/') ? cur.split('/').pop() : cur; if (!segDot.includes('.')) input.value = cur + '.'; break;
+        case '-': if (cur === '') input.value = '-'; else if (cur.endsWith('/')) input.value = cur + '-'; break;
+        default: input.value = cur + value;
+      }
+    });
+  });
 
-            const userX1Raw = document.getElementById("x1").value;
-            const userX2Raw = document.getElementById("x2").value;
+  // Enter on x2
+  const x2el = document.getElementById('x2');
+  if (x2el) x2el.addEventListener('keypress', (e) => { if (e.key === 'Enter') checkAnswer(); });
 
-            const userX1 = parseFractionalNumber(userX1Raw);
-            const userX2 = parseFractionalNumber(userX2Raw);
+  // restart
+  const restartBtn = document.getElementById('restart-btn');
+  if (restartBtn) restartBtn.addEventListener('click', restartGame);
+});
 
-            if (!isFinite(userX1) || !isFinite(userX2)) {
-                alert("Iltimos, ikkala ildizni ham to'g'ri kiriting (masalan: 3, -2, 1/2)");
-                timeUpTimeout = setTimeout(() => {
-                    if (gameState.gameActive) timeUpAutoCheck();
-                }, 60000);
-                return;
-            }
-
-            stopTimer();
-
-            const correct1 = currentEquation.x1;
-            const correct2 = currentEquation.x2;
-
-            const matchA = nearlyEqual(userX1, correct1) && nearlyEqual(userX2, correct2);
-            const matchB = nearlyEqual(userX1, correct2) && nearlyEqual(userX2, correct1);
-            const correct = matchA || matchB;
-
-            showResult(correct);
-        }
-
-        function completeLevel() {
-            gameState.gameActive = false;
-            stopTimer();
-            
-            gameState.currentLevel++;
-            gameState.levelQuestionsAnswered = 0;
-            gameState.levelXP = 0;
-            gameState.incorrectCount = 0;
-            gameState.gameActive = true;
-            gameState.askedEquations.clear();
-            
-            updateLives();
-            updateLevelDisplay();
-            newQuestion();
-        }
-
-        function endGame() {
-            gameState.gameActive = false;
-            stopTimer();
-            clearTimeout(timeUpTimeout);
-            clearTimeout(autoNextTimeout);
-
-            document.getElementById("final-level").textContent = gameState.highestLevelReached;
-            document.getElementById("final-questions").textContent = gameState.questionCount;
-            document.getElementById("final-correct").textContent = gameState.correctCount;
-            document.getElementById("final-xp").textContent = gameState.xpCount;
-
-            document.getElementById("game-over").style.display = 'block';
-        }
-
-        function restartGame() {
-            Object.assign(gameState, {
-                questionCount: 0,
-                correctCount: 0,
-                xpCount: 0,
-                currentLevel: 1,
-                levelQuestionsAnswered: 0,
-                levelXP: 0,
-                incorrectCount: 0,
-                gameActive: true,
-                highestLevelReached: 1,
-                askedEquations: new Set()
-            });
-
-            document.getElementById("question-count").textContent = gameState.questionCount;
-            document.getElementById("correct-count").textContent = gameState.correctCount;
-            document.getElementById("xp-count").textContent = gameState.xpCount;
-            document.getElementById("game-over").style.display = 'none';
-
-            updateLives();
-            updateUIStats();
-            updateLevelDisplay();
-            newQuestion();
-        }
-
-        function updateUIStats() {
-            document.getElementById("question-count").textContent = gameState.questionCount;
-            document.getElementById("correct-count").textContent = gameState.correctCount;
-            document.getElementById("xp-count").textContent = gameState.xpCount;
-            document.getElementById("difficulty-level").textContent = gameState.currentLevel;
-        }
-
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            clearInterval(timerInterval);
-            clearTimeout(timeUpTimeout);
-            clearTimeout(autoNextTimeout);
-        });
-    </script>
+/* cleanup */
+window.addEventListener('beforeunload', () => {
+  clearInterval(timerInterval);
+  clearTimeout(timeUpTimeout);
+  clearTimeout(autoNextTimeout);
+});
+</script>
 <button id="logoutBtn" class="logout-btn">Chiqish</button>
 <div id="xp-float" class="xp-float"></div>
 </body>
