@@ -1731,40 +1731,6 @@
         }
     </style>
 </head>
-
-<!-- Firebase CDN -->
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-
-<!-- Config -->
-<script src="/demo/firebase-config.js"></script>
-<script src="/demo/auth-utils.js"></script>
-
-<script>
-requireSession();
-
-// Ism Familiya + ID chiqarish
-onUserChange((u) => {
-    if (!u) return;
-    const el = document.getElementById("userName");
-    if (el) {
-        const fullName = u.data.fullName || "Foydalanuvchi";
-        const loginId  = u.data.loginId || u.id;
-        el.textContent = fullName + " (ID: " + loginId + ")";
-    }
-});
-
-// Mobil klaviatura ishlashi uchun fokus bloklarni o'chirish
-document.addEventListener('click', function(e){
-    const t = e.target;
-    if(t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'){
-        t.removeAttribute('readonly');
-        t.style.pointerEvents = 'auto';
-    }
-});
-</script>
-
-
 <body>
     <!-- Reyting jadvali modal oynasi -->
     <div id="leaderboard-modal" class="modal-overlay">
@@ -1963,6 +1929,35 @@ document.addEventListener('click', function(e){
     </div>
 <script src="auth-utils.js"></script>
     <script>
+        // Avval autentifikatsiyani tekshirish
+        document.addEventListener('DOMContentLoaded', async () => {
+            // AuthUtils mavjudligini tekshirish
+            if (typeof authUtils === 'undefined') {
+                console.error('AuthUtils mavjud emas. Login sahifasiga yo\'naltirilmoqda...');
+                window.location.href = '../login.html';
+                return;
+            }
+
+            try {
+                // Sessionni yuklash
+                const user = await authUtils.loadSession();
+                if (!user) {
+                    // Agar foydalanuvchi kirish qilmagan bo'lsa, login sahifasiga yo'naltirish
+                    // viet1.html /demo/sim/viet1.html da, login esa /demo/login.html da
+                    window.location.href = '../login.html';
+                    return;
+                }
+                
+                // Muvaffaqiyatli kirish - o'yinni boshlash
+                console.log('Foydalanuvchi mavjud:', user);
+                initializeGame();
+            } catch (error) {
+                console.error('Session tekshirishda xatolik:', error);
+                window.location.href = '../login.html';
+                return;
+            }
+        });
+
         // --- O'yin konfiguratsiyasi ---
         const MAX_LEVEL = 100;
         const LEVEL_CONFIG = {
@@ -2071,8 +2066,42 @@ document.addEventListener('click', function(e){
             return rounded.toString();
         }
 
-        // --- DOMContentLoaded ---
-        document.addEventListener('DOMContentLoaded', () => {
+        // --- O'yinni boshlash funksiyasi ---
+        function initializeGame() {
+            // Foydalanuvchi holatini kuzatish (agar Firebase mavjud bo'lsa)
+            if (typeof authUtils !== 'undefined' && authUtils.onUserChange) {
+                authUtils.onUserChange(async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        try {
+                            userData = user.data;
+                            const userNameEl = document.getElementById('user-name');
+                            const userInfoEl = document.getElementById('user-info');
+                            if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
+                            if (userInfoEl) userInfoEl.style.display = 'flex';
+                            
+                            // Reyting jadvalini yuklash
+                            loadLeaderboard();
+                            
+                            // O'yinni boshlash
+                            startGameInitial();
+                        } catch (err) {
+                            console.error("Foydalanuvchi yuklash xatosi:", err);
+                        }
+                    } else {
+                        // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
+                        window.location.href = '../login.html';
+                    }
+                });
+            } else {
+                console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
+                // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
+                startGameInitial();
+            }
+        }
+
+        // --- DOM elementlarini bog'lash ---
+        function bindEventListeners() {
             const checkBtn = document.getElementById('check-btn');
             const x1Input = document.getElementById('x1');
             const x2Input = document.getElementById('x2');
@@ -2295,38 +2324,7 @@ document.addEventListener('click', function(e){
                     document.getElementById('leaderboard-modal').style.display = 'none';
                 });
             }
-
-            // Foydalanuvchi holatini kuzatish (agar Firebase mavjud bo'lsa)
-            if (typeof authUtils !== 'undefined' && authUtils.onUserChange) {
-                authUtils.onUserChange(async (user) => {
-                    if (user) {
-                        currentUser = user;
-                        try {
-                            userData = user.data;
-                            const userNameEl = document.getElementById('user-name');
-                            const userInfoEl = document.getElementById('user-info');
-                            if (userNameEl) userNameEl.textContent = `${userData.fullName || 'Foydalanuvchi'}`;
-                            if (userInfoEl) userInfoEl.style.display = 'flex';
-                            
-                            // Reyting jadvalini yuklash
-                            loadLeaderboard();
-                            
-                            // O'yinni boshlash
-                            startGameInitial();
-                        } catch (err) {
-                            console.error("Foydalanuvchi yuklash xatosi:", err);
-                        }
-                    } else {
-                        // Foydalanuvchi mavjud emas, login sahifasiga yo'naltirish
-                        window.location.href = '/demo/login.html';
-                    }
-                });
-            } else {
-                console.warn('AuthUtils mavjud emas — lokal testing rejimida ishlayapsiz.');
-                // Agar AuthUtils bo'lmasa, shunchaki boshlang'ich savol bilan boshlaymiz (local testing)
-                startGameInitial();
-            }
-        });
+        }
 
         // Klaviatura ko'rsatish funksiyasi
         function showKeyboard() {
@@ -2387,6 +2385,10 @@ document.addEventListener('click', function(e){
 
         // O'yinni boshlash
         function startGameInitial() {
+            // Event listenerlarni bog'lash
+            bindEventListeners();
+            
+            // UI ni yangilash
             updateUIStats();
             updateLives();
             updateLevelDisplay();
@@ -2701,7 +2703,7 @@ document.addEventListener('click', function(e){
                         <div class="empty-leaderboard-icon">🏆</div>
                         <h3>Hali reyting mavjud emas</h3>
                         <p>Siz birinchi bo'ling!</p>
-                    </div>
+                </div>
                 `;
                 return;
             }
