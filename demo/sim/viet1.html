@@ -963,14 +963,13 @@ h1 {
     <script>
         // Firebase konfiguratsiyasi
         const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.firebasestorage.app",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
+            apiKey: "AIzaSyD-K_HQ6dfmGQ1LhkKpC3I3aLnF3qTv-Rw",
+            authDomain: "matem-game.firebaseapp.com",
+            projectId: "matem-game",
+            storageBucket: "matem-game.appspot.com",
+            messagingSenderId: "729788045825",
+            appId: "1:729788045825:web:3f54e9a432e9aab202e4bf"
+        };
 
         // Firebase ni ishga tushirish
         firebase.initializeApp(firebaseConfig);
@@ -1069,34 +1068,24 @@ h1 {
         }
 
         // Firebase Functions
-        async function saveGameResult(result) {
-            if (!currentUser) return;
-            try {
-                // save individual game run
-                const gameRef = db.collection('games').doc();
-                await gameRef.set({
-                    userId: currentUser.uid,
-                    userName: userData && userData.name ? userData.name : null,
-                    ...result,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                // Update user's best score in 'users' collection
-                await updateUserBestScore(result.xpCount, result.highestLevel);
-
-                // ALSO: maintain per-user summary record in 'game' collection (one document per user)
-                try {
-                    const summaryRef = db.collection('game').doc(currentUser.uid);
-                    await summaryRef.set({
-                        userId: currentUser.uid,
-                        userName: userData && userData.name ? userData.name : null,
-                        xp: result.xpCount || 0,
-                        highestLevel: result.highestLevel || 1,
-                        lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
-                } catch (e2) {
-                    console.warn('Could not update game summary doc:', e2);
-                }
+        async function saveGameResult(result){
+    if(!currentUser) return;
+    try{
+        await db.collection("games").add({
+            userId: currentUser.uid,
+            userName: userData.fullName,
+            ...result,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await db.collection("game").doc(currentUser.uid).set({
+            userId: currentUser.uid,
+            userName: userData.fullName,
+            xp: result.xpCount,
+            highestLevel: result.highestLevel,
+            lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
+        },{merge:true});
+    }catch(e){ console.error(e); }
+}
             } catch (error) {
                 console.error('Game result save error:', error);
             }
@@ -1127,25 +1116,14 @@ h1 {
             }
         }
 
-        async function loadLeaderboard() {
-            try {
-                const snapshot = await db.collection('users')
-                    .orderBy('bestScore', 'desc')
-                    .limit(10)
-                    .get();
-                
-                const leaderboard = [];
-                snapshot.forEach(doc => {
-                    leaderboard.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
-                });
-                
-                displayLeaderboard(leaderboard);
-            } catch (error) {
-                console.error('Leaderboard load error:', error);
-            }
+        async function loadLeaderboard(){
+    try{
+        const snap=await db.collection("game").orderBy("xp","desc").limit(20).get();
+        const arr=[];
+        snap.forEach(d=>arr.push(d.data()));
+        displayLeaderboard(arr);
+    }catch(e){ console.error(e); }
+}
         }
 
         function displayLeaderboard(leaderboard) {
@@ -1183,19 +1161,24 @@ h1 {
 
         // Asosiy login funksiyasi - avtomatik kirish
         async function autoLogin() {
-            try {
-                // 1. Avtomatik anonymous login
-                const userCredential = await auth.signInAnonymously();
-                currentUser = userCredential.user;
-                
-                // 2. Firestore'dan foydalanuvchi ma'lumotlarini olish
-                const userDoc = await db.collection('users').doc(currentUser.uid).get();
-                
-                if (userDoc.exists) {
-                    // Agar foydalanuvchi mavjud bo'lsa
-                    userData = userDoc.data();
-                    console.log("Mavjud foydalanuvchi:", userData.name);
-                } else {
+    try {
+        const session = await authUtils.loadSession();
+        if (!session || !session.docId) {
+            alert("Iltimos, tizimga kiring.");
+            window.location.href = "login.html";
+            return;
+        }
+        currentUser = { uid: session.docId };
+        userData = session.data || session;
+        document.getElementById("user-name").textContent =
+            userData.fullName || userData.name || "Foydalanuvchi";
+        document.getElementById("loading-screen").style.display = "none";
+        document.getElementById("game-screen").style.display = "block";
+        startGame();
+    } catch(e){
+        window.location.href="login.html";
+    }
+} else {
                     // Yangi foydalanuvchi bo'lsa
                     const randomName = getRandomName();
                     userData = {
