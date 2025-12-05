@@ -52,6 +52,41 @@ body {
   line-height: 1.4;
 }
 
+/* ====== LOADING SCREEN ====== */
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--white);
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 20px;
+}
+
+.loading-text {
+  color: var(--white);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ====== MAIN CONTAINER ====== */
 .container {
   max-width: 500px;
@@ -555,64 +590,6 @@ h1 {
   font-size: 0.65rem;
 }
 
-/* ====== LOGIN SCREEN ====== */
-.login-screen {
-  padding: 20px;
-  text-align: center;
-}
-
-.login-title {
-  font-size: 1.1rem;
-  font-weight: 900;
-  color: var(--primary);
-  margin-bottom: 15px;
-}
-
-.login-form {
-  max-width: 300px;
-  margin: 0 auto;
-}
-
-.login-input {
-  width: 100%;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-  border: 2px solid var(--light-gray);
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
-  transition: var(--transition);
-}
-
-.login-input:focus {
-  border-color: var(--primary);
-  outline: none;
-}
-
-.login-btn {
-  background: var(--gradient-primary);
-  color: var(--white);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 10px 20px;
-  font-size: 0.85rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: var(--transition);
-  width: 100%;
-  margin-top: 5px;
-}
-
-.login-btn:hover {
-  transform: translateY(-2px);
-}
-
-.login-error {
-  color: var(--danger);
-  font-size: 0.75rem;
-  margin-top: 8px;
-  display: none;
-}
-
 /* ====== LEADERBOARD MODAL ====== */
 .modal-overlay {
   position: fixed;
@@ -820,6 +797,12 @@ h1 {
     </style>
 </head>
 <body>
+    <!-- Loading screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Yuklanmoqda...</div>
+    </div>
+
     <!-- Reyting Modal -->
     <div id="leaderboard-modal" class="modal-overlay">
         <div class="leaderboard-modal">
@@ -834,17 +817,6 @@ h1 {
     </div>
 
     <div class="container">
-        <!-- Kirish Ekrani (login ekrani) -->
-        <div id="login-screen" class="login-screen" style="display: none;">
-            <div class="login-title">Viet Tenglamalar O'yini</div>
-            <div class="login-form">
-                <input type="text" id="login-name" class="login-input" placeholder="Ismingizni kiriting" 
-                       maxlength="20">
-                <div class="login-error" id="login-error"></div>
-                <button class="login-btn" id="login-btn">O'yinni Boshlash</button>
-            </div>
-        </div>
-
         <!-- Asosiy O'yin Ekrani -->
         <div id="game-screen" style="display: none;">
             <header>
@@ -1053,6 +1025,18 @@ h1 {
         let activeInput = 'x1';
         let autoNextTimeout = null;
 
+        // Random ism generator
+        const RANDOM_NAMES = [
+            "Matematik O'quvchi", "Tenglamalar Qiroli", "Algebrachi", "Geometriya Sehri",
+            "Raqamlar Ustasi", "Viet Tekshiruvchi", "Kvadrat Javobchi", "Ildiz Topuvchi",
+            "Aqliy Hisobchi", "Matematika Sevargusi", "Raqamlar Bobosi", "Algebra Masteri",
+            "Hisob-kitobchi", "Tenglamalar Sehrgari", "Kvadrat Eksperti", "Viet Usuli Mutaxassisi"
+        ];
+
+        function getRandomName() {
+            return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+        }
+
         // Helper Functions
         function parseFractionalNumber(str) {
             if (typeof str !== 'string') return NaN;
@@ -1193,18 +1177,72 @@ h1 {
             content.innerHTML = html;
         }
 
+        // Asosiy login funksiyasi - avtomatik kirish
+        async function autoLogin() {
+            try {
+                // 1. Avtomatik anonymous login
+                const userCredential = await auth.signInAnonymously();
+                currentUser = userCredential.user;
+                
+                // 2. Firestore'dan foydalanuvchi ma'lumotlarini olish
+                const userDoc = await db.collection('users').doc(currentUser.uid).get();
+                
+                if (userDoc.exists) {
+                    // Agar foydalanuvchi mavjud bo'lsa
+                    userData = userDoc.data();
+                    console.log("Mavjud foydalanuvchi:", userData.name);
+                } else {
+                    // Yangi foydalanuvchi bo'lsa
+                    const randomName = getRandomName();
+                    userData = {
+                        name: randomName,
+                        createdAt: new Date().toISOString(),
+                        bestScore: 0,
+                        bestLevel: 1
+                    };
+                    
+                    // Firestore'ga saqlash
+                    await db.collection('users').doc(currentUser.uid).set({
+                        ...userData,
+                        lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    console.log("Yangi foydalanuvchi yaratildi:", randomName);
+                }
+                
+                // 3. UI yangilash
+                document.getElementById('user-name').textContent = userData.name;
+                
+                // 4. O'yin ekranini ko'rsatish
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+                
+                // 5. O'yinni boshlash
+                startGame();
+                
+            } catch (error) {
+                console.error('Auto login error:', error);
+                // Xatolik yuz bersa, offline holatda o'ynash
+                handleOfflineMode();
+            }
+        }
+
+        // Offline mode
+        function handleOfflineMode() {
+            const offlineName = getRandomName();
+            userData = { name: offlineName };
+            
+            document.getElementById('user-name').textContent = offlineName;
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            
+            startGame();
+        }
+
         // DOM Ready
         document.addEventListener('DOMContentLoaded', () => {
-            // Show login screen initially
-            document.getElementById('login-screen').style.display = 'block';
-            
-            // Login button
-            document.getElementById('login-btn').addEventListener('click', handleLogin);
-            
-            // Login input Enter key
-            document.getElementById('login-name').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleLogin();
-            });
+            // Avtomatik login
+            autoLogin();
             
             // Logout button
             document.getElementById('logout-btn').addEventListener('click', handleLogout);
@@ -1272,63 +1310,9 @@ h1 {
             document.getElementById('restart-btn').addEventListener('click', restartGame);
         });
 
-        // Login handler
-        async function handleLogin() {
-            const nameInput = document.getElementById('login-name');
-            const name = nameInput.value.trim();
-            const errorEl = document.getElementById('login-error');
-            
-            if (!name) {
-                errorEl.textContent = 'Iltimos, ismingizni kiriting';
-                errorEl.style.display = 'block';
-                return;
-            }
-            
-            if (name.length < 2) {
-                errorEl.textContent = 'Ism kamida 2 harfdan iborat bo\'lishi kerak';
-                errorEl.style.display = 'block';
-                return;
-            }
-            
-            try {
-                // Anonymous login
-                const userCredential = await auth.signInAnonymously();
-                currentUser = userCredential.user;
-                
-                // Save user data
-                userData = {
-                    name: name,
-                    createdAt: new Date().toISOString()
-                };
-                
-                // Save to Firestore
-                await db.collection('users').doc(currentUser.uid).set({
-                    ...userData,
-                    bestScore: 0,
-                    bestLevel: 1,
-                    lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                // Update UI
-                document.getElementById('user-name').textContent = name;
-                
-                // Switch to game screen
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('game-screen').style.display = 'block';
-                
-                // Start game
-                startGame();
-                
-            } catch (error) {
-                console.error('Login error:', error);
-                errorEl.textContent = 'Kirishda xatolik. Qayta urinib ko\'ring';
-                errorEl.style.display = 'block';
-            }
-        }
-
         // Logout handler
         async function handleLogout() {
-            if (confirm('O\'yindan chiqishni xohlaysizmi?')) {
+            if (confirm('O\'yindan chiqishni xohlaysizmi? Keyin qayta kiring.')) {
                 await auth.signOut();
                 currentUser = null;
                 userData = null;
@@ -1347,11 +1331,12 @@ h1 {
                     askedEquations: new Set()
                 });
                 
-                // Switch to login screen
+                // Hide game and show loading
                 document.getElementById('game-screen').style.display = 'none';
-                document.getElementById('login-screen').style.display = 'block';
-                document.getElementById('login-name').value = '';
-                document.getElementById('login-error').style.display = 'none';
+                document.getElementById('loading-screen').style.display = 'flex';
+                
+                // Auto login again
+                autoLogin();
             }
         }
 
