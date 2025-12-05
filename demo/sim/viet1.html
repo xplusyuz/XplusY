@@ -883,8 +883,7 @@ h1 {
                 <div class="input-row">
                     <div class="input-group-mini">
                         <div class="input-label-mini">x₁</div>
-                        <input type="text" class="input-mini" id="x1" placeholder="?"
-                               onfocus="setActiveInput('x1')">
+                        <input type="text" class="input-mini" id="x1" placeholder="?" readonly>
                     </div>
                     
                     <div class="timer-mini">
@@ -894,8 +893,7 @@ h1 {
                     
                     <div class="input-group-mini">
                         <div class="input-label-mini">x₂</div>
-                        <input type="text" class="input-mini" id="x2" placeholder="?"
-                               onfocus="setActiveInput('x2')">
+                        <input type="text" class="input-mini" id="x2" placeholder="?" readonly>
                     </div>
                 </div>
                 
@@ -1072,19 +1070,32 @@ h1 {
         // Firebase Functions
         async function saveGameResult(result) {
             if (!currentUser) return;
-            
             try {
+                // save individual game run
                 const gameRef = db.collection('games').doc();
                 await gameRef.set({
                     userId: currentUser.uid,
-                    userName: userData.name,
+                    userName: userData && userData.name ? userData.name : null,
                     ...result,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                
-                // Update user's best score
+
+                // Update user's best score in 'users' collection
                 await updateUserBestScore(result.xpCount, result.highestLevel);
-                
+
+                // ALSO: maintain per-user summary record in 'game' collection (one document per user)
+                try {
+                    const summaryRef = db.collection('game').doc(currentUser.uid);
+                    await summaryRef.set({
+                        userId: currentUser.uid,
+                        userName: userData && userData.name ? userData.name : null,
+                        xp: result.xpCount || 0,
+                        highestLevel: result.highestLevel || 1,
+                        lastPlayed: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+                } catch (e2) {
+                    console.warn('Could not update game summary doc:', e2);
+                }
             } catch (error) {
                 console.error('Game result save error:', error);
             }
@@ -1289,7 +1300,7 @@ h1 {
                             input.value = cur + value;
                     }
                     
-                    input.focus();
+                    // focus suppressed to avoid native mobile keyboard
                 });
             });
 
@@ -1334,8 +1345,9 @@ h1 {
 
         // Game Functions
         function setActiveInput(inputId) {
+            // switch active target for custom keyboard without focusing native input
             activeInput = inputId;
-            document.getElementById(inputId).focus();
+            // keep native keyboard closed by not focusing the real input
         }
 
         function switchInputs() {
