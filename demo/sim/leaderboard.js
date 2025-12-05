@@ -1,28 +1,20 @@
-// leaderboard.js
-// Call loadLeaderboard() when opening the leaderboard modal.
-// Requires a Firestore-like `db` and `currentUser` with uid property.
-// If you're not using Firestore, adapt data loading accordingly.
-
+/* leaderboard.js - injected helper (mock loader) */
 async function loadLeaderboard() {
     try {
         const list = document.getElementById("leaderboard-list");
+        if (!list) return;
         list.innerHTML = '';
 
-        // Example Firestore query (uncomment and adapt if using Firestore)
-        // const snap = await db.collection("vietUsers").orderBy("totalXP","desc").get();
-
-        // MOCK DATA fallback (if no db available) - remove when using real DB
+        // MOCK data - replace with real DB calls (Firestore) as needed
         const mockUsers = [
             { id: 'u1', name: 'Ali', totalXP: 950, highestLevel: 5 },
             { id: 'u2', name: 'Vali', totalXP: 840, highestLevel: 4 },
             { id: 'u3', name: 'Sana', totalXP: 720, highestLevel: 4 }
         ];
 
-        // Use mockUsers for now. Replace with real snapshot iteration below.
         let rank = 1;
         let userRankFound = false;
 
-        // If using Firestore, replace this loop with: snap.forEach(doc => { const u = doc.data(); ... })
         for (const u of mockUsers) {
             const li = document.createElement('div');
             li.classList.add('leaderboard-item');
@@ -49,10 +41,25 @@ async function loadLeaderboard() {
         }
 
         if (!userRankFound && window.currentUser) {
-            // If current user not in first page, show user's rank area using provided data from server
             document.getElementById('user-rank').textContent = '-';
         }
     } catch (err) {
         console.error('loadLeaderboard error', err);
     }
 }
+
+// Attach click handler for the "Reyting" button to open modal and load leaderboard
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('level-info-btn');
+    if (btn) btn.addEventListener('click', () => {
+        const modal = document.getElementById('leaderboard-modal');
+        if (modal) modal.style.display = 'flex';
+        loadLeaderboard();
+    });
+
+    const modalClose = document.getElementById('leaderboard-modal-close');
+    if (modalClose) modalClose.addEventListener('click', () => {
+        const modal = document.getElementById('leaderboard-modal');
+        if (modal) modal.style.display = 'none';
+    });
+});
