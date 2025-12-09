@@ -1041,63 +1041,65 @@
         for (let i = 1; i <= MAX_LEVEL; i++) {
             let type;
             
-            // Daraja 50 dan oldin: butun sonli ildizlar, qiyinlashib borish tartibida
-            if (i < 50) {
-                if (i <= 10) {
-                    type = "integer"; // 1-10 darajalar: oddiy butun sonlar
-                } else if (i <= 20) {
-                    type = "integer_medium"; // 11-20: kattaroq butun sonlar
-                } else if (i <= 30) {
-                    type = "integer_hard"; // 21-30: manfiy va katta sonlar
-                } else if (i <= 40) {
-                    type = "fraction_simple"; // 31-40: oddiy kasrlar
-                } else {
-                    type = "fraction_medium"; // 41-49: murakkabroq kasrlar
-                }
-            } else {
-                // Daraja 50 dan keyin: faqat kasrli ildizlar
-                if (i <= 70) {
-                    type = "fraction_complex"; // 50-70: murakkab kasrlar
-                } else if (i <= 90) {
-                    type = "mixed_fraction"; // 71-90: aralash kasrlar
-                } else {
-                    type = "expert_fraction"; // 91-100: ekspert darajadagi kasrlar
-                }
+            // 1-10: Oddiy butun sonlar (foydalanuvchi daraja oshganini sezishi uchun)
+            if (i <= 10) {
+                type = "integer_easy";
+            }
+            // 11-20: O'rta butun sonlar
+            else if (i <= 20) {
+                type = "integer_medium";
+            }
+            // 21-30: Oddiy kasrlar
+            else if (i <= 30) {
+                type = "fraction_simple";
+            }
+            // 31-40: O'rta kasrlar
+            else if (i <= 40) {
+                type = "fraction_medium";
+            }
+            // 41-50: Murakkab kasrlar
+            else if (i <= 50) {
+                type = "fraction_hard";
+            }
+            // 51-70: Juda murakkab kasrlar
+            else if (i <= 70) {
+                type = "fraction_complex";
+            }
+            // 71-90: Aralash kasrlar
+            else if (i <= 90) {
+                type = "mixed_fraction";
+            }
+            // 91-100: Ekspert kasrlar
+            else {
+                type = "expert_fraction";
             }
             
             LEVEL_CONFIG[i] = {
                 name: `Daraja ${i}`,
-                questions: Math.min(15, 8 + Math.floor(i/4)),
-                xpToNext: 60 + (i * 25),
-                minRoot: -8 - Math.floor(i/3),
-                maxRoot: 8 + Math.floor(i/3),
+                questions: Math.min(15, 5 + Math.floor(i/5)), // Bosqichga qarab savollar soni oshadi
+                xpToNext: 50 + (i * 20),
                 type: type
             };
         }
 
-        // ================ GAME STATE ================
-        let gameState = {
-            questionCount: 0,
-            correctCount: 0,
-            xpCount: 0,
-            currentLevel: 1,
-            levelQuestionsAnswered: 0,
-            levelXP: 0,
-            incorrectCount: 0,
-            gameActive: true,
-            highestLevelReached: 1,
-            askedEquations: new Set()
-        };
+        // ================ YORDAMCHI FUNKSIYALAR ================
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
 
-        let currentEquation = {};
-        let startTime = null;
-        let timerInterval = null;
-        let timeUpTimeout = null;
-        let activeInput = 'x1';
-        let autoNextTimeout = null;
-        let inputValues = { x1: '', x2: '' };
+        function generateFraction(min, max, maxDenom) {
+            for (let attempt = 0; attempt < 10; attempt++) {
+                const denominator = getRandomInt(2, maxDenom);
+                const minNumerator = Math.ceil(min * denominator);
+                const maxNumerator = Math.floor(max * denominator);
+                if (minNumerator <= maxNumerator) {
+                    const numerator = getRandomInt(minNumerator, maxNumerator);
+                    return numerator / denominator;
+                }
+            }
+            return 0.5;
+        }
 
-        // ================ HELPER FUNCTIONS ================
         function parseFractionalNumber(str) {
             if (typeof str !== 'string') return NaN;
             const s = str.trim();
@@ -1138,26 +1140,31 @@
             return rounded.toString();
         }
 
-        // Sonni oddiy formatda (display uchun)
-        function formatForDisplay(num) {
-            if (Number.isInteger(num)) return num.toString();
-            
-            const tolerance = 1.0E-6;
-            for (let denominator = 1; denominator <= 12; denominator++) {
-                const numerator = Math.round(num * denominator);
-                if (Math.abs(num - numerator/denominator) < tolerance) {
-                    if (denominator === 1) return numerator.toString();
-                    return `${numerator}/${denominator}`;
-                }
-            }
-            
-            const rounded = Math.round(num * 100) / 100;
-            return rounded.toString();
-        }
+        // ================ GAME STATE ================
+        let gameState = {
+            questionCount: 0,
+            correctCount: 0,
+            xpCount: 0,
+            currentLevel: 1,
+            levelQuestionsAnswered: 0,
+            levelXP: 0,
+            incorrectCount: 0,
+            gameActive: true,
+            highestLevelReached: 1,
+            askedEquations: new Set(),
+            lastGeneratedEquation: null
+        };
+
+        let currentEquation = {};
+        let startTime = null;
+        let timerInterval = null;
+        let timeUpTimeout = null;
+        let activeInput = 'x1';
+        let autoNextTimeout = null;
+        let inputValues = { x1: '', x2: '' };
 
         // ================ UI FUNCTIONS ================
         function setActiveInput(inputId) {
-            // Oldingi inputni inactive qilamiz
             document.querySelectorAll('.input-group').forEach(el => {
                 el.classList.remove('active');
             });
@@ -1166,7 +1173,6 @@
                 el.classList.remove('placeholder');
             });
             
-            // Yangi inputni active qilamiz
             activeInput = inputId;
             const inputGroup = document.getElementById(`input-group-${inputId}`);
             const inputDisplay = document.getElementById(`${inputId}-display`);
@@ -1174,13 +1180,11 @@
             inputGroup.classList.add('active');
             inputDisplay.classList.add('active');
             
-            // Agar input bo'sh bo'lsa, placeholder ko'rsatamiz
             if (!inputValues[inputId]) {
                 inputDisplay.classList.add('placeholder');
             }
         }
 
-        // Fokusni boshqa inputga o'tkazish (qiymatlarni almashtirmay)
         function moveFocus() {
             if (activeInput === 'x1') {
                 setActiveInput('x2');
@@ -1193,7 +1197,6 @@
             const x1Display = document.getElementById('x1-display');
             const x2Display = document.getElementById('x2-display');
             
-            // x1 ni yangilaymiz
             if (inputValues.x1) {
                 x1Display.textContent = inputValues.x1;
                 x1Display.classList.remove('placeholder');
@@ -1202,7 +1205,6 @@
                 x1Display.classList.add('placeholder');
             }
             
-            // x2 ni yangilaymiz
             if (inputValues.x2) {
                 x2Display.textContent = inputValues.x2;
                 x2Display.classList.remove('placeholder');
@@ -1211,7 +1213,6 @@
                 x2Display.classList.add('placeholder');
             }
             
-            // Active inputni yangilaymiz
             const activeDisplay = document.getElementById(`${activeInput}-display`);
             if (inputValues[activeInput]) {
                 activeDisplay.classList.remove('placeholder');
@@ -1283,7 +1284,101 @@
             document.getElementById("timer").textContent = "0.0";
         }
 
-        // ================ GAME LOGIC ================
+        // ================ YANGI SAVOL YARATISH FUNKSIYASI ================
+        function generateRoots() {
+            const level = gameState.currentLevel;
+            const config = LEVEL_CONFIG[level];
+            let x1, x2;
+            
+            // Har bir daraja uchun alohida yondashuv
+            if (config.type === "integer_easy") {
+                // Daraja 1-10: Oddiy butun sonlar, daraja oshgani sayin diapazon oshadi
+                const offset = Math.floor((level - 1) / 2); // 1-10 uchun
+                const min = -3 - offset;
+                const max = 3 + offset;
+                x1 = getRandomInt(min, max);
+                x2 = getRandomInt(min, max);
+            } 
+            else if (config.type === "integer_medium") {
+                // Daraja 11-20: O'rta butun sonlar
+                const offset = Math.floor((level - 11) / 2);
+                const min = -5 - offset;
+                const max = 5 + offset;
+                x1 = getRandomInt(min, max);
+                x2 = getRandomInt(min, max);
+            }
+            else if (config.type === "fraction_simple") {
+                // Daraja 21-30: Oddiy kasrlar (50% ehtimollik bilan kasr, 50% butun)
+                if (Math.random() < 0.5) {
+                    const maxDenom = 4 + Math.floor((level - 21) / 2);
+                    x1 = generateFraction(-3, 3, maxDenom);
+                    x2 = generateFraction(-3, 3, maxDenom);
+                } else {
+                    const offset = Math.floor((level - 21) / 2);
+                    const min = -4 - offset;
+                    const max = 4 + offset;
+                    x1 = getRandomInt(min, max);
+                    x2 = getRandomInt(min, max);
+                }
+            }
+            else if (config.type === "fraction_medium") {
+                // Daraja 31-40: O'rta kasrlar (70% ehtimollik bilan kasr)
+                if (Math.random() < 0.7) {
+                    const maxDenom = 6 + Math.floor((level - 31) / 2);
+                    x1 = generateFraction(-4, 4, maxDenom);
+                    x2 = generateFraction(-4, 4, maxDenom);
+                } else {
+                    const offset = Math.floor((level - 31) / 2);
+                    const min = -5 - offset;
+                    const max = 5 + offset;
+                    x1 = getRandomInt(min, max);
+                    x2 = getRandomInt(min, max);
+                }
+            }
+            else if (config.type === "fraction_hard") {
+                // Daraja 41-50: Murakkab kasrlar (80% ehtimollik bilan kasr)
+                if (Math.random() < 0.8) {
+                    const maxDenom = 8 + Math.floor((level - 41) / 2);
+                    x1 = generateFraction(-5, 5, maxDenom);
+                    x2 = generateFraction(-5, 5, maxDenom);
+                } else {
+                    const offset = Math.floor((level - 41) / 2);
+                    const min = -6 - offset;
+                    const max = 6 + offset;
+                    x1 = getRandomInt(min, max);
+                    x2 = getRandomInt(min, max);
+                }
+            }
+            else if (config.type === "fraction_complex") {
+                // Daraja 51-70: Juda murakkab kasrlar (90% ehtimollik bilan kasr)
+                if (Math.random() < 0.9) {
+                    const maxDenom = 10 + Math.floor((level - 51) / 4);
+                    x1 = generateFraction(-6, 6, maxDenom);
+                    x2 = generateFraction(-6, 6, maxDenom);
+                } else {
+                    const offset = Math.floor((level - 51) / 4);
+                    const min = -7 - offset;
+                    const max = 7 + offset;
+                    x1 = getRandomInt(min, max);
+                    x2 = getRandomInt(min, max);
+                }
+            }
+            else if (config.type === "mixed_fraction") {
+                // Daraja 71-90: Aralash kasrlar (faqat kasrlar)
+                const maxDenom = 12 + Math.floor((level - 71) / 4);
+                x1 = generateFraction(-8, 8, maxDenom);
+                x2 = generateFraction(-8, 8, maxDenom);
+            }
+            else { // expert_fraction
+                // Daraja 91-100: Ekspert kasrlar (faqat kasrlar)
+                const maxDenom = 15 + Math.floor((level - 91) / 3);
+                x1 = generateFraction(-10, 10, maxDenom);
+                x2 = generateFraction(-10, 10, maxDenom);
+            }
+            
+            return { x1, x2 };
+        }
+
         function newQuestion() {
             if (!gameState.gameActive) return;
             
@@ -1303,81 +1398,25 @@
             const maxAttempts = 100;
 
             do {
-                // Darajaga qarab turli xil ildiz turlari
-                if (config.type === "integer") {
-                    // 1-10 darajalar: oddiy butun sonlar
-                    x1 = Math.floor(Math.random() * 7) - 3;
-                    x2 = Math.floor(Math.random() * 7) - 3;
-                } else if (config.type === "integer_medium") {
-                    // 11-20 darajalar: kattaroq butun sonlar
-                    x1 = Math.floor(Math.random() * 11) - 5;
-                    x2 = Math.floor(Math.random() * 11) - 5;
-                } else if (config.type === "integer_hard") {
-                    // 21-30 darajalar: manfiy va katta sonlar
-                    x1 = Math.floor(Math.random() * 15) - 7;
-                    x2 = Math.floor(Math.random() * 15) - 7;
-                } else if (config.type === "fraction_simple") {
-                    // 31-40 darajalar: oddiy kasrlar
-                    const denom = Math.floor(Math.random() * 4) + 2;
-                    const numer1 = Math.floor(Math.random() * denom) + 1;
-                    const numer2 = Math.floor(Math.random() * denom) + 1;
-                    x1 = Math.random() > 0.5 ? numer1/denom : -numer1/denom;
-                    x2 = Math.random() > 0.5 ? numer2/denom : -numer2/denom;
-                } else if (config.type === "fraction_medium") {
-                    // 41-49 darajalar: murakkabroq kasrlar
-                    if (Math.random() > 0.5) {
-                        x1 = Math.floor(Math.random() * 5) - 2;
-                        const denom = Math.floor(Math.random() * 4) + 2;
-                        const numer = Math.floor(Math.random() * (denom-1)) + 1;
-                        x2 = Math.random() > 0.5 ? numer/denom : -numer/denom;
-                    } else {
-                        const denom1 = Math.floor(Math.random() * 5) + 2;
-                        const numer1 = Math.floor(Math.random() * (denom1-1)) + 1;
-                        x1 = Math.random() > 0.5 ? numer1/denom1 : -numer1/denom1;
-                        
-                        const denom2 = Math.floor(Math.random() * 5) + 2;
-                        const numer2 = Math.floor(Math.random() * (denom2-1)) + 1;
-                        x2 = Math.random() > 0.5 ? numer2/denom2 : -numer2/denom2;
-                    }
-                } else if (config.type === "fraction_complex") {
-                    // 50-70 darajalar: murakkab kasrlar
-                    const denom1 = Math.floor(Math.random() * 8) + 2;
-                    const numer1 = Math.floor(Math.random() * (denom1*2)) - denom1;
-                    x1 = numer1/denom1;
-                    
-                    const denom2 = Math.floor(Math.random() * 8) + 2;
-                    const numer2 = Math.floor(Math.random() * (denom2*2)) - denom2;
-                    x2 = numer2/denom2;
-                } else if (config.type === "mixed_fraction") {
-                    // 71-90 darajalar: aralash kasrlar
-                    const whole1 = Math.floor(Math.random() * 3) - 1;
-                    const denom1 = Math.floor(Math.random() * 6) + 2;
-                    const numer1 = Math.floor(Math.random() * denom1) + 1;
-                    x1 = whole1 + (Math.random() > 0.5 ? numer1/denom1 : -numer1/denom1);
-                    
-                    const whole2 = Math.floor(Math.random() * 3) - 1;
-                    const denom2 = Math.floor(Math.random() * 6) + 2;
-                    const numer2 = Math.floor(Math.random() * denom2) + 1;
-                    x2 = whole2 + (Math.random() > 0.5 ? numer2/denom2 : -numer2/denom2);
-                } else {
-                    // 91-100 darajalar: ekspert darajadagi kasrlar
-                    const denom1 = Math.floor(Math.random() * 12) + 2;
-                    const numer1 = Math.floor(Math.random() * (denom1*3)) - denom1*1.5;
-                    x1 = numer1/denom1;
-                    
-                    const denom2 = Math.floor(Math.random() * 12) + 2;
-                    const numer2 = Math.floor(Math.random() * (denom2*3)) - denom2*1.5;
-                    x2 = numer2/denom2;
-                }
+                // Har xil turdagi ildizlar yaratish
+                const roots = generateRoots();
+                x1 = roots.x1;
+                x2 = roots.x2;
 
                 b = -(x1 + x2);
                 c = x1 * x2;
 
                 attempts++;
-                if (attempts >= maxAttempts) break;
+                if (attempts >= maxAttempts) {
+                    // Agar juda ko'p urinishdan keyin ham takrorlansa, askedEquations ni tozalaymiz
+                    gameState.askedEquations.clear();
+                    break;
+                }
             } while (gameState.askedEquations.has(`${b.toFixed(3)},${c.toFixed(3)}`));
 
+            // Yangi tenglamani saqlaymiz
             gameState.askedEquations.add(`${b.toFixed(3)},${c.toFixed(3)}`);
+            gameState.lastGeneratedEquation = `${b.toFixed(3)},${c.toFixed(3)}`;
             currentEquation = { x1, x2, b, c };
 
             // Tenglamani LaTeX formatida yaratamiz
@@ -1413,8 +1452,11 @@
             startTimer();
             updateProgressBar();
             
-            // Vaqt chegarasi
-            const timeLimit = config.type.includes('fraction') ? 90 : 60;
+            // Vaqt chegarasi (daraja oshgani sayin vaqt kamayadi)
+            const baseTime = 60;
+            const timeReduction = Math.min(30, Math.floor(gameState.currentLevel / 3));
+            const timeLimit = Math.max(20, baseTime - timeReduction);
+            
             clearTimeout(timeUpTimeout);
             timeUpTimeout = setTimeout(() => {
                 if (gameState.gameActive) timeUpAutoCheck();
@@ -1480,7 +1522,6 @@
                     }
                     break;
                 default:
-                    // Raqam kiritish
                     inputValues[activeInput] += value;
             }
             
@@ -1558,14 +1599,18 @@
             let xpEarned = 0;
             
             if (isCorrect) {
-                // XP hisoblaymiz
+                // XP hisoblaymiz (tezlik bonusini hisobga olgan holda)
                 if (timeDiff <= 60) {
                     xpEarned = Math.max(1, 61 - Math.ceil(timeDiff));
                 } else {
                     xpEarned = 1;
                 }
                 
+                // Daraja bonusini qo'shamiz
                 xpEarned = Math.floor(xpEarned * (1 + (gameState.currentLevel * 0.05)));
+                
+                // Minimal XP kafolati
+                xpEarned = Math.max(1, xpEarned);
                 
                 resultContainer.classList.add('result-correct');
                 resultHeader.innerHTML = '✅ To\'g\'ri javob!';
@@ -1646,12 +1691,18 @@
             gameState.gameActive = false;
             stopTimer();
             
+            // Darajani oshirish
             gameState.currentLevel++;
             gameState.levelQuestionsAnswered = 0;
             gameState.levelXP = 0;
             gameState.incorrectCount = 0;
             gameState.gameActive = true;
-            gameState.askedEquations.clear();
+            
+            // Faqat juda eski tenglamalarni saqlab qolamiz (oxirgi 50 ta)
+            if (gameState.askedEquations.size > 50) {
+                const equationsArray = Array.from(gameState.askedEquations);
+                gameState.askedEquations = new Set(equationsArray.slice(-50));
+            }
             
             updateLives();
             updateLevelDisplay();
@@ -1711,7 +1762,8 @@
                 incorrectCount: 0,
                 gameActive: true,
                 highestLevelReached: 1,
-                askedEquations: new Set()
+                askedEquations: new Set(),
+                lastGeneratedEquation: null
             });
 
             inputValues = { x1: '', x2: '' };
