@@ -1669,20 +1669,29 @@
             document.getElementById("final-correct").textContent = gameState.correctCount;
             document.getElementById("final-xp").textContent = gameState.xpCount;
 
-            // Final resultni saqlash
+            // ============ YANGI: TO'G'RI NATIJALAR SAQLASH ============
             try {
                 const user = authUtils.getUser();
                 if (user) {
-                    await authUtils.updateBestScore(gameState.xpCount);
+                    // 1. Avval bestScore ni yangilash
+                    const updateResult = await authUtils.updateBestScore(gameState.xpCount);
                     
-                    // Ballarni qo'shish
-                    const currentUser = authUtils.getUser();
-                    const currentPoints = Number(currentUser.data.points || 0);
-                    const newPoints = currentPoints + gameState.xpCount;
-                    
-                    await authUtils.updateUserData({
-                        points: newPoints
-                    });
+                    // 2. Agar bestScore muvaffaqiyatli yangilangan bo'lsa
+                    if (updateResult.success) {
+                        const currentUser = authUtils.getUser();
+                        const currentPoints = Number(currentUser.data.points || 0);
+                        
+                        // Points ga faqat bu o'yindagi XP larni qo'shamiz
+                        // Bu har safar o'yin tugaganda to'g'ri ishlaydi
+                        const pointsToAdd = gameState.xpCount;
+                        const newPoints = currentPoints + pointsToAdd;
+                        
+                        await authUtils.updateUserData({
+                            points: newPoints
+                        });
+                        
+                        console.log(`Natija saqlandi: ${gameState.xpCount} XP, Total points: ${currentPoints} + ${pointsToAdd} = ${newPoints}`);
+                    }
                 }
             } catch (error) {
                 console.error('Yakuniy natijalarni saqlashda xatolik:', error);
