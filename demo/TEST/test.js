@@ -1,671 +1,393 @@
-/* 
-  test.js
-  - test.html (test yechish) va admintest.html (admin) uchun umumiy JS
-  - Sahifani tanlash: <body data-page="runner"> yoki <body data-page="admin">
-*/
+/* ========= Imports ========= */
+// Firebase ni global objectdan olamiz
+const auth = firebase.auth;
+const db = firebase.firestore;
+const { doc, runTransaction, serverTimestamp } = firebase.firestore;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const pageType = document.body.getAttribute("data-page");
-  if (pageType === "runner") {
-    initTestRunner();
-  } else if (pageType === "admin") {
-    initAdmin();
+/* ========= Shorthand & helpers ========= */
+const $    = (s) => document.querySelector(s);
+const pad2 = (n) => String(Math.max(0, n)).padStart(2, "0");
+const sum  = (a) => (Array.isArray(a) ? a : []).reduce((x, y) => x + (+y || 0), 0);
+const isMulti     = (q) => Array.isArray(q.correctIndices);
+const normalize   = (arr) => Array.from(new Set((arr || []).map(Number))).sort((a, b) => a - b);
+const arraysEqual = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const fmt  = (x) => { const r = Math.round((+x + Number.EPSILON) * 100) / 100; return (Math.abs(r) % 1 === 0) ? String(Math.trunc(r)) : String(r); };
+const slug = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/* ========= Status chip ========= */
+function showSaveStatus(msg, kind = "good") {
+  const top = $("#saveStatusTop");
+  const bot = $("#saveStatus");
+  [top, bot].forEach((el) => {
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove("hidden", "good", "bad", "warn");
+    el.classList.add(kind);
+  });
+}
+
+/* ========= MathJax helpers ========= */
+const TEX_TOKENS = ["\\frac","\\sqrt","\\sum","\\int","\\pi","\\alpha","\\beta","\\gamma","\\le","\\ge","\\cdot","\\times","\\pm","\\ln","\\log","\\sin","\\cos","\\tan","^","_"];
+function looksLikeTeX(s){ if(typeof s!=="string") return false; if(s.includes("$")||s.includes("\\(")||s.includes("\\[")) return false; for(const t of TEX_TOKENS){ if(s.indexOf(t)!==-1) return true; } return false; }
+const wrapTeX = (s)=> looksLikeTeX(s) ? `\\(${s}\\)` : s;
+const mjReady = ()=> new Promise(res=>{ const tick=()=> (window.MathJax&&window.MathJax.typesetPromise)?res():setTimeout(tick,30); tick(); });
+async function typeset(el){ await mjReady(); try{ await MathJax.typesetPromise([el]); }catch{} }
+
+/* ========= Duration parsing ========= */
+function parseDurationMinutes(v){
+  if (typeof v === "number" && isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s=v.trim();
+    if (s.includes(":")) {
+      const p=s.split(":").map(x=>parseInt(x,10)||0);
+      if (p.length===2) return p[0];         // mm:ss
+      if (p.length===3) return p[0]*60+p[1]; // hh:mm:ss
+    }
+    const n=parseFloat(s); return isFinite(n)?n:0;
   }
+  return 0;
+}
+
+/* ========= Global state ========= */
+let testData=null, currentIndex=0, answers=[], startedAt=null, timeLeftSec=0, timerId=null, spentSeconds=0;
+const params=new URLSearchParams(location.search);
+const rawIdFromUrl=params.get("id");
+let currentTestId= rawIdFromUrl || (location.pathname.split("/").pop().replace(/\..*$/,"") || "test");
+let currentTestCode = params.get("code") || null;
+
+/* ========= Auth ========= */
+async function initializeAuth() {
+  try {
+    const user = await authUtils.requireSession();
+    
+    if (user) {
+      // Foydalanuvchi ma'lumotlarini ko'rsatish
+      document.getElementById('user-name').textContent = user.data.fullName || user.data.loginId || 'Foydalanuvchi';
+      document.getElementById('user-info').style.display = 'flex';
+      document.getElementById('authInfo').style.display = 'none';
+      
+      // Loading ekranini yashirish
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('introCard').classList.remove('hidden');
+      
+      return user;
+    }
+  } catch (error) {
+    console.error('Session xatosi:', error);
+    // Login sahifasiga yo'naltirish
+    window.location.href = '../login.html';
+  }
+}
+
+/* ========= Test data loader ========= */
+function applySectionRanges(data){
+  if(!Array.isArray(data.questions)) return;
+  if(Array.isArray(data.sections)){
+    data.sections.forEach(sec=>{
+      const name=sec.name||"Umumiy";
+      const s=Math.max(1, Number(sec.start||1));
+      const e=Math.min(data.questions.length, Number(sec.end||data.questions.length));
+      for(let i=s-1;i<e;i++){ data.questions[i].section = data.questions[i].section || name; }
+    });
+  }
+  data.questions.forEach(q=>{ if(!q.section) q.section="Umumiy"; });
+}
+function normalizeTestData(data){
+  if(!data || !Array.isArray(data.questions)) return data;
+  data.title = data.title || "Test";
+  data.description = data.description || "Rasm + variantlar";
+  data.questions = data.questions.map(q=>({ ...q, points: Number(q.points||1) }));
+  const rawDur = (data.durationMinutes ?? data.totalTime ?? 0);
+  data.durationMinutes = parseDurationMinutes(rawDur);
+  applySectionRanges(data);
+  data.id   = data.id   || slug(data.title);
+  data.code = data.code || slug(data.title);
+  return data;
+}
+async function loadTestData(){
+  const stored = localStorage.getItem("testData");
+  if(stored){ try{ testData = normalizeTestData(JSON.parse(stored)); return; }catch{} }
+  try{
+    const r = await fetch("./test.json",{cache:"no-store"});
+    if(!r.ok) throw new Error("no test.json");
+    testData = normalizeTestData(await r.json());
+  }catch{
+    testData = normalizeTestData({
+      title:"Demo test", description:"Fallback ma'lumotlar", durationMinutes:1, code:"demo-001",
+      questions:[
+        {section:"Algebra", text:"1) $2+2$ nechiga teng?", options:["2","3","4","5"], correctIndex:2, points:1},
+        {section:"Sonlar nazariyasi", text:"2) \\(\\text{Tub son(lar)}\\)", options:["2","4","5","9"], correctIndices:[0,2], points:2},
+        {section:"Geometriya", text:"3) Nisbatni toping.", options:["1:1","1:2","2:3","3:4"], correctIndex:0, points:1}
+      ]
+    });
+  }
+  // shuffle options
+  testData.questions.forEach(q=>{
+    const idxs=[...Array(q.options.length).keys()];
+    for(let i=idxs.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [idxs[i],idxs[j]]=[idxs[j],idxs[i]]; }
+    q._perm=idxs;
+  });
+}
+
+/* ========= UI: dots, question render, images ========= */
+function buildNavDots(){
+  const n=testData.questions.length; const root=$("#navDots"); root.innerHTML="";
+  for(let i=0;i<n;i++){
+    const b=document.createElement("button");
+    b.className="dot"; b.dataset.idx=String(i); b.textContent=String(i+1);
+    b.addEventListener("click", ()=>{ currentIndex=i; renderQuestion(); });
+    root.appendChild(b);
+  }
+  refreshDotsState(); highlightDot(0);
+}
+function highlightDot(i){ [...document.querySelectorAll(".dot")].forEach((el,idx)=> el.classList.toggle("active", idx===i)); }
+function refreshDotsState(){ [...document.querySelectorAll(".dot")].forEach(el=>{ const i=Number(el.dataset.idx); const hasAns=!!(answers[i]&&answers[i].length); el.classList.toggle("answered", hasAns); }); }
+
+async function resolveImageSrc(idx1){
+  const q=testData.questions[idx1-1]||{};
+  const cand=[`./${idx1}.jpg`,`./${idx1}.png`,`./${idx1}.jpeg`,`./${idx1}.webp`, q.image||""].filter(Boolean);
+  for(const u of cand){
+    const ok = await new Promise(r=>{ const img=new Image(); img.onload=()=>r(true); img.onerror=()=>r(false); img.src=u+(u.includes("?")?"":`?t=${Date.now()}`); });
+    if(ok) return u;
+  }
+  return "";
+}
+function renderQuestion(){
+  const q=testData.questions[currentIndex];
+  $("#qIndex").textContent=String(currentIndex+1);
+  $("#qTotal").textContent=String(testData.questions.length);
+  $("#qText").innerHTML=wrapTeX(q.text||"");
+  $("#qSect").textContent=q.section||"Umumiy";
+  $("#opts").innerHTML="";
+
+  const multi=isMulti(q);
+  const chosen=new Set(answers[currentIndex]||[]);
+  const order=q._perm&&q._perm.length===q.options.length?q._perm:[...Array(q.options.length).keys()];
+  order.forEach((orig)=>{
+    const row=document.createElement("label"); row.className="opt";
+    const inp=document.createElement("input");
+    inp.type=multi?"checkbox":"radio";
+    inp.name="q"+currentIndex+(multi?"[]":"");
+    inp.value=String(orig);
+    inp.checked=chosen.has(orig);
+    inp.addEventListener("change", ()=>{
+      if(multi){ if(inp.checked) chosen.add(orig); else chosen.delete(orig); answers[currentIndex]=normalize([...chosen]); }
+      else{ answers[currentIndex]=inp.checked?[orig]:[]; }
+      refreshDotsState();
+    });
+    const span=document.createElement("span"); span.innerHTML=wrapTeX(q.options[orig]);
+    row.appendChild(inp); row.appendChild(span);
+    $("#opts").appendChild(row);
+  });
+  resolveImageSrc(currentIndex+1).then(src=>{ $("#qImage").src=src; });
+  highlightDot(currentIndex); typeset($("#questionsCard"));
+}
+
+/* ========= Timer ========= */
+function startTimerIfNeeded(){
+  const minutes=Number(testData.durationMinutes||0);
+  const both=(txt,show)=>{ $("#metaTimer").textContent=txt; $("#qTimer").textContent=txt; $("#metaTimer").classList.toggle("hidden",!show); $("#qTimer").classList.toggle("hidden",!show); };
+  if(!minutes){ both("00:00",false); return; }
+  timeLeftSec=Math.round(minutes*60);
+  both(`${pad2(Math.floor(timeLeftSec/60))}:${pad2(timeLeftSec%60)}`, true);
+  timerId=setInterval(()=>{
+    timeLeftSec--; spentSeconds++;
+    const m=Math.max(0,Math.floor(timeLeftSec/60)), s=Math.max(0,timeLeftSec%60);
+    both(`${pad2(m)}:${pad2(s)}`, true);
+    if(timeLeftSec<=0){ clearInterval(timerId); onFinish(); }
+  },1000);
+}
+
+/* ========= Scoring ========= */
+function computeTotals(){
+  let total=0, max=0; const perQuestion=[]; const sectionAgg=new Map();
+  testData.questions.forEach((q,i)=>{
+    const sect=q.section||"Umumiy"; const pts=Number(q.points||1); max+=pts;
+    const picked=normalize(answers[i]||[]);
+    const correct=isMulti(q)?normalize(q.correctIndices||[]):[Number(q.correctIndex??-1)];
+    const ok=isMulti(q)?arraysEqual(picked,correct):(picked.length===1 && picked[0]===correct[0]);
+    if(ok) total+=pts;
+    if(!sectionAgg.has(sect)) sectionAgg.set(sect,{q:0,ok:0,pts:0,ptsMax:0});
+    const a=sectionAgg.get(sect); a.q+=1; a.ptsMax+=pts; if(ok){ a.ok+=1; a.pts+=pts; }
+    perQuestion.push({
+      i, section:sect, pts:Number(pts||0), ok:!!ok,
+      picked:Array.isArray(picked)?picked:[], correct:Array.isArray(correct)?correct:[],
+      text:String(q.text||""), options:Array.isArray(q.options)?q.options.map(v=>String(v??"")):[]
+    });
+  });
+  return { total, max, perQuestion, sectionAgg };
+}
+
+/* ========= POINTS: only-once per test (no results) ========= */
+/** Birinchi marta yechilganda points qo'shish; keyingi urinishlarda skip. */
+async function addPointsIfFirstSolve({ uid, testCode, delta }) {
+  const userRef = doc(db, "users", uid);
+  const markRef = doc(db, "users", uid, "solved", testCode);
+
+  const add = Number(delta || 0);
+  if (!(add > 0)) return { skipped: true, reason: "non-positive" };
+
+  return runTransaction(db, async (tx) => {
+    const markSnap = await tx.get(markRef);
+    if (markSnap.exists()) return { skipped: true };
+
+    const userSnap = await tx.get(userRef);
+    const prev = userSnap.exists() ? Number(userSnap.data()?.points || 0) : 0;
+    const next = prev + add;
+
+    tx.set(userRef, { points: next, updatedAt: serverTimestamp() }, { merge: true });
+    tx.set(markRef, { testCode, added: add, at: serverTimestamp(), spentSeconds });
+
+    return { skipped: false, added: add, totalPoints: next };
+  });
+}
+
+/* ========= Render helpers for results ========= */
+function renderSectionStats(sectionAgg){
+  const container=document.createElement("div"); container.className="stats-grid";
+  for(const [name,a] of sectionAgg.entries()){
+    const pct=a.q?Math.round((a.ok/a.q)*100):0;
+    const card=document.createElement("div"); card.className="stat";
+    card.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${name}</div>
+                    <div style="color:#667a72;font-size:12px">Savollar: ${a.q}</div>
+                    <div style="margin-top:6px"><b>${fmt(a.pts)}</b>/<b>${fmt(a.ptsMax)}</b> · <b>${pct}%</b></div>`;
+    container.appendChild(card);
+  }
+  const root=$("#sectionStats"); root.innerHTML=""; root.appendChild(container);
+}
+function renderDetail(perQuestion){
+  const table=document.createElement("table"); table.className="tbl";
+  table.innerHTML = `<thead class="rowbox">
+    <tr><th>#</th><th>Bo'lim</th><th>Savol</th><th>Tanlangan</th><th>To'g'ri</th><th style="text-align:right">Ball</th></tr>
+  </thead><tbody id="detailBody"></tbody>`;
+  const body=table.querySelector("#detailBody");
+  perQuestion.forEach(r=>{
+    const picked=r.picked.length? r.picked.map(x=>x+1).join(", "):"—";
+    const correct=r.correct.map(x=>x+1).join(", ");
+    const tr=document.createElement("tr"); tr.className="rowbox";
+    tr.innerHTML=`<td>${r.i+1}</td>
+                  <td><span class="chip">${r.section}</span></td>
+                  <td style="max-width:360px">${wrapTeX(r.text||"")}</td>
+                  <td>${picked} ${r.ok?"✓":"✗"}</td>
+                  <td>${correct}</td>
+                  <td style="text-align:right"><b>${r.ok?fmt(r.pts):0}</b>/<b>${fmt(r.pts)}</b></td>`;
+    body.appendChild(tr);
+  });
+  const root=$("#detailTable"); root.innerHTML=""; root.appendChild(table); typeset(root);
+}
+
+/* ========= Finish handler ========= */
+async function onFinish(){
+  if(timerId){ clearInterval(timerId); timerId=null; }
+  if(startedAt){ const now=new Date(); spentSeconds=Math.max(spentSeconds, Math.floor((now-startedAt)/1000)); }
+
+  const { total, max, perQuestion, sectionAgg } = computeTotals();
+  $("#questionsCard").classList.add("hidden");
+  $("#resultCard").classList.remove("hidden");
+
+  $("#scoreTotal").textContent=fmt(total);
+  $("#scoreMax").textContent=fmt(max);
+  $("#scoreNote").textContent=`To'g'ri: ${perQuestion.filter(x=>x.ok).length} / ${perQuestion.length}`;
+  $("#timeNote").textContent=`Sarflangan vaqt: ${pad2(Math.floor(spentSeconds/60))}:${pad2(spentSeconds%60)}`;
+  $("#stCorrect").textContent=String(perQuestion.filter(x=>x.ok).length);
+  $("#stWrong").textContent=String(perQuestion.length - perQuestion.filter(x=>x.ok).length);
+  $("#stPct").textContent=(max?Math.round((total/max)*100):0) + "%";
+  $("#stPoints").textContent=`${fmt(total)}/${fmt(max)}`;
+  renderSectionStats(sectionAgg);
+  renderDetail(perQuestion.map(r=>({
+    i:r.i, section:r.section||"Umumiy", pts:Number(r.pts||0), ok:!!r.ok,
+    picked:Array.isArray(r.picked)?r.picked:[], correct:Array.isArray(r.correct)?r.correct:[],
+    text:String(r.text||""), options:Array.isArray(r.options)?r.options.map(v=>String(v??"")):[]
+  })));
+
+  const user = auth.currentUser;
+  if(!currentTestCode){ showSaveStatus("Kod topilmadi — points qo'shilmadi","warn"); return; }
+  if(!user){ showSaveStatus("Kirmagansiz — points qo'shilmadi","warn"); return; }
+
+  try{
+    const res = await addPointsIfFirstSolve({ uid:user.uid, testCode:currentTestCode, delta: total });
+    if(res.skipped){ showSaveStatus("Oldin yechilgansiz — points qo'shilmadi (skip)","warn"); }
+    else { showSaveStatus(`Points +${res.added} → ${res.totalPoints} · Saqlandi`,"good"); }
+  }catch(e){
+    console.error("points add error:", e);
+    showSaveStatus("Points qo'shishda xatolik: " + (e?.message || e), "bad");
+  }
+}
+
+/* ========= Boot ========= */
+async function boot(){
+  // Avval auth ni tekshirish
+  await initializeAuth();
+  
+  // Loading ekranini yashirish
+  document.getElementById('loading-screen').style.display = 'none';
+  
+  await loadTestData();
+
+  if(!testData || !testData.questions?.length){
+    $("#introCard").classList.add("hidden");
+    $("#questionsCard").classList.add("hidden");
+    $("#resultCard").classList.add("hidden");
+    $("#emptyCard").classList.remove("hidden");
+    return;
+  }
+
+  $("#emptyCard").classList.add("hidden");
+  $("#resultCard").classList.add("hidden");
+  $("#questionsCard").classList.add("hidden");
+  $("#introCard").classList.remove("hidden");
+
+  currentTestId   = rawIdFromUrl || testData.id || currentTestId;
+  currentTestCode = currentTestCode || testData.code || currentTestId;
+
+  $("#testTitle").textContent=testData.title || "Test";
+  if(currentTestCode){ $("#codeChip").textContent=`Kod: ${currentTestCode}`; $("#codeChip").classList.remove("hidden"); }
+  document.title = `${testData.title||"Test"} — ${currentTestCode?("#"+currentTestCode):""} | LeaderMath`;
+  $("#testDesc").textContent=testData.description || "";
+  $("#metaCount").textContent=`Savollar: ${testData.questions.length}`;
+  $("#metaPoints").textContent=`Umumiy ball: ${fmt(sum(testData.questions.map(q=>q.points)))}`;
+
+  const minutes=Number(testData.durationMinutes||0);
+  if(minutes>0){ $("#metaTimer").textContent=`${pad2(minutes)}:00`; $("#metaTimer").classList.remove("hidden"); }
+  else { $("#metaTimer").classList.add("hidden"); }
+
+  answers = Array.from({length:testData.questions.length}, ()=>[]);
+  buildNavDots();
+
+  $("#startBtn").onclick  = ()=>{ startedAt=new Date(); spentSeconds=0; $("#introCard").classList.add("hidden"); $("#questionsCard").classList.remove("hidden"); renderQuestion(); startTimerIfNeeded(); };
+  $("#prevBtn").onclick   = ()=>{ if(currentIndex>0){ currentIndex--; renderQuestion(); } };
+  $("#nextBtn").onclick   = ()=>{ if(currentIndex<testData.questions.length-1){ currentIndex++; renderQuestion(); } };
+  $("#finishBtn").onclick = onFinish;
+  $("#againBtn").onclick  = ()=>{ $("#resultCard").classList.add("hidden"); $("#questionsCard").classList.remove("hidden"); renderQuestion(); };
+}
+
+// DOM yuklanganda ishga tushirish
+document.addEventListener('DOMContentLoaded', () => {
+  // Loading ekranini ko'rsatish
+  document.getElementById('loading-screen').style.display = 'flex';
+  
+  // Boot funksiyasini chaqirish
+  boot();
 });
 
-/* ===============================
-   Kichik util funksiyalar
-   =============================== */
+// Cheklovlar
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  if (
+    e.key === "F12" ||
+    (e.ctrlKey && e.shiftKey && ["I","J","C"].includes(e.key)) ||
+    (e.ctrlKey && e.key === "U") ||
+    (e.ctrlKey && e.key === "S")
+  ) e.preventDefault();
+});
 
-function byId(id) {
-  return document.getElementById(id);
-}
+document.addEventListener('dragstart', e => {
+  if (e.target.tagName === 'IMG') e.preventDefault();
+});
 
-function createEl(tag, props = {}, children = []) {
-  const el = document.createElement(tag);
-  Object.entries(props).forEach(([k, v]) => {
-    if (k === "class") el.className = v;
-    else if (k === "text") el.textContent = v;
-    else el.setAttribute(k, v);
+window.addEventListener('load', ()=>{
+  document.querySelectorAll('img').forEach(img=>{
+    img.setAttribute('draggable','false');
+    img.addEventListener('dragstart', e => e.preventDefault());
   });
-  children.forEach((ch) => el.appendChild(ch));
-  return el;
-}
-
-// Rasmlarni avtomatik topish: 1.jpg, 2.jpg, ... ketma-ket
-// stopAfterFirstMiss — true bo'lsa, 1-marta yo'q bo'lganda to'xtaydi (agar hech bo'lmasa 1 ta topilgan bo'lsa)
-function detectImagesSequential(maxCheck = 500, stopAfterFirstMiss = true) {
-  return new Promise((resolve) => {
-    let index = 1;
-    let found = [];
-    let misses = 0;
-
-    function tryNext() {
-      if (index > maxCheck) {
-        return resolve(found);
-      }
-      const img = new Image();
-      img.onload = () => {
-        found.push(index);
-        index++;
-        misses = 0;
-        tryNext();
-      };
-      img.onerror = () => {
-        index++;
-        misses++;
-        if (stopAfterFirstMiss && found.length > 0) {
-          return resolve(found);
-        }
-        if (!stopAfterFirstMiss && misses >= 3 && found.length > 0) {
-          return resolve(found);
-        }
-        tryNext();
-      };
-      img.src = `${found.length === 0 ? "" : ""}${index}.jpg`;
-    }
-
-    tryNext();
-  });
-}
-
-/* ===============================
-   1) TEST RUNNER (test.html)
-   =============================== */
-
-function initTestRunner() {
-  const state = {
-    config: null,
-    questions: [],
-    sections: [],
-    currentQuestionIndex: 0,
-    answers: {}, // questionId -> {type, letters[] or text}
-    timerSecondsLeft: 0,
-    timerId: null,
-  };
-
-  const dom = {
-    title: byId("testTitle"),
-    timerDisplay: byId("timerDisplay"),
-    timerLabel: byId("timerLabel"),
-    progressBarInner: byId("progressBarInner"),
-    progressMetaLeft: byId("progressMetaLeft"),
-    progressMetaRight: byId("progressMetaRight"),
-    sectionList: byId("sectionList"),
-    qPills: byId("questionPills"),
-    questionImage: byId("questionImage"),
-    questionSectionLabel: byId("questionSectionLabel"),
-    questionTypeLabel: byId("questionTypeLabel"),
-    answersContainer: byId("answersContainer"),
-    openAnswer: byId("openAnswer"),
-    openAnswerWrap: byId("openAnswerWrap"),
-    btnPrev: byId("btnPrev"),
-    btnNext: byId("btnNext"),
-    btnFinish: byId("btnFinish"),
-    currentQuestionLabel: byId("currentQuestionLabel"),
-    resultOverlay: byId("resultOverlay"),
-    resultCloseBtn: byId("resultCloseBtn"),
-    resultScore: byId("resultScore"),
-    resultDetails: byId("resultDetails"),
-  };
-
-  // Config.json ni o'qish
-  fetch("config.json?_=" + Date.now())
-    .then((res) => {
-      if (!res.ok) throw new Error("config.json topilmadi");
-      return res.json();
-    })
-    .then((config) => {
-      setupTestWithConfig(config, state, dom);
-    })
-    .catch((err) => {
-      console.error(err);
-      alert(
-        "config.json topilmadi yoki xato. Iltimos, admintest orqali config.json ni yarating."
-      );
-    });
-
-  dom.btnPrev.addEventListener("click", () => goToRelativeQuestion(-1, state, dom));
-  dom.btnNext.addEventListener("click", () => goToRelativeQuestion(1, state, dom));
-  dom.btnFinish.addEventListener("click", () => finishTest(state, dom));
-  dom.resultCloseBtn.addEventListener("click", () => {
-    dom.resultOverlay.style.display = "none";
-  });
-}
-
-function setupTestWithConfig(config, state, dom) {
-  state.config = config;
-  state.questions = (config.questions || []).slice().sort((a, b) => a.id - b.id);
-
-  if (!state.questions.length) {
-    alert("config.json ichida 'questions' bo'sh. Admin panelda savollarni kiriting.");
-    return;
-  }
-
-  // Title
-  dom.title.textContent = config.title || "Test";
-
-  // Timer
-  const duration = Number(config.durationMinutes || 0);
-  if (duration > 0) {
-    state.timerSecondsLeft = duration * 60;
-    dom.timerLabel.textContent = "Qolgan vaqt";
-    startTimer(state, dom);
-  } else {
-    dom.timerLabel.textContent = "Vaqt cheklanmagan";
-    dom.timerDisplay.textContent = "--:--";
-  }
-
-  // Sections: savollar ichidagi sectionName bo'yicha
-  const sectionMap = {};
-  state.questions.forEach((q) => {
-    const s = q.sectionName || "Bo'limsiz";
-    if (!sectionMap[s]) sectionMap[s] = [];
-    sectionMap[s].push(q.id);
-  });
-
-  state.sections = Object.entries(sectionMap).map(([name, ids]) => ({
-    name,
-    ids,
-  }));
-
-  renderSections(state, dom);
-  renderQuestionPills(state, dom);
-  renderQuestion(state, dom);
-  updateProgress(state, dom);
-}
-
-function startTimer(state, dom) {
-  if (state.timerId) clearInterval(state.timerId);
-  state.timerId = setInterval(() => {
-    state.timerSecondsLeft--;
-    if (state.timerSecondsLeft <= 0) {
-      clearInterval(state.timerId);
-      state.timerSecondsLeft = 0;
-      dom.timerDisplay.textContent = "00:00";
-      finishTest(state, dom, true);
-      return;
-    }
-    const m = Math.floor(state.timerSecondsLeft / 60);
-    const s = state.timerSecondsLeft % 60;
-    dom.timerDisplay.textContent = `${String(m).padStart(2, "0")}:${String(
-      s
-    ).padStart(2, "0")}`;
-  }, 1000);
-}
-
-function renderSections(state, dom) {
-  dom.sectionList.innerHTML = "";
-  state.sections.forEach((section, idx) => {
-    const chip = createEl(
-      "button",
-      { class: "section-chip" + (idx === 0 ? " active" : ""), type: "button" },
-      []
-    );
-    const left = createEl("div", { class: "section-chip-title", text: section.name });
-    const right = createEl("div", { class: "section-chip-count", text: section.ids.length });
-    chip.appendChild(left);
-    chip.appendChild(right);
-    chip.addEventListener("click", () => {
-      [...dom.sectionList.children].forEach((c) => c.classList.remove("active"));
-      chip.classList.add("active");
-      // birinchi savoli shu bo'limdagi eng kichik id bo'ladi
-      const firstId = section.ids[0];
-      const idxQ = state.questions.findIndex((q) => q.id === firstId);
-      if (idxQ >= 0) {
-        state.currentQuestionIndex = idxQ;
-        renderQuestion(state, dom);
-        renderQuestionPills(state, dom);
-      }
-    });
-    dom.sectionList.appendChild(chip);
-  });
-}
-
-function renderQuestionPills(state, dom) {
-  dom.qPills.innerHTML = "";
-  state.questions.forEach((q, idx) => {
-    const pill = createEl(
-      "button",
-      {
-        class:
-          "q-pill" +
-          (idx === state.currentQuestionIndex ? " current" : "") +
-          (state.answers[q.id] ? " answered" : ""),
-        type: "button",
-      },
-      []
-    );
-    pill.textContent = q.id;
-    pill.addEventListener("click", () => {
-      state.currentQuestionIndex = idx;
-      renderQuestion(state, dom);
-      renderQuestionPills(state, dom);
-    });
-    dom.qPills.appendChild(pill);
-  });
-}
-
-function renderQuestion(state, dom) {
-  const q = state.questions[state.currentQuestionIndex];
-  if (!q) return;
-
-  dom.currentQuestionLabel.textContent = `Savol ${q.id}/${state.questions.length}`;
-  dom.questionImage.src = q.image || `${q.id}.jpg`;
-  dom.questionImage.alt = `Savol ${q.id}`;
-
-  dom.questionSectionLabel.textContent = q.sectionName || "Bo'limsiz";
-  const typeText =
-    q.type === "open"
-      ? "Ochiq savol"
-      : q.type === "multi"
-      ? "Yopiq savol — ko‘p javob"
-      : "Yopiq savol — bitta javob";
-  dom.questionTypeLabel.textContent = typeText;
-
-  dom.answersContainer.innerHTML = "";
-  dom.openAnswerWrap.style.display = "none";
-
-  const saved = state.answers[q.id];
-
-  if (q.type === "open") {
-    dom.openAnswerWrap.style.display = "block";
-    dom.openAnswer.value = saved?.text || "";
-    dom.openAnswer.oninput = () => {
-      state.answers[q.id] = { type: "open", text: dom.openAnswer.value.trim() };
-      updateProgress(state, dom);
-      renderQuestionPills(state, dom);
-    };
-  } else {
-    const variantCount = Number(q.variantCount || 4);
-    const savedLetters = saved?.letters || [];
-
-    for (let i = 0; i < variantCount; i++) {
-      const letter = String.fromCharCode(65 + i); // A, B, C...
-      const option = createEl(
-        "label",
-        {
-          class:
-            "answer-option" + (savedLetters.includes(letter) ? " selected" : ""),
-        },
-        []
-      );
-      const input = document.createElement("input");
-      input.type = q.type === "multi" ? "checkbox" : "radio";
-      input.name = "answer-" + q.id;
-      input.value = letter;
-      input.checked = savedLetters.includes(letter);
-
-      const circle = createEl("div", { class: "answer-letter", text: letter }, []);
-      const text = createEl("div", { class: "answer-text", text: `${letter} javob` }, []);
-
-      option.appendChild(input);
-      option.appendChild(circle);
-      option.appendChild(text);
-
-      option.addEventListener("click", (e) => {
-        if (e.target.tagName === "INPUT") return;
-        input.checked = !input.checked;
-        if (input.type === "radio") {
-          // radio: faqat bitta qoladi
-          const others = dom.answersContainer.querySelectorAll("input");
-          others.forEach((o) => {
-            if (o !== input) {
-              o.checked = false;
-              o.closest(".answer-option").classList.remove("selected");
-            }
-          });
-        }
-        if (input.checked) option.classList.add("selected");
-        else option.classList.remove("selected");
-
-        const chosen = Array.from(
-          dom.answersContainer.querySelectorAll("input:checked")
-        ).map((i) => i.value);
-
-        if (chosen.length) {
-          state.answers[q.id] = { type: q.type, letters: chosen };
-        } else {
-          delete state.answers[q.id];
-        }
-        updateProgress(state, dom);
-        renderQuestionPills(state, dom);
-      });
-
-      dom.answersContainer.appendChild(option);
-    }
-  }
-
-  // Navigatsiya tugmalari holati
-  dom.btnPrev.disabled = state.currentQuestionIndex === 0;
-  dom.btnNext.disabled = state.currentQuestionIndex === state.questions.length - 1;
-}
-
-function goToRelativeQuestion(delta, state, dom) {
-  const newIdx = state.currentQuestionIndex + delta;
-  if (newIdx < 0 || newIdx >= state.questions.length) return;
-  state.currentQuestionIndex = newIdx;
-  renderQuestion(state, dom);
-  renderQuestionPills(state, dom);
-}
-
-function updateProgress(state, dom) {
-  const total = state.questions.length || 0;
-  const answered = Object.values(state.answers).filter((a) => {
-    if (!a) return false;
-    if (a.type === "open") return (a.text || "").length > 0;
-    return (a.letters || []).length > 0;
-  }).length;
-
-  const pct = total ? Math.round((answered / total) * 100) : 0;
-  dom.progressBarInner.style.width = `${pct}%`;
-  dom.progressMetaLeft.textContent = `${answered} / ${total} savol belgilangan`;
-  dom.progressMetaRight.textContent = `${pct}%`;
-
-  dom.btnFinish.disabled = total !== 0 && answered === 0;
-}
-
-function finishTest(state, dom, auto = false) {
-  if (!auto) {
-    const ok = confirm("Testni yakunlamoqchimisiz?");
-    if (!ok) return;
-  }
-
-  // Timer to'xtatish
-  if (state.timerId) clearInterval(state.timerId);
-
-  const questions = state.questions;
-  let totalPoints = 0;
-  let earnedPoints = 0;
-  let correctCount = 0;
-  let incorrectCount = 0;
-  let openCount = 0;
-
-  questions.forEach((q) => {
-    const points = Number(q.points || 1);
-    totalPoints += points;
-    if (q.type === "open") {
-      // avtomatik baholanmaydi
-      if (state.answers[q.id]?.text) {
-        openCount++;
-      }
-      return;
-    }
-
-    const correctLetters = (q.correctLetters || []).map((x) => String(x).toUpperCase());
-    if (!correctLetters.length) return;
-
-    const given = (state.answers[q.id]?.letters || []).map((x) =>
-      String(x).toUpperCase()
-    );
-
-    // to'liq moslik kerak: hamma to'g'ri va ortiqcha yo'q
-    const isSameLength = correctLetters.length === given.length;
-    const allIncluded = correctLetters.every((c) => given.includes(c));
-    const isCorrect = isSameLength && allIncluded;
-
-    if (isCorrect) {
-      earnedPoints += points;
-      correctCount++;
-    } else if (given.length) {
-      incorrectCount++;
-    }
-  });
-
-  const scorePct = totalPoints ? Math.round((earnedPoints / totalPoints) * 100) : 0;
-  dom.resultScore.textContent = `${scorePct}%`;
-  dom.resultDetails.textContent = `To‘g‘ri: ${correctCount} ta, noto‘g‘ri: ${incorrectCount} ta, ochiq savollar: ${openCount} ta. Ball: ${earnedPoints}/${totalPoints}`;
-
-  dom.resultOverlay.style.display = "flex";
-}
-
-/* ===============================
-   2) ADMIN PANEL (admintest.html)
-   =============================== */
-
-function initAdmin() {
-  const state = {
-    questions: [],
-    config: {
-      title: "",
-      durationMinutes: 0,
-      questions: [],
-    },
-  };
-
-  const dom = {
-    titleInput: byId("adminTitle"),
-    durationInput: byId("adminDuration"),
-    scanBtn: byId("btnScanImages"),
-    questionsWrap: byId("adminQuestionsWrap"),
-    loadJsonInput: byId("adminLoadJsonInput"),
-    loadJsonBtn: byId("btnLoadJson"),
-    saveJsonBtn: byId("btnSaveJson"),
-  };
-
-  dom.scanBtn.addEventListener("click", async () => {
-    dom.scanBtn.disabled = true;
-    dom.scanBtn.textContent = "Skanerlanmoqda...";
-    const indices = await detectImagesSequential(500, true);
-    dom.scanBtn.disabled = false;
-    dom.scanBtn.textContent = "1.jpg, 2.jpg, ... rasmlarni topish";
-
-    if (!indices.length) {
-      alert("Bu papkada 1.jpg, 2.jpg, ... ko‘rinishida rasm topilmadi.");
-      return;
-    }
-
-    state.questions = indices.map((id) => {
-      const existing = state.config.questions?.find((q) => q.id === id);
-      return (
-        existing || {
-          id,
-          image: `${id}.jpg`,
-          type: "single",
-          variantCount: 4,
-          correctLetters: [],
-          sectionName: "",
-          points: 1,
-        }
-      );
-    });
-
-    state.config.questions = state.questions;
-    renderAdminQuestions(state, dom);
-  });
-
-  dom.loadJsonBtn.addEventListener("click", () => {
-    dom.loadJsonInput.click();
-  });
-
-  dom.loadJsonInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        state.config = parsed;
-        dom.titleInput.value = parsed.title || "";
-        dom.durationInput.value = parsed.durationMinutes || "";
-        state.questions = (parsed.questions || []).slice().sort((a, b) => a.id - b.id);
-        renderAdminQuestions(state, dom);
-        alert("config.json muvaffaqiyatli yuklandi.");
-      } catch (err) {
-        console.error(err);
-        alert("JSON format xato.");
-      }
-    };
-    reader.readAsText(file, "utf-8");
-  });
-
-  dom.saveJsonBtn.addEventListener("click", () => {
-    // inputlardan yangi qiymatlarni state.config ga yozamiz
-    state.config.title = dom.titleInput.value.trim() || "Test";
-    state.config.durationMinutes = Number(dom.durationInput.value || 0);
-    state.config.questions = state.questions;
-
-    const jsonStr = JSON.stringify(state.config, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "config.json";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  });
-
-  // Agar papkada allaqachon config.json bo'lsa, uni avtomatik o'qishga urinib ko'ramiz
-  fetch("config.json?_=" + Date.now())
-    .then((r) => (r.ok ? r.json() : null))
-    .then((cfg) => {
-      if (!cfg) return;
-      state.config = cfg;
-      state.questions = (cfg.questions || []).slice().sort((a, b) => a.id - b.id);
-      dom.titleInput.value = cfg.title || "";
-      dom.durationInput.value = cfg.durationMinutes || "";
-      renderAdminQuestions(state, dom);
-    })
-    .catch(() => {});
-}
-
-function renderAdminQuestions(state, dom) {
-  dom.questionsWrap.innerHTML = "";
-
-  if (!state.questions.length) {
-    dom.questionsWrap.innerHTML =
-      "<div class='admin-help'>Rasmlarni skan qilish uchun yuqoridagi tugmani bosing.</div>";
-    return;
-  }
-
-  state.questions.forEach((q) => {
-    const row = createEl(
-      "div",
-      { class: "admin-q-row", "data-id": String(q.id) },
-      []
-    );
-
-    const idCol = createEl("div", { class: "admin-q-id", text: q.id }, []);
-    const imgCol = createEl("div", {}, []);
-    const img = createEl("img", { src: q.image || `${q.id}.jpg`, alt: "q" }, []);
-    imgCol.appendChild(img);
-
-    // Section name input
-    const sectionInput = createEl(
-      "input",
-      { class: "input", value: q.sectionName || "", placeholder: "Bo‘lim" },
-      []
-    );
-
-    sectionInput.addEventListener("input", () => {
-      q.sectionName = sectionInput.value.trim();
-    });
-
-    // Type select
-    const typeSelect = createEl(
-      "select",
-      { class: "select" },
-      []
-    );
-    [
-      { value: "single", label: "Yopiq (1 javob)" },
-      { value: "multi", label: "Yopiq (ko‘p javob)" },
-      { value: "open", label: "Ochiq savol" },
-    ].forEach((opt) => {
-      const o = createEl("option", { value: opt.value, text: opt.label }, []);
-      if (q.type === opt.value) o.selected = true;
-      typeSelect.appendChild(o);
-    });
-
-    // Variant count input
-    const varInput = createEl(
-      "input",
-      {
-        class: "input",
-        type: "number",
-        min: "1",
-        max: "8",
-        value: String(q.variantCount || 4),
-      },
-      []
-    );
-
-    // Correct letters input (ACD kabi)
-    const corrInput = createEl(
-      "input",
-      {
-        class: "input",
-        value: (q.correctLetters || []).join(""),
-        placeholder: "To‘g‘ri javob (masalan: AC)",
-      },
-      []
-    );
-
-    // Points
-    const pointsInput = createEl(
-      "input",
-      {
-        class: "input",
-        type: "number",
-        min: "0",
-        value: String(q.points || 1),
-      },
-      []
-    );
-
-    typeSelect.addEventListener("change", () => {
-      q.type = typeSelect.value;
-      const isOpen = q.type === "open";
-      varInput.disabled = isOpen;
-      corrInput.disabled = isOpen;
-      if (isOpen) {
-        q.correctLetters = [];
-      }
-    });
-
-    varInput.addEventListener("input", () => {
-      let v = Number(varInput.value || 4);
-      if (v < 1) v = 1;
-      if (v > 8) v = 8;
-      q.variantCount = v;
-      varInput.value = String(v);
-    });
-
-    corrInput.addEventListener("input", () => {
-      const raw = corrInput.value
-        .toUpperCase()
-        .replace(/[^A-Z]/g, "");
-      const arr = Array.from(new Set(raw.split("")));
-      q.correctLetters = arr;
-      corrInput.value = arr.join("");
-    });
-
-    pointsInput.addEventListener("input", () => {
-      const v = Number(pointsInput.value || 0);
-      q.points = v;
-    });
-
-    row.appendChild(idCol);
-    row.appendChild(imgCol);
-    row.appendChild(sectionInput);
-    row.appendChild(typeSelect);
-    row.appendChild(varInput);
-    row.appendChild(corrInput);
-    row.appendChild(pointsInput);
-
-    dom.questionsWrap.appendChild(row);
-  });
-
-  const help = createEl(
-    "div",
-    {
-      class: "admin-help",
-      text:
-        "• Ochiq savollar uchun to‘g‘ri javob yozilmaydi (keyin qo‘lda tekshiriladi). • Yopiq savollar uchun to‘g‘ri javoblarni harf ko‘rinishida yozing: A, B, AC, BCD va hokazo.",
-    },
-    []
-  );
-  dom.questionsWrap.appendChild(help);
-}
+});
