@@ -75,7 +75,7 @@ async function initializeAuth() {
   } catch (error) {
     console.error('Session xatosi:', error);
     // Login sahifasiga yo'naltirish
-    window.location.href = '.../login.html';
+    window.location.href = '/demo/login.html';
   }
 }
 
