@@ -1,6 +1,5 @@
 /* ========= Imports ========= */
 // Firebase ni global objectdan olamiz
-const auth = firebase.auth;
 const db = firebase.firestore;
 const { doc, runTransaction, serverTimestamp } = firebase.firestore;
 
@@ -62,13 +61,17 @@ async function initializeAuth() {
     
     if (user) {
       // Foydalanuvchi ma'lumotlarini ko'rsatish
-      document.getElementById('user-name').textContent = user.data.fullName || user.data.loginId || 'Foydalanuvchi';
-      document.getElementById('user-info').style.display = 'flex';
-      document.getElementById('authInfo').style.display = 'none';
+      const userInfo = $('#user-info');
+      const userName = $('#user-name');
+      const authInfo = $('#authInfo');
       
-      // Loading ekranini yashirish
-      document.getElementById('loading-screen').style.display = 'none';
-      document.getElementById('introCard').classList.remove('hidden');
+      if (userInfo && userName) {
+        userName.textContent = user.data.fullName || user.data.loginId || 'Foydalanuvchi';
+        userInfo.style.display = 'flex';
+        if (authInfo) {
+          authInfo.style.display = 'none';
+        }
+      }
       
       return user;
     }
@@ -220,7 +223,11 @@ function computeTotals(){
 
 /* ========= POINTS: only-once per test (no results) ========= */
 /** Birinchi marta yechilganda points qo'shish; keyingi urinishlarda skip. */
-async function addPointsIfFirstSolve({ uid, testCode, delta }) {
+async function addPointsIfFirstSolve({ testCode, delta }) {
+  const user = authUtils.getUser();
+  if (!user) return { skipped: true, reason: "no user" };
+
+  const uid = user.docId;
   const userRef = doc(db, "users", uid);
   const markRef = doc(db, "users", uid, "solved", testCode);
 
@@ -300,12 +307,12 @@ async function onFinish(){
     text:String(r.text||""), options:Array.isArray(r.options)?r.options.map(v=>String(v??"")):[]
   })));
 
-  const user = auth.currentUser;
+  const user = authUtils.getUser();
   if(!currentTestCode){ showSaveStatus("Kod topilmadi — points qo'shilmadi","warn"); return; }
   if(!user){ showSaveStatus("Kirmagansiz — points qo'shilmadi","warn"); return; }
 
   try{
-    const res = await addPointsIfFirstSolve({ uid:user.uid, testCode:currentTestCode, delta: total });
+    const res = await addPointsIfFirstSolve({ testCode:currentTestCode, delta: total });
     if(res.skipped){ showSaveStatus("Oldin yechilgansiz — points qo'shilmadi (skip)","warn"); }
     else { showSaveStatus(`Points +${res.added} → ${res.totalPoints} · Saqlandi`,"good"); }
   }catch(e){
@@ -320,8 +327,11 @@ async function boot(){
   await initializeAuth();
   
   // Loading ekranini yashirish
-  document.getElementById('loading-screen').style.display = 'none';
-  
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.display = 'none';
+  }
+
   await loadTestData();
 
   if(!testData || !testData.questions?.length){
@@ -364,7 +374,10 @@ async function boot(){
 // DOM yuklanganda ishga tushirish
 document.addEventListener('DOMContentLoaded', () => {
   // Loading ekranini ko'rsatish
-  document.getElementById('loading-screen').style.display = 'flex';
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.style.display = 'flex';
+  }
   
   // Boot funksiyasini chaqirish
   boot();
