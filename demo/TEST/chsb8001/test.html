@@ -1,136 +1,851 @@
 <!doctype html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LeaderMath — Test</title>
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test — Imtihon</title>
   
-  <!-- Auth tizimi -->
-  <script src="/demo/firebase-config.js"></script>
-  <script src="/demo/auth-utils.js"></script>
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="../test.css">
-  <link rel="icon" href="/favicon.png">
   <!-- MathJax -->
   <script>
     window.MathJax = {
-      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes:true, packages:{'[+]':['noerrors']} },
-      options: { renderActions: { addMenu: [] } },
-      loader: { load: ['[tex]/noerrors'] }
+      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes: true, packages:{'[+]':['noerrors']} },
+      options: { renderActions: { addMenu: [] } }, loader: { load: ['[tex]/noerrors'] }
     };
   </script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  
+  <style>
+    :root{--g:#2E8B57;--gd:#1F6B45;--bd:#e9f2ec;--muted:#64748b;--ring:rgba(46,139,87,.18)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f6faf8;color:#0f172a}
+    .wrap{max-width:900px;margin:0 auto;padding:20px}
+    header{text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:2px solid var(--bd)}
+    h1{margin:0 0 10px;color:var(--g)}
+    .subtitle{color:var(--muted);font-size:16px}
+    .timer{font-size:24px;font-weight:bold;color:var(--g);background:#f1f8f4;padding:10px 20px;border-radius:12px;display:inline-block;margin:10px 0}
+    
+    .question-card{background:#fff;border:1px solid var(--bd);border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 8px 24px rgba(31,107,69,.06)}
+    .q-number{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;background:var(--g);color:white;border-radius:10px;font-weight:bold;margin-right:12px}
+    .q-header{display:flex;align-items:center;margin-bottom:20px}
+    .q-image{width:100%;max-width:600px;margin:0 auto 20px;display:block;border:1px solid var(--bd);border-radius:12px}
+    .q-image img{width:100%;height:auto;border-radius:12px}
+    .section-header{background:#f1f8f4;padding:12px 20px;border-radius:12px;margin:30px 0 20px;font-weight:600;color:var(--g)}
+    
+    /* Variantli test */
+    .options-grid{display:grid;gap:12px;margin-top:20px}
+    .option{display:flex;align-items:center;gap:12px;padding:14px 18px;border:2px solid #dfeae3;border-radius:12px;cursor:pointer;transition:all 0.2s}
+    .option:hover{border-color:var(--g);background:#f9fdfb}
+    .option.selected{border-color:var(--g);background:#e8f5ef}
+    .option input{transform:scale(1.2)}
+    .option-label{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:#f1f8f4;border-radius:8px;font-weight:600}
+    .option-content{flex:1}
+    
+    /* Yopiq test */
+    .open-answer{width:100%;padding:16px;border:2px solid #dfeae3;border-radius:12px;font-size:16px;font-family:inherit;margin-top:10px}
+    .open-answer:focus{outline:none;border-color:var(--g)}
+    
+    /* Navigation */
+    .nav-buttons{display:flex;justify-content:space-between;margin-top:30px;padding-top:20px;border-top:2px solid var(--bd)}
+    .btn{appearance:none;border:none;border-radius:12px;padding:12px 24px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--g),var(--gd));cursor:pointer;font-size:16px}
+    .btn.ghost{background:#fff;color:var(--g);border:2px solid var(--bd)}
+    .btn.danger{background:linear-gradient(135deg,#d32f2f,#b71c1c)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+    
+    /* Results */
+    .results-screen{text-align:center;padding:40px 20px}
+    .score-circle{width:200px;height:200px;border-radius:50%;background:linear-gradient(135deg,var(--g),var(--gd));color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 30px;font-size:48px;font-weight:bold}
+    .score-circle small{font-size:20px;opacity:0.9}
+    .result-details{max-width:600px;margin:30px auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 24px rgba(31,107,69,.06)}
+    .result-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--bd)}
+    .result-row:last-child{border-bottom:none}
+    
+    /* Loading & Error */
+    .loading{text-align:center;padding:60px 20px;font-size:18px}
+    .error{text-align:center;padding:40px 20px;background:#fee2e2;border-radius:16px;color:#991b1b;margin:20px 0}
+    
+    /* Student info */
+    .student-form{background:#fff;border-radius:16px;padding:30px;max-width:500px;margin:40px auto;box-shadow:0 8px 24px rgba(31,107,69,.06)}
+    .form-group{margin-bottom:20px}
+    .form-group label{display:block;margin-bottom:8px;font-weight:600}
+    .form-group input{width:100%;padding:12px 16px;border:2px solid #dfeae3;border-radius:10px;font-size:16px}
+    .form-group input:focus{outline:none;border-color:var(--g)}
+    
+    /* Progress bar */
+    .progress-bar{height:8px;background:#e9f2ec;border-radius:4px;margin:20px 0;overflow:hidden}
+    .progress-fill{height:100%;background:var(--g);border-radius:4px;transition:width 0.3s}
+    
+    .hidden{display:none}
+  </style>
 </head>
 <body>
-  <!-- Loading screen -->
-  <div id="loading-screen" class="loading-screen">
-    <div class="loading-spinner"></div>
-    <div class="loading-text">Yuklanmoqda...</div>
-  </div>
-
-  <header>
-    <div class="wrap row" style="justify-content:space-between">
-      <div class="row">
-        <b>LeaderMath — Test</b>
-        <span class="chip">BSB / CHSB sinov</span>
-      </div>
-      <div class="row">
-        <div class="user-info" id="user-info" style="display: none;">
-          <span class="user-name" id="user-name"></span>
+  <!-- Firebase config (same as in admin) -->
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+  </script>
+  
+  <div class="wrap">
+    <!-- Loading screen -->
+    <div id="loadingScreen" class="loading">
+      <div style="font-size:48px;margin-bottom:20px">📚</div>
+      <h2>Test yuklanmoqda...</h2>
+      <p id="loadingText">Firebase ulanmoqda</p>
+    </div>
+    
+    <!-- Error screen -->
+    <div id="errorScreen" class="error hidden">
+      <h2>Xatolik yuz berdi</h2>
+      <p id="errorText"></p>
+      <button class="btn" onclick="location.reload()">Qayta yuklash</button>
+    </div>
+    
+    <!-- Student info form -->
+    <div id="studentFormScreen" class="hidden">
+      <div class="student-form">
+        <h2>Ismingizni kiriting</h2>
+        <p>Testni boshlash uchun ism va familiyangizni kiriting</p>
+        
+        <div class="form-group">
+          <label>Ism</label>
+          <input type="text" id="studentName" placeholder="Ali" required>
         </div>
-        <span id="authInfo" class="chip">Kirish: aniqlanmoqda…</span>
-        <span id="saveStatusTop" class="chip hidden"></span>
-        <a class="btn ghost" href="https://xplusy.netlify.app/index">HOME</a>
+        
+        <div class="form-group">
+          <label>Familiya</label>
+          <input type="text" id="studentSurname" placeholder="Valiyev" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Guruh/Raqam (ixtiyoriy)</label>
+          <input type="text" id="studentGroup" placeholder="10-A">
+        </div>
+        
+        <button class="btn" id="startTestBtn" style="width:100%;padding:16px">Testni boshlash</button>
       </div>
     </div>
-  </header>
-
-  <main class="wrap">
-    <!-- Intro -->
-    <section id="introCard" class="card hidden">
-      <div class="row" style="justify-content:space-between">
+    
+    <!-- Test screen -->
+    <div id="testScreen" class="hidden">
+      <header>
+        <h1 id="testTitle">Test</h1>
+        <div class="subtitle" id="testDescription"></div>
+        <div class="timer" id="timer">30:00</div>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill" style="width:0%"></div>
+        </div>
+      </header>
+      
+      <div id="questionsContainer"></div>
+      
+      <div class="nav-buttons">
+        <button class="btn ghost" id="prevBtn" disabled>← Oldingi</button>
         <div>
-          <h2 id="testTitle" style="margin:6px 0 10px">Test</h2>
-          <div class="row" style="gap:8px;margin:6px 0 8px">
-            <span id="codeChip" class="chip hidden">Kod: —</span>
+          <span id="currentQuestion">1</span> / <span id="totalQuestions">20</span>
+        </div>
+        <button class="btn" id="nextBtn">Keyingi →</button>
+      </div>
+      
+      <div style="text-align:center;margin-top:20px">
+        <button class="btn danger" id="submitTestBtn">Testni yakunlash</button>
+      </div>
+    </div>
+    
+    <!-- Results screen -->
+    <div id="resultsScreen" class="hidden results-screen">
+      <div class="score-circle">
+        <span id="scoreValue">0</span>
+        <small>ball</small>
+      </div>
+      
+      <h2>Test yakunlandi!</h2>
+      <p id="studentInfo"></p>
+      
+      <div class="result-details">
+        <h3>Natijalar</h3>
+        <div class="result-row">
+          <span>To'g'ri javoblar:</span>
+          <span id="correctCount">0</span>
+        </div>
+        <div class="result-row">
+          <span>Noto'g'ri javoblar:</span>
+          <span id="wrongCount">0</span>
+        </div>
+        <div class="result-row">
+          <span>Javobsiz:</span>
+          <span id="unansweredCount">0</span>
+        </div>
+        <div class="result-row">
+          <span>Umumiy ball:</span>
+          <span id="totalScore">0</span>
+        </div>
+        <div class="result-row">
+          <span>Vaqt:</span>
+          <span id="timeUsed">0:00</span>
+        </div>
+      </div>
+      
+      <div style="margin-top:30px">
+        <button class="btn" onclick="location.reload()">Yana test yechish</button>
+        <button class="btn ghost" id="reviewBtn">Javoblarni ko'rib chiqish</button>
+      </div>
+    </div>
+    
+    <!-- Review screen -->
+    <div id="reviewScreen" class="hidden">
+      <header>
+        <h1>Javoblarni ko'rib chiqish</h1>
+        <button class="btn ghost" onclick="showResults()">← Natijalarga qaytish</button>
+      </header>
+      
+      <div id="reviewContainer"></div>
+    </div>
+  </div>
+
+<script>
+/* ========= Global variables ========= */
+let firebaseApp = null;
+let db = null;
+let testData = null;
+let currentTest = null;
+let studentAnswers = {};
+let currentQuestionIndex = 0;
+let timerInterval = null;
+let timeRemaining = 0;
+let testStartTime = null;
+let testType = 'variant'; // 'variant' or 'yopiq'
+
+/* ========= DOM Elements ========= */
+const screens = {
+  loading: $('#loadingScreen'),
+  error: $('#errorScreen'),
+  studentForm: $('#studentFormScreen'),
+  test: $('#testScreen'),
+  results: $('#resultsScreen'),
+  review: $('#reviewScreen')
+};
+
+const elements = {
+  testTitle: $('#testTitle'),
+  testDescription: $('#testDescription'),
+  timer: $('#timer'),
+  progressFill: $('#progressFill'),
+  questionsContainer: $('#questionsContainer'),
+  currentQuestion: $('#currentQuestion'),
+  totalQuestions: $('#totalQuestions'),
+  prevBtn: $('#prevBtn'),
+  nextBtn: $('#nextBtn'),
+  submitTestBtn: $('#submitTestBtn'),
+  studentName: $('#studentName'),
+  studentSurname: $('#studentSurname'),
+  studentGroup: $('#studentGroup'),
+  startTestBtn: $('#startTestBtn'),
+  loadingText: $('#loadingText'),
+  errorText: $('#errorText'),
+  scoreValue: $('#scoreValue'),
+  correctCount: $('#correctCount'),
+  wrongCount: $('#wrongCount'),
+  unansweredCount: $('#unansweredCount'),
+  totalScore: $('#totalScore'),
+  timeUsed: $('#timeUsed'),
+  studentInfo: $('#studentInfo'),
+  reviewContainer: $('#reviewContainer'),
+  reviewBtn: $('#reviewBtn')
+};
+
+/* ========= Firebase initialization ========= */
+async function initializeFirebase() {
+  try {
+    elements.loadingText.textContent = "Firebase ulanmoqda...";
+    
+    // Try to load config from localStorage first
+    const savedConfig = localStorage.getItem('firebaseConfig');
+    let config = firebaseConfig;
+    
+    if (savedConfig) {
+      try {
+        config = JSON.parse(savedConfig);
+      } catch (e) {
+        console.log("Could not parse saved config, using default");
+      }
+    }
+    
+    // Initialize Firebase
+    firebaseApp = firebase.initializeApp(config);
+    db = firebase.firestore();
+    
+    elements.loadingText.textContent = "Test yuklanmoqda...";
+    return true;
+  } catch (error) {
+    console.error("Firebase initialization error:", error);
+    
+    // Try to load from localStorage as fallback
+    const savedTest = localStorage.getItem('testData');
+    if (savedTest) {
+      elements.loadingText.textContent = "LocalStorage'dan test yuklanmoqda...";
+      testData = JSON.parse(savedTest);
+      showStudentForm();
+      return true;
+    }
+    
+    showError("Firebase ulanishda xatolik. Iltimos, internet aloqasini tekshiring.");
+    return false;
+  }
+}
+
+/* ========= Test loading ========= */
+async function loadTest() {
+  try {
+    // Check for test code in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const testCode = urlParams.get('code') || localStorage.getItem('lastTestCode');
+    
+    if (testCode) {
+      // Load from Firebase
+      const testDoc = await db.collection('tests').doc(testCode).get();
+      
+      if (testDoc.exists) {
+        testData = testDoc.data();
+        testData.code = testCode;
+        localStorage.setItem('lastTestCode', testCode);
+      } else {
+        throw new Error("Berilgan kod bilan test topilmadi");
+      }
+    } else {
+      // Load from localStorage
+      const savedTest = localStorage.getItem('testData');
+      if (savedTest) {
+        testData = JSON.parse(savedTest);
+      } else {
+        throw new Error("Test topilmadi. Iltimos, test kodini kiriting.");
+      }
+    }
+    
+    // Initialize test
+    initializeTest();
+    showStudentForm();
+    
+  } catch (error) {
+    console.error("Test loading error:", error);
+    showError(error.message);
+  }
+}
+
+/* ========= Test initialization ========= */
+function initializeTest() {
+  if (!testData) return;
+  
+  // Set test type
+  testType = testData.type || 'variant';
+  
+  // Initialize answers object
+  testData.questions.forEach((q, index) => {
+    studentAnswers[index] = {
+      answer: null,
+      points: q.points || 1,
+      isCorrect: false
+    };
+  });
+  
+  // Set timer
+  timeRemaining = (testData.durationMinutes || 30) * 60;
+  
+  // Update UI
+  elements.testTitle.textContent = testData.title || "Test";
+  elements.testDescription.textContent = testData.description || "";
+  elements.totalQuestions.textContent = testData.questions.length;
+  
+  // Set test type indicator
+  const typeLabel = testType === 'variant' ? "Variantli test" : "Yopiq test (ochiq javob)";
+  elements.testDescription.textContent += ` (${typeLabel})`;
+}
+
+/* ========= Screen management ========= */
+function showScreen(screenName) {
+  Object.keys(screens).forEach(key => {
+    screens[key].classList.add('hidden');
+  });
+  screens[screenName].classList.remove('hidden');
+}
+
+function showError(message) {
+  elements.errorText.textContent = message;
+  showScreen('error');
+}
+
+function showStudentForm() {
+  showScreen('studentForm');
+}
+
+/* ========= Test navigation ========= */
+function renderQuestion(index) {
+  if (!testData || !testData.questions[index]) return;
+  
+  currentQuestionIndex = index;
+  const question = testData.questions[index];
+  const qNumber = index + 1;
+  
+  // Update navigation
+  elements.currentQuestion.textContent = qNumber;
+  elements.prevBtn.disabled = index === 0;
+  elements.nextBtn.disabled = index === testData.questions.length - 1;
+  
+  // Calculate progress
+  const progress = ((index + 1) / testData.questions.length) * 100;
+  elements.progressFill.style.width = `${progress}%`;
+  
+  // Check if there's a section header
+  let sectionHTML = '';
+  if (testData.sections) {
+    const section = testData.sections.find(s => 
+      qNumber >= s.start && qNumber <= s.end
+    );
+    if (section && (index === 0 || !testData.sections.find(s => 
+      index >= s.start - 1 && index <= s.end - 1 && 
+      qNumber - 1 >= s.start && qNumber - 1 <= s.end
+    ))) {
+      sectionHTML = `<div class="section-header">${section.name}</div>`;
+    }
+  }
+  
+  // Create question HTML
+  let questionHTML = `
+    ${sectionHTML}
+    <div class="question-card">
+      <div class="q-header">
+        <div class="q-number">${qNumber}</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:18px">Savol #${qNumber}</div>
+          <div class="mini" style="color:var(--muted);font-size:14px">
+            Ball: ${question.points || 1} | ${testType === 'variant' ? 'Variantli' : 'Yopiq javob'}
           </div>
-          <div id="testDesc" style="color:#667a72">Rasm + variantlar.</div>
-          <div class="row" style="gap:8px;margin-top:8px">
-            <span id="metaCount" class="chip">Savollar: —</span>
-            <span id="metaPoints" class="chip">Umumiy ball: —</span>
-            <span id="metaTimer" class="chip hidden">00:00</span>
+        </div>
+      </div>
+      
+      <!-- Question image -->
+      <div class="q-image">
+        <div style="text-align:center;padding:40px 20px;background:#f9fdfb;border-radius:12px">
+          <div style="font-size:48px;margin-bottom:10px">📷</div>
+          <div>Rasm: <code>${qNumber}.jpg/png</code></div>
+          <div class="mini" style="margin-top:10px">Testda haqiqiy rasm ko'rsatiladi</div>
+        </div>
+      </div>
+  `;
+  
+  // Add answer options based on test type
+  if (testType === 'variant') {
+    questionHTML += `
+      <div class="options-grid">
+        ${(question.options || []).map((opt, optIndex) => {
+          const isSelected = studentAnswers[index].answer === optIndex;
+          return `
+            <div class="option ${isSelected ? 'selected' : ''}" data-option="${optIndex}">
+              <input type="radio" name="q${index}" value="${optIndex}" 
+                ${isSelected ? 'checked' : ''} style="display:none">
+              <div class="option-label">${String.fromCharCode(65 + optIndex)}</div>
+              <div class="option-content mj">${renderMath(opt)}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  } else {
+    // Open answer for yopiq test
+    const currentAnswer = studentAnswers[index].answer || '';
+    questionHTML += `
+      <div>
+        <label style="display:block;margin-bottom:10px;font-weight:600">Javobingizni kiriting:</label>
+        <input type="text" class="open-answer" id="openAnswer${index}" 
+          value="${escapeHtml(currentAnswer)}" placeholder="Javob...">
+        <div class="mini" style="margin-top:8px">
+          Matematik ifodalar uchun LaTeX qo'llashingiz mumkin: $x^2$, $\\sqrt{a}$, $\\frac{a}{b}$
+        </div>
+      </div>
+    `;
+  }
+  
+  questionHTML += `</div>`;
+  elements.questionsContainer.innerHTML = questionHTML;
+  
+  // Add event listeners
+  if (testType === 'variant') {
+    document.querySelectorAll('.option').forEach(option => {
+      option.addEventListener('click', function() {
+        const optIndex = parseInt(this.dataset.option);
+        selectAnswer(index, optIndex);
+        
+        // Update UI
+        document.querySelectorAll('.option').forEach(opt => {
+          opt.classList.remove('selected');
+        });
+        this.classList.add('selected');
+        
+        // Auto-advance if enabled
+        if (localStorage.getItem('autoAdvance') === 'true') {
+          setTimeout(() => {
+            if (index < testData.questions.length - 1) {
+              renderQuestion(index + 1);
+            }
+          }, 300);
+        }
+      });
+    });
+  } else {
+    const openAnswerInput = $(`#openAnswer${index}`);
+    if (openAnswerInput) {
+      openAnswerInput.addEventListener('input', function() {
+        selectAnswer(index, this.value);
+      });
+    }
+  }
+  
+  // Re-render Math
+  typesetQuestion();
+}
+
+function selectAnswer(qIndex, answer) {
+  studentAnswers[qIndex].answer = answer;
+  
+  // Mark as answered
+  const questionElement = $(`.question-card:nth-child(${qIndex + 1})`);
+  if (questionElement) {
+    questionElement.style.borderColor = 'var(--g)';
+  }
+}
+
+/* ========= Timer ========= */
+function startTimer() {
+  testStartTime = Date.now();
+  
+  timerInterval = setInterval(() => {
+    timeRemaining--;
+    
+    if (timeRemaining <= 0) {
+      clearInterval(timerInterval);
+      submitTest();
+      return;
+    }
+    
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    elements.timer.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Change color when time is running out
+    if (timeRemaining < 300) { // 5 minutes
+      elements.timer.style.color = '#d32f2f';
+    }
+  }, 1000);
+}
+
+/* ========= Test submission ========= */
+async function submitTest() {
+  clearInterval(timerInterval);
+  
+  // Calculate results
+  let correctCount = 0;
+  let wrongCount = 0;
+  let unansweredCount = 0;
+  let totalScore = 0;
+  
+  testData.questions.forEach((q, index) => {
+    const studentAnswer = studentAnswers[index];
+    
+    if (studentAnswer.answer === null || studentAnswer.answer === '') {
+      unansweredCount++;
+      studentAnswer.isCorrect = false;
+    } else {
+      if (testType === 'variant') {
+        const isCorrect = q.correctIndex === studentAnswer.answer;
+        studentAnswer.isCorrect = isCorrect;
+        
+        if (isCorrect) {
+          correctCount++;
+          totalScore += q.points || 1;
+        } else {
+          wrongCount++;
+        }
+      } else {
+        // For open answers, we just store the answer
+        // Teacher will check manually later
+        studentAnswer.isCorrect = null; // Unknown, needs manual checking
+      }
+    }
+  });
+  
+  // Calculate time used
+  const timeUsedSeconds = (testData.durationMinutes * 60) - timeRemaining;
+  const timeUsedMinutes = Math.floor(timeUsedSeconds / 60);
+  const timeUsedSecondsRemainder = timeUsedSeconds % 60;
+  
+  // Update results UI
+  elements.scoreValue.textContent = totalScore;
+  elements.correctCount.textContent = correctCount;
+  elements.wrongCount.textContent = wrongCount;
+  elements.unansweredCount.textContent = unansweredCount;
+  elements.totalScore.textContent = totalScore;
+  elements.timeUsed.textContent = `${timeUsedMinutes}:${timeUsedSecondsRemainder.toString().padStart(2, '0')}`;
+  
+  // Student info
+  const studentName = elements.studentName.value;
+  const studentSurname = elements.studentSurname.value;
+  const studentGroup = elements.studentGroup.value;
+  
+  elements.studentInfo.textContent = `${studentName} ${studentSurname} ${studentGroup ? `(${studentGroup})` : ''}`;
+  
+  // Save results to Firebase
+  await saveResultsToFirebase(studentName, studentSurname, studentGroup, totalScore, timeUsedSeconds);
+  
+  // Show results
+  showScreen('results');
+}
+
+/* ========= Firebase save results ========= */
+async function saveResultsToFirebase(name, surname, group, score, timeUsed) {
+  try {
+    if (!db || !testData.code) return;
+    
+    const resultsData = {
+      testCode: testData.code,
+      testTitle: testData.title,
+      studentName: name,
+      studentSurname: surname,
+      studentGroup: group || '',
+      score: score,
+      timeUsed: timeUsed,
+      totalQuestions: testData.questions.length,
+      answers: studentAnswers,
+      submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      testType: testType
+    };
+    
+    await db.collection('results').add(resultsData);
+    console.log("Results saved to Firebase");
+  } catch (error) {
+    console.error("Error saving results to Firebase:", error);
+    // Still continue even if Firebase save fails
+  }
+}
+
+/* ========= Review screen ========= */
+function showReview() {
+  showScreen('review');
+  
+  let reviewHTML = '';
+  
+  testData.questions.forEach((q, index) => {
+    const qNumber = index + 1;
+    const studentAnswer = studentAnswers[index];
+    
+    reviewHTML += `
+      <div class="question-card">
+        <div class="q-header">
+          <div class="q-number">${qNumber}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:18px">Savol #${qNumber}</div>
+            <div style="display:flex;gap:10px;margin-top:8px">
+              <div class="badge">Ball: ${q.points || 1}</div>
+              <div class="badge" style="background:${
+                studentAnswer.isCorrect === true ? '#dcfce7' : 
+                studentAnswer.isCorrect === false ? '#fee2e2' : '#fef3c7'
+              }; color:${
+                studentAnswer.isCorrect === true ? '#166534' : 
+                studentAnswer.isCorrect === false ? '#991b1b' : '#92400e'
+              }">
+                ${studentAnswer.isCorrect === true ? '✓ To\'g\'ri' : 
+                  studentAnswer.isCorrect === false ? '✗ Noto\'g\'ri' : '○ Javob tekshirilmadi'}
+              </div>
+            </div>
           </div>
         </div>
-        <button id="startBtn" class="btn">Boshlash</button>
-      </div>
-    </section>
-
-    <!-- Questions -->
-    <section id="questionsCard" class="card hidden">
-      <div class="row" style="justify-content:space-between">
-        <div><b id="qIndex">1</b>/<span id="qTotal">—</span> <span id="qSect" class="chip"></span></div>
-        <div class="row">
-          <span id="qTimer" class="chip hidden">00:00</span>
-          <button id="prevBtn" class="btn ghost">← Oldingi</button>
-          <button id="nextBtn" class="btn">Keyingi →</button>
+        
+        <!-- Question image placeholder -->
+        <div class="q-image" style="margin-bottom:20px">
+          <div style="text-align:center;padding:20px;background:#f9fdfb;border-radius:12px">
+            Savol rasmi (#${qNumber})
+          </div>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div style="background:#f9fdfb;padding:16px;border-radius:12px">
+            <div style="font-weight:600;margin-bottom:10px">Sizning javobingiz:</div>
+            <div class="mj">
+    `;
+    
+    if (testType === 'variant') {
+      const optionIndex = studentAnswer.answer;
+      const optionText = q.options && q.options[optionIndex] ? q.options[optionIndex] : 'Javob berilmagan';
+      reviewHTML += `${optionIndex !== null ? `${String.fromCharCode(65 + optionIndex)}) ` : ''}${renderMath(optionText)}`;
+    } else {
+      reviewHTML += renderMath(studentAnswer.answer || 'Javob berilmagan');
+    }
+    
+    reviewHTML += `
+            </div>
+          </div>
+          
+          <div style="background:#f1f8f4;padding:16px;border-radius:12px">
+            <div style="font-weight:600;margin-bottom:10px">To'g'ri javob:</div>
+            <div class="mj">
+    `;
+    
+    if (testType === 'variant') {
+      const correctOption = q.options && q.options[q.correctIndex] ? q.options[q.correctIndex] : '';
+      reviewHTML += `${String.fromCharCode(65 + q.correctIndex)}) ${renderMath(correctOption)}`;
+    } else {
+      reviewHTML += renderMath(q.correctAnswer || '');
+    }
+    
+    reviewHTML += `
+            </div>
+          </div>
         </div>
       </div>
-      <div style="margin-top:10px">
-        <div id="qText"></div>
-        <img id="qImage" alt="Savol rasmi">
-        <div id="opts"></div>
-      </div>
-      <div class="row" style="justify-content:space-between;margin-top:8px">
-        <div id="navDots" class="navdots"></div>
-        <button id="finishBtn" class="btn">Yakunlash</button>
-      </div>
-    </section>
+    `;
+  });
+  
+  elements.reviewContainer.innerHTML = reviewHTML;
+  typesetQuestion();
+}
 
-    <!-- Results -->
-    <section id="resultCard" class="card hidden">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-size:20px;font-weight:800">Natija: <span id="scoreTotal">0</span>/<span id="scoreMax">0</span></div>
-          <div id="scoreNote" style="color:#667a72;margin-top:6px"></div>
-          <div id="timeNote" style="color:#667a72;margin-top:4px"></div>
-        </div>
-        <div class="row">
-          <span id="saveStatus" class="chip hidden"></span>
-          <a class="btn ghost" href="https://xplusy.netlify.app/index">HOME</a>
-          <button id="againBtn" class="btn ghost">Savollarga qaytish</button>
-        </div>
-      </div>
+/* ========= Helper functions ========= */
+function renderMath(text) {
+  if (!text) return '';
+  const escaped = escapeHtml(text);
+  
+  // Check if it contains LaTeX
+  if (text.includes('$') || text.includes('\\') || 
+      text.includes('^') || text.includes('_')) {
+    return `\\(${escaped}\\)`;
+  }
+  
+  return escaped;
+}
 
-      <div class="stats-grid" style="margin-top:12px">
-        <div class="stat"><div style="color:#667a72;font-size:12px">To'g'ri</div><div style="font-weight:800;font-size:20px" id="stCorrect">0</div></div>
-        <div class="stat"><div style="color:#667a72;font-size:12px">Noto'g'ri</div><div style="font-weight:800;font-size:20px" id="stWrong">0</div></div>
-        <div class="stat"><div style="color:#667a72;font-size:12px">Foiz</div><div style="font-weight:800;font-size:20px" id="stPct">0%</div></div>
-        <div class="stat"><div style="color:#667a72;font-size:12px">Umumiy ball</div><div style="font-weight:800;font-size:20px" id="stPoints">0</div></div>
-      </div>
+function escapeHtml(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
-      <div class="card" style="margin:14px 0">
-        <h3 style="margin:0 0 8px">Bo'limlar kesimida</h3>
-        <div id="sectionStats"></div>
-      </div>
+async function typesetQuestion() {
+  if (window.MathJax && MathJax.typesetPromise) {
+    try {
+      await MathJax.typesetPromise();
+    } catch (e) {
+      console.warn("MathJax typeset error:", e);
+    }
+  }
+}
 
-      <div class="card" style="margin:14px 0">
-        <h3 style="margin:0 0 8px">Javoblar tahlili</h3>
-        <div id="detailTable"></div>
-      </div>
-    </section>
+function showResults() {
+  showScreen('results');
+}
 
-    <section id="emptyCard" class="card hidden" style="text-align:center">
-      <h3>Test topilmadi</h3>
-      <p class="muted">Shu papkaga <code>test.json</code> qo'ying yoki <code>localStorage['testData']</code>ga yozing.</p>
-    </section>
-  </main>
+/* ========= Event Listeners ========= */
+document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize Firebase and load test
+  const firebaseInitialized = await initializeFirebase();
+  if (firebaseInitialized) {
+    await loadTest();
+  }
+  
+  // Student form events
+  elements.startTestBtn.addEventListener('click', () => {
+    const name = elements.studentName.value.trim();
+    const surname = elements.studentSurname.value.trim();
+    
+    if (!name || !surname) {
+      alert("Iltimos, ism va familiyangizni kiriting");
+      return;
+    }
+    
+    showScreen('test');
+    renderQuestion(0);
+    startTimer();
+  });
+  
+  // Navigation events
+  elements.prevBtn.addEventListener('click', () => {
+    if (currentQuestionIndex > 0) {
+      renderQuestion(currentQuestionIndex - 1);
+    }
+  });
+  
+  elements.nextBtn.addEventListener('click', () => {
+    if (currentQuestionIndex < testData.questions.length - 1) {
+      renderQuestion(currentQuestionIndex + 1);
+    }
+  });
+  
+  // Submit test
+  elements.submitTestBtn.addEventListener('click', () => {
+    if (confirm("Testni yakunlashni xohlaysizmi? Qayta davom ettirib bo'lmaydi.")) {
+      submitTest();
+    }
+  });
+  
+  // Review button
+  elements.reviewBtn.addEventListener('click', showReview);
+  
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (screens.test.classList.contains('hidden')) return;
+    
+    switch(e.key) {
+      case 'ArrowLeft':
+        if (currentQuestionIndex > 0) {
+          e.preventDefault();
+          renderQuestion(currentQuestionIndex - 1);
+        }
+        break;
+      case 'ArrowRight':
+      case ' ':
+        if (currentQuestionIndex < testData.questions.length - 1) {
+          e.preventDefault();
+          renderQuestion(currentQuestionIndex + 1);
+        }
+        break;
+      case '1': case '2': case '3': case '4': case '5':
+      case '6': case '7': case '8': case '9':
+        if (testType === 'variant') {
+          const num = parseInt(e.key) - 1;
+          const question = testData.questions[currentQuestionIndex];
+          if (question.options && num < question.options.length) {
+            selectAnswer(currentQuestionIndex, num);
+            renderQuestion(currentQuestionIndex); // Re-render to show selection
+          }
+        }
+        break;
+    }
+  });
+});
 
-  <!-- JS modul: /test/test.js (umumiy) -->
-  <script src="../test.js"></script>
+// Allow Enter to submit student form
+elements.studentName.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') elements.studentSurname.focus();
+});
+
+elements.studentSurname.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') elements.studentGroup.focus();
+});
+
+elements.studentGroup.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') elements.startTestBtn.click();
+});
+</script>
 </body>
 </html>
