@@ -35,6 +35,7 @@
       --g:#2E8B57; --gd:#1F6B45; --bd:#e9f2ec; 
       --muted:#64748b; --ring:rgba(46,139,87,.18);
       --danger:#ef4444; --danger-bg:#fee;
+      --warning:#f59e0b; --info:#3b82f6;
     }
     *{box-sizing:border-box}
     body{
@@ -45,7 +46,7 @@
       line-height:1.5;
     }
     .wrap{
-      max-width:1200px;
+      max-width:1400px;
       margin:20px auto;
       padding:16px;
     }
@@ -74,7 +75,7 @@
     }
     .row{
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
       gap:16px;
     }
     label{
@@ -136,6 +137,10 @@
       background:var(--danger);
       border-color:var(--danger);
     }
+    .btn.info{
+      background:var(--info);
+      border-color:var(--info);
+    }
     .muted{color:var(--muted);font-size:14px}
     .mini{font-size:12px;color:#6b7280}
     .sec-list{display:grid;gap:12px}
@@ -168,6 +173,22 @@
       font-size:13px;
       font-weight:500;
     }
+    .qtype-badge{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+    }
+    .qtype-badge.variant{
+      background:#dbeafe;
+      color:#1e40af;
+    }
+    .qtype-badge.open{
+      background:#f0fdf4;
+      color:#166534;
+    }
     .preview{
       border:1px dashed #e6f3ea;
       padding:16px;
@@ -192,7 +213,7 @@
     .drawer.open{transform:translateY(0%)}
     .kgrid{
       display:grid;
-      grid-template-columns:repeat(auto-fit,minmax(80px,1fr));
+      grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
       gap:10px;
     }
     .kbtn{
@@ -202,13 +223,38 @@
       border:1px solid #dfeae3;
       background:#fff;
       border-radius:10px;
-      min-height:48px;
+      min-height:50px;
       font-size:14px;
       transition:all 0.2s;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
     .kbtn:hover{
       background:#f1f8f4;
       border-color:var(--g);
+      transform:translateY(-2px);
+    }
+    .keypad-tabs{
+      display:flex;
+      gap:4px;
+      margin-bottom:12px;
+      border-bottom:1px solid #eef6f0;
+      padding-bottom:8px;
+    }
+    .keypad-tab{
+      padding:6px 12px;
+      border:none;
+      background:none;
+      border-radius:6px;
+      cursor:pointer;
+      font-size:13px;
+      font-weight:500;
+      color:var(--muted);
+    }
+    .keypad-tab.active{
+      background:var(--g);
+      color:white;
     }
     .hidden{display:none !important}
     .flex{
@@ -220,6 +266,7 @@
     .right{margin-left:auto}
     .error{color:var(--danger);font-size:12px}
     .success{color:var(--g)}
+    .warning{color:var(--warning)}
     .stats{
       background:#f8fbf9;
       padding:12px;
@@ -245,19 +292,54 @@
       animation:spin 1s linear infinite;
     }
     @keyframes spin{100%{transform:rotate(360deg)}}
+    .correct-preview{
+      background:#f0fdf4;
+      padding:8px 12px;
+      border-radius:8px;
+      margin-top:8px;
+      border-left:4px solid var(--g);
+    }
+    .option-item{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 0;
+      border-bottom:1px solid #f1f5f9;
+    }
+    .option-item:last-child{
+      border-bottom:none;
+    }
+    .option-index{
+      width:24px;
+      height:24px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#e2e8f0;
+      border-radius:50%;
+      font-size:12px;
+      font-weight:600;
+    }
+    .option-index.correct{
+      background:var(--g);
+      color:white;
+    }
+    .option-text{
+      flex:1;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="topbar">
-      <h1>👨‍💻 Admin — Bo'limli Test & Math klaviatura</h1>
+      <h1>👨‍💻 Admin — Test Yaratish Tizimi</h1>
       <div class="flex">
         <div id="authStatus" class="muted">Tizimga kirilmoqda...</div>
         <button id="logoutBtn" class="btn ghost hidden">Chiqish</button>
       </div>
     </div>
 
-    <!-- Login area (temporary) -->
+    <!-- Login area -->
     <div id="loginArea" class="card">
       <h2>Tizimga kirish</h2>
       <p>Iltimos, Google hisobingiz orqali tizimga kiring.</p>
@@ -297,7 +379,7 @@
           <div>
             <label>Default savol turi</label>
             <select id="globalDefault">
-              <option value="variant">Variantli</option>
+              <option value="variant">Variantli (Birinchi variant to'g'ri)</option>
               <option value="open">Yopiq (ochiq javob)</option>
             </select>
           </div>
@@ -326,13 +408,15 @@
         <div class="stats">
           <strong>Statistika:</strong>
           <span id="questionCount">Savollar: 0</span> | 
-          <span id="sectionCount">Bo'limlar: 0</span>
+          <span id="sectionCount">Bo'limlar: 0</span> |
+          <span id="variantCount">Variantli: 0</span> |
+          <span id="openCount">Yopiq: 0</span>
         </div>
 
         <div style="margin-top:20px" class="flex">
           <button id="exportBtn" class="btn ghost">📥 JSON Export</button>
           <button id="previewBtn" class="btn flat">👁️ Preview (test.html)</button>
-          <button id="validateBtn" class="btn flat">✓ Testni tekshirish</button>
+          <button id="validateBtn" class="btn info">✓ Testni tekshirish</button>
           <button id="saveBtn" class="btn" style="margin-left:auto">
             <span id="saveText">💾 Firestore'ga saqlash</span>
             <span id="saveLoading" class="loading hidden"></span>
@@ -363,11 +447,16 @@
 
   <!-- Math keypad drawer -->
   <div id="keypadDrawer" class="drawer" aria-hidden="true">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <strong>Math klaviatura</strong>
-      <div class="flex">
-        <label class="mini"><input id="pinDrawer" type="checkbox"> Doimiy ko'rsatish</label>
-        <button id="closeDrawer" class="kbtn mini" style="padding:4px 8px">×</button>
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong>Math klaviatura</strong>
+        <div class="flex">
+          <label class="mini"><input id="pinDrawer" type="checkbox"> Doimiy ko'rsatish</label>
+          <button id="closeDrawer" class="kbtn mini" style="padding:4px 8px">×</button>
+        </div>
+      </div>
+      <div class="keypad-tabs" id="keypadTabs">
+        <!-- Tabs will be generated by JavaScript -->
       </div>
     </div>
     <div id="keypadGrid" class="kgrid"></div>
@@ -551,21 +640,26 @@ document.getElementById('rebuildSections').addEventListener('click', rebuildSect
 document.getElementById('secCount').addEventListener('change', rebuildSectionsUI);
 
 /* ---------------------------
-  SAVOLLAR UI
+  SAVOLLAR UI - YANGILANGAN
 ----------------------------*/
 function questionTemplate(index, defaultType = 'variant') {
+  const isVariant = defaultType === 'variant';
+  
   return `
-  <div class="qbox" data-index="${index}">
+  <div class="qbox" data-index="${index}" data-type="${isVariant ? 'variant' : 'open'}">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="badge">
-        <span>Savol #${index}</span>
-        <span class="mini">(${index}.jpg rasm)</span>
+      <div class="flex">
+        <div class="badge">Savol #${index}</div>
+        <span class="qtype-badge ${isVariant ? 'variant' : 'open'}">
+          ${isVariant ? 'VARIANTLI' : 'YOPIQ'}
+        </span>
+        <div class="mini">(rasm: ${index}.jpg)</div>
       </div>
       <div class="flex">
         <label class="mini">Turi:</label>
-        <select class="qtype" style="min-width:140px">
-          <option value="variant" ${defaultType === 'variant' ? 'selected' : ''}>Variantli</option>
-          <option value="open" ${defaultType === 'open' ? 'selected' : ''}>Yopiq (ochiq javob)</option>
+        <select class="qtype" style="min-width:180px">
+          <option value="variant" ${isVariant ? 'selected' : ''}>Variantli (birinchi variant to'g'ri)</option>
+          <option value="open" ${!isVariant ? 'selected' : ''}>Yopiq (bitta to'g'ri javob)</option>
         </select>
         <button class="btn ghost danger mini" onclick="removeQuestion(this)">O'chirish</button>
       </div>
@@ -576,27 +670,28 @@ function questionTemplate(index, defaultType = 'variant') {
         <label>Ball <span class="error">*</span></label>
         <input class="points" type="number" value="1" min="0.5" step="0.5" required>
       </div>
-      <div>
-        <label>Variantlar (har bir yangi qatorda)</label>
-        <textarea class="options" placeholder="A varianti\nB varianti\nC varianti"></textarea>
-        <div class="mini">Variantli savollar uchun</div>
-      </div>
-      <div>
-        <label>To'g'ri javob <span class="error">*</span></label>
-        <div class="flex" style="margin-bottom:4px">
-          <select class="correct-type" style="width:auto">
-            <option value="index">Variant indeksi</option>
-            <option value="text">Matn (yopiq savol)</option>
-          </select>
+      
+      <div id="variantFields_${index}" class="${!isVariant ? 'hidden' : ''}">
+        <label>Variantlar (har bir yangi qatorda) <span class="error">*</span></label>
+        <textarea class="options" placeholder="Variant 1\nVariant 2\nVariant 3" required></textarea>
+        <div class="mini">Birinchi variant avtomatik ravishda to'g'ri javob hisoblanadi</div>
+        
+        <div class="correct-preview hidden" id="variantPreview_${index}">
+          <strong>To'g'ri javob:</strong> <span id="correctVariant_${index}"></span>
         </div>
-        <input class="correct" type="text" placeholder="0 yoki $x=5$" required>
-        <div class="mini correct-hint">0 dan boshlangan variant indeksi</div>
+      </div>
+      
+      <div id="openFields_${index}" class="${isVariant ? 'hidden' : ''}">
+        <label>To'g'ri javob <span class="error">*</span></label>
+        <input class="correct-open" type="text" placeholder="Masalan: $x=5$ yoki 42" 
+               ${!isVariant ? 'required' : ''}>
+        <div class="mini">Yopiq savol uchun bitta to'g'ri javob</div>
       </div>
     </div>
     
     <div>
       <label>Izoh (ixtiyoriy)</label>
-      <input class="comment" type="text" placeholder="Qo'shimcha ma'lumot">
+      <input class="comment" type="text" placeholder="Qo'shimcha ma'lumot yoki yo'riqnoma">
     </div>
   </div>`;
 }
@@ -611,24 +706,69 @@ function buildQuestions() {
     area.insertAdjacentHTML('beforeend', questionTemplate(i, defaultType));
   }
   
-  // Correct type change listener
-  document.querySelectorAll('.correct-type').forEach(select => {
+  // Savol turini o'zgartirish
+  document.querySelectorAll('.qtype').forEach(select => {
     select.addEventListener('change', function() {
-      const correctInput = this.closest('.row').querySelector('.correct');
-      const hint = this.closest('.row').querySelector('.correct-hint');
+      const questionBox = this.closest('.qbox');
+      const index = questionBox.dataset.index;
+      const isVariant = this.value === 'variant';
       
-      if (this.value === 'index') {
-        correctInput.placeholder = "0";
-        hint.textContent = "0 dan boshlangan variant indeksi";
+      // Yangilash
+      questionBox.dataset.type = isVariant ? 'variant' : 'open';
+      
+      // UI yangilash
+      const variantFields = document.getElementById(`variantFields_${index}`);
+      const openFields = document.getElementById(`openFields_${index}`);
+      const badge = questionBox.querySelector('.qtype-badge');
+      
+      if (isVariant) {
+        variantFields.classList.remove('hidden');
+        openFields.classList.add('hidden');
+        badge.className = 'qtype-badge variant';
+        badge.textContent = 'VARIANTLI';
+        questionBox.querySelector('.options').required = true;
+        questionBox.querySelector('.correct-open').required = false;
       } else {
-        correctInput.placeholder = "$x=5$";
-        hint.textContent = "To'g'ri javob matni";
+        variantFields.classList.add('hidden');
+        openFields.classList.remove('hidden');
+        badge.className = 'qtype-badge open';
+        badge.textContent = 'YOPIQ';
+        questionBox.querySelector('.options').required = false;
+        questionBox.querySelector('.correct-open').required = true;
       }
+      
+      updateStats();
+    });
+  });
+  
+  // Variantlar kiritilganda preview ko'rsatish
+  document.querySelectorAll('.options').forEach(textarea => {
+    textarea.addEventListener('input', function() {
+      const questionBox = this.closest('.qbox');
+      const index = questionBox.dataset.index;
+      updateVariantPreview(index);
     });
   });
   
   rebuildSectionsUI();
   updateStats();
+}
+
+function updateVariantPreview(index) {
+  const questionBox = document.querySelector(`.qbox[data-index="${index}"]`);
+  if (!questionBox || questionBox.dataset.type !== 'variant') return;
+  
+  const optionsText = questionBox.querySelector('.options').value;
+  const options = optionsText.split('\n').filter(line => line.trim());
+  const preview = document.getElementById(`variantPreview_${index}`);
+  const correctSpan = document.getElementById(`correctVariant_${index}`);
+  
+  if (options.length > 0) {
+    preview.classList.remove('hidden');
+    correctSpan.textContent = options[0].trim();
+  } else {
+    preview.classList.add('hidden');
+  }
 }
 
 function removeQuestion(btn) {
@@ -642,9 +782,25 @@ function removeQuestion(btn) {
 
 function reindexQuestions() {
   document.querySelectorAll('#questionsArea .qbox').forEach((q, index) => {
-    const badge = q.querySelector('.badge span:first-child');
-    if (badge) badge.textContent = `Savol #${index + 1}`;
-    q.dataset.index = index + 1;
+    const newIndex = index + 1;
+    q.dataset.index = newIndex;
+    
+    // Yangilash
+    const badge = q.querySelector('.badge');
+    const mini = q.querySelector('.mini');
+    if (badge) badge.innerHTML = `Savol #${newIndex}`;
+    if (mini) mini.textContent = `(rasm: ${newIndex}.jpg)`;
+    
+    // ID larni yangilash
+    const variantFields = q.querySelector(`[id^="variantFields_"]`);
+    const openFields = q.querySelector(`[id^="openFields_"]`);
+    const preview = q.querySelector(`[id^="variantPreview_"]`);
+    const correctSpan = q.querySelector(`[id^="correctVariant_"]`);
+    
+    if (variantFields) variantFields.id = `variantFields_${newIndex}`;
+    if (openFields) openFields.id = `openFields_${newIndex}`;
+    if (preview) preview.id = `variantPreview_${newIndex}`;
+    if (correctSpan) correctSpan.id = `correctVariant_${newIndex}`;
   });
 }
 
@@ -656,44 +812,150 @@ document.getElementById('globalDefault').addEventListener('change', buildQuestio
 buildQuestions();
 
 /* ---------------------------
-  MATH KEYPAD
+  YANGI KENGAYTIRILGAN MATH KEYPAD
 ----------------------------*/
-const MATH_KEYS = [
-  { show: 'x^y', insert: '^{▮}' },
-  { show: 'x_y', insert: '_{▮}' },
-  { show: '\\frac{a}{b}', insert: '\\frac{▮}{ }' },
-  { show: '\\sqrt{x}', insert: '\\sqrt{▮}' },
-  { show: '\\sqrt[n]{x}', insert: '\\sqrt[▮]{ }' },
-  { show: '\\pi', insert: '\\pi' },
-  { show: '\\infty', insert: '\\infty' },
-  { show: '\\alpha', insert: '\\alpha' },
-  { show: '\\beta', insert: '\\beta' },
-  { show: '\\cdot', insert: '\\cdot' },
-  { show: '\\times', insert: '\\times' },
-  { show: '\\div', insert: '\\div' },
-  { show: '\\le', insert: '\\le' },
-  { show: '\\ge', insert: '\\ge' },
-  { show: '\\neq', insert: '\\neq' },
-  { show: '\\approx', insert: '\\approx' },
-  { show: '\\sum', insert: '\\sum_{i=1}^{▮}' },
-  { show: '\\int', insert: '\\int_{▮}^{ }' },
-  { show: '\\left(\\right)', insert: '\\left(▮\\right)' },
-  { show: '\\left[\\right]', insert: '\\left[▮\\right]' },
-  { show: '\\left\\{\\right\\}', insert: '\\left\\{▮\\right\\}' },
-];
+const MATH_KEYPAD = {
+  basic: [
+    { show: 'x^y', insert: '^{▮}', title: 'Daraja' },
+    { show: 'x_y', insert: '_{▮}', title: 'Indeks' },
+    { show: '\\frac{a}{b}', insert: '\\frac{▮}{ }', title: 'Kasr' },
+    { show: '\\sqrt{x}', insert: '\\sqrt{▮}', title: 'Kvadrat ildiz' },
+    { show: '\\sqrt[n]{x}', insert: '\\sqrt[▮]{ }', title: 'n-darajali ildiz' },
+    { show: '\\pi', insert: '\\pi', title: 'Pi' },
+    { show: '\\infty', insert: '\\infty', title: 'Cheksizlik' },
+    { show: '\\alpha', insert: '\\alpha', title: 'Alfa' },
+    { show: '\\beta', insert: '\\beta', title: 'Beta' },
+    { show: '\\gamma', insert: '\\gamma', title: 'Gamma' },
+    { show: '\\theta', insert: '\\theta', title: 'Teta' },
+    { show: '\\Delta', insert: '\\Delta', title: 'Delta' },
+  ],
+  
+  operators: [
+    { show: '+', insert: '+', title: 'Qo\'shish' },
+    { show: '-', insert: '-', title: 'Ayirish' },
+    { show: '\\cdot', insert: '\\cdot', title: 'Nuqta ko\'paytirish' },
+    { show: '\\times', insert: '\\times', title: 'Ko\'paytirish' },
+    { show: '\\div', insert: '\\div', title: 'Bo\'lish' },
+    { show: '=', insert: '=', title: 'Teng' },
+    { show: '\\neq', insert: '\\neq', title: 'Teng emas' },
+    { show: '\\approx', insert: '\\approx', title: 'Taxminan' },
+    { show: '\\le', insert: '\\le', title: 'Kichik yoki teng' },
+    { show: '\\ge', insert: '\\ge', title: 'Katta yoki teng' },
+    { show: '<', insert: '<', title: 'Kichik' },
+    { show: '>', insert: '>', title: 'Katta' },
+    { show: '\\pm', insert: '\\pm', title: 'Plus-minus' },
+    { show: '\\mp', insert: '\\mp', title: 'Minus-plus' },
+  ],
+  
+  functions: [
+    { show: '\\log', insert: '\\log(▮)', title: 'Logarifm' },
+    { show: '\\ln', insert: '\\ln(▮)', title: 'Natural logarifm' },
+    { show: '\\log_{a}b', insert: '\\log_{▮}( )', title: 'Asosli logarifm' },
+    { show: '\\sin', insert: '\\sin(▮)', title: 'Sinus' },
+    { show: '\\cos', insert: '\\cos(▮)', title: 'Kosinus' },
+    { show: '\\tan', insert: '\\tan(▮)', title: 'Tangens' },
+    { show: '\\cot', insert: '\\cot(▮)', title: 'Kotangens' },
+    { show: '\\arcsin', insert: '\\arcsin(▮)', title: 'Arksinus' },
+    { show: '\\arccos', insert: '\\arccos(▮)', title: 'Arkkosinus' },
+    { show: '\\arctan', insert: '\\arctan(▮)', title: 'Arktangens' },
+    { show: '\\lim', insert: '\\lim_{▮\\to }', title: 'Limit' },
+    { show: '\\sum', insert: '\\sum_{▮= }^{ }', title: 'Yig\'indi' },
+    { show: '\\prod', insert: '\\prod_{▮= }^{ }', title: 'Ko\'paytma' },
+    { show: '\\int', insert: '\\int_{▮}^{ }', title: 'Integral' },
+  ],
+  
+  symbols: [
+    { show: '\\left(\\right)', insert: '\\left(▮\\right)', title: 'Qavs' },
+    { show: '\\left[\\right]', insert: '\\left[▮\\right]', title: 'To\'rtburchak qavs' },
+    { show: '\\left\\{\\right\\}', insert: '\\left\\{▮\\right\\}', title: 'Figurali qavs' },
+    { show: '\\left|\\right|', insert: '\\left|▮\\right|', title: 'Modul' },
+    { show: '\\binom{n}{k}', insert: '\\binom{▮}{ }', title: 'Binom koeffitsiyent' },
+    { show: '\\overrightarrow{AB}', insert: '\\overrightarrow{▮}', title: 'Vektor' },
+    { show: '\\angle', insert: '\\angle', title: 'Burchak' },
+    { show: '\\parallel', insert: '\\parallel', title: 'Parallel' },
+    { show: '\\perp', insert: '\\perp', title: 'Perpendikulyar' },
+    { show: '\\in', insert: '\\in', title: 'Element' },
+    { show: '\\subset', insert: '\\subset', title: 'Qism to\'plam' },
+    { show: '\\cup', insert: '\\cup', title: 'Birlashma' },
+    { show: '\\cap', insert: '\\cap', title: 'Kesishma' },
+    { show: '\\emptyset', insert: '\\emptyset', title: 'Bo\'sh to\'plam' },
+  ],
+  
+  sets: [
+    { show: '\\mathbb{R}', insert: '\\mathbb{R}', title: 'Haqiqiy sonlar' },
+    { show: '\\mathbb{Q}', insert: '\\mathbb{Q}', title: 'Ratsional sonlar' },
+    { show: '\\mathbb{Z}', insert: '\\mathbb{Z}', title: 'Butun sonlar' },
+    { show: '\\mathbb{N}', insert: '\\mathbb{N}', title: 'Natural sonlar' },
+    { show: '\\mathbb{C}', insert: '\\mathbb{C}', title: 'Kompleks sonlar' },
+    { show: '\\forall', insert: '\\forall', title: 'Barchasi uchun' },
+    { show: '\\exists', insert: '\\exists', title: 'Mavjud' },
+    { show: '\\neg', insert: '\\neg', title: 'Inkor' },
+    { show: '\\wedge', insert: '\\wedge', title: 'VA' },
+    { show: '\\vee', insert: '\\vee', title: 'YOKI' },
+    { show: '\\Rightarrow', insert: '\\Rightarrow', title: 'Demak' },
+    { show: '\\Leftrightarrow', insert: '\\Leftrightarrow', title: 'Agar va faqat agar' },
+  ]
+};
 
 let activeTextarea = null;
+let currentTab = 'basic';
 
 function buildKeypad() {
+  const tabsContainer = document.getElementById('keypadTabs');
+  const grid = document.getElementById('keypadGrid');
+  
+  // Tabs yaratish
+  tabsContainer.innerHTML = '';
+  Object.keys(MATH_KEYPAD).forEach(tabName => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'keypad-tab';
+    tab.textContent = getTabName(tabName);
+    tab.dataset.tab = tabName;
+    
+    if (tabName === currentTab) {
+      tab.classList.add('active');
+    }
+    
+    tab.addEventListener('click', () => {
+      // Barcha tablarni faolsizlantirish
+      document.querySelectorAll('.keypad-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentTab = tabName;
+      renderKeypadGrid(tabName);
+    });
+    
+    tabsContainer.appendChild(tab);
+  });
+  
+  // Boshlang'ich gridni yaratish
+  renderKeypadGrid(currentTab);
+}
+
+function getTabName(tabKey) {
+  const names = {
+    basic: 'Asosiy',
+    operators: 'Amallar',
+    functions: 'Funksiyalar',
+    symbols: 'Belgilar',
+    sets: 'To\'plamlar'
+  };
+  return names[tabKey] || tabKey;
+}
+
+function renderKeypadGrid(tabName) {
   const grid = document.getElementById('keypadGrid');
   grid.innerHTML = '';
   
-  MATH_KEYS.forEach(key => {
+  const keys = MATH_KEYPAD[tabName];
+  if (!keys) return;
+  
+  keys.forEach(key => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'kbtn';
     button.innerHTML = `$${key.show}$`;
-    button.title = key.show;
+    button.title = key.title || key.show;
     button.addEventListener('click', () => insertMath(key.insert));
     grid.appendChild(button);
   });
@@ -723,7 +985,7 @@ function insertMath(template) {
   textarea.setSelectionRange(newPosition, newPosition);
   textarea.focus();
   
-  // Trigger input event for validation
+  // Input event trigger
   textarea.dispatchEvent(new Event('input'));
 }
 
@@ -777,9 +1039,13 @@ buildKeypad();
 function updateStats() {
   const questionCount = document.querySelectorAll('#questionsArea .qbox').length;
   const sectionCount = document.querySelectorAll('.sec-row').length;
+  const variantCount = document.querySelectorAll('.qbox[data-type="variant"]').length;
+  const openCount = document.querySelectorAll('.qbox[data-type="open"]').length;
   
   document.getElementById('questionCount').textContent = `Savollar: ${questionCount}`;
   document.getElementById('sectionCount').textContent = `Bo'limlar: ${sectionCount}`;
+  document.getElementById('variantCount').textContent = `Variantli: ${variantCount}`;
+  document.getElementById('openCount').textContent = `Yopiq: ${openCount}`;
 }
 
 function validateTest() {
@@ -802,15 +1068,10 @@ function validateTest() {
   // Question validation
   document.querySelectorAll('#questionsArea .qbox').forEach((q, index) => {
     const points = parseFloat(q.querySelector('.points').value);
-    const type = q.querySelector('.qtype').value;
-    const correct = q.querySelector('.correct').value.trim();
+    const type = q.dataset.type;
     
     if (!points || points <= 0) {
       errors.push(`Savol #${index + 1}: Ball noto'g'ri`);
-    }
-    
-    if (!correct) {
-      errors.push(`Savol #${index + 1}: To'g'ri javob kiritilmagan`);
     }
     
     if (type === 'variant') {
@@ -818,10 +1079,10 @@ function validateTest() {
       if (options.length < 2) {
         errors.push(`Savol #${index + 1}: Kamida 2 variant bo'lishi kerak`);
       }
-      
-      const correctIndex = parseInt(correct);
-      if (isNaN(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
-        errors.push(`Savol #${index + 1}: To'g'ri variant indeksi noto'g'ri`);
+    } else {
+      const correct = q.querySelector('.correct-open').value.trim();
+      if (!correct) {
+        errors.push(`Savol #${index + 1}: To'g'ri javob kiritilmagan`);
       }
     }
   });
@@ -854,7 +1115,7 @@ function validateTest() {
 document.getElementById('validateBtn').addEventListener('click', validateTest);
 
 /* ---------------------------
-  JSON EXPORT & SAVE
+  JSON EXPORT & SAVE - YANGILANGAN
 ----------------------------*/
 function collectTestData() {
   const title = document.getElementById('title').value.trim();
@@ -866,25 +1127,29 @@ function collectTestData() {
   const questions = [];
   document.querySelectorAll('#questionsArea .qbox').forEach(q => {
     const points = parseFloat(q.querySelector('.points').value) || 1;
-    const type = q.querySelector('.qtype').value;
-    const options = q.querySelector('.options').value.trim().split('\n').filter(o => o.trim());
-    const correct = q.querySelector('.correct').value.trim();
+    const type = q.dataset.type;
     const comment = q.querySelector('.comment')?.value.trim() || '';
     
     if (type === 'variant') {
-      const correctIndex = parseInt(correct) || 0;
+      const options = q.querySelector('.options').value.trim()
+        .split('\n')
+        .map(o => o.trim())
+        .filter(o => o);
+      
       questions.push({
         type: 'variant',
         points,
         options,
-        correctIndex,
+        correctIndex: 0, // HAR DOIM BIRINCHI VARIANT TO'G'RI
         comment
       });
     } else {
+      const correctAnswer = q.querySelector('.correct-open').value.trim();
+      
       questions.push({
         type: 'open',
         points,
-        correctAnswer: correct,
+        correctAnswer,
         comment
       });
     }
@@ -902,7 +1167,8 @@ function collectTestData() {
     questions,
     version: '3.0',
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    correctIndexAlwaysZero: true // Yangi qoida
   };
 }
 
@@ -1003,7 +1269,7 @@ async function loadExistingTests() {
     
     if (!snapshot.empty) {
       console.log(`${snapshot.size} ta test topildi`);
-      // Bu yerda testlar ro'yxatini ko'rsatish uchun UI qo'shishingiz mumkin
+      // Testlar ro'yxatini ko'rsatish uchun UI qo'shishingiz mumkin
     }
   } catch (error) {
     console.error("Testlarni yuklashda xato:", error);
@@ -1032,7 +1298,6 @@ function showMessage(message, type = 'info') {
 setTimeout(() => {
   if (!currentUser) {
     document.getElementById('authStatus').textContent = 'Google orqali kirishni kuting...';
-    // Auto-sign in popup bilan
     signIn();
   }
 }, 1000);
