@@ -2,90 +2,152 @@
 <html lang="uz">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Test Admin — Auto Firebase + Google Sign-in</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin — Sectioned Test + Math Keyboard + Firebase Auto Sign-in</title>
 
   <!-- MathJax -->
   <script>
     window.MathJax = {
-      tex: { inlineMath: [['$','$'],['\\(','\\)']] },
+      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes: true, packages:{'[+]':['noerrors']} },
       options: { renderActions: { addMenu: [] } }
     };
   </script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
-  <!-- Firebase -->
+  <!-- Firebase (compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
   <style>
-    body { font-family: Inter, sans-serif; margin:0; background:#f6faf8; }
-    .wrap { max-width:1100px; margin:20px auto; padding:16px; }
-    h1 { display:flex; gap:10px; align-items:center; }
-    input, textarea, select { width:100%; padding:10px; border:1px solid #ddeee3; border-radius:10px; margin-top:4px; }
-    textarea { min-height:90px; }
-    .btn { padding:10px 16px; border-radius:10px; border:none; cursor:pointer; font-weight:bold; }
-    .green { background:#2E8B57; color:white; }
-    .gray  { background:white; border:1px solid #ccd; }
-    .card { background:white; padding:16px; border-radius:12px; margin-top:16px; box-shadow:0 4px 20px rgba(0,0,0,.05); }
-    .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
-    .qbox { border:1px dashed #cde; padding:12px; margin-top:14px; border-radius:10px; }
-    .badge { padding:4px 10px; background:#eef8f2; border-radius:6px; display:inline-block; margin-bottom:8px; }
-    #notAdmin { color:#b91c1c; font-weight:bold; }
+    :root{
+      --g:#2E8B57; --gd:#1F6B45; --bd:#e9f2ec; --muted:#64748b; --ring:rgba(46,139,87,.18)
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f6faf8;color:#0f172a}
+    .wrap{max-width:1200px;margin:20px auto;padding:16px}
+    h1{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+    .card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(31,107,69,.04);margin-bottom:12px}
+    .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    label{display:block;font-size:13px;color:#475569;margin-bottom:6px}
+    input,textarea,select{width:100%;padding:10px;border-radius:10px;border:1px solid #e6f3ea;background:#fbfdfc}
+    textarea{min-height:88px;resize:vertical}
+    .btn{appearance:none;border:none;border-radius:10px;padding:10px 14px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--g),var(--gd));cursor:pointer}
+    .btn.ghost{background:#fff;color:var(--gd);border:1px solid #cfe4d7}
+    .btn.flat{background:#f8fbf9;color:var(--gd);border:1px solid #cfe4d7}
+    .muted{color:var(--muted);font-size:13px}
+    .mini{font-size:12px;color:#6b7280}
+    .sec-list{display:grid;gap:8px}
+    .sec-row{display:grid;grid-template-columns:220px 1fr 1fr;gap:8px;align-items:center}
+    .qbox{border:1px dashed #cfe4d7;border-radius:12px;padding:12px;display:grid;gap:10px}
+    .badge{display:inline-block;background:#f1f8f4;padding:6px 10px;border-radius:999px}
+    .preview{border:1px dashed #e6f3ea;padding:10px;border-radius:8px;background:#fbfdfc}
+    .drawer{position:fixed;left:0;right:0;bottom:0;transform:translateY(100%);transition:transform .22s ease;background:#ffffffee;backdrop-filter: blur(6px) saturate(1.1);border-top:1px solid #dfeae3;padding:10px 14px;z-index:9999}
+    .drawer.open{transform:translateY(0%)}
+    .kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
+    .kbtn{appearance:none;cursor:pointer;padding:8px;border:1px solid #dfeae3;background:#fff;border-radius:10px;min-height:44px}
+    .hidden{display:none}
+    .flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .right{margin-left:auto}
   </style>
 </head>
 <body>
-<div class="wrap">
+  <div class="wrap">
+    <div class="topbar">
+      <h1>Admin — Bo‘limli Test & Math klaviatura</h1>
+      <div class="flex">
+        <div id="authStatus" class="muted">Auth: kutilyapti...</div>
+      </div>
+    </div>
 
-  <h1>Test Admin — Auto Firebase + Google Sign-in</h1>
-  <div id="status" style="margin-bottom:12px;color:#666">Ulanish: kutilyapti…</div>
+    <!-- Admin area -->
+    <div id="adminArea" class="hidden">
 
-  <!-- ADMIN UI -->
-  <div id="adminUI" style="display:none">
+      <!-- Meta + Sections -->
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>Sarlavha</label>
+            <input id="title" type="text" placeholder="Algebra — Test">
+          </div>
+          <div>
+            <label>Ta'rif</label>
+            <input id="desc" type="text" placeholder="Test haqida qisqacha">
+          </div>
+          <div>
+            <label>Test kodi (doc id)</label>
+            <input id="tcode" type="text" placeholder="bsb-a1-2025-10">
+          </div>
+          <div>
+            <label>Vaqt (daqiqada)</label>
+            <input id="dur" type="number" value="30" min="0">
+          </div>
+          <div>
+            <label>Holat</label>
+            <select id="testStatus">
+              <option value="draft">Qoralama</option>
+              <option value="active">Faol</option>
+            </select>
+          </div>
+          <div>
+            <label>Global default turi</label>
+            <select id="globalDefault">
+              <option value="variant">Variantli</option>
+              <option value="open">Yopiq</option>
+            </select>
+          </div>
+        </div>
 
-    <!-- Test meta -->
-    <div class="card">
-      <div class="row">
-        <div><label>Sarlavha</label><input id="title" type="text"></div>
-        <div><label>Ta'rif</label><input id="desc" type="text"></div>
-        <div><label>Test kodi</label><input id="tcode" type="text" placeholder="bsb-a1-2025-10"></div>
-        <div><label>Daqiqalar</label><input id="dur" type="number" value="30"></div>
-        <div><label>Savollar soni</label><input id="qcount" type="number" value="10"></div>
-        <div>
-          <label>Holat</label>
-          <select id="testStatus">
-            <option value="draft">Qoralama</option>
-            <option value="active">Faol</option>
-          </select>
+        <hr style="margin:12px 0;border:none;border-top:1px solid #eef6f0">
+
+        <div style="display:flex;gap:10px;align-items:center">
+          <div>
+            <label>Bo‘limlar soni</label>
+            <input id="secCount" type="number" value="0" min="0" style="width:120px">
+          </div>
+          <div class="mini">Agar 0 bo‘lsa — sections bo‘lim maydoni bo‘lmaydi.</div>
+          <div class="right">
+            <button id="rebuildSections" class="btn">Bo‘limlarni yangilash</button>
+          </div>
+        </div>
+
+        <div id="secList" class="sec-list" style="margin-top:12px"></div>
+
+        <div style="margin-top:12px" class="flex">
+          <button id="buildQuestions" class="btn">Savollarni yarat</button>
+          <button id="exportBtn" class="btn ghost">Export JSON</button>
+          <button id="previewBtn" class="btn flat">Preview (test.html)</button>
+          <button id="saveBtn" class="btn" style="margin-left:auto">Firestore'ga saqlash</button>
         </div>
       </div>
 
-      <button class="btn green" id="buildBtn" style="margin-top:12px">Savollarni yaratish</button>
+      <!-- Questions area -->
+      <div id="questionsArea"></div>
+
+      <!-- Save status -->
+      <div id="saveStatus" class="card muted"></div>
     </div>
 
-    <!-- Questions -->
-    <div id="questionsArea"></div>
-
-    <!-- Save -->
-    <div class="card">
-      <button id="saveBtn" class="btn green">Firebase’ga saqlash</button>
-      <span id="saveStatus" style="margin-left:10px;color:#2E8B57"></span>
+    <!-- Not admin -->
+    <div id="notAdmin" class="card hidden">
+      <div class="muted">Siz admin emassiz yoki ruxsat yo'q. Admin email: <b>sohibjonmath@gmail.com</b></div>
     </div>
-
   </div>
 
-  <!-- Not admin UI -->
-  <div id="notAdmin" style="display:none" class="card">
-    Siz admin emassiz. Ruxsat faqat: <b>sohibjonmath@gmail.com</b>
+  <!-- Math keypad drawer -->
+  <div id="keypadDrawer" class="drawer" aria-hidden="true">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <strong>Math klaviatura</strong>
+      <div class="flex"><label class="mini"><input id="pinDrawer" type="checkbox"> Doim ochiq</label></div>
+    </div>
+    <div id="keypadGrid" class="kgrid"></div>
   </div>
-
-</div>
 
 <script>
-/* ---------------------------------------------
-   1) Firebase Config — Automatically Connected
-----------------------------------------------*/
+/* ---------------------------
+  CONFIG: auto Firebase init
+----------------------------*/
 const firebaseConfig = {
   apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
@@ -95,125 +157,296 @@ const firebaseConfig = {
   appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
   measurementId: "G-459PLJ7P7L"
 };
-
-// IMPORTANT: initialize IMMEDIATELY (this fixes your error)
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-document.getElementById("status").textContent = "Firebase ulandi. Auth kutilyapti…";
-
-
-/* ---------------------------------------------
-   2) Google Auto-Sign-In (Popup → Redirect Fallback)
-----------------------------------------------*/
 const ADMIN_EMAIL = "sohibjonmath@gmail.com";
 
-async function autoSignIn() {
-  const auth = firebase.auth();
+/* initialize immediately to avoid "No Firebase App" error */
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+document.getElementById('authStatus').textContent = 'Firebase ulandi — auth kutilyapti...';
 
-  // If already logged in
-  if (auth.currentUser) {
-    return handleUser(auth.currentUser);
-  }
-
+/* ---------- Auth: auto Google sign-in (popup -> redirect) ---------- */
+async function trySignIn() {
+  if(auth.currentUser) return handleUser(auth.currentUser);
   const provider = new firebase.auth.GoogleAuthProvider();
-
-  try {
+  try{
     const res = await auth.signInWithPopup(provider);
     return handleUser(res.user);
-  } catch (e) {
-    console.warn("Popup ishlamadi, redirect sinab ko‘riladi...");
-    await auth.signInWithRedirect(provider);
+  }catch(e){
+    console.warn('Popup failed, trying redirect...', e);
+    try{
+      await auth.signInWithRedirect(provider);
+    }catch(e2){
+      console.error('Redirect failed', e2);
+      alert('Google sign-in muvaffaqiyatsiz: ' + (e2?.message || e.message));
+    }
   }
 }
 
-function handleUser(user) {
-  if (!user) return;
-
-  document.getElementById("status").textContent = "Kirdi: " + user.email;
-
-  if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-    document.getElementById("adminUI").style.display = "";
-    document.getElementById("notAdmin").style.display = "none";
-  } else {
-    document.getElementById("adminUI").style.display = "none";
-    document.getElementById("notAdmin").style.display = "";
+async function handleUser(user){
+  if(!user) return;
+  const email = (user.email || '').toLowerCase();
+  document.getElementById('authStatus').textContent = 'Kirdi: ' + email;
+  const tokenRes = await user.getIdTokenResult(true).catch(()=>null);
+  const claims = tokenRes?.claims || {};
+  const isAdmin = (claims.admin === true) || (email === ADMIN_EMAIL.toLowerCase());
+  if(isAdmin){
+    document.getElementById('adminArea').classList.remove('hidden');
+    document.getElementById('notAdmin').classList.add('hidden');
+    // show admin items
+  }else{
+    // auto sign out if not admin
+    try{ await auth.signOut(); }catch(){}
+    document.getElementById('adminArea').classList.add('hidden');
+    document.getElementById('notAdmin').classList.remove('hidden');
   }
 }
 
-firebase.auth().onAuthStateChanged(user => {
-  if (user) handleUser(user);
-  else autoSignIn();
+auth.onAuthStateChanged(async (user)=>{
+  if(user) await handleUser(user);
+  else await trySignIn();
 });
 
+/* ---------- Sections UI ---------- */
+function rebuildSectionsUI(){
+  const n = Math.max(0, Number(document.getElementById('secCount').value || 0));
+  const list = document.getElementById('secList');
+  list.innerHTML = '';
+  if(n === 0){
+    list.innerHTML = '<div class="mini">Bo‘lim yo‘q — test.json ichida sections bo‘lmaydi.</div>';
+    return;
+  }
+  for(let i=0;i<n;i++){
+    const div = document.createElement('div');
+    div.className = 'sec-row card';
+    div.innerHTML = `
+      <input class="sec-name" type="text" placeholder="Bo'lim nomi (Masalan: Algebra)" value="Bo'lim ${i+1}">
+      <input class="sec-start" type="number" min="1" placeholder="start" value="${i*5+1}">
+      <input class="sec-end" type="number" min="1" placeholder="end" value="${(i+1)*5}">
+    `;
+    list.appendChild(div);
+  }
+}
+document.getElementById('rebuildSections').addEventListener('click', rebuildSectionsUI);
+rebuildSectionsUI();
 
-/* ---------------------------------------------
-   3) Question Builder
-----------------------------------------------*/
-function questionHTML(i) {
-  return `
-    <div class="card qbox">
-      <div class="badge">#${i} — rasm: <code>${i}.jpg</code></div>
-
-      <label>Ball</label>
-      <input class="points" type="number" value="1">
-
-      <label>Variantlar (har satr — bitta)</label>
-      <textarea class="options" placeholder="A\nB\nC"></textarea>
-
-      <label>To‘g‘ri javob (variant index yoki matn)</label>
-      <input class="correct" type="text" placeholder="0 yoki $x=5$">
-    </div>
-  `;
+/* collect sections */
+function collectSections(totalQ){
+  const n = Math.max(0, Number(document.getElementById('secCount').value || 0));
+  if(n === 0) return [];
+  const names = Array.from(document.querySelectorAll('.sec-name'));
+  const starts = Array.from(document.querySelectorAll('.sec-start'));
+  const ends = Array.from(document.querySelectorAll('.sec-end'));
+  const out = [];
+  for(let i=0;i<n;i++){
+    const name = (names[i]?.value || `Bo'lim ${i+1}`).trim();
+    const start = Math.max(1, Number(starts[i]?.value || 1));
+    const end = Math.min(totalQ, Number(ends[i]?.value || totalQ));
+    if(start <= end) out.push({ name, start, end });
+  }
+  return out;
 }
 
-document.getElementById("buildBtn").onclick = () => {
-  const n = Number(document.getElementById("qcount").value);
-  const area = document.getElementById("questionsArea");
-  area.innerHTML = "";
-  for (let i = 1; i <= n; i++) {
-    area.insertAdjacentHTML("beforeend", questionHTML(i));
+/* ---------- Math keypad ---------- */
+const KEYS = [
+  { show:'x^n', insert:'^{▮}' },
+  { show:'x_n', insert:'_{▮}' },
+  { show:'\\frac{a}{b}', insert:'\\frac{▮}{ }' },
+  { show:'\\sqrt{}', insert:'\\sqrt{▮}' },
+  { show:'\\pi', insert:'\\pi' },
+  { show:'\\cdot', insert:'\\cdot' },
+  { show:'\\times', insert:'\\times' },
+  { show:'\\le', insert:'\\le' },
+  { show:'\\ge', insert:'\\ge' },
+  { show:'\\sum', insert:'\\sum_{i=1}^{▮}' },
+  { show:'\\int', insert:'\\int_{▮}^{ }' },
+  { show:'\\left(\\right)', insert:'\\left(▮\\right)' },
+];
+
+function buildKeypad(){
+  const grid = document.getElementById('keypadGrid'); grid.innerHTML = '';
+  KEYS.forEach(k=>{
+    const b = document.createElement('button');
+    b.type='button'; b.className='kbtn';
+    b.innerHTML = `$${k.show}$`;
+    b.addEventListener('mousedown', e=>e.preventDefault());
+    b.addEventListener('click', ()=>{
+      const ta = ACTIVE_TEXTAREA || LAST_ACTIVE_TEXTAREA;
+      if(!ta) return;
+      insertAtCursor(ta, k.insert);
+      ta.focus();
+    });
+    grid.appendChild(b);
+  });
+  // typeset math within keypad
+  if(window.MathJax?.typesetPromise) MathJax.typesetPromise([grid]).catch(()=>{});
+}
+buildKeypad();
+
+function setDrawer(open){
+  const d = document.getElementById('keypadDrawer');
+  d.classList.toggle('open', !!open);
+  d.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+/* helper: insert at cursor */
+function insertAtCursor(inputEl, template){
+  inputEl.focus();
+  const start = inputEl.selectionStart ?? inputEl.value.length;
+  const end = inputEl.selectionEnd ?? inputEl.value.length;
+  const before = inputEl.value.slice(0,start);
+  const after = inputEl.value.slice(end);
+  let out = before + template + after;
+  // remove marker
+  const markerPos = (before + template).indexOf('▮');
+  if(markerPos >= 0) out = out.replace('▮','');
+  inputEl.value = out;
+  const pos = markerPos >= 0 ? markerPos : (start + template.length);
+  inputEl.setSelectionRange(pos,pos);
+  inputEl.dispatchEvent(new Event('input',{bubbles:true}));
+}
+
+/* toggle drawer on focus */
+let ACTIVE_TEXTAREA = null, LAST_ACTIVE_TEXTAREA = null;
+document.addEventListener('focusin', (e)=>{
+  if(e.target && (e.target.tagName === 'TEXTAREA' || (e.target.tagName==='INPUT' && e.target.type==='text'))){
+    ACTIVE_TEXTAREA = e.target;
+    LAST_ACTIVE_TEXTAREA = e.target;
+    setDrawer(true);
   }
-};
+});
 
+/* pin behavior */
+document.getElementById('pinDrawer').addEventListener('change', (e)=>{
+  if(e.target.checked) setDrawer(true);
+});
 
-/* ---------------------------------------------
-   4) Save to Firestore
-----------------------------------------------*/
-document.getElementById("saveBtn").onclick = async () => {
-  const tcode = document.getElementById("tcode").value.trim();
-  if (!tcode) return alert("Test kodi kiritilmagan!");
+/* close drawer when clicking outside */
+document.addEventListener('click', (e)=>{
+  const d = document.getElementById('keypadDrawer');
+  if(d.contains(e.target) || (e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT')) return;
+  if(!document.getElementById('pinDrawer').checked) setDrawer(false);
+});
 
-  const data = {
-    title: document.getElementById("title").value,
-    description: document.getElementById("desc").value,
-    durationMinutes: Number(document.getElementById("dur").value),
-    status: document.getElementById("testStatus").value,
-    questions: [],
-    version: "2.2",
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  };
+/* ---------- Question builder (variant/open per-question) ---------- */
+function questionTemplate(i, defaultType='variant'){
+  return `
+  <div class="qbox card" data-index="${i}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="badge">#${i} — rasm: <code>${i}.jpg</code></div>
+      <div class="flex">
+        <label class="mini">Turi</label>
+        <select class="qtype" style="min-width:120px;margin-left:6px">
+          <option value="variant"${defaultType==='variant'?' selected':''}>Variantli</option>
+          <option value="open"${defaultType==='open'?' selected':''}>Yopiq (ochiq)</option>
+        </select>
+        <button class="btn ghost" data-remove style="margin-left:8px">O'chirish</button>
+      </div>
+    </div>
 
-  document.querySelectorAll(".qbox").forEach((q, i) => {
-    const points = Number(q.querySelector(".points").value);
-    const opts = q.querySelector(".options").value.split("\n").map(s => s.trim()).filter(Boolean);
-    const correct = q.querySelector(".correct").value;
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label>Ball</label>
+        <input class="points" type="number" value="1" min="1">
+      </div>
+      <div>
+        <label>Variantlar (har satr — bitta)</label>
+        <textarea class="options" placeholder="A varianti&#10;B varianti&#10;C varianti"></textarea>
+      </div>
+      <div>
+        <label>To'g'ri javob (variant uchun index 0-based yoki yopiq uchun matn)</label>
+        <input class="correct" type="text" placeholder="0 yoki $x=5$">
+      </div>
+    </div>
+  </div>`;
+}
 
-    data.questions.push({
-      points,
-      options: opts,
-      correct
+function buildQuestions(){
+  const n = Math.max(1, Number(document.getElementById('qcount').value || 1));
+  const defaultType = document.getElementById('globalDefault').value || 'variant';
+  const area = document.getElementById('questionsArea');
+  area.innerHTML = '';
+  for(let i=1;i<=n;i++){
+    area.insertAdjacentHTML('beforeend', questionTemplate(i, defaultType));
+  }
+  // attach events
+  document.querySelectorAll('[data-remove]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      const q = e.target.closest('.qbox');
+      if(q) q.remove();
     });
   });
+  // focus behavior for options and correct inputs handled by global focus listener
+}
+document.getElementById('buildQuestions').addEventListener('click', buildQuestions);
+buildQuestions();
 
-  try {
-    await db.collection("test").doc(tcode).set(data);
-    document.getElementById("saveStatus").textContent = "✔ Saqlandi!";
-  } catch (e) {
-    alert("Xatolik: " + e.message);
+/* ---------- Collect JSON & Save ---------- */
+function collectJson(){
+  const title = document.getElementById('title').value || '';
+  const description = document.getElementById('desc').value || '';
+  const code = (document.getElementById('tcode').value || '').trim();
+  const durationMinutes = Number(document.getElementById('dur').value || 0);
+  const status = document.getElementById('testStatus').value || 'draft';
+  const questions = [];
+  document.querySelectorAll('#questionsArea .qbox').forEach((q, idx)=>{
+    const points = Number(q.querySelector('.points').value || 1);
+    const type = q.querySelector('.qtype').value === 'open' ? 'open' : 'variant';
+    const opts = (q.querySelector('.options').value || '').split('\n').map(s=>s.trim()).filter(Boolean);
+    const correctRaw = (q.querySelector('.correct').value || '').trim();
+    if(type === 'variant'){
+      const correctIndex = correctRaw === '' ? 0 : Number(correctRaw);
+      questions.push({ points, type:'variant', options: opts, correctIndex });
+    } else {
+      questions.push({ points, type:'open', correctAnswer: correctRaw });
+    }
+  });
+  const sections = collectSections(questions.length);
+  const out = { title, description, durationMinutes, sections, questions, code, status, version:'3.0' };
+  return out;
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const data = collectJson();
+  const b = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'test.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+});
+
+document.getElementById('previewBtn').addEventListener('click', ()=>{
+  const data = collectJson();
+  localStorage.setItem('testData', JSON.stringify(data));
+  window.open('test.html', '_blank');
+});
+
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  const data = collectJson();
+  const code = data.code || document.getElementById('tcode').value;
+  if(!code) return alert('Iltimos, test kodi kiriting.');
+  try{
+    // double-check admin
+    const user = auth.currentUser;
+    if(!user) return alert('Foydalanuvchi auth yo‘q — qayta kirib ko‘ring.');
+    if((user.email || '').toLowerCase() !== ADMIN_EMAIL.toLowerCase()){
+      return alert('Siz admin emassiz.');
+    }
+    await db.collection('test').doc(code).set({
+      ...data,
+      createdBy: user.email,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById('saveStatus').textContent = '✅ Saqlandi: ' + code;
+    setTimeout(()=>document.getElementById('saveStatus').textContent = '', 4000);
+  }catch(e){
+    console.error(e);
+    alert('Saqlash xatosi: ' + (e?.message || e));
   }
-};
-</script>
+});
 
+/* ---------- small helper: when DOM loaded, typeset placeholders ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ if(window.MathJax?.typesetPromise) MathJax.typesetPromise(); });
+
+</script>
 </body>
 </html>
