@@ -327,23 +327,68 @@
     .option-text{
       flex:1;
     }
+    .login-overlay{
+      position:fixed;
+      top:0;left:0;right:0;bottom:0;
+      background:rgba(255,255,255,0.95);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      z-index:2000;
+      padding:20px;
+    }
+    .login-box{
+      max-width:400px;
+      width:100%;
+      padding:30px;
+      text-align:center;
+      background:white;
+      border-radius:16px;
+      box-shadow:0 20px 40px rgba(0,0,0,0.1);
+    }
+    .login-btn{
+      margin-top:20px;
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      padding:14px;
+      font-size:16px;
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <!-- Login overlay (first thing user sees) -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+      <h2 style="margin-top:0">Test Yaratish Tizimiga Xush Kelibsiz! 👨‍💻</h2>
+      <p>Test yaratish, tahrirlash va boshqarish uchun tizimga kiring.</p>
+      <p><strong>Admin email:</strong> sohibjonmath@gmail.com</p>
+      <div style="margin:20px 0;padding:15px;background:#f8fbf9;border-radius:10px;">
+        <p class="mini">Iltimos, Google hisobingiz orqali tizimga kiring.</p>
+      </div>
+      <button id="loginBtn" class="btn login-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Google orqali kirish
+      </button>
+      <div id="loginStatus" class="muted" style="margin-top:15px;"></div>
+    </div>
+  </div>
+
+  <div class="wrap" style="display:none;" id="mainContent">
     <div class="topbar">
       <h1>👨‍💻 Admin — Test Yaratish Tizimi</h1>
       <div class="flex">
-        <div id="authStatus" class="muted">Tizimga kirilmoqda...</div>
-        <button id="logoutBtn" class="btn ghost hidden">Chiqish</button>
+        <div id="authStatus" class="muted"></div>
+        <button id="logoutBtn" class="btn ghost">Chiqish</button>
       </div>
-    </div>
-
-    <!-- Login area -->
-    <div id="loginArea" class="card">
-      <h2>Tizimga kirish</h2>
-      <p>Iltimos, Google hisobingiz orqali tizimga kiring.</p>
-      <button id="loginBtn" class="btn">Google orqali kirish</button>
     </div>
 
     <!-- Admin area -->
@@ -486,36 +531,52 @@ try {
   console.log("Firebase muvaffaqiyatli ulandi");
 } catch (error) {
   console.error("Firebase ulanishida xato:", error);
-  document.getElementById('authStatus').textContent = 'Firebase ulanish xatosi';
+  document.getElementById('loginStatus').textContent = 'Firebase ulanish xatosi';
 }
 
 /* ---------------------------
-  AUTHENTIFIKATSIYA
+  AUTHENTIFIKATSIYA - O'ZGARTIRILGAN (POPUP BLOCK MUAMMOSIZ)
 ----------------------------*/
 let currentUser = null;
 
 async function signIn() {
   try {
-    document.getElementById('authStatus').textContent = 'Kirilmoqda...';
+    document.getElementById('loginStatus').textContent = 'Kirilmoqda...';
+    document.getElementById('loginBtn').disabled = true;
+    
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.addScope('email');
     provider.addScope('profile');
     
+    // Fayrdalanuvchi interaktsiyasi bilan popup ochish (eng xavfsiz usul)
     const result = await auth.signInWithPopup(provider);
     console.log("Google kirish muvaffaqiyatli:", result.user.email);
     return result.user;
   } catch (error) {
     console.error("Kirish xatosi:", error);
-    document.getElementById('authStatus').textContent = 'Kirishda xato: ' + error.message;
     
-    // Redirect urinib ko'rish
+    // Popup bloklanganda, foydalanuvchiga qayta urinish imkoniyati berish
     if (error.code === 'auth/popup-blocked') {
-      alert('Pop-up bloklandi. Iltimos, pop-up blokirovkasini o\'chiring yoki qayta urinib ko\'ring.');
-      try {
-        await auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
-      } catch (e) {
-        console.error("Redirect ham xato:", e);
-      }
+      document.getElementById('loginStatus').innerHTML = 
+        '⚠️ Pop-up bloklandi. Iltimos:<br>' +
+        '1. Brauzeringizning yuqori o\'ng burchagidagi pop-up blokirovkasi belgisini bosing<br>' +
+        '2. "Pop-up-larga ruxsat berish" ni tanlang<br>' +
+        '3. Qaytadan "Google orqali kirish" tugmasini bosing';
+      
+      document.getElementById('loginBtn').disabled = false;
+      
+      // 5 soniyadan keyin xabarni tozalash
+      setTimeout(() => {
+        document.getElementById('loginStatus').textContent = '';
+      }, 10000);
+    } else if (error.code === 'auth/cancelled-popup-request' || 
+               error.code === 'auth/popup-closed-by-user') {
+      // Foydalanuvchi popup ni yopgan
+      document.getElementById('loginStatus').textContent = 'Kirish bekor qilindi. Qayta urinib ko\'ring.';
+      document.getElementById('loginBtn').disabled = false;
+    } else {
+      document.getElementById('loginStatus').textContent = 'Kirishda xato: ' + error.message;
+      document.getElementById('loginBtn').disabled = false;
     }
     return null;
   }
@@ -525,29 +586,34 @@ async function signOut() {
   try {
     await auth.signOut();
     currentUser = null;
-    updateUI();
+    showLoginScreen();
     console.log("Chiqish muvaffaqiyatli");
   } catch (error) {
     console.error("Chiqish xatosi:", error);
   }
 }
 
+function showLoginScreen() {
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('loginBtn').disabled = false;
+  document.getElementById('loginStatus').textContent = '';
+}
+
+function showMainContent() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+}
+
 function updateUI() {
-  const loginArea = document.getElementById('loginArea');
   const adminArea = document.getElementById('adminArea');
   const notAdmin = document.getElementById('notAdmin');
-  const logoutBtn = document.getElementById('logoutBtn');
   const authStatus = document.getElementById('authStatus');
 
   if (!currentUser) {
-    loginArea.classList.remove('hidden');
-    adminArea.classList.add('hidden');
-    notAdmin.classList.add('hidden');
-    logoutBtn.classList.add('hidden');
-    authStatus.textContent = 'Kirilmagan';
+    showLoginScreen();
   } else {
-    loginArea.classList.add('hidden');
-    logoutBtn.classList.remove('hidden');
+    showMainContent();
     authStatus.textContent = `Kirgan: ${currentUser.email}`;
     
     if (currentUser.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
@@ -564,7 +630,7 @@ function updateUI() {
   }
 }
 
-// Auth state listener
+// Auth state listener - barcha sahifalarda ishlaydi
 auth.onAuthStateChanged((user) => {
   currentUser = user;
   updateUI();
@@ -576,8 +642,8 @@ auth.onAuthStateChanged((user) => {
 });
 
 // Event listeners
-document.getElementById('loginBtn')?.addEventListener('click', signIn);
-document.getElementById('logoutBtn')?.addEventListener('click', signOut);
+document.getElementById('loginBtn').addEventListener('click', signIn);
+document.getElementById('logoutBtn').addEventListener('click', signOut);
 
 /* ---------------------------
   BO'LIMLAR UI
@@ -1294,13 +1360,14 @@ function showMessage(message, type = 'info') {
 /* ---------------------------
   INITIALIZATION
 ----------------------------*/
-// Auto-login check
-setTimeout(() => {
-  if (!currentUser) {
-    document.getElementById('authStatus').textContent = 'Google orqali kirishni kuting...';
-    signIn();
-  }
-}, 1000);
+// Sahifa yuklanganda login ekranini ko'rsatish
+showLoginScreen();
+
+// Avvalgi sessionni tekshirish
+auth.onAuthStateChanged((user) => {
+  currentUser = user;
+  updateUI();
+});
 
 // Initialize
 updateStats();
