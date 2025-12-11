@@ -137,13 +137,13 @@
         <div><label>Nechta savol</label><input id="qcount" type="number" min="1" value="20"></div>
       </div>
       
-      <!-- Test turi -->
+      <!-- Test turi (global default) -->
       <div class="row">
         <div>
-          <label>Test turi</label>
+          <label>Global default</label>
           <div class="mode-selector">
-            <div class="mode-tab active" data-mode="variant">Variantli test</div>
-            <div class="mode-tab" data-mode="yopiq">Yopiq test</div>
+            <div class="mode-tab active" data-mode="variant">Variantli (global)</div>
+            <div class="mode-tab" data-mode="yopiq">Yopiq (global)</div>
           </div>
         </div>
         <div>
@@ -274,31 +274,41 @@ let firebaseApp = null;
 let db = null;
 let firebaseInitialized = false;
 
+// PROVIDED CONFIG (as requested)
+const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
+
 function initializeFirebase(config){
   try{
     if(firebaseApp) return;
-    
-    const firebaseConfig = {
-      apiKey: config.apiKey || $('#firebaseApiKey').value,
-      authDomain: config.authDomain || $('#firebaseAuthDomain').value,
-      projectId: config.projectId || $('#firebaseProjectId').value,
-      storageBucket: config.storageBucket || $('#firebaseStorageBucket').value,
-      messagingSenderId: config.messagingSenderId || $('#firebaseMessagingSenderId').value,
-      appId: config.appId || $('#firebaseAppId').value
+    const c = config || {
+      apiKey: $('#firebaseApiKey').value,
+      authDomain: $('#firebaseAuthDomain').value,
+      projectId: $('#firebaseProjectId').value,
+      storageBucket: $('#firebaseStorageBucket').value,
+      messagingSenderId: $('#firebaseMessagingSenderId').value,
+      appId: $('#firebaseAppId').value
     };
-    
-    firebaseApp = firebase.initializeApp(firebaseConfig);
+
+    firebaseApp = firebase.initializeApp(c);
     db = firebase.firestore();
     firebaseInitialized = true;
-    
+
     $('#firebaseStatus').textContent = "Firebase ulandi ✓";
     $('#firebaseStatus').className = "firebase-status connected";
-    
+
     console.log("Firebase initialized successfully");
     return true;
   }catch(e){
     console.error("Firebase initialization error:", e);
-    $('#firebaseStatus').textContent = "Firebase ulashda xatolik: " + e.message;
+    $('#firebaseStatus').textContent = "Firebase ulashda xatolik: " + (e.message || e);
     $('#firebaseStatus').className = "firebase-status disconnected";
     return false;
   }
@@ -309,48 +319,33 @@ async function saveTestToFirebase(testData){
     alert("Iltimos, avval Firebase'ni ulang");
     return false;
   }
-  
   try{
     const testCode = testData.code || $('#tcode').value;
     if(!testCode){
       alert("Iltimos, Test kodi kiriting (Firestore uchun)");
       return false;
     }
-    
-    // Testni Firestore'ga saqlash
-    const testRef = db.collection('tests').doc(testCode);
-    
-    // Metadata qo'shamiz
+
+    // Save to collection 'test' with doc id = testCode
+    const testRef = db.collection('test').doc(testCode);
+
     const fullData = {
       ...testData,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      status: $('#testStatus').value || 'draft',
-      type: $('.mode-tab.active').dataset.mode || 'variant'
+      status: $('#testStatus').value || 'draft'
     };
-    
+
     await testRef.set(fullData);
-    
-    // Javoblar to'plami yaratish
-    const answersRef = db.collection('answers');
-    const answersData = {
-      testCode: testCode,
-      testTitle: testData.title,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      totalQuestions: testData.questions.length,
-      type: fullData.type
-    };
-    
-    await answersRef.add(answersData);
-    
-    $('#saveStatus').textContent = "✅ Test Firebase'ga saqlandi";
+
+    $('#saveStatus').textContent = "✅ Test 'test' collectionga saqlandi (doc: " + testCode + ")";
     $('#saveStatus').className = "success";
-    setTimeout(()=>{$('#saveStatus').textContent='';}, 3000);
-    
+    setTimeout(()=>{$('#saveStatus').textContent='';}, 4000);
+
     return true;
   }catch(e){
     console.error("Firebase save error:", e);
-    alert("Firebase'ga saqlashda xatolik: " + e.message);
+    alert("Firebase'ga saqlashda xatolik: " + (e.message || e));
     return false;
   }
 }
@@ -364,7 +359,6 @@ function saveFirebaseConfigToLocal(){
     messagingSenderId: $('#firebaseMessagingSenderId').value,
     appId: $('#firebaseAppId').value
   };
-  
   localStorage.setItem('firebaseConfig', JSON.stringify(config));
   alert("Firebase sozlamalari saqlandi");
 }
@@ -428,91 +422,18 @@ function buildKeypad(){
   typeset(grid);
 }
 
-/* ========= Test turini o'zgartirish ========= */
-function initTestTypeToggle(){
-  const tabs = $$('.mode-tab');
-  tabs.forEach(tab=>{
-    tab.addEventListener('click', ()=>{
-      tabs.forEach(t=>t.classList.remove('active'));
-      tab.classList.add('active');
-      
-      const testType = tab.dataset.mode;
-      // Savol shakllarini yangilash
-      $$('#questionsArea .qbox').forEach(qb=>{
-        updateQuestionMode(qb, testType);
-      });
-    });
-  });
-}
-
-function updateQuestionMode(qbox, testType){
-  const variantSection = qbox.querySelector('.variant-section');
-  const closedSection = qbox.querySelector('.closed-section');
-  
-  if(testType === 'variant'){
-    variantSection.style.display = 'block';
-    closedSection.style.display = 'none';
-  }else{
-    variantSection.style.display = 'none';
-    closedSection.style.display = 'block';
-  }
-  
-  // Preview ni yangilash
-  updatePreviewForQuestion(qbox);
-}
-
-/* ========= Sections editor ========= */
-function rebuildSectionsUI(){
-  const secN = Math.max(0, Number($('#secCount').value||0));
-  const list = $('#secList'); list.innerHTML = '';
-  if(secN===0){
-    list.innerHTML = `<div class="mini warn">Bo'limlar JSON'ga yozilmaydi (test.html default bo'limlardan foydalanadi).</div>`;
-    return;
-  }
-  const hdr = document.createElement('div');
-  hdr.className = 'sec-row';
-  hdr.innerHTML = `
-    <div><label>Bo'lim nomi</label></div>
-    <div><label>Boshlanish (1-indeks)</label></div>
-    <div><label>Tugash</label></div>
-    <div><label>Izoh</label></div>`;
-  list.appendChild(hdr);
-  
-  for(let i=0;i<secN;i++){
-    const row = document.createElement('div'); row.className='sec-row sec-item';
-    row.innerHTML = `
-      <input type="text" class="sec-name" placeholder="Masalan: Algebra">
-      <input type="number" min="1" class="sec-start" placeholder="1">
-      <input type="number" min="1" class="sec-end" placeholder="12">
-      <div class="mini">Qamrab olgan savollar diapazoni</div>`;
-    list.appendChild(row);
-  }
-}
-function collectSections(totalQ){
-  const n = Math.max(0, Number($('#secCount').value||0));
-  if(n===0) return [];
-  const names = $$('#secList .sec-name');
-  const starts = $$('#secList .sec-start');
-  const ends = $$('#secList .sec-end');
-  const out = [];
-  for(let i=0;i<n;i++){
-    const name = (names[i]?.value || `Bo'lim ${i+1}`).trim();
-    const start = Math.max(1, Number(starts[i]?.value||1));
-    const end = Math.min(totalQ, Number(ends[i]?.value||totalQ));
-    if(start<=end) out.push({ name, start, end });
-  }
-  return out;
-}
-
-/* ========= Question template / logic ========= */
-function qTemplate(i){
-  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
-  
+/* ========= Question template / logic (now with per-question type select) ========= */
+function qTemplate(i, defaultType){
+  const testType = defaultType || 'variant';
   return `
   <div class="card qbox" data-index="${i}">
     <div class="flex" style="justify-content:space-between;align-items:center">
       <div class="badge">#${i} — rasm: <code>${i}.jpg</code> / <code>${i}.png</code></div>
       <div class="flex">
+        <select class="qtype" title="Savol turi">
+          <option value="variant" ${testType==='variant'?'selected':''}>Variantli</option>
+          <option value="open" ${testType!=='variant'?'selected':''}>Yopiq (ochiq javob)</option>
+        </select>
         <button class="btn flat" data-minitoggle type="button">Yig'ish</button>
         <button class="btn danger" data-remove type="button">O'chirish</button>
       </div>
@@ -536,7 +457,7 @@ function qTemplate(i){
         <!-- Variantli qism (variant test uchun) -->
         <div class="variant-section" style="${testType === 'variant' ? 'display:block' : 'display:none'}">
           <label class="miniLocal">Variantlar (har satr — bitta, LaTeX uchun $ ... $)</label>
-          <textarea class="options" placeholder="A varianti&#10;B varianti&#10;$x^2-1$&#10;$\\sqrt{a^2+b^2}$"></textarea>
+          <textarea class="options" placeholder="A varianti\nB varianti\n$x^2-1$\n$\\sqrt{a^2+b^2}$"></textarea>
           <div class="mini">Focus shu maydonda bo'lsa, pastdagi klaviatura avtomatik ochiladi.</div>
           
           <div class="hr"></div>
@@ -545,7 +466,7 @@ function qTemplate(i){
         </div>
         
         <!-- Yopiq test qismi -->
-        <div class="closed-section" style="${testType === 'yopiq' ? 'display:block' : 'display:none'}">
+        <div class="closed-section" style="${testType === 'yopiq' || testType === 'open' ? 'display:block' : 'display:none'}">
           <label>To'g'ri javob (matn yoki LaTeX)</label>
           <input type="text" class="correct-answer" placeholder="Masalan: $x = 5$">
           <div class="mini">O'quvchi bu javobni test.html da kiritadi</div>
@@ -562,7 +483,7 @@ function qTemplate(i){
           <div class="hr"></div>
           <div class="mini" id="previewMode${i}">Test turi: ${testType === 'variant' ? 'Variantli' : 'Yopiq'}</div>
           <div class="pvOptions"></div>
-          <div class="pvClosedAnswer" style="${testType === 'yopiq' ? 'display:block' : 'display:none'}"></div>
+          <div class="pvClosedAnswer" style="${testType === 'yopiq' || testType === 'open' ? 'display:block' : 'display:none'}"></div>
           <div class="hr"></div>
           <div class="mini">To'g'ri javob: <span class="correct-answer-preview"></span></div>
         </div>
@@ -571,8 +492,13 @@ function qTemplate(i){
   </div>`;
 }
 
+function getQuestionTypeFromQbox(qbox){
+  const sel = qbox.querySelector('.qtype');
+  return sel ? (sel.value === 'open' ? 'open' : 'variant') : 'variant';
+}
+
 function updatePreviewForQuestion(qbox){
-  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  const testType = getQuestionTypeFromQbox(qbox);
   const previewMode = qbox.querySelector(`#previewMode${qbox.dataset.index}`);
   const pvOptions = qbox.querySelector('.pvOptions');
   const pvClosedAnswer = qbox.querySelector('.pvClosedAnswer');
@@ -580,10 +506,11 @@ function updatePreviewForQuestion(qbox){
   
   if(testType === 'variant'){
     previewMode.textContent = "Test turi: Variantli";
+    qbox.querySelector('.variant-section').style.display = 'block';
+    qbox.querySelector('.closed-section').style.display = 'none';
     pvOptions.style.display = 'block';
     pvClosedAnswer.style.display = 'none';
     
-    // To'g'ri javobni ko'rsatish
     const correctRadio = qbox.querySelector('.answers input[type="radio"]:checked');
     const correctIndex = correctRadio ? parseInt(correctRadio.value, 10) : 0;
     const options = qbox.querySelector('.options').value.split('\n').map(s=>s.trim()).filter(Boolean);
@@ -596,25 +523,24 @@ function updatePreviewForQuestion(qbox){
     }
   }else{
     previewMode.textContent = "Test turi: Yopiq (ochiq javob)";
+    qbox.querySelector('.variant-section').style.display = 'none';
+    qbox.querySelector('.closed-section').style.display = 'block';
     pvOptions.style.display = 'none';
     pvClosedAnswer.style.display = 'block';
     
-    // Yopiq test uchun to'g'ri javob
     const correctAnswer = qbox.querySelector('.correct-answer').value;
     correctAnswerPreview.innerHTML = `<span class="mj">${renderLineForMath(correctAnswer || "Kiritilmagan")}</span>`;
     
-    pvClosedAnswer.innerHTML = `<div style="padding:8px;background:#f8faf9;border-radius:8px;">
-      <em>O'quvchi javobni kiritadi</em>
-    </div>`;
+    pvClosedAnswer.innerHTML = `<div style="padding:8px;background:#f8faf9;border-radius:8px;">\n      <em>O'quvchi javobni kiritadi</em>\n    </div>`;
   }
   
   typeset(qbox.querySelector('.preview'));
 }
 
 function rebuildAnswerPickers(qbox){
-  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  const testType = getQuestionTypeFromQbox(qbox);
   if(testType !== 'variant') return;
-  
+
   const ta = qbox.querySelector('.options');
   const ansBox = qbox.querySelector('.answers');
   const pv = qbox.querySelector('.pvOptions');
@@ -654,59 +580,61 @@ function rebuildAnswerPickers(qbox){
 }
 
 function attachQEvents(qbox){
-  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
-  
-  if(testType === 'variant'){
-    const ta = qbox.querySelector('.options');
-    ta.addEventListener('focus', ()=>{
-      ACTIVE_TEXTAREA = ta;
-      LAST_ACTIVE_TEXTAREA = ta;
-      setDrawer(true);
-    });
-    ta.addEventListener('blur', ()=>{
-      setTimeout(()=>{
-        const ae = document.activeElement;
-        const isOverDrawer = $('#keypadDrawer').contains(ae);
-        if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
-      }, 0);
-    });
-    ta.addEventListener('input', ()=>rebuildAnswerPickers(qbox));
-  }else{
-    const correctInput = qbox.querySelector('.correct-answer');
-    correctInput.addEventListener('focus', ()=>{
-      ACTIVE_TEXTAREA = correctInput;
-      LAST_ACTIVE_TEXTAREA = correctInput;
-      setDrawer(true);
-    });
-    correctInput.addEventListener('blur', ()=>{
-      setTimeout(()=>{
-        const ae = document.activeElement;
-        const isOverDrawer = $('#keypadDrawer').contains(ae);
-        if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
-      }, 0);
-    });
-    correctInput.addEventListener('input', ()=>updatePreviewForQuestion(qbox));
-  }
-  
+  // per-question type change
+  const qtypeSel = qbox.querySelector('.qtype');
+  qtypeSel.addEventListener('change', ()=>{
+    rebuildAnswerPickers(qbox);
+    updatePreviewForQuestion(qbox);
+  });
+
+  const ta = qbox.querySelector('.options');
+  const correctInput = qbox.querySelector('.correct-answer');
+
+  ta.addEventListener('focus', ()=>{
+    ACTIVE_TEXTAREA = ta;
+    LAST_ACTIVE_TEXTAREA = ta;
+    setDrawer(true);
+  });
+  ta.addEventListener('blur', ()=>{
+    setTimeout(()=>{
+      const ae = document.activeElement;
+      const isOverDrawer = $('#keypadDrawer').contains(ae);
+      if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
+    }, 0);
+  });
+  ta.addEventListener('input', ()=>rebuildAnswerPickers(qbox));
+
+  correctInput.addEventListener('focus', ()=>{
+    ACTIVE_TEXTAREA = correctInput;
+    LAST_ACTIVE_TEXTAREA = correctInput;
+    setDrawer(true);
+  });
+  correctInput.addEventListener('blur', ()=>{
+    setTimeout(()=>{
+      const ae = document.activeElement;
+      const isOverDrawer = $('#keypadDrawer').contains(ae);
+      if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
+    }, 0);
+  });
+  correctInput.addEventListener('input', ()=>updatePreviewForQuestion(qbox));
+
   qbox.querySelector('[data-remove]').addEventListener('click', ()=>qbox.remove());
   qbox.querySelector('[data-minitoggle]').addEventListener('click', (e)=>{
     const collapsed = qbox.classList.toggle('collapsed');
     e.target.textContent = collapsed ? 'Yoyish' : "Yig'ish";
   });
   
-  if(testType === 'variant'){
-    rebuildAnswerPickers(qbox);
-  }else{
-    updatePreviewForQuestion(qbox);
-  }
+  // initial build
+  rebuildAnswerPickers(qbox);
+  updatePreviewForQuestion(qbox);
 }
 
-function buildForms(){
+function buildForms(defaultType){
   const n = Math.max(1, Number($('#qcount').value||1));
   const area = $('#questionsArea'); area.innerHTML = '';
   for(let i=1;i<=n;i++){
     const holder = document.createElement('div');
-    holder.innerHTML = qTemplate(i);
+    holder.innerHTML = qTemplate(i, defaultType);
     const el = holder.firstElementChild;
     area.appendChild(el);
     attachQEvents(el);
@@ -721,13 +649,14 @@ function collectJson(){
   const code = ($('#tcode')?.value || '').trim();
   const durationMinutes = Number($('#dur').value||0);
   const status = $('#testStatus').value || 'draft';
-  const type = $('.mode-tab.active').dataset.mode || 'variant';
+  const globalDefault = $('.mode-tab.active')?.dataset.mode || 'variant';
   
   const questions = [];
   $$('#questionsArea .qbox').forEach(qbox=>{
     const points = Math.max(1, Number(qbox.querySelector('.points').value||1));
+    const qType = getQuestionTypeFromQbox(qbox);
     
-    if(type === 'variant'){
+    if(qType === 'variant'){
       const opts = (qbox.querySelector('.options').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
       const correctRadio = qbox.querySelector('.answers input[type="radio"]:checked');
       const correctIndex = correctRadio ? parseInt(correctRadio.value, 10) : 0;
@@ -757,8 +686,8 @@ function collectJson(){
     questions,
     code,
     status,
-    type,
-    version: '2.0'
+    globalDefault,
+    version: '2.1'
   };
   if(id) out.id = id;
   return out;
@@ -808,14 +737,12 @@ function normalizeImported(data){
     
     const qq = { ...q };
     if(qq.type === 'open' || qq.type === 'yopiq'){
-      // Yopiq savol
       return {
         points: Number(qq.points||1),
         correctAnswer: qq.correctAnswer || '',
         type: 'open'
       };
     }else{
-      // Variantli savol
       if(!Array.isArray(qq.options) && typeof qq.opts === 'string'){
         qq.options = qq.opts.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       }
@@ -842,8 +769,7 @@ function applyTestData(data){
   $('#dur').value   = Number(d.durationMinutes||0);
   $('#testStatus').value = d.status || 'draft';
   
-  // Test turini o'rnatish
-  const testType = d.type || 'variant';
+  const testType = d.globalDefault || 'variant';
   $$('.mode-tab').forEach(tab=>{
     tab.classList.remove('active');
     if(tab.dataset.mode === testType) tab.classList.add('active');
@@ -863,13 +789,14 @@ function applyTestData(data){
   }
   
   $('#qcount').value = d.questions.length;
-  buildForms();
+  buildForms(testType);
   
   $$('#questionsArea .qbox').forEach((qbox, idx)=>{
     const q = d.questions[idx];
     if(!q) return;
-    
     qbox.querySelector('.points').value = Number(q.points||1);
+    const qtypeSel = qbox.querySelector('.qtype');
+    if(q.type === 'open') qtypeSel.value = 'open'; else qtypeSel.value = 'variant';
     
     if(q.type === 'variant'){
       const ta = qbox.querySelector('.options');
@@ -914,12 +841,55 @@ async function importFromLocalStorage(){
 async function importFromTestJson(){
   try{
     const r = await fetch('test.json', { cache: 'no-store' });
-    if(!r.ok) throw new Error('test.json o\'qilmadi');
+    if(!r.ok) throw new Error('test.json o\\'qilmadi');
     const data = await r.json();
     applyTestData(data);
   }catch(e){
-    alert('test.json o\'qishda xatolik: ' + e.message + "\n\nEslatma: file:// bilan ochilganda fetch ishlamasligi mumkin. Kichik lokal serverda ishga tushiring.");
+    alert('test.json o\\'qishda xatolik: ' + e.message + "\n\nEslatma: file:// bilan ochilganda fetch ishlamasligi mumkin. Kichik lokal serverda ishga tushiring.");
   }
+}
+
+/* ========= Sections editor ========= */
+function rebuildSectionsUI(){
+  const secN = Math.max(0, Number($('#secCount').value||0));
+  const list = $('#secList'); list.innerHTML = '';
+  if(secN===0){
+    list.innerHTML = `<div class="mini warn">Bo'limlar JSON'ga yozilmaydi (test.html default bo'limlardan foydalanadi).</div>`;
+    return;
+  }
+  const hdr = document.createElement('div');
+  hdr.className = 'sec-row';
+  hdr.innerHTML = `
+    <div><label>Bo'lim nomi</label></div>
+    <div><label>Boshlanish (1-indeks)</label></div>
+    <div><label>Tugash</label></div>
+    <div><label>Izoh</label></div>`;
+  list.appendChild(hdr);
+  
+  for(let i=0;i<secN;i++){
+    const row = document.createElement('div'); row.className='sec-row sec-item';
+    row.innerHTML = `
+      <input type="text" class="sec-name" placeholder="Masalan: Algebra">
+      <input type="number" min="1" class="sec-start" placeholder="1">
+      <input type="number" min="1" class="sec-end" placeholder="12">
+      <div class="mini">Qamrab olgan savollar diapazoni</div>`;
+    list.appendChild(row);
+  }
+}
+function collectSections(totalQ){
+  const n = Math.max(0, Number($('#secCount').value||0));
+  if(n===0) return [];
+  const names = $$('#secList .sec-name');
+  const starts = $$('#secList .sec-start');
+  const ends = $$('#secList .sec-end');
+  const out = [];
+  for(let i=0;i<n;i++){
+    const name = (names[i]?.value || `Bo'lim ${i+1}`).trim();
+    const start = Math.max(1, Number(starts[i]?.value||1));
+    const end = Math.min(totalQ, Number(ends[i]?.value||totalQ));
+    if(start<=end) out.push({ name, start, end });
+  }
+  return out;
 }
 
 /* ========= Global keypad & init ========= */
@@ -941,7 +911,10 @@ document.addEventListener('focusin', (e)=>{
 });
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  // Test turini sozlash
+  // initialize firebase with provided config automatically
+  try{ initializeFirebase(firebaseConfig); }catch(e){ console.warn('Auto init failed', e); }
+
+  // Test turini sozlash (global tabs)
   initTestTypeToggle();
   
   // Firebase eventlar
@@ -958,7 +931,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
   
   // Eski eventlar
-  $('#buildBtn').addEventListener('click', buildForms);
+  $('#buildBtn').addEventListener('click', ()=>{
+    const globalDefault = $('.mode-tab.active')?.dataset.mode || 'variant';
+    buildForms(globalDefault);
+  });
   $('#exportBtn').addEventListener('click', ()=>{
     const data = collectJson();
     download('test.json', new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
@@ -983,11 +959,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#secCount').addEventListener('input', rebuildSectionsUI);
   
   rebuildSectionsUI();
-  buildForms();
+  const globalDefault = $('.mode-tab.active')?.dataset.mode || 'variant';
+  buildForms(globalDefault);
   
   // Saqlangan Firebase sozlamalarini yuklash
   loadFirebaseConfigFromLocal();
 });
+
+/* ========= Mode tabs (global default) ========= */
+function initTestTypeToggle(){
+  const tabs = $$('.mode-tab');
+  tabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      tabs.forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+}
 </script>
 </body>
 </html>
