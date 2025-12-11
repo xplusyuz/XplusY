@@ -1,97 +1,993 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
-  />
-  <title>Admin Test — Konfiguratsiya</title>
-  <link rel="stylesheet" href="../test.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rasm-Only Test — Admin (Yopiq/Variant + Firebase)</title>
+
+  <!-- MathJax -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']], processEscapes: true, packages:{'[+]':['noerrors']} },
+      options: { renderActions: { addMenu: [] } }, loader: { load: ['[tex]/noerrors'] }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+  <style>
+    :root{--g:#2E8B57;--gd:#1F6B45;--bd:#e9f2ec;--muted:#64748b;--ring:rgba(46,139,87,.18)}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f6faf8;color:#0f172a}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    h1{display:flex;align-items:center;gap:10px;margin:0 0 16px}
+    .pi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--g),var(--gd));color:#fff;font-weight:800}
+    
+    .grid{display:grid;gap:12px}
+    .card{background:#fff;border:1px solid var(--bd);border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(31,107,69,.06)}
+    .row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    label{font-size:12px;color:#475569}
+    input[type="text"],input[type="number"],textarea,select{width:100%;padding:10px 12px;border:1px solid #dfeae3;border-radius:10px;background:#fbfdfc}
+    textarea{min-height:92px;resize:vertical}
+    .qbox{border:1px dashed #cfe4d7;border-radius:14px;padding:12px;display:grid;gap:12px}
+    .btn{appearance:none;border:none;border-radius:12px;padding:10px 14px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--g),var(--gd));cursor:pointer}
+    .btn.ghost{background:#fff;color:#1F6B45;border:1px solid #cfe4d7}
+    .btn.danger{background:linear-gradient(135deg,#d32f2f,#b71c1c)}
+    .btn.flat{background:#f8fbf9;color:#1F6B45;border:1px solid #cfe4d7}
+    .btn.warning{background:linear-gradient(135deg,#f59e0b,#d97706)}
+    .muted{color:#64748b;font-size:13px}
+    .flex{display:flex;gap:10px;flex-wrap:wrap}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:#f1f8f4;border:1px solid #dfeae3;border-radius:999px;padding:6px 10px;font-size:12px}
+    .mini{font-size:12px;color:#64748b}
+    .help{font-size:12px;color:#6b7280}
+    .answers .opt{display:flex;align-items:center;gap:8px}
+    .answers .opt input{transform:translateY(2px)}
+    .hr{height:1px;background:#eef4f0;margin:8px 0}
+    .side{display:grid;gap:10px}
+    .preview{border:1px dashed #dfeae3;border-radius:12px;padding:12px;background:#fbfdfc}
+    .warn{color:#b45309}
+    .success{color:#2E8B57}
+    
+    /* Drawer keypad */
+    .drawer{position:fixed;left:0;right:0;bottom:0;transform:translateY(100%);transition:transform .25s ease;background:#fffffff2;backdrop-filter:saturate(1.2) blur(6px);border-top:1px solid #dfeae3;box-shadow:0 -10px 24px rgba(31,107,69,.12);padding:12px 14px;z-index:9999}
+    .drawer.open{transform:translateY(0%)}
+    .drawer .rowbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px}
+    .kbtn{appearance:none;cursor:pointer;padding:8px 10px;border:1px solid #dfeae3;background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;min-height:44px;transition:box-shadow .15s,border-color .15s,background .15s}
+    .kbtn:hover{border-color:#b9dfc8;box-shadow:0 0 0 4px var(--ring);background:#fff}
+    .pin{display:flex;align-items:center;gap:8px}
+    .pin input{transform:translateY(1px)}
+    .drawer .title{font-weight:700}
+    .toolbar-note{font-size:12px;color:#64748b}
+    
+    .qbox.collapsed .row, .qbox.collapsed .side, .qbox.collapsed .preview, .qbox.collapsed .miniLocal {display:none}
+    .sec-row{display:grid;gap:10px;grid-template-columns:260px 1fr 1fr 1fr}
+    .sec-item{display:contents}
+    .sec-list{display:grid;gap:8px}
+    .hidden{display:none}
+    
+    /* Firebase panel */
+    .firebase-panel{margin-top:20px;border:2px solid #e0f2fe;background:#f0f9ff}
+    .firebase-status{padding:8px 12px;border-radius:8px;font-size:13px}
+    .firebase-status.connected{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+    .firebase-status.disconnected{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .firebase-panel .row{grid-template-columns:1fr 1fr}
+    
+    /* Mode selector */
+    .mode-selector{display:flex;gap:12px;align-items:center}
+    .mode-tab{padding:8px 16px;border:1px solid #cfe4d7;border-radius:8px;cursor:pointer;font-size:13px}
+    .mode-tab.active{background:var(--g);color:white;border-color:var(--g)}
+  </style>
 </head>
-<body data-page="admin">
-  <div class="page-shell">
-    <div class="page-inner">
-      <header class="app-header">
-        <div class="app-title">
-          <span>Test konfiguratori</span>
-          <span class="app-title-badge">Admin panel</span>
+<body>
+  <div class="wrap">
+    <h1><span class="pi">π</span> Test Admin (Yopiq/Variant + Firebase)</h1>
+    
+    <!-- Firebase config -->
+    <div class="card firebase-panel">
+      <div class="flex" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Firebase Sozlamalari</h3>
+        <div id="firebaseStatus" class="firebase-status disconnected">Firebase ulanmagan</div>
+      </div>
+      <div class="row">
+        <div>
+          <label>API Key</label>
+          <input type="password" id="firebaseApiKey" placeholder="AIzaSy..." value="">
         </div>
-        <div class="app-meta">
-          <span class="badge badge-outline">
-            <span class="tag-dot"></span> Rasmlar: 1.jpg, 2.jpg, ...
-          </span>
+        <div>
+          <label>Auth Domain</label>
+          <input type="text" id="firebaseAuthDomain" placeholder="your-app.firebaseapp.com">
         </div>
-      </header>
-
-      <div class="admin-layout">
-        <!-- LEFT: umumiy sozlamalar -->
-        <div class="admin-left card">
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div>
-              <div class="field-label">Test nomi</div>
-              <input
-                id="adminTitle"
-                class="input"
-                type="text"
-                placeholder="Masalan: 9-sinf Matematika T1"
-              />
-            </div>
-
-            <div>
-              <div class="field-label">Vaqt (daqiqada)</div>
-              <input
-                id="adminDuration"
-                class="input"
-                type="number"
-                min="0"
-                placeholder="0 — cheklanmagan"
-              />
-            </div>
-
-            <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px;">
-              <button id="btnScanImages" type="button" class="btn btn-primary btn-sm">
-                <span class="btn-icon">&#x1F50D;</span>
-                1.jpg, 2.jpg, ... rasmlarni topish
-              </button>
-
-              <button id="btnLoadJson" type="button" class="btn btn-ghost btn-sm">
-                <span class="btn-icon">&#x21E9;</span>
-                Mavjud config.json ni yuklash
-              </button>
-
-              <button id="btnSaveJson" type="button" class="btn btn-ghost btn-sm">
-                <span class="btn-icon">&#x1F4BE;</span>
-                config.json ni yuklab olish
-              </button>
-
-              <input
-                id="adminLoadJsonInput"
-                type="file"
-                accept="application/json"
-                style="display: none;"
-              />
-            </div>
-
-            <div class="admin-help" style="margin-top: 4px;">
-              • Rasmlar bu papkada <strong>1.jpg, 2.jpg, 3.jpg...</strong> ko‘rinishida
-              bo‘lishi kerak. <br />
-              • JSONni yuklab olib, serverga <code>config.json</code> nomi bilan joylaysiz.
-            </div>
+        <div>
+          <label>Project ID</label>
+          <input type="text" id="firebaseProjectId" placeholder="your-project-id">
+        </div>
+        <div>
+          <label>Storage Bucket</label>
+          <input type="text" id="firebaseStorageBucket" placeholder="your-app.appspot.com">
+        </div>
+        <div>
+          <label>Messaging Sender ID</label>
+          <input type="text" id="firebaseMessagingSenderId" placeholder="123456789012">
+        </div>
+        <div>
+          <label>App ID</label>
+          <input type="text" id="firebaseAppId" placeholder="1:123456789012:web:...">
+        </div>
+      </div>
+      <div class="flex" style="margin-top:12px">
+        <button class="btn" id="initFirebaseBtn">Firebase'ni ulash</button>
+        <button class="btn ghost" id="saveFirebaseConfig">Sozlamalarni saqlash</button>
+        <button class="btn flat" id="loadFirebaseConfig">Sozlamalarni yuklash</button>
+      </div>
+    </div>
+    
+    <!-- Test meta -->
+    <div class="card grid">
+      <div class="row">
+        <div><label>Sarlavha</label><input id="title" type="text" placeholder="Algebra — Test"></div>
+        <div><label>Ta'rif</label><input id="desc" type="text" placeholder="Test haqida qisqacha"></div>
+        <div><label>Test ID (slug)</label><input id="tid" type="text" placeholder="bsb-alg-geo-20"></div>
+        <div><label>Test kodi (Firestore uchun)</label><input id="tcode" type="text" placeholder="bsb-a1-2025-10" required></div>
+        <div><label>Vaqt (daqiqada)</label><input id="dur" type="number" min="0" value="30"></div>
+        <div><label>Nechta savol</label><input id="qcount" type="number" min="1" value="20"></div>
+      </div>
+      
+      <!-- Test turi -->
+      <div class="row">
+        <div>
+          <label>Test turi</label>
+          <div class="mode-selector">
+            <div class="mode-tab active" data-mode="variant">Variantli test</div>
+            <div class="mode-tab" data-mode="yopiq">Yopiq test</div>
           </div>
         </div>
-
-        <!-- RIGHT: savollar ro'yxati -->
-        <div class="admin-right card">
-          <div class="field-label" style="margin-bottom: 4px;">Savollar</div>
-          <div id="adminQuestionsWrap" class="admin-questions">
-            <!-- JS orqali -->
-          </div>
+        <div>
+          <label>Test holati</label>
+          <select id="testStatus">
+            <option value="draft">Qoralama</option>
+            <option value="active">Faol</option>
+            <option value="archived">Arxiv</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- Sections editor -->
+      <div class="row">
+        <div>
+          <label>Nechta bo'lim?</label>
+          <input id="secCount" type="number" min="0" value="2">
+          <div class="mini">0 bo'lsa — test.html default bo'limlardan foydalanadi.</div>
+        </div>
+        <div class="sec-list" id="secList"></div>
+      </div>
+      
+      <!-- Import/Export/Preview -->
+      <div class="flex" style="align-items:center;justify-content:space-between">
+        <div class="flex" style="gap:8px">
+          <button class="btn" id="buildBtn" type="button">Savol shakllarini yarat</button>
+          <button class="btn flat" id="importBtn" type="button">Import JSON (fayldan)</button>
+          <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+          <button class="btn flat" id="importLS" type="button">Import (localStorage)</button>
+          <button class="btn flat" id="importTestJson" type="button">Import (test.json)</button>
+        </div>
+        <div class="flex">
+          <button class="btn flat" id="expandAll" type="button">Barchasini yoyish</button>
+          <button class="btn flat" id="collapseAll" type="button">Barchasini yig'ish</button>
+          <button class="btn ghost" id="toggleDrawer" type="button">Math klaviatura</button>
         </div>
       </div>
     </div>
+    
+    <!-- Questions -->
+    <div id="questionsArea" class="grid"></div>
+    
+    <!-- Firebase actions -->
+    <div class="card flex" style="justify-content:space-between;align-items:center">
+      <div class="flex">
+        <button class="btn" id="exportBtn" type="button">Export JSON</button>
+        <button class="btn ghost" id="previewBtn" type="button">Preview (test.html)</button>
+        <button class="btn warning" id="saveToFirebaseBtn" type="button">Firebase'ga saqlash</button>
+      </div>
+      <div class="muted">
+        <span id="saveStatus"></span>
+        | "Preview" — <code>localStorage['testData']</code>ga yozadi va <code>test.html</code>ni ochadi.
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="help">
+        <strong>Eslatma:</strong> 
+        <ul>
+          <li><b>Variantli test:</b> Har bir savol uchun variantlar va to'g'ri javobni tanlang</li>
+          <li><b>Yopiq test:</b> Faqat savol rasmi, javobni o'quvchi kiritadi (ochiq javob)</li>
+          <li><b>Test kodi</b> Firestore'da testni identifikatsiya qilish uchun ishlatiladi</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Drawer keypad -->
+  <div id="keypadDrawer" class="drawer" aria-hidden="true">
+    <div class="rowbar">
+      <div class="title">Math klaviatura</div>
+      <div class="pin"><input type="checkbox" id="pinDrawer"><label for="pinDrawer" class="toolbar-note">Doim ochiq</label></div>
+    </div>
+    <div id="keypadGrid" class="kgrid"></div>
   </div>
 
-  <script src="../test.js"></script>
+<script>
+/* ========= Utilities ========= */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const typeset = async (el)=>{ if(window.MathJax?.typesetPromise){ try{ await MathJax.typesetPromise([el]); }catch(_){} } };
+
+// HTML escape (regexsiz)
+function escapeHtml(t){
+  return t.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;');
+}
+function looksLikeTeX(s){
+  if (!s) return false;
+  const needles = ['\\frac','\\sqrt','\\sum','\\int','\\log','\\ln','\\sin','\\cos','\\tan','\\vec','\\pi','\\le','\\ge','\\ne','\\pm','\\cdot','\\times','\\left','\\right'];
+  for(const k of needles){ if(s.indexOf(k) !== -1) return true; }
+  for(const ch of ['^','_','{','}','\\']){ if(s.indexOf(ch) !== -1) return true; }
+  return false;
+}
+function hasDollarPair(s){
+  const i = s.indexOf('$'); if(i === -1) return false;
+  return s.indexOf('$', i+1) !== -1;
+}
+function renderLineForMath(s){
+  const safe = escapeHtml(s);
+  if (hasDollarPair(s)) return safe;
+  if (looksLikeTeX(s)) return '\\(' + safe + '\\)';
+  return safe;
+}
+
+// Caret insert with '▮' marker
+function insertAtCursor(textarea, template){
+  textarea.focus();
+  const start  = textarea.selectionStart ?? textarea.value.length;
+  const end    = textarea.selectionEnd   ?? textarea.value.length;
+  const before = textarea.value.slice(0,start);
+  const after  = textarea.value.slice(end);
+  let out = before + template + after;
+  const markerPos = (before + template).indexOf('▮');
+  if(markerPos >= 0){ out = out.replace('▮',''); }
+  textarea.value = out;
+  const pos = markerPos >= 0 ? markerPos : (start + template.length);
+  textarea.setSelectionRange(pos, pos);
+  textarea.dispatchEvent(new Event('input', { bubbles:true }));
+}
+function setDrawer(open){
+  const d = $('#keypadDrawer');
+  d.classList.toggle('open', open);
+  d.setAttribute('aria-hidden', open ? 'false' : 'true');
+}
+
+/* ========= Firebase ========= */
+let firebaseApp = null;
+let db = null;
+let firebaseInitialized = false;
+
+function initializeFirebase(config){
+  try{
+    if(firebaseApp) return;
+    
+    const firebaseConfig = {
+      apiKey: config.apiKey || $('#firebaseApiKey').value,
+      authDomain: config.authDomain || $('#firebaseAuthDomain').value,
+      projectId: config.projectId || $('#firebaseProjectId').value,
+      storageBucket: config.storageBucket || $('#firebaseStorageBucket').value,
+      messagingSenderId: config.messagingSenderId || $('#firebaseMessagingSenderId').value,
+      appId: config.appId || $('#firebaseAppId').value
+    };
+    
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseInitialized = true;
+    
+    $('#firebaseStatus').textContent = "Firebase ulandi ✓";
+    $('#firebaseStatus').className = "firebase-status connected";
+    
+    console.log("Firebase initialized successfully");
+    return true;
+  }catch(e){
+    console.error("Firebase initialization error:", e);
+    $('#firebaseStatus').textContent = "Firebase ulashda xatolik: " + e.message;
+    $('#firebaseStatus').className = "firebase-status disconnected";
+    return false;
+  }
+}
+
+async function saveTestToFirebase(testData){
+  if(!firebaseInitialized || !db){
+    alert("Iltimos, avval Firebase'ni ulang");
+    return false;
+  }
+  
+  try{
+    const testCode = testData.code || $('#tcode').value;
+    if(!testCode){
+      alert("Iltimos, Test kodi kiriting (Firestore uchun)");
+      return false;
+    }
+    
+    // Testni Firestore'ga saqlash
+    const testRef = db.collection('tests').doc(testCode);
+    
+    // Metadata qo'shamiz
+    const fullData = {
+      ...testData,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      status: $('#testStatus').value || 'draft',
+      type: $('.mode-tab.active').dataset.mode || 'variant'
+    };
+    
+    await testRef.set(fullData);
+    
+    // Javoblar to'plami yaratish
+    const answersRef = db.collection('answers');
+    const answersData = {
+      testCode: testCode,
+      testTitle: testData.title,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      totalQuestions: testData.questions.length,
+      type: fullData.type
+    };
+    
+    await answersRef.add(answersData);
+    
+    $('#saveStatus').textContent = "✅ Test Firebase'ga saqlandi";
+    $('#saveStatus').className = "success";
+    setTimeout(()=>{$('#saveStatus').textContent='';}, 3000);
+    
+    return true;
+  }catch(e){
+    console.error("Firebase save error:", e);
+    alert("Firebase'ga saqlashda xatolik: " + e.message);
+    return false;
+  }
+}
+
+function saveFirebaseConfigToLocal(){
+  const config = {
+    apiKey: $('#firebaseApiKey').value,
+    authDomain: $('#firebaseAuthDomain').value,
+    projectId: $('#firebaseProjectId').value,
+    storageBucket: $('#firebaseStorageBucket').value,
+    messagingSenderId: $('#firebaseMessagingSenderId').value,
+    appId: $('#firebaseAppId').value
+  };
+  
+  localStorage.setItem('firebaseConfig', JSON.stringify(config));
+  alert("Firebase sozlamalari saqlandi");
+}
+
+function loadFirebaseConfigFromLocal(){
+  const saved = localStorage.getItem('firebaseConfig');
+  if(saved){
+    const config = JSON.parse(saved);
+    $('#firebaseApiKey').value = config.apiKey || '';
+    $('#firebaseAuthDomain').value = config.authDomain || '';
+    $('#firebaseProjectId').value = config.projectId || '';
+    $('#firebaseStorageBucket').value = config.storageBucket || '';
+    $('#firebaseMessagingSenderId').value = config.messagingSenderId || '';
+    $('#firebaseAppId').value = config.appId || '';
+    alert("Firebase sozlamalari yuklandi");
+  }else{
+    alert("Saqlangan sozlamalar topilmadi");
+  }
+}
+
+/* ========= Keypad ========= */
+const KEYS = [
+  { show:'x^n',             insert:'^{▮}' },
+  { show:'x_n',             insert:'_{▮}' },
+  { show:'\\sqrt{}',        insert:'\\sqrt{▮}' },
+  { show:'\\sqrt[n]{}',     insert:'\\sqrt[▮]{ }' },
+  { show:'\\frac{a}{b}',    insert:'\\frac{▮}{ }' },
+  { show:'\\log_a()',       insert:'\\log_{▮}()' },
+  { show:'\\ln()',          insert:'\\ln(▮)' },
+  { show:'e^{x}',           insert:'e^{▮}' },
+  { show:'\\sin()',         insert:'\\sin(▮)' },
+  { show:'\\cos()',         insert:'\\cos(▮}' },
+  { show:'\\tan()',         insert:'\\tan(▮)' },
+  { show:'\\pi',            insert:'\\pi' },
+  { show:'\\cdot',          insert:'\\cdot' },
+  { show:'\\times',         insert:'\\times' },
+  { show:'\\le',            insert:'\\le' },
+  { show:'\\ge',            insert:'\\ge' },
+  { show:'\\ne',            insert:'\\ne' },
+  { show:'\\pm',            insert:'\\pm' },
+  { show:'\\sum_{i=1}^{n}', insert:'\\sum_{i=1}^{▮}' },
+  { show:'\\int',           insert:'\\int_{▮}^{ }' },
+  { show:'\\vec{v}',        insert:'\\vec{▮}' },
+  { show:'\\left(\\right)', insert:'\\left(▮\\right)' },
+  { show:'\\left[\\right]', insert:'\\left[▮\\right]' },
+  { show:'\\left\\{\\right\\}', insert:'\\left\\{▮\\right\\}' }
+];
+function buildKeypad(){
+  const grid = $('#keypadGrid'); grid.innerHTML = '';
+  KEYS.forEach(k=>{
+    const btn = document.createElement('button');
+    btn.type='button'; btn.className='kbtn';
+    btn.innerHTML = `$${k.show}$`;
+    btn.addEventListener('mousedown', e=>e.preventDefault());
+    btn.addEventListener('click', ()=>{
+      const targetTA = ACTIVE_TEXTAREA || LAST_ACTIVE_TEXTAREA;
+      if(targetTA){ insertAtCursor(targetTA, k.insert); targetTA.focus(); }
+    });
+    grid.appendChild(btn);
+  });
+  typeset(grid);
+}
+
+/* ========= Test turini o'zgartirish ========= */
+function initTestTypeToggle(){
+  const tabs = $$('.mode-tab');
+  tabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      tabs.forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      const testType = tab.dataset.mode;
+      // Savol shakllarini yangilash
+      $$('#questionsArea .qbox').forEach(qb=>{
+        updateQuestionMode(qb, testType);
+      });
+    });
+  });
+}
+
+function updateQuestionMode(qbox, testType){
+  const variantSection = qbox.querySelector('.variant-section');
+  const closedSection = qbox.querySelector('.closed-section');
+  
+  if(testType === 'variant'){
+    variantSection.style.display = 'block';
+    closedSection.style.display = 'none';
+  }else{
+    variantSection.style.display = 'none';
+    closedSection.style.display = 'block';
+  }
+  
+  // Preview ni yangilash
+  updatePreviewForQuestion(qbox);
+}
+
+/* ========= Sections editor ========= */
+function rebuildSectionsUI(){
+  const secN = Math.max(0, Number($('#secCount').value||0));
+  const list = $('#secList'); list.innerHTML = '';
+  if(secN===0){
+    list.innerHTML = `<div class="mini warn">Bo'limlar JSON'ga yozilmaydi (test.html default bo'limlardan foydalanadi).</div>`;
+    return;
+  }
+  const hdr = document.createElement('div');
+  hdr.className = 'sec-row';
+  hdr.innerHTML = `
+    <div><label>Bo'lim nomi</label></div>
+    <div><label>Boshlanish (1-indeks)</label></div>
+    <div><label>Tugash</label></div>
+    <div><label>Izoh</label></div>`;
+  list.appendChild(hdr);
+  
+  for(let i=0;i<secN;i++){
+    const row = document.createElement('div'); row.className='sec-row sec-item';
+    row.innerHTML = `
+      <input type="text" class="sec-name" placeholder="Masalan: Algebra">
+      <input type="number" min="1" class="sec-start" placeholder="1">
+      <input type="number" min="1" class="sec-end" placeholder="12">
+      <div class="mini">Qamrab olgan savollar diapazoni</div>`;
+    list.appendChild(row);
+  }
+}
+function collectSections(totalQ){
+  const n = Math.max(0, Number($('#secCount').value||0));
+  if(n===0) return [];
+  const names = $$('#secList .sec-name');
+  const starts = $$('#secList .sec-start');
+  const ends = $$('#secList .sec-end');
+  const out = [];
+  for(let i=0;i<n;i++){
+    const name = (names[i]?.value || `Bo'lim ${i+1}`).trim();
+    const start = Math.max(1, Number(starts[i]?.value||1));
+    const end = Math.min(totalQ, Number(ends[i]?.value||totalQ));
+    if(start<=end) out.push({ name, start, end });
+  }
+  return out;
+}
+
+/* ========= Question template / logic ========= */
+function qTemplate(i){
+  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  
+  return `
+  <div class="card qbox" data-index="${i}">
+    <div class="flex" style="justify-content:space-between;align-items:center">
+      <div class="badge">#${i} — rasm: <code>${i}.jpg</code> / <code>${i}.png</code></div>
+      <div class="flex">
+        <button class="btn flat" data-minitoggle type="button">Yig'ish</button>
+        <button class="btn danger" data-remove type="button">O'chirish</button>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div>
+        <label>Ball (#${i})</label>
+        <input type="number" min="1" value="1" class="points">
+      </div>
+      <div>
+        <label>To'g'ri javob</label>
+        <div class="mini">
+          ${testType === 'variant' ? 'Quyidagi variantlardan birini tanlang' : 'To\'g\'ri javobni kiriting'}
+        </div>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div class="side">
+        <!-- Variantli qism (variant test uchun) -->
+        <div class="variant-section" style="${testType === 'variant' ? 'display:block' : 'display:none'}">
+          <label class="miniLocal">Variantlar (har satr — bitta, LaTeX uchun $ ... $)</label>
+          <textarea class="options" placeholder="A varianti&#10;B varianti&#10;$x^2-1$&#10;$\\sqrt{a^2+b^2}$"></textarea>
+          <div class="mini">Focus shu maydonda bo'lsa, pastdagi klaviatura avtomatik ochiladi.</div>
+          
+          <div class="hr"></div>
+          <label>To'g'ri javobni tanlang</label>
+          <div class="answers"></div>
+        </div>
+        
+        <!-- Yopiq test qismi -->
+        <div class="closed-section" style="${testType === 'yopiq' ? 'display:block' : 'display:none'}">
+          <label>To'g'ri javob (matn yoki LaTeX)</label>
+          <input type="text" class="correct-answer" placeholder="Masalan: $x = 5$">
+          <div class="mini">O'quvchi bu javobni test.html da kiritadi</div>
+        </div>
+      </div>
+      
+      <div class="side">
+        <label>Jonli preview</label>
+        <div class="preview">
+          <div class="mini">Savol #${i} — rasm:</div>
+          <div style="margin:6px 0 10px;padding:8px;border:1px solid #eef4f0;border-radius:10px;background:#fff">
+            <em>${i}.jpg/png — test.html'da ko'rsatiladi.</em>
+          </div>
+          <div class="hr"></div>
+          <div class="mini" id="previewMode${i}">Test turi: ${testType === 'variant' ? 'Variantli' : 'Yopiq'}</div>
+          <div class="pvOptions"></div>
+          <div class="pvClosedAnswer" style="${testType === 'yopiq' ? 'display:block' : 'display:none'}"></div>
+          <div class="hr"></div>
+          <div class="mini">To'g'ri javob: <span class="correct-answer-preview"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updatePreviewForQuestion(qbox){
+  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  const previewMode = qbox.querySelector(`#previewMode${qbox.dataset.index}`);
+  const pvOptions = qbox.querySelector('.pvOptions');
+  const pvClosedAnswer = qbox.querySelector('.pvClosedAnswer');
+  const correctAnswerPreview = qbox.querySelector('.correct-answer-preview');
+  
+  if(testType === 'variant'){
+    previewMode.textContent = "Test turi: Variantli";
+    pvOptions.style.display = 'block';
+    pvClosedAnswer.style.display = 'none';
+    
+    // To'g'ri javobni ko'rsatish
+    const correctRadio = qbox.querySelector('.answers input[type="radio"]:checked');
+    const correctIndex = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+    const options = qbox.querySelector('.options').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    
+    if(options.length > 0){
+      const correctText = options[correctIndex] || options[0];
+      correctAnswerPreview.innerHTML = `<b>${correctIndex+1}-variant:</b> <span class="mj">${renderLineForMath(correctText)}</span>`;
+    }else{
+      correctAnswerPreview.textContent = "Variantlar kiritilmagan";
+    }
+  }else{
+    previewMode.textContent = "Test turi: Yopiq (ochiq javob)";
+    pvOptions.style.display = 'none';
+    pvClosedAnswer.style.display = 'block';
+    
+    // Yopiq test uchun to'g'ri javob
+    const correctAnswer = qbox.querySelector('.correct-answer').value;
+    correctAnswerPreview.innerHTML = `<span class="mj">${renderLineForMath(correctAnswer || "Kiritilmagan")}</span>`;
+    
+    pvClosedAnswer.innerHTML = `<div style="padding:8px;background:#f8faf9;border-radius:8px;">
+      <em>O'quvchi javobni kiritadi</em>
+    </div>`;
+  }
+  
+  typeset(qbox.querySelector('.preview'));
+}
+
+function rebuildAnswerPickers(qbox){
+  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  if(testType !== 'variant') return;
+  
+  const ta = qbox.querySelector('.options');
+  const ansBox = qbox.querySelector('.answers');
+  const pv = qbox.querySelector('.pvOptions');
+  const lines = (ta.value || '').split('\n').map(s=>s.trim()).filter(Boolean);
+  
+  ansBox.innerHTML = '';
+  lines.forEach((txt, idx)=>{
+    const id = `q${qbox.dataset.index}_opt${idx}`;
+    const inp = document.createElement('input');
+    inp.type = 'radio';
+    inp.name = `ans_${qbox.dataset.index}`;
+    inp.value = String(idx);
+    inp.id = id;
+    inp.checked = (idx === 0);
+    
+    inp.addEventListener('change', ()=>updatePreviewForQuestion(qbox));
+    
+    const lab = document.createElement('label');
+    lab.setAttribute('for', id);
+    lab.innerHTML = `${idx+1}) <span class="mj">${renderLineForMath(txt)}</span>`;
+    
+    const row = document.createElement('div');
+    row.className = 'answers opt';
+    row.appendChild(inp); row.appendChild(lab);
+    ansBox.appendChild(row);
+  });
+  
+  pv.innerHTML = '';
+  lines.forEach((txt, idx)=>{
+    const line = document.createElement('div');
+    line.innerHTML = `${idx+1}) <span class="mj">${renderLineForMath(txt)}</span> <span class="flag">${idx===0?' ✓':''}</span>`;
+    pv.appendChild(line);
+  });
+  
+  typeset(ansBox); typeset(pv);
+  updatePreviewForQuestion(qbox);
+}
+
+function attachQEvents(qbox){
+  const testType = $('.mode-tab.active')?.dataset.mode || 'variant';
+  
+  if(testType === 'variant'){
+    const ta = qbox.querySelector('.options');
+    ta.addEventListener('focus', ()=>{
+      ACTIVE_TEXTAREA = ta;
+      LAST_ACTIVE_TEXTAREA = ta;
+      setDrawer(true);
+    });
+    ta.addEventListener('blur', ()=>{
+      setTimeout(()=>{
+        const ae = document.activeElement;
+        const isOverDrawer = $('#keypadDrawer').contains(ae);
+        if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
+      }, 0);
+    });
+    ta.addEventListener('input', ()=>rebuildAnswerPickers(qbox));
+  }else{
+    const correctInput = qbox.querySelector('.correct-answer');
+    correctInput.addEventListener('focus', ()=>{
+      ACTIVE_TEXTAREA = correctInput;
+      LAST_ACTIVE_TEXTAREA = correctInput;
+      setDrawer(true);
+    });
+    correctInput.addEventListener('blur', ()=>{
+      setTimeout(()=>{
+        const ae = document.activeElement;
+        const isOverDrawer = $('#keypadDrawer').contains(ae);
+        if(!$('#pinDrawer').checked && !isOverDrawer){ setDrawer(false); }
+      }, 0);
+    });
+    correctInput.addEventListener('input', ()=>updatePreviewForQuestion(qbox));
+  }
+  
+  qbox.querySelector('[data-remove]').addEventListener('click', ()=>qbox.remove());
+  qbox.querySelector('[data-minitoggle]').addEventListener('click', (e)=>{
+    const collapsed = qbox.classList.toggle('collapsed');
+    e.target.textContent = collapsed ? 'Yoyish' : "Yig'ish";
+  });
+  
+  if(testType === 'variant'){
+    rebuildAnswerPickers(qbox);
+  }else{
+    updatePreviewForQuestion(qbox);
+  }
+}
+
+function buildForms(){
+  const n = Math.max(1, Number($('#qcount').value||1));
+  const area = $('#questionsArea'); area.innerHTML = '';
+  for(let i=1;i<=n;i++){
+    const holder = document.createElement('div');
+    holder.innerHTML = qTemplate(i);
+    const el = holder.firstElementChild;
+    area.appendChild(el);
+    attachQEvents(el);
+  }
+}
+
+/* ========= Export / Import / Preview ========= */
+function collectJson(){
+  const title = $('#title').value || 'Test';
+  const description = $('#desc').value || 'Test haqida';
+  const id   = ($('#tid')?.value || '').trim();
+  const code = ($('#tcode')?.value || '').trim();
+  const durationMinutes = Number($('#dur').value||0);
+  const status = $('#testStatus').value || 'draft';
+  const type = $('.mode-tab.active').dataset.mode || 'variant';
+  
+  const questions = [];
+  $$('#questionsArea .qbox').forEach(qbox=>{
+    const points = Math.max(1, Number(qbox.querySelector('.points').value||1));
+    
+    if(type === 'variant'){
+      const opts = (qbox.querySelector('.options').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      const correctRadio = qbox.querySelector('.answers input[type="radio"]:checked');
+      const correctIndex = correctRadio ? parseInt(correctRadio.value, 10) : 0;
+      questions.push({ 
+        points, 
+        options: opts, 
+        correctIndex,
+        type: 'variant'
+      });
+    }else{
+      const correctAnswer = (qbox.querySelector('.correct-answer').value||'').trim();
+      questions.push({ 
+        points, 
+        correctAnswer,
+        type: 'open'
+      });
+    }
+  });
+  
+  const sections = collectSections(questions.length);
+  
+  const out = { 
+    title, 
+    description, 
+    durationMinutes, 
+    sections, 
+    questions,
+    code,
+    status,
+    type,
+    version: '2.0'
+  };
+  if(id) out.id = id;
+  return out;
+}
+
+function download(filename, blob){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+
+function setAllCollapsed(state){
+  $$('#questionsArea .qbox').forEach(qb=>{
+    const btn = qb.querySelector('[data-minitoggle]');
+    const collapsed = qb.classList.contains('collapsed');
+    if(state && !collapsed){ btn.click(); }
+    if(!state && collapsed){ btn.click(); }
+  });
+}
+
+function normalizeImported(data){
+  if(!data) throw new Error("Fayl bo'sh yoki o'qilmadi");
+  if(Array.isArray(data)) data = { questions: data };
+  if(!Array.isArray(data.questions)){
+    const candidate = data.items || data.qs || data.list || data.data;
+    if(Array.isArray(candidate)) data.questions = candidate;
+  }
+  if(!Array.isArray(data.questions)) throw new Error("JSON format mos emas. 'questions' massiv topilmadi.");
+  if(data.totalTime && !data.durationMinutes) data.durationMinutes = Number(data.totalTime);
+  
+  data.title = data.title || 'Test';
+  data.description = data.description || 'Test haqida';
+  data.type = data.type || 'variant';
+  data.status = data.status || 'draft';
+  
+  data.questions = data.questions.map(q=>{
+    if(typeof q === 'string'){
+      return { 
+        points: 1, 
+        options: q.split(/\r?\n/).map(s=>s.trim()).filter(Boolean), 
+        correctIndex: 0,
+        type: 'variant'
+      };
+    }
+    
+    const qq = { ...q };
+    if(qq.type === 'open' || qq.type === 'yopiq'){
+      // Yopiq savol
+      return {
+        points: Number(qq.points||1),
+        correctAnswer: qq.correctAnswer || '',
+        type: 'open'
+      };
+    }else{
+      // Variantli savol
+      if(!Array.isArray(qq.options) && typeof qq.opts === 'string'){
+        qq.options = qq.opts.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      }
+      if(!Array.isArray(qq.options) && Array.isArray(qq.opts)) qq.options = qq.opts;
+      if(typeof qq.correctOption==='number' && qq.correctIndex===undefined) qq.correctIndex = Number(qq.correctOption);
+      qq.points = Number(qq.points||1);
+      if(!Array.isArray(qq.options)) qq.options = [];
+      qq.type = 'variant';
+      return qq;
+    }
+  });
+  
+  if(!Array.isArray(data.sections)) data.sections = [];
+  return data;
+}
+
+function applyTestData(data){
+  const d = normalizeImported(data);
+  
+  $('#title').value = d.title || '';
+  $('#desc').value  = d.description || '';
+  $('#tid').value   = d.id || '';
+  $('#tcode').value = d.code || '';
+  $('#dur').value   = Number(d.durationMinutes||0);
+  $('#testStatus').value = d.status || 'draft';
+  
+  // Test turini o'rnatish
+  const testType = d.type || 'variant';
+  $$('.mode-tab').forEach(tab=>{
+    tab.classList.remove('active');
+    if(tab.dataset.mode === testType) tab.classList.add('active');
+  });
+  
+  $('#secCount').value = (d.sections && d.sections.length) ? d.sections.length : 0;
+  rebuildSectionsUI();
+  if(d.sections && d.sections.length){
+    const names  = $$('#secList .sec-name');
+    const starts = $$('#secList .sec-start');
+    const ends   = $$('#secList .sec-end');
+    d.sections.forEach((s, i)=>{
+      if(names[i])  names[i].value  = s.name  || `Bo'lim ${i+1}`;
+      if(starts[i]) starts[i].value = s.start ?? '';
+      if(ends[i])   ends[i].value   = s.end   ?? '';
+    });
+  }
+  
+  $('#qcount').value = d.questions.length;
+  buildForms();
+  
+  $$('#questionsArea .qbox').forEach((qbox, idx)=>{
+    const q = d.questions[idx];
+    if(!q) return;
+    
+    qbox.querySelector('.points').value = Number(q.points||1);
+    
+    if(q.type === 'variant'){
+      const ta = qbox.querySelector('.options');
+      ta.value = (q.options||[]).join('\n');
+      rebuildAnswerPickers(qbox);
+      const correctIndex = q.correctIndex || 0;
+      const inp = qbox.querySelector(`.answers input[value="${correctIndex}"]`);
+      if(inp){ inp.checked = true; }
+    }else{
+      const correctInput = qbox.querySelector('.correct-answer');
+      correctInput.value = q.correctAnswer || '';
+    }
+    
+    updatePreviewForQuestion(qbox);
+  });
+  
+  typeset($('#questionsArea'));
+}
+
+async function importFromFile(file){
+  try{
+    let text = await file.text();
+    if(text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+    const json = JSON.parse(text);
+    applyTestData(json);
+  }catch(err){
+    alert('Import xatosi: ' + (err?.message||err) + "\n\nTekshiring: fayl JSON va unda 'questions' massiv bor.");
+  }
+}
+
+async function importFromLocalStorage(){
+  try{
+    const raw = localStorage.getItem('testData');
+    if(!raw) throw new Error("localStorage['testData'] topilmadi.");
+    const data = JSON.parse(raw);
+    applyTestData(data);
+  }catch(e){
+    alert('localStorage import xatosi: ' + e.message);
+  }
+}
+
+async function importFromTestJson(){
+  try{
+    const r = await fetch('test.json', { cache: 'no-store' });
+    if(!r.ok) throw new Error('test.json o\'qilmadi');
+    const data = await r.json();
+    applyTestData(data);
+  }catch(e){
+    alert('test.json o\'qishda xatolik: ' + e.message + "\n\nEslatma: file:// bilan ochilganda fetch ishlamasligi mumkin. Kichik lokal serverda ishga tushiring.");
+  }
+}
+
+/* ========= Global keypad & init ========= */
+let ACTIVE_TEXTAREA = null;
+let LAST_ACTIVE_TEXTAREA = null;
+
+buildKeypad();
+$('#toggleDrawer').addEventListener('click', ()=>{
+  const open = !$('#keypadDrawer').classList.contains('open');
+  setDrawer(open);
+});
+$('#keypadGrid').addEventListener('mousedown', e=>e.preventDefault());
+
+document.addEventListener('focusin', (e)=>{
+  if(e.target && (e.target.tagName==='TEXTAREA' || e.target.tagName==='INPUT')){
+    ACTIVE_TEXTAREA = e.target;
+    LAST_ACTIVE_TEXTAREA = e.target;
+  }
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Test turini sozlash
+  initTestTypeToggle();
+  
+  // Firebase eventlar
+  $('#initFirebaseBtn').addEventListener('click', ()=>{
+    initializeFirebase({});
+  });
+  
+  $('#saveFirebaseConfig').addEventListener('click', saveFirebaseConfigToLocal);
+  $('#loadFirebaseConfig').addEventListener('click', loadFirebaseConfigFromLocal);
+  
+  $('#saveToFirebaseBtn').addEventListener('click', async ()=>{
+    const testData = collectJson();
+    await saveTestToFirebase(testData);
+  });
+  
+  // Eski eventlar
+  $('#buildBtn').addEventListener('click', buildForms);
+  $('#exportBtn').addEventListener('click', ()=>{
+    const data = collectJson();
+    download('test.json', new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}));
+  });
+  $('#previewBtn').addEventListener('click', ()=>{
+    const data = collectJson();
+    localStorage.setItem('testData', JSON.stringify(data));
+    window.open('test.html', '_blank');
+  });
+  $('#expandAll').addEventListener('click', ()=>setAllCollapsed(false));
+  $('#collapseAll').addEventListener('click', ()=>setAllCollapsed(true));
+  
+  $('#importBtn').addEventListener('click', ()=>$('#importFile').click());
+  $('#importFile').addEventListener('change', (e)=>{
+    const file = e.target.files?.[0];
+    if(file) importFromFile(file);
+    e.target.value = '';
+  });
+  $('#importLS').addEventListener('click', importFromLocalStorage);
+  $('#importTestJson').addEventListener('click', importFromTestJson);
+  
+  $('#secCount').addEventListener('input', rebuildSectionsUI);
+  
+  rebuildSectionsUI();
+  buildForms();
+  
+  // Saqlangan Firebase sozlamalarini yuklash
+  loadFirebaseConfigFromLocal();
+});
+</script>
 </body>
 </html>
