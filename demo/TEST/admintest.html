@@ -183,24 +183,111 @@ async function trySignIn() {
   }
 }
 
-async function handleUser(user){
-  if(!user) return;
+async function handleUser(user) {
+  if (!user) return;
+  
   const email = (user.email || '').toLowerCase();
   document.getElementById('authStatus').textContent = 'Kirdi: ' + email;
-  const tokenRes = await user.getIdTokenResult(true).catch(()=>null);
-  const claims = tokenRes?.claims || {};
-  const isAdmin = (claims.admin === true) || (email === ADMIN_EMAIL.toLowerCase());
-  if(isAdmin){
-    document.getElementById('adminArea').classList.remove('hidden');
-    document.getElementById('notAdmin').classList.add('hidden');
-    // show admin items
-  }else{
-    // auto sign out if not admin
-    try{ await auth.signOut(); }catch(){}
+  
+  try {
+    const tokenRes = await user.getIdTokenResult(true);
+    const claims = tokenRes.claims || {};
+    const isAdmin = (claims.admin === true) || (email === ADMIN_EMAIL.toLowerCase());
+    
+    if (isAdmin) {
+      document.getElementById('adminArea').classList.remove('hidden');
+      document.getElementById('notAdmin').classList.add('hidden');
+      // Admin sahifalarini yuklash yoki boshqa admin funksiyalar
+      await loadAdminContent();
+    } else {
+      // Admin emasligini bildirish
+      document.getElementById('adminArea').classList.add('hidden');
+      document.getElementById('notAdmin').classList.remove('hidden');
+      document.getElementById('notAdmin').textContent = 'Siz admin emassiz. Chiqarilmoqdasiz...';
+      
+      // 3 soniya kutib, keyin chiqarish
+      setTimeout(async () => {
+        try {
+          await auth.signOut();
+        } catch (error) {
+          console.error('Chiqishda xato:', error);
+          // Chiqish muvaffaqiyatsiz bo'lsa, sahifani yangilash
+          window.location.reload();
+        }
+      }, 3000);
+    }
+  } catch (error) {
+    console.error('Token olishda xato:', error);
+    document.getElementById('authStatus').textContent = 'Xato: Token olinmadi';
     document.getElementById('adminArea').classList.add('hidden');
     document.getElementById('notAdmin').classList.remove('hidden');
   }
 }
+
+// Qo'shimcha funksiya admin kontentini yuklash uchun
+async function loadAdminContent() {
+  try {
+    // Admin panel elementlari
+    const adminElements = document.querySelectorAll('.admin-only');
+    adminElements.forEach(el => el.classList.remove('hidden'));
+    
+    // Admin ma'lumotlarini yuklash
+    // Masalan: await fetchAdminData();
+    
+    console.log('Admin panel yuklandi');
+  } catch (error) {
+    console.error('Admin kontent yuklashda xato:', error);
+  }
+}
+
+// Auth state observer (Firebase uchun)
+function setupAuthListener() {
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      await handleUser(user);
+    } else {
+      // Foydalanuvchi chiqib ketgan yoki yo'q
+      document.getElementById('authStatus').textContent = 'Chiqib ketdingiz';
+      document.getElementById('adminArea').classList.add('hidden');
+      document.getElementById('notAdmin').classList.add('hidden');
+      document.getElementById('loginArea').classList.remove('hidden');
+    }
+  });
+}
+
+// HTML da kerakli elementlar:
+/*
+<div id="authStatus"></div>
+<div id="adminArea" class="hidden">
+  <!-- Admin kontenti -->
+</div>
+<div id="notAdmin" class="hidden"></div>
+<div id="loginArea">
+  <button onclick="login()">Kirish</button>
+</div>
+*/
+
+// CSS da:
+/*
+.hidden {
+  display: none !important;
+}
+*/
+
+// Login funksiyasi (misol)
+async function login() {
+  try {
+    // Firebase yoki boshqa auth provider orqali login
+    // Masalan: await signInWithPopup(auth, provider);
+  } catch (error) {
+    console.error('Kirishda xato:', error);
+  }
+}
+
+// Dastur boshlanganda auth listener ni ishga tushirish
+document.addEventListener('DOMContentLoaded', () => {
+  setupAuthListener();
+});
 
 auth.onAuthStateChanged(async (user)=>{
   if(user) await handleUser(user);
