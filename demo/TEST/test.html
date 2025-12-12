@@ -387,21 +387,6 @@
                 height: 35px;
             }
         }
-        
-        /* Code input for manual test loading */
-        .code-input {
-            max-width: 500px;
-            margin: 0 auto;
-        }
-        
-        .code-input input {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid var(--frame);
-            border-radius: 12px;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
     </style>
 </head>
 <body>
@@ -423,22 +408,6 @@
     </header>
     
     <div class="wrap">
-        <!-- Test Code Input (if no code in URL) -->
-        <div id="codeInputCard" class="card hidden">
-            <h2>Test Kodini Kiriting</h2>
-            <p>Test kodini quyidagi maydonga kiriting yoki URL manzilingizda ?code=TEST_KODI ko'rinishida kiriting</p>
-            
-            <div class="code-input">
-                <input type="text" id="manualTestCode" placeholder="Masalan: 8001">
-                <button id="loadTestBtn" class="btn">Testni Yuklash</button>
-            </div>
-            
-            <div id="localTests" style="margin-top: 20px;">
-                <h3>Mavjud Testlar:</h3>
-                <div id="testList"></div>
-            </div>
-        </div>
-        
         <!-- Intro Card -->
         <div id="introCard" class="card hidden">
             <h1 id="testTitle">Test</h1>
@@ -533,7 +502,6 @@
             <h2 style="color: var(--danger);">Xatolik!</h2>
             <p id="errorMessage">Test yuklanmadi. Iltimos, internet aloqasini tekshiring.</p>
             <button id="retryBtn" class="btn">Qayta Urinish</button>
-            <button id="loadLocalBtn" class="btn">LocalStorage'dan Yuklash</button>
         </div>
         
         <!-- Status Messages -->
@@ -567,11 +535,6 @@
         const elements = {
             loadingScreen: document.getElementById('loadingScreen'),
             loadingText: document.getElementById('loadingText'),
-            codeInputCard: document.getElementById('codeInputCard'),
-            manualTestCode: document.getElementById('manualTestCode'),
-            loadTestBtn: document.getElementById('loadTestBtn'),
-            testList: document.getElementById('testList'),
-            localTests: document.getElementById('localTests'),
             introCard: document.getElementById('introCard'),
             questionCard: document.getElementById('questionCard'),
             resultsCard: document.getElementById('resultsCard'),
@@ -610,8 +573,7 @@
             finishBtn: document.getElementById('finishBtn'),
             restartBtn: document.getElementById('restartBtn'),
             reviewBtn: document.getElementById('reviewBtn'),
-            retryBtn: document.getElementById('retryBtn'),
-            loadLocalBtn: document.getElementById('loadLocalBtn')
+            retryBtn: document.getElementById('retryBtn')
         };
         
         /* ========= Initialize Firebase ========= */
@@ -636,33 +598,16 @@
         /* ========= Load Test from Firebase ========= */
         async function loadTestFromFirebase(code) {
             try {
-                elements.loadingText.textContent = "Firestore'dan test yuklanmoqda...";
-                
-                console.log(`Test yuklanmoqda: ${code}`);
+                elements.loadingText.textContent = "Test yuklanmoqda...";
                 
                 const testDoc = await db.collection('tests').doc(code).get();
                 
                 if (!testDoc.exists) {
-                    throw new Error(`"${code}" kodli test Firestore'da topilmadi`);
+                    throw new Error(`"${code}" kodli test topilmadi`);
                 }
                 
                 testData = testDoc.data();
                 currentTestCode = code;
-                
-                console.log("Test yuklandi:", testData);
-                
-                // Check if test data has required fields
-                if (!testData.questions || !Array.isArray(testData.questions)) {
-                    console.warn("Testda savollar maydoni yo'q yoki array emas. Test ma'lumotlari:", testData);
-                    // Try to fix it
-                    if (testData.questions && typeof testData.questions === 'object') {
-                        // Convert object to array if needed
-                        const questionsArray = Object.values(testData.questions);
-                        testData.questions = questionsArray;
-                    } else {
-                        testData.questions = [];
-                    }
-                }
                 
                 // Normalize test data
                 normalizeTestData();
@@ -694,11 +639,6 @@
             
             // Normalize each question
             testData.questions.forEach((q, index) => {
-                // Ensure question is an object
-                if (!q || typeof q !== 'object') {
-                    q = {};
-                }
-                
                 q.points = q.points || 1;
                 q.section = q.section || "Umumiy";
                 q.type = q.type || "variant";
@@ -713,43 +653,15 @@
                 if (q.type === 'open') {
                     q.correctAnswer = q.correctAnswer || "";
                 }
-                
-                // Save back to array
-                testData.questions[index] = q;
             });
             
             // Calculate total points
-            testData.totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 0), 0);
-            
-            console.log("Normalized test data:", testData);
-        }
-        
-        /* ========= Load Test from LocalStorage ========= */
-        function loadTestFromLocalStorage(code) {
-            try {
-                const savedTests = JSON.parse(localStorage.getItem('savedTests') || '{}');
-                
-                if (savedTests[code]) {
-                    testData = savedTests[code];
-                    currentTestCode = code;
-                    normalizeTestData();
-                    
-                    console.log("Test localStorage'dan yuklandi:", testData);
-                    showStatus("Test localStorage'dan yuklandi", "warning");
-                    return true;
-                } else {
-                    throw new Error(`"${code}" kodli test localStorage'da topilmadi`);
-                }
-            } catch (error) {
-                console.error("LocalStorage loading error:", error);
-                return false;
-            }
+            testData.totalPoints = testData.questions.reduce((sum, q) => sum + q.points, 0);
         }
         
         /* ========= Show/Hide Screens ========= */
         function showScreen(screenName) {
             // Hide all screens
-            elements.codeInputCard.classList.add('hidden');
             elements.introCard.classList.add('hidden');
             elements.questionCard.classList.add('hidden');
             elements.resultsCard.classList.add('hidden');
@@ -758,9 +670,6 @@
             
             // Show requested screen
             switch(screenName) {
-                case 'codeInput':
-                    elements.codeInputCard.classList.remove('hidden');
-                    break;
                 case 'intro':
                     elements.introCard.classList.remove('hidden');
                     break;
@@ -851,7 +760,7 @@
                     dot.classList.add('active');
                 }
                 
-                if (userAnswers[index] !== undefined && userAnswers[index] !== '') {
+                if (userAnswers[index] !== undefined) {
                     dot.classList.add('answered');
                 }
             });
@@ -861,44 +770,32 @@
         function loadQuestionImage(questionIndex) {
             const img = elements.questionImage;
             
-            // Hide image initially
-            img.classList.add('hidden');
-            
             // If test code exists, try to load from code folder
             if (currentTestCode) {
-                const imageNumber = questionIndex + 1;
-                const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-                
-                let loaded = false;
-                let currentExtension = 0;
-                
-                const tryLoadImage = () => {
-                    if (currentExtension >= extensions.length) {
-                        // All extensions tried, hide image
-                        img.classList.add('hidden');
-                        return;
-                    }
-                    
-                    const ext = extensions[currentExtension];
-                    const imagePath = `./${currentTestCode}/${imageNumber}.${ext}`;
-                    
-                    console.log(`Rasm yuklanmoqda: ${imagePath}`);
-                    
-                    img.src = imagePath;
-                    img.onload = () => {
-                        console.log(`Rasm yuklandi: ${imagePath}`);
-                        img.classList.remove('hidden');
-                        loaded = true;
-                    };
-                    
-                    img.onerror = () => {
-                        console.log(`Rasm topilmadi: ${imagePath}`);
-                        currentExtension++;
-                        setTimeout(tryLoadImage, 100);
-                    };
+                const imagePath = `./${currentTestCode}/${questionIndex + 1}.jpg`;
+                img.src = imagePath;
+                img.onload = () => {
+                    img.classList.remove('hidden');
                 };
-                
-                tryLoadImage();
+                img.onerror = () => {
+                    // Try other extensions
+                    const extensions = ['png', 'jpeg', 'webp', 'gif'];
+                    let currentExtension = 0;
+                    
+                    const tryNextExtension = () => {
+                        if (currentExtension < extensions.length) {
+                            img.src = `./${currentTestCode}/${questionIndex + 1}.${extensions[currentExtension]}`;
+                            currentExtension++;
+                        } else {
+                            img.classList.add('hidden');
+                        }
+                    };
+                    
+                    img.onerror = tryNextExtension;
+                    tryNextExtension();
+                };
+            } else {
+                img.classList.add('hidden');
             }
         }
         
@@ -908,19 +805,17 @@
             
             const question = testData.questions[currentQuestionIndex];
             
-            console.log(`Rendering question ${currentQuestionIndex + 1}:`, question);
-            
             // Update basic info
             elements.currentQ.textContent = currentQuestionIndex + 1;
             elements.totalQ.textContent = testData.questions.length;
-            elements.sectionName.textContent = question.section || "Umumiy";
+            elements.sectionName.textContent = question.section;
             
             // Load image
             loadQuestionImage(currentQuestionIndex);
             
             // Show question text if exists
             if (question.text) {
-                elements.questionText.innerHTML = question.text;
+                elements.questionText.textContent = question.text;
                 elements.questionText.classList.remove('hidden');
             } else {
                 elements.questionText.classList.add('hidden');
@@ -936,9 +831,6 @@
                 renderVariantQuestion(question);
             } else if (question.type === 'open') {
                 renderOpenQuestion(question);
-            } else {
-                // Default to variant if type not specified
-                renderVariantQuestion(question);
             }
             
             // Update navigation
@@ -947,9 +839,7 @@
             
             // Re-render MathJax
             if (window.MathJax && MathJax.typesetPromise) {
-                setTimeout(() => {
-                    MathJax.typesetPromise().catch(console.error);
-                }, 100);
+                MathJax.typesetPromise();
             }
         }
         
@@ -957,9 +847,7 @@
         function renderVariantQuestion(question) {
             elements.optionsContainer.classList.remove('hidden');
             
-            const options = question.options || ["A", "B", "C", "D"];
-            
-            options.forEach((option, optionIndex) => {
+            question.options.forEach((option, optionIndex) => {
                 const optionDiv = document.createElement('div');
                 optionDiv.className = 'option';
                 
@@ -988,7 +876,7 @@
                 
                 const label = document.createElement('label');
                 label.htmlFor = `option_${optionIndex}`;
-                label.innerHTML = option || `Variant ${optionIndex + 1}`;
+                label.innerHTML = option;
                 
                 optionDiv.appendChild(input);
                 optionDiv.appendChild(label);
@@ -1022,7 +910,7 @@
         
         /* ========= Start Timer ========= */
         function startTimer() {
-            timeRemaining = (testData.durationMinutes || 30) * 60;
+            timeRemaining = testData.durationMinutes * 60;
             timeSpent = 0;
             
             updateTimerDisplay();
@@ -1067,7 +955,7 @@
                 if (question.type === 'variant') {
                     if (userAnswer === question.correctIndex) {
                         correctCount++;
-                        totalScore += (question.points || 1);
+                        totalScore += question.points;
                     }
                 } else if (question.type === 'open') {
                     // For open questions, we need manual checking
@@ -1075,13 +963,7 @@
                     if (userAnswer && userAnswer.trim() !== '') {
                         // In real system, you'd compare with correctAnswer
                         correctCount++;
-                        totalScore += (question.points || 1);
-                    }
-                } else {
-                    // Default to variant type
-                    if (userAnswer === (question.correctIndex || 0)) {
-                        correctCount++;
-                        totalScore += (question.points || 1);
+                        totalScore += question.points;
                     }
                 }
             });
@@ -1115,101 +997,34 @@
             
             showScreen('results');
             showStatus("Test muvaffaqiyatli yakunlandi!", "success");
-            
-            // Save results to localStorage
-            saveResultsToLocalStorage(results);
         }
         
-        /* ========= Save Results to LocalStorage ========= */
-        function saveResultsToLocalStorage(results) {
+        /* ========= Save Results to Firebase ========= */
+        async function saveResultsToFirebase(results) {
+            if (!currentTestCode) return;
+            
             try {
-                const testResults = JSON.parse(localStorage.getItem('testResults') || '[]');
-                
-                testResults.push({
+                const resultsData = {
                     testCode: currentTestCode,
                     testTitle: testData.title,
                     score: results.totalScore,
                     correctAnswers: results.correctCount,
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
-                    date: new Date().toISOString()
-                });
+                    answers: userAnswers,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
                 
-                localStorage.setItem('testResults', JSON.stringify(testResults));
-                console.log("Results saved to localStorage");
+                await db.collection('results').add(resultsData);
+                console.log("Results saved to Firebase");
                 
             } catch (error) {
-                console.error("Error saving results to localStorage:", error);
-            }
-        }
-        
-        /* ========= List Available Tests ========= */
-        function listAvailableTests() {
-            try {
-                const savedTests = JSON.parse(localStorage.getItem('savedTests') || '{}');
-                const testList = elements.testList;
-                
-                if (Object.keys(savedTests).length === 0) {
-                    elements.localTests.style.display = 'none';
-                    return;
-                }
-                
-                elements.localTests.style.display = 'block';
-                testList.innerHTML = '';
-                
-                Object.keys(savedTests).forEach(code => {
-                    const test = savedTests[code];
-                    const testItem = document.createElement('div');
-                    testItem.className = 'test-item';
-                    testItem.style.cursor = 'pointer';
-                    testItem.style.padding = '10px';
-                    testItem.style.border = '1px solid var(--frame)';
-                    testItem.style.borderRadius = '8px';
-                    testItem.style.marginBottom = '5px';
-                    
-                    testItem.innerHTML = `
-                        <strong>${test.title || code}</strong>
-                        <div style="font-size: 12px; color: var(--muted);">
-                            Savollar: ${test.questions?.length || 0} | Kod: ${code}
-                        </div>
-                    `;
-                    
-                    testItem.addEventListener('click', () => {
-                        elements.manualTestCode.value = code;
-                    });
-                    
-                    testList.appendChild(testItem);
-                });
-            } catch (error) {
-                console.error("Error listing tests:", error);
+                console.error("Error saving results:", error);
             }
         }
         
         /* ========= Event Listeners ========= */
         function setupEventListeners() {
-            // Load test button
-            elements.loadTestBtn.addEventListener('click', async () => {
-                const code = elements.manualTestCode.value.trim();
-                if (!code) {
-                    alert("Iltimos, test kodini kiriting");
-                    return;
-                }
-                
-                // Update URL without reloading
-                window.history.pushState({}, '', `?code=${code}`);
-                
-                // Load test
-                const loaded = await loadTestFromFirebase(code);
-                if (loaded) {
-                    initIntroScreen();
-                } else {
-                    // Try local storage
-                    if (loadTestFromLocalStorage(code)) {
-                        initIntroScreen();
-                    }
-                }
-            });
-            
             // Start button
             elements.startBtn.addEventListener('click', () => {
                 testStarted = true;
@@ -1266,19 +1081,6 @@
                 window.location.reload();
             });
             
-            // Load from localStorage button
-            elements.loadLocalBtn.addEventListener('click', () => {
-                showScreen('codeInput');
-                listAvailableTests();
-            });
-            
-            // Enter key in code input
-            elements.manualTestCode.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    elements.loadTestBtn.click();
-                }
-            });
-            
             // Keyboard navigation
             document.addEventListener('keydown', (e) => {
                 if (!testStarted) return;
@@ -1309,41 +1111,29 @@
             
             // Initialize Firebase
             if (!initializeFirebase()) {
-                showStatus("Firebase ulanmadi. LocalStorage'dan yuklash mumkin.", "warning");
-                // Continue anyway, we'll use localStorage
+                showError("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.");
+                return;
             }
             
             // Get test code from URL
             const testCode = getTestCodeFromURL();
             
             if (!testCode) {
-                // No code in URL, show code input
-                showScreen('codeInput');
-                listAvailableTests();
-                setupEventListeners();
+                showError("Test kodi kiritilmagan. URL da ?code=TEST_KODI ko'rinishida kod kiriting.");
                 return;
             }
             
-            // Try to load from Firebase first
-            let loaded = false;
-            if (db) {
-                loaded = await loadTestFromFirebase(testCode);
-            }
-            
-            // If Firebase failed, try localStorage
-            if (!loaded) {
-                loaded = loadTestFromLocalStorage(testCode);
-            }
+            // Load test from Firebase
+            const loaded = await loadTestFromFirebase(testCode);
             
             if (!loaded) {
-                // Test not found, show code input
-                showScreen('codeInput');
-                listAvailableTests();
-                showStatus(`"${testCode}" kodli test topilmadi. Boshqa kod kiriting.`, "error");
-            } else {
-                // Test loaded successfully
-                initIntroScreen();
+                // If Firebase fails, show error
+                showError(`"${testCode}" kodli test topilmadi yoki yuklanmadi.`);
+                return;
             }
+            
+            // Initialize intro screen
+            initIntroScreen();
             
             // Setup event listeners
             setupEventListeners();
