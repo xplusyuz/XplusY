@@ -1,4 +1,4 @@
-// auth-utils.js - Foydalanuvchi uchun bitta document yaratish, session boshqarish, o'yin natijalari
+// improved auth-utils.js (compat-compatible, backward-compatible)
 (function(){
   const STORAGE_KEY = 'imiFoydalanuvchiDocId';
   const COL = 'foydalanuvchilar';
@@ -7,19 +7,21 @@
   let currentUser = null;
   const listeners = [];
 
-  /* =============== ASOSIY FUNKSIYALAR =============== */
-
   function ensureDb(){
     if (db) return db;
-    if (!window.firebase || !firebase.firestore){
-      console.error('Firestore topilmadi.');
+    if (typeof window.firebase === 'undefined' || !firebase.firestore){
+      console.error('Firestore topilmadi. Iltimos firebase-app-compat va firebase-firestore-compat yuklang.');
       return null;
     }
-    db = firebase.firestore();
-    return db;
+    try {
+      db = firebase.firestore();
+      return db;
+    } catch (e) {
+      console.error('Firestore init xatosi:', e);
+      return null;
+    }
   }
 
-  // Foydalanuvchi ID sini izchil olish
   function getConsistentUserId(user) {
     if (!user) return null;
     if (user.id) return String(user.id);
@@ -30,8 +32,6 @@
     console.warn('Foydalanuvchi ID si topilmadi:', user);
     return null;
   }
-
-  /* =============== SESSION BOSHQARISH =============== */
 
   function onUserChange(cb){
     if (typeof cb === 'function') listeners.push(cb);
@@ -63,7 +63,7 @@
     try{
       const snap = await dbi.collection(COL).doc(docId).get();
       if (!snap.exists){
-        localStorage.removeItem(STORAGE_KEY);
+        try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
         currentUser = null;
         notify();
         return null;
@@ -91,8 +91,6 @@
     return new Promise(()=>{}); // hech qachon resolve bo‘lmaydi
   }
 
-  /* =============== LOGIN & REGISTER =============== */
-
   async function loginWithIdPassword(loginId, password){
     const dbi = ensureDb();
     if (!dbi) throw new Error('Firestore mavjud emas');
@@ -111,6 +109,7 @@
     const doc  = snap.docs[0];
     const data = doc.data() || {};
 
+    // NOTE: plaintext password comparison (security risk)
     if (!data.password || data.password !== pass){
       throw new Error('Parol noto‘g‘ri');
     }
@@ -130,7 +129,7 @@
     const dbi = ensureDb();
     if (!dbi) throw new Error('Firestore mavjud emas');
 
-    while(true){
+    for (let i=0;i<9999;i++){
       const id = String(Math.floor(100000 + Math.random()*900000));
       const q  = await dbi.collection(COL)
         .where('loginId','==',id)
@@ -138,6 +137,8 @@
         .get();
       if (q.empty) return id;
     }
+    // fallback (amalga oshmaydi odatda)
+    return String(Date.now()).slice(-6);
   }
 
   function generatePassword(len = 8){
@@ -166,6 +167,7 @@
       points: 0,
       rank: 'Yangi foydalanuvchi',
       bestScore: 0,
+      role: 'user',
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -183,8 +185,6 @@
 
     return { loginId, password, user: currentUser };
   }
-
-  /* =============== PROFIL BOSHQARISH =============== */
 
   async function logout(){
     try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
@@ -263,7 +263,15 @@
     }
   }
 
-  /* =============== O'YIN NATIJALARI =============== */
+  function isAdminUser(user = null){
+    const u = user || currentUser;
+    if (!u) return false;
+    const role = u.data?.role;
+    if (role === 'admin') return true;
+    // fallback: agar hujjatda email maydoni bo'lsa tekshir
+    if (u.data?.email && u.data.email === 'sohibjonmath@gmail.com') return true;
+    return false;
+  }
 
   async function saveGameResult(gameData) {
     const dbi = ensureDb();
@@ -342,40 +350,30 @@
     }
   }
 
-  /* =============== INIT =============== */
+  // init
   loadSession();
 
-  // Global object
   window.authUtils = {
-    // Session
     requireSession,
     getUser,
     onUserChange,
     loadSession,
-    
-    // Auth
     loginWithIdPassword,
     registerAuto,
     logout,
     refreshUser,
-    
-    // Profile management
     updateUserData,
     getUserProfile,
     checkUserExists,
     getConsistentUserId,
-    
-    // Game results
     saveGameResult,
     updateBestScore,
     getLeaderboard,
-    
-    // Utilities
     generatePassword,
-    generateUniqueId
+    generateUniqueId,
+    isAdminUser
   };
 
-  // authLite bilan moslik
   window.authLite = window.authUtils;
 
 })();
