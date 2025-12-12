@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin — Bo'limli Test & Math klaviatura</title>
+  <!-- MathJax -->
+  <script>
+    window.MathJax = {
+      tex: { 
+        inlineMath: [['$','$'],['\\(','\\)']], 
+        displayMath: [['$$','$$'],['\\[','\\]']], 
+        processEscapes: true, 
+        packages:{'[+]':['noerrors']}
+      },
+      options: { 
+        renderActions: { 
+          addMenu: [],
+          assistiveMml: [] 
+        }
+      },
+      loader: { load: ['[tex]/noerrors'] }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <style>
+    :root{
+      --g:#2E8B57; --gd:#1F6B45; --bd:#e9f2ec; 
+      --muted:#64748b; --ring:rgba(46,139,87,.18);
+      --danger:#ef4444; --danger-bg:#fee;
+      --warning:#f59e0b; --info:#3b82f6;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;
+      background:#f6faf8;
+      color:#0f172a;
+      line-height:1.5;
+    }
+    .wrap{
+      max-width:1400px;
+      margin:20px auto;
+      padding:16px;
+    }
+    h1{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin:0 0 12px;
+      font-size:1.5rem;
+    }
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:20px;
+      flex-wrap:wrap;
+    }
+    .card{
+      background:#fff;
+      border:1px solid var(--bd);
+      border-radius:12px;
+      padding:20px;
+      box-shadow:0 8px 24px rgba(31,107,69,.04);
+      margin-bottom:16px;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+      gap:16px;
+    }
+    label{
+      display:block;
+      font-size:14px;
+      color:#475569;
+      margin-bottom:6px;
+      font-weight:500;
+    }
+    input,textarea,select{
+      width:100%;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid #e6f3ea;
+      background:#fbfdfc;
+      font-size:14px;
+      transition:border-color 0.2s;
+    }
+    input:focus, textarea:focus, select:focus{
+      outline:none;
+      border-color:var(--g);
+      box-shadow:0 0 0 3px var(--ring);
+    }
+    textarea{
+      min-height:100px;
+      resize:vertical;
+      font-family:inherit;
+    }
+    .btn{
+      appearance:none;
+      border:none;
+      border-radius:10px;
+      padding:10px 16px;
+      font-weight:600;
+      font-size:14px;
+      color:#fff;
+      background:linear-gradient(135deg,var(--g),var(--gd));
+      cursor:pointer;
+      transition:all 0.2s;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+    }
+    .btn:hover{
+      transform:translateY(-1px);
+      box-shadow:0 4px 12px rgba(46,139,87,0.3);
+    }
+    .btn.ghost{
+      background:#fff;
+      color:var(--gd);
+      border:1px solid #cfe4d7;
+    }
+    .btn.flat{
+      background:#f8fbf9;
+      color:var(--gd);
+      border:1px solid #cfe4d7;
+    }
+    .btn.danger{
+      background:var(--danger);
+      border-color:var(--danger);
+    }
+    .btn.info{
+      background:var(--info);
+      border-color:var(--info);
+    }
+    .muted{color:var(--muted);font-size:14px}
+    .mini{font-size:12px;color:#6b7280}
+    .sec-list{display:grid;gap:12px}
+    .sec-row{
+      display:grid;
+      grid-template-columns:220px 1fr 1fr auto;
+      gap:12px;
+      align-items:center;
+      padding:12px;
+      border:1px solid #eef6f0;
+      border-radius:8px;
+      background:#fbfdfc;
+    }
+    .qbox{
+      border:1px solid #cfe4d7;
+      border-radius:12px;
+      padding:20px;
+      display:grid;
+      gap:16px;
+      background:#fff;
+      margin-bottom:16px;
+    }
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      background:#f1f8f4;
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:13px;
+      font-weight:500;
+    }
+    .qtype-badge{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:4px;
+      font-size:11px;
+      font-weight:600;
+      text-transform:uppercase;
+    }
+    .qtype-badge.variant{
+      background:#dbeafe;
+      color:#1e40af;
+    }
+    .qtype-badge.open{
+      background:#f0fdf4;
+      color:#166534;
+    }
+    .preview{
+      border:1px dashed #e6f3ea;
+      padding:16px;
+      border-radius:8px;
+      background:#fbfdfc;
+      margin-top:12px;
+    }
+    .drawer{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      transform:translateY(100%);
+      transition:transform 0.3s ease;
+      background:#ffffffee;
+      backdrop-filter:blur(6px) saturate(1.1);
+      border-top:1px solid #dfeae3;
+      padding:16px;
+      z-index:1000;
+      box-shadow:0 -4px 20px rgba(0,0,0,0.1);
+    }
+    .drawer.open{transform:translateY(0%)}
+    .kgrid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+      gap:10px;
+    }
+    .kbtn{
+      appearance:none;
+      cursor:pointer;
+      padding:10px;
+      border:1px solid #dfeae3;
+      background:#fff;
+      border-radius:10px;
+      min-height:50px;
+      font-size:14px;
+      transition:all 0.2s;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .kbtn:hover{
+      background:#f1f8f4;
+      border-color:var(--g);
+      transform:translateY(-2px);
+    }
+    .keypad-tabs{
+      display:flex;
+      gap:4px;
+      margin-bottom:12px;
+      border-bottom:1px solid #eef6f0;
+      padding-bottom:8px;
+    }
+    .keypad-tab{
+      padding:6px 12px;
+      border:none;
+      background:none;
+      border-radius:6px;
+      cursor:pointer;
+      font-size:13px;
+      font-weight:500;
+      color:var(--muted);
+    }
+    .keypad-tab.active{
+      background:var(--g);
+      color:white;
+    }
+    .hidden{display:none !important}
+    .flex{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .right{margin-left:auto}
+    .error{color:var(--danger);font-size:12px}
+    .success{color:var(--g)}
+    .warning{color:var(--warning)}
+    .stats{
+      background:#f8fbf9;
+      padding:12px;
+      border-radius:8px;
+      font-size:13px;
+    }
+    .qcount-input{
+      width:80px;
+      text-align:center;
+    }
+    hr{
+      margin:20px 0;
+      border:none;
+      border-top:1px solid #eef6f0;
+    }
+    .loading{
+      display:inline-block;
+      width:16px;
+      height:16px;
+      border:2px solid rgba(255,255,255,0.3);
+      border-radius:50%;
+      border-top-color:#fff;
+      animation:spin 1s linear infinite;
+    }
+    @keyframes spin{100%{transform:rotate(360deg)}}
+    .correct-preview{
+      background:#f0fdf4;
+      padding:8px 12px;
+      border-radius:8px;
+      margin-top:8px;
+      border-left:4px solid var(--g);
+    }
+    .option-item{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 0;
+      border-bottom:1px solid #f1f5f9;
+    }
+    .option-item:last-child{
+      border-bottom:none;
+    }
+    .option-index{
+      width:24px;
+      height:24px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#e2e8f0;
+      border-radius:50%;
+      font-size:12px;
+      font-weight:600;
+    }
+    .option-index.correct{
+      background:var(--g);
+      color:white;
+    }
+    .option-text{
+      flex:1;
+    }
+    .login-overlay{
+      position:fixed;
+      top:0;left:0;right:0;bottom:0;
+      background:rgba(255,255,255,0.95);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      z-index:2000;
+      padding:20px;
+    }
+    .login-box{
+      max-width:400px;
+      width:100%;
+      padding:30px;
+      text-align:center;
+      background:white;
+      border-radius:16px;
+      box-shadow:0 20px 40px rgba(0,0,0,0.1);
+    }
+    .login-btn{
+      margin-top:20px;
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      padding:14px;
+      font-size:16px;
+    }
+    .import-section{
+      border:2px dashed #cfe4d7;
+      border-radius:12px;
+      padding:20px;
+      text-align:center;
+      background:#fbfdfc;
+      margin-bottom:20px;
+      cursor:pointer;
+      transition:all 0.3s;
+    }
+    .import-section:hover{
+      background:#f1f8f4;
+      border-color:var(--g);
+    }
+    .import-icon{
+      font-size:48px;
+      margin-bottom:12px;
+      color:var(--g);
+    }
+    .file-input{
+      display:none;
+    }
+    .modal{
+      position:fixed;
+      top:0;left:0;right:0;bottom:0;
+      background:rgba(0,0,0,0.5);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:3000;
+      padding:20px;
+    }
+    .modal-content{
+      background:white;
+      border-radius:16px;
+      padding:30px;
+      max-width:500px;
+      width:100%;
+      max-height:80vh;
+      overflow-y:auto;
+    }
+    .modal-actions{
+      display:flex;
+      gap:12px;
+      margin-top:20px;
+      justify-content:flex-end;
+    }
+    .test-list{
+      max-height:400px;
+      overflow-y:auto;
+      margin:20px 0;
+    }
+    .test-item{
+      padding:12px;
+      border:1px solid #eef6f0;
+      border-radius:8px;
+      margin-bottom:8px;
+      cursor:pointer;
+      transition:all 0.2s;
+    }
+    .test-item:hover{
+      background:#f1f8f4;
+      border-color:var(--g);
+    }
+    .test-item.active{
+      background:#e2f7e8;
+      border-color:var(--g);
+    }
+    .test-title{
+      font-weight:600;
+      margin-bottom:4px;
+    }
+    .test-meta{
+      display:flex;
+      gap:12px;
+      font-size:12px;
+      color:var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <!-- Login overlay -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+      <h2 style="margin-top:0">Test Yaratish Tizimiga Xush Kelibsiz! 👨‍💻</h2>
+      <p>Test yaratish, tahrirlash va boshqarish uchun tizimga kiring.</p>
+      <p><strong>Admin email:</strong> sohibjonmath@gmail.com</p>
+      <div style="margin:20px 0;padding:15px;background:#f8fbf9;border-radius:10px;">
+        <p class="mini">Iltimos, Google hisobingiz orqali tizimga kiring.</p>
+      </div>
+      <button id="loginBtn" class="btn login-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Google orqali kirish
+      </button>
+      <div id="loginStatus" class="muted" style="margin-top:15px;"></div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="importModal" class="modal hidden">
+    <div class="modal-content">
+      <h2 style="margin-top:0">Testni Import Qilish</h2>
+      
+      <div class="keypad-tabs" style="margin-bottom:20px;">
+        <button class="keypad-tab active" data-import-tab="file">Fayldan Import</button>
+        <button class="keypad-tab" data-import-tab="firebase">Firestore'dan</button>
+      </div>
+      
+      <!-- File Import -->
+      <div id="fileImportTab">
+        <div class="import-section" id="dropZone">
+          <div class="import-icon">📁</div>
+          <h3>JSON Faylni Yuklash</h3>
+          <p>Test.json faylni bu yerga tashlang yoki tanlash uchun bosing</p>
+          <p class="mini">Qo'llab-quvvatlanadigan format: test.json</p>
+          <input type="file" id="fileInput" class="file-input" accept=".json,application/json">
+        </div>
+        <div class="preview" id="filePreview" style="display:none;">
+          <h4>Fayl ma'lumotlari:</h4>
+          <div id="fileInfo"></div>
+        </div>
+      </div>
+      
+      <!-- Firebase Import -->
+      <div id="firebaseImportTab" class="hidden">
+        <div style="margin-bottom:20px;">
+          <input type="text" id="searchTest" placeholder="Test kodini yoki nomini qidirish..." style="margin-bottom:12px;">
+          <div class="test-list" id="testList">
+            <!-- Testlar ro'yxati bu yerga yuklanadi -->
+          </div>
+        </div>
+      
+# truncated for brevity - full file saved to disk
