@@ -1,1170 +1,714 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test - LeaderMath</title>
-    
-    <!-- MathJax -->
-    <script>
-        window.MathJax = {
-            tex: { 
-                inlineMath: [['$','$'],['\\(','\\)']], 
-                displayMath: [['$$','$$'],['\\[','\\]']], 
-                processEscapes: true 
-            },
-            options: { 
-                renderActions: { 
-                    addMenu: [],
-                    assistiveMml: [] 
-                }
-            }
-        };
-    </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    
-    <style>
-        /* ========= CSS Styles ========= */
-        :root {
-            --brand: #2E8B57;
-            --brand2: #1F6B45;
-            --bg: #f6faf8;
-            --text: #0f172a;
-            --muted: #667a72;
-            --frame: #e3efe8;
-            --danger: #ef4444;
-            --success: #22c55e;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-        }
-        
-        .wrap {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        /* Header */
-        header {
-            background: white;
-            border-bottom: 1px solid var(--frame);
-            padding: 15px 0;
-            margin-bottom: 30px;
-        }
-        
-        .header-inner {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-        
-        .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--brand);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        /* Cards */
-        .card {
-            background: white;
-            border: 1px solid var(--frame);
-            border-radius: 16px;
-            padding: 30px;
-            margin: 20px 0;
-            box-shadow: 0 8px 24px rgba(31, 107, 69, 0.04);
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        /* Loading */
-        #loadingScreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid var(--frame);
-            border-top-color: var(--brand);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Test Info */
-        .test-info {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
-        
-        .info-item {
-            background: var(--frame);
-            padding: 10px 15px;
-            border-radius: 10px;
-            font-size: 14px;
-        }
-        
-        /* Question */
-        .question-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--frame);
-        }
-        
-        .question-nav {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .q-number {
-            font-weight: bold;
-            font-size: 1.2rem;
-            color: var(--brand);
-        }
-        
-        .question-image {
-            max-width: 100%;
-            margin: 20px 0;
-            border-radius: 12px;
-            display: block;
-        }
-        
-        /* Options */
-        .options {
-            margin: 20px 0;
-        }
-        
-        .option {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            padding: 15px;
-            margin: 10px 0;
-            border: 2px solid var(--frame);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .option:hover {
-            border-color: var(--brand);
-            background: #f9fdfb;
-        }
-        
-        .option.selected {
-            border-color: var(--brand);
-            background: #e8f5ef;
-        }
-        
-        .option input[type="radio"],
-        .option input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-        }
-        
-        /* Open Answer */
-        .open-answer {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid var(--frame);
-            border-radius: 12px;
-            font-size: 16px;
-            font-family: inherit;
-            margin-top: 10px;
-        }
-        
-        .open-answer:focus {
-            outline: none;
-            border-color: var(--brand);
-        }
-        
-        /* Navigation Dots */
-        .nav-dots {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 20px 0;
-            justify-content: center;
-        }
-        
-        .dot {
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            border: 2px solid var(--frame);
-            background: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-        
-        .dot:hover {
-            border-color: var(--brand);
-        }
-        
-        .dot.active {
-            border-color: var(--brand);
-            background: var(--brand);
-            color: white;
-        }
-        
-        .dot.answered {
-            background: var(--success);
-            color: white;
-            border-color: var(--success);
-        }
-        
-        /* Buttons */
-        .btn {
-            padding: 12px 24px;
-            border-radius: 12px;
-            border: none;
-            background: linear-gradient(135deg, var(--brand), var(--brand2));
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.2s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(46, 139, 87, 0.25);
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-            justify-content: center;
-        }
-        
-        /* Results */
-        .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        
-        .result-item {
-            background: var(--frame);
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-        }
-        
-        .score-circle {
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--brand), var(--brand2));
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 30px;
-            font-size: 48px;
-            font-weight: bold;
-        }
-        
-        .score-circle small {
-            font-size: 20px;
-            opacity: 0.9;
-        }
-        
-        /* Status Messages */
-        .status {
-            padding: 15px;
-            border-radius: 12px;
-            margin: 10px 0;
-            text-align: center;
-        }
-        
-        .status.success {
-            background: #e8f5ee;
-            border: 1px solid #c7ead6;
-            color: #0f5132;
-        }
-        
-        .status.error {
-            background: #fdecea;
-            border: 1px solid #f5c2c7;
-            color: #842029;
-        }
-        
-        .status.warning {
-            background: #fff4e5;
-            border: 1px solid #ffe0b2;
-            color: #8a4b03;
-        }
-        
-        /* Timer */
-        .timer {
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--brand);
-            text-align: center;
-            margin: 20px 0;
-            padding: 15px;
-            background: #f1f8f4;
-            border-radius: 12px;
-        }
-        
-        .timer.warning {
-            color: var(--danger);
-            background: #fee;
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .wrap {
-                padding: 15px;
-            }
-            
-            .card {
-                padding: 20px;
-            }
-            
-            .btn {
-                padding: 10px 15px;
-            }
-            
-            .dot {
-                width: 35px;
-                height: 35px;
-            }
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LeaderMath — Test</title>
+
+  <!-- MathJax -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$','$'], ['\\(','\\)']],
+        displayMath: [['$$','$$'], ['\\[','\\]']],
+        processEscapes: true
+      },
+      options: {
+        renderActions: { addMenu: [], assistiveMml: [] }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <!-- Firebase compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --brand: #2E8B57;
+      --brand2: #1F6B45;
+      --bg: #f6faf8;
+      --text: #0f172a;
+      --muted: #667a72;
+      --frame: #e3efe8;
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+    .wrap{max-width:1000px;margin:0 auto;padding:20px}
+    header{background:white;border-bottom:1px solid var(--frame);padding:15px 0;margin-bottom:30px}
+    .header-inner{display:flex;justify-content:space-between;align-items:center;max-width:1000px;margin:0 auto;padding:0 20px}
+    .logo{font-size:1.5rem;font-weight:bold;color:var(--brand);display:flex;align-items:center;gap:10px}
+    .card{background:white;border:1px solid var(--frame);border-radius:16px;padding:30px;margin:20px 0;box-shadow:0 8px 24px rgba(31,107,69,0.04)}
+    .hidden{display:none!important}
+    .loading-spinner{width:50px;height:50px;border:5px solid var(--frame);border-top-color:var(--brand);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:20px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .test-info{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px}
+    .info-item{background:var(--frame);padding:10px 15px;border-radius:10px;font-size:14px}
+    .question-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:1px solid var(--frame)}
+    .question-nav{display:flex;gap:10px;align-items:center}
+    .q-number{font-weight:bold;font-size:1.2rem;color:var(--brand)}
+    .question-image{max-width:100%;margin:20px 0;border-radius:12px;display:block}
+    .options{margin:20px 0}
+    .option{display:flex;align-items:center;gap:15px;padding:15px;margin:10px 0;border:2px solid var(--frame);border-radius:12px;cursor:pointer;transition:all .2s}
+    .option:hover{border-color:var(--brand);background:#f9fdfb}
+    .option.selected{border-color:var(--brand);background:#e8f5ef}
+    .open-answer{width:100%;padding:15px;border:2px solid var(--frame);border-radius:12px;font-size:16px;font-family:inherit;margin-top:10px}
+    .nav-dots{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0;justify-content:center}
+    .dot{width:40px;height:40px;border-radius:10px;border:2px solid var(--frame);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:bold;transition:all .2s}
+    .dot:hover{border-color:var(--brand)}
+    .dot.active{border-color:var(--brand);background:var(--brand);color:white}
+    .dot.answered{background:var(--success);color:white;border-color:var(--success)}
+    .btn{padding:12px 24px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--brand),var(--brand2));color:white;font-weight:bold;cursor:pointer;font-size:16px;transition:all .2s}
+    .btn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(46,139,87,0.25)}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn-group{display:flex;gap:10px;margin-top:20px;justify-content:center}
+    .results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:20px 0}
+    .result-item{background:var(--frame);padding:20px;border-radius:12px;text-align:center}
+    .score-circle{width:200px;height:200px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0 auto 30px;font-size:48px;font-weight:bold}
+    .timer{font-size:24px;font-weight:bold;color:var(--brand);text-align:center;margin:0;padding:0}
+    .timer.warning{color:var(--danger);background:#fee}
+    .status{padding:12px;border-radius:12px;margin:10px 0;text-align:center;display:none}
+    .status.success{background:#e8f5ee;border:1px solid #c7ead6;color:#0f5132;display:block}
+    .status.error{background:#fdecea;border:1px solid #f5c2c7;color:#842029;display:block}
+    @media(max-width:768px){.wrap{padding:15px}.card{padding:20px}.btn{padding:10px 15px}.dot{width:35px;height:35px}}
+  </style>
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loadingScreen" class="card">
-        <div class="loading-spinner"></div>
-        <h2>Test yuklanmoqda...</h2>
-        <p id="loadingText">Firebase ulanmoqda</p>
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="card">
+    <div class="loading-spinner"></div>
+    <h2>Test yuklanmoqda...</h2>
+    <p id="loadingText">Firebase ulanmoqda</p>
+  </div>
+
+  <header>
+    <div class="header-inner">
+      <div class="logo">📚 LeaderMath Test</div>
+      <div id="timer" class="timer">00:00</div>
     </div>
-    
-    <!-- Header -->
-    <header>
-        <div class="header-inner">
-            <div class="logo">
-                <span>📚</span> LeaderMath Test
-            </div>
-            <div id="timer" class="timer">00:00</div>
-        </div>
-    </header>
-    
-    <div class="wrap">
-        <!-- Intro Card -->
-        <div id="introCard" class="card hidden">
-            <h1 id="testTitle">Test</h1>
-            <p id="testDescription" class="muted"></p>
-            
-            <div class="test-info">
-                <div class="info-item">Savollar: <span id="totalQuestions">0</span></div>
-                <div class="info-item">Vaqt: <span id="testDuration">0</span> daqiqa</div>
-                <div class="info-item">Ball: <span id="totalPoints">0</span></div>
-                <div class="info-item" id="codeBadge">Kod: <span id="testCode">0000</span></div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px;">
-                <button id="startBtn" class="btn" style="padding: 15px 40px; font-size: 18px;">
-                    Testni Boshlash
-                </button>
-            </div>
-        </div>
-        
-        <!-- Question Card -->
-        <div id="questionCard" class="card hidden">
-            <div class="question-header">
-                <div class="question-nav">
-                    <span class="q-number" id="currentQ">1</span>
-                    <span>/</span>
-                    <span id="totalQ">20</span>
-                </div>
-                <div id="sectionName" class="info-item">Umumiy</div>
-            </div>
-            
-            <!-- Question Image -->
-            <img id="questionImage" class="question-image hidden" alt="Savol rasmi">
-            
-            <!-- Question Text -->
-            <div id="questionText" class="hidden"></div>
-            
-            <!-- Options (for multiple choice) -->
-            <div id="optionsContainer" class="options hidden"></div>
-            
-            <!-- Open Answer (for open questions) -->
-            <div id="openAnswerContainer" class="hidden">
-                <input type="text" id="openAnswerInput" class="open-answer" placeholder="Javobingizni kiriting...">
-            </div>
-            
-            <!-- Navigation Dots -->
-            <div class="nav-dots" id="navDots"></div>
-            
-            <!-- Buttons -->
-            <div class="btn-group">
-                <button id="prevBtn" class="btn">Oldingi</button>
-                <button id="nextBtn" class="btn">Keyingi</button>
-                <button id="finishBtn" class="btn">Testni Yakunlash</button>
-            </div>
-        </div>
-        
-        <!-- Results Card -->
-        <div id="resultsCard" class="card hidden">
-            <div class="score-circle">
-                <span id="finalScore">0</span>
-                <small>ball</small>
-            </div>
-            
-            <h2 style="text-align: center; margin-bottom: 20px;">Test Yakunlandi!</h2>
-            
-            <div class="results-grid">
-                <div class="result-item">
-                    <div style="font-size: 14px; color: var(--muted);">To'g'ri javoblar</div>
-                    <div style="font-size: 36px; font-weight: bold;" id="correctCount">0</div>
-                </div>
-                <div class="result-item">
-                    <div style="font-size: 14px; color: var(--muted);">Noto'g'ri javoblar</div>
-                    <div style="font-size: 36px; font-weight: bold;" id="wrongCount">0</div>
-                </div>
-                <div class="result-item">
-                    <div style="font-size: 14px; color: var(--muted);">Umumiy ball</div>
-                    <div style="font-size: 36px; font-weight: bold;" id="totalScoreResult">0</div>
-                </div>
-                <div class="result-item">
-                    <div style="font-size: 14px; color: var(--muted);">Vaqt</div>
-                    <div style="font-size: 36px; font-weight: bold;" id="timeUsed">00:00</div>
-                </div>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px;">
-                <button id="restartBtn" class="btn">Yana Test Yechish</button>
-                <button id="reviewBtn" class="btn">Javoblarni Ko'rib Chiqish</button>
-            </div>
-        </div>
-        
-        <!-- Error Card -->
-        <div id="errorCard" class="card hidden">
-            <h2 style="color: var(--danger);">Xatolik!</h2>
-            <p id="errorMessage">Test yuklanmadi. Iltimos, internet aloqasini tekshiring.</p>
-            <button id="retryBtn" class="btn">Qayta Urinish</button>
-        </div>
-        
-        <!-- Status Messages -->
-        <div id="statusMessage" class="status hidden"></div>
+  </header>
+
+  <div class="wrap">
+    <!-- Intro Card -->
+    <div id="introCard" class="card hidden">
+      <h1 id="testTitle">Test</h1>
+      <p id="testDescription" class="muted"></p>
+
+      <div class="test-info">
+        <div class="info-item">Savollar: <span id="totalQuestions">0</span></div>
+        <div class="info-item">Vaqt: <span id="testDuration">0</span> daqiqa</div>
+        <div class="info-item">Ball: <span id="totalPoints">0</span></div>
+        <div class="info-item" id="codeBadge">Kod: <span id="testCode">0000</span></div>
+      </div>
+
+      <div style="text-align:center;margin-top:30px;">
+        <button id="startBtn" class="btn" style="padding:15px 40px;font-size:18px;">Testni Boshlash</button>
+      </div>
     </div>
-    
-    <script>
-        /* ========= Firebase Configuration ========= */
-        const firebaseConfig = {
-            apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-            authDomain: "xplusy-760fa.firebaseapp.com",
-            projectId: "xplusy-760fa",
-            storageBucket: "xplusy-760fa.firebasestorage.app",
-            messagingSenderId: "992512966017",
-            appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-            measurementId: "G-459PLJ7P7L"
+
+    <!-- Question Card -->
+    <div id="questionCard" class="card hidden">
+      <div class="question-header">
+        <div class="question-nav">
+          <span class="q-number" id="currentQ">1</span>
+          <span>/</span>
+          <span id="totalQ">20</span>
+        </div>
+        <div id="sectionName" class="info-item">Umumiy</div>
+      </div>
+
+      <img id="questionImage" class="question-image hidden" alt="Savol rasmi">
+      <div id="questionText" class="hidden"></div>
+      <div id="optionsContainer" class="options hidden"></div>
+      <div id="openAnswerContainer" class="hidden">
+        <input type="text" id="openAnswerInput" class="open-answer" placeholder="Javobingizni kiriting...">
+      </div>
+
+      <div class="nav-dots" id="navDots"></div>
+
+      <div class="btn-group">
+        <button id="prevBtn" class="btn">Oldingi</button>
+        <button id="nextBtn" class="btn">Keyingi</button>
+        <button id="finishBtn" class="btn">Testni Yakunlash</button>
+      </div>
+    </div>
+
+    <!-- Results Card -->
+    <div id="resultsCard" class="card hidden">
+      <div class="score-circle">
+        <span id="finalScore">0</span>
+        <small>ball</small>
+      </div>
+
+      <h2 style="text-align:center;margin-bottom:20px;">Test Yakunlandi!</h2>
+
+      <div class="results-grid">
+        <div class="result-item">
+          <div style="font-size:14px;color:var(--muted);">To'g'ri javoblar</div>
+          <div style="font-size:36px;font-weight:bold;" id="correctCount">0</div>
+        </div>
+        <div class="result-item">
+          <div style="font-size:14px;color:var(--muted);">Noto'g'ri javoblar</div>
+          <div style="font-size:36px;font-weight:bold;" id="wrongCount">0</div>
+        </div>
+        <div class="result-item">
+          <div style="font-size:14px;color:var(--muted);">Umumiy ball</div>
+          <div style="font-size:36px;font-weight:bold;" id="totalScoreResult">0</div>
+        </div>
+        <div class="result-item">
+          <div style="font-size:14px;color:var(--muted);">Vaqt</div>
+          <div style="font-size:36px;font-weight:bold;" id="timeUsed">00:00</div>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:30px;">
+        <button id="restartBtn" class="btn">Yana Test Yechish</button>
+        <button id="reviewBtn" class="btn">Javoblarni Ko'rib Chiqish</button>
+      </div>
+    </div>
+
+    <!-- Error Card -->
+    <div id="errorCard" class="card hidden">
+      <h2 style="color:var(--danger);">Xatolik!</h2>
+      <p id="errorMessage">Test yuklanmadi. Iltimos, internet aloqasini tekshiring.</p>
+      <button id="retryBtn" class="btn">Qayta Urinish</button>
+    </div>
+
+    <div id="statusMessage" class="status hidden"></div>
+  </div>
+
+  <script>
+    // ========== Firebase config ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
+
+    // Globals
+    let db;
+    let testData = null;
+    let currentTestCode = null;
+    let currentQuestionIndex = 0;
+    let userAnswers = [];
+    let timerInterval = null;
+    let timeRemaining = 0;
+    let timeSpent = 0;
+    let testStarted = false;
+
+    // Elements
+    const elements = {
+      loadingScreen: document.getElementById('loadingScreen'),
+      loadingText: document.getElementById('loadingText'),
+      introCard: document.getElementById('introCard'),
+      questionCard: document.getElementById('questionCard'),
+      resultsCard: document.getElementById('resultsCard'),
+      errorCard: document.getElementById('errorCard'),
+      errorMessage: document.getElementById('errorMessage'),
+      statusMessage: document.getElementById('statusMessage'),
+
+      testTitle: document.getElementById('testTitle'),
+      testDescription: document.getElementById('testDescription'),
+      totalQuestions: document.getElementById('totalQuestions'),
+      testDuration: document.getElementById('testDuration'),
+      totalPoints: document.getElementById('totalPoints'),
+      testCode: document.getElementById('testCode'),
+      codeBadge: document.getElementById('codeBadge'),
+
+      timer: document.getElementById('timer'),
+      currentQ: document.getElementById('currentQ'),
+      totalQ: document.getElementById('totalQ'),
+      sectionName: document.getElementById('sectionName'),
+      questionImage: document.getElementById('questionImage'),
+      questionText: document.getElementById('questionText'),
+      optionsContainer: document.getElementById('optionsContainer'),
+      openAnswerContainer: document.getElementById('openAnswerContainer'),
+      openAnswerInput: document.getElementById('openAnswerInput'),
+      navDots: document.getElementById('navDots'),
+
+      finalScore: document.getElementById('finalScore'),
+      correctCount: document.getElementById('correctCount'),
+      wrongCount: document.getElementById('wrongCount'),
+      totalScoreResult: document.getElementById('totalScoreResult'),
+      timeUsed: document.getElementById('timeUsed'),
+
+      startBtn: document.getElementById('startBtn'),
+      prevBtn: document.getElementById('prevBtn'),
+      nextBtn: document.getElementById('nextBtn'),
+      finishBtn: document.getElementById('finishBtn'),
+      restartBtn: document.getElementById('restartBtn'),
+      reviewBtn: document.getElementById('reviewBtn'),
+      retryBtn: document.getElementById('retryBtn')
+    };
+
+    // Initialize Firebase
+    function initializeFirebase() {
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        console.log("Firebase initialized successfully");
+        return true;
+      } catch (error) {
+        console.error("Firebase initialization error:", error);
+        return false;
+      }
+    }
+
+    // Get code from URL
+    function getTestCodeFromURL() {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('code');
+    }
+
+    // Load test from Firestore ONLY (no local fallback)
+    async function loadTestFromFirebase(code) {
+      try {
+        elements.loadingText.textContent = "Test yuklanmoqda...";
+        const doc = await db.collection('tests').doc(String(code)).get();
+
+        if (!doc.exists) {
+          throw new Error(`"${code}" kodli test Firestore'da topilmadi`);
+        }
+
+        testData = doc.data();
+        currentTestCode = String(code);
+
+        normalizeTestData();
+
+        console.log("Test loaded from Firestore:", testData.title || code);
+        return true;
+
+      } catch (error) {
+        console.error("Test loading error:", error);
+        showError(`Test yuklashda xato: ${error.message}`);
+        return false;
+      }
+    }
+
+    // Normalize data
+    function normalizeTestData() {
+      if (!testData) return;
+
+      testData.title = testData.title || "Test";
+      testData.description = testData.description || "";
+      testData.code = testData.code || currentTestCode;
+      testData.durationMinutes = Number(testData.durationMinutes) || 30;
+
+      if (!Array.isArray(testData.questions)) testData.questions = [];
+
+      testData.questions.forEach((q) => {
+        q.points = Number(q.points) || 1;
+        q.section = q.section || "Umumiy";
+        q.type = q.type || "variant";
+        if (q.type === 'variant') {
+          q.options = q.options || ["A","B","C","D"];
+          q.correctIndex = (typeof q.correctIndex === 'number') ? q.correctIndex : 0;
+        } else if (q.type === 'open') {
+          q.correctAnswer = q.correctAnswer || "";
+        }
+      });
+
+      testData.totalPoints = testData.questions.reduce((sum, q) => sum + (Number(q.points) || 0), 0);
+    }
+
+    // UI screens
+    function showScreen(screenName) {
+      elements.introCard.classList.add('hidden');
+      elements.questionCard.classList.add('hidden');
+      elements.resultsCard.classList.add('hidden');
+      elements.errorCard.classList.add('hidden');
+      elements.loadingScreen.classList.add('hidden');
+
+      switch(screenName) {
+        case 'intro': elements.introCard.classList.remove('hidden'); break;
+        case 'question': elements.questionCard.classList.remove('hidden'); break;
+        case 'results': elements.resultsCard.classList.remove('hidden'); break;
+        case 'error': elements.errorCard.classList.remove('hidden'); break;
+        case 'loading': elements.loadingScreen.classList.remove('hidden'); break;
+      }
+    }
+
+    function showError(message) {
+      elements.errorMessage.textContent = message;
+      showScreen('error');
+    }
+
+    function showStatus(message, type = 'success') {
+      elements.statusMessage.textContent = message;
+      elements.statusMessage.className = `status ${type}`;
+      elements.statusMessage.style.display = 'block';
+      setTimeout(() => {
+        elements.statusMessage.style.display = 'none';
+      }, 5000);
+    }
+
+    // Intro init
+    function initIntroScreen() {
+      if (!testData) return;
+      elements.testTitle.textContent = testData.title;
+      elements.testDescription.textContent = testData.description;
+      elements.totalQuestions.textContent = testData.questions.length;
+      elements.testDuration.textContent = testData.durationMinutes;
+      elements.totalPoints.textContent = testData.totalPoints;
+      elements.testCode.textContent = currentTestCode || '';
+
+      if (currentTestCode) elements.codeBadge.classList.remove('hidden');
+      else elements.codeBadge.classList.add('hidden');
+
+      showScreen('intro');
+    }
+
+    // Nav dots
+    function buildNavDots() {
+      elements.navDots.innerHTML = '';
+      testData.questions.forEach((_, index) => {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        dot.textContent = index + 1;
+        dot.dataset.index = index;
+        dot.addEventListener('click', () => {
+          if (testStarted) {
+            currentQuestionIndex = index;
+            renderQuestion();
+          }
+        });
+        elements.navDots.appendChild(dot);
+      });
+      updateNavDots();
+    }
+
+    function updateNavDots() {
+      const dots = elements.navDots.querySelectorAll('.dot');
+      dots.forEach((dot, index) => {
+        dot.classList.remove('active', 'answered');
+        if (index === currentQuestionIndex) dot.classList.add('active');
+        if (userAnswers[index] !== undefined) dot.classList.add('answered');
+      });
+    }
+
+    // Image loader: probe extensions (but no JSON fallback)
+    function tryImagePath(basePath) {
+      const exts = ['jpg','png','jpeg','webp','gif','svg'];
+      return new Promise((resolve) => {
+        let idx = 0;
+        const img = new Image();
+        function next() {
+          if (idx >= exts.length) return resolve(null);
+          const path = `${basePath}.${exts[idx++]}`;
+          img.onload = () => resolve(path);
+          img.onerror = () => next();
+          img.src = path;
+        }
+        next();
+      });
+    }
+
+    async function loadQuestionImage(questionIndex) {
+      const img = elements.questionImage;
+      img.classList.add('hidden');
+      if (!currentTestCode) return;
+
+      const base = `./${currentTestCode}/${questionIndex + 1}`;
+      const found = await tryImagePath(base);
+      if (found) {
+        img.src = found;
+        img.classList.remove('hidden');
+      } else {
+        img.classList.add('hidden');
+      }
+    }
+
+    // Render question
+    function renderQuestion() {
+      if (!testData || !testData.questions[currentQuestionIndex]) return;
+      const q = testData.questions[currentQuestionIndex];
+
+      elements.currentQ.textContent = currentQuestionIndex + 1;
+      elements.totalQ.textContent = testData.questions.length;
+      elements.sectionName.textContent = q.section || 'Umumiy';
+
+      loadQuestionImage(currentQuestionIndex);
+
+      if (q.text) {
+        elements.questionText.innerHTML = q.text;
+        elements.questionText.classList.remove('hidden');
+      } else {
+        elements.questionText.classList.add('hidden');
+      }
+
+      elements.optionsContainer.innerHTML = '';
+      elements.optionsContainer.classList.add('hidden');
+      elements.openAnswerContainer.classList.add('hidden');
+
+      if (q.type === 'variant') renderVariantQuestion(q);
+      else if (q.type === 'open') renderOpenQuestion(q);
+
+      updateNavDots();
+      updateNavigationButtons();
+
+      if (window.MathJax && MathJax.typesetPromise) {
+        MathJax.typesetPromise().catch(console.error);
+      }
+    }
+
+    // Variant
+    function renderVariantQuestion(question) {
+      elements.optionsContainer.classList.remove('hidden');
+      question.options.forEach((option, optionIndex) => {
+        const optionDiv = document.createElement('div');
+        optionDiv.className = 'option';
+
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `questionOption_${currentQuestionIndex}`;
+        input.value = optionIndex;
+        input.id = `option_${currentQuestionIndex}_${optionIndex}`;
+        input.style.pointerEvents = 'none';
+
+        if (userAnswers[currentQuestionIndex] === optionIndex) optionDiv.classList.add('selected');
+
+        optionDiv.addEventListener('click', () => {
+          // clear selections for this question
+          const parentOpts = elements.optionsContainer.querySelectorAll('.option');
+          parentOpts.forEach(o => o.classList.remove('selected'));
+          optionDiv.classList.add('selected');
+          userAnswers[currentQuestionIndex] = optionIndex;
+          updateNavDots();
+        });
+
+        const label = document.createElement('label');
+        label.htmlFor = input.id;
+        label.innerHTML = option;
+
+        optionDiv.appendChild(input);
+        optionDiv.appendChild(label);
+        elements.optionsContainer.appendChild(optionDiv);
+      });
+    }
+
+    // Open
+    function renderOpenQuestion(question) {
+      elements.openAnswerContainer.classList.remove('hidden');
+      elements.openAnswerInput.value = userAnswers[currentQuestionIndex] || '';
+      elements.openAnswerInput.oninput = () => {
+        userAnswers[currentQuestionIndex] = elements.openAnswerInput.value;
+        updateNavDots();
+      };
+    }
+
+    // Navigation buttons
+    function updateNavigationButtons() {
+      elements.prevBtn.disabled = currentQuestionIndex === 0;
+      elements.nextBtn.disabled = currentQuestionIndex === testData.questions.length - 1;
+    }
+
+    // Timer
+    function startTimer() {
+      timeRemaining = testData.durationMinutes * 60;
+      timeSpent = 0;
+      updateTimerDisplay();
+      timerInterval = setInterval(() => {
+        timeRemaining--;
+        timeSpent++;
+        if (timeRemaining <= 0) {
+          clearInterval(timerInterval);
+          finishTest();
+          return;
+        }
+        updateTimerDisplay();
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const minutes = Math.floor(timeRemaining / 60);
+      const seconds = timeRemaining % 60;
+      elements.timer.textContent = `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+      if (timeRemaining < 300) elements.timer.classList.add('warning'); else elements.timer.classList.remove('warning');
+    }
+
+    // Calculate results
+    function calculateResults() {
+      let correctCount = 0;
+      let totalScore = 0;
+
+      testData.questions.forEach((question, index) => {
+        const userAnswer = userAnswers[index];
+
+        if (question.type === 'variant') {
+          if (userAnswer === question.correctIndex) {
+            correctCount++;
+            totalScore += question.points;
+          }
+        } else if (question.type === 'open') {
+          if (userAnswer && String(userAnswer).trim() !== '') {
+            if (question.correctAnswer && String(question.correctAnswer).trim() !== '') {
+              if (String(userAnswer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase()) {
+                correctCount++;
+                totalScore += question.points;
+              }
+            } else {
+              correctCount++;
+              totalScore += question.points;
+            }
+          }
+        }
+      });
+
+      const wrongCount = testData.questions.length - correctCount;
+      const timeMinutes = Math.floor(timeSpent / 60);
+      const timeSeconds = timeSpent % 60;
+
+      return {
+        correctCount,
+        wrongCount,
+        totalScore,
+        timeSpent,
+        timeFormatted: `${String(timeMinutes).padStart(2,'0')}:${String(timeSeconds).padStart(2,'0')}`
+      };
+    }
+
+    // Finish
+    function finishTest() {
+      clearInterval(timerInterval);
+      testStarted = false;
+      const results = calculateResults();
+
+      elements.finalScore.textContent = results.totalScore;
+      elements.correctCount.textContent = results.correctCount;
+      elements.wrongCount.textContent = results.wrongCount;
+      elements.totalScoreResult.textContent = results.totalScore;
+      elements.timeUsed.textContent = results.timeFormatted;
+
+      showScreen('results');
+      showStatus("Test muvaffaqiyatli yakunlandi!", "success");
+
+      // save attempt (best-effort)
+      saveResultsToFirebase(results);
+    }
+
+    // Save results to Firestore (collection: results)
+    async function saveResultsToFirebase(results) {
+      if (!currentTestCode) return;
+      try {
+        const resultsData = {
+          testCode: currentTestCode,
+          testTitle: testData.title,
+          score: results.totalScore,
+          correctAnswers: results.correctCount,
+          totalQuestions: testData.questions.length,
+          timeSpent: results.timeSpent,
+          answers: userAnswers,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
         };
-        
-        /* ========= Global Variables ========= */
-        let db;
-        let testData = null;
-        let currentTestCode = null;
-        let currentQuestionIndex = 0;
-        let userAnswers = [];
-        let timerInterval = null;
-        let timeRemaining = 0;
-        let timeSpent = 0;
-        let testStarted = false;
-        
-        /* ========= DOM Elements ========= */
-        const elements = {
-            loadingScreen: document.getElementById('loadingScreen'),
-            loadingText: document.getElementById('loadingText'),
-            introCard: document.getElementById('introCard'),
-            questionCard: document.getElementById('questionCard'),
-            resultsCard: document.getElementById('resultsCard'),
-            errorCard: document.getElementById('errorCard'),
-            errorMessage: document.getElementById('errorMessage'),
-            statusMessage: document.getElementById('statusMessage'),
-            
-            testTitle: document.getElementById('testTitle'),
-            testDescription: document.getElementById('testDescription'),
-            totalQuestions: document.getElementById('totalQuestions'),
-            testDuration: document.getElementById('testDuration'),
-            totalPoints: document.getElementById('totalPoints'),
-            testCode: document.getElementById('testCode'),
-            codeBadge: document.getElementById('codeBadge'),
-            
-            timer: document.getElementById('timer'),
-            currentQ: document.getElementById('currentQ'),
-            totalQ: document.getElementById('totalQ'),
-            sectionName: document.getElementById('sectionName'),
-            questionImage: document.getElementById('questionImage'),
-            questionText: document.getElementById('questionText'),
-            optionsContainer: document.getElementById('optionsContainer'),
-            openAnswerContainer: document.getElementById('openAnswerContainer'),
-            openAnswerInput: document.getElementById('openAnswerInput'),
-            navDots: document.getElementById('navDots'),
-            
-            finalScore: document.getElementById('finalScore'),
-            correctCount: document.getElementById('correctCount'),
-            wrongCount: document.getElementById('wrongCount'),
-            totalScoreResult: document.getElementById('totalScoreResult'),
-            timeUsed: document.getElementById('timeUsed'),
-            
-            startBtn: document.getElementById('startBtn'),
-            prevBtn: document.getElementById('prevBtn'),
-            nextBtn: document.getElementById('nextBtn'),
-            finishBtn: document.getElementById('finishBtn'),
-            restartBtn: document.getElementById('restartBtn'),
-            reviewBtn: document.getElementById('reviewBtn'),
-            retryBtn: document.getElementById('retryBtn')
-        };
-        
-        /* ========= Initialize Firebase ========= */
-        function initializeFirebase() {
-            try {
-                firebase.initializeApp(firebaseConfig);
-                db = firebase.firestore();
-                console.log("Firebase initialized successfully");
-                return true;
-            } catch (error) {
-                console.error("Firebase initialization error:", error);
-                return false;
-            }
+        await db.collection('results').add(resultsData);
+        console.log("Results saved to Firebase");
+      } catch (error) {
+        console.error("Error saving results:", error);
+      }
+    }
+
+    // Event listeners
+    function setupEventListeners() {
+      elements.startBtn.addEventListener('click', () => {
+        testStarted = true;
+        userAnswers = new Array(testData.questions.length);
+        startTimer();
+        buildNavDots();
+        currentQuestionIndex = 0;
+        renderQuestion();
+        showScreen('question');
+      });
+
+      elements.prevBtn.addEventListener('click', () => {
+        if (currentQuestionIndex > 0) {
+          currentQuestionIndex--;
+          renderQuestion();
         }
-        
-        /* ========= Get Test Code from URL ========= */
-        function getTestCodeFromURL() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('code');
+      });
+
+      elements.nextBtn.addEventListener('click', () => {
+        if (currentQuestionIndex < testData.questions.length - 1) {
+          currentQuestionIndex++;
+          renderQuestion();
         }
-        
-        /* ========= Load Test from Firebase ========= */
-        async function loadTestFromFirebase(code) {
-            try {
-                elements.loadingText.textContent = "Test yuklanmoqda...";
-                
-                const testDoc = await db.collection('tests').doc(code).get();
-                
-                if (!testDoc.exists) {
-                    throw new Error(`"${code}" kodli test topilmadi`);
-                }
-                
-                testData = testDoc.data();
-                currentTestCode = code;
-                
-                // Normalize test data
-                normalizeTestData();
-                
-                console.log("Test loaded successfully:", testData.title);
-                return true;
-                
-            } catch (error) {
-                console.error("Test loading error:", error);
-                showError(`Test yuklashda xato: ${error.message}`);
-                return false;
-            }
+      });
+
+      elements.finishBtn.addEventListener('click', () => {
+        if (confirm("Testni yakunlashni xohlaysizmi? Qayta davom ettirib bo'lmaydi.")) {
+          finishTest();
         }
-        
-        /* ========= Normalize Test Data ========= */
-        function normalizeTestData() {
-            if (!testData) return;
-            
-            // Set defaults
-            testData.title = testData.title || "Test";
-            testData.description = testData.description || "";
-            testData.code = testData.code || currentTestCode;
-            testData.durationMinutes = testData.durationMinutes || 30;
-            
-            // Ensure questions array exists
-            if (!testData.questions || !Array.isArray(testData.questions)) {
-                testData.questions = [];
-            }
-            
-            // Normalize each question
-            testData.questions.forEach((q, index) => {
-                q.points = q.points || 1;
-                q.section = q.section || "Umumiy";
-                q.type = q.type || "variant";
-                
-                // For variant questions
-                if (q.type === 'variant') {
-                    q.options = q.options || ["A", "B", "C", "D"];
-                    q.correctIndex = q.correctIndex || 0;
-                }
-                
-                // For open questions
-                if (q.type === 'open') {
-                    q.correctAnswer = q.correctAnswer || "";
-                }
-            });
-            
-            // Calculate total points
-            testData.totalPoints = testData.questions.reduce((sum, q) => sum + q.points, 0);
+      });
+
+      elements.restartBtn.addEventListener('click', () => window.location.reload());
+      elements.reviewBtn.addEventListener('click', () => alert("Ko'rib chiqish funksiyasi keyingi versiyada qo'shiladi"));
+      elements.retryBtn.addEventListener('click', () => window.location.reload());
+
+      document.addEventListener('keydown', (e) => {
+        if (!testStarted) return;
+        if (e.key === 'ArrowLeft') {
+          if (currentQuestionIndex > 0) { e.preventDefault(); currentQuestionIndex--; renderQuestion(); }
+        } else if (e.key === 'ArrowRight') {
+          if (currentQuestionIndex < testData.questions.length - 1) { e.preventDefault(); currentQuestionIndex++; renderQuestion(); }
         }
-        
-        /* ========= Show/Hide Screens ========= */
-        function showScreen(screenName) {
-            // Hide all screens
-            elements.introCard.classList.add('hidden');
-            elements.questionCard.classList.add('hidden');
-            elements.resultsCard.classList.add('hidden');
-            elements.errorCard.classList.add('hidden');
-            elements.loadingScreen.classList.add('hidden');
-            
-            // Show requested screen
-            switch(screenName) {
-                case 'intro':
-                    elements.introCard.classList.remove('hidden');
-                    break;
-                case 'question':
-                    elements.questionCard.classList.remove('hidden');
-                    break;
-                case 'results':
-                    elements.resultsCard.classList.remove('hidden');
-                    break;
-                case 'error':
-                    elements.errorCard.classList.remove('hidden');
-                    break;
-                case 'loading':
-                    elements.loadingScreen.classList.remove('hidden');
-                    break;
-            }
+      });
+
+      // Restrict context menu and typical devtools keys
+      document.addEventListener('contextmenu', (e) => e.preventDefault());
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key))) {
+          e.preventDefault();
         }
-        
-        /* ========= Show Error ========= */
-        function showError(message) {
-            elements.errorMessage.textContent = message;
-            showScreen('error');
-        }
-        
-        /* ========= Show Status Message ========= */
-        function showStatus(message, type = 'info') {
-            elements.statusMessage.textContent = message;
-            elements.statusMessage.className = `status ${type}`;
-            elements.statusMessage.classList.remove('hidden');
-            
-            setTimeout(() => {
-                elements.statusMessage.classList.add('hidden');
-            }, 5000);
-        }
-        
-        /* ========= Initialize Intro Screen ========= */
-        function initIntroScreen() {
-            if (!testData) return;
-            
-            elements.testTitle.textContent = testData.title;
-            elements.testDescription.textContent = testData.description;
-            elements.totalQuestions.textContent = testData.questions.length;
-            elements.testDuration.textContent = testData.durationMinutes;
-            elements.totalPoints.textContent = testData.totalPoints;
-            elements.testCode.textContent = currentTestCode;
-            
-            // Show code badge only if code exists
-            if (currentTestCode) {
-                elements.codeBadge.classList.remove('hidden');
-            } else {
-                elements.codeBadge.classList.add('hidden');
-            }
-            
-            showScreen('intro');
-        }
-        
-        /* ========= Build Navigation Dots ========= */
-        function buildNavDots() {
-            elements.navDots.innerHTML = '';
-            
-            testData.questions.forEach((_, index) => {
-                const dot = document.createElement('div');
-                dot.className = 'dot';
-                dot.textContent = index + 1;
-                dot.dataset.index = index;
-                
-                dot.addEventListener('click', () => {
-                    if (testStarted) {
-                        currentQuestionIndex = index;
-                        renderQuestion();
-                    }
-                });
-                
-                elements.navDots.appendChild(dot);
-            });
-            
-            updateNavDots();
-        }
-        
-        /* ========= Update Navigation Dots ========= */
-        function updateNavDots() {
-            const dots = elements.navDots.querySelectorAll('.dot');
-            
-            dots.forEach((dot, index) => {
-                dot.classList.remove('active', 'answered');
-                
-                if (index === currentQuestionIndex) {
-                    dot.classList.add('active');
-                }
-                
-                if (userAnswers[index] !== undefined) {
-                    dot.classList.add('answered');
-                }
-            });
-        }
-        
-        /* ========= Load Question Image ========= */
-        function loadQuestionImage(questionIndex) {
-            const img = elements.questionImage;
-            
-            // If test code exists, try to load from code folder
-            if (currentTestCode) {
-                const imagePath = `./${currentTestCode}/${questionIndex + 1}.jpg`;
-                img.src = imagePath;
-                img.onload = () => {
-                    img.classList.remove('hidden');
-                };
-                img.onerror = () => {
-                    // Try other extensions
-                    const extensions = ['png', 'jpeg', 'webp', 'gif'];
-                    let currentExtension = 0;
-                    
-                    const tryNextExtension = () => {
-                        if (currentExtension < extensions.length) {
-                            img.src = `./${currentTestCode}/${questionIndex + 1}.${extensions[currentExtension]}`;
-                            currentExtension++;
-                        } else {
-                            img.classList.add('hidden');
-                        }
-                    };
-                    
-                    img.onerror = tryNextExtension;
-                    tryNextExtension();
-                };
-            } else {
-                img.classList.add('hidden');
-            }
-        }
-        
-        /* ========= Render Question ========= */
-        function renderQuestion() {
-            if (!testData || !testData.questions[currentQuestionIndex]) return;
-            
-            const question = testData.questions[currentQuestionIndex];
-            
-            // Update basic info
-            elements.currentQ.textContent = currentQuestionIndex + 1;
-            elements.totalQ.textContent = testData.questions.length;
-            elements.sectionName.textContent = question.section;
-            
-            // Load image
-            loadQuestionImage(currentQuestionIndex);
-            
-            // Show question text if exists
-            if (question.text) {
-                elements.questionText.textContent = question.text;
-                elements.questionText.classList.remove('hidden');
-            } else {
-                elements.questionText.classList.add('hidden');
-            }
-            
-            // Clear previous options
-            elements.optionsContainer.innerHTML = '';
-            elements.optionsContainer.classList.add('hidden');
-            elements.openAnswerContainer.classList.add('hidden');
-            
-            // Render based on question type
-            if (question.type === 'variant') {
-                renderVariantQuestion(question);
-            } else if (question.type === 'open') {
-                renderOpenQuestion(question);
-            }
-            
-            // Update navigation
-            updateNavDots();
-            updateNavigationButtons();
-            
-            // Re-render MathJax
-            if (window.MathJax && MathJax.typesetPromise) {
-                MathJax.typesetPromise();
-            }
-        }
-        
-        /* ========= Render Variant Question ========= */
-        function renderVariantQuestion(question) {
-            elements.optionsContainer.classList.remove('hidden');
-            
-            question.options.forEach((option, optionIndex) => {
-                const optionDiv = document.createElement('div');
-                optionDiv.className = 'option';
-                
-                const input = document.createElement('input');
-                input.type = 'radio';
-                input.name = 'questionOption';
-                input.value = optionIndex;
-                input.id = `option_${optionIndex}`;
-                
-                if (userAnswers[currentQuestionIndex] === optionIndex) {
-                    input.checked = true;
-                    optionDiv.classList.add('selected');
-                }
-                
-                input.addEventListener('change', () => {
-                    // Remove selection from all options
-                    document.querySelectorAll('.option').forEach(opt => {
-                        opt.classList.remove('selected');
-                    });
-                    
-                    // Add selection to clicked option
-                    optionDiv.classList.add('selected');
-                    userAnswers[currentQuestionIndex] = optionIndex;
-                    updateNavDots();
-                });
-                
-                const label = document.createElement('label');
-                label.htmlFor = `option_${optionIndex}`;
-                label.innerHTML = option;
-                
-                optionDiv.appendChild(input);
-                optionDiv.appendChild(label);
-                elements.optionsContainer.appendChild(optionDiv);
-            });
-        }
-        
-        /* ========= Render Open Question ========= */
-        function renderOpenQuestion(question) {
-            elements.openAnswerContainer.classList.remove('hidden');
-            
-            // Set current answer if exists
-            if (userAnswers[currentQuestionIndex] !== undefined) {
-                elements.openAnswerInput.value = userAnswers[currentQuestionIndex];
-            } else {
-                elements.openAnswerInput.value = '';
-            }
-            
-            // Update answer on input
-            elements.openAnswerInput.oninput = () => {
-                userAnswers[currentQuestionIndex] = elements.openAnswerInput.value;
-                updateNavDots();
-            };
-        }
-        
-        /* ========= Update Navigation Buttons ========= */
-        function updateNavigationButtons() {
-            elements.prevBtn.disabled = currentQuestionIndex === 0;
-            elements.nextBtn.disabled = currentQuestionIndex === testData.questions.length - 1;
-        }
-        
-        /* ========= Start Timer ========= */
-        function startTimer() {
-            timeRemaining = testData.durationMinutes * 60;
-            timeSpent = 0;
-            
-            updateTimerDisplay();
-            
-            timerInterval = setInterval(() => {
-                timeRemaining--;
-                timeSpent++;
-                
-                if (timeRemaining <= 0) {
-                    clearInterval(timerInterval);
-                    finishTest();
-                    return;
-                }
-                
-                updateTimerDisplay();
-            }, 1000);
-        }
-        
-        /* ========= Update Timer Display ========= */
-        function updateTimerDisplay() {
-            const minutes = Math.floor(timeRemaining / 60);
-            const seconds = timeRemaining % 60;
-            
-            elements.timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            
-            // Add warning class if less than 5 minutes
-            if (timeRemaining < 300) { // 5 minutes
-                elements.timer.classList.add('warning');
-            } else {
-                elements.timer.classList.remove('warning');
-            }
-        }
-        
-        /* ========= Calculate Results ========= */
-        function calculateResults() {
-            let correctCount = 0;
-            let totalScore = 0;
-            
-            testData.questions.forEach((question, index) => {
-                const userAnswer = userAnswers[index];
-                
-                if (question.type === 'variant') {
-                    if (userAnswer === question.correctIndex) {
-                        correctCount++;
-                        totalScore += question.points;
-                    }
-                } else if (question.type === 'open') {
-                    // For open questions, we need manual checking
-                    // For now, just count as correct if answered
-                    if (userAnswer && userAnswer.trim() !== '') {
-                        // In real system, you'd compare with correctAnswer
-                        correctCount++;
-                        totalScore += question.points;
-                    }
-                }
-            });
-            
-            const wrongCount = testData.questions.length - correctCount;
-            const timeMinutes = Math.floor(timeSpent / 60);
-            const timeSeconds = timeSpent % 60;
-            
-            return {
-                correctCount,
-                wrongCount,
-                totalScore,
-                timeSpent,
-                timeFormatted: `${timeMinutes.toString().padStart(2, '0')}:${timeSeconds.toString().padStart(2, '0')}`
-            };
-        }
-        
-        /* ========= Finish Test ========= */
-        function finishTest() {
-            clearInterval(timerInterval);
-            testStarted = false;
-            
-            const results = calculateResults();
-            
-            // Update results display
-            elements.finalScore.textContent = results.totalScore;
-            elements.correctCount.textContent = results.correctCount;
-            elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = results.totalScore;
-            elements.timeUsed.textContent = results.timeFormatted;
-            
-            showScreen('results');
-            showStatus("Test muvaffaqiyatli yakunlandi!", "success");
-        }
-        
-        /* ========= Save Results to Firebase ========= */
-        async function saveResultsToFirebase(results) {
-            if (!currentTestCode) return;
-            
-            try {
-                const resultsData = {
-                    testCode: currentTestCode,
-                    testTitle: testData.title,
-                    score: results.totalScore,
-                    correctAnswers: results.correctCount,
-                    totalQuestions: testData.questions.length,
-                    timeSpent: results.timeSpent,
-                    answers: userAnswers,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                };
-                
-                await db.collection('results').add(resultsData);
-                console.log("Results saved to Firebase");
-                
-            } catch (error) {
-                console.error("Error saving results:", error);
-            }
-        }
-        
-        /* ========= Event Listeners ========= */
-        function setupEventListeners() {
-            // Start button
-            elements.startBtn.addEventListener('click', () => {
-                testStarted = true;
-                userAnswers = new Array(testData.questions.length);
-                
-                // Initialize timer
-                startTimer();
-                
-                // Build navigation dots
-                buildNavDots();
-                
-                // Show first question
-                currentQuestionIndex = 0;
-                renderQuestion();
-                showScreen('question');
-            });
-            
-            // Previous button
-            elements.prevBtn.addEventListener('click', () => {
-                if (currentQuestionIndex > 0) {
-                    currentQuestionIndex--;
-                    renderQuestion();
-                }
-            });
-            
-            // Next button
-            elements.nextBtn.addEventListener('click', () => {
-                if (currentQuestionIndex < testData.questions.length - 1) {
-                    currentQuestionIndex++;
-                    renderQuestion();
-                }
-            });
-            
-            // Finish button
-            elements.finishBtn.addEventListener('click', () => {
-                if (confirm("Testni yakunlashni xohlaysizmi? Qayta davom ettirib bo'lmaydi.")) {
-                    finishTest();
-                }
-            });
-            
-            // Restart button
-            elements.restartBtn.addEventListener('click', () => {
-                window.location.reload();
-            });
-            
-            // Review button
-            elements.reviewBtn.addEventListener('click', () => {
-                // In real implementation, show review screen
-                alert("Ko'rib chiqish funksiyasi keyingi versiyada qo'shiladi");
-            });
-            
-            // Retry button
-            elements.retryBtn.addEventListener('click', () => {
-                window.location.reload();
-            });
-            
-            // Keyboard navigation
-            document.addEventListener('keydown', (e) => {
-                if (!testStarted) return;
-                
-                switch(e.key) {
-                    case 'ArrowLeft':
-                        if (currentQuestionIndex > 0) {
-                            e.preventDefault();
-                            currentQuestionIndex--;
-                            renderQuestion();
-                        }
-                        break;
-                    case 'ArrowRight':
-                        if (currentQuestionIndex < testData.questions.length - 1) {
-                            e.preventDefault();
-                            currentQuestionIndex++;
-                            renderQuestion();
-                        }
-                        break;
-                }
-            });
-        }
-        
-        /* ========= Initialize Test ========= */
-        async function initializeTest() {
-            // Show loading screen
-            showScreen('loading');
-            
-            // Initialize Firebase
-            if (!initializeFirebase()) {
-                showError("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.");
-                return;
-            }
-            
-            // Get test code from URL
-            const testCode = getTestCodeFromURL();
-            
-            if (!testCode) {
-                showError("Test kodi kiritilmagan. URL da ?code=TEST_KODI ko'rinishida kod kiriting.");
-                return;
-            }
-            
-            // Load test from Firebase
-            const loaded = await loadTestFromFirebase(testCode);
-            
-            if (!loaded) {
-                // If Firebase fails, show error
-                showError(`"${testCode}" kodli test topilmadi yoki yuklanmadi.`);
-                return;
-            }
-            
-            // Initialize intro screen
-            initIntroScreen();
-            
-            // Setup event listeners
-            setupEventListeners();
-            
-            console.log("Test initialized successfully");
-        }
-        
-        /* ========= Start Application ========= */
-        // Start when page loads
-        document.addEventListener('DOMContentLoaded', initializeTest);
-        
-        // Prevent cheating
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key))) {
-                e.preventDefault();
-            }
-        });
-        
-        // Prevent image dragging
-        document.addEventListener('dragstart', (e) => {
-            if (e.target.tagName === 'IMG') e.preventDefault();
-        });
-        
-        // Add this to prevent MathJax errors
-        window.addEventListener('error', (e) => {
-            if (e.message.includes('MathJax')) {
-                e.preventDefault();
-                console.warn('MathJax error caught:', e.message);
-            }
-        });
-    </script>
+      });
+
+      // Prevent dragging images
+      document.addEventListener('dragstart', (e) => {
+        if (e.target.tagName === 'IMG') e.preventDefault();
+      });
+    }
+
+    // Initialize test
+    async function initializeTest() {
+      showScreen('loading');
+
+      if (!initializeFirebase()) {
+        showError("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.");
+        return;
+      }
+
+      const testCode = getTestCodeFromURL();
+      if (!testCode) {
+        showError("Test kodi kiritilmagan. URL da ?code=TEST_KODI ko'rinishida kod kiriting.");
+        return;
+      }
+
+      const loaded = await loadTestFromFirebase(testCode);
+      if (!loaded) {
+        showError(`"${testCode}" kodli test topilmadi yoki yuklanmadi.`);
+        return;
+      }
+
+      initIntroScreen();
+      setupEventListeners();
+
+      console.log("Test initialized successfully");
+    }
+
+    document.addEventListener('DOMContentLoaded', initializeTest);
+
+    // suppress MathJax errors bubbling up
+    window.addEventListener('error', (e) => {
+      if (e.message && e.message.includes('MathJax')) {
+        e.preventDefault();
+        console.warn('MathJax error caught:', e.message);
+      }
+    });
+  </script>
 </body>
 </html>
