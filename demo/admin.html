@@ -461,7 +461,7 @@
 
     .page-btn:disabled {
       opacity: 0.5;
-      cursor: not-all-allowed;
+      cursor: not-allowed;
     }
 
     /* Loading */
@@ -850,9 +850,24 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-  <script src="auth-utils.js"></script>
-
   <script>
+    // Firebase konfiguratsiyasi
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Firebaseni initialize qilish
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
     // Global o'zgaruvchilar
     let allUsers = [];
     let currentAdmin = null;
@@ -876,6 +891,48 @@
     const activeUsersEl = document.getElementById('active-users');
     const adminCountEl = document.getElementById('admin-count');
     const adminNameEl = document.getElementById('admin-name');
+
+    // Auth utils funksiyalari
+    const authUtils = {
+      getUser: function() {
+        const userData = localStorage.getItem('leadermath_user');
+        if (userData) {
+          return JSON.parse(userData);
+        }
+        return null;
+      },
+
+      isAdmin: function() {
+        const user = this.getUser();
+        if (!user) return false;
+        
+        return user.email === 'sohibjonmath@gmail.com';
+      },
+
+      requireAdmin: function() {
+        if (!this.isAdmin()) {
+          alert('Siz admin emassiz! Faqat admin kirishi mumkin.');
+          
+          const user = this.getUser();
+          if (user) {
+            window.location.href = 'index.html';
+          } else {
+            window.location.href = 'login.html';
+          }
+          return false;
+        }
+        return true;
+      },
+
+      logout: function() {
+        localStorage.removeItem('leadermath_user');
+        firebase.auth().signOut().then(() => {
+          console.log('Firebasedan chiqildi');
+        }).catch((error) => {
+          console.error('Chiqishda xatolik:', error);
+        });
+      }
+    };
 
     // Admin tekshiruvi
     if (!authUtils.isAdmin()) {
@@ -917,7 +974,6 @@
           const user = {
             id: doc.id,
             ...userData,
-            // Statusni aniqlash
             status: userData.status || 'active'
           };
           
@@ -991,9 +1047,9 @@
       pageNumbers.innerHTML = '';
       for (let i = 1; i <= totalPages; i++) {
         const pageBtn = document.createElement('button');
-        pageBtn.className = `page-btn ${i === currentPage ? 'active' : ''}`;
+        pageBtn.className = 'page-btn ' + (i === currentPage ? 'active' : '');
         pageBtn.textContent = i;
-        pageBtn.onclick = () => {
+        pageBtn.onclick = function() {
           currentPage = i;
           renderUsers();
         };
@@ -1059,15 +1115,14 @@
             <button class="action-btn edit" data-id="${user.id}" title="Tahrirlash">
               <i class="fas fa-edit"></i>
             </button>
-            ${user.email !== 'sohibjonmath@gmail.com' ? `
-              <button class="action-btn delete" data-id="${user.id}" title="O'chirish">
-                <i class="fas fa-trash"></i>
-              </button>
-            ` : `
-              <button class="action-btn delete" disabled title="Asosiy admin o'chirilmaydi">
-                <i class="fas fa-trash"></i>
-              </button>
-            `}
+            ${user.email !== 'sohibjonmath@gmail.com' ? 
+              '<button class="action-btn delete" data-id="' + user.id + '" title="O' + "'chirish" + '">' +
+                '<i class="fas fa-trash"></i>' +
+              '</button>' : 
+              '<button class="action-btn delete" disabled title="Asosiy admin o' + "'chirilmaydi" + '">' +
+                '<i class="fas fa-trash"></i>' +
+              '</button>'
+            }
           </div>
         `;
         
@@ -1076,11 +1131,15 @@
       
       // Action button event listener qo'shish
       document.querySelectorAll('.action-btn.edit').forEach(btn => {
-        btn.addEventListener('click', () => openEditModal(btn.dataset.id));
+        btn.addEventListener('click', function() {
+          openEditModal(this.dataset.id);
+        });
       });
       
       document.querySelectorAll('.action-btn.delete:not(:disabled)').forEach(btn => {
-        btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+        btn.addEventListener('click', function() {
+          openDeleteModal(this.dataset.id);
+        });
       });
     }
 
@@ -1108,13 +1167,13 @@
       
       // Asosiy adminni o'chirish mumkin emas
       if (user.email === 'sohibjonmath@gmail.com') {
-        alert('Asosiy adminni o'chirish mumkin emas!');
+        alert("Asosiy adminni o'chirish mumkin emas!");
         return;
       }
       
       deleteUserId = userId;
       document.getElementById('delete-user-name').textContent = 
-        `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Foydalanuvchi';
+        (user.firstName || '') + ' ' + (user.lastName || '').trim() || user.email || 'Foydalanuvchi';
       
       deleteModal.classList.add('active');
     }
@@ -1134,7 +1193,7 @@
           allUsers[userIndex] = { ...allUsers[userIndex], ...data };
         }
         
-        alert('Foydalanuvchi ma'lumotlari yangilandi!');
+        alert('Foydalanuvchi ma\'lumotlari yangilandi!');
         renderUsers();
         return true;
       } catch (error) {
@@ -1150,7 +1209,7 @@
         // Asosiy adminni o'chirishni tekshirish
         const user = allUsers.find(u => u.id === userId);
         if (user && user.email === 'sohibjonmath@gmail.com') {
-          alert('Asosiy adminni o'chirish mumkin emas!');
+          alert("Asosiy adminni o'chirish mumkin emas!");
           return false;
         }
         
@@ -1160,42 +1219,42 @@
         // Local datadan o'chirish
         allUsers = allUsers.filter(u => u.id !== userId);
         
-        alert('Foydalanuvchi o'chirildi!');
+        alert('Foydalanuvchi o\'chirildi!');
         renderUsers();
         return true;
       } catch (error) {
-        console.error('O'chirishda xatolik:', error);
+        console.error('O\'chirishda xatolik:', error);
         alert('Xatolik: ' + error.message);
         return false;
       }
     }
 
     // Event listenerlar
-    document.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Admin ma'lumotlarini yuklash
       await loadAdminData();
       
       // Search event
-      searchInput.addEventListener('input', () => {
+      searchInput.addEventListener('input', function() {
         currentPage = 1;
         renderUsers();
       });
       
       // Filter event
-      filterSelect.addEventListener('change', () => {
+      filterSelect.addEventListener('change', function() {
         currentPage = 1;
         renderUsers();
       });
       
       // Pagination events
-      prevPageBtn.addEventListener('click', () => {
+      prevPageBtn.addEventListener('click', function() {
         if (currentPage > 1) {
           currentPage--;
           renderUsers();
         }
       });
       
-      nextPageBtn.addEventListener('click', () => {
+      nextPageBtn.addEventListener('click', function() {
         const totalPages = Math.ceil(allUsers.length / usersPerPage);
         if (currentPage < totalPages) {
           currentPage++;
@@ -1204,7 +1263,7 @@
       });
       
       // Edit form submit
-      document.getElementById('edit-form').addEventListener('submit', async (e) => {
+      document.getElementById('edit-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
         const userId = document.getElementById('edit-user-id').value;
@@ -1225,7 +1284,7 @@
       });
       
       // Delete confirmation
-      document.getElementById('delete-confirm').addEventListener('click', async () => {
+      document.getElementById('delete-confirm').addEventListener('click', async function() {
         if (deleteUserId) {
           const success = await deleteUser(deleteUserId);
           if (success) {
@@ -1236,32 +1295,32 @@
       });
       
       // Modal close events
-      document.getElementById('edit-close').addEventListener('click', () => {
+      document.getElementById('edit-close').addEventListener('click', function() {
         editModal.classList.remove('active');
       });
       
-      document.getElementById('edit-cancel').addEventListener('click', () => {
+      document.getElementById('edit-cancel').addEventListener('click', function() {
         editModal.classList.remove('active');
       });
       
-      document.getElementById('delete-close').addEventListener('click', () => {
+      document.getElementById('delete-close').addEventListener('click', function() {
         deleteModal.classList.remove('active');
         deleteUserId = null;
       });
       
-      document.getElementById('delete-cancel').addEventListener('click', () => {
+      document.getElementById('delete-cancel').addEventListener('click', function() {
         deleteModal.classList.remove('active');
         deleteUserId = null;
       });
       
       // Modal overlay click
-      editModal.addEventListener('click', (e) => {
+      editModal.addEventListener('click', function(e) {
         if (e.target === editModal) {
           editModal.classList.remove('active');
         }
       });
       
-      deleteModal.addEventListener('click', (e) => {
+      deleteModal.addEventListener('click', function(e) {
         if (e.target === deleteModal) {
           deleteModal.classList.remove('active');
           deleteUserId = null;
@@ -1269,7 +1328,7 @@
       });
       
       // Logout
-      document.getElementById('logout-btn').addEventListener('click', () => {
+      document.getElementById('logout-btn').addEventListener('click', function() {
         if (confirm('Rostan ham admin panelidan chiqmoqchimisiz?')) {
           authUtils.logout();
           window.location.href = 'login.html';
@@ -1277,7 +1336,7 @@
       });
       
       // Escape key bilan modal yopish
-      document.addEventListener('keydown', (e) => {
+      document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
           editModal.classList.remove('active');
           deleteModal.classList.remove('active');
@@ -1287,7 +1346,7 @@
     });
 
     // Auto-refresh every 30 seconds
-    setInterval(() => {
+    setInterval(function() {
       loadUsers();
     }, 30000);
   </script>
