@@ -807,6 +807,39 @@
             });
         }
         
+        /* ========= Calculate Age from Birth Date ========= */
+        function calculateAge(birthDate) {
+            if (!birthDate) return '—';
+            
+            try {
+                // Firestore Timestamp obyekti bo'lsa
+                if (birthDate.seconds) {
+                    birthDate = new Date(birthDate.seconds * 1000);
+                } else if (birthDate.toDate) {
+                    // agar toDate() metodi mavjud bo'lsa (Firestore Timestamp)
+                    birthDate = birthDate.toDate();
+                } else {
+                    // String yoki boshqa formatda bo'lsa
+                    birthDate = new Date(birthDate);
+                }
+                
+                if (isNaN(birthDate.getTime())) return '—';
+                
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const monthDiff = today.getMonth() - birthDate.getMonth();
+                
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                }
+                
+                return age;
+            } catch (error) {
+                console.error("Yosh hisoblashda xatolik:", error);
+                return '—';
+            }
+        }
+        
         /* ========= Update User UI ========= */
         function updateUserUI() {
             if (!userData) return;
@@ -816,12 +849,12 @@
             elements.userFullName.textContent = fullName;
             
             // Calculate and update age
+            let ageDisplay = "Yosh: —";
             if (userData.birthDate) {
                 const age = calculateAge(userData.birthDate);
-                elements.userAge.textContent = `Yosh: ${age}`;
-            } else {
-                elements.userAge.textContent = "Yosh: —";
+                ageDisplay = `Yosh: ${age}`;
             }
+            elements.userAge.textContent = ageDisplay;
             
             // Update avatar (first letter of first name)
             const firstName = fullName.split(' ')[0] || 'U';
@@ -829,24 +862,6 @@
             
             // Show header
             elements.header.classList.remove('hidden');
-        }
-        
-        /* ========= Calculate Age from Birth Date ========= */
-        function calculateAge(birthDate) {
-            if (!birthDate) return '—';
-            
-            const birth = new Date(birthDate);
-            if (isNaN(birth.getTime())) return '—';
-            
-            const today = new Date();
-            let age = today.getFullYear() - birth.getFullYear();
-            const monthDiff = today.getMonth() - birth.getMonth();
-            
-            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-                age--;
-            }
-            
-            return age;
         }
         
         /* ========= Logout Function ========= */
