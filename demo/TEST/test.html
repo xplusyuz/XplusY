@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test - LeaderMath</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com;">
+    <title>Himoyalangan Test - LeaderMath</title>
     
     <!-- MathJax -->
     <script>
@@ -38,6 +39,7 @@
             --muted: #667a72;
             --frame: #e3efe8;
             --danger: #ef4444;
+            --warning: #f59e0b;
             --success: #22c55e;
         }
         
@@ -45,6 +47,10 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
         
         body {
@@ -52,12 +58,16 @@
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
+            overflow: hidden;
+            height: 100vh;
         }
         
         .wrap {
             max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
+            height: calc(100vh - 70px);
+            overflow-y: auto;
         }
         
         /* Header */
@@ -65,7 +75,10 @@
             background: white;
             border-bottom: 1px solid var(--frame);
             padding: 15px 0;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         
         .header-inner {
@@ -84,6 +97,34 @@
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        
+        /* Violation Badges */
+        .violation-badge {
+            font-size: 12px;
+            margin-left: 10px;
+            padding: 2px 8px;
+            background: var(--frame);
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        
+        .violation-badge.warning {
+            background: var(--warning);
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        
+        .violation-badge.danger {
+            background: var(--danger);
+            color: white;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
         }
         
         /* User Info in Header */
@@ -143,6 +184,7 @@
             padding: 30px;
             margin: 20px 0;
             box-shadow: 0 8px 24px rgba(31, 107, 69, 0.04);
+            min-height: 400px;
         }
         
         .hidden {
@@ -183,7 +225,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 1000;
+            z-index: 10000;
         }
         
         .loading-spinner {
@@ -239,9 +281,11 @@
         
         .question-image {
             max-width: 100%;
+            max-height: 300px;
             margin: 20px 0;
             border-radius: 12px;
             display: block;
+            object-fit: contain;
         }
         
         /* Options */
@@ -275,6 +319,7 @@
         .option input[type="checkbox"] {
             width: 20px;
             height: 20px;
+            cursor: pointer;
         }
         
         /* Open Answer */
@@ -286,6 +331,10 @@
             font-size: 16px;
             font-family: inherit;
             margin-top: 10px;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
         }
         
         .open-answer:focus {
@@ -429,25 +478,146 @@
             font-weight: bold;
             color: var(--brand);
             text-align: center;
-            margin: 20px 0;
-            padding: 15px;
+            margin: 0 20px;
+            padding: 10px 20px;
             background: #f1f8f4;
             border-radius: 12px;
+            min-width: 120px;
         }
         
         .timer.warning {
+            color: var(--warning);
+            background: #fef3c7;
+            animation: pulse 1s infinite;
+        }
+        
+        .timer.danger {
             color: var(--danger);
             background: #fee;
+            animation: pulse 0.5s infinite;
+        }
+        
+        /* Warning Modal */
+        .warning-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            animation: warningPulse 2s infinite;
+            font-family: 'Courier New', monospace;
+        }
+        
+        @keyframes warningPulse {
+            0% { background: rgba(239, 68, 68, 0.95); }
+            50% { background: rgba(185, 28, 28, 0.95); }
+            100% { background: rgba(239, 68, 68, 0.95); }
+        }
+        
+        .warning-content {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 80%;
+            border: 3px solid var(--danger);
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.7);
+        }
+        
+        .warning-content h2 {
+            color: #ff6b6b;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        
+        .warning-content p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .warning-content small {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        /* Full Screen Lock Warning */
+        .fullscreen-warning {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--danger);
+            color: white;
+            padding: 10px;
+            text-align: center;
+            z-index: 9998;
+            font-weight: bold;
+        }
+        
+        /* Security Monitor */
+        .security-monitor {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--text);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 100;
+            opacity: 0.8;
+        }
+        
+        .security-monitor.active {
+            background: var(--success);
+        }
+        
+        .security-monitor.warning {
+            background: var(--warning);
+        }
+        
+        .security-monitor.danger {
+            background: var(--danger);
+            animation: pulse 1s infinite;
+        }
+        
+        /* Cheating Prevention */
+        .cheat-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 10px,
+                rgba(255, 255, 255, 0.05) 10px,
+                rgba(255, 255, 255, 0.05) 20px
+            );
+            pointer-events: none;
+            z-index: -1;
         }
         
         /* Responsive */
         @media (max-width: 768px) {
             .wrap {
                 padding: 15px;
+                height: calc(100vh - 120px);
             }
             
             .card {
                 padding: 20px;
+                min-height: 300px;
             }
             
             .btn {
@@ -468,6 +638,12 @@
             .user-info {
                 order: 2;
             }
+            
+            .timer {
+                margin: 10px 0;
+                order: 3;
+                width: 100%;
+            }
         }
         
         /* Code input for manual test loading */
@@ -487,18 +663,31 @@
     </style>
 </head>
 <body>
+    <!-- Cheating Prevention Overlay -->
+    <div class="cheat-overlay" id="cheatOverlay"></div>
+    
     <!-- Loading Screen -->
     <div id="loadingScreen" class="card">
         <div class="loading-spinner"></div>
-        <h2>Yuklanmoqda...</h2>
-        <p id="loadingText">Tizimga kirish tekshirilmoqda...</p>
+        <h2>Xavfsizlik sozlamalari o'rnatilmoqda...</h2>
+        <p id="loadingText">Himoyalangan test muhiti tayyorlanmoqda...</p>
+        <div class="security-monitor">
+            <span>🔒</span> Himoya rejimi faollashtirilmoqda
+        </div>
+    </div>
+    
+    <!-- Full Screen Warning -->
+    <div id="fullscreenWarning" class="fullscreen-warning hidden">
+        ⚠️ Iltimos, testni to'liq ekran rejimida bajaring! Agar ekran kichik bo'lsa, test natijalari hisobga olinmaydi.
     </div>
     
     <!-- Header -->
     <header id="header" class="hidden">
         <div class="header-inner">
             <div class="logo">
-                <span>📚</span> LeaderMath Test
+                <span>📚</span> Himoyalangan Test
+                <span id="violationBadge" class="violation-badge">Buzilishlar: 0</span>
+                <span id="penaltyPoints" class="violation-badge hidden">Jarima: 0 ball</span>
             </div>
             
             <!-- Timer will be shown during test -->
@@ -511,8 +700,8 @@
                     <div class="user-age" id="userAge">Yosh: —</div>
                 </div>
                 <div class="user-avatar" id="userAvatar">U</div>
-                <button class="logout-btn" id="logoutBtn">
-                    <i>🚪</i> Chiqish
+                <button class="logout-btn" id="logoutBtn" disabled>
+                    <i>🚪</i> Chiqish (bloklangan)
                 </button>
             </div>
         </div>
@@ -521,9 +710,16 @@
     <div class="wrap">
         <!-- Login Required Card -->
         <div id="loginRequiredCard" class="card login-required hidden">
-            <h2>Test Yechish Uchun Tizimga Kiring</h2>
-            <p>Bu testni faqat ro'yxatdan o'tgan foydalanuvchilar yecha olishadi.</p>
-            <p>Iltimos, avval tizimga kiring yoki ro'yxatdan o'ting.</p>
+            <h2>Himoyalangan Test Tizimi</h2>
+            <p>Bu test to'liq himoyalangan muhitda o'tkaziladi:</p>
+            <ul style="text-align: left; margin: 20px auto; max-width: 500px;">
+                <li>🔒 To'liq ekran rejimi majburiy</li>
+                <li>📸 Screenshot va ekran yozib olish bloklangan</li>
+                <li>📋 Nusxa ko'chirish/qo'yish bloklangan</li>
+                <li>👁️ Boshqa tabga o'tish nazorat qilinadi</li>
+                <li>⚠️ Har qanday buzilish jarimaga olib keladi</li>
+            </ul>
+            <p>Testni boshlash uchun tizimga kiring.</p>
             <div class="btn-group">
                 <button id="goToLoginBtn" class="btn">Kirish sahifasiga o'tish</button>
                 <button id="goToRegisterBtn" class="btn">Ro'yxatdan o'tish</button>
@@ -546,6 +742,28 @@
             </div>
         </div>
         
+        <!-- Security Agreement -->
+        <div id="securityAgreementCard" class="card hidden">
+            <h2>Xavfsizlik Kelishuvi</h2>
+            <div style="background: var(--frame); padding: 20px; border-radius: 12px; margin: 20px 0;">
+                <p>Ushbu test to'liq himoyalangan muhitda o'tkaziladi. Testni boshlash bilan siz quyidagi shartlarga rozilik bildirasiz:</p>
+                <ol style="text-align: left; margin: 20px; padding-left: 20px;">
+                    <li>Test davomida faqat test ilovasidan foydalanishingiz kerak</li>
+                    <li>Ekran yozib olish, screenshot olish, nusxa ko'chirish/qo'yish taqiqlanadi</li>
+                    <li>Boshqa dasturlar yoki tablarga o'tish taqiqlanadi</li>
+                    <li>Test davomida to'liq ekran rejimida bo'lishingiz kerak</li>
+                    <li>Har qanday buzilish jarima ballarga olib keladi</li>
+                    <li>Qoidabuzarliklar test natijalarini bekor qilishi mumkin</li>
+                </ol>
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <label style="display: block; margin-bottom: 15px;">
+                    <input type="checkbox" id="agreeCheckbox"> Men yuqoridagi shartlarga roziman va testni adolatli bajarmoqchiman
+                </label>
+                <button id="agreeBtn" class="btn" disabled>Roziman va Testni Boshlash</button>
+            </div>
+        </div>
+        
         <!-- Intro Card -->
         <div id="introCard" class="card hidden">
             <h1 id="testTitle">Test</h1>
@@ -559,8 +777,11 @@
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
+                <div id="securityStatus" class="security-monitor active" style="position: relative; margin: 20px auto; max-width: 300px;">
+                    <span>✅</span> Himoya tizimlari faol
+                </div>
                 <button id="startBtn" class="btn" style="padding: 15px 40px; font-size: 18px;">
-                    Testni Boshlash
+                    🔒 Himoyalangan Testni Boshlash
                 </button>
             </div>
         </div>
@@ -587,7 +808,7 @@
             
             <!-- Open Answer (for open questions) -->
             <div id="openAnswerContainer" class="hidden">
-                <input type="text" id="openAnswerInput" class="open-answer" placeholder="Javobingizni kiriting...">
+                <input type="text" id="openAnswerInput" class="open-answer" placeholder="Javobingizni kiriting..." autocomplete="off">
             </div>
             
             <!-- Navigation Dots -->
@@ -627,6 +848,14 @@
                     <div style="font-size: 14px; color: var(--muted);">Vaqt</div>
                     <div style="font-size: 36px; font-weight: bold;" id="timeUsed">00:00</div>
                 </div>
+                <div class="result-item">
+                    <div style="font-size: 14px; color: var(--muted);">Jarima ballar</div>
+                    <div style="font-size: 36px; font-weight: bold; color: var(--danger);" id="penaltyResult">0</div>
+                </div>
+                <div class="result-item">
+                    <div style="font-size: 14px; color: var(--muted);">Buzilishlar</div>
+                    <div style="font-size: 36px; font-weight: bold;" id="violationResult">0</div>
+                </div>
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
@@ -637,14 +866,21 @@
         
         <!-- Error Card -->
         <div id="errorCard" class="card hidden">
-            <h2 style="color: var(--danger);">Xatolik!</h2>
-            <p id="errorMessage">Test yuklanmadi. Iltimos, internet aloqasini tekshiring.</p>
-            <button id="retryBtn" class="btn">Qayta Urinish</button>
-            <button id="loadLocalBtn" class="btn">LocalStorage'dan Yuklash</button>
+            <h2 style="color: var(--danger);">Xavfsizlik Xatoligi!</h2>
+            <p id="errorMessage">Himoya tizimlarida muammo aniqlangan. Test davom ettirilmaydi.</p>
+            <div class="btn-group">
+                <button id="retryBtn" class="btn">Qayta Urinish</button>
+                <button id="loadLocalBtn" class="btn">LocalStorage'dan Yuklash</button>
+            </div>
         </div>
         
         <!-- Status Messages -->
         <div id="statusMessage" class="status hidden"></div>
+    </div>
+    
+    <!-- Security Monitor (Bottom Right) -->
+    <div id="securityMonitor" class="security-monitor active hidden">
+        <span>🛡️</span> <span id="monitorText">Himoya faol</span>
     </div>
     
     <script>
@@ -672,6 +908,12 @@
         let timeRemaining = 0;
         let timeSpent = 0;
         let testStarted = false;
+        let securityEnabled = false;
+        let violations = [];
+        let penaltyPoints = 0;
+        let isFullScreen = false;
+        let visibilityCheckInterval = null;
+        let cheatDetectionInterval = null;
         
         /* ========= DOM Elements ========= */
         const elements = {
@@ -681,10 +923,24 @@
             header: document.getElementById('header'),
             loginRequiredCard: document.getElementById('loginRequiredCard'),
             codeInputCard: document.getElementById('codeInputCard'),
+            securityAgreementCard: document.getElementById('securityAgreementCard'),
             introCard: document.getElementById('introCard'),
             questionCard: document.getElementById('questionCard'),
             resultsCard: document.getElementById('resultsCard'),
             errorCard: document.getElementById('errorCard'),
+            
+            // Security elements
+            fullscreenWarning: document.getElementById('fullscreenWarning'),
+            violationBadge: document.getElementById('violationBadge'),
+            penaltyPoints: document.getElementById('penaltyPoints'),
+            securityMonitor: document.getElementById('securityMonitor'),
+            monitorText: document.getElementById('monitorText'),
+            cheatOverlay: document.getElementById('cheatOverlay'),
+            securityStatus: document.getElementById('securityStatus'),
+            
+            // Agreement
+            agreeCheckbox: document.getElementById('agreeCheckbox'),
+            agreeBtn: document.getElementById('agreeBtn'),
             
             // User info elements
             userFullName: document.getElementById('userFullName'),
@@ -731,6 +987,8 @@
             wrongCount: document.getElementById('wrongCount'),
             totalScoreResult: document.getElementById('totalScoreResult'),
             timeUsed: document.getElementById('timeUsed'),
+            penaltyResult: document.getElementById('penaltyResult'),
+            violationResult: document.getElementById('violationResult'),
             
             // Buttons
             startBtn: document.getElementById('startBtn'),
@@ -747,7 +1005,493 @@
             statusMessage: document.getElementById('statusMessage')
         };
         
-        /* ========= Initialize Firebase ========= */
+        /* ========= SECURITY FUNCTIONS ========= */
+        
+        // 1. Full Screen Lock
+        function enableFullScreen() {
+            const elem = document.documentElement;
+            
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().then(() => {
+                    isFullScreen = true;
+                    updateSecurityMonitor("To'liq ekran rejimi faol");
+                }).catch(err => {
+                    console.error("Fullscreen error:", err);
+                    recordViolation("fullscreen_failed", 5);
+                });
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen().then(() => {
+                    isFullScreen = true;
+                    updateSecurityMonitor("To'liq ekran rejimi faol");
+                }).catch(err => {
+                    console.error("Fullscreen error:", err);
+                    recordViolation("fullscreen_failed", 5);
+                });
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen().then(() => {
+                    isFullScreen = true;
+                    updateSecurityMonitor("To'liq ekran rejimi faol");
+                }).catch(err => {
+                    console.error("Fullscreen error:", err);
+                    recordViolation("fullscreen_failed", 5);
+                });
+            } else {
+                recordViolation("fullscreen_not_supported", 10);
+                showWarning("To'liq ekran rejimi qo'llab-quvvatlanmaydi. Test natijalari hisobga olinmasligi mumkin.");
+            }
+            
+            // Listen for fullscreen changes
+            document.addEventListener('fullscreenchange', handleFullScreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullScreenChange);
+            document.addEventListener('MSFullscreenChange', handleFullScreenChange);
+        }
+        
+        function handleFullScreenChange() {
+            const isFullscreen = !!(document.fullscreenElement || 
+                                   document.webkitFullscreenElement || 
+                                   document.mozFullScreenElement || 
+                                   document.msFullscreenElement);
+            
+            isFullScreen = isFullscreen;
+            
+            if (testStarted && !isFullscreen) {
+                // User exited fullscreen during test
+                recordViolation("fullscreen_exit", 15);
+                showWarning("TEST DAVOMIDA TO'LIQ EKRANDAN CHIQISH MUMKIN EMAS!");
+                applyPenalty(15);
+                
+                // Force back to fullscreen
+                setTimeout(() => {
+                    if (testStarted && !isFullScreen) {
+                        enableFullScreen();
+                    }
+                }, 1000);
+            }
+            
+            // Show/hide warning
+            elements.fullscreenWarning.classList.toggle('hidden', isFullscreen);
+            updateSecurityMonitor(isFullscreen ? "To'liq ekran rejimi faol" : "To'liq ekran rejimi o'chirilgan!");
+        }
+        
+        // 2. Screen Recording & Screenshot Blocking
+        function blockScreenRecording() {
+            // Override getDisplayMedia
+            if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+                const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+                navigator.mediaDevices.getDisplayMedia = function() {
+                    recordViolation("screen_recording_attempt", 30);
+                    showWarning("EKRAN YOZIB OLISH ANIQLANDI!");
+                    applyPenalty(30);
+                    return Promise.reject(new Error('Screen recording is blocked during test'));
+                };
+            }
+            
+            // Detect Print Screen and screenshot shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'PrintScreen' || 
+                    (e.ctrlKey && e.key === 'p') || 
+                    (e.metaKey && e.shiftKey && e.key === '4') || // Mac screenshot
+                    (e.metaKey && e.shiftKey && e.key === '3')) { // Mac full screenshot
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    recordViolation("screenshot_attempt", 20);
+                    showWarning("SCREENSHOT OLISH ANIQLANDI!");
+                    applyPenalty(20);
+                    
+                    // Clear clipboard
+                    navigator.clipboard.writeText('').catch(() => {});
+                    
+                    return false;
+                }
+            });
+        }
+        
+        // 3. Tab Switching Detection
+        function monitorTabFocus() {
+            let hidden, visibilityChange;
+            
+            if (typeof document.hidden !== "undefined") {
+                hidden = "hidden";
+                visibilityChange = "visibilitychange";
+            } else if (typeof document.msHidden !== "undefined") {
+                hidden = "msHidden";
+                visibilityChange = "msvisibilitychange";
+            } else if (typeof document.webkitHidden !== "undefined") {
+                hidden = "webkitHidden";
+                visibilityChange = "webkitvisibilitychange";
+            }
+            
+            document.addEventListener(visibilityChange, function() {
+                if (document[hidden] && testStarted) {
+                    // Tab switched or window minimized
+                    recordViolation("tab_switch", 10);
+                    showWarning("BOSHQA TAB YOKI DASTURGA O'TILGAN!");
+                    applyPenalty(10);
+                    
+                    updateSecurityMonitor("Tab o'zgartirildi!", "danger");
+                    
+                    // Play warning sound (if allowed)
+                    try {
+                        const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ');
+                        audio.play();
+                    } catch(e) {}
+                } else if (testStarted) {
+                    updateSecurityMonitor("Himoya faol", "active");
+                }
+            }, false);
+            
+            // Periodic visibility check
+            visibilityCheckInterval = setInterval(() => {
+                if (document[hidden] && testStarted) {
+                    recordViolation("hidden_tab_detected", 5);
+                    applyPenalty(5);
+                }
+            }, 5000);
+        }
+        
+        // 4. Clipboard Blocking
+        function blockClipboard() {
+            document.addEventListener('copy', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                    recordViolation("copy_attempt", 15);
+                    showWarning("NUSXA KO'CHIRISH TAQIQLANGAN!");
+                    applyPenalty(15);
+                }
+            });
+            
+            document.addEventListener('paste', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                    recordViolation("paste_attempt", 15);
+                    showWarning("QO'YISH (PASTE) TAQIQLANGAN!");
+                    applyPenalty(15);
+                }
+            });
+            
+            document.addEventListener('cut', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                    recordViolation("cut_attempt", 15);
+                    showWarning("KESISH (CUT) TAQIQLANGAN!");
+                    applyPenalty(15);
+                }
+            });
+        }
+        
+        // 5. Developer Tools Blocking
+        function blockDeveloperTools() {
+            // Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'F12' || 
+                    (e.ctrlKey && e.shiftKey && e.key === 'I') || 
+                    (e.ctrlKey && e.shiftKey && e.key === 'J') || 
+                    (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+                    (e.metaKey && e.altKey && e.key === 'I') || // Mac
+                    (e.metaKey && e.altKey && e.key === 'J')) { // Mac
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    recordViolation("devtools_attempt", 25);
+                    showWarning("DEVELOPER TOOLS OCHISH TAQIQLANGAN!");
+                    applyPenalty(25);
+                    
+                    return false;
+                }
+            });
+            
+            // Detect devtools opening by checking console
+            const element = new Image();
+            Object.defineProperty(element, 'id', {
+                get: function() {
+                    recordViolation("devtools_detected", 50);
+                    showWarning("DEVELOPER TOOLS ANIQLANDI!");
+                    applyPenalty(50);
+                }
+            });
+            
+            console.log('%c ', element);
+            
+            // Check debugger usage
+            setInterval(() => {
+                if (testStarted) {
+                    const start = performance.now();
+                    debugger;
+                    const end = performance.now();
+                    
+                    if (end - start > 100) {
+                        recordViolation("debugger_detected", 40);
+                        showWarning("DEBUGGER ANIQLANDI!");
+                        applyPenalty(40);
+                    }
+                }
+            }, 1000);
+        }
+        
+        // 6. Drag & Drop Blocking
+        function blockDragDrop() {
+            document.addEventListener('dragstart', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                }
+            });
+            
+            document.addEventListener('drop', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                    recordViolation("drop_attempt", 10);
+                    showWarning("FAYL YUKLASH TAQIQLANGAN!");
+                }
+            });
+            
+            document.addEventListener('dragover', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                }
+            });
+        }
+        
+        // 7. Cheating Detection System
+        function startCheatDetection() {
+            // Monitor mouse leaving window
+            document.addEventListener('mouseleave', function(e) {
+                if (testStarted && e.clientY <= 0) {
+                    recordViolation("mouse_leave", 5);
+                    applyPenalty(5);
+                }
+            });
+            
+            // Monitor rapid clicking (possible automation)
+            let clickCount = 0;
+            let clickTimer = null;
+            document.addEventListener('click', function() {
+                if (!testStarted) return;
+                
+                clickCount++;
+                if (!clickTimer) {
+                    clickTimer = setTimeout(() => {
+                        clickCount = 0;
+                        clickTimer = null;
+                    }, 1000);
+                }
+                
+                if (clickCount > 10) { // More than 10 clicks per second
+                    recordViolation("rapid_clicking", 10);
+                    showWarning("JUDAYA TEZ BOSISH ANIQLANDI!");
+                    applyPenalty(10);
+                    clickCount = 0;
+                }
+            });
+            
+            // Detect iframe or popup opening
+            window.addEventListener('blur', function() {
+                if (testStarted) {
+                    recordViolation("window_blur", 8);
+                    applyPenalty(8);
+                }
+            });
+            
+            // Detect right click
+            document.addEventListener('contextmenu', function(e) {
+                if (testStarted) {
+                    e.preventDefault();
+                    recordViolation("right_click", 5);
+                    showWarning("O'NG TUGMA BLOKLANGAN!");
+                    applyPenalty(5);
+                    return false;
+                }
+            });
+            
+            // Periodic cheat detection
+            cheatDetectionInterval = setInterval(() => {
+                if (!testStarted) return;
+                
+                // Check if window is focused
+                if (!document.hasFocus()) {
+                    recordViolation("window_not_focused", 3);
+                    applyPenalty(3);
+                }
+                
+                // Check for suspicious browser extensions
+                if (window.chrome && chrome.runtime) {
+                    try {
+                        // This might detect some extensions
+                        chrome.runtime.sendMessage("test", () => {});
+                    } catch(e) {
+                        // Extension detected
+                        recordViolation("extension_detected", 20);
+                    }
+                }
+            }, 10000);
+        }
+        
+        // 8. Security Monitor Updates
+        function updateSecurityMonitor(message, status = "active") {
+            elements.securityMonitor.classList.remove("active", "warning", "danger");
+            elements.securityMonitor.classList.add(status);
+            elements.monitorText.textContent = message;
+            
+            if (elements.securityStatus) {
+                elements.securityStatus.classList.remove("active", "warning", "danger");
+                elements.securityStatus.classList.add(status);
+                elements.securityStatus.querySelector("span").textContent = 
+                    status === "danger" ? "⚠️" : status === "warning" ? "⚠️" : "✅";
+                elements.securityStatus.querySelector("span").nextSibling.textContent = 
+                    " " + message;
+            }
+        }
+        
+        // 9. Violation Recording
+        function recordViolation(type, penalty = 0) {
+            const violation = {
+                type: type,
+                timestamp: new Date().toISOString(),
+                penalty: penalty,
+                user: currentUser ? currentUser.uid : 'anonymous',
+                testCode: currentTestCode,
+                pageX: window.pageXOffset,
+                pageY: window.pageYOffset,
+                userAgent: navigator.userAgent
+            };
+            
+            violations.push(violation);
+            
+            // Update violation badge
+            elements.violationBadge.textContent = `Buzilishlar: ${violations.length}`;
+            elements.violationBadge.classList.remove("warning", "danger");
+            
+            if (violations.length >= 10) {
+                elements.violationBadge.classList.add("danger");
+            } else if (violations.length >= 5) {
+                elements.violationBadge.classList.add("warning");
+            }
+            
+            // Apply penalty
+            if (penalty > 0) {
+                applyPenalty(penalty);
+            }
+            
+            // Save to Firestore
+            if (db && currentUser && testStarted) {
+                db.collection('violations').add(violation);
+            }
+            
+            // Save to localStorage
+            saveViolationToLocalStorage(violation);
+            
+            console.warn(`Violation: ${type} (Penalty: ${penalty})`);
+        }
+        
+        // 10. Penalty Application
+        function applyPenalty(points) {
+            penaltyPoints += points;
+            
+            // Update penalty display
+            elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints} ball`;
+            elements.penaltyPoints.classList.remove("hidden");
+            
+            // Flash penalty badge
+            elements.penaltyPoints.style.animation = "none";
+            setTimeout(() => {
+                elements.penaltyPoints.style.animation = "pulse 0.5s 3";
+            }, 10);
+        }
+        
+        // 11. Warning Display
+        function showWarning(message) {
+            if (!testStarted) return;
+            
+            const warningModal = document.createElement('div');
+            warningModal.className = 'warning-modal';
+            warningModal.innerHTML = `
+                <div class="warning-content">
+                    <h2>⚠️ XAVFSIZLIK OGOHLANTIRISHI</h2>
+                    <p>${message}</p>
+                    <p><small>Qoidabuzarlik qayd etildi. Jarima: ${penaltyPoints} ball</small></p>
+                    <p><small>Qo'shimcha buzilishlar testni bekor qilishi mumkin</small></p>
+                </div>
+            `;
+            
+            document.body.appendChild(warningModal);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                if (warningModal.parentNode) {
+                    warningModal.remove();
+                }
+            }, 3000);
+        }
+        
+        // 12. Save Violation to LocalStorage
+        function saveViolationToLocalStorage(violation) {
+            try {
+                const savedViolations = JSON.parse(localStorage.getItem('testViolations') || '[]');
+                savedViolations.push(violation);
+                localStorage.setItem('testViolations', JSON.stringify(savedViolations));
+            } catch (error) {
+                console.error("Error saving violation:", error);
+            }
+        }
+        
+        // 13. Enable All Security Features
+        function enableAllSecurityFeatures() {
+            if (securityEnabled) return;
+            
+            elements.loadingText.textContent = "Xavfsizlik tizimlari faollashtirilmoqda...";
+            
+            // Enable all security features
+            enableFullScreen();
+            blockScreenRecording();
+            monitorTabFocus();
+            blockClipboard();
+            blockDeveloperTools();
+            blockDragDrop();
+            startCheatDetection();
+            
+            // Show security monitor
+            elements.securityMonitor.classList.remove("hidden");
+            updateSecurityMonitor("Barcha himoya tizimlari faol", "active");
+            
+            // Disable logout during test
+            elements.logoutBtn.disabled = true;
+            elements.logoutBtn.title = "Test davomida chiqish mumkin emas";
+            
+            securityEnabled = true;
+            console.log("All security features enabled");
+        }
+        
+        // 14. Disable Security Features (after test)
+        function disableSecurityFeatures() {
+            securityEnabled = false;
+            
+            // Clear intervals
+            if (visibilityCheckInterval) clearInterval(visibilityCheckInterval);
+            if (cheatDetectionInterval) clearInterval(cheatDetectionInterval);
+            
+            // Re-enable logout
+            elements.logoutBtn.disabled = false;
+            elements.logoutBtn.title = "";
+            
+            // Exit fullscreen
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+            
+            // Hide security monitor
+            elements.securityMonitor.classList.add("hidden");
+            
+            console.log("Security features disabled");
+        }
+        
+        /* ========= APPLICATION FUNCTIONS ========= */
+        
+        // Initialize Firebase
         function initializeFirebase() {
             try {
                 firebase.initializeApp(firebaseConfig);
@@ -761,7 +1505,7 @@
             }
         }
         
-        /* ========= Check User Authentication ========= */
+        // Check User Authentication
         function checkUserAuthentication() {
             return new Promise((resolve, reject) => {
                 auth.onAuthStateChanged(async (user) => {
@@ -769,7 +1513,6 @@
                         currentUser = user;
                         console.log("User is logged in:", user.uid);
                         
-                        // Load user data from Firestore
                         try {
                             const userDoc = await db.collection('foydalanuvchilar').doc(user.uid).get();
                             if (userDoc.exists) {
@@ -779,7 +1522,6 @@
                                 resolve(true);
                             } else {
                                 console.log("User document not found");
-                                // Create basic user data if not exists
                                 userData = {
                                     fullName: user.displayName || "Foydalanuvchi",
                                     loginId: user.email || user.phoneNumber || "—"
@@ -789,7 +1531,6 @@
                             }
                         } catch (error) {
                             console.error("Error loading user data:", error);
-                            // Still allow to proceed with basic info
                             userData = {
                                 fullName: "Foydalanuvchi",
                                 loginId: "—"
@@ -807,19 +1548,16 @@
             });
         }
         
-        /* ========= Calculate Age from Birth Date ========= */
+        // Calculate Age from Birth Date
         function calculateAge(birthDate) {
             if (!birthDate) return '—';
             
             try {
-                // Firestore Timestamp obyekti bo'lsa
                 if (birthDate.seconds) {
                     birthDate = new Date(birthDate.seconds * 1000);
                 } else if (birthDate.toDate) {
-                    // agar toDate() metodi mavjud bo'lsa (Firestore Timestamp)
                     birthDate = birthDate.toDate();
                 } else {
-                    // String yoki boshqa formatda bo'lsa
                     birthDate = new Date(birthDate);
                 }
                 
@@ -840,15 +1578,13 @@
             }
         }
         
-        /* ========= Update User UI ========= */
+        // Update User UI
         function updateUserUI() {
             if (!userData) return;
             
-            // Update user name
             const fullName = userData.fullName || "Foydalanuvchi";
             elements.userFullName.textContent = fullName;
             
-            // Calculate and update age
             let ageDisplay = "Yosh: —";
             if (userData.birthDate) {
                 const age = calculateAge(userData.birthDate);
@@ -856,17 +1592,16 @@
             }
             elements.userAge.textContent = ageDisplay;
             
-            // Update avatar (first letter of first name)
             const firstName = fullName.split(' ')[0] || 'U';
             elements.userAvatar.textContent = firstName.charAt(0).toUpperCase();
             
-            // Show header
             elements.header.classList.remove('hidden');
         }
         
-        /* ========= Logout Function ========= */
+        // Logout Function
         function logout() {
             if (confirm("Rostan ham tizimdan chiqmoqchimisiz?")) {
+                disableSecurityFeatures();
                 auth.signOut().then(() => {
                     window.location.href = 'login.html';
                 }).catch((error) => {
@@ -876,13 +1611,13 @@
             }
         }
         
-        /* ========= Get Test Code from URL ========= */
+        // Get Test Code from URL
         function getTestCodeFromURL() {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get('code');
         }
         
-        /* ========= Load Test from Firebase ========= */
+        // Load Test from Firebase
         async function loadTestFromFirebase(code) {
             try {
                 elements.loadingText.textContent = "Firestore'dan test yuklanmoqda...";
@@ -900,12 +1635,9 @@
                 
                 console.log("Test yuklandi:", testData);
                 
-                // Check if test data has required fields
                 if (!testData.questions || !Array.isArray(testData.questions)) {
-                    console.warn("Testda savollar maydoni yo'q yoki array emas. Test ma'lumotlari:", testData);
-                    // Try to fix it
+                    console.warn("Testda savollar maydoni yo'q yoki array emas.");
                     if (testData.questions && typeof testData.questions === 'object') {
-                        // Convert object to array if needed
                         const questionsArray = Object.values(testData.questions);
                         testData.questions = questionsArray;
                     } else {
@@ -913,7 +1645,6 @@
                     }
                 }
                 
-                // Normalize test data
                 normalizeTestData();
                 
                 console.log("Test loaded successfully:", testData.title);
@@ -926,24 +1657,20 @@
             }
         }
         
-        /* ========= Normalize Test Data ========= */
+        // Normalize Test Data
         function normalizeTestData() {
             if (!testData) return;
             
-            // Set defaults
             testData.title = testData.title || "Test";
             testData.description = testData.description || "";
             testData.code = testData.code || currentTestCode;
             testData.durationMinutes = testData.durationMinutes || 30;
             
-            // Ensure questions array exists
             if (!testData.questions || !Array.isArray(testData.questions)) {
                 testData.questions = [];
             }
             
-            // Normalize each question
             testData.questions.forEach((q, index) => {
-                // Ensure question is an object
                 if (!q || typeof q !== 'object') {
                     q = {};
                 }
@@ -952,28 +1679,24 @@
                 q.section = q.section || "Umumiy";
                 q.type = q.type || "variant";
                 
-                // For variant questions
                 if (q.type === 'variant') {
                     q.options = q.options || ["A", "B", "C", "D"];
                     q.correctIndex = q.correctIndex || 0;
                 }
                 
-                // For open questions
                 if (q.type === 'open') {
                     q.correctAnswer = q.correctAnswer || "";
                 }
                 
-                // Save back to array
                 testData.questions[index] = q;
             });
             
-            // Calculate total points
             testData.totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 0), 0);
             
             console.log("Normalized test data:", testData);
         }
         
-        /* ========= Load Test from LocalStorage ========= */
+        // Load Test from LocalStorage
         function loadTestFromLocalStorage(code) {
             try {
                 const savedTests = JSON.parse(localStorage.getItem('savedTests') || '{}');
@@ -995,24 +1718,26 @@
             }
         }
         
-        /* ========= Show/Hide Screens ========= */
+        // Show/Hide Screens
         function showScreen(screenName) {
-            // Hide all screens
             elements.loginRequiredCard.classList.add('hidden');
             elements.codeInputCard.classList.add('hidden');
+            elements.securityAgreementCard.classList.add('hidden');
             elements.introCard.classList.add('hidden');
             elements.questionCard.classList.add('hidden');
             elements.resultsCard.classList.add('hidden');
             elements.errorCard.classList.add('hidden');
             elements.loadingScreen.classList.add('hidden');
             
-            // Show requested screen
             switch(screenName) {
                 case 'loginRequired':
                     elements.loginRequiredCard.classList.remove('hidden');
                     break;
                 case 'codeInput':
                     elements.codeInputCard.classList.remove('hidden');
+                    break;
+                case 'securityAgreement':
+                    elements.securityAgreementCard.classList.remove('hidden');
                     break;
                 case 'intro':
                     elements.introCard.classList.remove('hidden');
@@ -1032,13 +1757,13 @@
             }
         }
         
-        /* ========= Show Error ========= */
+        // Show Error
         function showError(message) {
             elements.errorMessage.textContent = message;
             showScreen('error');
         }
         
-        /* ========= Show Status Message ========= */
+        // Show Status Message
         function showStatus(message, type = 'info') {
             elements.statusMessage.textContent = message;
             elements.statusMessage.className = `status ${type}`;
@@ -1049,7 +1774,7 @@
             }, 5000);
         }
         
-        /* ========= Initialize Intro Screen ========= */
+        // Initialize Intro Screen
         function initIntroScreen() {
             if (!testData) return;
             
@@ -1060,17 +1785,17 @@
             elements.totalPoints.textContent = testData.totalPoints;
             elements.testCode.textContent = currentTestCode;
             
-            // Show code badge only if code exists
             if (currentTestCode) {
                 elements.codeBadge.classList.remove('hidden');
             } else {
                 elements.codeBadge.classList.add('hidden');
             }
             
-            showScreen('intro');
+            // Show security agreement first
+            showScreen('securityAgreement');
         }
         
-        /* ========= Build Navigation Dots ========= */
+        // Build Navigation Dots
         function buildNavDots() {
             elements.navDots.innerHTML = '';
             
@@ -1093,7 +1818,7 @@
             updateNavDots();
         }
         
-        /* ========= Update Navigation Dots ========= */
+        // Update Navigation Dots
         function updateNavDots() {
             const dots = elements.navDots.querySelectorAll('.dot');
             
@@ -1110,14 +1835,11 @@
             });
         }
         
-        /* ========= Load Question Image ========= */
+        // Load Question Image
         function loadQuestionImage(questionIndex) {
             const img = elements.questionImage;
-            
-            // Hide image initially
             img.classList.add('hidden');
             
-            // If test code exists, try to load from code folder
             if (currentTestCode) {
                 const imageNumber = questionIndex + 1;
                 const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
@@ -1127,7 +1849,6 @@
                 
                 const tryLoadImage = () => {
                     if (currentExtension >= extensions.length) {
-                        // All extensions tried, hide image
                         img.classList.add('hidden');
                         return;
                     }
@@ -1155,7 +1876,7 @@
             }
         }
         
-        /* ========= Render Question ========= */
+        // Render Question
         function renderQuestion() {
             if (!testData || !testData.questions[currentQuestionIndex]) return;
             
@@ -1163,15 +1884,12 @@
             
             console.log(`Rendering question ${currentQuestionIndex + 1}:`, question);
             
-            // Update basic info
             elements.currentQ.textContent = currentQuestionIndex + 1;
             elements.totalQ.textContent = testData.questions.length;
             elements.sectionName.textContent = question.section || "Umumiy";
             
-            // Load image
             loadQuestionImage(currentQuestionIndex);
             
-            // Show question text if exists
             if (question.text) {
                 elements.questionText.innerHTML = question.text;
                 elements.questionText.classList.remove('hidden');
@@ -1179,26 +1897,21 @@
                 elements.questionText.classList.add('hidden');
             }
             
-            // Clear previous options
             elements.optionsContainer.innerHTML = '';
             elements.optionsContainer.classList.add('hidden');
             elements.openAnswerContainer.classList.add('hidden');
             
-            // Render based on question type
             if (question.type === 'variant') {
                 renderVariantQuestion(question);
             } else if (question.type === 'open') {
                 renderOpenQuestion(question);
             } else {
-                // Default to variant if type not specified
                 renderVariantQuestion(question);
             }
             
-            // Update navigation
             updateNavDots();
             updateNavigationButtons();
             
-            // Re-render MathJax
             if (window.MathJax && MathJax.typesetPromise) {
                 setTimeout(() => {
                     MathJax.typesetPromise().catch(console.error);
@@ -1206,7 +1919,7 @@
             }
         }
         
-        /* ========= Render Variant Question ========= */
+        // Render Variant Question
         function renderVariantQuestion(question) {
             elements.optionsContainer.classList.remove('hidden');
             
@@ -1228,12 +1941,10 @@
                 }
                 
                 input.addEventListener('change', () => {
-                    // Remove selection from all options
                     document.querySelectorAll('.option').forEach(opt => {
                         opt.classList.remove('selected');
                     });
                     
-                    // Add selection to clicked option
                     optionDiv.classList.add('selected');
                     userAnswers[currentQuestionIndex] = optionIndex;
                     updateNavDots();
@@ -1249,38 +1960,34 @@
             });
         }
         
-        /* ========= Render Open Question ========= */
+        // Render Open Question
         function renderOpenQuestion(question) {
             elements.openAnswerContainer.classList.remove('hidden');
             
-            // Set current answer if exists
             if (userAnswers[currentQuestionIndex] !== undefined) {
                 elements.openAnswerInput.value = userAnswers[currentQuestionIndex];
             } else {
                 elements.openAnswerInput.value = '';
             }
             
-            // Update answer on input
             elements.openAnswerInput.oninput = () => {
                 userAnswers[currentQuestionIndex] = elements.openAnswerInput.value;
                 updateNavDots();
             };
         }
         
-        /* ========= Update Navigation Buttons ========= */
+        // Update Navigation Buttons
         function updateNavigationButtons() {
             elements.prevBtn.disabled = currentQuestionIndex === 0;
             elements.nextBtn.disabled = currentQuestionIndex === testData.questions.length - 1;
         }
         
-        /* ========= Start Timer ========= */
+        // Start Timer
         function startTimer() {
             timeRemaining = (testData.durationMinutes || 30) * 60;
             timeSpent = 0;
             
             updateTimerDisplay();
-            
-            // Show timer in header
             elements.timer.classList.remove('hidden');
             
             timerInterval = setInterval(() => {
@@ -1297,22 +2004,23 @@
             }, 1000);
         }
         
-        /* ========= Update Timer Display ========= */
+        // Update Timer Display
         function updateTimerDisplay() {
             const minutes = Math.floor(timeRemaining / 60);
             const seconds = timeRemaining % 60;
             
             elements.timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             
-            // Add warning class if less than 5 minutes
-            if (timeRemaining < 300) { // 5 minutes
-                elements.timer.classList.add('warning');
-            } else {
-                elements.timer.classList.remove('warning');
+            elements.timer.classList.remove("warning", "danger");
+            if (timeRemaining < 300) {
+                elements.timer.classList.add("warning");
+            }
+            if (timeRemaining < 60) {
+                elements.timer.classList.add("danger");
             }
         }
         
-        /* ========= Calculate Results ========= */
+        // Calculate Results
         function calculateResults() {
             let correctCount = 0;
             let totalScore = 0;
@@ -1326,21 +2034,22 @@
                         totalScore += (question.points || 1);
                     }
                 } else if (question.type === 'open') {
-                    // For open questions, we need manual checking
-                    // For now, just count as correct if answered
                     if (userAnswer && userAnswer.trim() !== '') {
-                        // In real system, you'd compare with correctAnswer
+                        // For open questions, we'd need manual grading
+                        // For now, give full points if answered
                         correctCount++;
                         totalScore += (question.points || 1);
                     }
                 } else {
-                    // Default to variant type
                     if (userAnswer === (question.correctIndex || 0)) {
                         correctCount++;
                         totalScore += (question.points || 1);
                     }
                 }
             });
+            
+            // Apply penalty points
+            const finalScore = Math.max(0, totalScore - penaltyPoints);
             
             const wrongCount = testData.questions.length - correctCount;
             const timeMinutes = Math.floor(timeSpent / 60);
@@ -1350,39 +2059,43 @@
                 correctCount,
                 wrongCount,
                 totalScore,
+                finalScore,
+                penaltyPoints,
                 timeSpent,
                 timeFormatted: `${timeMinutes.toString().padStart(2, '0')}:${timeSeconds.toString().padStart(2, '0')}`
             };
         }
         
-        /* ========= Finish Test ========= */
+        // Finish Test
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
             
-            // Hide timer
+            // Disable security features
+            disableSecurityFeatures();
+            
             elements.timer.classList.add('hidden');
             
             const results = calculateResults();
             
             // Update results display
-            elements.finalScore.textContent = results.totalScore;
+            elements.finalScore.textContent = results.finalScore;
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
             elements.totalScoreResult.textContent = results.totalScore;
             elements.timeUsed.textContent = results.timeFormatted;
+            elements.penaltyResult.textContent = results.penaltyPoints;
+            elements.violationResult.textContent = violations.length;
             
             showScreen('results');
             showStatus("Test muvaffaqiyatli yakunlandi!", "success");
             
-            // Save results to localStorage
+            // Save results
             saveResultsToLocalStorage(results);
-            
-            // Save results to Firestore if user is logged in
             saveResultsToFirestore(results);
         }
         
-        /* ========= Save Results to LocalStorage ========= */
+        // Save Results to LocalStorage
         function saveResultsToLocalStorage(results) {
             try {
                 const testResults = JSON.parse(localStorage.getItem('testResults') || '[]');
@@ -1390,7 +2103,10 @@
                 testResults.push({
                     testCode: currentTestCode,
                     testTitle: testData.title,
-                    score: results.totalScore,
+                    score: results.finalScore,
+                    totalScore: results.totalScore,
+                    penaltyPoints: results.penaltyPoints,
+                    violations: violations.length,
                     correctAnswers: results.correctCount,
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
@@ -1405,7 +2121,7 @@
             }
         }
         
-        /* ========= Save Results to Firestore ========= */
+        // Save Results to Firestore
         async function saveResultsToFirestore(results) {
             if (!currentUser || !userData) return;
             
@@ -1416,7 +2132,11 @@
                     userAge: calculateAge(userData.birthDate),
                     testCode: currentTestCode,
                     testTitle: testData.title,
-                    score: results.totalScore,
+                    score: results.finalScore,
+                    totalScore: results.totalScore,
+                    penaltyPoints: results.penaltyPoints,
+                    violations: violations.length,
+                    violationDetails: violations,
                     correctAnswers: results.correctCount,
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
@@ -1424,13 +2144,11 @@
                     date: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
-                // Save to Firestore
                 await db.collection('test_results').add(resultData);
                 console.log("Test results saved to Firestore");
                 
-                // Update user's total points
                 if (userData.points !== undefined) {
-                    const newPoints = (userData.points || 0) + results.totalScore;
+                    const newPoints = (userData.points || 0) + results.finalScore;
                     await db.collection('foydalanuvchilar').doc(currentUser.uid).update({
                         points: newPoints
                     });
@@ -1442,7 +2160,7 @@
             }
         }
         
-        /* ========= List Available Tests ========= */
+        // List Available Tests
         function listAvailableTests() {
             try {
                 const savedTests = JSON.parse(localStorage.getItem('savedTests') || '{}');
@@ -1484,7 +2202,7 @@
             }
         }
         
-        /* ========= Event Listeners ========= */
+        /* ========= EVENT LISTENERS ========= */
         function setupEventListeners() {
             // Logout button
             elements.logoutBtn.addEventListener('click', logout);
@@ -1499,6 +2217,16 @@
                 window.location.href = 'register.html';
             });
             
+            // Agreement checkbox
+            elements.agreeCheckbox.addEventListener('change', () => {
+                elements.agreeBtn.disabled = !elements.agreeCheckbox.checked;
+            });
+            
+            // Agreement button
+            elements.agreeBtn.addEventListener('click', () => {
+                showScreen('intro');
+            });
+            
             // Load test button
             elements.loadTestBtn.addEventListener('click', async () => {
                 const code = elements.manualTestCode.value.trim();
@@ -1507,15 +2235,12 @@
                     return;
                 }
                 
-                // Update URL without reloading
                 window.history.pushState({}, '', `?code=${code}`);
                 
-                // Load test
                 const loaded = await loadTestFromFirebase(code);
                 if (loaded) {
                     initIntroScreen();
                 } else {
-                    // Try local storage
                     if (loadTestFromLocalStorage(code)) {
                         initIntroScreen();
                     }
@@ -1527,7 +2252,10 @@
                 testStarted = true;
                 userAnswers = new Array(testData.questions.length);
                 
-                // Initialize timer
+                // Enable all security features
+                enableAllSecurityFeatures();
+                
+                // Start timer
                 startTimer();
                 
                 // Build navigation dots
@@ -1537,6 +2265,9 @@
                 currentQuestionIndex = 0;
                 renderQuestion();
                 showScreen('question');
+                
+                // Record test start
+                recordViolation("test_started", 0);
             });
             
             // Previous button
@@ -1564,12 +2295,12 @@
             
             // Restart button
             elements.restartBtn.addEventListener('click', () => {
+                disableSecurityFeatures();
                 window.location.reload();
             });
             
             // Review button
             elements.reviewBtn.addEventListener('click', () => {
-                // In real implementation, show review screen
                 alert("Ko'rib chiqish funksiyasi keyingi versiyada qo'shiladi");
             });
             
@@ -1614,89 +2345,84 @@
             });
         }
         
-        /* ========= Initialize Application ========= */
+        /* ========= INITIALIZE APPLICATION ========= */
         async function initializeApplication() {
-            // Show loading screen
             showScreen('loading');
             
-            // Initialize Firebase
             if (!initializeFirebase()) {
                 showStatus("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.", "warning");
-                // Still try to check authentication
             }
             
-            // Check user authentication
             const isLoggedIn = await checkUserAuthentication();
             
             if (!isLoggedIn) {
-                // User is not logged in, show login required screen
                 showScreen('loginRequired');
                 setupEventListeners();
                 return;
             }
             
-            // User is logged in, continue with test loading
-            
-            // Get test code from URL
             const testCode = getTestCodeFromURL();
             
             if (!testCode) {
-                // No code in URL, show code input
                 showScreen('codeInput');
                 listAvailableTests();
                 setupEventListeners();
                 return;
             }
             
-            // Try to load from Firebase first
             let loaded = false;
             if (db) {
                 loaded = await loadTestFromFirebase(testCode);
             }
             
-            // If Firebase failed, try localStorage
             if (!loaded) {
                 loaded = loadTestFromLocalStorage(testCode);
             }
             
             if (!loaded) {
-                // Test not found, show code input
                 showScreen('codeInput');
                 listAvailableTests();
                 showStatus(`"${testCode}" kodli test topilmadi. Boshqa kod kiriting.`, "error");
             } else {
-                // Test loaded successfully
                 initIntroScreen();
             }
             
-            // Setup event listeners
             setupEventListeners();
-            
             console.log("Application initialized successfully");
         }
         
-        /* ========= Start Application ========= */
-        // Start when page loads
+        /* ========= START APPLICATION ========= */
         document.addEventListener('DOMContentLoaded', initializeApplication);
         
-        // Prevent cheating
+        // Additional security measures
         document.addEventListener('contextmenu', (e) => e.preventDefault());
+        
         document.addEventListener('keydown', (e) => {
             if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key))) {
                 e.preventDefault();
+                if (testStarted) {
+                    recordViolation("devtools_shortcut_attempt", 15);
+                }
             }
         });
         
-        // Prevent image dragging
         document.addEventListener('dragstart', (e) => {
             if (e.target.tagName === 'IMG') e.preventDefault();
         });
         
-        // Add this to prevent MathJax errors
         window.addEventListener('error', (e) => {
             if (e.message.includes('MathJax')) {
                 e.preventDefault();
                 console.warn('MathJax error caught:', e.message);
+            }
+        });
+        
+        // Before unload warning
+        window.addEventListener('beforeunload', (e) => {
+            if (testStarted) {
+                e.preventDefault();
+                e.returnValue = 'Test davomida chiqish natijalarni yo\'q qiladi. Rostan ham chiqmoqchimisiz?';
+                return e.returnValue;
             }
         });
     </script>
