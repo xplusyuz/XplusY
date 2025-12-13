@@ -2348,6 +2348,14 @@
         dynamicPage.innerHTML = getPageContent(pageId);
         // Re-initialize event listeners for the new page content
         initDynamicPageEventListeners();
+        
+        // Check if ranking page is loaded
+        const hasRankingContent = dynamicPage.querySelector('.ranking-container');
+        if (hasRankingContent) {
+          setTimeout(() => {
+            loadRankingData();
+          }, 100);
+        }
       }, 300);
     }
 
@@ -2520,11 +2528,47 @@
               </div>
             </div>
           </section>
-            setTimeout(() => {
-              if (typeof loadRankingData === 'function') {
-                loadRankingData();
-              }
-            }, 100);
+        `,
+        
+        'reyting': `
+          <section class="content-section">
+            <div class="section-header">
+              <h2 class="section-title">
+                <i class="fas fa-chart-line"></i>
+                Umumiy Reyting
+              </h2>
+              <p class="section-subtitle">Barcha foydalanuvchilar reytingi</p>
+            </div>
+            
+            <div class="ranking-container">
+              <div class="ranking-header">
+                <h3 class="ranking-title">Umumiy Foydalanuvchi Reytingi</h3>
+                <p class="ranking-subtitle">Barcha vaqt davomidagi ballar asosida</p>
+              </div>
+              
+              <div class="current-user-rank" id="current-user-rank">
+                <div class="loading-indicator">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <div>Reyting yuklanmoqda...</div>
+                </div>
+              </div>
+              
+              <div class="ranking-filters">
+                <button class="filter-btn active" data-filter="all">Barchasi</button>
+                <button class="filter-btn" data-filter="region">Viloyat</button>
+                <button class="filter-btn" data-filter="district">Tuman</button>
+                <button class="filter-btn" data-filter="age">Yosh</button>
+              </div>
+              
+              <div class="ranking-list" id="ranking-list">
+                <div class="loading-indicator">
+                  <i class="fas fa-spinner fa-spin"></i>
+                  <div>Reyting ro'yxati yuklanmoqda...</div>
+                </div>
+              </div>
+            </div>
+          </section>
+        `,
       };
       
       return pageContents[pageId] || `
@@ -2580,9 +2624,16 @@
           </div>
         `;
         
+        // Get current user
+        const currentUser = authUtils.getUser();
+        if (!currentUser) {
+          window.location.href = 'login.html';
+          return;
+        }
+        
         // Get all users sorted by points
-        const usersSnapshot = await firebase.firestore()
-          .collection('users')
+        const db = firebase.firestore();
+        const usersSnapshot = await db.collection('users')
           .orderBy('points', 'desc')
           .limit(1000)
           .get();
@@ -2606,13 +2657,9 @@
           });
         });
         
-        // Get current user
-        const currentUser = authUtils.getUser();
+        // Find current user position
         let currentUserPosition = -1;
-        
-        if (currentUser) {
-          currentUserPosition = users.findIndex(user => user.id === currentUser.id);
-        }
+        currentUserPosition = users.findIndex(user => user.id === currentUser.id);
         
         // Display current user rank
         if (currentUser && currentUserPosition !== -1) {
@@ -2832,17 +2879,6 @@
           });
         }
       });
-      
-      // Check if ranking page is loaded
-      const rankingPage = document.getElementById('page-dynamic');
-      if (rankingPage && rankingPage.classList.contains('active')) {
-        const hasRankingContent = rankingPage.querySelector('.ranking-container');
-        if (hasRankingContent && typeof loadRankingData === 'function') {
-          setTimeout(() => {
-            loadRankingData();
-          }, 300);
-        }
-      }
     }
 
     // Global function for inline script
