@@ -2305,8 +2305,12 @@
         
         <div class="profile-details">
           <div class="detail-item">
-            <span class="detail-label">To'liq ism:</span>
-            <span class="detail-value" id="detail-fullname">—</span>
+            <span class="detail-label">Ism:</span>
+            <span class="detail-value" id="detail-firstname">—</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Familiya:</span>
+            <span class="detail-value" id="detail-lastname">—</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Tug'ilgan sana:</span>
@@ -2356,24 +2360,18 @@
       <div class="profile-body">
         <form id="edit-profile-form">
           <div class="form-group">
-            <div class="detail-item" style="border-bottom: none; padding: 0;">
-              <span class="detail-label">Ism:</span>
-              <input type="text" class="form-input" id="edit-firstname" placeholder="Ism" required>
-            </div>
+            <label class="form-label">Ism:</label>
+            <input type="text" class="form-input" id="edit-firstname" placeholder="Ism" required>
           </div>
           
           <div class="form-group">
-            <div class="detail-item" style="border-bottom: none; padding: 0;">
-              <span class="detail-label">Familiya:</span>
-              <input type="text" class="form-input" id="edit-lastname" placeholder="Familiya">
-            </div>
+            <label class="form-label">Familiya:</label>
+            <input type="text" class="form-input" id="edit-lastname" placeholder="Familiya">
           </div>
           
           <div class="form-group">
-            <div class="detail-item" style="border-bottom: none; padding: 0;">
-              <span class="detail-label">Tug'ilgan sana:</span>
-              <input type="date" class="form-input" id="edit-birthdate" required>
-            </div>
+            <label class="form-label">Tug'ilgan sana:</label>
+            <input type="date" class="form-input" id="edit-birthdate" required>
           </div>
           
           <div class="form-group">
@@ -2755,45 +2753,6 @@
       `;
     }
 
-    // =============== FULLNAME PARSING FUNCTIONS ===============
-    function parseFullName(fullName) {
-      if (!fullName || typeof fullName !== 'string') {
-        return { firstName: 'Foydalanuvchi', lastName: '' };
-      }
-      
-      const trimmedName = fullName.trim();
-      if (trimmedName === '') {
-        return { firstName: 'Foydalanuvchi', lastName: '' };
-      }
-      
-      const nameParts = trimmedName.split(/\s+/);
-      
-      if (nameParts.length === 1) {
-        return { firstName: nameParts[0], lastName: '' };
-      }
-      
-      // O'zbekcha ism familiya tuzilishi: Ism Familiya
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ');
-      
-      return { firstName, lastName };
-    }
-
-    function getFirstName(fullName) {
-      return parseFullName(fullName).firstName;
-    }
-
-    function getLastName(fullName) {
-      return parseFullName(fullName).lastName;
-    }
-
-    function combineName(firstName, lastName) {
-      if (!lastName || lastName.trim() === '') {
-        return firstName.trim();
-      }
-      return `${firstName.trim()} ${lastName.trim()}`;
-    }
-
     // =============== REGION DATA MANAGEMENT ===============
     async function loadRegionData() {
       try {
@@ -3025,7 +2984,7 @@
         usersSnapshot.forEach(doc => {
           const userData = doc.data();
           users.push({
-            id: doc.id,  // This is the uid
+            id: doc.id,
             ...userData
           });
         });
@@ -3038,14 +2997,13 @@
         if (currentUser && currentUserPosition !== -1) {
           const user = users[currentUserPosition];
           const age = user.birthDate ? calculateAge(user.birthDate) : '—';
-          const { firstName, lastName } = parseFullName(user.fullName || '');
-          const displayName = firstName || 'Foydalanuvchi';
+          const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Foydalanuvchi';
           
           currentUserRank.innerHTML = `
             <div class="current-rank-badge">${currentUserPosition + 1}</div>
             <div class="current-user-info">
               <div class="current-rank-text">Sizning o'rningiz</div>
-              <div class="current-user-name">${user.fullName || 'Foydalanuvchi'}</div>
+              <div class="current-user-name">${displayName}</div>
               <div class="current-user-details">
                 <span><i class="fas fa-user"></i> ${age} yosh</span>
                 <span><i class="fas fa-map-marker-alt"></i> ${user.region || '—'}</span>
@@ -3074,9 +3032,9 @@
           const age = user.birthDate ? calculateAge(user.birthDate) : '—';
           const isCurrentUser = currentUser && user.id === currentUser.id;
           const rankNumber = index + 1;
-          const { firstName } = parseFullName(user.fullName || '');
-          const firstNameLetter = firstName ? 
-            firstName.charAt(0).toUpperCase() : 'U';
+          const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Foydalanuvchi';
+          const firstNameLetter = user.firstName ? 
+            user.firstName.charAt(0).toUpperCase() : 'U';
           
           const rankingItem = document.createElement('div');
           rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
@@ -3084,7 +3042,7 @@
             <div class="rank-number ${rankNumber <= 3 ? 'top-3' : ''}">${rankNumber}</div>
             <div class="rank-avatar">${firstNameLetter}</div>
             <div class="rank-info">
-              <div class="rank-name">${user.fullName || 'Foydalanuvchi'}</div>
+              <div class="rank-name">${displayName}</div>
               <div class="rank-details">
                 <span class="rank-detail">
                   <i class="fas fa-user"></i>
@@ -3236,9 +3194,9 @@
             const age = user.birthDate ? calculateAge(user.birthDate) : '—';
             const isCurrentUser = currentUser && user.id === currentUser.id;
             const rankNumber = filter === 'all' ? index + 1 : '—';
-            const { firstName } = parseFullName(user.fullName || '');
-            const firstNameLetter = firstName ? 
-              firstName.charAt(0).toUpperCase() : 'U';
+            const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Foydalanuvchi';
+            const firstNameLetter = user.firstName ? 
+              user.firstName.charAt(0).toUpperCase() : 'U';
             
             const rankingItem = document.createElement('div');
             rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
@@ -3246,7 +3204,7 @@
               <div class="rank-number">${rankNumber}</div>
               <div class="rank-avatar">${firstNameLetter}</div>
               <div class="rank-info">
-                <div class="rank-name">${user.fullName || 'Foydalanuvchi'}</div>
+                <div class="rank-name">${displayName}</div>
                 <div class="rank-details">
                   <span class="rank-detail">
                     <i class="fas fa-user"></i>
@@ -3302,23 +3260,23 @@
         return;
       }
       
-      // Parse full name into first and last name
-      const fullName = currentUserData.fullName || '';
-      const { firstName, lastName } = parseFullName(fullName);
+      // Ism va familiyani olish
+      const firstName = currentUserData.firstName || '';
+      const lastName = currentUserData.lastName || '';
+      const displayName = `${firstName} ${lastName}`.trim() || 'Foydalanuvchi';
       
       // Update header greeting
-      const firstNameDisplay = firstName || 'Foydalanuvchi';
-      document.getElementById('user-firstname').textContent = firstNameDisplay;
+      document.getElementById('user-firstname').textContent = firstName || 'Foydalanuvchi';
       
       // Avatar text (first letter of first name)
-      const firstNameLetter = firstNameDisplay.charAt(0).toUpperCase();
+      const firstNameLetter = firstName ? firstName.charAt(0).toUpperCase() : 'U';
       document.getElementById('avatar-text').textContent = firstNameLetter;
       
       // Avatar ni yuklash (agar mavjud bo'lsa)
       loadAvatar();
       
       // User info in profile modal
-      document.getElementById('profile-name').textContent = fullName || 'Foydalanuvchi';
+      document.getElementById('profile-name').textContent = displayName;
       document.getElementById('profile-user-id').textContent = 
         `ID: ${currentUserData.loginId || '—'}`;
       
@@ -3336,8 +3294,8 @@
       document.getElementById('profile-age').textContent = age;
       
       // Details
-      document.getElementById('detail-fullname').textContent = 
-        fullName || '—';
+      document.getElementById('detail-firstname').textContent = firstName || '—';
+      document.getElementById('detail-lastname').textContent = lastName || '—';
       document.getElementById('detail-birthdate').textContent = 
         currentUserData.birthDate ? formatDate(currentUserData.birthDate) : '—';
       document.getElementById('detail-region').textContent = 
@@ -3348,7 +3306,7 @@
         currentUserData.createdAt ? 
         formatDate(currentUserData.createdAt.seconds * 1000) : '—';
       
-      // Edit form values - split into first and last name
+      // Edit form values
       document.getElementById('edit-firstname').value = firstName;
       document.getElementById('edit-lastname').value = lastName;
       document.getElementById('edit-birthdate').value = 
@@ -3462,11 +3420,9 @@
       }
       
       try {
-        // Combine first and last name
-        const fullName = combineName(firstName, lastName);
-        
         const updateData = {
-          fullName,
+          firstName,
+          lastName,
           birthDate,
           region,
           district
@@ -3629,6 +3585,7 @@
       // Create notification element
       const notification = document.createElement('div');
       notification.className = `notification ${type}`;
+      notification.textContent = message;
       
       // Add to DOM
       document.body.appendChild(notification);
