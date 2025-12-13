@@ -1,14 +1,20 @@
 // improved auth-utils.js (compat-compatible, backward-compatible)
 (function(){
-  const STORAGE_KEY = 'imiFoydalanuvchiDocId';
+  const STORAGE_KEY = 'leaderMathUserSession';
   const COL = 'foydalanuvchilar';
 
   let db = null;
   let currentUser = null;
-  const listeners = [];
+  let isSessionLoading = false;
+  let sessionPromise = null;
 
   function ensureDb(){
     if (db) return db;
+    // Avval global db dan foydalanish
+    if (window.db) {
+      db = window.db;
+      return db;
+    }
     if (typeof window.firebase === 'undefined' || !firebase.firestore){
       console.error('Firestore topilmadi. Iltimos firebase-app-compat va firebase-firestore-compat yuklang.');
       return null;
@@ -22,73 +28,95 @@
     }
   }
 
-  function getConsistentUserId(user) {
-    if (!user) return null;
-    if (user.id) return String(user.id);
-    if (user.uid) return String(user.uid);
-    if (user.data?.loginId) return String(user.data.loginId);
-    if (user.data?.id) return String(user.data.id);
-    if (user.docId) return String(user.docId);
-    console.warn('Foydalanuvchi ID si topilmadi:', user);
+  async function loadSession(){
+    // Agar sessiya yuklanayotgan bo'lsa, shu promise'ni qaytarish
+    if (isSessionLoading && sessionPromise) {
+      return sessionPromise;
+    }
+
+    isSessionLoading = true;
+    sessionPromise = (async () => {
+      const dbi = ensureDb();
+      if (!dbi) {
+        isSessionLoading = false;
+        return null;
+      }
+      
+      let docId = null;
+      try{ 
+        docId = localStorage.getItem(STORAGE_KEY); 
+      } catch(e) {
+        console.error('LocalStorage error:', e);
+      }
+
+      if (!docId){
+        currentUser = null;
+        isSessionLoading = false;
+        return null;
+      }
+
+      try{
+        const snap = await dbi.collection(COL).doc(docId).get();
+        if (!snap.exists){
+          try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+          currentUser = null;
+          isSessionLoading = false;
+          return null;
+        }
+        currentUser = { 
+          docId: snap.id, 
+          id: snap.id,
+          data: snap.data() || {} 
+        };
+        isSessionLoading = false;
+        return currentUser;
+      }catch(err){
+        console.error('Session yuklashda xatolik:', err);
+        currentUser = null;
+        isSessionLoading = false;
+        return null;
+      }
+    })();
+
+    return sessionPromise;
+  }
+
+  async function requireSession(){
+    // Agar currentUser allaqachon mavjud bo'lsa, darhol qaytarish
+    if (currentUser) {
+      return currentUser;
+    }
+
+    // Sessionni yuklash
+    const user = await loadSession();
+    
+    if (user) {
+      return user;
+    }
+
+    // Agar session mavjud bo'lmasa, login sahifasiga yo'naltirish
+    const currentPath = window.location.pathname;
+    // Faqat login sahifasida bo'lmasak, redirect qilamiz
+    if (!currentPath.includes('login.html')) {
+      const redirect = encodeURIComponent(window.location.href);
+      window.location.href = `login.html?redirect=${redirect}`;
+      // Redirect qilgandan so'ng, yangi promise qaytaramiz, chunki bu sahifa yuklanmaydi
+      return new Promise(() => {});
+    }
+    
     return null;
   }
 
-  function onUserChange(cb){
-    if (typeof cb === 'function') listeners.push(cb);
-  }
-
-  function notify(){
-    listeners.forEach(fn=>{
-      try{ fn(currentUser); }catch(e){ console.error(e); }
-    });
+  async function checkSession() {
+    // Session borligini tekshirish, lekin redirect qilmaslik
+    if (currentUser) return currentUser;
+    
+    const user = await loadSession();
+    return user;
   }
 
   function getUser(){
     return currentUser;
-  }
-
-  async function loadSession(){
-    const dbi = ensureDb();
-    if (!dbi) return null;
-    
-    let docId = null;
-    try{ docId = localStorage.getItem(STORAGE_KEY); }catch(e){}
-
-    if (!docId){
-      currentUser = null;
-      notify();
-      return null;
-    }
-
-    try{
-      const snap = await dbi.collection(COL).doc(docId).get();
-      if (!snap.exists){
-        try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-        currentUser = null;
-        notify();
-        return null;
-      }
-      currentUser = { 
-        docId: snap.id, 
-        id: snap.id,
-        data: snap.data() || {} 
-      };
-      notify();
-      return currentUser;
-    }catch(err){
-      console.error('Session yuklashda xatolik:', err);
-      return null;
-    }
-  }
-
-  async function requireSession(){
-    ensureDb();
-    if (!currentUser) await loadSession();
-    if (currentUser) return currentUser;
-
-    const redirect = encodeURIComponent(location.pathname + location.search + location.hash);
-    location.href = 'login.html?redirect=' + redirect;
-    return new Promise(()=>{}); // hech qachon resolve bo‘lmaydi
   }
 
   async function loginWithIdPassword(loginId, password){
@@ -109,45 +137,24 @@
     const doc  = snap.docs[0];
     const data = doc.data() || {};
 
-    // NOTE: plaintext password comparison (security risk)
+    // Plaintext password comparison
     if (!data.password || data.password !== pass){
       throw new Error('Parol noto‘g‘ri');
     }
 
-    try{ localStorage.setItem(STORAGE_KEY, doc.id); }catch(e){}
+    try{ 
+      localStorage.setItem(STORAGE_KEY, doc.id); 
+    } catch(e) {
+      console.error('LocalStorage error:', e);
+    }
 
     currentUser = { 
       docId: doc.id, 
       id: doc.id,
       data: data 
     };
-    notify();
+    
     return currentUser;
-  }
-
-  async function generateUniqueId(){
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-
-    for (let i=0;i<9999;i++){
-      const id = String(Math.floor(100000 + Math.random()*900000));
-      const q  = await dbi.collection(COL)
-        .where('loginId','==',id)
-        .limit(1)
-        .get();
-      if (q.empty) return id;
-    }
-    // fallback (amalga oshmaydi odatda)
-    return String(Date.now()).slice(-6);
-  }
-
-  function generatePassword(len = 8){
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let s = '';
-    for (let i=0; i<len; i++){
-      s += chars[Math.floor(Math.random()*chars.length)];
-    }
-    return s;
   }
 
   async function registerAuto(){
@@ -174,42 +181,30 @@
 
     const docRef = await dbi.collection(COL).add(payload);
 
-    try{ localStorage.setItem(STORAGE_KEY, docRef.id); }catch(e){}
+    try{ 
+      localStorage.setItem(STORAGE_KEY, docRef.id); 
+    } catch(e) {
+      console.error('LocalStorage error:', e);
+    }
 
     currentUser = { 
       docId: docRef.id, 
       id: docRef.id,
       data: payload 
     };
-    notify();
 
     return { loginId, password, user: currentUser };
   }
 
   async function logout(){
-    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-    currentUser = null;
-    notify();
-  }
-
-  async function refreshUser(){
-    if (!currentUser) return loadSession();
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-    
-    const snap = await dbi.collection(COL).doc(currentUser.docId).get();
-    if (!snap.exists){
-      await logout();
-      return null;
+    try{ 
+      localStorage.removeItem(STORAGE_KEY); 
+    } catch(e) {
+      console.error('LocalStorage error:', e);
     }
-    
-    currentUser = { 
-      docId: snap.id, 
-      id: snap.id,
-      data: snap.data() || {} 
-    };
-    notify();
-    return currentUser;
+    currentUser = null;
+    isSessionLoading = false;
+    sessionPromise = null;
   }
 
   async function updateUserData(partial){
@@ -229,151 +224,48 @@
       id: currentUser.docId,
       data: { ...currentUser.data, ...updateData }
     };
-    notify();
+    
     return currentUser;
   }
 
-  async function getUserProfile(userId = null) {
-    const dbi = ensureDb();
-    if (!dbi) return null;
-    
-    const targetUserId = userId || (currentUser ? currentUser.docId : null);
-    if (!targetUserId) return null;
-    
-    try {
-      const userDoc = await dbi.collection(COL).doc(targetUserId).get();
-      return userDoc.exists ? userDoc.data() : null;
-    } catch (error) {
-      console.error('Foydalanuvchi maʼlumotlarini o‘qishda xatolik:', error);
-      return null;
-    }
-  }
-
-  async function checkUserExists(userId) {
-    if (!userId) return false;
-    const dbi = ensureDb();
-    if (!dbi) return false;
-    
-    try {
-      const userDoc = await dbi.collection(COL).doc(userId).get();
-      return userDoc.exists;
-    } catch (error) {
-      console.error('Foydalanuvchi mavjudligini tekshirishda xatolik:', error);
-      return false;
-    }
-  }
-
-  function isAdminUser(user = null){
-    const u = user || currentUser;
-    if (!u) return false;
-    const role = u.data?.role;
-    if (role === 'admin') return true;
-    // fallback: agar hujjatda email maydoni bo'lsa tekshir
-    if (u.data?.email && u.data.email === 'sohibjonmath@gmail.com') return true;
-    return false;
-  }
-
-  async function saveGameResult(gameData) {
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-    if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
-
-    const resultData = {
-      userId: currentUser.docId,
-      gameType: 'viet1',
-      score: gameData.score || 0,
-      correctAnswers: gameData.correctAnswers || 0,
-      totalQuestions: gameData.totalQuestions || 0,
-      timeSpent: gameData.timeSpent || 0,
-      difficulty: gameData.difficulty || 1,
-      xpEarned: gameData.xpEarned || 0,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    try {
-      await dbi.collection('gameResults').add(resultData);
-      return { success: true };
-    } catch (error) {
-      console.error('Natijani saqlashda xatolik:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async function updateBestScore(newScore) {
-    if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
+  async function generateUniqueId(){
     const dbi = ensureDb();
     if (!dbi) throw new Error('Firestore mavjud emas');
 
-    const userRef = dbi.collection(COL).doc(currentUser.docId);
-    const userDoc = await userRef.get();
-    if (!userDoc.exists) throw new Error('Foydalanuvchi topilmadi');
-
-    const currentBest = userDoc.data().bestScore || 0;
-    let isNewRecord = false;
-
-    if (newScore > currentBest) {
-      await userRef.update({
-        bestScore: newScore,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      isNewRecord = true;
-      currentUser.data.bestScore = newScore;
-      notify();
-    }
-
-    return { success: true, isNewRecord, bestScore: Math.max(currentBest, newScore) };
-  }
-
-  async function getLeaderboard(limit = 10) {
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-
-    try {
-      const snapshot = await dbi.collection(COL)
-        .orderBy('bestScore', 'desc')
-        .limit(limit)
+    for (let i=0;i<9999;i++){
+      const id = String(Math.floor(100000 + Math.random()*900000));
+      const q  = await dbi.collection(COL)
+        .where('loginId','==',id)
+        .limit(1)
         .get();
-
-      const leaderboard = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          fullName: data.fullName || 'Foydalanuvchi',
-          bestScore: data.bestScore || 0
-        };
-      });
-
-      return { success: true, leaderboard };
-    } catch (error) {
-      console.error('Reyting jadvalini olishda xatolik:', error);
-      return { success: false, error: error.message };
+      if (q.empty) return id;
     }
+    return String(Date.now()).slice(-6);
   }
 
-  // init
+  function generatePassword(len = 8){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+    let s = '';
+    for (let i=0; i<len; i++){
+      s += chars[Math.floor(Math.random()*chars.length)];
+    }
+    return s;
+  }
+
+  // Avvalgi sessionni yuklash
   loadSession();
 
   window.authUtils = {
     requireSession,
+    checkSession,
     getUser,
-    onUserChange,
     loadSession,
     loginWithIdPassword,
     registerAuto,
     logout,
-    refreshUser,
     updateUserData,
-    getUserProfile,
-    checkUserExists,
-    getConsistentUserId,
-    saveGameResult,
-    updateBestScore,
-    getLeaderboard,
-    generatePassword,
     generateUniqueId,
-    isAdminUser
+    generatePassword
   };
-
-  window.authLite = window.authUtils;
 
 })();
