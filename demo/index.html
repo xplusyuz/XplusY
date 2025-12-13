@@ -245,6 +245,26 @@
       flex-shrink: 0;
     }
 
+    /* User Greeting Styles */
+    .user-greeting {
+      display: none;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-right: var(--space-xs);
+    }
+
+    .user-greeting .user-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    @media (min-width: 768px) {
+      .user-greeting {
+        display: block;
+      }
+    }
+
     .theme-toggle {
       background: none;
       border: none;
@@ -1164,6 +1184,9 @@
       .nav-text {
         display: inline;
       }
+      .user-greeting {
+        display: block;
+      }
     }
 
     /* =============== PROFILE MODAL - SUPER DESIGN =============== */
@@ -1458,6 +1481,11 @@
         height: 36px;
       }
       
+      .user-greeting {
+        font-size: 13px;
+        margin-right: 4px;
+      }
+      
       .page-content {
         padding: var(--space-md);
         padding-bottom: 80px;
@@ -1602,6 +1630,10 @@
         font-size: 18px;
       }
       
+      .user-greeting {
+        display: none;
+      }
+      
       .profile-avatar {
         width: 70px;
         height: 70px;
@@ -1674,6 +1706,9 @@
         </div>
       </div>
       <div class="header-actions">
+        <div class="user-greeting" id="user-greeting">
+          Salom, <span class="user-name" id="user-firstname">Foydalanuvchi</span>
+        </div>
         <button class="theme-toggle" id="theme-toggle" title="Temani o'zgartirish">
           <i class="fas fa-moon"></i>
           <i class="fas fa-sun"></i>
@@ -2203,11 +2238,21 @@
         <form id="edit-profile-form">
           <div class="form-group" style="margin-bottom: var(--space-lg);">
             <div class="detail-item" style="border-bottom: none; padding: 0;">
-              <span class="detail-label">To'liq ism:</span>
-              <input type="text" class="detail-value" id="edit-fullname" 
+              <span class="detail-label">Ism:</span>
+              <input type="text" class="detail-value" id="edit-firstname" 
                      style="background: var(--bg-secondary); border: 1px solid var(--border-light); 
                             border-radius: var(--radius-sm); padding: var(--space-sm); width: 60%;"
-                     placeholder="Ism familiya">
+                     placeholder="Ism">
+            </div>
+          </div>
+          
+          <div class="form-group" style="margin-bottom: var(--space-lg);">
+            <div class="detail-item" style="border-bottom: none; padding: 0;">
+              <span class="detail-label">Familiya:</span>
+              <input type="text" class="detail-value" id="edit-lastname" 
+                     style="background: var(--bg-secondary); border: 1px solid var(--border-light); 
+                            border-radius: var(--radius-sm); padding: var(--space-sm); width: 60%;"
+                     placeholder="Familiya">
             </div>
           </div>
           
@@ -2601,6 +2646,45 @@
       `;
     }
 
+    // =============== FULLNAME PARSING FUNCTIONS ===============
+    function parseFullName(fullName) {
+      if (!fullName || typeof fullName !== 'string') {
+        return { firstName: 'Foydalanuvchi', lastName: '' };
+      }
+      
+      const trimmedName = fullName.trim();
+      if (trimmedName === '') {
+        return { firstName: 'Foydalanuvchi', lastName: '' };
+      }
+      
+      const nameParts = trimmedName.split(/\s+/);
+      
+      if (nameParts.length === 1) {
+        return { firstName: nameParts[0], lastName: '' };
+      }
+      
+      // O'zbekcha ism familiya tuzilishi: Ism Familiya
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ');
+      
+      return { firstName, lastName };
+    }
+
+    function getFirstName(fullName) {
+      return parseFullName(fullName).firstName;
+    }
+
+    function getLastName(fullName) {
+      return parseFullName(fullName).lastName;
+    }
+
+    function combineName(firstName, lastName) {
+      if (!lastName || lastName.trim() === '') {
+        return firstName.trim();
+      }
+      return `${firstName.trim()} ${lastName.trim()}`;
+    }
+
     // =============== RANKING MANAGEMENT ===============
     async function loadRankingData() {
       try {
@@ -2631,9 +2715,9 @@
           return;
         }
         
-        // Get all users sorted by points
+        // Get all users from "foydalanuvchilar" collection sorted by points
         const db = firebase.firestore();
-        const usersSnapshot = await db.collection('users')
+        const usersSnapshot = await db.collection('foydalanuvchilar')
           .orderBy('points', 'desc')
           .limit(1000)
           .get();
@@ -2652,7 +2736,7 @@
         usersSnapshot.forEach(doc => {
           const userData = doc.data();
           users.push({
-            id: doc.id,
+            id: doc.id,  // This is the uid
             ...userData
           });
         });
@@ -2665,6 +2749,8 @@
         if (currentUser && currentUserPosition !== -1) {
           const user = users[currentUserPosition];
           const age = user.birthDate ? calculateAge(user.birthDate) : '—';
+          const { firstName, lastName } = parseFullName(user.fullName || '');
+          const displayName = firstName || 'Foydalanuvchi';
           
           currentUserRank.innerHTML = `
             <div class="current-rank-badge">${currentUserPosition + 1}</div>
@@ -2699,8 +2785,9 @@
           const age = user.birthDate ? calculateAge(user.birthDate) : '—';
           const isCurrentUser = currentUser && user.id === currentUser.id;
           const rankNumber = index + 1;
-          const firstNameLetter = user.fullName ? 
-            user.fullName.charAt(0).toUpperCase() : 'U';
+          const { firstName } = parseFullName(user.fullName || '');
+          const firstNameLetter = firstName ? 
+            firstName.charAt(0).toUpperCase() : 'U';
           
           const rankingItem = document.createElement('div');
           rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
@@ -2739,28 +2826,56 @@
       } catch (error) {
         console.error('Reyting yuklashda xatolik:', error);
         
-        const rankingList = document.getElementById('ranking-list');
-        const currentUserRank = document.getElementById('current-user-rank');
-        
-        if (rankingList) {
-          rankingList.innerHTML = `
-            <div class="loading-indicator">
-              <i class="fas fa-exclamation-triangle"></i>
-              <div>Reyting yuklanmadi. Iltimos, qayta urinib ko'ring.</div>
-            </div>
-          `;
+        // Check if error is because points field is not indexed
+        if (error.message && error.message.includes('index')) {
+          console.error('Firestore indeksi kerak: "foydalanuvchilar" kolleksiyasida "points" maydoni bo\'yicha indeks yarating');
+          
+          const rankingList = document.getElementById('ranking-list');
+          const currentUserRank = document.getElementById('current-user-rank');
+          
+          if (rankingList) {
+            rankingList.innerHTML = `
+              <div class="loading-indicator">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>Firestore indeksi kerak. Iltimos, "points" maydoni bo'yicha indeks yarating.</div>
+              </div>
+            `;
+          }
+          
+          if (currentUserRank) {
+            currentUserRank.innerHTML = `
+              <div class="loading-indicator">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>Indeks muammosi</div>
+              </div>
+            `;
+          }
+          
+          showNotification('Reyting yuklanmadi: Firestore indeksi kerak. Iltimos, konsolga qarang.', 'error');
+        } else {
+          const rankingList = document.getElementById('ranking-list');
+          const currentUserRank = document.getElementById('current-user-rank');
+          
+          if (rankingList) {
+            rankingList.innerHTML = `
+              <div class="loading-indicator">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>Reyting yuklanmadi. Iltimos, qayta urinib ko'ring.</div>
+              </div>
+            `;
+          }
+          
+          if (currentUserRank) {
+            currentUserRank.innerHTML = `
+              <div class="loading-indicator">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>Ma'lumotlar yuklanmadi</div>
+              </div>
+            `;
+          }
+          
+          showNotification('Reyting yuklanmadi: ' + error.message, 'error');
         }
-        
-        if (currentUserRank) {
-          currentUserRank.innerHTML = `
-            <div class="loading-indicator">
-              <i class="fas fa-exclamation-triangle"></i>
-              <div>Ma'lumotlar yuklanmadi</div>
-            </div>
-          `;
-        }
-        
-        showNotification('Reyting yuklanmadi: ' + error.message, 'error');
       }
     }
 
@@ -2832,8 +2947,9 @@
             const age = user.birthDate ? calculateAge(user.birthDate) : '—';
             const isCurrentUser = currentUser && user.id === currentUser.id;
             const rankNumber = filter === 'all' ? index + 1 : '—';
-            const firstNameLetter = user.fullName ? 
-              user.fullName.charAt(0).toUpperCase() : 'U';
+            const { firstName } = parseFullName(user.fullName || '');
+            const firstNameLetter = firstName ? 
+              firstName.charAt(0).toUpperCase() : 'U';
             
             const rankingItem = document.createElement('div');
             rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
@@ -2899,14 +3015,20 @@
         return;
       }
       
-      // Avatar text
-      const firstNameLetter = currentUserData.fullName ? 
-        currentUserData.fullName.charAt(0).toUpperCase() : 'U';
+      // Parse full name into first and last name
+      const fullName = currentUserData.fullName || '';
+      const { firstName, lastName } = parseFullName(fullName);
+      
+      // Update header greeting
+      const firstNameDisplay = firstName || 'Foydalanuvchi';
+      document.getElementById('user-firstname').textContent = firstNameDisplay;
+      
+      // Avatar text (first letter of first name)
+      const firstNameLetter = firstNameDisplay.charAt(0).toUpperCase();
       document.getElementById('avatar-text').textContent = firstNameLetter;
       
-      // User info
-      document.getElementById('profile-name').textContent = 
-        currentUserData.fullName || 'Foydalanuvchi';
+      // User info in profile modal
+      document.getElementById('profile-name').textContent = fullName || 'Foydalanuvchi';
       document.getElementById('profile-user-id').textContent = 
         `ID: ${currentUserData.loginId || '—'}`;
       
@@ -2925,7 +3047,7 @@
       
       // Details
       document.getElementById('detail-fullname').textContent = 
-        currentUserData.fullName || '—';
+        fullName || '—';
       document.getElementById('detail-birthdate').textContent = 
         currentUserData.birthDate ? formatDate(currentUserData.birthDate) : '—';
       document.getElementById('detail-region').textContent = 
@@ -2936,9 +3058,9 @@
         currentUserData.createdAt ? 
         formatDate(currentUserData.createdAt.seconds * 1000) : '—';
       
-      // Edit form values
-      document.getElementById('edit-fullname').value = 
-        currentUserData.fullName || '';
+      // Edit form values - split into first and last name
+      document.getElementById('edit-firstname').value = firstName;
+      document.getElementById('edit-lastname').value = lastName;
       document.getElementById('edit-birthdate').value = 
         currentUserData.birthDate || '';
       document.getElementById('edit-region').value = 
@@ -2948,7 +3070,11 @@
     }
 
     function calculateAge(birthDate) {
+      if (!birthDate) return '—';
+      
       const birth = new Date(birthDate);
+      if (isNaN(birth.getTime())) return '—';
+      
       const today = new Date();
       let age = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();
@@ -2977,6 +3103,7 @@
       if (points >= 500000) return "Ustoz";
       if (points >= 200000) return "Faol talaba";
       if (points >= 50000) return "Faol foydalanuvchi";
+      if (points >= 1000) return "Boshlovchi";
       return "Yangi ishtirokchi";
     }
 
@@ -3005,17 +3132,26 @@
     }
 
     async function saveProfileChanges() {
-      const fullName = document.getElementById('edit-fullname').value.trim();
+      const firstName = document.getElementById('edit-firstname').value.trim();
+      const lastName = document.getElementById('edit-lastname').value.trim();
       const birthDate = document.getElementById('edit-birthdate').value;
       const region = document.getElementById('edit-region').value.trim();
       const district = document.getElementById('edit-district').value.trim();
       
-      if (!fullName || !birthDate) {
-        alert('Iltimos, ism va tug\'ilgan sanani to\'ldiring');
+      if (!firstName) {
+        alert('Iltimos, ismingizni kiriting');
+        return;
+      }
+      
+      if (!birthDate) {
+        alert('Iltimos, tug\'ilgan sanangizni kiriting');
         return;
       }
       
       try {
+        // Combine first and last name
+        const fullName = combineName(firstName, lastName);
+        
         const updateData = {
           fullName,
           birthDate,
@@ -3025,6 +3161,10 @@
         
         await authUtils.updateUserData(updateData);
         showNotification('Profil muvaffaqiyatli yangilandi', 'success');
+        
+        // Update header greeting
+        document.getElementById('user-firstname').textContent = firstName;
+        
         closeEditProfileModal();
         loadProfileData();
       } catch (error) {
@@ -3216,6 +3356,10 @@
           window.location.href = 'login.html';
           return;
         }
+        
+        // Load user profile data for header
+        loadProfileData();
+        
       } catch (error) {
         window.location.href = 'login.html';
         return;
