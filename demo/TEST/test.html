@@ -1459,7 +1459,7 @@
                 showWarning("❌ TEST DAVOMIDA TO'LIQ EKRANDAN CHIQISH TAQIQLANGAN!");
                 applyPenalty(testData?.penalties?.fullscreen_exit || 100);
                 
-                // 3 soniya ichida fullscreen'ga qaytmasa, test bekor qilinadi
+                // 3 soniya ichida fullscreen'ga qaytmasa, test bekor qilindi
                 setTimeout(() => {
                     if (testStarted && !isFullScreen) {
                         finishTestWithWarning("To'liq ekrandan chiqilgani uchun test bekor qilindi!");
@@ -2037,6 +2037,11 @@
             }
             elements.userAge.textContent = ageDisplay;
             
+            // Agar foydalanuvchining umumiy ballari bo'lsa, ularni ham ko'rsatish
+            if (userData.points) {
+                elements.userAge.innerHTML += `<br>Umumiy ball: ${userData.points}`;
+            }
+            
             const firstName = fullName.split(' ')[0] || 'U';
             elements.userAvatar.textContent = firstName.charAt(0).toUpperCase();
             
@@ -2097,53 +2102,65 @@
         
         // Load Rating Data
         async function loadRatingData() {
-            if (!testData || !testData.rating) return;
+            if (!testData || !currentTestCode) return;
             
             try {
-                // Rating ma'lumotlari test hujjatida mavjud
-                elements.ratingSection.classList.remove('hidden');
-                elements.ratingTableBody.innerHTML = '';
+                const testRef = db.collection('tests').doc(currentTestCode);
+                const testDoc = await testRef.get();
                 
-                // Ratingni saralash (eng yuqori ball birinchi)
-                const sortedRating = [...testData.rating].sort((a, b) => b.score - a.score);
-                
-                sortedRating.forEach((item, index) => {
-                    const row = document.createElement('tr');
+                if (testDoc.exists) {
+                    const testDataFromDB = testDoc.data();
+                    const rating = testDataFromDB.rating || [];
                     
-                    // Rang berish
-                    let rankClass = '';
-                    if (index === 0) rankClass = 'rating-badge';
-                    else if (index === 1) rankClass = 'rating-badge';
-                    else if (index === 2) rankClass = 'rating-badge';
-                    
-                    // Sana formatlash
-                    let dateStr = "Noma'lum";
-                    if (item.date) {
-                        if (item.date.toDate) {
-                            dateStr = item.date.toDate().toLocaleDateString('uz-UZ');
-                        } else if (item.date.seconds) {
-                            dateStr = new Date(item.date.seconds * 1000).toLocaleDateString('uz-UZ');
-                        } else {
-                            dateStr = new Date(item.date).toLocaleDateString('uz-UZ');
-                        }
+                    // Faqat rating mavjud bo'lsa ko'rsatamiz
+                    if (rating.length > 0) {
+                        elements.ratingSection.classList.remove('hidden');
+                        elements.ratingTableBody.innerHTML = '';
+                        
+                        // Ratingni saralash (eng yuqori ball birinchi)
+                        const sortedRating = [...rating].sort((a, b) => b.score - a.score);
+                        
+                        sortedRating.forEach((item, index) => {
+                            const row = document.createElement('tr');
+                            
+                            // Rang berish
+                            let rankClass = 'rating-badge';
+                            
+                            // Sana formatlash
+                            let dateStr = "Noma'lum";
+                            if (item.date) {
+                                if (item.date.toDate) {
+                                    dateStr = item.date.toDate().toLocaleDateString('uz-UZ');
+                                } else if (item.date.seconds) {
+                                    dateStr = new Date(item.date.seconds * 1000).toLocaleDateString('uz-UZ');
+                                } else {
+                                    dateStr = new Date(item.date).toLocaleDateString('uz-UZ');
+                                }
+                            }
+                            
+                            row.innerHTML = `
+                                <td>
+                                    <div class="${rankClass}" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : 'background: var(--brand);'}">
+                                        ${index + 1}
+                                    </div>
+                                </td>
+                                <td>${item.userFullName || "Foydalanuvchi"}</td>
+                                <td><strong>${item.score}</strong> ball</td>
+                                <td>${dateStr}</td>
+                            `;
+                            
+                            elements.ratingTableBody.appendChild(row);
+                        });
+                    } else {
+                        elements.ratingSection.classList.add('hidden');
                     }
-                    
-                    row.innerHTML = `
-                        <td>
-                            <div class="${rankClass}" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : 'background: var(--brand);'}">
-                                ${index + 1}
-                            </div>
-                        </td>
-                        <td>${item.userFullName || "Foydalanuvchi"}</td>
-                        <td><strong>${item.score}</strong> ball</td>
-                        <td>${dateStr}</td>
-                    `;
-                    
-                    elements.ratingTableBody.appendChild(row);
-                });
+                } else {
+                    elements.ratingSection.classList.add('hidden');
+                }
                 
             } catch (error) {
                 console.error("Rating yuklashda xato:", error);
+                elements.ratingSection.classList.add('hidden');
             }
         }
         
@@ -2630,8 +2647,8 @@
                 const testDoc = await testRef.get();
                 
                 if (testDoc.exists) {
-                    const testData = testDoc.data();
-                    const rating = testData.rating || [];
+                    const testDataFromDB = testDoc.data();
+                    const rating = testDataFromDB.rating || [];
                     
                     // Foydalanuvchining o'rni
                     const sortedRating = [...rating].sort((a, b) => b.score - a.score);
@@ -2696,7 +2713,7 @@
                     date: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
-                // 1. Test Results collectionga saqlash
+                // 1. Test Results collectionga saqlash (har bir urinish)
                 await db.collection('test_results').add(resultData);
                 
                 // 2. Tests collectiondagi o'sha test hujjatiga saqlash (faqat birinchi eng yaxshi natija)
@@ -2747,7 +2764,7 @@
                     });
                 }
                 
-                // 3. Foydalanuvchilar collectionida points ga qo'shish
+                // 3. Foydalanuvchilar collectionida points ga qo'shish (barcha testlardan)
                 const userRef = db.collection('foydalanuvchilar').doc(currentUser.uid);
                 
                 // Foydalanuvchining joriy ballarini olish
