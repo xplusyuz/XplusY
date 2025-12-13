@@ -26,6 +26,7 @@
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     
     <style>
         /* ========= CSS Styles ========= */
@@ -85,6 +86,55 @@
             gap: 10px;
         }
         
+        /* User Info in Header */
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--brand);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .user-details {
+            text-align: right;
+        }
+        
+        .user-name {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .user-age {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        
+        .logout-btn {
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .logout-btn:hover {
+            background: #fee;
+        }
+        
         /* Cards */
         .card {
             background: white;
@@ -97,6 +147,28 @@
         
         .hidden {
             display: none !important;
+        }
+        
+        /* Login Required Card */
+        .login-required {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .login-required h2 {
+            color: var(--danger);
+            margin-bottom: 15px;
+        }
+        
+        .login-required p {
+            margin-bottom: 25px;
+            color: var(--muted);
+        }
+        
+        .login-required .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
         }
         
         /* Loading */
@@ -386,6 +458,16 @@
                 width: 35px;
                 height: 35px;
             }
+            
+            .header-inner {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .user-info {
+                order: 2;
+            }
         }
         
         /* Code input for manual test loading */
@@ -408,21 +490,46 @@
     <!-- Loading Screen -->
     <div id="loadingScreen" class="card">
         <div class="loading-spinner"></div>
-        <h2>Test yuklanmoqda...</h2>
-        <p id="loadingText">Firebase ulanmoqda</p>
+        <h2>Yuklanmoqda...</h2>
+        <p id="loadingText">Tizimga kirish tekshirilmoqda...</p>
     </div>
     
     <!-- Header -->
-    <header>
+    <header id="header" class="hidden">
         <div class="header-inner">
             <div class="logo">
                 <span>📚</span> LeaderMath Test
             </div>
-            <div id="timer" class="timer">00:00</div>
+            
+            <!-- Timer will be shown during test -->
+            <div id="timer" class="timer hidden">00:00</div>
+            
+            <!-- User Info -->
+            <div class="user-info">
+                <div class="user-details">
+                    <div class="user-name" id="userFullName">Foydalanuvchi</div>
+                    <div class="user-age" id="userAge">Yosh: —</div>
+                </div>
+                <div class="user-avatar" id="userAvatar">U</div>
+                <button class="logout-btn" id="logoutBtn">
+                    <i>🚪</i> Chiqish
+                </button>
+            </div>
         </div>
     </header>
     
     <div class="wrap">
+        <!-- Login Required Card -->
+        <div id="loginRequiredCard" class="card login-required hidden">
+            <h2>Test Yechish Uchun Tizimga Kiring</h2>
+            <p>Bu testni faqat ro'yxatdan o'tgan foydalanuvchilar yecha olishadi.</p>
+            <p>Iltimos, avval tizimga kiring yoki ro'yxatdan o'ting.</p>
+            <div class="btn-group">
+                <button id="goToLoginBtn" class="btn">Kirish sahifasiga o'tish</button>
+                <button id="goToRegisterBtn" class="btn">Ro'yxatdan o'tish</button>
+            </div>
+        </div>
+        
         <!-- Test Code Input (if no code in URL) -->
         <div id="codeInputCard" class="card hidden">
             <h2>Test Kodini Kiriting</h2>
@@ -554,6 +661,9 @@
         
         /* ========= Global Variables ========= */
         let db;
+        let auth;
+        let currentUser = null;
+        let userData = null;
         let testData = null;
         let currentTestCode = null;
         let currentQuestionIndex = 0;
@@ -565,20 +675,34 @@
         
         /* ========= DOM Elements ========= */
         const elements = {
+            // Screens
             loadingScreen: document.getElementById('loadingScreen'),
             loadingText: document.getElementById('loadingText'),
+            header: document.getElementById('header'),
+            loginRequiredCard: document.getElementById('loginRequiredCard'),
             codeInputCard: document.getElementById('codeInputCard'),
-            manualTestCode: document.getElementById('manualTestCode'),
-            loadTestBtn: document.getElementById('loadTestBtn'),
-            testList: document.getElementById('testList'),
-            localTests: document.getElementById('localTests'),
             introCard: document.getElementById('introCard'),
             questionCard: document.getElementById('questionCard'),
             resultsCard: document.getElementById('resultsCard'),
             errorCard: document.getElementById('errorCard'),
-            errorMessage: document.getElementById('errorMessage'),
-            statusMessage: document.getElementById('statusMessage'),
             
+            // User info elements
+            userFullName: document.getElementById('userFullName'),
+            userAge: document.getElementById('userAge'),
+            userAvatar: document.getElementById('userAvatar'),
+            logoutBtn: document.getElementById('logoutBtn'),
+            
+            // Login buttons
+            goToLoginBtn: document.getElementById('goToLoginBtn'),
+            goToRegisterBtn: document.getElementById('goToRegisterBtn'),
+            
+            // Test code input
+            manualTestCode: document.getElementById('manualTestCode'),
+            loadTestBtn: document.getElementById('loadTestBtn'),
+            testList: document.getElementById('testList'),
+            localTests: document.getElementById('localTests'),
+            
+            // Test info
             testTitle: document.getElementById('testTitle'),
             testDescription: document.getElementById('testDescription'),
             totalQuestions: document.getElementById('totalQuestions'),
@@ -587,7 +711,10 @@
             testCode: document.getElementById('testCode'),
             codeBadge: document.getElementById('codeBadge'),
             
+            // Timer
             timer: document.getElementById('timer'),
+            
+            // Question elements
             currentQ: document.getElementById('currentQ'),
             totalQ: document.getElementById('totalQ'),
             sectionName: document.getElementById('sectionName'),
@@ -598,12 +725,14 @@
             openAnswerInput: document.getElementById('openAnswerInput'),
             navDots: document.getElementById('navDots'),
             
+            // Results elements
             finalScore: document.getElementById('finalScore'),
             correctCount: document.getElementById('correctCount'),
             wrongCount: document.getElementById('wrongCount'),
             totalScoreResult: document.getElementById('totalScoreResult'),
             timeUsed: document.getElementById('timeUsed'),
             
+            // Buttons
             startBtn: document.getElementById('startBtn'),
             prevBtn: document.getElementById('prevBtn'),
             nextBtn: document.getElementById('nextBtn'),
@@ -611,7 +740,11 @@
             restartBtn: document.getElementById('restartBtn'),
             reviewBtn: document.getElementById('reviewBtn'),
             retryBtn: document.getElementById('retryBtn'),
-            loadLocalBtn: document.getElementById('loadLocalBtn')
+            loadLocalBtn: document.getElementById('loadLocalBtn'),
+            
+            // Messages
+            errorMessage: document.getElementById('errorMessage'),
+            statusMessage: document.getElementById('statusMessage')
         };
         
         /* ========= Initialize Firebase ========= */
@@ -619,11 +752,112 @@
             try {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.firestore();
+                auth = firebase.auth();
                 console.log("Firebase initialized successfully");
                 return true;
             } catch (error) {
                 console.error("Firebase initialization error:", error);
                 return false;
+            }
+        }
+        
+        /* ========= Check User Authentication ========= */
+        function checkUserAuthentication() {
+            return new Promise((resolve, reject) => {
+                auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        console.log("User is logged in:", user.uid);
+                        
+                        // Load user data from Firestore
+                        try {
+                            const userDoc = await db.collection('foydalanuvchilar').doc(user.uid).get();
+                            if (userDoc.exists) {
+                                userData = userDoc.data();
+                                console.log("User data loaded:", userData);
+                                updateUserUI();
+                                resolve(true);
+                            } else {
+                                console.log("User document not found");
+                                // Create basic user data if not exists
+                                userData = {
+                                    fullName: user.displayName || "Foydalanuvchi",
+                                    loginId: user.email || user.phoneNumber || "—"
+                                };
+                                updateUserUI();
+                                resolve(true);
+                            }
+                        } catch (error) {
+                            console.error("Error loading user data:", error);
+                            // Still allow to proceed with basic info
+                            userData = {
+                                fullName: "Foydalanuvchi",
+                                loginId: "—"
+                            };
+                            updateUserUI();
+                            resolve(true);
+                        }
+                    } else {
+                        console.log("User is not logged in");
+                        currentUser = null;
+                        userData = null;
+                        resolve(false);
+                    }
+                });
+            });
+        }
+        
+        /* ========= Update User UI ========= */
+        function updateUserUI() {
+            if (!userData) return;
+            
+            // Update user name
+            const fullName = userData.fullName || "Foydalanuvchi";
+            elements.userFullName.textContent = fullName;
+            
+            // Calculate and update age
+            if (userData.birthDate) {
+                const age = calculateAge(userData.birthDate);
+                elements.userAge.textContent = `Yosh: ${age}`;
+            } else {
+                elements.userAge.textContent = "Yosh: —";
+            }
+            
+            // Update avatar (first letter of first name)
+            const firstName = fullName.split(' ')[0] || 'U';
+            elements.userAvatar.textContent = firstName.charAt(0).toUpperCase();
+            
+            // Show header
+            elements.header.classList.remove('hidden');
+        }
+        
+        /* ========= Calculate Age from Birth Date ========= */
+        function calculateAge(birthDate) {
+            if (!birthDate) return '—';
+            
+            const birth = new Date(birthDate);
+            if (isNaN(birth.getTime())) return '—';
+            
+            const today = new Date();
+            let age = today.getFullYear() - birth.getFullYear();
+            const monthDiff = today.getMonth() - birth.getMonth();
+            
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+                age--;
+            }
+            
+            return age;
+        }
+        
+        /* ========= Logout Function ========= */
+        function logout() {
+            if (confirm("Rostan ham tizimdan chiqmoqchimisiz?")) {
+                auth.signOut().then(() => {
+                    window.location.href = 'login.html';
+                }).catch((error) => {
+                    console.error("Logout error:", error);
+                    showStatus("Chiqishda xatolik: " + error.message, "error");
+                });
             }
         }
         
@@ -749,6 +983,7 @@
         /* ========= Show/Hide Screens ========= */
         function showScreen(screenName) {
             // Hide all screens
+            elements.loginRequiredCard.classList.add('hidden');
             elements.codeInputCard.classList.add('hidden');
             elements.introCard.classList.add('hidden');
             elements.questionCard.classList.add('hidden');
@@ -758,6 +993,9 @@
             
             // Show requested screen
             switch(screenName) {
+                case 'loginRequired':
+                    elements.loginRequiredCard.classList.remove('hidden');
+                    break;
                 case 'codeInput':
                     elements.codeInputCard.classList.remove('hidden');
                     break;
@@ -1027,6 +1265,9 @@
             
             updateTimerDisplay();
             
+            // Show timer in header
+            elements.timer.classList.remove('hidden');
+            
             timerInterval = setInterval(() => {
                 timeRemaining--;
                 timeSpent++;
@@ -1104,6 +1345,9 @@
             clearInterval(timerInterval);
             testStarted = false;
             
+            // Hide timer
+            elements.timer.classList.add('hidden');
+            
             const results = calculateResults();
             
             // Update results display
@@ -1118,6 +1362,9 @@
             
             // Save results to localStorage
             saveResultsToLocalStorage(results);
+            
+            // Save results to Firestore if user is logged in
+            saveResultsToFirestore(results);
         }
         
         /* ========= Save Results to LocalStorage ========= */
@@ -1140,6 +1387,43 @@
                 
             } catch (error) {
                 console.error("Error saving results to localStorage:", error);
+            }
+        }
+        
+        /* ========= Save Results to Firestore ========= */
+        async function saveResultsToFirestore(results) {
+            if (!currentUser || !userData) return;
+            
+            try {
+                const resultData = {
+                    userId: currentUser.uid,
+                    userFullName: userData.fullName,
+                    userAge: calculateAge(userData.birthDate),
+                    testCode: currentTestCode,
+                    testTitle: testData.title,
+                    score: results.totalScore,
+                    correctAnswers: results.correctCount,
+                    totalQuestions: testData.questions.length,
+                    timeSpent: results.timeSpent,
+                    answers: userAnswers,
+                    date: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                // Save to Firestore
+                await db.collection('test_results').add(resultData);
+                console.log("Test results saved to Firestore");
+                
+                // Update user's total points
+                if (userData.points !== undefined) {
+                    const newPoints = (userData.points || 0) + results.totalScore;
+                    await db.collection('foydalanuvchilar').doc(currentUser.uid).update({
+                        points: newPoints
+                    });
+                    console.log(`User points updated: ${newPoints}`);
+                }
+                
+            } catch (error) {
+                console.error("Error saving results to Firestore:", error);
             }
         }
         
@@ -1187,6 +1471,19 @@
         
         /* ========= Event Listeners ========= */
         function setupEventListeners() {
+            // Logout button
+            elements.logoutBtn.addEventListener('click', logout);
+            
+            // Go to login button
+            elements.goToLoginBtn.addEventListener('click', () => {
+                window.location.href = 'login.html';
+            });
+            
+            // Go to register button
+            elements.goToRegisterBtn.addEventListener('click', () => {
+                window.location.href = 'register.html';
+            });
+            
             // Load test button
             elements.loadTestBtn.addEventListener('click', async () => {
                 const code = elements.manualTestCode.value.trim();
@@ -1302,16 +1599,28 @@
             });
         }
         
-        /* ========= Initialize Test ========= */
-        async function initializeTest() {
+        /* ========= Initialize Application ========= */
+        async function initializeApplication() {
             // Show loading screen
             showScreen('loading');
             
             // Initialize Firebase
             if (!initializeFirebase()) {
-                showStatus("Firebase ulanmadi. LocalStorage'dan yuklash mumkin.", "warning");
-                // Continue anyway, we'll use localStorage
+                showStatus("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.", "warning");
+                // Still try to check authentication
             }
+            
+            // Check user authentication
+            const isLoggedIn = await checkUserAuthentication();
+            
+            if (!isLoggedIn) {
+                // User is not logged in, show login required screen
+                showScreen('loginRequired');
+                setupEventListeners();
+                return;
+            }
+            
+            // User is logged in, continue with test loading
             
             // Get test code from URL
             const testCode = getTestCodeFromURL();
@@ -1348,12 +1657,12 @@
             // Setup event listeners
             setupEventListeners();
             
-            console.log("Test initialized successfully");
+            console.log("Application initialized successfully");
         }
         
         /* ========= Start Application ========= */
         // Start when page loads
-        document.addEventListener('DOMContentLoaded', initializeTest);
+        document.addEventListener('DOMContentLoaded', initializeApplication);
         
         // Prevent cheating
         document.addEventListener('contextmenu', (e) => e.preventDefault());
