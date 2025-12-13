@@ -850,17 +850,17 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-  <script>
+   <script>
     // Firebase konfiguratsiyasi
     const firebaseConfig = {
-  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  storageBucket: "xplusy-760fa.firebasestorage.app",
-  messagingSenderId: "992512966017",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  measurementId: "G-459PLJ7P7L"
-};
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+      measurementId: "G-459PLJ7P7L"
+    };
 
     // Firebaseni initialize qilish
     if (!firebase.apps.length) {
@@ -885,71 +885,81 @@
     const pageNumbers = document.getElementById('page-numbers');
     const editModal = document.getElementById('edit-modal');
     const deleteModal = document.getElementById('delete-modal');
-
-    // Statistika elementlari
-    const totalUsersEl = document.getElementById('total-users');
-    const totalPointsEl = document.getElementById('total-points');
-    const activeUsersEl = document.getElementById('active-users');
-    const adminCountEl = document.getElementById('admin-count');
     const adminNameEl = document.getElementById('admin-name');
 
-    // Auth utils funksiyalari
-    const authUtils = {
-      getUser: function() {
-        const userData = localStorage.getItem('leadermath_user');
-        if (userData) {
-          return JSON.parse(userData);
-        }
-        return null;
-      },
-
-      isAdmin: function() {
-        const user = this.getUser();
-        if (!user) return false;
-        
-        return user.email === 'sohibjonmath@gmail.com';
-      },
-
-      requireAdmin: function() {
-        if (!this.isAdmin()) {
-          alert('Siz admin emassiz! Faqat admin kirishi mumkin.');
-          
-          const user = this.getUser();
-          if (user) {
-            window.location.href = 'index.html';
-          } else {
-            window.location.href = 'login.html';
-          }
-          return false;
-        }
-        return true;
-      },
-
-      logout: function() {
-        localStorage.removeItem('leadermath_user');
-        firebase.auth().signOut().then(() => {
-          console.log('Firebasedan chiqildi');
-        }).catch((error) => {
-          console.error('Chiqishda xatolik:', error);
+    // Google orqali avtomatik kirish qilish funksiyasi
+    function signInWithGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('profile');
+      provider.addScope('email');
+      
+      auth.signInWithPopup(provider)
+        .then((result) => {
+          // Kirish muvaffaqiyatli
+          const user = result.user;
+          checkAdminAndLoadData(user);
+        })
+        .catch((error) => {
+          console.error('Google orqali kirishda xatolik:', error);
+          alert('Google orqali kirishda xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
         });
-      }
-    };
-
-    // Admin tekshiruvi
-    if (!authUtils.isAdmin()) {
-      alert('Siz admin emassiz! Faqat admin kirishi mumkin.');
-      window.location.href = 'index.html';
     }
 
-    // Admin ma'lumotlarini yuklash
-    async function loadAdminData() {
-      currentAdmin = authUtils.getUser();
-      if (currentAdmin && currentAdmin.firstName) {
+    // Admin tekshiruvi va ma'lumotlarni yuklash
+    async function checkAdminAndLoadData(user) {
+      try {
+        // Firestore'dan foydalanuvchi ma'lumotlarini olish
+        const userDoc = await db.collection('foydalanuvchilar').doc(user.uid).get();
+        
+        if (!userDoc.exists) {
+          // Foydalanuvchi ma'lumotlari yo'q
+          await db.collection('foydalanuvchilar').doc(user.uid).set({
+            firstName: user.displayName ? user.displayName.split(' ')[0] : 'Foydalanuvchi',
+            lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : '',
+            email: user.email,
+            role: 'user', // Boshlang'ich holatda user
+            points: 0,
+            region: '',
+            district: '',
+            status: 'active',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        } else {
+          // Last login yangilash
+          await db.collection('foydalanuvchilar').doc(user.uid).update({
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+
+        // Admin tekshiruvi (faqat sohibjonmath@gmail.com)
+        if (user.email !== 'sohibjonmath@gmail.com') {
+          alert('Siz admin emassiz! Faqat admin kirishi mumkin.');
+          auth.signOut();
+          window.location.href = 'index.html';
+          return;
+        }
+
+        // Admin ma'lumotlarini o'rnatish
+        currentAdmin = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          firstName: user.displayName ? user.displayName.split(' ')[0] : 'Admin',
+          photoURL: user.photoURL
+        };
+
+        // Admin ismini ko'rsatish
         adminNameEl.textContent = currentAdmin.firstName;
+        
+        // Ma'lumotlarni yuklash
+        await loadUsers();
+        setupEventListeners();
+        
+      } catch (error) {
+        console.error('Ma\'lumotlarni yuklashda xatolik:', error);
+        alert('Ma\'lumotlarni yuklashda xatolik yuz berdi.');
       }
-      
-      // Foydalanuvchilarni yuklash
-      await loadUsers();
     }
 
     // Foydalanuvchilarni yuklash
@@ -962,7 +972,6 @@
           </div>
         `;
 
-        const db = firebase.firestore();
         const usersSnapshot = await db.collection('foydalanuvchilar').get();
         
         allUsers = [];
@@ -986,14 +995,14 @@
           if (user.role === 'admin') adminCount++;
         });
 
-        // Sort by points (descending)
+        // Ballar bo'yicha saralash
         allUsers.sort((a, b) => (b.points || 0) - (a.points || 0));
 
         // Statistika yangilash
-        totalUsersEl.textContent = allUsers.length.toLocaleString();
-        totalPointsEl.textContent = totalPoints.toLocaleString();
-        activeUsersEl.textContent = activeUsers.toLocaleString();
-        adminCountEl.textContent = adminCount;
+        document.getElementById('total-users').textContent = allUsers.length.toLocaleString();
+        document.getElementById('total-points').textContent = totalPoints.toLocaleString();
+        document.getElementById('active-users').textContent = activeUsers.toLocaleString();
+        document.getElementById('admin-count').textContent = adminCount;
 
         renderUsers();
       } catch (error) {
@@ -1166,7 +1175,6 @@
       const user = allUsers.find(u => u.id === userId);
       if (!user) return;
       
-      // Asosiy adminni o'chirish mumkin emas
       if (user.email === 'sohibjonmath@gmail.com') {
         alert("Asosiy adminni o'chirish mumkin emas!");
         return;
@@ -1182,7 +1190,6 @@
     // Foydalanuvchi ma'lumotlarini yangilash
     async function updateUser(userId, data) {
       try {
-        const db = firebase.firestore();
         await db.collection('foydalanuvchilar').doc(userId).update({
           ...data,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1207,14 +1214,12 @@
     // Foydalanuvchini o'chirish
     async function deleteUser(userId) {
       try {
-        // Asosiy adminni o'chirishni tekshirish
         const user = allUsers.find(u => u.id === userId);
         if (user && user.email === 'sohibjonmath@gmail.com') {
           alert("Asosiy adminni o'chirish mumkin emas!");
           return false;
         }
         
-        const db = firebase.firestore();
         await db.collection('foydalanuvchilar').doc(userId).delete();
         
         // Local datadan o'chirish
@@ -1230,11 +1235,8 @@
       }
     }
 
-    // Event listenerlar
-    document.addEventListener('DOMContentLoaded', async function() {
-      // Admin ma'lumotlarini yuklash
-      await loadAdminData();
-      
+    // Event listenerlarni o'rnatish
+    function setupEventListeners() {
       // Search event
       searchInput.addEventListener('input', function() {
         currentPage = 1;
@@ -1331,8 +1333,9 @@
       // Logout
       document.getElementById('logout-btn').addEventListener('click', function() {
         if (confirm('Rostan ham admin panelidan chiqmoqchimisiz?')) {
-          authUtils.logout();
-          window.location.href = 'login.html';
+          auth.signOut().then(() => {
+            window.location.href = 'index.html';
+          });
         }
       });
       
@@ -1344,12 +1347,20 @@
           deleteUserId = null;
         }
       });
-    });
+    }
 
-    // Auto-refresh every 30 seconds
-    setInterval(function() {
-      loadUsers();
-    }, 30000);
+    // DOM ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Avtomatik Google kirish
+      signInWithGoogle();
+      
+      // Auto-refresh every 30 seconds
+      setInterval(function() {
+        if (currentAdmin) {
+          loadUsers();
+        }
+      }, 30000);
+    });
   </script>
 </body>
 </html>
