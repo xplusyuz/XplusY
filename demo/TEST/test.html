@@ -2246,9 +2246,11 @@
             console.warn(`Violation: ${type} (Penalty: ${penalty})`);
         }
         
-        // 10. Penalty Application
+        // 10. Penalty Application (Tuzatilgan)
         function applyPenalty(points) {
-            penaltyPoints += points;
+            // Floating-point xatoliklarni oldini olish uchun ballarni yaxlitlash
+            points = Math.round(points * 100) / 100; // 2 ta kasrga yaxlitlash
+            penaltyPoints = Math.round((penaltyPoints + points) * 100) / 100;
             
             // Update penalty display
             elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints} ball`;
@@ -3004,7 +3006,7 @@
             }
         }
         
-        // Calculate Results
+        // Calculate Results (Tuzatilgan)
         function calculateResults() {
             let correctCount = 0;
             let totalScore = 0;
@@ -3019,8 +3021,6 @@
                     }
                 } else if (question.type === 'open') {
                     if (userAnswer && userAnswer.trim() !== '') {
-                        // For open questions, we'd need manual grading
-                        // For now, give full points if answered
                         correctCount++;
                         totalScore += (question.points || 1);
                     }
@@ -3032,8 +3032,13 @@
                 }
             });
             
+            // Floating-point xatoliklarni oldini olish uchun yaxlitlash
+            totalScore = Math.round(totalScore * 100) / 100;
+            
             // Apply penalty points
-            const finalScore = Math.max(0, totalScore - penaltyPoints);
+            let finalScore = totalScore - penaltyPoints;
+            if (finalScore < 0) finalScore = 0;
+            finalScore = Math.round(finalScore * 100) / 100;
             
             const wrongCount = testData.questions.length - correctCount;
             const timeMinutes = Math.floor(timeSpent / 60);
@@ -3050,7 +3055,13 @@
             };
         }
         
-        // Finish Test
+        // Format number for display (remove trailing zeros)
+        function formatNumber(num) {
+            // Format to 2 decimal places and remove unnecessary trailing zeros
+            return num.toFixed(2).replace(/\.?0+$/, '');
+        }
+        
+        // Finish Test (Tuzatilgan)
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
@@ -3062,13 +3073,13 @@
             
             const results = calculateResults();
             
-            // Update results display
-            elements.finalScore.textContent = results.finalScore;
+            // Update results display with formatted numbers
+            elements.finalScore.textContent = formatNumber(results.finalScore);
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = results.totalScore;
+            elements.totalScoreResult.textContent = formatNumber(results.totalScore);
             elements.timeUsed.textContent = results.timeFormatted;
-            elements.penaltyResult.textContent = results.penaltyPoints;
+            elements.penaltyResult.textContent = formatNumber(results.penaltyPoints);
             elements.violationResult.textContent = violations.length;
             
             // Save results
@@ -3217,7 +3228,7 @@
                 
                 // Yangi ballarni qo'shish
                 await userRef.update({
-                    points: currentPoints + results.finalScore,
+                    points: Math.round((currentPoints + results.finalScore) * 100) / 100,
                     lastTest: currentTestCode,
                     lastScore: results.finalScore,
                     totalTests: firebase.firestore.FieldValue.increment(1),
