@@ -21,12 +21,34 @@
             tex: { 
                 inlineMath: [['$','$'],['\\(','\\)']], 
                 displayMath: [['$$','$$'],['\\[','\\]']], 
-                processEscapes: true 
+                processEscapes: true,
+                packages: {'[+]': ['boldsymbol']}
             },
             options: { 
                 renderActions: { 
                     addMenu: [],
-                    assistiveMml: [] 
+                    assistiveMml: [],
+                    findScript: [10, function (doc) {
+                        for (const node of document.querySelectorAll('script[type^="math/tex"]')) {
+                            const display = !!node.type.match(/; *mode=display/);
+                            const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+                            const text = document.createTextNode('');
+                            node.parentNode.replaceChild(text, node);
+                            math.start = {node: text, delim: '', n: 0};
+                            math.end = {node: text, delim: '', n: 0};
+                            doc.math.push(math);
+                        }
+                    }, '']
+                },
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'annotation', 'annotation-xml'],
+                ignoreHtmlClass: 'tex2jax_ignore',
+                processHtmlClass: 'tex2jax_process'
+            },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                    // Klaviatura tugmalarini MathJax bilan render qilish
+                    renderMathButtons();
                 }
             }
         };
@@ -669,7 +691,6 @@
             align-items: center;
             justify-content: center;
             text-align: center;
-            font-family: "Cambria Math", "Times New Roman", serif;
         }
         
         .kbtn:hover {
@@ -825,7 +846,6 @@
             border-radius: 12px;
             background: white;
             font-size: 18px;
-            font-family: "Cambria Math", "Times New Roman", serif;
             overflow-x: auto;
             white-space: nowrap;
             margin-bottom: 20px;
@@ -930,6 +950,40 @@
         
         .kbtn {
             position: relative;
+        }
+        
+        /* Math klaviatura tugmalari uchun maxsus style */
+        .kbtn div {
+            min-height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Math input display uchun */
+        .math-input-display mjx-container {
+            width: 100% !important;
+            overflow-x: auto !important;
+        }
+        
+        /* Klaviatura tugmalarida MathJax o'qlarini yashirish */
+        .kbtn mjx-container[jax="CHTML"] {
+            overflow: visible !important;
+        }
+        
+        .kbtn mjx-container[jax="CHTML"] mjx-mtext {
+            font-size: 12px !important;
+        }
+        
+        /* Kichik ekranlar uchun */
+        @media (max-width: 768px) {
+            .kbtn div {
+                font-size: 12px !important;
+            }
+            
+            .kbtn mjx-container[jax="CHTML"] mjx-mtext {
+                font-size: 10px !important;
+            }
         }
     </style>
 </head>
@@ -1368,84 +1422,84 @@
         /* ========= MATH KEYPAD CONFIGURATION ========= */
         const MATH_KEYPAD = {
             basic: [
-                { show: 'x^y', insert: '^{?}', title: 'Daraja' },
-                { show: 'x_y', insert: '_{?}', title: 'Indeks' },
-                { show: 'a/b', insert: '\\frac{?}{?}', title: 'Kasr' },
-                { show: '√x', insert: '\\sqrt{?}', title: 'Kvadrat ildiz' },
-                { show: 'ⁿ√x', insert: '\\sqrt[?]{?}', title: 'n-darajali ildiz' },
-                { show: 'π', insert: '\\pi', title: 'Pi' },
-                { show: '∞', insert: '\\infty', title: 'Cheksizlik' },
-                { show: 'α', insert: '\\alpha', title: 'Alfa' },
-                { show: 'β', insert: '\\beta', title: 'Beta' },
-                { show: 'γ', insert: '\\gamma', title: 'Gamma' },
-                { show: 'θ', insert: '\\theta', title: 'Teta' },
-                { show: 'Δ', insert: '\\Delta', title: 'Delta' },
+                { show: 'x^{y}', insert: '^{?}', title: 'Daraja' },
+                { show: 'x_{y}', insert: '_{?}', title: 'Indeks' },
+                { show: '\\frac{a}{b}', insert: '\\frac{?}{?}', title: 'Kasr' },
+                { show: '\\sqrt{x}', insert: '\\sqrt{?}', title: 'Kvadrat ildiz' },
+                { show: '\\sqrt[?]{x}', insert: '\\sqrt[?]{?}', title: 'n-darajali ildiz' },
+                { show: '\\pi', insert: '\\pi', title: 'Pi' },
+                { show: '\\infty', insert: '\\infty', title: 'Cheksizlik' },
+                { show: '\\alpha', insert: '\\alpha', title: 'Alfa' },
+                { show: '\\beta', insert: '\\beta', title: 'Beta' },
+                { show: '\\gamma', insert: '\\gamma', title: 'Gamma' },
+                { show: '\\theta', insert: '\\theta', title: 'Teta' },
+                { show: '\\Delta', insert: '\\Delta', title: 'Delta' },
             ],
             
             operators: [
                 { show: '+', insert: '+', title: 'Qo\'shish' },
                 { show: '-', insert: '-', title: 'Ayirish' },
-                { show: '·', insert: '\\cdot', title: 'Nuqta ko\'paytirish' },
-                { show: '×', insert: '\\times', title: 'Ko\'paytirish' },
-                { show: '÷', insert: '\\div', title: 'Bo\'lish' },
+                { show: '\\cdot', insert: '\\cdot', title: 'Nuqta ko\'paytirish' },
+                { show: '\\times', insert: '\\times', title: 'Ko\'paytirish' },
+                { show: '\\div', insert: '\\div', title: 'Bo\'lish' },
                 { show: '=', insert: '=', title: 'Teng' },
-                { show: '≠', insert: '\\neq', title: 'Teng emas' },
-                { show: '≈', insert: '\\approx', title: 'Taxminan' },
-                { show: '≤', insert: '\\le', title: 'Kichik yoki teng' },
-                { show: '≥', insert: '\\ge', title: 'Katta yoki teng' },
+                { show: '\\neq', insert: '\\neq', title: 'Teng emas' },
+                { show: '\\approx', insert: '\\approx', title: 'Taxminan' },
+                { show: '\\le', insert: '\\le', title: 'Kichik yoki teng' },
+                { show: '\\ge', insert: '\\ge', title: 'Katta yoki teng' },
                 { show: '<', insert: '<', title: 'Kichik' },
                 { show: '>', insert: '>', title: 'Katta' },
-                { show: '±', insert: '\\pm', title: 'Plus-minus' },
-                { show: '∓', insert: '\\mp', title: 'Minus-plus' },
+                { show: '\\pm', insert: '\\pm', title: 'Plus-minus' },
+                { show: '\\mp', insert: '\\mp', title: 'Minus-plus' },
             ],
             
             functions: [
-                { show: 'log', insert: '\\log(?)', title: 'Logarifm' },
-                { show: 'ln', insert: '\\ln(?)', title: 'Natural logarifm' },
-                { show: 'logₐb', insert: '\\log_{?}(?)', title: 'Asosli logarifm' },
-                { show: 'sin', insert: '\\sin(?)', title: 'Sinus' },
-                { show: 'cos', insert: '\\cos(?)', title: 'Kosinus' },
-                { show: 'tan', insert: '\\tan(?)', title: 'Tangens' },
-                { show: 'cot', insert: '\\cot(?)', title: 'Kotangens' },
-                { show: 'arcsin', insert: '\\arcsin(?)', title: 'Arksinus' },
-                { show: 'arccos', insert: '\\arccos(?)', title: 'Arkkosinus' },
-                { show: 'arctan', insert: '\\arctan(?)', title: 'Arktangens' },
-                { show: 'lim', insert: '\\lim_{?\\to ?}', title: 'Limit' },
-                { show: '∑', insert: '\\sum_{?= ?}^{?}', title: 'Yig\'indi' },
-                { show: '∏', insert: '\\prod_{?= ?}^{?}', title: 'Ko\'paytma' },
-                { show: '∫', insert: '\\int_{?}^{?}', title: 'Integral' },
+                { show: '\\log(x)', insert: '\\log(?)', title: 'Logarifm' },
+                { show: '\\ln(x)', insert: '\\ln(?)', title: 'Natural logarifm' },
+                { show: '\\log_a b', insert: '\\log_{?}(?)', title: 'Asosli logarifm' },
+                { show: '\\sin(x)', insert: '\\sin(?)', title: 'Sinus' },
+                { show: '\\cos(x)', insert: '\\cos(?)', title: 'Kosinus' },
+                { show: '\\tan(x)', insert: '\\tan(?)', title: 'Tangens' },
+                { show: '\\cot(x)', insert: '\\cot(?)', title: 'Kotangens' },
+                { show: '\\arcsin(x)', insert: '\\arcsin(?)', title: 'Arksinus' },
+                { show: '\\arccos(x)', insert: '\\arccos(?)', title: 'Arkkosinus' },
+                { show: '\\arctan(x)', insert: '\\arctan(?)', title: 'Arktangens' },
+                { show: '\\lim\\limits_{x \\to a}', insert: '\\lim_{?\\to ?}', title: 'Limit' },
+                { show: '\\sum\\limits_{i=1}^{n}', insert: '\\sum_{?= ?}^{?}', title: 'Yig\'indi' },
+                { show: '\\prod\\limits_{i=1}^{n}', insert: '\\prod_{?= ?}^{?}', title: 'Ko\'paytma' },
+                { show: '\\int\\limits_{a}^{b}', insert: '\\int_{?}^{?}', title: 'Integral' },
             ],
             
             symbols: [
-                { show: '( )', insert: '\\left(?\\right)', title: 'Qavs' },
-                { show: '[ ]', insert: '\\left[?\\right]', title: 'To\'rtburchak qavs' },
-                { show: '{ }', insert: '\\left\\{?\\right\\}', title: 'Figurali qavs' },
-                { show: '| |', insert: '\\left|?\\right|', title: 'Modul' },
-                { show: 'C(n,k)', insert: '\\binom{?}{?}', title: 'Binom koeffitsiyent' },
-                { show: '→AB', insert: '\\overrightarrow{?}', title: 'Vektor' },
-                { show: '∠', insert: '\\angle', title: 'Burchak' },
-                { show: '∥', insert: '\\parallel', title: 'Parallel' },
-                { show: '⊥', insert: '\\perp', title: 'Perpendikulyar' },
-                { show: '∈', insert: '\\in', title: 'Element' },
-                { show: '⊂', insert: '\\subset', title: 'Qism to\'plam' },
-                { show: '∪', insert: '\\cup', title: 'Birlashma' },
-                { show: '∩', insert: '\\cap', title: 'Kesishma' },
-                { show: '∅', insert: '\\emptyset', title: 'Bo\'sh to\'plam' },
+                { show: '\\left(\\right)', insert: '\\left(?\\right)', title: 'Qavs' },
+                { show: '\\left[\\right]', insert: '\\left[?\\right]', title: 'To\'rtburchak qavs' },
+                { show: '\\left\\{\\right\\}', insert: '\\left\\{?\\right\\}', title: 'Figurali qavs' },
+                { show: '\\left|\\right|', insert: '\\left|?\\right|', title: 'Modul' },
+                { show: '\\binom{n}{k}', insert: '\\binom{?}{?}', title: 'Binom koeffitsiyent' },
+                { show: '\\overrightarrow{AB}', insert: '\\overrightarrow{?}', title: 'Vektor' },
+                { show: '\\angle', insert: '\\angle', title: 'Burchak' },
+                { show: '\\parallel', insert: '\\parallel', title: 'Parallel' },
+                { show: '\\perp', insert: '\\perp', title: 'Perpendikulyar' },
+                { show: '\\in', insert: '\\in', title: 'Element' },
+                { show: '\\subset', insert: '\\subset', title: 'Qism to\'plam' },
+                { show: '\\cup', insert: '\\cup', title: 'Birlashma' },
+                { show: '\\cap', insert: '\\cap', title: 'Kesishma' },
+                { show: '\\emptyset', insert: '\\emptyset', title: 'Bo\'sh to\'plam' },
             ],
             
             sets: [
-                { show: 'ℝ', insert: '\\mathbb{R}', title: 'Haqiqiy sonlar' },
-                { show: 'ℚ', insert: '\\mathbb{Q}', title: 'Ratsional sonlar' },
-                { show: 'ℤ', insert: '\\mathbb{Z}', title: 'Butun sonlar' },
-                { show: 'ℕ', insert: '\\mathbb{N}', title: 'Natural sonlar' },
-                { show: 'ℂ', insert: '\\mathbb{C}', title: 'Kompleks sonlar' },
-                { show: '∀', insert: '\\forall', title: 'Barchasi uchun' },
-                { show: '∃', insert: '\\exists', title: 'Mavjud' },
-                { show: '¬', insert: '\\neg', title: 'Inkor' },
-                { show: '∧', insert: '\\wedge', title: 'VA' },
-                { show: '∨', insert: '\\vee', title: 'YOKI' },
-                { show: '⇒', insert: '\\Rightarrow', title: 'Demak' },
-                { show: '⇔', insert: '\\Leftrightarrow', title: 'Agar va faqat agar' },
+                { show: '\\mathbb{R}', insert: '\\mathbb{R}', title: 'Haqiqiy sonlar' },
+                { show: '\\mathbb{Q}', insert: '\\mathbb{Q}', title: 'Ratsional sonlar' },
+                { show: '\\mathbb{Z}', insert: '\\mathbb{Z}', title: 'Butun sonlar' },
+                { show: '\\mathbb{N}', insert: '\\mathbb{N}', title: 'Natural sonlar' },
+                { show: '\\mathbb{C}', insert: '\\mathbb{C}', title: 'Kompleks sonlar' },
+                { show: '\\forall', insert: '\\forall', title: 'Barchasi uchun' },
+                { show: '\\exists', insert: '\\exists', title: 'Mavjud' },
+                { show: '\\neg', insert: '\\neg', title: 'Inkor' },
+                { show: '\\wedge', insert: '\\wedge', title: 'VA' },
+                { show: '\\vee', insert: '\\vee', title: 'YOKI' },
+                { show: '\\Rightarrow', insert: '\\Rightarrow', title: 'Demak' },
+                { show: '\\Leftrightarrow', insert: '\\Leftrightarrow', title: 'Agar va faqat agar' },
             ]
         };
         
@@ -1461,10 +1515,34 @@
             // Focus on display
             display.addEventListener('focus', function() {
                 startCursorBlink();
+                // Tozalangan LaTeX ko'rinishini saqlash
+                const currentText = this.textContent || '';
+                if (currentText.includes('\\(') || currentText.includes('\\)')) {
+                    // Agar MathJax render qilingan bo'lsa, oddiy matn olish
+                    const latexText = currentText.replace(/\\\(|\\\)/g, '').trim();
+                    this.textContent = latexText;
+                }
             });
             
             display.addEventListener('blur', function() {
                 stopCursorBlink();
+                // LaTeX ni render qilish
+                updateMathPreview();
+            });
+            
+            // Real-time LaTeX render
+            display.addEventListener('input', function() {
+                // Tezkor render (debounce bilan)
+                clearTimeout(this.renderTimeout);
+                this.renderTimeout = setTimeout(() => {
+                    const text = this.textContent || '';
+                    updateHiddenInput(text);
+                    
+                    // Agar foydalanuvchi yozayotgan bo'lsa, to'liq render qilmaslik
+                    if (!this.isFocused) {
+                        updateMathPreview();
+                    }
+                }, 500);
             });
             
             // Handle keyboard input
@@ -1536,17 +1614,23 @@
                 return;
             }
             
-            // Wrap in $ for MathJax
-            const latex = `$$${text}$`;
+            // LaTeX matnini tozalash va formatlash
+            const latex = text
+                .replace(/\n/g, '\\\\')  // Yangi qator uchun
+                .replace(/\s+/g, ' ')    // Ortiqcha bo'sh joylarni olib tashlash
+                .trim();
             
-            // Create preview
-            display.innerHTML = latex;
+            // MathJax uchun format
+            const mathContent = `\\(${latex}\\)`;
             
-            // Typeset with MathJax
+            // Displayni yangilash
+            display.innerHTML = mathContent;
+            
+            // MathJax ni yangi kontentni render qilish uchun chaqirish
             if (window.MathJax && MathJax.typesetPromise) {
                 MathJax.typesetPromise([display]).catch(err => {
-                    console.log('MathJax error:', err);
-                    // Fallback to plain text
+                    console.log('MathJax rendering error:', err);
+                    // Xato bo'lsa oddiy matn sifatida ko'rsatish
                     display.textContent = text;
                 });
             }
@@ -1687,9 +1771,16 @@
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'kbtn';
-                button.innerHTML = key.show;
-                button.title = key.title || key.show;
                 button.dataset.insert = key.insert;
+                button.title = key.title || key.show;
+                
+                // LaTeX ni MathJax bilan render qilish
+                const latexContent = document.createElement('div');
+                latexContent.style.display = 'inline';
+                latexContent.style.fontSize = '14px';
+                latexContent.innerHTML = `\\(${key.show}\\)`;
+                
+                button.appendChild(latexContent);
                 
                 button.addEventListener('click', () => {
                     // Focus the math display
@@ -1704,6 +1795,23 @@
                 
                 grid.appendChild(button);
             });
+            
+            // MathJax ni yangi elementlarni render qilish uchun chaqirish
+            if (window.MathJax && MathJax.typesetPromise) {
+                MathJax.typesetPromise([grid]).catch(err => {
+                    console.log('MathJax error in keyboard:', err);
+                });
+            }
+        }
+        
+        function renderMathButtons() {
+            // Klaviatura tugmalarini MathJax bilan render qilish
+            if (window.MathJax && MathJax.typesetPromise) {
+                const keyboardPanel = document.getElementById('mathKeyboardPanel');
+                if (keyboardPanel) {
+                    MathJax.typesetPromise([keyboardPanel]).catch(console.error);
+                }
+            }
         }
         
         function switchMathTab() {
