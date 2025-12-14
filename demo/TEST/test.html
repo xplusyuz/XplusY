@@ -1428,6 +1428,7 @@
         let currentUser = null;
         let userData = null;
         let testData = null;
+        let originalTestData = null; // Asl test ma'lumotlari
         let currentTestCode = null;
         let currentQuestionIndex = 0;
         let userAnswers = [];
@@ -1537,6 +1538,98 @@
             errorMessage: document.getElementById('errorMessage'),
             statusMessage: document.getElementById('statusMessage')
         };
+        
+        /* ========= RANDOMIZATION FUNCTIONS ========= */
+        
+        // Fisher-Yates shuffle algoritmi - massivni random tartibda aralashtiradi
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        // Variantli savollarning variantlarini random tartibda joylashtirish
+        function randomizeQuestionOptions(question) {
+            if (question.type !== 'variant' || !question.options || question.options.length <= 1) {
+                return question;
+            }
+            
+            // Variantlarni random tartibda joylashtirish
+            const originalOptions = [...question.options];
+            const shuffledOptions = shuffleArray(originalOptions);
+            
+            // To'g'ri javob indeksini yangilash
+            let newCorrectIndex = 0;
+            if (question.correctIndex !== undefined) {
+                const correctAnswer = originalOptions[question.correctIndex];
+                newCorrectIndex = shuffledOptions.indexOf(correctAnswer);
+            }
+            
+            return {
+                ...question,
+                options: shuffledOptions,
+                correctIndex: newCorrectIndex,
+                originalOptions: originalOptions,
+                originalCorrectIndex: question.correctIndex
+            };
+        }
+        
+        // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish (bo'limlar o'z o'rnida)
+        function randomizeTestSections(testData) {
+            if (!testData.questions || testData.questions.length === 0) {
+                return testData;
+            }
+            
+            // Bo'limlarni aniqlash
+            const sections = {};
+            testData.questions.forEach((question, index) => {
+                const sectionName = question.section || "Umumiy";
+                if (!sections[sectionName]) {
+                    sections[sectionName] = [];
+                }
+                sections[sectionName].push({ question, originalIndex: index });
+            });
+            
+            // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish
+            const randomizedQuestions = [];
+            const originalToRandomMap = {}; // Asl indeks -> random indeks
+            const randomToOriginalMap = {}; // Random indeks -> asl indeks
+            
+            // Bo'limlarni asl tartibda saqlab qolish
+            const sectionNames = Object.keys(sections);
+            
+            // Bo'limlarni asl tartibida qoldirish
+            sectionNames.forEach(sectionName => {
+                const sectionQuestions = sections[sectionName];
+                const shuffledSectionQuestions = shuffleArray(sectionQuestions);
+                
+                shuffledSectionQuestions.forEach(item => {
+                    const randomIndex = randomizedQuestions.length;
+                    const originalIndex = item.originalIndex;
+                    
+                    originalToRandomMap[originalIndex] = randomIndex;
+                    randomToOriginalMap[randomIndex] = originalIndex;
+                    
+                    // Har bir savolning variantlarini ham random qilish
+                    const randomizedQuestion = randomizeQuestionOptions(item.question);
+                    randomizedQuestion.originalIndex = originalIndex;
+                    randomizedQuestion.section = sectionName;
+                    
+                    randomizedQuestions.push(randomizedQuestion);
+                });
+            });
+            
+            return {
+                ...testData,
+                questions: randomizedQuestions,
+                originalToRandomMap: originalToRandomMap,
+                randomToOriginalMap: randomToOriginalMap,
+                sectionOrder: sectionNames // Bo'limlar tartibini saqlab qolish
+            };
+        }
         
         /* ========= PROFESSIONAL MATEMATIK EDITOR FUNKSIYALARI ========= */
         
@@ -2246,9 +2339,11 @@
             console.warn(`Violation: ${type} (Penalty: ${penalty})`);
         }
         
-        // 10. Penalty Application
+        // 10. Penalty Application (Tuzatilgan)
         function applyPenalty(points) {
-            penaltyPoints += points;
+            // Floating-point xatoliklarni oldini olish uchun ballarni yaxlitlash
+            points = Math.round(points * 100) / 100; // 2 ta kasrga yaxlitlash
+            penaltyPoints = Math.round((penaltyPoints + points) * 100) / 100;
             
             // Update penalty display
             elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints} ball`;
@@ -2523,6 +2618,7 @@
                 }
                 
                 testData = testDoc.data();
+                originalTestData = JSON.parse(JSON.stringify(testData)); // Asl nusxasini saqlab qo'yamiz
                 currentTestCode = code;
                 
                 console.log("Test yuklandi:", testData);
@@ -2532,6 +2628,9 @@
                 
                 normalizeTestData();
                 
+                // Test ma'lumotlarini random qilish (faqat variantlarni)
+                randomizeTest();
+                
                 console.log("Test loaded successfully:", testData.title);
                 return true;
                 
@@ -2540,6 +2639,28 @@
                 showError(`Test yuklashda xato: ${error.message}`);
                 return false;
             }
+        }
+        
+        // Test ma'lumotlarini random qilish (faqat variantlarni)
+        function randomizeTest() {
+            if (!testData || !testData.questions) return;
+            
+            console.log("Test ma'lumotlari random tartibda joylashtirilmoqda (faqat variantlar)...");
+            
+            // Asl test ma'lumotlarini saqlab qo'yamiz
+            if (!originalTestData) {
+                originalTestData = JSON.parse(JSON.stringify(testData));
+            }
+            
+            // Faqat variantlarni random qilish
+            testData.questions = testData.questions.map((question, index) => {
+                if (question.type === 'variant') {
+                    return randomizeQuestionOptions(question);
+                }
+                return question;
+            });
+            
+            console.log("Test variantlari random qilindi. Jami savollar:", testData.questions.length);
         }
         
         // Load Rating Data
@@ -2685,8 +2806,12 @@
                 
                 if (savedTests[code]) {
                     testData = savedTests[code];
+                    originalTestData = JSON.parse(JSON.stringify(testData)); // Asl nusxasini saqlab qo'yamiz
                     currentTestCode = code;
                     normalizeTestData();
+                    
+                    // Test ma'lumotlarini random qilish (faqat variantlarni)
+                    randomizeTest();
                     
                     console.log("Test localStorage'dan yuklandi:", testData);
                     showStatus("Test localStorage'dan yuklandi", "warning");
@@ -2823,7 +2948,8 @@
             img.classList.add('hidden');
             
             if (currentTestCode) {
-                const imageNumber = questionIndex + 1;
+                const imageNumber = questionIndex + 1; // Random emas, asl indeks
+                
                 const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
                 
                 let loaded = false;
@@ -3004,7 +3130,7 @@
             }
         }
         
-        // Calculate Results
+        // Calculate Results (Tuzatilgan)
         function calculateResults() {
             let correctCount = 0;
             let totalScore = 0;
@@ -3013,14 +3139,13 @@
                 const userAnswer = userAnswers[index];
                 
                 if (question.type === 'variant') {
+                    // Random variantlar bilan to'g'ri javobni tekshirish
                     if (userAnswer === question.correctIndex) {
                         correctCount++;
                         totalScore += (question.points || 1);
                     }
                 } else if (question.type === 'open') {
                     if (userAnswer && userAnswer.trim() !== '') {
-                        // For open questions, we'd need manual grading
-                        // For now, give full points if answered
                         correctCount++;
                         totalScore += (question.points || 1);
                     }
@@ -3032,8 +3157,13 @@
                 }
             });
             
+            // Floating-point xatoliklarni oldini olish uchun yaxlitlash
+            totalScore = Math.round(totalScore * 100) / 100;
+            
             // Apply penalty points
-            const finalScore = Math.max(0, totalScore - penaltyPoints);
+            let finalScore = totalScore - penaltyPoints;
+            if (finalScore < 0) finalScore = 0;
+            finalScore = Math.round(finalScore * 100) / 100;
             
             const wrongCount = testData.questions.length - correctCount;
             const timeMinutes = Math.floor(timeSpent / 60);
@@ -3050,7 +3180,13 @@
             };
         }
         
-        // Finish Test
+        // Format number for display (remove trailing zeros)
+        function formatNumber(num) {
+            // Format to 2 decimal places and remove unnecessary trailing zeros
+            return num.toFixed(2).replace(/\.?0+$/, '');
+        }
+        
+        // Finish Test (Tuzatilgan)
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
@@ -3062,13 +3198,13 @@
             
             const results = calculateResults();
             
-            // Update results display
-            elements.finalScore.textContent = results.finalScore;
+            // Update results display with formatted numbers
+            elements.finalScore.textContent = formatNumber(results.finalScore);
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = results.totalScore;
+            elements.totalScoreResult.textContent = formatNumber(results.totalScore);
             elements.timeUsed.textContent = results.timeFormatted;
-            elements.penaltyResult.textContent = results.penaltyPoints;
+            elements.penaltyResult.textContent = formatNumber(results.penaltyPoints);
             elements.violationResult.textContent = violations.length;
             
             // Save results
@@ -3154,6 +3290,7 @@
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
                     answers: userAnswers,
+                    randomized: true, // Test random qilinganligini belgilash
                     date: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
@@ -3217,7 +3354,7 @@
                 
                 // Yangi ballarni qo'shish
                 await userRef.update({
-                    points: currentPoints + results.finalScore,
+                    points: Math.round((currentPoints + results.finalScore) * 100) / 100,
                     lastTest: currentTestCode,
                     lastScore: results.finalScore,
                     totalTests: firebase.firestore.FieldValue.increment(1),
