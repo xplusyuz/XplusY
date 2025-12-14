@@ -1577,7 +1577,7 @@
             };
         }
         
-        // Har bir bo'limdagi savollarni random tartibda joylashtirish
+        // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish (bo'limlar o'z o'rnida)
         function randomizeTestSections(testData) {
             if (!testData.questions || testData.questions.length === 0) {
                 return testData;
@@ -1593,12 +1593,16 @@
                 sections[sectionName].push({ question, originalIndex: index });
             });
             
-            // Har bir bo'limdagi savollarni random tartibda joylashtirish
+            // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish
             const randomizedQuestions = [];
             const originalToRandomMap = {}; // Asl indeks -> random indeks
             const randomToOriginalMap = {}; // Random indeks -> asl indeks
             
-            Object.keys(sections).forEach(sectionName => {
+            // Bo'limlarni asl tartibda saqlab qolish
+            const sectionNames = Object.keys(sections);
+            
+            // Bo'limlarni asl tartibida qoldirish
+            sectionNames.forEach(sectionName => {
                 const sectionQuestions = sections[sectionName];
                 const shuffledSectionQuestions = shuffleArray(sectionQuestions);
                 
@@ -1622,7 +1626,8 @@
                 ...testData,
                 questions: randomizedQuestions,
                 originalToRandomMap: originalToRandomMap,
-                randomToOriginalMap: randomToOriginalMap
+                randomToOriginalMap: randomToOriginalMap,
+                sectionOrder: sectionNames // Bo'limlar tartibini saqlab qolish
             };
         }
         
@@ -2623,7 +2628,7 @@
                 
                 normalizeTestData();
                 
-                // Test ma'lumotlarini random qilish
+                // Test ma'lumotlarini random qilish (faqat variantlarni)
                 randomizeTest();
                 
                 console.log("Test loaded successfully:", testData.title);
@@ -2636,21 +2641,26 @@
             }
         }
         
-        // Test ma'lumotlarini random qilish
+        // Test ma'lumotlarini random qilish (faqat variantlarni)
         function randomizeTest() {
             if (!testData || !testData.questions) return;
             
-            console.log("Test ma'lumotlari random tartibda joylashtirilmoqda...");
+            console.log("Test ma'lumotlari random tartibda joylashtirilmoqda (faqat variantlar)...");
             
             // Asl test ma'lumotlarini saqlab qo'yamiz
             if (!originalTestData) {
                 originalTestData = JSON.parse(JSON.stringify(testData));
             }
             
-            // Test ma'lumotlarini random qilish
-            testData = randomizeTestSections(testData);
+            // Faqat variantlarni random qilish
+            testData.questions = testData.questions.map((question, index) => {
+                if (question.type === 'variant') {
+                    return randomizeQuestionOptions(question);
+                }
+                return question;
+            });
             
-            console.log("Test random qilindi. Jami savollar:", testData.questions.length);
+            console.log("Test variantlari random qilindi. Jami savollar:", testData.questions.length);
         }
         
         // Load Rating Data
@@ -2800,7 +2810,7 @@
                     currentTestCode = code;
                     normalizeTestData();
                     
-                    // Test ma'lumotlarini random qilish
+                    // Test ma'lumotlarini random qilish (faqat variantlarni)
                     randomizeTest();
                     
                     console.log("Test localStorage'dan yuklandi:", testData);
@@ -2938,9 +2948,7 @@
             img.classList.add('hidden');
             
             if (currentTestCode) {
-                // Random tartibda ko'rsatilgan savolning asl indeksini topamiz
-                const originalIndex = testData.randomToOriginalMap ? testData.randomToOriginalMap[questionIndex] : questionIndex;
-                const imageNumber = originalIndex + 1; // Asl indeks + 1 = rasm raqami
+                const imageNumber = questionIndex + 1; // Random emas, asl indeks
                 
                 const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
                 
@@ -3129,31 +3137,22 @@
             
             testData.questions.forEach((question, index) => {
                 const userAnswer = userAnswers[index];
-                const originalIndex = question.originalIndex !== undefined ? question.originalIndex : index;
                 
-                // Asl test ma'lumotlaridan foydalanish
-                let originalQuestion = null;
-                if (originalTestData && originalTestData.questions && originalTestData.questions[originalIndex]) {
-                    originalQuestion = originalTestData.questions[originalIndex];
-                } else {
-                    originalQuestion = question;
-                }
-                
-                if (originalQuestion.type === 'variant') {
-                    // Random tartibda ko'rsatilgan variantning asl to'g'ri javobini tekshirish
+                if (question.type === 'variant') {
+                    // Random variantlar bilan to'g'ri javobni tekshirish
                     if (userAnswer === question.correctIndex) {
                         correctCount++;
-                        totalScore += (originalQuestion.points || 1);
+                        totalScore += (question.points || 1);
                     }
-                } else if (originalQuestion.type === 'open') {
+                } else if (question.type === 'open') {
                     if (userAnswer && userAnswer.trim() !== '') {
                         correctCount++;
-                        totalScore += (originalQuestion.points || 1);
+                        totalScore += (question.points || 1);
                     }
                 } else {
-                    if (userAnswer === (originalQuestion.correctIndex || 0)) {
+                    if (userAnswer === (question.correctIndex || 0)) {
                         correctCount++;
-                        totalScore += (originalQuestion.points || 1);
+                        totalScore += (question.points || 1);
                     }
                 }
             });
