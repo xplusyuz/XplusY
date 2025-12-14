@@ -805,6 +805,74 @@
             font-size: 16px;
             margin-bottom: 10px;
         }
+        
+        /* Math Input Styles */
+        .math-input-container {
+            position: relative;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .math-input-hidden {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .math-input-display {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid var(--frame);
+            border-radius: 12px;
+            font-size: 16px;
+            min-height: 60px;
+            background: white;
+            overflow-x: auto;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            cursor: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        
+        .math-input-display:focus {
+            outline: none;
+            border-color: var(--brand);
+        }
+        
+        .math-input-display.empty::before {
+            content: "Javobingizni kiriting yoki pastdagi math klaviaturadan foydalaning...";
+            color: var(--muted);
+            font-style: italic;
+        }
+        
+        .math-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--brand);
+            margin: 0 1px;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        .math-input-wrapper {
+            position: relative;
+            display: inline;
+        }
     </style>
 </head>
 <body>
@@ -994,9 +1062,12 @@
             
             <!-- Open Answer (for open questions) -->
             <div id="openAnswerContainer" class="hidden">
-                <input type="text" id="openAnswerInput" class="open-answer" 
-                       placeholder="Javobingizni kiriting yoki pastdagi math klaviaturadan foydalaning..." 
-                       autocomplete="off">
+                <div class="math-input-container">
+                    <input type="text" id="openAnswerInput" class="math-input-hidden" 
+                           placeholder="Javobingizni kiriting..." autocomplete="off">
+                    <div id="mathInputDisplay" class="math-input-display empty" 
+                         contenteditable="false"></div>
+                </div>
                 <button id="openMathKeypad" class="btn" style="margin-top: 10px; width: 100%;">
                     <span>🧮 Math Klaviatura</span>
                 </button>
@@ -1193,6 +1264,7 @@
             optionsContainer: document.getElementById('optionsContainer'),
             openAnswerContainer: document.getElementById('openAnswerContainer'),
             openAnswerInput: document.getElementById('openAnswerInput'),
+            mathInputDisplay: document.getElementById('mathInputDisplay'),
             navDots: document.getElementById('navDots'),
             
             // Math Keypad elements
@@ -1227,6 +1299,224 @@
             errorMessage: document.getElementById('errorMessage'),
             statusMessage: document.getElementById('statusMessage')
         };
+        
+        /* ========= MATH INPUT SYSTEM ========= */
+        let mathCursorInterval = null;
+        let isCursorVisible = false;
+        let cursorPosition = 0;
+        
+        // Initialize Math Input
+        function initMathInput() {
+            const display = elements.mathInputDisplay;
+            const input = elements.openAnswerInput;
+            
+            if (!display || !input) return;
+            
+            // Click on display to focus
+            display.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Focus the hidden input
+                input.focus();
+                
+                // Calculate cursor position based on click
+                const clickX = e.clientX;
+                const displayRect = display.getBoundingClientRect();
+                const relativeX = clickX - displayRect.left;
+                
+                // Find approximate cursor position
+                const text = input.value;
+                cursorPosition = Math.min(text.length, Math.max(0, Math.floor(relativeX / 10)));
+                
+                updateMathDisplay();
+            });
+            
+            // Input event listener
+            input.addEventListener('input', function() {
+                userAnswers[currentQuestionIndex] = input.value;
+                updateNavDots();
+                updateMathDisplay();
+            });
+            
+            // Focus event
+            input.addEventListener('focus', function() {
+                display.classList.remove('empty');
+                display.style.borderColor = 'var(--brand)';
+                startCursorBlink();
+            });
+            
+            // Blur event
+            input.addEventListener('blur', function() {
+                display.style.borderColor = 'var(--frame)';
+                stopCursorBlink();
+                
+                if (!input.value || input.value.trim() === '') {
+                    display.classList.add('empty');
+                }
+            });
+            
+            // Keyboard events
+            input.addEventListener('keydown', function(e) {
+                // Handle arrow keys
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    cursorPosition = Math.max(0, cursorPosition - 1);
+                    updateMathDisplay();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    cursorPosition = Math.min(input.value.length, cursorPosition + 1);
+                    updateMathDisplay();
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    cursorPosition = 0;
+                    updateMathDisplay();
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    cursorPosition = input.value.length;
+                    updateMathDisplay();
+                } else if (e.key === 'Backspace') {
+                    if (cursorPosition > 0) {
+                        const text = input.value;
+                        input.value = text.substring(0, cursorPosition - 1) + text.substring(cursorPosition);
+                        cursorPosition--;
+                        input.dispatchEvent(new Event('input'));
+                        setTimeout(() => {
+                            input.focus();
+                            setCursorPosition(input, cursorPosition);
+                        }, 10);
+                    }
+                    e.preventDefault();
+                } else if (e.key === 'Delete') {
+                    if (cursorPosition < input.value.length) {
+                        const text = input.value;
+                        input.value = text.substring(0, cursorPosition) + text.substring(cursorPosition + 1);
+                        input.dispatchEvent(new Event('input'));
+                        setTimeout(() => {
+                            input.focus();
+                            setCursorPosition(input, cursorPosition);
+                        }, 10);
+                    }
+                    e.preventDefault();
+                }
+            });
+            
+            input.addEventListener('keyup', function(e) {
+                // Update cursor position for normal typing
+                if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    cursorPosition++;
+                }
+                updateMathDisplay();
+            });
+        }
+        
+        // Set cursor position in input
+        function setCursorPosition(inputElement, position) {
+            if (inputElement.setSelectionRange) {
+                inputElement.focus();
+                inputElement.setSelectionRange(position, position);
+            }
+        }
+        
+        // Start cursor blinking
+        function startCursorBlink() {
+            stopCursorBlink();
+            isCursorVisible = true;
+            mathCursorInterval = setInterval(() => {
+                isCursorVisible = !isCursorVisible;
+                updateMathDisplay();
+            }, 500);
+        }
+        
+        // Stop cursor blinking
+        function stopCursorBlink() {
+            if (mathCursorInterval) {
+                clearInterval(mathCursorInterval);
+                mathCursorInterval = null;
+            }
+            isCursorVisible = false;
+        }
+        
+        // Update math display
+        function updateMathDisplay() {
+            const display = elements.mathInputDisplay;
+            const input = elements.openAnswerInput;
+            
+            if (!display || !input) return;
+            
+            const text = input.value;
+            
+            if (!text || text.trim() === '') {
+                display.innerHTML = '';
+                display.classList.add('empty');
+                return;
+            }
+            
+            display.classList.remove('empty');
+            
+            // Split text at cursor position
+            const beforeCursor = text.substring(0, cursorPosition);
+            const afterCursor = text.substring(cursorPosition);
+            
+            // Create HTML with MathJax
+            let html = '';
+            
+            if (beforeCursor) {
+                html += `<span class="math-input-wrapper">$$${beforeCursor}$$</span>`;
+            }
+            
+            // Add cursor
+            if (isCursorVisible && document.activeElement === input) {
+                html += '<span class="math-cursor"></span>';
+            }
+            
+            if (afterCursor) {
+                html += `<span class="math-input-wrapper">$$${afterCursor}$$</span>`;
+            }
+            
+            display.innerHTML = html;
+            
+            // Typeset with MathJax
+            if (window.MathJax && MathJax.typesetPromise) {
+                setTimeout(() => {
+                    MathJax.typesetPromise([display]).catch(err => {
+                        console.log('MathJax typeset error:', err);
+                        // Fallback to plain text if MathJax fails
+                        if (text.length < 50) {
+                            display.textContent = text;
+                        }
+                    });
+                }, 50);
+            }
+        }
+        
+        // Insert math symbol into input
+        function insertMathSymbol(template) {
+            const input = elements.openAnswerInput;
+            if (!input) return;
+            
+            const text = input.value;
+            const before = text.substring(0, cursorPosition);
+            const after = text.substring(cursorPosition);
+            
+            // Replace cursor placeholder with empty string
+            const symbol = template.replace('▮', '');
+            
+            input.value = before + symbol + after;
+            cursorPosition += symbol.length;
+            
+            // Trigger input event
+            input.dispatchEvent(new Event('input'));
+            
+            // Update display
+            updateMathDisplay();
+            
+            // Focus back to input
+            setTimeout(() => {
+                input.focus();
+                setCursorPosition(input, cursorPosition);
+            }, 10);
+        }
         
         /* ========= MATH KEYPAD CONFIGURATION ========= */
         const MATH_KEYPAD = {
@@ -1348,7 +1638,11 @@
                 button.className = 'kbtn';
                 button.innerHTML = `$${key.show}$`;
                 button.title = key.title || key.show;
-                button.addEventListener('click', () => insertMathSymbol(key.insert));
+                button.addEventListener('click', () => {
+                    insertMathSymbol(key.insert);
+                    // Focus the input after inserting symbol
+                    elements.openAnswerInput.focus();
+                });
                 grid.appendChild(button);
             });
             
@@ -1357,28 +1651,6 @@
                     MathJax.typesetPromise([grid]).catch(console.error);
                 }, 100);
             }
-        }
-        
-        function insertMathSymbol(template) {
-            const input = elements.openAnswerInput;
-            if (!input) return;
-            
-            const start = input.selectionStart;
-            const end = input.selectionEnd;
-            const text = input.value;
-            
-            const before = text.substring(0, start);
-            const after = text.substring(end);
-            const cursorPos = template.indexOf('▮');
-            
-            let newText = template.replace('▮', text.substring(start, end) || '');
-            input.value = before + newText + after;
-            
-            const newPosition = cursorPos !== -1 ? start + cursorPos : start + newText.length;
-            input.setSelectionRange(newPosition, newPosition);
-            input.focus();
-            
-            input.dispatchEvent(new Event('input'));
         }
         
         function setupMathKeypadListeners() {
@@ -1459,7 +1731,7 @@
                 showWarning("❌ TEST DAVOMIDA TO'LIQ EKRANDAN CHIQISH TAQIQLANGAN!");
                 applyPenalty(testData?.penalties?.fullscreen_exit || 100);
                 
-                // 3 soniya ichida fullscreen'ga qaytmasa, test bekor qilindi
+                // 3 soniya ichida fullscreen'ga qaytmasa, test bekor qilinadi
                 setTimeout(() => {
                     if (testStarted && !isFullScreen) {
                         finishTestWithWarning("To'liq ekrandan chiqilgani uchun test bekor qilindi!");
@@ -2504,16 +2776,23 @@
         function renderOpenQuestion(question) {
             elements.openAnswerContainer.classList.remove('hidden');
             
-            if (userAnswers[currentQuestionIndex] !== undefined) {
-                elements.openAnswerInput.value = userAnswers[currentQuestionIndex];
+            // Set initial value and cursor position
+            const input = elements.openAnswerInput;
+            if (userAnswers[currentQuestionIndex] !== undefined && userAnswers[currentQuestionIndex] !== '') {
+                input.value = userAnswers[currentQuestionIndex];
+                cursorPosition = input.value.length;
             } else {
-                elements.openAnswerInput.value = '';
+                input.value = '';
+                cursorPosition = 0;
             }
             
-            elements.openAnswerInput.oninput = () => {
-                userAnswers[currentQuestionIndex] = elements.openAnswerInput.value;
-                updateNavDots();
-            };
+            // Update display
+            updateMathDisplay();
+            
+            // Focus on display click
+            elements.mathInputDisplay.addEventListener('click', function() {
+                input.focus();
+            });
         }
         
         // Update Navigation Buttons
@@ -2981,6 +3260,9 @@
             if (!initializeFirebase()) {
                 showStatus("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.", "warning");
             }
+            
+            // Math input system initialization
+            initMathInput();
             
             // Math klaviatura initsializatsiyasi
             initMathKeypad();
