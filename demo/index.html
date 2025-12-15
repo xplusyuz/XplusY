@@ -1013,18 +1013,58 @@
       border-radius: var(--radius-full);
     }
 
+    /* RANKING AVATAR WITH IMAGE STYLES */
     .rank-avatar {
       width: 44px;
       height: 44px;
       border-radius: var(--radius-full);
-      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
       display: flex;
       align-items: center;
       justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    }
+
+    .avatar-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .avatar-letter {
       color: white;
       font-weight: 700;
       font-size: 16px;
-      flex-shrink: 0;
+    }
+
+    .ranking-item:hover .rank-avatar {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .ranking-item.current-user .rank-avatar {
+      border: 2px solid var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+    }
+
+    .ranking-item .rank-number.top-3 + .rank-avatar {
+      border: 2px solid var(--color-warning);
+    }
+
+    .ranking-item .rank-number.top-3 + .rank-avatar::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: var(--radius-full);
+      background: linear-gradient(135deg, 
+        rgba(255, 149, 0, 0.3), 
+        rgba(255, 204, 0, 0.3));
+      z-index: -1;
     }
 
     .rank-info {
@@ -1390,7 +1430,8 @@
     }
 
     .profile-btn-edit,
-    .profile-btn-logout {
+    .profile-btn-logout,
+    .profile-btn-password {
       padding: var(--space-lg);
       border: none;
       border-radius: var(--radius-lg);
@@ -1412,6 +1453,12 @@
       box-shadow: 0 4px 16px rgba(0,122,255,0.3);
     }
 
+    .profile-btn-password {
+      background: linear-gradient(135deg, var(--color-warning), #FFCC00);
+      color: white;
+      box-shadow: 0 4px 16px rgba(255,149,0,0.3);
+    }
+
     .profile-btn-logout {
       background: linear-gradient(135deg, var(--color-danger), #FF2D55);
       color: white;
@@ -1419,11 +1466,13 @@
     }
 
     .profile-btn-edit:active,
+    .profile-btn-password:active,
     .profile-btn-logout:active {
       transform: scale(0.98);
     }
 
     .profile-btn-edit::after,
+    .profile-btn-password::after,
     .profile-btn-logout::after {
       content: '';
       position: absolute;
@@ -1437,6 +1486,7 @@
     }
 
     .profile-btn-edit:active::after,
+    .profile-btn-password:active::after,
     .profile-btn-logout:active::after {
       transform: translate(-50%, -50%) scale(1);
     }
@@ -1521,6 +1571,55 @@
       outline: none;
       border-color: var(--color-primary);
       box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+    }
+
+    /* Password field specific */
+    .password-input-container {
+      position: relative;
+    }
+
+    .toggle-password {
+      position: absolute;
+      right: var(--space-md);
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+    }
+
+    .toggle-password:active {
+      color: var(--color-primary);
+    }
+
+    .password-strength {
+      margin-top: var(--space-xs);
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+
+    .strength-bar {
+      height: 100%;
+      width: 0%;
+      transition: width var(--transition-normal);
+      border-radius: var(--radius-full);
+    }
+
+    .strength-weak { background: var(--color-danger); width: 25%; }
+    .strength-fair { background: var(--color-warning); width: 50%; }
+    .strength-good { background: #FFCC00; width: 75%; }
+    .strength-strong { background: var(--color-accent); width: 100%; }
+
+    .password-strength-text {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      text-align: right;
     }
 
     /* =============== NOTIFICATION STYLES =============== */
@@ -2333,7 +2432,11 @@
         <div class="profile-actions">
           <button class="profile-btn-edit" id="profile-edit-btn">
             <i class="fas fa-edit"></i>
-            Tahrirlash
+            Profilni tahrirlash
+          </button>
+          <button class="profile-btn-password" id="profile-password-btn">
+            <i class="fas fa-key"></i>
+            Parolni o'zgartirish
           </button>
           <button class="profile-btn-logout" id="profile-logout-btn">
             <i class="fas fa-sign-out-alt"></i>
@@ -2396,6 +2499,71 @@
             <button type="submit" class="profile-btn-edit" id="edit-save-btn">
               <i class="fas fa-save"></i>
               Saqlash
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD MODAL -->
+  <div class="profile-modal" id="change-password-modal">
+    <div class="profile-container">
+      <button class="profile-close" id="change-password-close">
+        <i class="fas fa-times"></i>
+      </button>
+      <div class="profile-header">
+        <div class="profile-name">
+          <i class="fas fa-key"></i>
+          Parolni o'zgartirish
+        </div>
+        <div class="profile-id">Yangilangan parol bilan kiring</div>
+      </div>
+      <div class="profile-body">
+        <form id="change-password-form">
+          <div class="form-group">
+            <label class="form-label">Joriy parol:</label>
+            <div class="password-input-container">
+              <input type="password" class="form-input" id="current-password" placeholder="Joriy parol" required>
+              <button type="button" class="toggle-password" data-target="current-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Yangi parol:</label>
+            <div class="password-input-container">
+              <input type="password" class="form-input" id="new-password" placeholder="Yangi parol" required>
+              <button type="button" class="toggle-password" data-target="new-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            <div class="password-strength">
+              <div class="strength-bar" id="password-strength-bar"></div>
+            </div>
+            <div class="password-strength-text" id="password-strength-text"></div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Yangi parolni takrorlang:</label>
+            <div class="password-input-container">
+              <input type="password" class="form-input" id="confirm-password" placeholder="Yangi parolni takrorlang" required>
+              <button type="button" class="toggle-password" data-target="confirm-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            <div id="password-match-message" style="font-size: 12px; margin-top: 4px;"></div>
+          </div>
+          
+          <div class="profile-actions">
+            <button type="button" class="profile-btn-logout" id="password-cancel-btn">
+              <i class="fas fa-times"></i>
+              Bekor qilish
+            </button>
+            <button type="submit" class="profile-btn-edit" id="password-save-btn">
+              <i class="fas fa-save"></i>
+              Parolni yangilash
             </button>
           </div>
         </form>
@@ -2933,6 +3101,186 @@
       });
     }
 
+    // =============== PASSWORD MANAGEMENT ===============
+    // Parol kuchini tekshirish
+    function checkPasswordStrength(password) {
+      if (!password) return { strength: 0, text: '' };
+      
+      let strength = 0;
+      let text = '';
+      
+      // Uzunlik
+      if (password.length >= 8) strength += 1;
+      if (password.length >= 12) strength += 1;
+      
+      // Har xil belgilar
+      if (/[a-z]/.test(password)) strength += 1; // Kichik harf
+      if (/[A-Z]/.test(password)) strength += 1; // Katta harf
+      if (/[0-9]/.test(password)) strength += 1; // Raqam
+      if (/[^A-Za-z0-9]/.test(password)) strength += 1; // Maxsus belgi
+      
+      // Natijani belgilash
+      if (strength <= 2) {
+        text = 'Zaif';
+      } else if (strength <= 4) {
+        text = 'Oʻrtacha';
+      } else if (strength <= 6) {
+        text = 'Yaxshi';
+      } else {
+        text = 'Kuchli';
+      }
+      
+      return { strength, text };
+    }
+
+    // Parol ko'rinishini o'zgartirish
+    function togglePasswordVisibility(inputId) {
+      const input = document.getElementById(inputId);
+      const button = document.querySelector(`.toggle-password[data-target="${inputId}"]`);
+      
+      if (input.type === 'password') {
+        input.type = 'text';
+        button.innerHTML = '<i class="fas fa-eye-slash"></i>';
+      } else {
+        input.type = 'password';
+        button.innerHTML = '<i class="fas fa-eye"></i>';
+      }
+    }
+
+    // Parol mosligini tekshirish
+    function checkPasswordMatch() {
+      const newPassword = document.getElementById('new-password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      const messageElement = document.getElementById('password-match-message');
+      
+      if (!newPassword || !confirmPassword) {
+        messageElement.textContent = '';
+        messageElement.style.color = '';
+        return false;
+      }
+      
+      if (newPassword === confirmPassword) {
+        messageElement.textContent = '✓ Parollar mos keladi';
+        messageElement.style.color = 'var(--color-accent)';
+        return true;
+      } else {
+        messageElement.textContent = '✗ Parollar mos kelmaydi';
+        messageElement.style.color = 'var(--color-danger)';
+        return false;
+      }
+    }
+
+    // Parolni yangilash
+    async function updatePassword() {
+      const currentPassword = document.getElementById('current-password').value;
+      const newPassword = document.getElementById('new-password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      
+      // Validatsiya
+      if (!currentPassword) {
+        showNotification('Joriy parolni kiriting', 'warning');
+        return;
+      }
+      
+      if (!newPassword) {
+        showNotification('Yangi parolni kiriting', 'warning');
+        return;
+      }
+      
+      if (newPassword.length < 6) {
+        showNotification('Yangi parol kamida 6 belgidan iborat bo\'lishi kerak', 'warning');
+        return;
+      }
+      
+      if (!checkPasswordMatch()) {
+        showNotification('Parollar mos kelmaydi', 'warning');
+        return;
+      }
+      
+      try {
+        // Parolni tekshirish (bu yerda authUtils.dan foydalanish kerak)
+        const user = authUtils.getUser();
+        if (!user) {
+          throw new Error('Foydalanuvchi topilmadi');
+        }
+        
+        // Firestore dan joriy parolni tekshirish
+        const db = firebase.firestore();
+        const userDoc = await db.collection('foydalanuvchilar').doc(user.id).get();
+        
+        if (!userDoc.exists) {
+          throw new Error('Foydalanuvchi ma\'lumotlari topilmadi');
+        }
+        
+        const userData = userDoc.data();
+        
+        // Parolni tekshirish (oddiy tekshirish - aslida hash qilinishi kerak)
+        if (userData.password !== currentPassword) {
+          showNotification('Joriy parol noto\'g\'ri', 'error');
+          return;
+        }
+        
+        // Yangi parolni saqlash
+        await db.collection('foydalanuvchilar').doc(user.id).update({
+          password: newPassword,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        showNotification('Parol muvaffaqiyatli yangilandi!', 'success');
+        closeChangePasswordModal();
+        
+        // Formani tozalash
+        document.getElementById('change-password-form').reset();
+        document.getElementById('password-strength-bar').className = 'strength-bar';
+        document.getElementById('password-strength-text').textContent = '';
+        document.getElementById('password-match-message').textContent = '';
+        
+      } catch (error) {
+        console.error('Parol yangilashda xatolik:', error);
+        showNotification('Xatolik: ' + error.message, 'error');
+      }
+    }
+
+    // =============== MODAL MANAGEMENT ===============
+    function openProfileModal() {
+      loadProfileData();
+      document.getElementById('profile-modal').classList.add('active');
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profile-modal').classList.remove('active');
+      document.getElementById('edit-profile-modal').classList.remove('active');
+      document.getElementById('change-password-modal').classList.remove('active');
+    }
+
+    function openEditProfileModal() {
+      document.getElementById('profile-modal').classList.remove('active');
+      setTimeout(() => {
+        document.getElementById('edit-profile-modal').classList.add('active');
+      }, 300);
+    }
+
+    function closeEditProfileModal() {
+      document.getElementById('edit-profile-modal').classList.remove('active');
+      setTimeout(() => {
+        document.getElementById('profile-modal').classList.add('active');
+      }, 300);
+    }
+
+    function openChangePasswordModal() {
+      document.getElementById('profile-modal').classList.remove('active');
+      setTimeout(() => {
+        document.getElementById('change-password-modal').classList.add('active');
+      }, 300);
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('change-password-modal').classList.remove('active');
+      setTimeout(() => {
+        document.getElementById('profile-modal').classList.add('active');
+      }, 300);
+    }
+
     // =============== RANKING MANAGEMENT ===============
     async function loadRankingData() {
       try {
@@ -2993,7 +3341,7 @@
         let currentUserPosition = -1;
         currentUserPosition = users.findIndex(user => user.id === currentUser.id);
         
-        // Display current user rank
+        // Display current user rank WITH AVATAR
         if (currentUser && currentUserPosition !== -1) {
           const user = users[currentUserPosition];
           const age = user.birthDate ? calculateAge(user.birthDate) : '—';
@@ -3001,6 +3349,12 @@
           
           currentUserRank.innerHTML = `
             <div class="current-rank-badge">${currentUserPosition + 1}</div>
+            <div class="rank-avatar" style="margin-right: var(--space-md);">
+              ${user.avatar ? 
+                `<img src="${user.avatar}" alt="${displayName}" class="avatar-image">` : 
+                `<div class="avatar-letter">${user.firstName ? user.firstName.charAt(0).toUpperCase() : 'U'}</div>`
+              }
+            </div>
             <div class="current-user-info">
               <div class="current-rank-text">Sizning o'rningiz</div>
               <div class="current-user-name">${displayName}</div>
@@ -3025,7 +3379,7 @@
           `;
         }
         
-        // Display ranking list
+        // Display ranking list WITH AVATARS
         rankingList.innerHTML = '';
         
         users.forEach((user, index) => {
@@ -3033,14 +3387,17 @@
           const isCurrentUser = currentUser && user.id === currentUser.id;
           const rankNumber = index + 1;
           const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Foydalanuvchi';
-          const firstNameLetter = user.firstName ? 
-            user.firstName.charAt(0).toUpperCase() : 'U';
           
           const rankingItem = document.createElement('div');
           rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
           rankingItem.innerHTML = `
             <div class="rank-number ${rankNumber <= 3 ? 'top-3' : ''}">${rankNumber}</div>
-            <div class="rank-avatar">${firstNameLetter}</div>
+            <div class="rank-avatar">
+              ${user.avatar ? 
+                `<img src="${user.avatar}" alt="${displayName}" class="avatar-image">` : 
+                `<div class="avatar-letter">${user.firstName ? user.firstName.charAt(0).toUpperCase() : 'U'}</div>`
+              }
+            </div>
             <div class="rank-info">
               <div class="rank-name">${displayName}</div>
               <div class="rank-details">
@@ -3084,7 +3441,7 @@
             rankingList.innerHTML = `
               <div class="loading-indicator">
                 <i class="fas fa-exclamation-triangle"></i>
-                <div>Firestore indeksi kerak. Iltimos, "points" maydoni bo'yicha indeks yarating.</div>
+                <div>Firestore indeksi kerak. Iltimos, "points" maydoni bo\'yicha indeks yarating.</div>
               </div>
             `;
           }
@@ -3107,7 +3464,7 @@
             rankingList.innerHTML = `
               <div class="loading-indicator">
                 <i class="fas fa-exclamation-triangle"></i>
-                <div>Reyting yuklanmadi. Iltimos, qayta urinib ko'ring.</div>
+                <div>Reyting yuklanmadi. Iltimos, qayta urinib ko\'ring.</div>
               </div>
             `;
           }
@@ -3116,7 +3473,7 @@
             currentUserRank.innerHTML = `
               <div class="loading-indicator">
                 <i class="fas fa-exclamation-triangle"></i>
-                <div>Ma'lumotlar yuklanmadi</div>
+                <div>Ma\'lumotlar yuklanmadi</div>
               </div>
             `;
           }
@@ -3187,7 +3544,7 @@
           // Get current user
           const currentUser = authUtils.getUser();
           
-          // Re-render ranking list
+          // Re-render ranking list WITH AVATARS
           rankingList.innerHTML = '';
           
           filteredUsers.forEach((user, index) => {
@@ -3195,14 +3552,17 @@
             const isCurrentUser = currentUser && user.id === currentUser.id;
             const rankNumber = filter === 'all' ? index + 1 : '—';
             const displayName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Foydalanuvchi';
-            const firstNameLetter = user.firstName ? 
-              user.firstName.charAt(0).toUpperCase() : 'U';
             
             const rankingItem = document.createElement('div');
             rankingItem.className = `ranking-item ${isCurrentUser ? 'current-user' : ''}`;
             rankingItem.innerHTML = `
               <div class="rank-number">${rankNumber}</div>
-              <div class="rank-avatar">${firstNameLetter}</div>
+              <div class="rank-avatar">
+                ${user.avatar ? 
+                  `<img src="${user.avatar}" alt="${displayName}" class="avatar-image">` : 
+                  `<div class="avatar-letter">${user.firstName ? user.firstName.charAt(0).toUpperCase() : 'U'}</div>`
+                }
+              </div>
               <div class="rank-info">
                 <div class="rank-name">${displayName}</div>
                 <div class="rank-details">
@@ -3368,30 +3728,6 @@
       return "Yangi ishtirokchi";
     }
 
-    function openProfileModal() {
-      loadProfileData();
-      document.getElementById('profile-modal').classList.add('active');
-    }
-
-    function closeProfileModal() {
-      document.getElementById('profile-modal').classList.remove('active');
-      document.getElementById('edit-profile-modal').classList.remove('active');
-    }
-
-    function openEditProfileModal() {
-      document.getElementById('profile-modal').classList.remove('active');
-      setTimeout(() => {
-        document.getElementById('edit-profile-modal').classList.add('active');
-      }, 300);
-    }
-
-    function closeEditProfileModal() {
-      document.getElementById('edit-profile-modal').classList.remove('active');
-      setTimeout(() => {
-        document.getElementById('profile-modal').classList.add('active');
-      }, 300);
-    }
-
     async function saveProfileChanges() {
       const firstName = document.getElementById('edit-firstname').value.trim();
       const lastName = document.getElementById('edit-lastname').value.trim();
@@ -3540,6 +3876,9 @@
       // Edit profile button
       document.getElementById('profile-edit-btn').addEventListener('click', openEditProfileModal);
       
+      // Change password button
+      document.getElementById('profile-password-btn').addEventListener('click', openChangePasswordModal);
+      
       // Logout button
       document.getElementById('profile-logout-btn').addEventListener('click', logout);
       
@@ -3555,10 +3894,65 @@
         saveProfileChanges();
       });
       
+      // Change password modal close
+      document.getElementById('change-password-close').addEventListener('click', closeChangePasswordModal);
+      
+      // Change password cancel button
+      document.getElementById('password-cancel-btn').addEventListener('click', closeChangePasswordModal);
+      
+      // Change password save button
+      document.getElementById('change-password-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        updatePassword();
+      });
+      
       // Region select change
       document.getElementById('edit-region').addEventListener('change', (e) => {
         updateDistrictSelect(e.target.value);
       });
+      
+      // Password visibility toggle
+      document.querySelectorAll('.toggle-password').forEach(button => {
+        button.addEventListener('click', () => {
+          const targetId = button.dataset.target;
+          togglePasswordVisibility(targetId);
+        });
+      });
+      
+      // Password strength check
+      document.getElementById('new-password').addEventListener('input', (e) => {
+        const password = e.target.value;
+        const { strength, text } = checkPasswordStrength(password);
+        const strengthBar = document.getElementById('password-strength-bar');
+        const strengthText = document.getElementById('password-strength-text');
+        
+        // Update strength bar
+        strengthBar.className = 'strength-bar';
+        if (password.length === 0) {
+          strengthBar.style.width = '0%';
+          strengthText.textContent = '';
+        } else if (strength <= 2) {
+          strengthBar.classList.add('strength-weak');
+          strengthText.textContent = 'Zaif';
+          strengthText.style.color = 'var(--color-danger)';
+        } else if (strength <= 4) {
+          strengthBar.classList.add('strength-fair');
+          strengthText.textContent = 'Oʻrtacha';
+          strengthText.style.color = 'var(--color-warning)';
+        } else if (strength <= 6) {
+          strengthBar.classList.add('strength-good');
+          strengthText.textContent = 'Yaxshi';
+          strengthText.style.color = '#FFCC00';
+        } else {
+          strengthBar.classList.add('strength-strong');
+          strengthText.textContent = 'Kuchli';
+          strengthText.style.color = 'var(--color-accent)';
+        }
+      });
+      
+      // Password match check
+      document.getElementById('confirm-password').addEventListener('input', checkPasswordMatch);
+      document.getElementById('new-password').addEventListener('input', checkPasswordMatch);
       
       // Modal overlay click to close
       document.querySelectorAll('.profile-modal').forEach(modal => {
