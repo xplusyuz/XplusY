@@ -9,7 +9,7 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com data:;
         img-src 'self' data: blob: https://*.firebasestorage.app;
-        connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com https://identitytoolkit.googleapis.com;
+        connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com;
         frame-src 'self';
         worker-src 'self' blob:;
     ">
@@ -53,10 +53,11 @@
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
-    <!-- Firebase -->
+    <!-- Firebase (faqat Firestore uchun) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <!-- Auth Utils -->
+    <script src="auth-utils.js"></script>
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1272,7 +1273,7 @@
             <!-- Options (for multiple choice) -->
             <div id="optionsContainer" class="options hidden"></div>
             
-            <!-- Open Answer (for open questions) - YANGILANGAN QISMI -->
+            <!-- Open Answer (for open questions) -->
             <div id="openAnswerContainer" class="hidden">
                 <div class="math-editor-container">
                     <div class="math-editor-wrapper">
@@ -1424,11 +1425,10 @@
         
         /* ========= Global Variables ========= */
         let db;
-        let auth;
         let currentUser = null;
         let userData = null;
         let testData = null;
-        let originalTestData = null; // Asl test ma'lumotlari
+        let originalTestData = null;
         let currentTestCode = null;
         let currentQuestionIndex = 0;
         let userAnswers = [];
@@ -1541,7 +1541,7 @@
         
         /* ========= RANDOMIZATION FUNCTIONS ========= */
         
-        // Fisher-Yates shuffle algoritmi - massivni random tartibda aralashtiradi
+        // Fisher-Yates shuffle algoritmi
         function shuffleArray(array) {
             const shuffled = [...array];
             for (let i = shuffled.length - 1; i > 0; i--) {
@@ -1557,11 +1557,9 @@
                 return question;
             }
             
-            // Variantlarni random tartibda joylashtirish
             const originalOptions = [...question.options];
             const shuffledOptions = shuffleArray(originalOptions);
             
-            // To'g'ri javob indeksini yangilash
             let newCorrectIndex = 0;
             if (question.correctIndex !== undefined) {
                 const correctAnswer = originalOptions[question.correctIndex];
@@ -1577,58 +1575,24 @@
             };
         }
         
-        // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish (bo'limlar o'z o'rnida)
-        function randomizeTestSections(testData) {
-            if (!testData.questions || testData.questions.length === 0) {
-                return testData;
+        // Test ma'lumotlarini random qilish (faqat variantlarni)
+        function randomizeTest() {
+            if (!testData || !testData.questions) return;
+            
+            console.log("Test ma'lumotlari random tartibda joylashtirilmoqda (faqat variantlar)...");
+            
+            if (!originalTestData) {
+                originalTestData = JSON.parse(JSON.stringify(testData));
             }
             
-            // Bo'limlarni aniqlash
-            const sections = {};
-            testData.questions.forEach((question, index) => {
-                const sectionName = question.section || "Umumiy";
-                if (!sections[sectionName]) {
-                    sections[sectionName] = [];
+            testData.questions = testData.questions.map((question, index) => {
+                if (question.type === 'variant') {
+                    return randomizeQuestionOptions(question);
                 }
-                sections[sectionName].push({ question, originalIndex: index });
+                return question;
             });
             
-            // Har bir bo'lim ichidagi savollarni random tartibda joylashtirish
-            const randomizedQuestions = [];
-            const originalToRandomMap = {}; // Asl indeks -> random indeks
-            const randomToOriginalMap = {}; // Random indeks -> asl indeks
-            
-            // Bo'limlarni asl tartibda saqlab qolish
-            const sectionNames = Object.keys(sections);
-            
-            // Bo'limlarni asl tartibida qoldirish
-            sectionNames.forEach(sectionName => {
-                const sectionQuestions = sections[sectionName];
-                const shuffledSectionQuestions = shuffleArray(sectionQuestions);
-                
-                shuffledSectionQuestions.forEach(item => {
-                    const randomIndex = randomizedQuestions.length;
-                    const originalIndex = item.originalIndex;
-                    
-                    originalToRandomMap[originalIndex] = randomIndex;
-                    randomToOriginalMap[randomIndex] = originalIndex;
-                    
-                    // Har bir savolning variantlarini ham random qilish
-                    const randomizedQuestion = randomizeQuestionOptions(item.question);
-                    randomizedQuestion.originalIndex = originalIndex;
-                    randomizedQuestion.section = sectionName;
-                    
-                    randomizedQuestions.push(randomizedQuestion);
-                });
-            });
-            
-            return {
-                ...testData,
-                questions: randomizedQuestions,
-                originalToRandomMap: originalToRandomMap,
-                randomToOriginalMap: randomToOriginalMap,
-                sectionOrder: sectionNames // Bo'limlar tartibini saqlab qolish
-            };
+            console.log("Test variantlari random qilindi. Jami savollar:", testData.questions.length);
         }
         
         /* ========= PROFESSIONAL MATEMATIK EDITOR FUNKSIYALARI ========= */
@@ -1687,7 +1651,6 @@
             range.deleteContents();
             range.insertNode(power);
             
-            // Fokusni asosga qo'yamiz
             setTimeout(() => {
                 const base = power.querySelector('.base');
                 base.focus();
@@ -1782,7 +1745,7 @@
             }, 10);
         }
         
-        // Logarifm yaratish (asosli)
+        // Logarifm yaratish
         function mathCreateLogarithm() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -1810,7 +1773,7 @@
             }, 10);
         }
         
-        // Limit yaratish (gorizontal)
+        // Limit yaratish
         function mathCreateLimit() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -1875,17 +1838,14 @@
             mathEditor = document.getElementById('mathEditor');
             if (!mathEditor) return;
             
-            // Oldingi javobni yuklash
             if (answer && answer.trim() !== '') {
                 mathEditor.innerHTML = answer;
             } else {
                 mathEditor.innerHTML = '';
             }
             
-            // Input hodisasini kuzatish
             mathEditor.addEventListener('input', saveMathAnswer);
             
-            // Tab bilan harakatlanish
             mathEditor.addEventListener('keydown', function(e) {
                 if (e.key === 'Tab') {
                     e.preventDefault();
@@ -1893,7 +1853,6 @@
                     const activeElement = document.activeElement;
                     if (!activeElement || !activeElement.hasAttribute('contenteditable')) return;
                     
-                    // Daraja ichida
                     if (activeElement.classList.contains('base')) {
                         const exp = activeElement.parentElement.querySelector('.exp');
                         if (exp) exp.focus();
@@ -1901,7 +1860,6 @@
                     else if (activeElement.classList.contains('exp')) {
                         mathPlaceCursorAfter(activeElement.parentElement);
                     }
-                    // Kasr ichida
                     else if (activeElement.classList.contains('cell')) {
                         const cells = activeElement.parentElement.querySelectorAll('.cell');
                         const currentIndex = Array.from(cells).indexOf(activeElement);
@@ -1911,28 +1869,24 @@
                             mathPlaceCursorAfter(activeElement.parentElement);
                         }
                     }
-                    // Limit ichida
                     else if (activeElement.classList.contains('var')) {
                         activeElement.parentElement.querySelector('.val').focus();
                     }
                     else if (activeElement.classList.contains('val')) {
                         activeElement.parentElement.parentElement.querySelector('.expr').focus();
                     }
-                    // Logarifm ichida
                     else if (activeElement.classList.contains('base')) {
                         const log = activeElement.parentElement.querySelector('.arg');
                         if (log) log.focus();
                     }
                 }
                 
-                // Enter tugmasi
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     mathInsertText(' ');
                 }
             });
             
-            // Boshlang'ich fokus
             setTimeout(() => {
                 mathEditor.focus();
             }, 100);
@@ -1973,7 +1927,6 @@
                 showWarning("To'liq ekran rejimi qo'llab-quvvatlanmaydi. Test natijalari hisobga olinmasligi mumkin.");
             }
             
-            // Listen for fullscreen changes
             document.addEventListener('fullscreenchange', handleFullScreenChange);
             document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
             document.addEventListener('mozfullscreenchange', handleFullScreenChange);
@@ -1989,12 +1942,10 @@
             isFullScreen = isFullscreen;
             
             if (testStarted && !isFullscreen) {
-                // User exited fullscreen during test
                 recordViolation("fullscreen_exit", testData?.penalties?.fullscreen_exit || 100);
                 showWarning("❌ TEST DAVOMIDA TO'LIQ EKRANDAN CHIQISH TAQIQLANGAN!");
                 applyPenalty(testData?.penalties?.fullscreen_exit || 100);
                 
-                // 3 soniya ichida fullscreen'ga qaytmasa, test bekor qilindi
                 setTimeout(() => {
                     if (testStarted && !isFullScreen) {
                         finishTestWithWarning("To'liq ekrandan chiqilgani uchun test bekor qilindi!");
@@ -2008,7 +1959,6 @@
         
         // 2. Screen Recording & Screenshot Blocking
         function blockScreenRecording() {
-            // Override getDisplayMedia
             if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
                 const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
                 navigator.mediaDevices.getDisplayMedia = function() {
@@ -2019,12 +1969,11 @@
                 };
             }
             
-            // Detect Print Screen and screenshot shortcuts
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'PrintScreen' || 
                     (e.ctrlKey && e.key === 'p') || 
-                    (e.metaKey && e.shiftKey && e.key === '4') || // Mac screenshot
-                    (e.metaKey && e.shiftKey && e.key === '3')) { // Mac full screenshot
+                    (e.metaKey && e.shiftKey && e.key === '4') ||
+                    (e.metaKey && e.shiftKey && e.key === '3')) {
                     e.preventDefault();
                     e.stopPropagation();
                     
@@ -2032,7 +1981,6 @@
                     showWarning("SCREENSHOT OLISH ANIQLANDI!");
                     applyPenalty(testData?.penalties?.screenshot_attempt || 75);
                     
-                    // Clear clipboard
                     navigator.clipboard.writeText('').catch(() => {});
                     
                     return false;
@@ -2057,14 +2005,12 @@
             
             document.addEventListener(visibilityChange, function() {
                 if (document[hidden] && testStarted) {
-                    // Tab switched or window minimized
                     recordViolation("tab_switch", testData?.penalties?.tab_switch || 50);
                     showWarning("BOSHQA TAB YOKI DASTURGA O'TILGAN!");
                     applyPenalty(testData?.penalties?.tab_switch || 50);
                     
                     updateSecurityMonitor("Tab o'zgartirildi!", "danger");
                     
-                    // Play warning sound (if allowed)
                     try {
                         const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ');
                         audio.play();
@@ -2074,7 +2020,6 @@
                 }
             }, false);
             
-            // Periodic visibility check
             visibilityCheckInterval = setInterval(() => {
                 if (document[hidden] && testStarted) {
                     recordViolation("hidden_tab_detected", testData?.penalties?.window_blur || 20);
@@ -2115,7 +2060,6 @@
         
         // 5. Developer Tools Blocking
         function blockDeveloperTools() {
-            // Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
             document.addEventListener('keydown', function(e) {
                 if (!testStarted) return;
                 
@@ -2134,11 +2078,11 @@
                     e.ctrlKey && e.key === 'U',
                     e.ctrlKey && e.key === 'S',
                     e.ctrlKey && e.key === 'P',
-                    e.metaKey && e.altKey && e.key === 'I', // Mac
-                    e.metaKey && e.altKey && e.key === 'J', // Mac
-                    (e.ctrlKey || e.metaKey) && e.key === 'r', // Refresh
-                    (e.ctrlKey || e.metaKey) && e.key === 'f', // Find
-                    (e.ctrlKey || e.metaKey) && e.key === 'h'  // History
+                    e.metaKey && e.altKey && e.key === 'I',
+                    e.metaKey && e.altKey && e.key === 'J',
+                    (e.ctrlKey || e.metaKey) && e.key === 'r',
+                    (e.ctrlKey || e.metaKey) && e.key === 'f',
+                    (e.ctrlKey || e.metaKey) && e.key === 'h'
                 ];
                 
                 if (blockedKeys.includes(e.key) || blockedCombinations.some(combo => combo)) {
@@ -2148,13 +2092,11 @@
                     recordViolation("devtools_attempt", testData?.penalties?.devtools_attempt || 150);
                     showWarning("❌ RUXSAT ETILMAYDIGAN HARAKAT!");
                     
-                    // Klaviatura bloklash
                     e.returnValue = false;
                     return false;
                 }
             });
             
-            // Console ochilishini aniqlash
             const element = new Image();
             Object.defineProperty(element, 'id', {
                 get: function() {
@@ -2165,7 +2107,6 @@
             
             console.log('%c ', element);
             
-            // Debugger bloklash
             setInterval(() => {
                 if (testStarted) {
                     const start = performance.now();
@@ -2205,7 +2146,6 @@
         
         // 7. Cheating Detection System
         function startCheatDetection() {
-            // Monitor mouse leaving window
             document.addEventListener('mouseleave', function(e) {
                 if (testStarted && e.clientY <= 0) {
                     recordViolation("mouse_leave", 5);
@@ -2213,7 +2153,6 @@
                 }
             });
             
-            // Monitor rapid clicking (possible automation)
             let clickCount = 0;
             let clickTimer = null;
             document.addEventListener('click', function() {
@@ -2227,7 +2166,7 @@
                     }, 1000);
                 }
                 
-                if (clickCount > 10) { // More than 10 clicks per second
+                if (clickCount > 10) {
                     recordViolation("rapid_clicking", testData?.penalties?.rapid_clicking || 40);
                     showWarning("JUDAYA TEZ BOSISH ANIQLANDI!");
                     applyPenalty(testData?.penalties?.rapid_clicking || 40);
@@ -2235,7 +2174,6 @@
                 }
             });
             
-            // Detect iframe or popup opening
             window.addEventListener('blur', function() {
                 if (testStarted) {
                     recordViolation("window_blur", testData?.penalties?.window_blur || 20);
@@ -2243,7 +2181,6 @@
                 }
             });
             
-            // Detect right click
             document.addEventListener('contextmenu', function(e) {
                 if (testStarted) {
                     e.preventDefault();
@@ -2254,23 +2191,18 @@
                 }
             });
             
-            // Periodic cheat detection
             cheatDetectionInterval = setInterval(() => {
                 if (!testStarted) return;
                 
-                // Check if window is focused
                 if (!document.hasFocus()) {
                     recordViolation("window_not_focused", testData?.penalties?.window_blur || 20);
                     applyPenalty(testData?.penalties?.window_blur || 20);
                 }
                 
-                // Check for suspicious browser extensions
                 if (window.chrome && chrome.runtime) {
                     try {
-                        // This might detect some extensions
                         chrome.runtime.sendMessage("test", () => {});
                     } catch(e) {
-                        // Extension detected
                         recordViolation("extension_detected", testData?.penalties?.extension_detected || 100);
                     }
                 }
@@ -2295,7 +2227,6 @@
         
         // 9. Violation Recording
         function recordViolation(type, penalty = 0) {
-            // Agar penalty kiritilmagan bo'lsa, test ma'lumotlaridagi jarimadan olish
             if (penalty === 0 && testData && testData.penalties && testData.penalties[type]) {
                 penalty = testData.penalties[type];
             }
@@ -2313,7 +2244,6 @@
             
             violations.push(violation);
             
-            // Update violation badge
             elements.violationBadge.textContent = `Buzilishlar: ${violations.length}`;
             elements.violationBadge.classList.remove("warning", "danger");
             
@@ -2323,33 +2253,27 @@
                 elements.violationBadge.classList.add("warning");
             }
             
-            // Apply penalty
             if (penalty > 0) {
                 applyPenalty(penalty);
             }
             
-            // Save to Firestore
             if (db && currentUser && testStarted) {
                 db.collection('violations').add(violation);
             }
             
-            // Save to localStorage
             saveViolationToLocalStorage(violation);
             
             console.warn(`Violation: ${type} (Penalty: ${penalty})`);
         }
         
-        // 10. Penalty Application (Tuzatilgan)
+        // 10. Penalty Application
         function applyPenalty(points) {
-            // 0,1 aniqlikda yaxlitlash
             points = parseFloat(points.toFixed(1));
             penaltyPoints = parseFloat((penaltyPoints + points).toFixed(1));
             
-            // Update penalty display
             elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints.toFixed(1)} ball`;
             elements.penaltyPoints.classList.remove("hidden");
             
-            // Flash penalty badge
             elements.penaltyPoints.style.animation = "none";
             setTimeout(() => {
                 elements.penaltyPoints.style.animation = "pulse 0.5s 3";
@@ -2373,7 +2297,6 @@
             
             document.body.appendChild(warningModal);
             
-            // Remove after 3 seconds
             setTimeout(() => {
                 if (warningModal.parentNode) {
                     warningModal.remove();
@@ -2398,7 +2321,6 @@
             
             elements.loadingText.textContent = "Xavfsizlik tizimlari faollashtirilmoqda...";
             
-            // Enable all security features
             enableFullScreen();
             blockScreenRecording();
             monitorTabFocus();
@@ -2407,11 +2329,9 @@
             blockDragDrop();
             startCheatDetection();
             
-            // Show security monitor
             elements.securityMonitor.classList.remove("hidden");
             updateSecurityMonitor("Barcha himoya tizimlari faol", "active");
             
-            // Disable logout during test
             elements.logoutBtn.disabled = true;
             elements.logoutBtn.title = "Test davomida chiqish mumkin emas";
             
@@ -2419,19 +2339,16 @@
             console.log("All security features enabled");
         }
         
-        // 14. Disable Security Features (after test)
+        // 14. Disable Security Features
         function disableSecurityFeatures() {
             securityEnabled = false;
             
-            // Clear intervals
             if (visibilityCheckInterval) clearInterval(visibilityCheckInterval);
             if (cheatDetectionInterval) clearInterval(cheatDetectionInterval);
             
-            // Re-enable logout
             elements.logoutBtn.disabled = false;
             elements.logoutBtn.title = "";
             
-            // Exit fullscreen
             if (document.exitFullscreen) {
                 document.exitFullscreen();
             } else if (document.webkitExitFullscreen) {
@@ -2440,25 +2357,22 @@
                 document.msExitFullscreen();
             }
             
-            // Hide security monitor
             elements.securityMonitor.classList.add("hidden");
             
             console.log("Security features disabled");
         }
         
-        // 15. Finish test with warning (for fullscreen exit)
+        // 15. Finish test with warning
         function finishTestWithWarning(message) {
             clearInterval(timerInterval);
             testStarted = false;
             
-            // Disable security features
             disableSecurityFeatures();
             
             elements.timer.classList.add('hidden');
             
             const results = calculateResults();
             
-            // Update results display
             elements.finalScore.textContent = "0 (Bekor qilindi)";
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
@@ -2478,8 +2392,7 @@
             try {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.firestore();
-                auth = firebase.auth();
-                console.log("Firebase initialized successfully");
+                console.log("Firebase (Firestore) initialized successfully");
                 return true;
             } catch (error) {
                 console.error("Firebase initialization error:", error);
@@ -2487,67 +2400,30 @@
             }
         }
         
-        // Check User Authentication
-        function checkUserAuthentication() {
-            return new Promise((resolve, reject) => {
-                auth.onAuthStateChanged(async (user) => {
-                    if (user) {
-                        currentUser = user;
-                        console.log("User is logged in:", user.uid);
-                        
-                        try {
-                            // **O'ZGARISH: To'g'ri collection nomi bilan ishlash**
-                            const userDoc = await db.collection('foydalanuvchilar').doc(user.uid).get();
-                            if (userDoc.exists) {
-                                userData = userDoc.data();
-                                console.log("User data loaded from foydalanuvchilar collection:", userData);
-                                updateUserUI();
-                                resolve(true);
-                            } else {
-                                console.log("User document not found in foydalanuvchilar collection");
-                                // Alternative: try users collection
-                                try {
-                                    const userDocAlt = await db.collection('users').doc(user.uid).get();
-                                    if (userDocAlt.exists) {
-                                        userData = userDocAlt.data();
-                                        console.log("User data loaded from users collection:", userData);
-                                        updateUserUI();
-                                        resolve(true);
-                                    } else {
-                                        userData = {
-                                            fullName: user.displayName || "Foydalanuvchi",
-                                            loginId: user.email || user.phoneNumber || "—"
-                                        };
-                                        updateUserUI();
-                                        resolve(true);
-                                    }
-                                } catch (altError) {
-                                    console.log("Alternative collection also not found");
-                                    userData = {
-                                        fullName: user.displayName || "Foydalanuvchi",
-                                        loginId: user.email || user.phoneNumber || "—"
-                                    };
-                                    updateUserUI();
-                                    resolve(true);
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Error loading user data:", error);
-                            userData = {
-                                fullName: "Foydalanuvchi",
-                                loginId: "—"
-                            };
-                            updateUserUI();
-                            resolve(true);
-                        }
-                    } else {
-                        console.log("User is not logged in");
-                        currentUser = null;
-                        userData = null;
-                        resolve(false);
-                    }
-                });
-            });
+        // Check User Authentication via auth-utils
+        async function checkUserAuthentication() {
+            try {
+                const user = await authUtils.checkSession();
+                
+                if (user) {
+                    currentUser = {
+                        uid: user.docId,
+                        ...user.data
+                    };
+                    userData = user.data;
+                    console.log("User authenticated via auth-utils:", user);
+                    updateUserUI();
+                    return true;
+                } else {
+                    console.log("User not authenticated via auth-utils");
+                    showScreen('loginRequired');
+                    return false;
+                }
+            } catch (error) {
+                console.error("Auth check error:", error);
+                showScreen('loginRequired');
+                return false;
+            }
         }
         
         // Calculate Age from Birth Date
@@ -2594,7 +2470,6 @@
             }
             elements.userAge.textContent = ageDisplay;
             
-            // Agar foydalanuvchining umumiy ballari bo'lsa, ularni ham ko'rsatish
             if (userData.points !== undefined && userData.points !== null) {
                 elements.userAge.innerHTML += `<br>Umumiy ball: ${parseFloat(userData.points).toFixed(1)}`;
             }
@@ -2609,7 +2484,8 @@
         function logout() {
             if (confirm("Rostan ham tizimdan chiqmoqchimisiz?")) {
                 disableSecurityFeatures();
-                auth.signOut().then(() => {
+                
+                authUtils.logout().then(() => {
                     window.location.href = 'login.html';
                 }).catch((error) => {
                     console.error("Logout error:", error);
@@ -2638,17 +2514,15 @@
                 }
                 
                 testData = testDoc.data();
-                originalTestData = JSON.parse(JSON.stringify(testData)); // Asl nusxasini saqlab qo'yamiz
+                originalTestData = JSON.parse(JSON.stringify(testData));
                 currentTestCode = code;
                 
                 console.log("Test yuklandi:", testData);
                 
-                // Load rating data
                 await loadRatingData();
                 
                 normalizeTestData();
                 
-                // Test ma'lumotlarini random qilish (faqat variantlarni)
                 randomizeTest();
                 
                 console.log("Test loaded successfully:", testData.title);
@@ -2659,28 +2533,6 @@
                 showError(`Test yuklashda xato: ${error.message}`);
                 return false;
             }
-        }
-        
-        // Test ma'lumotlarini random qilish (faqat variantlarni)
-        function randomizeTest() {
-            if (!testData || !testData.questions) return;
-            
-            console.log("Test ma'lumotlari random tartibda joylashtirilmoqda (faqat variantlar)...");
-            
-            // Asl test ma'lumotlarini saqlab qo'yamiz
-            if (!originalTestData) {
-                originalTestData = JSON.parse(JSON.stringify(testData));
-            }
-            
-            // Faqat variantlarni random qilish
-            testData.questions = testData.questions.map((question, index) => {
-                if (question.type === 'variant') {
-                    return randomizeQuestionOptions(question);
-                }
-                return question;
-            });
-            
-            console.log("Test variantlari random qilindi. Jami savollar:", testData.questions.length);
         }
         
         // Load Rating Data
@@ -2695,21 +2547,15 @@
                     const testDataFromDB = testDoc.data();
                     const rating = testDataFromDB.rating || [];
                     
-                    // Faqat rating mavjud bo'lsa ko'rsatamiz
                     if (rating.length > 0) {
                         elements.ratingSection.classList.remove('hidden');
                         elements.ratingTableBody.innerHTML = '';
                         
-                        // Ratingni saralash (eng yuqori ball birinchi)
                         const sortedRating = [...rating].sort((a, b) => b.score - a.score);
                         
                         sortedRating.forEach((item, index) => {
                             const row = document.createElement('tr');
                             
-                            // Rang berish
-                            let rankClass = 'rating-badge';
-                            
-                            // Sana formatlash
                             let dateStr = "Noma'lum";
                             if (item.date) {
                                 if (item.date.toDate) {
@@ -2723,7 +2569,7 @@
                             
                             row.innerHTML = `
                                 <td>
-                                    <div class="${rankClass}" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : 'background: var(--brand);'}">
+                                    <div class="rating-badge" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : 'background: var(--brand);'}">
                                         ${index + 1}
                                     </div>
                                 </td>
@@ -2771,7 +2617,6 @@
             testData.code = testData.code || currentTestCode;
             testData.durationMinutes = testData.durationMinutes || 30;
             
-            // Default jarima ballari
             testData.penalties = testData.penalties || {
                 fullscreen_exit: 100,
                 tab_switch: 50,
@@ -2799,7 +2644,6 @@
                 q.points = q.points || 1;
                 q.type = q.type || "variant";
                 
-                // Section nomini aniqlash
                 q.section = q.section || findSectionForQuestion(index + 1);
                 
                 if (q.type === 'variant') {
@@ -2814,7 +2658,6 @@
                 testData.questions[index] = q;
             });
             
-            // **O'ZGARISH: 0,1 aniqlikda hisoblash**
             const totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 0), 0);
             testData.totalPoints = parseFloat(totalPoints.toFixed(1));
             
@@ -2828,11 +2671,10 @@
                 
                 if (savedTests[code]) {
                     testData = savedTests[code];
-                    originalTestData = JSON.parse(JSON.stringify(testData)); // Asl nusxasini saqlab qo'yamiz
+                    originalTestData = JSON.parse(JSON.stringify(testData));
                     currentTestCode = code;
                     normalizeTestData();
                     
-                    // Test ma'lumotlarini random qilish (faqat variantlarni)
                     randomizeTest();
                     
                     console.log("Test localStorage'dan yuklandi:", testData);
@@ -2920,7 +2762,6 @@
                 elements.codeBadge.classList.add('hidden');
             }
             
-            // Show security agreement first
             showScreen('securityAgreement');
         }
         
@@ -2970,7 +2811,7 @@
             img.classList.add('hidden');
             
             if (currentTestCode) {
-                const imageNumber = questionIndex + 1; // Random emas, asl indeks
+                const imageNumber = questionIndex + 1;
                 
                 const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
                 
@@ -3091,16 +2932,14 @@
             });
         }
         
-        // Render Open Question - YANGILANGAN
+        // Render Open Question
         function renderOpenQuestion(question) {
             elements.optionsContainer.classList.add('hidden');
             elements.openAnswerContainer.classList.remove('hidden');
             
-            // Math editorni yuklash
             const currentAnswer = userAnswers[currentQuestionIndex];
             loadMathEditor(currentAnswer);
             
-            // Math editor uchun fokus
             setTimeout(() => {
                 if (mathEditor) {
                     mathEditor.focus();
@@ -3152,7 +2991,7 @@
             }
         }
         
-        // Calculate Results (Tuzatilgan) - ASOSIY O'ZGARISH
+        // Calculate Results
         function calculateResults() {
             let correctCount = 0;
             let totalScore = 0;
@@ -3161,7 +3000,6 @@
                 const userAnswer = userAnswers[index];
                 
                 if (question.type === 'variant') {
-                    // Random variantlar bilan to'g'ri javobni tekshirish
                     if (userAnswer === question.correctIndex) {
                         correctCount++;
                         totalScore += (question.points || 1);
@@ -3179,10 +3017,8 @@
                 }
             });
             
-            // **O'ZGARISH: 0,1 aniqlikda yaxlitlash**
             totalScore = parseFloat(totalScore.toFixed(1));
             
-            // Apply penalty points
             let finalScore = parseFloat((totalScore - penaltyPoints).toFixed(1));
             if (finalScore < 0) finalScore = 0;
             
@@ -3201,19 +3037,17 @@
             };
         }
         
-        // Finish Test (Tuzatilgan)
+        // Finish Test
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
             
-            // Disable security features
             disableSecurityFeatures();
             
             elements.timer.classList.add('hidden');
             
             const results = calculateResults();
             
-            // **O'ZGARISH: 0,1 aniqlikda ko'rsatish**
             elements.finalScore.textContent = results.finalScore.toFixed(1);
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
@@ -3222,10 +3056,8 @@
             elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
             
-            // Save results
             saveResultsToLocalStorage(results);
             saveResultsToFirestore(results).then(() => {
-                // Update rating display after saving
                 updateUserRank(results.finalScore);
             });
             
@@ -3245,7 +3077,6 @@
                     const testDataFromDB = testDoc.data();
                     const rating = testDataFromDB.rating || [];
                     
-                    // Foydalanuvchining o'rni
                     const sortedRating = [...rating].sort((a, b) => b.score - a.score);
                     const userIndex = sortedRating.findIndex(item => item.userId === currentUser.uid);
                     
@@ -3285,7 +3116,7 @@
             }
         }
         
-        // Save Results to Firestore - ASOSIY O'ZGARISH
+        // Save Results to Firestore
         async function saveResultsToFirestore(results) {
             if (!currentUser || !userData || !testData) return;
             
@@ -3305,29 +3136,23 @@
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
                     answers: userAnswers,
-                    randomized: true, // Test random qilinganligini belgilash
+                    randomized: true,
                     date: firebase.firestore.FieldValue.serverTimestamp()
                 };
                 
-                // 1. Test Results collectionga saqlash (har bir urinish)
                 await db.collection('test_results').add(resultData);
                 
-                // 2. Tests collectiondagi o'sha test hujjatiga saqlash (faqat birinchi eng yaxshi natija)
                 const testRef = db.collection('tests').doc(currentTestCode);
                 
-                // Test hujjatini olish
                 const testDoc = await testRef.get();
                 if (testDoc.exists) {
                     const testDataFromDB = testDoc.data();
                     
-                    // Rating tizimi - faqat birinchi eng yaxshi natija saqlansin
                     let rating = testDataFromDB.rating || [];
                     
-                    // Foydalanuvchining oldingi natijasini tekshirish
                     const existingUserIndex = rating.findIndex(item => item.userId === currentUser.uid);
                     
                     if (existingUserIndex >= 0) {
-                        // Agar yangi natija eski natijadan yuqori bo'lsa, yangilaymiz
                         if (results.finalScore > rating[existingUserIndex].score) {
                             rating[existingUserIndex] = {
                                 userId: currentUser.uid,
@@ -3336,9 +3161,7 @@
                                 date: firebase.firestore.FieldValue.serverTimestamp()
                             };
                         }
-                        // Pastroq bo'lsa, yangilamaymiz
                     } else {
-                        // Yangi foydalanuvchi qo'shamiz
                         rating.push({
                             userId: currentUser.uid,
                             userFullName: userData.fullName,
@@ -3347,27 +3170,21 @@
                         });
                     }
                     
-                    // Ratingni bali bo'yicha kamayish tartibida saralaymiz
                     rating.sort((a, b) => b.score - a.score);
                     
-                    // Faqat top 50 natijani saqlaymiz
                     rating = rating.slice(0, 50);
                     
-                    // Test hujjatini yangilaymiz
                     await testRef.update({
                         rating: rating,
                         lastAttempt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                 }
                 
-                // **O'ZGARISH: 3. Foydalanuvchilar collectionida points ga qo'shish (barcha testlardan)**
                 const userRef = db.collection('foydalanuvchilar').doc(currentUser.uid);
                 
-                // Foydalanuvchining joriy ballarini olish
                 const userDoc = await userRef.get();
                 const currentPoints = userDoc.exists ? (userDoc.data().points || 0) : 0;
                 
-                // **O'ZGARISH: Yangi ballarni 0,1 aniqlikda qo'shish**
                 const newTotalPoints = parseFloat((parseFloat(currentPoints) + results.finalScore).toFixed(1));
                 
                 await userRef.update({
@@ -3479,21 +3296,16 @@
                 testStarted = true;
                 userAnswers = new Array(testData.questions.length);
                 
-                // Enable all security features
                 enableAllSecurityFeatures();
                 
-                // Start timer
                 startTimer();
                 
-                // Build navigation dots
                 buildNavDots();
                 
-                // Show first question
                 currentQuestionIndex = 0;
                 renderQuestion();
                 showScreen('question');
                 
-                // Record test start
                 recordViolation("test_started", 0);
             });
             
@@ -3576,9 +3388,12 @@
         async function initializeApplication() {
             showScreen('loading');
             
-            if (!initializeFirebase()) {
-                showStatus("Firebase ulanmadi. Iltimos, internet aloqasini tekshiring.", "warning");
+            if (typeof authUtils === 'undefined') {
+                setTimeout(initializeApplication, 100);
+                return;
             }
+            
+            initializeFirebase();
             
             const isLoggedIn = await checkUserAuthentication();
             
