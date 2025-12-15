@@ -2341,12 +2341,12 @@
         
         // 10. Penalty Application (Tuzatilgan)
         function applyPenalty(points) {
-            // Floating-point xatoliklarni oldini olish uchun ballarni yaxlitlash
-            points = Math.round(points * 100) / 100; // 2 ta kasrga yaxlitlash
-            penaltyPoints = Math.round((penaltyPoints + points) * 100) / 100;
+            // 0,1 aniqlikda yaxlitlash
+            points = parseFloat(points.toFixed(1));
+            penaltyPoints = parseFloat((penaltyPoints + points).toFixed(1));
             
             // Update penalty display
-            elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints} ball`;
+            elements.penaltyPoints.textContent = `Jarima: -${penaltyPoints.toFixed(1)} ball`;
             elements.penaltyPoints.classList.remove("hidden");
             
             // Flash penalty badge
@@ -2366,7 +2366,7 @@
                 <div class="warning-content">
                     <h2>⚠️ XAVFSIZLIK OGOHLANTIRISHI</h2>
                     <p>${message}</p>
-                    <p><small>Qoidabuzarlik qayd etildi. Jarima: ${penaltyPoints} ball</small></p>
+                    <p><small>Qoidabuzarlik qayd etildi. Jarima: ${penaltyPoints.toFixed(1)} ball</small></p>
                     <p><small>Qo'shimcha buzilishlar testni bekor qilishi mumkin</small></p>
                 </div>
             `;
@@ -2462,9 +2462,9 @@
             elements.finalScore.textContent = "0 (Bekor qilindi)";
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = results.totalScore;
+            elements.totalScoreResult.textContent = results.totalScore.toFixed(1);
             elements.timeUsed.textContent = results.timeFormatted;
-            elements.penaltyResult.textContent = results.penaltyPoints;
+            elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
             
             showScreen('results');
@@ -2496,20 +2496,40 @@
                         console.log("User is logged in:", user.uid);
                         
                         try {
+                            // **O'ZGARISH: To'g'ri collection nomi bilan ishlash**
                             const userDoc = await db.collection('foydalanuvchilar').doc(user.uid).get();
                             if (userDoc.exists) {
                                 userData = userDoc.data();
-                                console.log("User data loaded:", userData);
+                                console.log("User data loaded from foydalanuvchilar collection:", userData);
                                 updateUserUI();
                                 resolve(true);
                             } else {
-                                console.log("User document not found");
-                                userData = {
-                                    fullName: user.displayName || "Foydalanuvchi",
-                                    loginId: user.email || user.phoneNumber || "—"
-                                };
-                                updateUserUI();
-                                resolve(true);
+                                console.log("User document not found in foydalanuvchilar collection");
+                                // Alternative: try users collection
+                                try {
+                                    const userDocAlt = await db.collection('users').doc(user.uid).get();
+                                    if (userDocAlt.exists) {
+                                        userData = userDocAlt.data();
+                                        console.log("User data loaded from users collection:", userData);
+                                        updateUserUI();
+                                        resolve(true);
+                                    } else {
+                                        userData = {
+                                            fullName: user.displayName || "Foydalanuvchi",
+                                            loginId: user.email || user.phoneNumber || "—"
+                                        };
+                                        updateUserUI();
+                                        resolve(true);
+                                    }
+                                } catch (altError) {
+                                    console.log("Alternative collection also not found");
+                                    userData = {
+                                        fullName: user.displayName || "Foydalanuvchi",
+                                        loginId: user.email || user.phoneNumber || "—"
+                                    };
+                                    updateUserUI();
+                                    resolve(true);
+                                }
                             }
                         } catch (error) {
                             console.error("Error loading user data:", error);
@@ -2575,8 +2595,8 @@
             elements.userAge.textContent = ageDisplay;
             
             // Agar foydalanuvchining umumiy ballari bo'lsa, ularni ham ko'rsatish
-            if (userData.points) {
-                elements.userAge.innerHTML += `<br>Umumiy ball: ${userData.points}`;
+            if (userData.points !== undefined && userData.points !== null) {
+                elements.userAge.innerHTML += `<br>Umumiy ball: ${parseFloat(userData.points).toFixed(1)}`;
             }
             
             const firstName = fullName.split(' ')[0] || 'U';
@@ -2708,7 +2728,7 @@
                                     </div>
                                 </td>
                                 <td>${item.userFullName || "Foydalanuvchi"}</td>
-                                <td><strong>${item.score}</strong> ball</td>
+                                <td><strong>${parseFloat(item.score).toFixed(1)}</strong> ball</td>
                                 <td>${dateStr}</td>
                             `;
                             
@@ -2794,7 +2814,9 @@
                 testData.questions[index] = q;
             });
             
-            testData.totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+            // **O'ZGARISH: 0,1 aniqlikda hisoblash**
+            const totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 0), 0);
+            testData.totalPoints = parseFloat(totalPoints.toFixed(1));
             
             console.log("Normalized test data:", testData);
         }
@@ -2889,7 +2911,7 @@
             elements.testDescription.textContent = testData.description;
             elements.totalQuestions.textContent = testData.questions.length;
             elements.testDuration.textContent = testData.durationMinutes;
-            elements.totalPoints.textContent = testData.totalPoints;
+            elements.totalPoints.textContent = testData.totalPoints.toFixed(1);
             elements.testCode.textContent = currentTestCode;
             
             if (currentTestCode) {
@@ -3130,7 +3152,7 @@
             }
         }
         
-        // Calculate Results (Tuzatilgan)
+        // Calculate Results (Tuzatilgan) - ASOSIY O'ZGARISH
         function calculateResults() {
             let correctCount = 0;
             let totalScore = 0;
@@ -3157,13 +3179,12 @@
                 }
             });
             
-            // Floating-point xatoliklarni oldini olish uchun yaxlitlash
-            totalScore = Math.round(totalScore * 100) / 100;
+            // **O'ZGARISH: 0,1 aniqlikda yaxlitlash**
+            totalScore = parseFloat(totalScore.toFixed(1));
             
             // Apply penalty points
-            let finalScore = totalScore - penaltyPoints;
+            let finalScore = parseFloat((totalScore - penaltyPoints).toFixed(1));
             if (finalScore < 0) finalScore = 0;
-            finalScore = Math.round(finalScore * 100) / 100;
             
             const wrongCount = testData.questions.length - correctCount;
             const timeMinutes = Math.floor(timeSpent / 60);
@@ -3180,12 +3201,6 @@
             };
         }
         
-        // Format number for display (remove trailing zeros)
-        function formatNumber(num) {
-            // Format to 2 decimal places and remove unnecessary trailing zeros
-            return num.toFixed(2).replace(/\.?0+$/, '');
-        }
-        
         // Finish Test (Tuzatilgan)
         function finishTest() {
             clearInterval(timerInterval);
@@ -3198,13 +3213,13 @@
             
             const results = calculateResults();
             
-            // Update results display with formatted numbers
-            elements.finalScore.textContent = formatNumber(results.finalScore);
+            // **O'ZGARISH: 0,1 aniqlikda ko'rsatish**
+            elements.finalScore.textContent = results.finalScore.toFixed(1);
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = formatNumber(results.totalScore);
+            elements.totalScoreResult.textContent = results.totalScore.toFixed(1);
             elements.timeUsed.textContent = results.timeFormatted;
-            elements.penaltyResult.textContent = formatNumber(results.penaltyPoints);
+            elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
             
             // Save results
@@ -3270,7 +3285,7 @@
             }
         }
         
-        // Save Results to Firestore
+        // Save Results to Firestore - ASOSIY O'ZGARISH
         async function saveResultsToFirestore(results) {
             if (!currentUser || !userData || !testData) return;
             
@@ -3281,9 +3296,9 @@
                     userAge: calculateAge(userData.birthDate),
                     testCode: currentTestCode,
                     testTitle: testData.title,
-                    score: results.finalScore,
-                    totalScore: results.totalScore,
-                    penaltyPoints: results.penaltyPoints,
+                    score: parseFloat(results.finalScore.toFixed(1)),
+                    totalScore: parseFloat(results.totalScore.toFixed(1)),
+                    penaltyPoints: parseFloat(results.penaltyPoints.toFixed(1)),
                     violations: violations.length,
                     violationDetails: violations,
                     correctAnswers: results.correctCount,
@@ -3317,7 +3332,7 @@
                             rating[existingUserIndex] = {
                                 userId: currentUser.uid,
                                 userFullName: userData.fullName,
-                                score: results.finalScore,
+                                score: parseFloat(results.finalScore.toFixed(1)),
                                 date: firebase.firestore.FieldValue.serverTimestamp()
                             };
                         }
@@ -3327,7 +3342,7 @@
                         rating.push({
                             userId: currentUser.uid,
                             userFullName: userData.fullName,
-                            score: results.finalScore,
+                            score: parseFloat(results.finalScore.toFixed(1)),
                             date: firebase.firestore.FieldValue.serverTimestamp()
                         });
                     }
@@ -3345,18 +3360,20 @@
                     });
                 }
                 
-                // 3. Foydalanuvchilar collectionida points ga qo'shish (barcha testlardan)
+                // **O'ZGARISH: 3. Foydalanuvchilar collectionida points ga qo'shish (barcha testlardan)**
                 const userRef = db.collection('foydalanuvchilar').doc(currentUser.uid);
                 
                 // Foydalanuvchining joriy ballarini olish
                 const userDoc = await userRef.get();
                 const currentPoints = userDoc.exists ? (userDoc.data().points || 0) : 0;
                 
-                // Yangi ballarni qo'shish
+                // **O'ZGARISH: Yangi ballarni 0,1 aniqlikda qo'shish**
+                const newTotalPoints = parseFloat((parseFloat(currentPoints) + results.finalScore).toFixed(1));
+                
                 await userRef.update({
-                    points: Math.round((currentPoints + results.finalScore) * 100) / 100,
+                    points: newTotalPoints,
                     lastTest: currentTestCode,
-                    lastScore: results.finalScore,
+                    lastScore: parseFloat(results.finalScore.toFixed(1)),
                     totalTests: firebase.firestore.FieldValue.increment(1),
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
