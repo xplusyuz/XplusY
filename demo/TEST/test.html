@@ -57,7 +57,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <!-- Auth Utils -->
-    <script src="/demo/auth-utils.js"></script>
+    <script src="auth-utils.js"></script>
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -101,8 +101,9 @@
             max-width: 1000px;
             margin: 0 auto;
             padding: 20px;
-            height: calc(100vh - 70px);
+            height: calc(100vh - 140px); /* O'ZGARDI: 140px */
             overflow-y: auto;
+            overflow-x: hidden; /* O'ZGARDI: gorizontal scroll o'chirildi */
         }
         
         /* Header */
@@ -114,6 +115,7 @@
             position: sticky;
             top: 0;
             z-index: 100;
+            height: 70px; /* O'ZGARDI: fixed height */
         }
         
         .header-inner {
@@ -123,6 +125,7 @@
             max-width: 1000px;
             margin: 0 auto;
             padding: 0 20px;
+            height: 100%;
         }
         
         .logo {
@@ -220,6 +223,8 @@
             margin: 20px 0;
             box-shadow: 0 8px 24px rgba(31, 107, 69, 0.04);
             min-height: 400px;
+            overflow-y: auto; /* O'ZGARDI: ichki scroll */
+            max-height: calc(100vh - 200px); /* O'ZGARDI: maksimal balandlik */
         }
         
         .hidden {
@@ -317,7 +322,7 @@
         .question-image {
             max-width: 100%;
             max-height: 300px;
-            margin: 20px 0;
+            margin: 20px auto;
             border-radius: 12px;
             display: block;
             object-fit: contain;
@@ -370,6 +375,7 @@
         
         #mathEditor {
             min-height: 120px;
+            max-height: 200px;
             padding: 20px;
             background: #fff;
             border-radius: 16px;
@@ -386,8 +392,9 @@
             outline: none;
             width: 100%;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-            overflow-x: auto;
-            white-space: nowrap;
+            overflow-y: auto; /* O'ZGARDI: faqat vertikal scroll */
+            overflow-x: hidden; /* O'ZGARDI: gorizontal scroll o'chirildi */
+            word-break: break-word; /* O'ZGARDI: so'zlarni uzish */
         }
         
         #mathEditor:focus {
@@ -1013,6 +1020,7 @@
             .card {
                 padding: 20px;
                 min-height: 300px;
+                max-height: calc(100vh - 150px);
             }
             
             .btn {
@@ -1028,6 +1036,7 @@
                 flex-direction: column;
                 gap: 10px;
                 padding: 10px;
+                height: auto;
             }
             
             .user-info {
@@ -1331,12 +1340,18 @@
         
         <!-- Results Card -->
         <div id="resultsCard" class="card hidden">
+            <!-- YANGILANDI: Bekor qilish xabari alohida joyda -->
+            <div id="cancelledMessage" class="status error hidden" style="margin-bottom: 30px;">
+                <h3>⚠️ Test Bekor Qilindi!</h3>
+                <p id="cancelledReason">Xavfsizlik qoidalari buzilganligi uchun test bekor qilindi.</p>
+            </div>
+            
             <div class="score-circle">
                 <span id="finalScore">0</span>
                 <small>ball</small>
             </div>
             
-            <h2 style="text-align: center; margin-bottom: 20px;">Test Yakunlandi!</h2>
+            <h2 style="text-align: center; margin-bottom: 20px;" id="resultsTitle">Test Yakunlandi!</h2>
             
             <div class="results-grid">
                 <div class="result-item">
@@ -1460,6 +1475,20 @@
             resultsCard: document.getElementById('resultsCard'),
             errorCard: document.getElementById('errorCard'),
             
+            // Results elements
+            cancelledMessage: document.getElementById('cancelledMessage'),
+            cancelledReason: document.getElementById('cancelledReason'),
+            resultsTitle: document.getElementById('resultsTitle'),
+            finalScore: document.getElementById('finalScore'),
+            correctCount: document.getElementById('correctCount'),
+            wrongCount: document.getElementById('wrongCount'),
+            totalScoreResult: document.getElementById('totalScoreResult'),
+            timeUsed: document.getElementById('timeUsed'),
+            penaltyResult: document.getElementById('penaltyResult'),
+            violationResult: document.getElementById('violationResult'),
+            afterTestRating: document.getElementById('afterTestRating'),
+            userRank: document.getElementById('userRank'),
+            
             // Security elements
             fullscreenWarning: document.getElementById('fullscreenWarning'),
             violationBadge: document.getElementById('violationBadge'),
@@ -1512,17 +1541,6 @@
             optionsContainer: document.getElementById('optionsContainer'),
             openAnswerContainer: document.getElementById('openAnswerContainer'),
             navDots: document.getElementById('navDots'),
-            
-            // Results elements
-            finalScore: document.getElementById('finalScore'),
-            correctCount: document.getElementById('correctCount'),
-            wrongCount: document.getElementById('wrongCount'),
-            totalScoreResult: document.getElementById('totalScoreResult'),
-            timeUsed: document.getElementById('timeUsed'),
-            penaltyResult: document.getElementById('penaltyResult'),
-            violationResult: document.getElementById('violationResult'),
-            afterTestRating: document.getElementById('afterTestRating'),
-            userRank: document.getElementById('userRank'),
             
             // Buttons
             startBtn: document.getElementById('startBtn'),
@@ -2362,7 +2380,7 @@
             console.log("Security features disabled");
         }
         
-        // 15. Finish test with warning
+        // 15. Finish test with warning (YANGILANDI: Bekor qilish xabari alohida ko'rsatiladi)
         function finishTestWithWarning(message) {
             clearInterval(timerInterval);
             testStarted = false;
@@ -2373,13 +2391,21 @@
             
             const results = calculateResults();
             
-            elements.finalScore.textContent = "0 (Bekor qilindi)";
+            // YANGILANDI: Bekor qilish xabarini alohida ko'rsatish
+            elements.cancelledMessage.classList.remove('hidden');
+            elements.cancelledReason.textContent = message;
+            elements.resultsTitle.textContent = "Test Bekor Qilindi!";
+            elements.finalScore.textContent = "0";
+            
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
             elements.totalScoreResult.textContent = results.totalScore.toFixed(1);
             elements.timeUsed.textContent = results.timeFormatted;
             elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
+            
+            // YANGILANDI: Doira rangi qizil qilish
+            document.querySelector('.score-circle').style.background = 'linear-gradient(135deg, var(--danger), #b91c1c)';
             
             showScreen('results');
             showStatus("Test bekor qilindi: " + message, "error");
@@ -2593,22 +2619,32 @@
             }
         }
         
-        // Find section for question
+        // YANGILANDI: Bo'lim nomini aniq aniqlash funksiyasi
         function findSectionForQuestion(questionNumber) {
-            if (!testData.sections || !Array.isArray(testData.sections)) {
-                return "Umumiy";
+            if (!testData || !testData.questions) return "Umumiy";
+            
+            // Savolning asl ma'lumotlarini olish
+            const question = testData.questions[questionNumber - 1];
+            if (!question) return "Umumiy";
+            
+            // Agar savolda section maydoni bo'lsa, uni qaytarish
+            if (question.section && question.section.trim() !== "") {
+                return question.section;
             }
             
-            for (let section of testData.sections) {
-                if (questionNumber >= section.start && questionNumber <= section.end) {
-                    return section.name;
+            // Agar testda sections array bo'lsa
+            if (testData.sections && Array.isArray(testData.sections)) {
+                for (let section of testData.sections) {
+                    if (questionNumber >= section.start && questionNumber <= section.end) {
+                        return section.name || "Umumiy";
+                    }
                 }
             }
             
             return "Umumiy";
         }
         
-        // Normalize Test Data
+        // Normalize Test Data (YANGILANDI: Bo'lim nomini to'g'ri olish)
         function normalizeTestData() {
             if (!testData) return;
             
@@ -2636,6 +2672,7 @@
                 testData.questions = [];
             }
             
+            // YANGILANDI: Har bir savol uchun section nomini to'g'ri belgilash
             testData.questions.forEach((q, index) => {
                 if (!q || typeof q !== 'object') {
                     q = {};
@@ -2644,6 +2681,7 @@
                 q.points = q.points || 1;
                 q.type = q.type || "variant";
                 
+                // YANGILANDI: Section nomini qayta aniqlash
                 q.section = q.section || findSectionForQuestion(index + 1);
                 
                 if (q.type === 'variant') {
@@ -2847,7 +2885,7 @@
             }
         }
         
-        // Render Question
+        // Render Question (YANGILANDI: Bo'lim nomini to'g'ri ko'rsatish)
         function renderQuestion() {
             if (!testData || !testData.questions[currentQuestionIndex]) return;
             
@@ -2857,7 +2895,10 @@
             
             elements.currentQ.textContent = currentQuestionIndex + 1;
             elements.totalQ.textContent = testData.questions.length;
-            elements.sectionName.textContent = question.section || "Umumiy";
+            
+            // YANGILANDI: Bo'lim nomini to'g'ri ko'rsatish
+            const sectionName = question.section || "Umumiy";
+            elements.sectionName.textContent = sectionName;
             
             loadQuestionImage(currentQuestionIndex);
             
@@ -3037,7 +3078,7 @@
             };
         }
         
-        // Finish Test
+        // Finish Test (YANGILANDI: Normal tugash va bekor qilish farqi)
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
@@ -3048,7 +3089,14 @@
             
             const results = calculateResults();
             
+            // YANGILANDI: Normal tugash holati
+            elements.cancelledMessage.classList.add('hidden');
+            elements.resultsTitle.textContent = "Test Yakunlandi!";
             elements.finalScore.textContent = results.finalScore.toFixed(1);
+            
+            // YANGILANDI: Doira rangi asl holatiga qaytarish
+            document.querySelector('.score-circle').style.background = 'linear-gradient(135deg, var(--brand), var(--brand2))';
+            
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
             elements.totalScoreResult.textContent = results.totalScore.toFixed(1);
