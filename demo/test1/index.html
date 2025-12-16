@@ -7,6 +7,10 @@
     <meta name="mobile-web-app-capable" content="yes">
     <title>Test Tizimi - Xavfsizlik rejimi</title>
     
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
     <!-- MathJax 3 -->
     <script>
         window.MathJax = {
@@ -25,8 +29,25 @@
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
+    <!-- Firestore konfiguratsiyasi -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        
+        // Firebase'ni ishga tushirish
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+    </script>
+    
+    <!-- CSS o'zgarishsiz -->
     <style>
-        :root {
+      :root {
             --brand: #2E8B57;
             --brand-light: #3CB371;
             --brand-dark: #1F6B45;
@@ -1163,7 +1184,7 @@
     </style>
 </head>
 <body>
-    <!-- 1. YUQORI BANNER -->
+     <!-- 1. YUQORI BANNER -->
     <div class="top-banner" id="topBanner"></div>
     
     <!-- 2. PASTKI BANNER -->
@@ -1439,7 +1460,7 @@
             </div>
         </div>
     </div>
-
+    
     <script>
         // ==================== KONFIGURATSIYA ====================
         const CONFIG = {
@@ -1467,308 +1488,81 @@
         let isFullScreen = false;
         let securityEnabled = false;
         
-        // ==================== DOM ELEMENTLARI ====================
-        const elements = {
-            loadingScreen: document.getElementById('loadingScreen'),
-            codeInputCard: document.getElementById('codeInputCard'),
-            classSelectionCard: document.getElementById('classSelectionCard'),
-            studentSelectionCard: document.getElementById('studentSelectionCard'),
-            introCard: document.getElementById('introCard'),
-            questionCard: document.getElementById('questionCard'),
-            resultsCard: document.getElementById('resultsCard'),
-            
-            // Test header elements
-            testHeader: document.getElementById('testHeader'),
-            headerStudentName: document.getElementById('headerStudentName'),
-            headerStudentClass: document.getElementById('headerStudentClass'),
-            currentSectionName: document.getElementById('currentSectionName'),
-            currentQuestionPoints: document.getElementById('currentQuestionPoints'),
-            violationCount: document.getElementById('violationCount'),
-            headerTimer: document.getElementById('headerTimer'),
-            
-            // Security monitor
-            securityMonitor: document.getElementById('securityMonitor'),
-            monitorText: document.getElementById('monitorText'),
-            
-            // Code input
-            testCodeInput: document.getElementById('testCodeInput'),
-            loadTestBtn: document.getElementById('loadTestBtn'),
-            
-            // Class selection
-            classSelect: document.getElementById('classSelect'),
-            backToCodeBtn: document.getElementById('backToCodeBtn'),
-            nextToStudentBtn: document.getElementById('nextToStudentBtn'),
-            
-            // Student selection
-            studentSelect: document.getElementById('studentSelect'),
-            backToClassBtn: document.getElementById('backToClassBtn'),
-            nextToIntroBtn: document.getElementById('nextToIntroBtn'),
-            
-            // Intro
-            testTitle: document.getElementById('testTitle'),
-            testDescription: document.getElementById('testDescription'),
-            totalQuestions: document.getElementById('totalQuestions'),
-            testDuration: document.getElementById('testDuration'),
-            totalPoints: document.getElementById('totalPoints'),
-            testSections: document.getElementById('testSections'),
-            sectionList: document.getElementById('sectionList'),
-            studentName: document.getElementById('studentName'),
-            startTestBtn: document.getElementById('startTestBtn'),
-            
-            // Question
-            currentQ: document.getElementById('currentQ'),
-            timer: document.getElementById('timer'),
-            sectionNameDisplay: document.getElementById('sectionNameDisplay'),
-            questionImageContainer: document.getElementById('questionImageContainer'),
-            questionImage: document.getElementById('questionImage'),
-            imageNotFound: document.getElementById('imageNotFound'),
-            questionText: document.getElementById('questionText'),
-            optionsContainer: document.getElementById('optionsContainer'),
-            openAnswerContainer: document.getElementById('openAnswerContainer'),
-            viewWarning: document.getElementById('viewWarning'),
-            viewCount: document.getElementById('viewCount'),
-            navDots: document.getElementById('navDots'),
-            prevBtn: document.getElementById('prevBtn'),
-            nextBtn: document.getElementById('nextBtn'),
-            finishBtn: document.getElementById('finishBtn'),
-            
-            // Results
-            finalScore: document.getElementById('finalScore'),
-            resultsTitle: document.getElementById('resultsTitle'),
-            correctCount: document.getElementById('correctCount'),
-            wrongCount: document.getElementById('wrongCount'),
-            totalScoreResult: document.getElementById('totalScoreResult'),
-            timeUsed: document.getElementById('timeUsed'),
-            restartBtn: document.getElementById('restartBtn'),
-            
-            // Banners
-            topBanner: document.getElementById('topBanner'),
-            bottomBanner: document.getElementById('bottomBanner')
-        };
-        
-        // ==================== CHEKSIZ BANNERLAR ====================
-        function createInfiniteBanners() {
-            // Yuqori banner
-            const bannerContent = [
-                "1-IMI.UZ | Ta'lim Sari Birinchi Qadam",
-                "LeaderMath.uz | Matematika Platformasi",
-                "Namangan shahar 1-IMI | Raqamli Ta'lim Markazi",
-                "www.1-imi.uz | www.LeaderMath.uz"
-            ];
-            
-            let topHTML = '';
-            for (let i = 0; i < 30; i++) {
-                bannerContent.forEach(item => {
-                    topHTML += `<div class="banner-item">${item}</div>`;
+        // ==================== FIREBASE FUNKSIYALARI ====================
+        async function loadClassesFromFirebase() {
+            try {
+                const classesRef = db.collection('davomat');
+                const snapshot = await classesRef.get();
+                
+                classes = [];
+                snapshot.forEach(doc => {
+                    const classData = doc.data();
+                    classes.push({
+                        id: doc.id,
+                        name: classData.name || doc.id
+                    });
                 });
-            }
-            elements.topBanner.innerHTML = `<div class="banner-wrapper">${topHTML}</div>`;
-            
-            // Pastki banner
-            const bottomContent = [
-                "1-IMI - Sifatli Ta'lim Kafolati",
-                "LeaderMath - Matematika Olamiga Sayohat",
-                "Telegram: @Help_LeaderMath_bot",
-                "Tel: +998 XX XXX XX XX"
-            ];
-            
-            let bottomHTML = '';
-            for (let i = 0; i < 30; i++) {
-                bottomContent.forEach(item => {
-                    bottomHTML += `<div class="bottom-banner-item">${item}</div>`;
-                });
-            }
-            elements.bottomBanner.innerHTML = `<div class="bottom-banner-wrapper">${bottomHTML}</div>`;
-        }
-        
-        // ==================== XAVFSIZLIK FUNKSIYALARI ====================
-        function enableSecurity() {
-            if (securityEnabled) return;
-            
-            elements.securityMonitor.classList.remove('hidden');
-            elements.monitorText.textContent = "Xavfsizlik rejimi faol";
-            
-            // Fullscreen ni yoqish
-            enableFullScreen();
-            
-            // Event listener'lar
-            window.addEventListener('blur', handleWindowBlur);
-            window.addEventListener('focus', handleWindowFocus);
-            document.addEventListener('fullscreenchange', handleFullScreenChange);
-            document.addEventListener('visibilitychange', handleVisibilityChange);
-            
-            // Clipboard block
-            document.addEventListener('copy', handleCopy);
-            document.addEventListener('paste', handlePaste);
-            document.addEventListener('cut', handleCut);
-            
-            // Context menu block
-            document.addEventListener('contextmenu', handleContextMenu);
-            
-            // Developer tools block
-            document.addEventListener('keydown', handleKeyDown);
-            
-            securityEnabled = true;
-            console.log("Xavfsizlik tizimlari faollashtirildi");
-        }
-        
-        function disableSecurity() {
-            elements.securityMonitor.classList.add('hidden');
-            
-            // Event listener'larni olib tashlash
-            window.removeEventListener('blur', handleWindowBlur);
-            window.removeEventListener('focus', handleWindowFocus);
-            document.removeEventListener('fullscreenchange', handleFullScreenChange);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            document.removeEventListener('copy', handleCopy);
-            document.removeEventListener('paste', handlePaste);
-            document.removeEventListener('cut', handleCut);
-            document.removeEventListener('contextmenu', handleContextMenu);
-            document.removeEventListener('keydown', handleKeyDown);
-            
-            // Fullscreen dan chiqish
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
-            
-            securityEnabled = false;
-            console.log("Xavfsizlik tizimlari o'chirildi");
-        }
-        
-        function enableFullScreen() {
-            const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            }
-            isFullScreen = true;
-        }
-        
-        function handleWindowBlur() {
-            if (testStarted) {
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Boshqa oynaga o'tildi!";
                 
-                if (violations >= 3) {
-                    cancelTest("3 marta boshqa oynaga o'tilgani uchun test bekor qilindi");
+                if (classes.length > 0) {
+                    elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
+                    classes.forEach(cls => {
+                        const option = document.createElement('option');
+                        option.value = cls.id;
+                        option.textContent = cls.name;
+                        elements.classSelect.appendChild(option);
+                    });
                 }
-            }
-        }
-        
-        function handleWindowFocus() {
-            // Hech narsa
-        }
-        
-        function handleFullScreenChange() {
-            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
-            isFullScreen = isFullscreen;
-            
-            if (testStarted && !isFullscreen) {
-                violations = 3;
-                elements.violationCount.textContent = violations;
-                cancelTest("To'liq ekran rejimidan chiqilgani uchun test bekor qilindi");
-            }
-        }
-        
-        function handleVisibilityChange() {
-            if (testStarted && document.hidden) {
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Boshqa tabga o'tildi!";
                 
-                if (violations >= 3) {
-                    cancelTest("3 marta boshqa tabga o'tilgani uchun test bekor qilindi");
-                }
+                return true;
+            } catch (error) {
+                console.error('Firebase sinflarni yuklashda xato:', error);
+                return false;
             }
         }
         
-        function handleCopy(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Nusxa ko'chirish bloklandi!";
-            }
-        }
-        
-        function handlePaste(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Qo'shish bloklandi!";
-            }
-        }
-        
-        function handleCut(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Kesish bloklandi!";
-            }
-        }
-        
-        function handleContextMenu(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "O'ng tugma bloklandi!";
-            }
-        }
-        
-        function handleKeyDown(e) {
-            if (!testStarted) return;
-            
-            // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U bloklash
-            if (e.key === 'F12' || 
-                (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
-                (e.ctrlKey && e.key === 'u')) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Ruxsat etilmagan tugma!";
+        async function loadStudentsFromFirebase(classId) {
+            try {
+                const classRef = db.collection('davomat').doc(classId);
+                const doc = await classRef.get();
                 
-                if (violations >= 3) {
-                    cancelTest("3 marta ruxsat etilmagan tugma bosilgani uchun test bekor qilindi");
+                if (!doc.exists) {
+                    console.error('Sinf topilmadi');
+                    return false;
                 }
+                
+                const classData = doc.data();
+                students = [];
+                
+                // Students maydonini tekshirish
+                if (classData.students && Array.isArray(classData.students)) {
+                    classData.students.forEach(student => {
+                        if (student && student.id && student.fullName) {
+                            students.push({
+                                id: student.id,
+                                fullName: student.fullName
+                            });
+                        }
+                    });
+                }
+                
+                if (students.length > 0) {
+                    elements.studentSelect.innerHTML = '<option value="">O`quvchini tanlang</option>';
+                    students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.id;
+                        option.textContent = student.fullName;
+                        elements.studentSelect.appendChild(option);
+                    });
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Firebase o`quvchilarni yuklashda xato:', error);
+                return false;
             }
         }
         
-        function cancelTest(reason) {
-            clearInterval(timerInterval);
-            testStarted = false;
-            
-            disableSecurity();
-            elements.testHeader.classList.add('hidden');
-            
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0,0,0,0.95); z-index: 10000;
-                display: flex; align-items: center; justify-content: center;
-                color: white; text-align: center; padding: 20px;
-            `;
-            modal.innerHTML = `
-                <div style="background: rgba(220,53,69,0.9); padding: 40px; border-radius: 15px; max-width: 500px;">
-                    <h2 style="margin-bottom: 20px; color: white;">⚠️ TEST BEKOR QILINDI!</h2>
-                    <p style="margin-bottom: 20px; font-size: 18px;">${reason}</p>
-                    <p style="margin-bottom: 30px;"><strong>Qoidabuzarliklar: ${violations}/3</strong></p>
-                    <button onclick="window.location.reload()" 
-                            style="padding: 12px 30px; background: white; color: #dc3545;
-                                   border: none; border-radius: 8px; font-weight: 600;
-                                   cursor: pointer; font-size: 16px;">
-                        Qayta boshlash
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-        
-        // ==================== 3-MARTALIK KO'RISH FUNKSIYALARI ====================
+        // ==================== 3-MARTALIK KO'RISH FUNKSIYALARI (TO'LIQ AMALGA OSHIRILDI) ====================
         function checkQuestionView(questionIndex) {
             if (!questionViews[questionIndex]) {
                 questionViews[questionIndex] = 1;
@@ -1790,6 +1584,13 @@
             if (views >= CONFIG.maxViews) {
                 const currentQElement = document.getElementById('currentQ');
                 currentQElement.classList.add('locked');
+                
+                // Navigation dot ni qulflash
+                const dots = elements.navDots.querySelectorAll('.dot');
+                if (dots[questionIndex]) {
+                    dots[questionIndex].classList.add('locked');
+                    dots[questionIndex].title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
+                }
             }
             
             return views;
@@ -1799,496 +1600,75 @@
             return questionViews[questionIndex] >= CONFIG.maxViews;
         }
         
-        // ==================== ASOSIY FUNKSIYALAR ====================
-        async function loadJSON(file) {
-            try {
-                const response = await fetch(file);
-                if (!response.ok) throw new Error(`${file} yuklanmadi`);
-                return await response.json();
-            } catch (error) {
-                console.error('Xato:', error);
-                return null;
-            }
-        }
-        
-        async function loadTestData(code) {
-            try {
-                showScreen('loading');
-                
-                // Faqat bitta JSON faylini yuklaymiz
-                testData = await loadJSON(`${code}.json`);
-                if (!testData) throw new Error(`"${code}" testi topilmadi`);
-                
-                console.log('Test yuklandi:', testData);
-                return true;
-            } catch (error) {
-                console.error('Test yuklashda xato:', error);
-                return false;
-            }
-        }
-        
-        async function loadClasses() {
-            classes = await loadJSON('sinflar.json');
-            if (classes && classes.length > 0) {
-                elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
-                classes.forEach(cls => {
-                    const option = document.createElement('option');
-                    option.value = cls;
-                    option.textContent = cls;
-                    elements.classSelect.appendChild(option);
-                });
-            }
-        }
-        
-        async function loadStudents(className) {
-            students = await loadJSON(`${className}.json`);
-            if (students && students.length > 0) {
-                elements.studentSelect.innerHTML = '<option value="">O`quvchini tanlang</option>';
-                students.forEach(student => {
-                    const option = document.createElement('option');
-                    option.value = student.id;
-                    option.textContent = student.fullName;
-                    elements.studentSelect.appendChild(option);
-                });
-            }
-        }
-        
-        function showScreen(screenName) {
-            elements.loadingScreen.classList.add('hidden');
-            elements.codeInputCard.classList.add('hidden');
-            elements.classSelectionCard.classList.add('hidden');
-            elements.studentSelectionCard.classList.add('hidden');
-            elements.introCard.classList.add('hidden');
-            elements.questionCard.classList.add('hidden');
-            elements.resultsCard.classList.add('hidden');
-            
-            switch(screenName) {
-                case 'codeInput':
-                    elements.codeInputCard.classList.remove('hidden');
-                    break;
-                case 'classSelection':
-                    elements.classSelectionCard.classList.remove('hidden');
-                    break;
-                case 'studentSelection':
-                    elements.studentSelectionCard.classList.remove('hidden');
-                    break;
-                case 'intro':
-                    elements.introCard.classList.remove('hidden');
-                    break;
-                case 'question':
-                    elements.questionCard.classList.remove('hidden');
-                    break;
-                case 'results':
-                    elements.resultsCard.classList.remove('hidden');
-                    break;
-                case 'loading':
-                    elements.loadingScreen.classList.remove('hidden');
-                    break;
-            }
-        }
-        
-        // ==================== TEST BOSHLASH ====================
-        function startTest() {
-            testStarted = true;
-            userAnswers = new Array(testData.questions.length);
-            timeRemaining = (testData.durationMinutes || 30) * 60;
-            timeSpent = 0;
-            violations = 0;
-            questionViews = {};
-            
-            // Header elementlarini yangilash
-            elements.headerStudentName.textContent = currentStudent.fullName;
-            elements.headerStudentClass.textContent = currentClass;
-            elements.violationCount.textContent = '0';
-            
-            // Xavfsizlikni yoqish
-            if (CONFIG.enableSecurity) {
-                enableSecurity();
-            }
-            
-            // Header va timer ko'rsatish
-            elements.testHeader.classList.remove('hidden');
-            startTimer();
-            
-            // Navigation dots
-            buildNavDots();
-            
-            // Birinchi savolni ko'rsatish
-            currentQuestionIndex = 0;
-            renderQuestion();
-            showScreen('question');
-        }
-        
-        function startTimer() {
-            updateTimerDisplay();
-            timerInterval = setInterval(() => {
-                timeRemaining--;
-                timeSpent++;
-                
-                if (timeRemaining <= 0) {
-                    finishTest();
-                    return;
-                }
-                
-                updateTimerDisplay();
-            }, 1000);
-        }
-        
-        function updateTimerDisplay() {
-            const minutes = Math.floor(timeRemaining / 60);
-            const seconds = timeRemaining % 60;
-            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            
-            elements.timer.textContent = timeString;
-            elements.headerTimer.textContent = timeString;
-            
-            // Vaqt rangini o'zgartirish
-            elements.timer.classList.remove('warning', 'danger');
-            if (timeRemaining < 300) {
-                elements.timer.classList.add('warning');
-            }
-            if (timeRemaining < 60) {
-                elements.timer.classList.add('danger');
-            }
-        }
-        
-        // ==================== PROFESSIONAL MATEMATIK EDITOR FUNKSIYALARI ====================
-        
-        // Raqam qo'shish
-        function insertNumber(number) {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            document.execCommand('insertText', false, number);
-            saveMathAnswer();
-        }
-        
-        // Matn qo'shish
-        function insertText(text) {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            document.execCommand('insertText', false, text);
-            saveMathAnswer();
-        }
-        
-        // Operator qo'shish
-        function insertOperator(operator) {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const span = document.createElement('span');
-            span.style.color = '#dc2626';
-            span.style.fontWeight = '600';
-            span.style.padding = '0 2px';
-            span.textContent = operator;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(span);
-            range.setStartAfter(span);
-            range.collapse(true);
-            
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-            saveMathAnswer();
-        }
-        
-        // Kasr yaratish
-        function createFraction() {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const fraction = document.createElement('span');
-            fraction.className = 'frac';
-            fraction.innerHTML = `
-                <span class="num" contenteditable="true">a</span>
-                <span class="line"></span>
-                <span class="den" contenteditable="true">b</span>
-            `;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(fraction);
-            
-            setTimeout(() => {
-                const numerator = fraction.querySelector('.num');
-                numerator.focus();
-                const range = document.createRange();
-                range.selectNodeContents(numerator);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
-        }
-        
-        // Daraja yaratish
-        function createPower() {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const power = document.createElement('span');
-            power.className = 'power';
-            power.innerHTML = `
-                <span class="base" contenteditable="true">x</span>
-                <sup class="exp" contenteditable="true">n</sup>
-            `;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(power);
-            
-            setTimeout(() => {
-                const base = power.querySelector('.base');
-                base.focus();
-                const range = document.createRange();
-                range.selectNodeContents(base);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
-        }
-        
-        // Ildiz yaratish
-        function createSqrt() {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const sqrt = document.createElement('span');
-            sqrt.className = 'sqrt';
-            sqrt.innerHTML = `
-                <span class="symbol">√</span>
-                <span class="rad" contenteditable="true">x</span>
-            `;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(sqrt);
-            
-            setTimeout(() => {
-                const rad = sqrt.querySelector('.rad');
-                rad.focus();
-                const range = document.createRange();
-                range.selectNodeContents(rad);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
-        }
-        
-        // Logarifm yaratish
-        function createLogarithm() {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const log = document.createElement('span');
-            log.className = 'log';
-            log.innerHTML = `
-                <span class="name">log</span>
-                <sub class="base" contenteditable="true">a</sub>
-                <span class="arg" contenteditable="true">x</span>
-            `;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(log);
-            
-            setTimeout(() => {
-                const base = log.querySelector('.base');
-                base.focus();
-                const range = document.createRange();
-                range.selectNodeContents(base);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
-        }
-        
-        // Trigonometrik funksiya yaratish
-        function createFunction(funcName) {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            
-            const func = document.createElement('span');
-            func.className = 'func';
-            func.innerHTML = `
-                <span class="name">${funcName}</span>(
-                <span class="arg" contenteditable="true">x</span>)
-            `;
-            
-            const range = window.getSelection().getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(func);
-            
-            setTimeout(() => {
-                const arg = func.querySelector('.arg');
-                arg.focus();
-                const range = document.createRange();
-                range.selectNodeContents(arg);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
-        }
-        
-        // Editorni tozalash
-        function clearMathEditor() {
-            if (!mathEditor) return;
-            mathEditor.innerHTML = '';
-            mathEditor.focus();
-            saveMathAnswer();
-        }
-        
-        // Oxirgi belgini o'chirish
-        function deleteLast() {
-            if (!mathEditor) return;
-            mathEditor.focus();
-            document.execCommand('delete', false);
-            saveMathAnswer();
-        }
-        
-        // Math javobni saqlash
-        function saveMathAnswer() {
-            if (!mathEditor) return;
-            userAnswers[currentQuestionIndex] = mathEditor.innerHTML;
-            updateNavDots();
-        }
-        
-        // Math editorni yuklash
-        function loadMathEditor(answer) {
-            mathEditor = document.getElementById('mathEditor');
-            if (!mathEditor) return;
-            
-            if (answer && answer.trim() !== '') {
-                mathEditor.innerHTML = answer;
-            } else {
-                mathEditor.innerHTML = '';
-            }
-            
-            // Input event listener
-            mathEditor.addEventListener('input', saveMathAnswer);
-            
-            // Tab va Enter boshqaruvi
-            mathEditor.addEventListener('keydown', function(e) {
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    
-                    const activeElement = document.activeElement;
-                    if (!activeElement || !activeElement.hasAttribute('contenteditable')) return;
-                    
-                    // Strukturalar orasida harakatlanish
-                    if (activeElement.classList.contains('num')) {
-                        const den = activeElement.parentElement.querySelector('.den');
-                        if (den) den.focus();
-                    } 
-                    else if (activeElement.classList.contains('den')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('base')) {
-                        const exp = activeElement.parentElement.querySelector('.exp');
-                        if (exp) exp.focus();
-                    }
-                    else if (activeElement.classList.contains('exp')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('rad')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('arg')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                }
-                
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    insertText(' ');
-                }
-            });
-            
-            // Fokus berish
-            setTimeout(() => {
-                mathEditor.focus();
-            }, 100);
-        }
-        
-        // Kursorni elementdan keyingi o'rnatish
-        function placeCursorAfter(element) {
-            const range = document.createRange();
-            const selection = window.getSelection();
-            range.setStartAfter(element);
-            range.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            if (mathEditor) mathEditor.focus();
-        }
-        
-        // ==================== SAVOL KO'RSATISH ====================
-        function buildNavDots() {
-            elements.navDots.innerHTML = '';
-            
-            testData.questions.forEach((_, index) => {
-                const dot = document.createElement('div');
-                dot.className = 'dot';
-                dot.textContent = index + 1;
-                dot.dataset.index = index;
-                
-                if (isQuestionLocked(index)) {
-                    dot.classList.add('locked');
-                    dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
-                } else {
-                    dot.addEventListener('click', () => {
-                        if (testStarted && !isQuestionLocked(index)) {
-                            checkQuestionView(currentQuestionIndex);
-                            currentQuestionIndex = index;
-                            renderQuestion();
-                        }
-                    });
-                }
-                
-                elements.navDots.appendChild(dot);
-            });
-            
-            updateNavDots();
-        }
-        
-        function updateNavDots() {
+        function updateQuestionLockStatus() {
             const dots = elements.navDots.querySelectorAll('.dot');
-            
             dots.forEach((dot, index) => {
-                dot.classList.remove('active', 'answered', 'locked');
-                
-                if (index === currentQuestionIndex) {
-                    dot.classList.add('active');
-                }
-                
-                if (userAnswers[index] !== undefined && userAnswers[index] !== '') {
-                    dot.classList.add('answered');
-                }
-                
                 if (isQuestionLocked(index)) {
                     dot.classList.add('locked');
                     dot.style.cursor = 'not-allowed';
+                    dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
+                } else {
+                    dot.classList.remove('locked');
+                    dot.style.cursor = 'pointer';
+                    dot.removeAttribute('title');
                 }
             });
         }
         
+        // ==================== SAVOL KO'RSATISH (QULFLANGAN SAVOLNI O'CHIRISH) ====================
         function renderQuestion() {
             if (!testData || !testData.questions[currentQuestionIndex]) return;
             
             const question = testData.questions[currentQuestionIndex];
+            
+            // QULFLANGANMI TEKSHIRISH
+            if (isQuestionLocked(currentQuestionIndex)) {
+                // Qulfdanagan savolni o'chirish
+                elements.prevBtn.disabled = false;
+                elements.nextBtn.disabled = false;
+                
+                // Savolni ko'rsatish o'rniga qulfdanaganligini ko'rsatish
+                elements.questionText.innerHTML = `
+                    <div style="text-align: center; padding: 50px 20px;">
+                        <div style="font-size: 100px; margin-bottom: 20px;">🔒</div>
+                        <h2 style="color: var(--danger);">Bu savol qulfdanadi</h2>
+                        <p>Bu savolni 3 marta ko'rganingiz uchun qulfdanadi.</p>
+                        <p style="margin-top: 20px;">
+                            <strong>Ko'rishlar soni:</strong> ${questionViews[currentQuestionIndex] || 0}/${CONFIG.maxViews}
+                        </p>
+                        <button onclick="goToNextUnlockedQuestion()" class="btn" style="margin-top: 30px; max-width: 300px;">
+                            Keyingi ochiq savolga o'tish
+                        </button>
+                    </div>
+                `;
+                
+                // Barcha variantlarni yashirish
+                elements.optionsContainer.classList.add('hidden');
+                elements.openAnswerContainer.classList.add('hidden');
+                elements.questionImageContainer.classList.add('hidden');
+                elements.viewWarning.classList.add('hidden');
+                
+                // Header elementlarini yangilash
+                elements.currentQ.textContent = currentQuestionIndex + 1;
+                elements.currentQ.classList.add('locked');
+                elements.sectionNameDisplay.textContent = question.section || "Umumiy";
+                elements.currentSectionName.textContent = question.section || "Umumiy";
+                
+                return; // Qulfdanagan savolni ko'rsatmasdan chiqamiz
+            }
+            
             const views = checkQuestionView(currentQuestionIndex);
             
-            // Qulfni tekshirish
+            // Qulfni tekshirish (agar views yangi oshgan bo'lsa)
             const currentQElement = document.getElementById('currentQ');
             if (views >= CONFIG.maxViews) {
                 currentQElement.classList.add('locked');
             } else {
                 currentQElement.classList.remove('locked');
             }
+            
+            // QOLGAN KOD O'ZGARISHSIZ...
+            // ... (oldingi renderQuestion funksiyasining qolgan qismi)
             
             // Header elementlarini yangilash
             elements.currentQ.textContent = currentQuestionIndex + 1;
@@ -2339,11 +1719,22 @@
                     const optionDiv = document.createElement('div');
                     optionDiv.className = 'option';
                     
+                    // Agar qulfdanaganda variantlarni tanlashni o'chirish
+                    if (isQuestionLocked(currentQuestionIndex)) {
+                        optionDiv.style.opacity = '0.5';
+                        optionDiv.style.cursor = 'not-allowed';
+                    }
+                    
                     const input = document.createElement('input');
                     input.type = 'radio';
                     input.name = 'questionOption';
                     input.value = index;
                     input.id = `option_${index}`;
+                    
+                    // Qulfdanaganda input'ni disable qilish
+                    if (isQuestionLocked(currentQuestionIndex)) {
+                        input.disabled = true;
+                    }
                     
                     if (userAnswers[currentQuestionIndex] === index) {
                         input.checked = true;
@@ -2351,6 +1742,8 @@
                     }
                     
                     input.addEventListener('change', () => {
+                        if (isQuestionLocked(currentQuestionIndex)) return; // Qulfdanaganda o'zgartirishga yo'l qo'ymaslik
+                        
                         document.querySelectorAll('.option').forEach(opt => {
                             opt.classList.remove('selected');
                         });
@@ -2370,11 +1763,22 @@
             } else if (question.type === 'open') {
                 elements.openAnswerContainer.classList.remove('hidden');
                 loadMathEditor(userAnswers[currentQuestionIndex]);
+                
+                // Qulfdanaganda math editorni disable qilish
+                if (isQuestionLocked(currentQuestionIndex)) {
+                    const editor = document.getElementById('mathEditor');
+                    if (editor) {
+                        editor.setAttribute('contenteditable', 'false');
+                        editor.style.opacity = '0.5';
+                        editor.style.cursor = 'not-allowed';
+                    }
+                }
             }
             
             // NAVIGATION BUTTONLARI
             updateNavigationButtons();
             updateNavDots();
+            updateQuestionLockStatus();
             
             // MATHJAX
             if (window.MathJax && MathJax.typesetPromise) {
@@ -2382,103 +1786,153 @@
             }
         }
         
-        function updateNavigationButtons() {
-            elements.prevBtn.disabled = currentQuestionIndex === 0;
-            elements.nextBtn.disabled = currentQuestionIndex === testData.questions.length - 1;
-        }
-        
-        // ==================== TEST YAKUNLASH ====================
-        function finishTest() {
-            clearInterval(timerInterval);
-            testStarted = false;
+        function goToNextUnlockedQuestion() {
+            let nextIndex = currentQuestionIndex;
             
-            if (CONFIG.enableSecurity) {
-                disableSecurity();
+            // Keyingi ochiq savolni topish
+            for (let i = currentQuestionIndex + 1; i < testData.questions.length; i++) {
+                if (!isQuestionLocked(i)) {
+                    nextIndex = i;
+                    break;
+                }
             }
             
-            elements.testHeader.classList.add('hidden');
-            
-            const results = calculateResults();
-            
-            // NATIJALARNI KO'RSATISH
-            elements.finalScore.textContent = results.finalScore.toFixed(1);
-            elements.correctCount.textContent = results.correctCount;
-            elements.wrongCount.textContent = results.wrongCount;
-            elements.totalScoreResult.textContent = results.totalScore.toFixed(1);
-            
-            const minutes = Math.floor(timeSpent / 60);
-            const seconds = timeSpent % 60;
-            elements.timeUsed.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            
-            showScreen('results');
-        }
-        
-        function calculateResults() {
-            let correctCount = 0;
-            let totalScore = 0;
-            
-            testData.questions.forEach((question, index) => {
-                const userAnswer = userAnswers[index];
-                
-                if (question.type === 'variant') {
-                    // Agar correctIndex bo'lsa, uni tekshiramiz
-                    if (question.correctIndex !== undefined && userAnswer === question.correctIndex) {
-                        correctCount++;
-                        totalScore += (question.points || 1);
-                    }
-                } else if (question.type === 'open') {
-                    // Ochiq javobda faqat javob berilganligini tekshiramiz
-                    if (userAnswer && userAnswer.trim() !== '') {
-                        correctCount++;
-                        totalScore += (question.points || 1);
+            // Agar keyingisi topilmasa, oldingi ochiq savolni qidirish
+            if (nextIndex === currentQuestionIndex) {
+                for (let i = currentQuestionIndex - 1; i >= 0; i--) {
+                    if (!isQuestionLocked(i)) {
+                        nextIndex = i;
+                        break;
                     }
                 }
-            });
-            
-            // Jarimalarni hisoblash
-            const penalty = violations * CONFIG.penaltyPerViolation;
-            const finalScore = Math.max(0, totalScore - penalty);
-            
-            return {
-                correctCount,
-                wrongCount: testData.questions.length - correctCount,
-                totalScore,
-                finalScore,
-                penalty
-            };
-        }
-        
-        // ==================== DASTURNI ISHGA TUSHIRISH ====================
-        async function initializeApp() {
-            showScreen('loading');
-            createInfiniteBanners();
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlCode = urlParams.get('code');
-            
-            if (urlCode) {
-                elements.testCodeInput.value = urlCode;
-                await handleTestCodeLoad();
-            } else {
-                showScreen('codeInput');
             }
             
-            setupEventListeners();
+            // Agar hammasi qulfdanaganda, testni yakunlash
+            if (nextIndex === currentQuestionIndex) {
+                alert('Barcha savollar qulfdanadi! Testni yakunlash.');
+                finishTest();
+                return;
+            }
+            
+            currentQuestionIndex = nextIndex;
+            renderQuestion();
         }
         
+        // ==================== NAVIGATION DOTS (QULFLANGANLARNI TO'G'RI KO'RSATISH) ====================
+        function buildNavDots() {
+            elements.navDots.innerHTML = '';
+            
+            testData.questions.forEach((_, index) => {
+                const dot = document.createElement('div');
+                dot.className = 'dot';
+                dot.textContent = index + 1;
+                dot.dataset.index = index;
+                
+                if (isQuestionLocked(index)) {
+                    dot.classList.add('locked');
+                    dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
+                    dot.style.cursor = 'not-allowed';
+                } else {
+                    dot.addEventListener('click', () => {
+                        if (testStarted && !isQuestionLocked(index)) {
+                            checkQuestionView(currentQuestionIndex);
+                            currentQuestionIndex = index;
+                            renderQuestion();
+                        }
+                    });
+                }
+                
+                elements.navDots.appendChild(dot);
+            });
+            
+            updateNavDots();
+        }
+        
+        // ==================== ASOSIY FUNKSIYALAR (FIREBASE VERSIYASI) ====================
+        async function loadTestData(code) {
+            try {
+                showScreen('loading');
+                
+                // JSON faylini yuklash (oldingi versiya)
+                testData = await loadJSON(`${code}.json`);
+                if (!testData) {
+                    // Firebase'dan yuklashni sinab ko'rish
+                    const testRef = db.collection('tests').doc(code);
+                    const doc = await testRef.get();
+                    
+                    if (!doc.exists) {
+                        throw new Error(`"${code}" testi topilmadi`);
+                    }
+                    
+                    testData = doc.data();
+                }
+                
+                console.log('Test yuklandi:', testData);
+                return true;
+            } catch (error) {
+                console.error('Test yuklashda xato:', error);
+                return false;
+            }
+        }
+        
+        // JSON yuklash funksiyasi (oldingi)
+        async function loadJSON(file) {
+            try {
+                const response = await fetch(file);
+                if (!response.ok) throw new Error(`${file} yuklanmadi`);
+                return await response.json();
+            } catch (error) {
+                console.error('Xato:', error);
+                return null;
+            }
+        }
+        
+        // ==================== TEST BOSHLASH ====================
+        function startTest() {
+            testStarted = true;
+            userAnswers = new Array(testData.questions.length);
+            timeRemaining = (testData.durationMinutes || 30) * 60;
+            timeSpent = 0;
+            violations = 0;
+            questionViews = {}; // Har bir test boshlanganda ko'rishlar soni noldan boshlanadi
+            
+            // Header elementlarini yangilash
+            elements.headerStudentName.textContent = currentStudent.fullName;
+            elements.headerStudentClass.textContent = currentClass;
+            elements.violationCount.textContent = '0';
+            
+            // Xavfsizlikni yoqish
+            if (CONFIG.enableSecurity) {
+                enableSecurity();
+            }
+            
+            // Header va timer ko'rsatish
+            elements.testHeader.classList.remove('hidden');
+            startTimer();
+            
+            // Navigation dots
+            buildNavDots();
+            
+            // Birinchi savolni ko'rsatish
+            currentQuestionIndex = 0;
+            renderQuestion();
+            showScreen('question');
+        }
+        
+        // ==================== EVENT LISTENERS (FIREBASE VERSIYASI) ====================
         function setupEventListeners() {
             elements.loadTestBtn.addEventListener('click', handleTestCodeLoad);
             elements.testCodeInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleTestCodeLoad();
             });
             
-            elements.nextToStudentBtn.addEventListener('click', () => {
+            elements.nextToStudentBtn.addEventListener('click', async () => {
                 currentClass = elements.classSelect.value;
                 if (!currentClass) {
                     alert('Iltimos, sinfni tanlang');
                     return;
                 }
-                loadStudents(currentClass);
+                await loadStudentsFromFirebase(currentClass);
                 showScreen('studentSelection');
             });
             
@@ -2555,6 +2009,24 @@
             elements.restartBtn.addEventListener('click', () => window.location.reload());
         }
         
+        // ==================== DASTURNI ISHGA TUSHIRISH ====================
+        async function initializeApp() {
+            showScreen('loading');
+            createInfiniteBanners();
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlCode = urlParams.get('code');
+            
+            if (urlCode) {
+                elements.testCodeInput.value = urlCode;
+                await handleTestCodeLoad();
+            } else {
+                showScreen('codeInput');
+            }
+            
+            setupEventListeners();
+        }
+        
         async function handleTestCodeLoad() {
             const code = elements.testCodeInput.value.trim();
             if (!code) {
@@ -2571,7 +2043,7 @@
                 return;
             }
             
-            await loadClasses();
+            await loadClassesFromFirebase();
             showScreen('classSelection');
         }
         
