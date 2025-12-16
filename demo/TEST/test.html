@@ -1718,7 +1718,7 @@
         <div class="header-inner">
             <div class="logo">
                 <span>📚</span> Himoyalangan Test
-                <span id="violationBadge" class="violation-badge">Buzilishlar: 0</span>
+                <span id="violationBadge" class="violation-badge">Qoidabuzarliklar: 0</span>
                 <span id="penaltyPoints" class="violation-badge hidden">Jarima: 0 ball</span>
             </div>
             
@@ -1810,14 +1810,15 @@
             
             <!-- Rating Section (if available) -->
             <div id="ratingSection" class="hidden" style="margin-top: 20px;">
-                <h3 style="margin-bottom: 10px;">📊 Reyting Jadvali</h3>
-                <div style="overflow-x: auto;">
+                <h3 style="margin-bottom: 10px;">📊 Reyting Jadvali (Top 50)</h3>
+                <div style="overflow-x: auto; max-height: 300px;">
                     <table class="rating-table">
                         <thead>
                             <tr>
                                 <th>#</th>
                                 <th>Ism</th>
                                 <th>Ball</th>
+                                <th>Vaqt</th>
                                 <th>Sana</th>
                             </tr>
                         </thead>
@@ -1826,7 +1827,9 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="mini" style="margin-top: 8px;">* Faqat birinchi eng yaxshi natijalar saqlanadi</p>
+                <p class="mini" style="margin-top: 8px; font-size: 12px;">
+                    * Faqat eng yaxshi natijalar saqlanadi (ball > vaqt tartibida)
+                </p>
             </div>
             
             <div style="text-align: center; margin-top: 20px;">
@@ -1954,7 +1957,7 @@
                     <div style="font-size: 32px; font-weight: bold; color: var(--danger);" id="penaltyResult">0</div>
                 </div>
                 <div class="result-item">
-                    <div style="font-size: 13px; color: var(--muted);">Buzilishlar</div>
+                    <div style="font-size: 13px; color: var(--muted);">Qoidabuzarliklar</div>
                     <div style="font-size: 32px; font-weight: bold;" id="violationResult">0</div>
                 </div>
             </div>
@@ -1964,13 +1967,12 @@
                 <h3 style="text-align: center;">📊 Reytingdagi O'rningiz</h3>
                 <div style="text-align: center; margin: 15px 0;">
                     <div style="font-size: 40px; font-weight: bold; color: var(--brand);" id="userRank">-</div>
-                    <div style="font-size: 13px; color: var(--muted);">o'rin</div>
                 </div>
             </div>
             
             <div style="text-align: center; margin-top: 20px;">
                 <button id="restartBtn" class="btn">Yana Test Yechish</button>
-                <button id="reviewBtn" class="btn">Javoblarni Ko'rib Chiqish</button>
+                <button id="reviewBtn" class="btn">Natijalarni Ko'rib Chiqish</button>
             </div>
         </div>
         
@@ -2036,6 +2038,10 @@
         let isFullScreen = false;
         let visibilityCheckInterval = null;
         let cheatDetectionInterval = null;
+        
+        /* ========= Yangi o'zgaruvchilar: Test tarixi va vaqt kuzatish ========= */
+        let testHistory = []; // Har bir savol uchun vaqt yozib borish
+        let startTimes = {}; // Har bir savol boshlangan vaqt
         
         /* ========= PROFESSIONAL MATEMATIK EDITOR O'ZGARUVCHILARI ========= */
         let mathEditor = null;
@@ -2190,6 +2196,44 @@
             });
             
             console.log("Test variantlari random qilindi. Jami savollar:", testData.questions.length);
+        }
+        
+        /* ========= YANGI FUNKTSIYALAR: VAQT VA TARIX KUZATISH ========= */
+        
+        // Har bir savolga vaqt yozishni boshlash
+        function startTimeForQuestion(questionIndex) {
+            startTimes[questionIndex] = Date.now();
+        }
+        
+        // Har bir savolga sarflangan vaqtni hisoblash
+        function stopTimeForQuestion(questionIndex) {
+            if (!startTimes[questionIndex]) return 0;
+            
+            const timeSpent = Math.floor((Date.now() - startTimes[questionIndex]) / 1000);
+            
+            // Test tarixiga qo'shish
+            testHistory.push({
+                questionIndex: questionIndex,
+                timeSpent: timeSpent,
+                timestamp: new Date().toISOString(),
+                answer: userAnswers[questionIndex]
+            });
+            
+            delete startTimes[questionIndex];
+            return timeSpent;
+        }
+        
+        // Qurilma ma'lumotlarini olish
+        function getDeviceInfo() {
+            return {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                screenWidth: window.screen.width,
+                screenHeight: window.screen.height,
+                colorDepth: window.screen.colorDepth,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            };
         }
         
         /* ========= PROFESSIONAL MATEMATIK EDITOR FUNKSIYALARI ========= */
@@ -2841,7 +2885,7 @@
             
             violations.push(violation);
             
-            elements.violationBadge.textContent = `Buzilishlar: ${violations.length}`;
+            elements.violationBadge.textContent = `Qoidabuzarliklar: ${violations.length}`;
             elements.violationBadge.classList.remove("warning", "danger");
             
             if (violations.length >= 10) {
@@ -2854,13 +2898,9 @@
                 applyPenalty(penalty);
             }
             
-            if (db && currentUser && testStarted) {
-                db.collection('violations').add(violation);
-            }
-            
             saveViolationToLocalStorage(violation);
             
-            console.warn(`Violation: ${type} (Penalty: ${penalty})`);
+            console.warn(`Qoidabuzarlik: ${type} (Jarima: ${penalty})`);
         }
         
         // 10. Penalty Application
@@ -2959,10 +2999,15 @@
             console.log("Security features disabled");
         }
         
-        // 15. Finish test with warning (YANGILANDI: Bekor qilish xabari alohida ko'rsatiladi)
+        // 15. Finish test with warning
         function finishTestWithWarning(message) {
             clearInterval(timerInterval);
             testStarted = false;
+            
+            // So'nggi savol uchun vaqtni to'xtatish
+            if (currentQuestionIndex !== undefined) {
+                stopTimeForQuestion(currentQuestionIndex);
+            }
             
             disableSecurityFeatures();
             
@@ -2970,7 +3015,7 @@
             
             const results = calculateResults();
             
-            // YANGILANDI: Bekor qilish xabarini alohida ko'rsatish
+            // Bekor qilish xabarini alohida ko'rsatish
             elements.cancelledMessage.classList.remove('hidden');
             elements.cancelledReason.textContent = message;
             elements.resultsTitle.textContent = "Test Bekor Qilindi!";
@@ -2983,8 +3028,18 @@
             elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
             
-            // YANGILANDI: Doira rangi qizil qilish
+            // Doira rangi qizil qilish
             document.querySelector('.score-circle').style.background = 'linear-gradient(135deg, var(--danger), #b91c1c)';
+            
+            // Natijalarni saqlash (faqat tarix uchun)
+            saveResultsToLocalStorage({
+                ...results,
+                status: 'cancelled',
+                reason: message,
+                history: testHistory,
+                deviceInfo: getDeviceInfo(),
+                violationCount: violations.length
+            });
             
             showScreen('results');
             showStatus("Test bekor qilindi: " + message, "error");
@@ -3156,7 +3211,11 @@
                         elements.ratingSection.classList.remove('hidden');
                         elements.ratingTableBody.innerHTML = '';
                         
-                        const sortedRating = [...rating].sort((a, b) => b.score - a.score);
+                        // Ball va vaqt bo'yicha tartiblash
+                        const sortedRating = [...rating].sort((a, b) => {
+                            if (b.score !== a.score) return b.score - a.score;
+                            return (a.timeSpent || 0) - (b.timeSpent || 0);
+                        });
                         
                         sortedRating.forEach((item, index) => {
                             const row = document.createElement('tr');
@@ -3172,14 +3231,26 @@
                                 }
                             }
                             
+                            // Vaqtni formatlash
+                            const timeMinutes = Math.floor((item.timeSpent || 0) / 60);
+                            const timeSeconds = (item.timeSpent || 0) % 60;
+                            const timeFormatted = `${timeMinutes.toString().padStart(2, '0')}:${timeSeconds.toString().padStart(2, '0')}`;
+                            
+                            // Foydalanuvchi o'zini ajratib ko'rsatish
+                            const isCurrentUser = item.userId === currentUser?.uid;
+                            
                             row.innerHTML = `
                                 <td>
-                                    <div class="rating-badge" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : 'background: var(--brand);'}">
+                                    <div class="rating-badge" style="${index === 0 ? 'background: #FFD700;' : index === 1 ? 'background: #C0C0C0;' : index === 2 ? 'background: #CD7F32;' : isCurrentUser ? 'background: var(--brand2);' : 'background: var(--brand);'}">
                                         ${index + 1}
                                     </div>
                                 </td>
-                                <td>${item.userFullName || "Foydalanuvchi"}</td>
+                                <td ${isCurrentUser ? 'style="font-weight: bold; color: var(--brand2);"' : ''}>
+                                    ${item.userFullName || "Foydalanuvchi"}
+                                    ${isCurrentUser ? ' (Siz)' : ''}
+                                </td>
                                 <td><strong>${parseFloat(item.score).toFixed(1)}</strong> ball</td>
+                                <td>${timeFormatted}</td>
                                 <td>${dateStr}</td>
                             `;
                             
@@ -3198,7 +3269,7 @@
             }
         }
         
-        // YANGILANDI: Bo'lim nomini aniq aniqlash funksiyasi
+        // Bo'lim nomini aniq aniqlash funksiyasi
         function findSectionForQuestion(questionNumber) {
             if (!testData || !testData.questions) return "Umumiy";
             
@@ -3223,7 +3294,7 @@
             return "Umumiy";
         }
         
-        // Normalize Test Data (YANGILANDI: Bo'lim nomini to'g'ri olish)
+        // Normalize Test Data (Bo'lim nomini to'g'ri olish)
         function normalizeTestData() {
             if (!testData) return;
             
@@ -3251,7 +3322,7 @@
                 testData.questions = [];
             }
             
-            // YANGILANDI: Har bir savol uchun section nomini to'g'ri belgilash
+            // Har bir savol uchun section nomini to'g'ri belgilash
             testData.questions.forEach((q, index) => {
                 if (!q || typeof q !== 'object') {
                     q = {};
@@ -3260,7 +3331,7 @@
                 q.points = q.points || 1;
                 q.type = q.type || "variant";
                 
-                // YANGILANDI: Section nomini qayta aniqlash
+                // Section nomini qayta aniqlash
                 q.section = q.section || findSectionForQuestion(index + 1);
                 
                 if (q.type === 'variant') {
@@ -3394,6 +3465,11 @@
                 
                 dot.addEventListener('click', () => {
                     if (testStarted) {
+                        // Oldingi savol uchun vaqtni to'xtatish
+                        if (currentQuestionIndex !== undefined) {
+                            stopTimeForQuestion(currentQuestionIndex);
+                        }
+                        
                         currentQuestionIndex = index;
                         renderQuestion();
                     }
@@ -3409,7 +3485,7 @@
         function updateNavDots() {
             const dots = elements.navDots.querySelectorAll('.dot');
             
-            dots.forEach((dot, index) => {
+            dots.forEach((dot, index) {
                 dot.classList.remove('active', 'answered');
                 
                 if (index === currentQuestionIndex) {
@@ -3464,7 +3540,7 @@
             }
         }
         
-        // Render Question (YANGILANDI: Section nomi ko'rinadigan qilindi)
+        // Render Question
         function renderQuestion() {
             if (!testData || !testData.questions[currentQuestionIndex]) return;
             
@@ -3475,7 +3551,7 @@
             elements.currentQ.textContent = currentQuestionIndex + 1;
             elements.totalQ.textContent = testData.questions.length;
             
-            // YANGILANDI: Section nomini ko'rinadigan qilish
+            // Section nomini ko'rinadigan qilish
             const sectionName = question.section || "Umumiy";
             elements.sectionName.textContent = sectionName;
             elements.sectionName.style.display = 'block';
@@ -3658,10 +3734,15 @@
             };
         }
         
-        // Finish Test (YANGILANDI: Normal tugash va bekor qilish farqi)
-        function finishTest() {
+        // Finish Test
+        async function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
+            
+            // So'nggi savol uchun vaqtni to'xtatish
+            if (currentQuestionIndex !== undefined) {
+                stopTimeForQuestion(currentQuestionIndex);
+            }
             
             disableSecurityFeatures();
             
@@ -3669,12 +3750,17 @@
             
             const results = calculateResults();
             
-            // YANGILANDI: Normal tugash holati
+            // Tarixni qo'shish
+            results.history = testHistory;
+            results.deviceInfo = getDeviceInfo();
+            results.violationCount = violations.length;
+            
+            // Normal tugash holati
             elements.cancelledMessage.classList.add('hidden');
             elements.resultsTitle.textContent = "Test Yakunlandi!";
             elements.finalScore.textContent = results.finalScore.toFixed(1);
             
-            // YANGILANDI: Doira rangi asl holatiga qaytarish
+            // Doira rangi asl holatiga qaytarish
             document.querySelector('.score-circle').style.background = 'linear-gradient(135deg, var(--brand), var(--brand2))';
             
             elements.correctCount.textContent = results.correctCount;
@@ -3684,17 +3770,169 @@
             elements.penaltyResult.textContent = results.penaltyPoints.toFixed(1);
             elements.violationResult.textContent = violations.length;
             
+            // Natijalarni saqlash
             saveResultsToLocalStorage(results);
-            saveResultsToFirestore(results).then(() => {
-                updateUserRank(results.finalScore);
-            });
+            
+            if (db && currentUser) {
+                await saveResultsToFirestore(results);
+                await updateUserRankDisplay(results.finalScore);
+            }
             
             showScreen('results');
             showStatus("Test muvaffaqiyatli yakunlandi!", "success");
         }
         
-        // Update user rank after test
-        async function updateUserRank(finalScore) {
+        // Test reytingini yangilash
+        async function updateTestRating(finalScore) {
+            try {
+                const testRef = db.collection('tests').doc(currentTestCode);
+                
+                const testDoc = await testRef.get();
+                if (!testDoc.exists) return;
+                
+                const testDataFromDB = testDoc.data();
+                let rating = testDataFromDB.rating || [];
+                
+                // Foydalanuvchini reytingda qidirish
+                const existingUserIndex = rating.findIndex(item => item.userId === currentUser.uid);
+                
+                const ratingEntry = {
+                    userId: currentUser.uid,
+                    userFullName: userData.fullName,
+                    score: parseFloat(finalScore.toFixed(1)),
+                    date: firebase.firestore.FieldValue.serverTimestamp(),
+                    timeSpent: timeSpent,
+                    correctAnswers: results.correctCount,
+                    totalQuestions: testData.questions.length
+                };
+                
+                if (existingUserIndex >= 0) {
+                    // Faqat yangi natija yaxshi bo'lsa yangilash
+                    if (finalScore > rating[existingUserIndex].score) {
+                        rating[existingUserIndex] = ratingEntry;
+                    }
+                } else {
+                    rating.push(ratingEntry);
+                }
+                
+                // Ball va vaqt bo'yicha tartiblash
+                rating.sort((a, b) => {
+                    if (b.score !== a.score) return b.score - a.score;
+                    return (a.timeSpent || 0) - (b.timeSpent || 0);
+                });
+                
+                // Faqat eng yaxshi 50 natija
+                rating = rating.slice(0, 50);
+                
+                await testRef.update({
+                    rating: rating,
+                    lastAttempt: firebase.firestore.FieldValue.serverTimestamp(),
+                    totalAttempts: firebase.firestore.FieldValue.increment(1)
+                });
+                
+                return true;
+                
+            } catch (error) {
+                console.error("Error updating rating:", error);
+                return false;
+            }
+        }
+        
+        // Foydalanuvchi statistikasini yangilash
+        async function updateUserStatistics(finalScore) {
+            try {
+                const userRef = db.collection('foydalanuvchilar').doc(currentUser.uid);
+                
+                const userDoc = await userRef.get();
+                const userDataFromDB = userDoc.exists ? userDoc.data() : {};
+                
+                const currentPoints = userDataFromDB.points || 0;
+                const totalTests = userDataFromDB.totalTests || 0;
+                
+                const updateData = {
+                    points: parseFloat((parseFloat(currentPoints) + finalScore).toFixed(1)),
+                    lastTest: currentTestCode,
+                    lastScore: parseFloat(finalScore.toFixed(1)),
+                    lastTestTime: timeSpent,
+                    totalTests: totalTests + 1,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                // Agar oldingi test ma'lumotlari yo'q bo'lsa
+                if (!userDataFromDB.testHistory) {
+                    updateData.testHistory = [{
+                        testCode: currentTestCode,
+                        score: finalScore,
+                        date: firebase.firestore.FieldValue.serverTimestamp()
+                    }];
+                } else {
+                    // History'ga yangi test qo'shish
+                    const historyUpdate = firebase.firestore.FieldValue.arrayUnion({
+                        testCode: currentTestCode,
+                        score: finalScore,
+                        date: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    updateData.testHistory = historyUpdate;
+                }
+                
+                await userRef.set(updateData, { merge: true });
+                
+                return true;
+                
+            } catch (error) {
+                console.error("Error updating user statistics:", error);
+                return false;
+            }
+        }
+        
+        // Save Results to Firestore
+        async function saveResultsToFirestore(results) {
+            if (!currentUser || !userData || !testData) return null;
+            
+            try {
+                const resultData = {
+                    userId: currentUser.uid,
+                    userFullName: userData.fullName,
+                    userAge: calculateAge(userData.birthDate),
+                    testCode: currentTestCode,
+                    testTitle: testData.title,
+                    score: parseFloat(results.finalScore.toFixed(1)),
+                    totalScore: parseFloat(results.totalScore.toFixed(1)),
+                    penaltyPoints: parseFloat(results.penaltyPoints.toFixed(1)),
+                    violationCount: results.violationCount,
+                    correctAnswers: results.correctCount,
+                    totalQuestions: testData.questions.length,
+                    timeSpent: results.timeSpent,
+                    answers: userAnswers,
+                    history: results.history,
+                    deviceInfo: results.deviceInfo,
+                    randomized: true,
+                    date: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                // test_results collection'ga saqlash
+                const resultRef = await db.collection('test_results').add(resultData);
+                console.log("Test results saved with ID:", resultRef.id);
+                
+                // Test uchun reyting yangilash
+                await updateTestRating(results.finalScore);
+                
+                // Foydalanuvchi statistikasini yangilash
+                await updateUserStatistics(results.finalScore);
+                
+                showStatus("Natijangiz muvaffaqiyatli saqlandi!", "success");
+                return resultRef.id;
+                
+            } catch (error) {
+                console.error("Error saving results to Firestore:", error);
+                showStatus("Natijalarni saqlashda xatolik: " + error.message, "error");
+                return null;
+            }
+        }
+        
+        // Foydalanuvchi o'rnini ko'rsatish
+        async function updateUserRankDisplay(finalScore) {
             if (!db || !currentTestCode || !currentUser) return;
             
             try {
@@ -3705,16 +3943,35 @@
                     const testDataFromDB = testDoc.data();
                     const rating = testDataFromDB.rating || [];
                     
-                    const sortedRating = [...rating].sort((a, b) => b.score - a.score);
+                    // Ball va vaqt bo'yicha tartiblash
+                    const sortedRating = [...rating].sort((a, b) => {
+                        if (b.score !== a.score) return b.score - a.score;
+                        return (a.timeSpent || 0) - (b.timeSpent || 0);
+                    });
+                    
                     const userIndex = sortedRating.findIndex(item => item.userId === currentUser.uid);
                     
                     if (userIndex !== -1) {
                         elements.afterTestRating.classList.remove('hidden');
-                        elements.userRank.textContent = userIndex + 1;
+                        
+                        // Qancha odamdan yaxshi ekanligini ko'rsatish
+                        const totalInRating = sortedRating.length;
+                        const betterThan = totalInRating - (userIndex + 1);
+                        const percentage = Math.round(((totalInRating - userIndex) / totalInRating) * 100);
+                        
+                        elements.userRank.innerHTML = `
+                            ${userIndex + 1}
+                            <div style="font-size: 14px; margin-top: 5px; color: var(--muted);">
+                                ${betterThan} kishidan yaxshi (top ${percentage}%)
+                            </div>
+                        `;
+                    } else {
+                        elements.afterTestRating.classList.add('hidden');
                     }
                 }
             } catch (error) {
-                console.error("Rank yangilashda xato:", error);
+                console.error("Rank ko'rsatishda xato:", error);
+                elements.afterTestRating.classList.add('hidden');
             }
         }
         
@@ -3729,7 +3986,7 @@
                     score: results.finalScore,
                     totalScore: results.totalScore,
                     penaltyPoints: results.penaltyPoints,
-                    violations: violations.length,
+                    violations: results.violationCount,
                     correctAnswers: results.correctCount,
                     totalQuestions: testData.questions.length,
                     timeSpent: results.timeSpent,
@@ -3741,94 +3998,6 @@
                 
             } catch (error) {
                 console.error("Error saving results to localStorage:", error);
-            }
-        }
-        
-        // Save Results to Firestore
-        async function saveResultsToFirestore(results) {
-            if (!currentUser || !userData || !testData) return;
-            
-            try {
-                const resultData = {
-                    userId: currentUser.uid,
-                    userFullName: userData.fullName,
-                    userAge: calculateAge(userData.birthDate),
-                    testCode: currentTestCode,
-                    testTitle: testData.title,
-                    score: parseFloat(results.finalScore.toFixed(1)),
-                    totalScore: parseFloat(results.totalScore.toFixed(1)),
-                    penaltyPoints: parseFloat(results.penaltyPoints.toFixed(1)),
-                    violations: violations.length,
-                    violationDetails: violations,
-                    correctAnswers: results.correctCount,
-                    totalQuestions: testData.questions.length,
-                    timeSpent: results.timeSpent,
-                    answers: userAnswers,
-                    randomized: true,
-                    date: firebase.firestore.FieldValue.serverTimestamp()
-                };
-                
-                await db.collection('test_results').add(resultData);
-                
-                const testRef = db.collection('tests').doc(currentTestCode);
-                
-                const testDoc = await testRef.get();
-                if (testDoc.exists) {
-                    const testDataFromDB = testDoc.data();
-                    
-                    let rating = testDataFromDB.rating || [];
-                    
-                    const existingUserIndex = rating.findIndex(item => item.userId === currentUser.uid);
-                    
-                    if (existingUserIndex >= 0) {
-                        if (results.finalScore > rating[existingUserIndex].score) {
-                            rating[existingUserIndex] = {
-                                userId: currentUser.uid,
-                                userFullName: userData.fullName,
-                                score: parseFloat(results.finalScore.toFixed(1)),
-                                date: firebase.firestore.FieldValue.serverTimestamp()
-                            };
-                        }
-                    } else {
-                        rating.push({
-                            userId: currentUser.uid,
-                            userFullName: userData.fullName,
-                            score: parseFloat(results.finalScore.toFixed(1)),
-                            date: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                    }
-                    
-                    rating.sort((a, b) => b.score - a.score);
-                    
-                    rating = rating.slice(0, 50);
-                    
-                    await testRef.update({
-                        rating: rating,
-                        lastAttempt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                
-                const userRef = db.collection('foydalanuvchilar').doc(currentUser.uid);
-                
-                const userDoc = await userRef.get();
-                const currentPoints = userDoc.exists ? (userDoc.data().points || 0) : 0;
-                
-                const newTotalPoints = parseFloat((parseFloat(currentPoints) + results.finalScore).toFixed(1));
-                
-                await userRef.update({
-                    points: newTotalPoints,
-                    lastTest: currentTestCode,
-                    lastScore: parseFloat(results.finalScore.toFixed(1)),
-                    totalTests: firebase.firestore.FieldValue.increment(1),
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                
-                console.log("Test results saved to Firestore successfully");
-                showStatus("Natijangiz muvaffaqiyatli saqlandi!", "success");
-                
-            } catch (error) {
-                console.error("Error saving results to Firestore:", error);
-                showStatus("Natijalarni saqlashda xatolik: " + error.message, "error");
             }
         }
         
@@ -3872,6 +4041,115 @@
             } catch (error) {
                 console.error("Error listing tests:", error);
             }
+        }
+        
+        // Natijalarni ko'rib chiqish oynasini ochish
+        function showReviewScreen() {
+            const results = calculateResults();
+            
+            const reviewCard = document.createElement('div');
+            reviewCard.className = 'card';
+            reviewCard.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 90%;
+                max-width: 800px;
+                max-height: 80vh;
+                overflow-y: auto;
+                z-index: 10000;
+                background: var(--bg);
+            `;
+            
+            let reviewHTML = `
+                <h2>Test Natijalari Tahlili</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 15px 0;">
+                    <div class="result-item">
+                        <div>Yakuniy ball</div>
+                        <div style="font-size: 24px; font-weight: bold;">${results.finalScore.toFixed(1)}</div>
+                    </div>
+                    <div class="result-item">
+                        <div>To'g'ri javoblar</div>
+                        <div style="font-size: 24px; font-weight: bold;">${results.correctCount}/${testData.questions.length}</div>
+                    </div>
+                    <div class="result-item">
+                        <div>Sarflangan vaqt</div>
+                        <div style="font-size: 24px; font-weight: bold;">${results.timeFormatted}</div>
+                    </div>
+                    <div class="result-item">
+                        <div>Jarima ball</div>
+                        <div style="font-size: 24px; font-weight: bold; color: var(--danger);">${results.penaltyPoints.toFixed(1)}</div>
+                    </div>
+                </div>
+                <h3>Savollar bo'yicha tahlil:</h3>
+            `;
+            
+            testData.questions.forEach((question, index) => {
+                const userAnswer = userAnswers[index];
+                let isCorrect = false;
+                let pointsEarned = 0;
+                
+                if (question.type === 'variant') {
+                    isCorrect = userAnswer === question.correctIndex;
+                } else if (question.type === 'open') {
+                    isCorrect = userAnswer && userAnswer.trim() !== '';
+                }
+                
+                pointsEarned = isCorrect ? (question.points || 1) : 0;
+                
+                const timeData = testHistory.find(h => h.questionIndex === index);
+                const timeSpent = timeData ? timeData.timeSpent : 0;
+                
+                reviewHTML += `
+                    <div class="question-review" style="border: 1px solid var(--frame); border-radius: 8px; padding: 10px; margin: 10px 0;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <strong>Savol ${index + 1}</strong>
+                            <span style="color: ${isCorrect ? 'var(--success)' : 'var(--danger)'}">
+                                ${isCorrect ? '✓ To‘g‘ri' : '✗ Noto‘g‘ri'}
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--muted);">
+                            Vaqt: ${Math.floor(timeSpent / 60)}:${(timeSpent % 60).toString().padStart(2, '0')}
+                            | Ball: ${pointsEarned}/${question.points || 1}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            reviewHTML += `
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="closeReview" class="btn">Yopish</button>
+                </div>
+            `;
+            
+            reviewCard.innerHTML = reviewHTML;
+            document.body.appendChild(reviewCard);
+            
+            // Overlay qo'shish
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.7);
+                z-index: 9999;
+            `;
+            document.body.appendChild(overlay);
+            
+            // Yopish funksiyasi
+            document.getElementById('closeReview').addEventListener('click', () => {
+                reviewCard.remove();
+                overlay.remove();
+            });
+            
+            // Overlay bosilsa ham yopish
+            overlay.addEventListener('click', () => {
+                reviewCard.remove();
+                overlay.remove();
+            });
         }
         
         /* ========= EVENT LISTENERS ========= */
@@ -3923,6 +4201,8 @@
             elements.startBtn.addEventListener('click', () => {
                 testStarted = true;
                 userAnswers = new Array(testData.questions.length);
+                testHistory = []; // Tarixni tozalash
+                startTimes = {}; // Vaqtlarni tozalash
                 
                 enableAllSecurityFeatures();
                 
@@ -3940,6 +4220,9 @@
             // Previous button
             elements.prevBtn.addEventListener('click', () => {
                 if (currentQuestionIndex > 0) {
+                    // Hozirgi savol uchun vaqtni to'xtatish
+                    stopTimeForQuestion(currentQuestionIndex);
+                    
                     currentQuestionIndex--;
                     renderQuestion();
                 }
@@ -3948,6 +4231,9 @@
             // Next button
             elements.nextBtn.addEventListener('click', () => {
                 if (currentQuestionIndex < testData.questions.length - 1) {
+                    // Hozirgi savol uchun vaqtni to'xtatish
+                    stopTimeForQuestion(currentQuestionIndex);
+                    
                     currentQuestionIndex++;
                     renderQuestion();
                 }
@@ -3968,7 +4254,7 @@
             
             // Review button
             elements.reviewBtn.addEventListener('click', () => {
-                alert("Ko'rib chiqish funksiyasi keyingi versiyada qo'shiladi");
+                showReviewScreen();
             });
             
             // Retry button
@@ -3997,6 +4283,7 @@
                     case 'ArrowLeft':
                         if (currentQuestionIndex > 0) {
                             e.preventDefault();
+                            stopTimeForQuestion(currentQuestionIndex);
                             currentQuestionIndex--;
                             renderQuestion();
                         }
@@ -4004,6 +4291,7 @@
                     case 'ArrowRight':
                         if (currentQuestionIndex < testData.questions.length - 1) {
                             e.preventDefault();
+                            stopTimeForQuestion(currentQuestionIndex);
                             currentQuestionIndex++;
                             renderQuestion();
                         }
