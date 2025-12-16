@@ -25,6 +25,10 @@
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    
     <style>
         :root {
             --brand: #2E8B57;
@@ -1446,6 +1450,18 @@
             maxViews: 3, // 3 marta ko'rish
             penaltyPerViolation: 5, // Har bir qoidabuzarlik uchun jarima
             enableSecurity: true, // Xavfsizlik rejimi yoqilgan
+            allowNavigationToLocked: false, // Qulflangan savollarga o'tishga ruxsat berish
+        };
+        
+        // ==================== FIREBASE KONFIGURATSIYA ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDJ46oKqDf52JQRaIqe8SJ5vYSfTpSYZKo",
+            authDomain: "mathcenter-1c98d.firebaseapp.com",
+            projectId: "mathcenter-1c98d",
+            storageBucket: "mathcenter-1c98d.firebasestorage.app",
+            messagingSenderId: "1016417719928",
+            appId: "1:1016417719928:web:700b028da1312477c87f8d",
+            measurementId: "G-JEECME5HMJ"
         };
         
         // ==================== GLOBAL O'ZGARUVCHILAR ====================
@@ -1466,6 +1482,7 @@
         let mathEditor = null;
         let isFullScreen = false;
         let securityEnabled = false;
+        let db = null;
         
         // ==================== DOM ELEMENTLARI ====================
         const elements = {
@@ -1545,6 +1562,165 @@
             topBanner: document.getElementById('topBanner'),
             bottomBanner: document.getElementById('bottomBanner')
         };
+        
+        // ==================== FIREBASE FUNKSIYALARI ====================
+        async function initializeFirebase() {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                db = firebase.firestore();
+                console.log("Firestore muvaffaqiyatli ishga tushdi");
+                return true;
+            } catch (error) {
+                console.error("Firestore ishga tushirishda xato:", error);
+                return false;
+            }
+        }
+        
+        async function loadTestFromFirestore(code) {
+            try {
+                const testDoc = await db.collection('testlar').doc(code).get();
+                if (!testDoc.exists) {
+                    throw new Error(`"${code}" testi topilmadi`);
+                }
+                return testDoc.data();
+            } catch (error) {
+                console.error('Firestore test yuklashda xato:', error);
+                return null;
+            }
+        }
+        
+        async function loadClassesFromFirestore() {
+            try {
+                // 1-usul: davomat/sinf hujjatidan o'qish
+                const sinfDoc = await db.collection('davomat').doc('sinf').get();
+                
+                if (sinfDoc.exists) {
+                    const data = sinfDoc.data();
+                    classes = data.classes || [];
+                    console.log('Sinf ma\'lumotlari Firestore\'dan yuklandi (davomat/sinf):', classes);
+                } else {
+                    // 2-usul: sinflar collectionidan o'qish
+                    const sinflarSnapshot = await db.collection('sinflar').get();
+                    classes = [];
+                    
+                    sinflarSnapshot.forEach(doc => {
+                        classes.push({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    });
+                    
+                    console.log('Sinf ma\'lumotlari Firestore\'dan yuklandi (sinflar):', classes);
+                }
+                
+                if (classes.length > 0) {
+                    elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
+                    classes.forEach(cls => {
+                        const option = document.createElement('option');
+                        option.value = cls.id;
+                        option.textContent = cls.name || cls.id;
+                        elements.classSelect.appendChild(option);
+                    });
+                } else {
+                    console.warn('Firestore\'da hech qanday sinf ma\'lumoti topilmadi!');
+                    showMessage("Sinf ma'lumotlari topilmadi. Iltimos, Firebase'ni tekshiring.", 'error');
+                }
+                
+                return classes;
+            } catch (error) {
+                console.error('Sinf ma\'lumotlarini Firestore\'dan yuklashda xato:', error);
+                classes = [];
+                showMessage("Sinf ma'lumotlarini yuklashda xato. Internet aloqasini tekshiring.", 'error');
+                return [];
+            }
+        }
+        
+        async function loadStudentsFromFirestore(className) {
+            try {
+                // Sinf ID sini topish
+                const classObj = classes.find(c => c.id === className || c.name === className);
+                if (!classObj) {
+                    console.error('Sinf topilmadi:', className);
+                    showMessage('Tanlangan sinf topilmadi', 'error');
+                    return [];
+                }
+                
+                // 1-usul: Sinf hujjatidan o'quvchilarni olish
+                if (classObj.students && classObj.students.length > 0) {
+                    students = classObj.students.map((student, index) => ({
+                        id: student.id || `student_${index}`,
+                        fullName: student.fullName || student.fullname || `O'quvchi ${index + 1}`
+                    }));
+                } else {
+                    // 2-usul: alohida o'quvchilar collectionidan olish
+                    const studentsSnapshot = await db.collection('sinflar').doc(classObj.id)
+                        .collection('o_quvchilar').get();
+                    
+                    students = [];
+                    studentsSnapshot.forEach(doc => {
+                        students.push({
+                            id: doc.id,
+                            ...doc.data()
+                        });
+                    });
+                    
+                    // Agar hali ham o'quvchi topilmasa, test faylidan o'qishga urinish
+                    if (students.length === 0) {
+                        console.warn('Firestore\'da o\'quvchilar topilmadi, JSON faylidan yuklanmoqda...');
+                        students = await loadJSON(`${className}.json`);
+                        if (!students) students = [];
+                    }
+                }
+                
+                if (students.length > 0) {
+                    elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
+                    students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.id;
+                        option.textContent = student.fullName;
+                        elements.studentSelect.appendChild(option);
+                    });
+                } else {
+                    console.warn('O\'quvchilar topilmadi!');
+                    showMessage('Bu sinfda o\'quvchilar mavjud emas', 'warning');
+                    students = [];
+                }
+                
+                return students;
+            } catch (error) {
+                console.error('O\'quvchilarni Firestore\'dan yuklashda xato:', error);
+                students = [];
+                showMessage('O\'quvchilarni yuklashda xato', 'error');
+                return [];
+            }
+        }
+        
+        function showMessage(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.style.cssText = `
+                position: fixed;
+                top: 100px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: ${type === 'error' ? '#dc3545' : type === 'warning' ? '#ffc107' : '#28a745'};
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                z-index: 10001;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                font-weight: 500;
+                min-width: 300px;
+                text-align: center;
+            `;
+            alertDiv.textContent = message;
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                document.body.removeChild(alertDiv);
+            }, 3000);
+        }
         
         // ==================== CHEKSIZ BANNERLAR ====================
         function createInfiniteBanners() {
@@ -1790,6 +1966,11 @@
             if (views >= CONFIG.maxViews) {
                 const currentQElement = document.getElementById('currentQ');
                 currentQElement.classList.add('locked');
+                
+                // Qulflangan savolni ko'rsatmaslik
+                if (isQuestionLocked(questionIndex)) {
+                    return views;
+                }
             }
             
             return views;
@@ -1797,6 +1978,59 @@
         
         function isQuestionLocked(questionIndex) {
             return questionViews[questionIndex] >= CONFIG.maxViews;
+        }
+        
+        function showLockedQuestionMessage() {
+            elements.questionText.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 48px; color: var(--danger); margin-bottom: 20px;">🔒</div>
+                    <h2 style="color: var(--danger); margin-bottom: 15px;">Bu savol qulfdanadi</h2>
+                    <p style="color: var(--text-light); margin-bottom: 20px;">
+                        Bu savolni maksimal (${CONFIG.maxViews}) marta ko'rganingiz uchun qulfdanadi.
+                    </p>
+                    <p style="color: var(--warning); font-weight: 500;">
+                        Iltimos, boshqa savolga o'ting.
+                    </p>
+                </div>
+            `;
+            
+            // Variantlar va ochiq javoblarni yashirish
+            elements.optionsContainer.classList.add('hidden');
+            elements.openAnswerContainer.classList.add('hidden');
+            elements.questionImageContainer.classList.add('hidden');
+            
+            // Tugmalarni o'chirish
+            document.querySelectorAll('.option').forEach(option => {
+                option.style.pointerEvents = 'none';
+                option.style.opacity = '0.5';
+            });
+            
+            // Matematik editorni o'chirish
+            if (mathEditor) {
+                mathEditor.contentEditable = false;
+                mathEditor.style.pointerEvents = 'none';
+                mathEditor.style.opacity = '0.5';
+            }
+        }
+        
+        function navigateToNextUnlockedQuestion(direction) {
+            let newIndex = currentQuestionIndex;
+            const increment = direction === 'next' ? 1 : -1;
+            
+            do {
+                newIndex += increment;
+                
+                // Chegaralarni tekshirish
+                if (newIndex < 0 || newIndex >= testData.questions.length) {
+                    return currentQuestionIndex; // Hech qanday ochiq savol topilmadi
+                }
+                
+                // Qulflanmagan savolni qidirish
+                if (!isQuestionLocked(newIndex)) {
+                    return newIndex;
+                }
+                
+            } while (true);
         }
         
         // ==================== ASOSIY FUNKSIYALAR ====================
@@ -1815,9 +2049,14 @@
             try {
                 showScreen('loading');
                 
-                // Faqat bitta JSON faylini yuklaymiz
-                testData = await loadJSON(`${code}.json`);
-                if (!testData) throw new Error(`"${code}" testi topilmadi`);
+                // Avval Firestore'dan yuklashga urinish
+                testData = await loadTestFromFirestore(code);
+                
+                // Agar Firestore'da topilmasa, JSON fayldan yuklash
+                if (!testData) {
+                    testData = await loadJSON(`${code}.json`);
+                    if (!testData) throw new Error(`"${code}" testi topilmadi`);
+                }
                 
                 console.log('Test yuklandi:', testData);
                 return true;
@@ -1828,29 +2067,15 @@
         }
         
         async function loadClasses() {
-            classes = await loadJSON('sinflar.json');
-            if (classes && classes.length > 0) {
-                elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
-                classes.forEach(cls => {
-                    const option = document.createElement('option');
-                    option.value = cls;
-                    option.textContent = cls;
-                    elements.classSelect.appendChild(option);
-                });
-            }
+            // Firestore'dan sinflarni yuklash
+            classes = await loadClassesFromFirestore();
+            return classes;
         }
         
         async function loadStudents(className) {
-            students = await loadJSON(`${className}.json`);
-            if (students && students.length > 0) {
-                elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
-                students.forEach(student => {
-                    const option = document.createElement('option');
-                    option.value = student.id;
-                    option.textContent = student.fullName;
-                    elements.studentSelect.appendChild(option);
-                });
-            }
+            // Firestore'dan o'quvchilarni yuklash
+            students = await loadStudentsFromFirestore(className);
+            return students;
         }
         
         function showScreen(screenName) {
@@ -2239,9 +2464,11 @@
                 if (isQuestionLocked(index)) {
                     dot.classList.add('locked');
                     dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
+                    dot.style.cursor = 'not-allowed';
+                    dot.style.pointerEvents = 'none';
                 } else {
                     dot.addEventListener('click', () => {
-                        if (testStarted && !isQuestionLocked(index)) {
+                        if (testStarted) {
                             checkQuestionView(currentQuestionIndex);
                             currentQuestionIndex = index;
                             renderQuestion();
@@ -2272,6 +2499,7 @@
                 if (isQuestionLocked(index)) {
                     dot.classList.add('locked');
                     dot.style.cursor = 'not-allowed';
+                    dot.style.pointerEvents = 'none';
                 }
             });
         }
@@ -2281,6 +2509,16 @@
             
             const question = testData.questions[currentQuestionIndex];
             const views = checkQuestionView(currentQuestionIndex);
+            
+            // Agar savol qulflangan bo'lsa, maxsus xabarni ko'rsatish
+            if (isQuestionLocked(currentQuestionIndex)) {
+                showLockedQuestionMessage();
+                
+                // Navigation tugmalarini yangilash
+                updateNavigationButtons();
+                updateNavDots();
+                return;
+            }
             
             // Qulfni tekshirish
             const currentQElement = document.getElementById('currentQ');
@@ -2383,8 +2621,25 @@
         }
         
         function updateNavigationButtons() {
-            elements.prevBtn.disabled = currentQuestionIndex === 0;
-            elements.nextBtn.disabled = currentQuestionIndex === testData.questions.length - 1;
+            // Oldingi tugma - qulflanmagan oldingi savol bormi?
+            let hasPrevUnlocked = false;
+            for (let i = currentQuestionIndex - 1; i >= 0; i--) {
+                if (!isQuestionLocked(i)) {
+                    hasPrevUnlocked = true;
+                    break;
+                }
+            }
+            elements.prevBtn.disabled = !hasPrevUnlocked || currentQuestionIndex === 0;
+            
+            // Keyingi tugma - qulflanmagan keyingi savol bormi?
+            let hasNextUnlocked = false;
+            for (let i = currentQuestionIndex + 1; i < testData.questions.length; i++) {
+                if (!isQuestionLocked(i)) {
+                    hasNextUnlocked = true;
+                    break;
+                }
+            }
+            elements.nextBtn.disabled = !hasNextUnlocked || currentQuestionIndex === testData.questions.length - 1;
         }
         
         // ==================== TEST YAKUNLASH ====================
@@ -2453,6 +2708,12 @@
             showScreen('loading');
             createInfiniteBanners();
             
+            // Firestore ni ishga tushirish
+            const firebaseInitialized = await initializeFirebase();
+            if (!firebaseInitialized) {
+                showMessage("Firestore ishga tushirishda xato. Internet aloqasini tekshiring.", 'error');
+            }
+            
             const urlParams = new URLSearchParams(window.location.search);
             const urlCode = urlParams.get('code');
             
@@ -2475,7 +2736,7 @@
             elements.nextToStudentBtn.addEventListener('click', () => {
                 currentClass = elements.classSelect.value;
                 if (!currentClass) {
-                    alert('Iltimos, sinfni tanlang');
+                    showMessage('Iltimos, sinfni tanlang', 'error');
                     return;
                 }
                 loadStudents(currentClass);
@@ -2487,13 +2748,13 @@
             elements.nextToIntroBtn.addEventListener('click', () => {
                 const studentId = elements.studentSelect.value;
                 if (!studentId) {
-                    alert('O\'quvchini tanlang');
+                    showMessage('O\'quvchini tanlang', 'error');
                     return;
                 }
                 
                 currentStudent = students.find(s => s.id == studentId);
                 if (!currentStudent) {
-                    alert('O\'quvchi topilmadi');
+                    showMessage('O\'quvchi topilmadi', 'error');
                     return;
                 }
                 
@@ -2533,16 +2794,26 @@
             elements.prevBtn.addEventListener('click', () => {
                 if (currentQuestionIndex > 0) {
                     checkQuestionView(currentQuestionIndex);
-                    currentQuestionIndex--;
-                    renderQuestion();
+                    const nextIndex = navigateToNextUnlockedQuestion('prev');
+                    if (nextIndex !== currentQuestionIndex) {
+                        currentQuestionIndex = nextIndex;
+                        renderQuestion();
+                    } else {
+                        showMessage("Oldingi ochiq savol mavjud emas", 'warning');
+                    }
                 }
             });
             
             elements.nextBtn.addEventListener('click', () => {
                 if (currentQuestionIndex < testData.questions.length - 1) {
                     checkQuestionView(currentQuestionIndex);
-                    currentQuestionIndex++;
-                    renderQuestion();
+                    const nextIndex = navigateToNextUnlockedQuestion('next');
+                    if (nextIndex !== currentQuestionIndex) {
+                        currentQuestionIndex = nextIndex;
+                        renderQuestion();
+                    } else {
+                        showMessage("Keyingi ochiq savol mavjud emas", 'warning');
+                    }
                 }
             });
             
@@ -2558,7 +2829,7 @@
         async function handleTestCodeLoad() {
             const code = elements.testCodeInput.value.trim();
             if (!code) {
-                alert('Test kodini kiriting');
+                showMessage('Test kodini kiriting', 'error');
                 return;
             }
             
@@ -2566,7 +2837,7 @@
             const loaded = await loadTestData(code);
             
             if (!loaded) {
-                alert(`"${code}" testi topilmadi`);
+                showMessage(`"${code}" testi topilmadi`, 'error');
                 showScreen('codeInput');
                 return;
             }
