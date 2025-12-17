@@ -1610,46 +1610,46 @@
             -o-user-drag: none;
             user-drag: none;
         }
-		/* Full screen warning */
-.fullscreen-warning {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: linear-gradient(135deg, var(--danger) 0%, #b91c1c 100%);
-    color: white;
-    padding: 20px 30px;
-    border-radius: 10px;
-    z-index: 10001;
-    text-align: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    animation: pulseWarning 2s infinite;
-    border: 3px solid white;
-    max-width: 90%;
-    width: 400px;
-}
+        /* Full screen warning */
+        .fullscreen-warning {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            z-index: 10001;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: pulseWarning 2s infinite;
+            border: 3px solid white;
+            max-width: 90%;
+            width: 400px;
+        }
 
-.fullscreen-warning h3 {
-    color: white;
-    margin-bottom: 10px;
-    -webkit-text-fill-color: white;
-}
+        .fullscreen-warning h3 {
+            color: white;
+            margin-bottom: 10px;
+            -webkit-text-fill-color: white;
+        }
 
-.fullscreen-warning p {
-    color: rgba(255,255,255,0.9);
-    margin-bottom: 15px;
-}
+        .fullscreen-warning p {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 15px;
+        }
 
-.fullscreen-warning .btn {
-    background: white;
-    color: var(--danger);
-    font-weight: bold;
-    margin-top: 10px;
-}
+        .fullscreen-warning .btn {
+            background: white;
+            color: #d97706;
+            font-weight: bold;
+            margin-top: 10px;
+        }
 
-.fullscreen-warning .btn:hover {
-    background: #f8f9fa;
-}
+        .fullscreen-warning .btn:hover {
+            background: #f8f9fa;
+        }
     </style>
 </head>
 <body>
@@ -1970,12 +1970,12 @@
     </div>
 <!-- Fullscreen warning -->
 <div id="fullscreenWarning" class="fullscreen-warning hidden">
-    <h3>⚠️ FULL SCREEN TALAB QILINADI!</h3>
-    <p>Testni davom ettirish uchun full screen rejimini yoqing.</p>
+    <h3>⚠️ FULL SCREEN TAVSIYA ETILADI!</h3>
+    <p>Testni to'liq ekranda davom ettirishingiz tavsiya etiladi.</p>
     <p><strong>F11 tugmasini bosing</strong> yoki brauzer oynasining yuqori o'ng burchagidagi full screen tugmasini bosing.</p>
     <button onclick="enableMandatoryFullScreen()" class="btn">✅ Full Screen Yoqish</button>
     <p style="margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.7);">
-        Full screen yoqilmasa, qoidabuzarlik hisoblanadi!
+        Test to'liq ekranda davom etsa, yaxshi tajriba bo'ladi.
     </p>
 </div>
     <script>
@@ -2287,8 +2287,14 @@
             }
         }
         
-        // ==================== QOIDABUZARLIK FUNKSIYALARI ====================
+        // ==================== QOIDABUZARLIK FUNKSIYALARI (YANGILANGAN) ====================
         function addViolation(type, description) {
+            // Full screen chiqish endi qoidabuzarlik emas
+            if (type === 'fullScreenExit') {
+                console.log("Full screen chiqish qoidabuzarlik hisoblanmaydi");
+                return;
+            }
+            
             const timestamp = new Date().toLocaleTimeString();
             
             violations[type]++;
@@ -2317,13 +2323,11 @@
         }
         
         function updateViolationDisplay() {
-            const total = violations.fullScreenExit + violations.windowSwitch + violations.minorViolations;
+            // Endi faqat windowSwitch va minorViolations hisobga olinadi
+            const total = violations.windowSwitch + violations.minorViolations;
             elements.violationCount.textContent = total;
             
             let monitorText = '';
-            if (violations.fullScreenExit > 0) {
-                monitorText += '🚫 Full screen chiqish ';
-            }
             if (violations.windowSwitch > 0) {
                 monitorText += `🪟 Oyna o'tish: ${violations.windowSwitch}/3 `;
             }
@@ -2332,6 +2336,11 @@
             }
             
             elements.monitorText.textContent = monitorText.trim() || 'Xavfsizlik rejimi faol';
+            
+            // Agar full screen bo'lmasa, monitor matnini o'zgartirish
+            if (!isFullScreen && testStarted) {
+                elements.monitorText.textContent = "⚠️ Full screen tavsiya etiladi! F11 tugmasini bosing";
+            }
             
             elements.securityMonitor.style.animation = 'none';
             setTimeout(() => {
@@ -2362,10 +2371,8 @@
         }
         
         function checkViolationLimits() {
-            if (violations.fullScreenExit >= 1) {
-                cancelTest("Full screen rejimidan chiqilgani uchun test bekor qilindi");
-                return;
-            }
+            // Full screen chiqish endi testni bekor qilmaydi
+            // Faqat windowSwitch va minorViolations uchun cheklovlar
             
             if (violations.windowSwitch >= CONFIG.maxWindowSwitchViolations) {
                 cancelTest("3 marta boshqa oynaga o'tilgani uchun test bekor qilindi");
@@ -2378,142 +2385,140 @@
             }
         }
         
-        // ==================== FULL SCREEN FUNKSIYALARI ====================
+        // ==================== FULL SCREEN FUNKSIYALARI (YANGILANGAN) ====================
         async function enableMandatoryFullScreen() {
-    try {
-        console.log("Full screen rejimi yoqilmoqda...");
-        
-        // Fullscreen qo'llab-quvvatlanishini tekshirish
-        if (!document.fullscreenEnabled && 
-            !document.webkitFullscreenEnabled && 
-            !document.mozFullScreenEnabled && 
-            !document.msFullscreenEnabled) {
-            console.warn("Full screen rejimi qo'llab-quvvatlanmaydi");
-            return true; // Fullscreen yo'q bo'lsa ham testni davom ettirish
-        }
-        
-        let fullscreenSuccess = false;
-        
-        // Turli browserlar uchun fullscreen so'rovini yuborish
-        const element = document.documentElement;
-        
-        if (element.requestFullscreen) {
-            await element.requestFullscreen();
-            fullscreenSuccess = true;
-        } else if (element.webkitRequestFullscreen) {
-            await element.webkitRequestFullscreen();
-            fullscreenSuccess = true;
-        } else if (element.mozRequestFullScreen) {
-            await element.mozRequestFullScreen();
-            fullscreenSuccess = true;
-        } else if (element.msRequestFullscreen) {
-            await element.msRequestFullscreen();
-            fullscreenSuccess = true;
-        } else {
-            console.warn("Full screen rejimiga o'tish funksiyasi topilmadi");
-            return true; // Fullscreen funksiyasi yo'q bo'lsa ham testni davom ettirish
-        }
-        
-        if (fullscreenSuccess) {
-            isFullScreen = true;
-            console.log("Majburiy full screen rejimi yoqildi");
-            
-            // Foydalanuvchi harakatini yozish
-            logUserAction('fullscreen_entered');
-            
-            return true;
-        }
-        
-        return true; // Har qanday holatda testni davom ettirish
-    } catch (error) {
-        console.error('Full screen ga o\'tishda xato:', error);
-        
-        // Foydalanuvchiga ogohlantirish
-        showMessage("Iltimos, full screen rejimini yoqing (F11 tugmasi)", "warning");
-        
-        // 5 soniya kutish va yana urinish
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        // Yana urinib ko'rish
-        try {
-            if (document.documentElement.requestFullscreen) {
-                await document.documentElement.requestFullscreen();
-                isFullScreen = true;
-                console.log("Full screen rejimi ikkinchi urinishda yoqildi");
+            try {
+                console.log("Full screen rejimi yoqilmoqda...");
+                
+                // Fullscreen qo'llab-quvvatlanishini tekshirish
+                if (!document.fullscreenEnabled && 
+                    !document.webkitFullscreenEnabled && 
+                    !document.mozFullScreenEnabled && 
+                    !document.msFullscreenEnabled) {
+                    console.warn("Full screen rejimi qo'llab-quvvatlanmaydi");
+                    return true; // Fullscreen yo'q bo'lsa ham testni davom ettirish
+                }
+                
+                let fullscreenSuccess = false;
+                
+                // Turli browserlar uchun fullscreen so'rovini yuborish
+                const element = document.documentElement;
+                
+                if (element.requestFullscreen) {
+                    await element.requestFullscreen();
+                    fullscreenSuccess = true;
+                } else if (element.webkitRequestFullscreen) {
+                    await element.webkitRequestFullscreen();
+                    fullscreenSuccess = true;
+                } else if (element.mozRequestFullScreen) {
+                    await element.mozRequestFullScreen();
+                    fullscreenSuccess = true;
+                } else if (element.msRequestFullscreen) {
+                    await element.msRequestFullscreen();
+                    fullscreenSuccess = true;
+                } else {
+                    console.warn("Full screen rejimiga o'tish funksiyasi topilmadi");
+                    return true; // Fullscreen funksiyasi yo'q bo'lsa ham testni davom ettirish
+                }
+                
+                if (fullscreenSuccess) {
+                    isFullScreen = true;
+                    console.log("Full screen rejimi yoqildi");
+                    
+                    // Foydalanuvchi harakatini yozish
+                    logUserAction('fullscreen_entered');
+                    
+                    return true;
+                }
+                
+                return true; // Har qanday holatda testni davom ettirish
+            } catch (error) {
+                console.error('Full screen ga o\'tishda xato:', error);
+                
+                // Xatolik yuz bersa ham testni davom ettirish
+                showMessage("Full screen rejimini yoqishda xatolik. Test davom etadi.", "warning");
                 return true;
             }
-        } catch (e) {
-            console.error("Ikkinchi urinish ham muvaffaqiyatsiz:", e);
         }
         
-        // Fullscreen bo'lmasa ham testni davom ettirish, lekin ogohlantirish
-        alert("⚠️ DIQQAT: Full screen rejimi yoqilmadi!\n\n" +
-              "Testni davom ettirish uchun F11 tugmasini bosing yoki brauzeringizning full screen rejimini yoqing.\n\n" +
-              "Full screen rejimisiz test davom etsa, sizda qoidabuzarliklar hisoblanadi!");
-        
-        return true; // Testni davom ettirish
-    }
-}
-        
-function handleFullScreenChange() {
-    const isCurrentlyFullScreen = !!(
-        document.fullscreenElement ||
-        document.webkitFullscreenElement ||
-        document.mozFullScreenElement ||
-        document.msFullscreenElement
-    );
-    
-    console.log("Full screen holati o'zgardi:", isCurrentlyFullScreen);
-    
-    if (testStarted && !isCurrentlyFullScreen && isFullScreen) {
-        // Test davomida full screendan chiqilganda
-        addViolation('fullScreenExit', "Full screen rejimidan chiqildi");
-        
-        // Foydalanuvchi harakatini yozish
-        logUserAction('fullscreen_exited');
-        
-        // Ogohlantirish ko'rsatish
-        showFullscreenWarning();
-        
-        // 3 soniyadan keyin full screenga qaytishga urinish
-        setTimeout(() => {
-            if (testStarted && !isFullScreen) {
-                console.log("Full screenga avtomatik qaytishga urinilmoqda...");
-                enableMandatoryFullScreen();
+        function handleFullScreenChange() {
+            const isCurrentlyFullScreen = !!(
+                document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement
+            );
+            
+            console.log("Full screen holati o'zgardi:", isCurrentlyFullScreen);
+            
+            if (testStarted && !isCurrentlyFullScreen && isFullScreen) {
+                // Test davomida full screendan chiqilganda - faqat ogohlantirish
+                console.log("Full screendan chiqildi, lekin test davom etadi");
+                
+                // Foydalanuvchi harakatini yozish
+                logUserAction('fullscreen_exited');
+                
+                // Ogohlantirish ko'rsatish
+                showMessage("⚠️ Iltimos, testni to'liq ekranda davom ettiring. (F11 tugmasi)", "warning");
+                
+                // Security monitor matnini yangilash
+                elements.monitorText.textContent = "⚠️ Full screen tavsiya etiladi! F11 tugmasini bosing";
+                
+                // Security monitor rangini o'zgartirish (ogohlantirish)
+                elements.securityMonitor.style.background = "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)";
+                
+                // Fullscreen warning ko'rsatish
+                showFullscreenWarning();
+                
+                // 3 soniyadan keyin full screenga qaytishga urinish (ixtiyoriy)
+                setTimeout(() => {
+                    if (testStarted && !isFullScreen) {
+                        console.log("Full screenga avtomatik qaytishga urinilmoqda...");
+                        enableMandatoryFullScreen();
+                    }
+                }, 3000);
+            } else if (isCurrentlyFullScreen) {
+                // Full screenga kirilganda
+                console.log("Full screenga kirdi");
+                
+                // Security monitor matnini normal holatga qaytarish
+                elements.monitorText.textContent = "Xavfsizlik rejimi faol";
+                
+                // Security monitor rangini normal holatga qaytarish
+                elements.securityMonitor.style.background = "linear-gradient(135deg, var(--danger) 0%, #ef4444 100%)";
+                
+                // Fullscreen warning yashirish
+                hideFullscreenWarning();
             }
-        }, 3000);
-    } else if (isCurrentlyFullScreen) {
-        // Full screenga kirilganda ogohlantirishni yashirish
-        hideFullscreenWarning();
-    }
-    
-    isFullScreen = isCurrentlyFullScreen;
-}
-function setupFullScreenListeners() {
-    // Turli browserlar uchun fullscreen o'zgarishlarini kuzatish
-    document.addEventListener('fullscreenchange', handleFullScreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullScreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullScreenChange);
-    
-    // Klaviatura orqali fullscreen (F11) ni aniqlash
-    document.addEventListener('keydown', (e) => {
-        if (testStarted && e.key === 'F11') {
-            e.preventDefault();
-            console.log("F11 bosildi - full screen o'zgartirilmoqda");
-            setTimeout(() => {
-                handleFullScreenChange();
-            }, 100);
+            
+            isFullScreen = isCurrentlyFullScreen;
         }
-    });
-}
-
-function removeFullScreenListeners() {
-    document.removeEventListener('fullscreenchange', handleFullScreenChange);
-    document.removeEventListener('webkitfullscreenchange', handleFullScreenChange);
-    document.removeEventListener('mozfullscreenchange', handleFullScreenChange);
-    document.removeEventListener('MSFullscreenChange', handleFullScreenChange);
-}
+        
+        function setupFullScreenListeners() {
+            // Turli browserlar uchun fullscreen o'zgarishlarini kuzatish
+            document.addEventListener('fullscreenchange', handleFullScreenChange);
+            document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
+            document.addEventListener('mozfullscreenchange', handleFullScreenChange);
+            document.addEventListener('MSFullscreenChange', handleFullScreenChange);
+            
+            // Klaviatura orqali fullscreen (F11) ni aniqlash
+            document.addEventListener('keydown', (e) => {
+                if (testStarted && e.key === 'F11') {
+                    e.preventDefault();
+                    console.log("F11 bosildi - full screen o'zgartirilmoqda");
+                    setTimeout(() => {
+                        handleFullScreenChange();
+                    }, 100);
+                }
+            });
+        }
+        
+        function removeFullScreenListeners() {
+            document.removeEventListener('fullscreenchange', handleFullScreenChange);
+            document.removeEventListener('webkitfullscreenchange', handleFullScreenChange);
+            document.removeEventListener('mozfullscreenchange', handleFullScreenChange);
+            document.removeEventListener('MSFullscreenChange', handleFullScreenChange);
+        }
         
         // ==================== BOSHQA OYNAGA O'TISHNI ANIQLASH ====================
         let lastBlurTime = 0;
@@ -2583,81 +2588,83 @@ function removeFullScreenListeners() {
             }
         }
         
-        // ==================== XAVFSIZLIK FUNKSIYALARI ====================
-       function enableSecurity() {
-    if (securityEnabled) return;
-    
-    elements.securityMonitor.classList.remove('hidden');
-    elements.monitorText.textContent = "Xavfsizlik rejimi faol - Full screen talab qilinadi";
-    
-    // Fullscreen listenerlarni o'rnatish
-    setupFullScreenListeners();
-    
-    window.addEventListener('blur', handleWindowBlur);
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    document.addEventListener('contextmenu', handleContextMenu);
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('copy', handleCopyPaste);
-    document.addEventListener('cut', handleCopyPaste);
-    document.addEventListener('paste', handleCopyPaste);
-    
-    elements.securityMonitor.addEventListener('mouseenter', () => {
-        elements.violationHistoryPanel.style.display = 'block';
-    });
-    
-    elements.securityMonitor.addEventListener('mouseleave', () => {
-        setTimeout(() => {
-            if (!elements.violationHistoryPanel.matches(':hover')) {
+        // ==================== XAVFSIZLIK FUNKSIYALARI (YANGILANGAN) ====================
+        function enableSecurity() {
+            if (securityEnabled) return;
+            
+            elements.securityMonitor.classList.remove('hidden');
+            
+            // Test boshlanganda full screen tavsiya etiladi
+            elements.monitorText.textContent = "Xavfsizlik rejimi faol - Full screen tavsiya etiladi";
+            
+            // Fullscreen listenerlarni o'rnatish
+            setupFullScreenListeners();
+            
+            window.addEventListener('blur', handleWindowBlur);
+            window.addEventListener('focus', handleWindowFocus);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            document.addEventListener('contextmenu', handleContextMenu);
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('copy', handleCopyPaste);
+            document.addEventListener('cut', handleCopyPaste);
+            document.addEventListener('paste', handleCopyPaste);
+            
+            elements.securityMonitor.addEventListener('mouseenter', () => {
+                elements.violationHistoryPanel.style.display = 'block';
+            });
+            
+            elements.securityMonitor.addEventListener('mouseleave', () => {
+                setTimeout(() => {
+                    if (!elements.violationHistoryPanel.matches(':hover')) {
+                        elements.violationHistoryPanel.style.display = 'none';
+                    }
+                }, 300);
+            });
+            
+            elements.violationHistoryPanel.addEventListener('mouseleave', () => {
                 elements.violationHistoryPanel.style.display = 'none';
-            }
-        }, 300);
-    });
-    
-    elements.violationHistoryPanel.addEventListener('mouseleave', () => {
-        elements.violationHistoryPanel.style.display = 'none';
-    });
-    
-    securityEnabled = true;
-    
-    // Fullscreen holatini tekshirish
-    setTimeout(() => {
-        handleFullScreenChange();
-    }, 1000);
-}
-
-function disableSecurity() {
-    elements.securityMonitor.classList.add('hidden');
-    elements.violationHistoryPanel.style.display = 'none';
-    
-    // Fullscreen listenerlarni olib tashlash
-    removeFullScreenListeners();
-    
-    window.removeEventListener('blur', handleWindowBlur);
-    window.removeEventListener('focus', handleWindowFocus);
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-    document.removeEventListener('contextmenu', handleContextMenu);
-    document.removeEventListener('keydown', handleKeyDown);
-    document.removeEventListener('copy', handleCopyPaste);
-    document.removeEventListener('cut', handleCopyPaste);
-    document.removeEventListener('paste', handleCopyPaste);
-    
-    // Agar fullscreen bo'lsa, chiqish
-    if (isFullScreen) {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.mozCancelFullScreen) {
-            document.mozCancelFullScreen();
-        } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
+            });
+            
+            securityEnabled = true;
+            
+            // Fullscreen holatini tekshirish
+            setTimeout(() => {
+                handleFullScreenChange();
+            }, 1000);
         }
-    }
-    
-    securityEnabled = false;
-    isFullScreen = false;
-}
+        
+        function disableSecurity() {
+            elements.securityMonitor.classList.add('hidden');
+            elements.violationHistoryPanel.style.display = 'none';
+            
+            // Fullscreen listenerlarni olib tashlash
+            removeFullScreenListeners();
+            
+            window.removeEventListener('blur', handleWindowBlur);
+            window.removeEventListener('focus', handleWindowFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('contextmenu', handleContextMenu);
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('copy', handleCopyPaste);
+            document.removeEventListener('cut', handleCopyPaste);
+            document.removeEventListener('paste', handleCopyPaste);
+            
+            // Agar fullscreen bo'lsa, chiqish
+            if (isFullScreen) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+            
+            securityEnabled = false;
+            isFullScreen = false;
+        }
         
         function handleVisibilityChange() {
             if (testStarted && document.hidden) {
@@ -3138,7 +3145,7 @@ function disableSecurity() {
                 "1-IMI - Sifatli Ta'lim Kafolati",
                 "LeaderMath - Matematika Olamiga Sayohat",
                 "Telegram: @Help_LeaderMath_bot",
-                "Tel: +998 XX XXX XX XX"
+                "Tel: +998 97 336 69 39"
             ];
             
             let bottomHTML = '';
@@ -3234,100 +3241,100 @@ function disableSecurity() {
         }
         
         // ==================== TEST BOSHLASH (YANGILANGAN) ====================
-  async function startTest() {
-    try {
-        // Oldin urinib ko'rganligini tekshirish va to'xtatish
-        if (CONFIG.singleAttempt && previousAttempt) {
-            alert("❌ Siz bu testni oldin ishlagansiz!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.\n\nOldingi natijangizni ko'rish uchun 'Oldingi Natijani Ko'rish' tugmasini bosing.");
-            return;
-        }
-        
-        if (!testData || !testData.questions) {
-            throw new Error("Test ma'lumotlari yuklanmagan");
-        }
-        
-        if (!currentStudent) {
-            throw new Error("O'quvchi tanlanmagan");
-        }
-        
-        console.log("Test boshlanmoqda...");
-        
-        // Avval fullscreen ni yoqish
-        const fullScreenSuccess = await enableMandatoryFullScreen();
-        
-        if (!fullScreenSuccess) {
-            console.warn("Full screen yoqilmadi, lekin test davom etadi");
-        }
-        
-        testStarted = true;
-        
-        // Foydalanuvchi harakatini yozish
-        logUserAction('test_started', { fullScreenSuccess: fullScreenSuccess });
-        
-        document.body.classList.add('test-active');
-        
-        if (CONFIG.enableRandomOrder) {
-            const randomOrder = createRandomOrderForStudent(
-                currentStudent.id,
-                currentTestCode,
-                testData.questions
-            );
-            
-            shuffledQuestions = randomOrder.shuffledQuestions;
-            originalToShuffledMap = randomOrder.originalToShuffled;
-            shuffledToOriginalMap = randomOrder.shuffledToOriginal;
-            shuffledOptionsMap = randomOrder.shuffledOptions;
-        } else {
-            shuffledQuestions = [...testData.questions];
-            testData.questions.forEach((_, index) => {
-                originalToShuffledMap[index] = index;
-                shuffledToOriginalMap[index] = index;
-            });
-        }
-        
-        userAnswers = new Array(testData.questions.length).fill(null);
-        timeRemaining = (testData.durationMinutes || 30) * 60;
-        timeSpent = 0;
-        violations = {
-            fullScreenExit: 0,
-            windowSwitch: 0,
-            minorViolations: 0
-        };
-        violationHistory = [];
-        questionViews = {};
-        userActions = [];
-        
-        elements.headerStudentName.textContent = currentStudent.fullName;
-        elements.headerStudentClass.textContent = currentClass;
-        elements.violationCount.textContent = '0';
-        
-        if (CONFIG.enableSecurity) {
-            enableSecurity();
-        }
-        
-        elements.testHeader.classList.remove('hidden');
-        startTimer();
-        
-        buildVerticalNavDots();
-        
-        currentQuestionIndex = 0;
-        renderQuestion();
-        showScreen('question');
-        
-        // Test boshlanganda fullscreen holatini tekshirish
-        setTimeout(() => {
-            if (!isFullScreen) {
-                showMessage("⚠️ Full screen rejimini yoqing (F11 tugmasi)", "warning");
-                elements.monitorText.textContent = "⚠️ Full screen talab qilinadi! F11 tugmasini bosing";
+        async function startTest() {
+            try {
+                // Oldin urinib ko'rganligini tekshirish va to'xtatish
+                if (CONFIG.singleAttempt && previousAttempt) {
+                    alert("❌ Siz bu testni oldin ishlagansiz!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.\n\nOldingi natijangizni ko'rish uchun 'Oldingi Natijani Ko'rish' tugmasini bosing.");
+                    return;
+                }
+                
+                if (!testData || !testData.questions) {
+                    throw new Error("Test ma'lumotlari yuklanmagan");
+                }
+                
+                if (!currentStudent) {
+                    throw new Error("O'quvchi tanlanmagan");
+                }
+                
+                console.log("Test boshlanmoqda...");
+                
+                // Fullscreen ni yoqishga urinish (majburiy emas)
+                const fullScreenSuccess = await enableMandatoryFullScreen();
+                
+                if (!fullScreenSuccess) {
+                    console.log("Full screen yoqilmadi, lekin test davom etadi");
+                }
+                
+                testStarted = true;
+                
+                // Foydalanuvchi harakatini yozish
+                logUserAction('test_started', { fullScreenSuccess: fullScreenSuccess });
+                
+                document.body.classList.add('test-active');
+                
+                if (CONFIG.enableRandomOrder) {
+                    const randomOrder = createRandomOrderForStudent(
+                        currentStudent.id,
+                        currentTestCode,
+                        testData.questions
+                    );
+                    
+                    shuffledQuestions = randomOrder.shuffledQuestions;
+                    originalToShuffledMap = randomOrder.originalToShuffled;
+                    shuffledToOriginalMap = randomOrder.shuffledToOriginal;
+                    shuffledOptionsMap = randomOrder.shuffledOptions;
+                } else {
+                    shuffledQuestions = [...testData.questions];
+                    testData.questions.forEach((_, index) => {
+                        originalToShuffledMap[index] = index;
+                        shuffledToOriginalMap[index] = index;
+                    });
+                }
+                
+                userAnswers = new Array(testData.questions.length).fill(null);
+                timeRemaining = (testData.durationMinutes || 30) * 60;
+                timeSpent = 0;
+                violations = {
+                    fullScreenExit: 0,
+                    windowSwitch: 0,
+                    minorViolations: 0
+                };
+                violationHistory = [];
+                questionViews = {};
+                userActions = [];
+                
+                elements.headerStudentName.textContent = currentStudent.fullName;
+                elements.headerStudentClass.textContent = currentClass;
+                elements.violationCount.textContent = '0';
+                
+                if (CONFIG.enableSecurity) {
+                    enableSecurity();
+                }
+                
+                elements.testHeader.classList.remove('hidden');
+                startTimer();
+                
+                buildVerticalNavDots();
+                
+                currentQuestionIndex = 0;
+                renderQuestion();
+                showScreen('question');
+                
+                // Test boshlanganda fullscreen holatini tekshirish
+                setTimeout(() => {
+                    if (!isFullScreen) {
+                        showMessage("⚠️ Iltimos, testni to'liq ekranda davom ettiring. (F11 tugmasi)", "warning");
+                        elements.monitorText.textContent = "⚠️ Full screen tavsiya etiladi! F11 tugmasini bosing";
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Testni boshlashda xato:', error);
+                showMessage(error.message || "Testni boshlashda xato", 'error');
+                showScreen('intro');
             }
-        }, 2000);
-        
-    } catch (error) {
-        console.error('Testni boshlashda xato:', error);
-        showMessage(error.message || "Testni boshlashda xato", 'error');
-        showScreen('intro');
-    }
-}
+        }
         
         function startTimer() {
             updateTimerDisplay();
@@ -3961,32 +3968,29 @@ function disableSecurity() {
         
         // ==================== TEST YAKUNLASH (YANGILANGAN) ====================
         function cancelTest(reason) {
-    clearInterval(timerInterval);
-    testStarted = false;
-    
-    // Foydalanuvchi harakatini yozish
-    logUserAction('test_cancelled', { reason: reason });
-    
-    // Avval security ni o'chirish
-    disableSecurity();
-    
-    elements.testHeader.classList.add('hidden');
-    document.body.classList.remove('test-active');
-    
-    let violationDetails = '';
-    if (violations.fullScreenExit > 0) {
-        violationDetails += `🚫 Full screen chiqish: ${violations.fullScreenExit} marta\n`;
-    }
-    if (violations.windowSwitch > 0) {
-        violationDetails += `🪟 Boshqa oynaga o'tish: ${violations.windowSwitch} marta\n`;
-    }
-    if (violations.minorViolations > 0) {
-        violationDetails += `⚠️ Mayda qoidabuzarliklar: ${violations.minorViolations} marta\n`;
-    }
-    
-    alert(`TEST BEKOR QILINDI!\n\nSabab: ${reason}\n\nQoidabuzarliklar:\n${violationDetails}`);
-    window.location.reload();
-}
+            clearInterval(timerInterval);
+            testStarted = false;
+            
+            // Foydalanuvchi harakatini yozish
+            logUserAction('test_cancelled', { reason: reason });
+            
+            // Avval security ni o'chirish
+            disableSecurity();
+            
+            elements.testHeader.classList.add('hidden');
+            document.body.classList.remove('test-active');
+            
+            let violationDetails = '';
+            if (violations.windowSwitch > 0) {
+                violationDetails += `🪟 Boshqa oynaga o'tish: ${violations.windowSwitch} marta\n`;
+            }
+            if (violations.minorViolations > 0) {
+                violationDetails += `⚠️ Mayda qoidabuzarliklar: ${violations.minorViolations} marta\n`;
+            }
+            
+            alert(`TEST BEKOR QILINDI!\n\nSabab: ${reason}\n\nQoidabuzarliklar:\n${violationDetails}`);
+            window.location.reload();
+        }
         
         async function finishTest() {
             clearInterval(timerInterval);
@@ -4053,7 +4057,7 @@ function disableSecurity() {
                 }
             });
             
-            const penalty = (violations.fullScreenExit + violations.windowSwitch + violations.minorViolations) * CONFIG.penaltyPerViolation;
+            const penalty = (violations.windowSwitch + violations.minorViolations) * CONFIG.penaltyPerViolation;
             const finalScore = Math.max(0, totalScore - penalty);
             
             return {
@@ -4108,32 +4112,6 @@ function disableSecurity() {
             }
             
             setupEventListeners();
-			// Test boshlanganda fullscreen ni tekshirish uchun interval
-let fullscreenCheckInterval = null;
-
-function startFullscreenChecker() {
-    if (fullscreenCheckInterval) clearInterval(fullscreenCheckInterval);
-    
-    fullscreenCheckInterval = setInterval(() => {
-        if (testStarted && !isFullScreen) {
-            // Har 30 soniyada fullscreen holatini tekshirish
-            handleFullScreenChange();
-            
-            // Agar fullscreen bo'lmasa, ogohlantirish
-            if (!isFullScreen) {
-                elements.monitorText.textContent = "⚠️ Full screen talab qilinadi! F11 tugmasini bosing";
-                elements.securityMonitor.style.animation = 'pulseDanger 1s infinite';
-            }
-        }
-    }, 30000); // 30 soniyada bir
-}
-
-function stopFullscreenChecker() {
-    if (fullscreenCheckInterval) {
-        clearInterval(fullscreenCheckInterval);
-        fullscreenCheckInterval = null;
-    }
-}
         }
         
         function setupEventListeners() {
@@ -4306,24 +4284,26 @@ function stopFullscreenChecker() {
                 showScreen('classSelection');
             }
         }
+        
         function showFullscreenWarning() {
-    if (!testStarted) return;
-    
-    elements.fullscreenWarning.classList.remove('hidden');
-    
-    // 10 soniyadan keyin yashirish
-    setTimeout(() => {
-        if (isFullScreen) {
+            if (!testStarted) return;
+            
+            elements.fullscreenWarning.classList.remove('hidden');
+            
+            // 10 soniyadan keyin yashirish
+            setTimeout(() => {
+                if (isFullScreen) {
+                    elements.fullscreenWarning.classList.add('hidden');
+                }
+            }, 10000);
+        }
+        
+        function hideFullscreenWarning() {
             elements.fullscreenWarning.classList.add('hidden');
         }
-    }, 10000);
-}
-
-function hideFullscreenWarning() {
-    elements.fullscreenWarning.classList.add('hidden');
-}
+        
         // ==================== START ====================
         document.addEventListener('DOMContentLoaded', initializeApp); 
-</script>
+    </script>
 </body>
 </html>
