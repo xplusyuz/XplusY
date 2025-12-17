@@ -3597,12 +3597,35 @@
         }
         
         function updateNavigationButtons() {
-            const totalQuestions = shuffledQuestions.length;
-            
-            elements.prevBtn.disabled = currentQuestionIndex <= 0;
-            elements.nextBtn.disabled = currentQuestionIndex >= totalQuestions - 1;
-            elements.finishBtn.disabled = false;
+    const totalQuestions = shuffledQuestions.length;
+    
+    // Oldingi tugma: agar oldinda qulflanmagan savol bo'lsa yoki yo'qligini tekshirish
+    let hasPreviousUnlocked = false;
+    for (let i = currentQuestionIndex - 1; i >= 0; i--) {
+        if (!isQuestionLocked(i)) {
+            hasPreviousUnlocked = true;
+            break;
         }
+    }
+    elements.prevBtn.disabled = currentQuestionIndex <= 0 || !hasPreviousUnlocked;
+    
+    // Keyingi tugma: agar keyinda qulflanmagan savol bo'lsa yoki yo'qligini tekshirish
+    let hasNextUnlocked = false;
+    for (let i = currentQuestionIndex + 1; i < totalQuestions; i++) {
+        if (!isQuestionLocked(i)) {
+            hasNextUnlocked = true;
+            break;
+        }
+    }
+    elements.nextBtn.disabled = currentQuestionIndex >= totalQuestions - 1 || !hasNextUnlocked;
+    
+    elements.finishBtn.disabled = false;
+    
+    // Agar ikkala tugma ham disabled bo'lsa, foydalanuvchiga xabar berish
+    if (elements.prevBtn.disabled && elements.nextBtn.disabled && !elements.finishBtn.disabled) {
+        showMessage("Barcha savollar qulfdanadi. Testni yakunlashingiz mumkin.", "info");
+    }
+}
         
         function showLockedQuestionMessage() {
             elements.questionText.innerHTML = `
@@ -3623,9 +3646,68 @@
             elements.questionImageContainer.classList.add('hidden');
         }
         
-        function isQuestionLocked(questionIndex) {
-            return (questionViews[questionIndex] || 0) >= CONFIG.maxViews;
+       function isQuestionLocked(questionIndex) {
+    const originalIndex = shuffledToOriginalMap[questionIndex] !== undefined ? 
+                         shuffledToOriginalMap[questionIndex] : questionIndex;
+    return (questionViews[originalIndex] || 0) >= CONFIG.maxViews;
+}
+function goToPreviousQuestion() {
+    let newIndex = currentQuestionIndex - 1;
+    let attempts = 0;
+    
+    // Qulflanmagan savolni topguncha orqaga qarab qidirish
+    while (newIndex >= 0 && isQuestionLocked(newIndex) && attempts < shuffledQuestions.length) {
+        newIndex--;
+        attempts++;
+    }
+    
+    if (newIndex >= 0 && !isQuestionLocked(newIndex)) {
+        currentQuestionIndex = newIndex;
+        renderQuestion();
+        
+        // Foydalanuvchi harakatini yozish
+        logUserAction('question_navigated', {
+            from: currentQuestionIndex + 1, // +1 chunki biz yangi indexga o'tdik
+            to: newIndex + 1,
+            direction: 'previous'
+        });
+    } else {
+        // Barcha oldingi savollar qulflangan
+        showMessage("Barcha oldingi savollar qulfdanadi", "warning");
+    }
+}
+
+function goToNextQuestion() {
+    let newIndex = currentQuestionIndex + 1;
+    let attempts = 0;
+    
+    // Qulflanmagan savolni topguncha oldinga qarab qidirish
+    while (newIndex < shuffledQuestions.length && isQuestionLocked(newIndex) && attempts < shuffledQuestions.length) {
+        newIndex++;
+        attempts++;
+    }
+    
+    if (newIndex < shuffledQuestions.length && !isQuestionLocked(newIndex)) {
+        currentQuestionIndex = newIndex;
+        renderQuestion();
+        
+        // Foydalanuvchi harakatini yozish
+        logUserAction('question_navigated', {
+            from: currentQuestionIndex - 1, // -1 chunki biz yangi indexga o'tdik
+            to: newIndex + 1,
+            direction: 'next'
+        });
+    } else {
+        // Barcha keyingi savollar qulflangan
+        showMessage("Barcha keyingi savollar qulfdanadi", "warning");
+        
+        // Agar oxirgi savolga yetib borgan bo'lsak yoki barcha keyingi savollar qulflangan bo'lsa
+        // foydalanuvchini ogohlantirish
+        if (newIndex >= shuffledQuestions.length) {
+            showMessage("Testning oxiriga yetdingiz. Testni yakunlashni tavsiya qilamiz.", "info");
         }
+    }
+}
         
         // ==================== MATEMATIK EDITOR FUNKSIYALARI ====================
         function insertNumber(number) {
