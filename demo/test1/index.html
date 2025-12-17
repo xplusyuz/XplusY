@@ -453,6 +453,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            position: relative;
         }
         
         .q-number {
@@ -466,9 +467,60 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         }
         
-        .q-number.locked::after {
+        /* Savol ko'rish holatlari uchun ranglar */
+        .q-number.view-1 {
+            background: #28a745 !important;
+            color: white !important;
+        }
+        
+        .q-number.view-2 {
+            background: #ffc107 !important;
+            color: black !important;
+        }
+        
+        .q-number.view-3 {
+            background: #dc3545 !important;
+            color: white !important;
+        }
+        
+        .q-number.view-1::after {
+            content: "👁️";
+            position: absolute;
+            margin-left: 35px;
+            margin-top: -35px;
+            font-size: 12px;
+            background: var(--success);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        .q-number.view-2::after {
+            content: "⚠️";
+            position: absolute;
+            margin-left: 35px;
+            margin-top: -35px;
+            font-size: 14px;
+            background: var(--warning);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        .q-number.view-3::after {
             content: "🔒";
             position: absolute;
             margin-left: 35px;
@@ -853,24 +905,75 @@
             border-color: var(--success);
         }
         
-        .dot.locked {
-            background: var(--danger) !important;
+        /* Savol ko'rish holatlari uchun ranglar */
+        .dot.view-1 {
+            background: #28a745 !important;
             color: white !important;
-            border-color: var(--danger) !important;
-            cursor: not-allowed;
-            opacity: 0.7;
+            border-color: #28a745 !important;
         }
         
-        .dot.locked::after {
+        .dot.view-2 {
+            background: #ffc107 !important;
+            color: black !important;
+            border-color: #ffc107 !important;
+        }
+        
+        .dot.view-3 {
+            background: #dc3545 !important;
+            color: white !important;
+            border-color: #dc3545 !important;
+        }
+        
+        .dot.locked {
+            cursor: not-allowed;
+            opacity: 0.7;
+            position: relative;
+        }
+        
+        .dot.view-1::after {
+            content: "👁️";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            font-size: 10px;
+            background: white;
+            color: var(--success);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .dot.view-2::after {
+            content: "⚠️";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            font-size: 10px;
+            background: white;
+            color: var(--warning);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .dot.view-3::after {
             content: "🔒";
             position: absolute;
             top: -8px;
             right: -8px;
-            font-size: 12px;
+            font-size: 10px;
             background: white;
             color: var(--danger);
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -1946,6 +2049,7 @@
         
         // ==================== 3-MARTALIK KO'RISH FUNKSIYALARI ====================
         function checkQuestionView(questionIndex) {
+            // Ko'rish sonini hisoblash
             if (!questionViews[questionIndex]) {
                 questionViews[questionIndex] = 1;
             } else {
@@ -1953,27 +2057,60 @@
             }
             
             const views = questionViews[questionIndex];
+            const maxViews = CONFIG.maxViews;
+            
+            // Qulf holatini tekshirish
+            const isLocked = views >= maxViews;
+            
+            // O'zgartirish: 3 marta ko'rishi uchun ruxsat berish
+            // 1-marta: yashil rang
+            // 2-marta: sariq rang  
+            // 3-marta: qizil rang va qulf
+            updateQuestionStatus(questionIndex, views, isLocked);
             
             // OGOHLANTIRISHNI KO'RSATISH
-            if (views >= 2) {
+            if (views >= (maxViews - 1)) { // 2 yoki undan ko'p marta ko'rganida
                 elements.viewWarning.classList.remove('hidden');
                 elements.viewCount.textContent = views;
             } else {
                 elements.viewWarning.classList.add('hidden');
             }
             
-            // QULFLANGANLIGINI TEKSHIRISH
-            if (views >= CONFIG.maxViews) {
-                const currentQElement = document.getElementById('currentQ');
-                currentQElement.classList.add('locked');
+            return views;
+        }
+        
+        function updateQuestionStatus(questionIndex, views, isLocked) {
+            const dots = elements.navDots.querySelectorAll('.dot');
+            const dot = dots[questionIndex];
+            const qNumber = document.getElementById('currentQ');
+            
+            if (!dot) return;
+            
+            // Eski klasslarni olib tashlash
+            dot.classList.remove('view-1', 'view-2', 'view-3', 'locked', 'active');
+            qNumber.classList.remove('view-1', 'view-2', 'view-3');
+            
+            // Ko'rish soniga qarab rang o'zgartirish
+            if (views === 1) {
+                dot.classList.add('view-1');
+                qNumber.classList.add('view-1');
+            } else if (views === 2) {
+                dot.classList.add('view-2');
+                qNumber.classList.add('view-2');
+            } else if (views >= 3) {
+                dot.classList.add('view-3');
+                qNumber.classList.add('view-3');
                 
-                // Qulflangan savolni ko'rsatmaslik
-                if (isQuestionLocked(questionIndex)) {
-                    return views;
+                if (isLocked) {
+                    dot.classList.add('locked');
+                    qNumber.classList.add('locked');
                 }
             }
             
-            return views;
+            // Joriy savolni active qilish
+            if (questionIndex === currentQuestionIndex) {
+                dot.classList.add('active');
+            }
         }
         
         function isQuestionLocked(questionIndex) {
@@ -2016,21 +2153,28 @@
         function navigateToNextUnlockedQuestion(direction) {
             let newIndex = currentQuestionIndex;
             const increment = direction === 'next' ? 1 : -1;
+            const totalQuestions = testData.questions.length;
             
-            do {
+            // Barcha savollarni tekshirish
+            for (let i = 0; i < totalQuestions; i++) {
                 newIndex += increment;
                 
-                // Chegaralarni tekshirish
-                if (newIndex < 0 || newIndex >= testData.questions.length) {
-                    return currentQuestionIndex; // Hech qanday ochiq savol topilmadi
-                }
+                // Chegaralarni aylanma qilish
+                if (newIndex < 0) newIndex = totalQuestions - 1;
+                if (newIndex >= totalQuestions) newIndex = 0;
                 
                 // Qulflanmagan savolni qidirish
                 if (!isQuestionLocked(newIndex)) {
                     return newIndex;
                 }
                 
-            } while (true);
+                // Agar barcha savollar qulflangan bo'lsa
+                if (i === totalQuestions - 1) {
+                    return currentQuestionIndex; // Hech qanday ochiq savol topilmadi
+                }
+            }
+            
+            return currentQuestionIndex;
         }
         
         // ==================== ASOSIY FUNKSIYALAR ====================
@@ -2469,9 +2613,13 @@
                 } else {
                     dot.addEventListener('click', () => {
                         if (testStarted) {
-                            checkQuestionView(currentQuestionIndex);
-                            currentQuestionIndex = index;
-                            renderQuestion();
+                            const views = questionViews[index] || 0;
+                            if (views >= CONFIG.maxViews) {
+                                showMessage("Bu savol qulfdanadi! Boshqa savolga o'ting.", "warning");
+                            } else {
+                                currentQuestionIndex = index;
+                                renderQuestion();
+                            }
                         }
                     });
                 }
@@ -2486,7 +2634,7 @@
             const dots = elements.navDots.querySelectorAll('.dot');
             
             dots.forEach((dot, index) => {
-                dot.classList.remove('active', 'answered', 'locked');
+                dot.classList.remove('active', 'answered');
                 
                 if (index === currentQuestionIndex) {
                     dot.classList.add('active');
@@ -2494,12 +2642,6 @@
                 
                 if (userAnswers[index] !== undefined && userAnswers[index] !== '') {
                     dot.classList.add('answered');
-                }
-                
-                if (isQuestionLocked(index)) {
-                    dot.classList.add('locked');
-                    dot.style.cursor = 'not-allowed';
-                    dot.style.pointerEvents = 'none';
                 }
             });
         }
@@ -2510,22 +2652,15 @@
             const question = testData.questions[currentQuestionIndex];
             const views = checkQuestionView(currentQuestionIndex);
             
-            // Agar savol qulflangan bo'lsa, maxsus xabarni ko'rsatish
-            if (isQuestionLocked(currentQuestionIndex)) {
+            // Qulf holatini tekshirish
+            const isLocked = isQuestionLocked(currentQuestionIndex);
+            
+            // Agar savol qulflangan bo'lsa
+            if (isLocked) {
                 showLockedQuestionMessage();
-                
-                // Navigation tugmalarini yangilash
                 updateNavigationButtons();
                 updateNavDots();
                 return;
-            }
-            
-            // Qulfni tekshirish
-            const currentQElement = document.getElementById('currentQ');
-            if (views >= CONFIG.maxViews) {
-                currentQElement.classList.add('locked');
-            } else {
-                currentQElement.classList.remove('locked');
             }
             
             // Header elementlarini yangilash
@@ -2629,7 +2764,6 @@
                     break;
                 }
             }
-            elements.prevBtn.disabled = !hasPrevUnlocked || currentQuestionIndex === 0;
             
             // Keyingi tugma - qulflanmagan keyingi savol bormi?
             let hasNextUnlocked = false;
@@ -2639,7 +2773,9 @@
                     break;
                 }
             }
-            elements.nextBtn.disabled = !hasNextUnlocked || currentQuestionIndex === testData.questions.length - 1;
+            
+            elements.prevBtn.disabled = !hasPrevUnlocked;
+            elements.nextBtn.disabled = !hasNextUnlocked;
         }
         
         // ==================== TEST YAKUNLASH ====================
@@ -2793,7 +2929,6 @@
             
             elements.prevBtn.addEventListener('click', () => {
                 if (currentQuestionIndex > 0) {
-                    checkQuestionView(currentQuestionIndex);
                     const nextIndex = navigateToNextUnlockedQuestion('prev');
                     if (nextIndex !== currentQuestionIndex) {
                         currentQuestionIndex = nextIndex;
@@ -2806,7 +2941,6 @@
             
             elements.nextBtn.addEventListener('click', () => {
                 if (currentQuestionIndex < testData.questions.length - 1) {
-                    checkQuestionView(currentQuestionIndex);
                     const nextIndex = navigateToNextUnlockedQuestion('next');
                     if (nextIndex !== currentQuestionIndex) {
                         currentQuestionIndex = nextIndex;
