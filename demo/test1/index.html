@@ -616,7 +616,7 @@ p {
 }
 
 .timer {
-    display: none;
+    display: none; /* Savol oynasidagi vaqtni yashiramiz */
 }
 
 /* ========== 10. YORQIN VARIANTLAR ========== */
@@ -1056,30 +1056,6 @@ p {
     font-size: 10px;
     background: white;
     color: var(--danger);
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-/* Random tartib uchun dot */
-.dot.random {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
-    color: white !important;
-    border-color: #8b5cf6 !important;
-}
-
-.dot.random::after {
-    content: "🎲";
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    font-size: 10px;
-    background: white;
-    color: #8b5cf6;
     width: 18px;
     height: 18px;
     border-radius: 50%;
@@ -1572,7 +1548,7 @@ p {
         <!-- Kod kiritish -->
         <div id="codeInputCard" class="card hidden">
             <h1>📝 Test Tizimi</h1>
-            <p style="text-align: center; margin-bottom: 25px;">Professional matematik test tizimi (Random tartib)</p>
+            <p style="text-align: center; margin-bottom: 25px;">Professional matematik test tizimi</p>
             
             <div class="input-group">
                 <label for="testCodeInput">Test kodini kiriting</label>
@@ -1794,8 +1770,6 @@ p {
             penaltyPerViolation: 5, // Har bir qoidabuzarlik uchun jarima
             enableSecurity: true, // Xavfsizlik rejimi yoqilgan
             allowNavigationToLocked: false, // Qulflangan savollarga o'tishga ruxsat berish
-            enableRandomOrder: true, // Random tartibni yoqish
-            enableRandomOptions: true // Variantlarni random tartiblash
         };
         
         // ==================== FIREBASE KONFIGURATSIYA ====================
@@ -1828,12 +1802,6 @@ p {
         let isFullScreen = false;
         let securityEnabled = false;
         let db = null;
-        
-        // ==================== RANDOM TARTIB ====================
-        let shuffledQuestions = []; // Random tartiblangan savollar
-        let originalToShuffledMap = {}; // Original index -> Random index
-        let shuffledToOriginalMap = {}; // Random index -> Original index
-        let shuffledOptionsMap = {}; // Har bir savol uchun random tartiblangan variantlar
         
         // ==================== DOM ELEMENTLARI ====================
         const elements = {
@@ -1913,77 +1881,6 @@ p {
             topBanner: document.getElementById('topBanner'),
             bottomBanner: document.getElementById('bottomBanner')
         };
-        
-        // ==================== RANDOM FUNCTIONS ====================
-        
-        // Seeded random generator (har bir o'quvchi uchun bir xil random tartib)
-        function seededRandom(seed) {
-            let x = Math.sin(seed++) * 10000;
-            return x - Math.floor(x);
-        }
-        
-        // Seeded shuffle (Fisher-Yates algoritmi)
-        function seededShuffle(array, seed) {
-            const result = [...array];
-            const random = seededRandom(seed);
-            
-            for (let i = result.length - 1; i > 0; i--) {
-                const j = Math.floor(random() * (i + 1));
-                [result[i], result[j]] = [result[j], result[i]];
-            }
-            
-            return result;
-        }
-        
-        // Random seed yaratish (har bir o'quvchi uchun unique)
-        function generateSeed(studentId, testCode) {
-            // String ni hash qilish
-            let hash = 0;
-            const str = `${studentId}_${testCode}_${Date.now()}`;
-            
-            for (let i = 0; i < str.length; i++) {
-                const char = str.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash; // 32-bit integer
-            }
-            
-            return Math.abs(hash);
-        }
-        
-        // Har bir o'quvchi uchun random tartibni yaratish
-        function createRandomOrderForStudent(studentId, testCode, questions) {
-            const seed = generateSeed(studentId, testCode);
-            
-            // Savollarni random tartiblash
-            const shuffledQuestions = seededShuffle(questions, seed);
-            
-            // Mapping yaratish
-            const originalToShuffled = {};
-            const shuffledToOriginal = {};
-            const shuffledOptions = {};
-            
-            questions.forEach((question, originalIndex) => {
-                const shuffledIndex = shuffledQuestions.findIndex(q => 
-                    q.text === question.text && 
-                    q.type === question.type
-                );
-                originalToShuffled[originalIndex] = shuffledIndex;
-                shuffledToOriginal[shuffledIndex] = originalIndex;
-                
-                // Variantlarni random tartiblash (agar mavjud bo'lsa)
-                if (question.type === 'variant' && question.options && CONFIG.enableRandomOptions) {
-                    const optionsSeed = generateSeed(`${studentId}_${testCode}_${originalIndex}`, Date.now());
-                    shuffledOptions[originalIndex] = seededShuffle(question.options, optionsSeed);
-                }
-            });
-            
-            return {
-                shuffledQuestions: shuffledQuestions,
-                originalToShuffled: originalToShuffled,
-                shuffledToOriginal: shuffledToOriginal,
-                shuffledOptions: shuffledOptions
-            };
-        }
         
         // ==================== FIREBASE FUNKSIYALARI ====================
         async function initializeFirebase() {
@@ -2367,25 +2264,28 @@ p {
         }
         
         // ==================== 3-MARTALIK KO'RISH FUNKSIYALARI ====================
-        function checkQuestionView(originalIndex) {
+        function checkQuestionView(questionIndex) {
             // Ko'rish sonini hisoblash
-            if (!questionViews[originalIndex]) {
-                questionViews[originalIndex] = 1;
+            if (!questionViews[questionIndex]) {
+                questionViews[questionIndex] = 1;
             } else {
-                questionViews[originalIndex]++;
+                questionViews[questionIndex]++;
             }
             
-            const views = questionViews[originalIndex];
+            const views = questionViews[questionIndex];
             const maxViews = CONFIG.maxViews;
             
             // Qulf holatini tekshirish
             const isLocked = views >= maxViews;
             
             // O'zgartirish: 3 marta ko'rishi uchun ruxsat berish
-            updateQuestionStatus(originalIndex, views, isLocked);
+            // 1-marta: yashil rang
+            // 2-marta: sariq rang  
+            // 3-marta: qizil rang va qulf
+            updateQuestionStatus(questionIndex, views, isLocked);
             
             // OGOHLANTIRISHNI KO'RSATISH
-            if (views >= (maxViews - 1)) {
+            if (views >= (maxViews - 1)) { // 2 yoki undan ko'p marta ko'rganida
                 elements.viewWarning.classList.remove('hidden');
                 elements.viewCount.textContent = views;
             } else {
@@ -2395,20 +2295,9 @@ p {
             return views;
         }
         
-        function updateQuestionStatus(originalIndex, views, isLocked) {
-            // Random index ni topish
-            const randomIndex = originalToShuffledMap[originalIndex];
+        function updateQuestionStatus(questionIndex, views, isLocked) {
             const dots = elements.navDots.querySelectorAll('.dot');
-            
-            // Tegishli dot ni topish
-            let dot = null;
-            for (const d of dots) {
-                if (parseInt(d.dataset.originalIndex) === originalIndex) {
-                    dot = d;
-                    break;
-                }
-            }
-            
+            const dot = dots[questionIndex];
             const qNumber = document.getElementById('currentQ');
             
             if (!dot) return;
@@ -2434,13 +2323,8 @@ p {
                 }
             }
             
-            // Random tartib belgisi
-            if (CONFIG.enableRandomOrder) {
-                dot.classList.add('random');
-            }
-            
             // Joriy savolni active qilish
-            if (randomIndex === currentQuestionIndex) {
+            if (questionIndex === currentQuestionIndex) {
                 dot.classList.add('active');
             }
         }
@@ -2483,24 +2367,21 @@ p {
         }
         
         function navigateToNextUnlockedQuestion(direction) {
-            let newRandomIndex = currentQuestionIndex;
+            let newIndex = currentQuestionIndex;
             const increment = direction === 'next' ? 1 : -1;
-            const totalQuestions = shuffledQuestions.length;
+            const totalQuestions = testData.questions.length;
             
             // Barcha savollarni tekshirish
             for (let i = 0; i < totalQuestions; i++) {
-                newRandomIndex += increment;
+                newIndex += increment;
                 
                 // Chegaralarni aylanma qilish
-                if (newRandomIndex < 0) newRandomIndex = totalQuestions - 1;
-                if (newRandomIndex >= totalQuestions) newRandomIndex = 0;
-                
-                // Original index ni topish
-                const originalIndex = shuffledToOriginalMap[newRandomIndex];
+                if (newIndex < 0) newIndex = totalQuestions - 1;
+                if (newIndex >= totalQuestions) newIndex = 0;
                 
                 // Qulflanmagan savolni qidirish
-                if (!isQuestionLocked(originalIndex)) {
-                    return newRandomIndex;
+                if (!isQuestionLocked(newIndex)) {
+                    return newIndex;
                 }
                 
                 // Agar barcha savollar qulflangan bo'lsa
@@ -2591,48 +2472,10 @@ p {
             }
         }
         
-        // ==================== TEST BOSHLASH (RANDOM TARTIB QO'SHILGAN) ====================
+        // ==================== TEST BOSHLASH ====================
         function startTest() {
             testStarted = true;
-            
-            // Random tartib yoqilgan bo'lsa
-            if (CONFIG.enableRandomOrder && currentStudent && currentStudent.id) {
-                // O'quvchi va test kodi asosida random tartib yaratish
-                const randomOrder = createRandomOrderForStudent(
-                    currentStudent.id,
-                    currentTestCode,
-                    testData.questions
-                );
-                
-                shuffledQuestions = randomOrder.shuffledQuestions;
-                originalToShuffledMap = randomOrder.originalToShuffled;
-                shuffledToOriginalMap = randomOrder.shuffledToOriginal;
-                shuffledOptionsMap = randomOrder.shuffledOptions;
-                
-                console.log('Random tartib yaratildi:', {
-                    studentId: currentStudent.id,
-                    testCode: currentTestCode,
-                    shuffledCount: shuffledQuestions.length
-                });
-            } else {
-                // Random tartib yoqilmagan - oddiy tartib
-                shuffledQuestions = [...testData.questions];
-                testData.questions.forEach((_, index) => {
-                    originalToShuffledMap[index] = index;
-                    shuffledToOriginalMap[index] = index;
-                    
-                    // Variantlarni random tartiblash yoqilmagan bo'lsa
-                    if (testData.questions[index].type === 'variant' && 
-                        testData.questions[index].options) {
-                        shuffledOptionsMap[index] = [...testData.questions[index].options];
-                    }
-                });
-            }
-            
-            // User answers array ni yaratish
             userAnswers = new Array(testData.questions.length);
-            
-            // Test davomiyligi
             timeRemaining = (testData.durationMinutes || 30) * 60;
             timeSpent = 0;
             violations = 0;
@@ -2896,8 +2739,7 @@ p {
         // Math javobni saqlash
         function saveMathAnswer() {
             if (!mathEditor) return;
-            const originalIndex = shuffledToOriginalMap[currentQuestionIndex];
-            userAnswers[originalIndex] = mathEditor.innerHTML;
+            userAnswers[currentQuestionIndex] = mathEditor.innerHTML;
             updateNavDots();
         }
         
@@ -2969,20 +2811,17 @@ p {
             if (mathEditor) mathEditor.focus();
         }
         
-        // ==================== SAVOL KO'RSATISH (RANDOM TARTIB UCHUN YANGILANGAN) ====================
+        // ==================== SAVOL KO'RSATISH ====================
         function buildNavDots() {
             elements.navDots.innerHTML = '';
             
-            shuffledQuestions.forEach((question, randomIndex) => {
-                const originalIndex = shuffledToOriginalMap[randomIndex];
-                
+            testData.questions.forEach((_, index) => {
                 const dot = document.createElement('div');
                 dot.className = 'dot';
-                dot.textContent = randomIndex + 1; // Random tartibdagi raqam
-                dot.dataset.originalIndex = originalIndex;
-                dot.dataset.randomIndex = randomIndex;
+                dot.textContent = index + 1;
+                dot.dataset.index = index;
                 
-                if (isQuestionLocked(originalIndex)) {
+                if (isQuestionLocked(index)) {
                     dot.classList.add('locked');
                     dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
                     dot.style.cursor = 'not-allowed';
@@ -2990,11 +2829,11 @@ p {
                 } else {
                     dot.addEventListener('click', () => {
                         if (testStarted) {
-                            const views = questionViews[originalIndex] || 0;
+                            const views = questionViews[index] || 0;
                             if (views >= CONFIG.maxViews) {
                                 showMessage("Bu savol qulfdanadi! Boshqa savolga o'ting.", "warning");
                             } else {
-                                currentQuestionIndex = randomIndex;
+                                currentQuestionIndex = index;
                                 renderQuestion();
                             }
                         }
@@ -3010,35 +2849,27 @@ p {
         function updateNavDots() {
             const dots = elements.navDots.querySelectorAll('.dot');
             
-            dots.forEach((dot) => {
-                const originalIndex = parseInt(dot.dataset.originalIndex);
-                const randomIndex = parseInt(dot.dataset.randomIndex);
-                
+            dots.forEach((dot, index) => {
                 dot.classList.remove('active', 'answered');
                 
-                if (randomIndex === currentQuestionIndex) {
+                if (index === currentQuestionIndex) {
                     dot.classList.add('active');
                 }
                 
-                if (userAnswers[originalIndex] !== undefined && userAnswers[originalIndex] !== '') {
+                if (userAnswers[index] !== undefined && userAnswers[index] !== '') {
                     dot.classList.add('answered');
                 }
             });
         }
         
         function renderQuestion() {
-            if (!shuffledQuestions || !shuffledQuestions[currentQuestionIndex]) return;
+            if (!testData || !testData.questions[currentQuestionIndex]) return;
             
-            // Random tartibdagi joriy savol
-            const randomQuestion = shuffledQuestions[currentQuestionIndex];
-            
-            // Original index ni topish
-            const originalIndex = shuffledToOriginalMap[currentQuestionIndex];
-            
-            const views = checkQuestionView(originalIndex);
+            const question = testData.questions[currentQuestionIndex];
+            const views = checkQuestionView(currentQuestionIndex);
             
             // Qulf holatini tekshirish
-            const isLocked = isQuestionLocked(originalIndex);
+            const isLocked = isQuestionLocked(currentQuestionIndex);
             
             // Agar savol qulflangan bo'lsa
             if (isLocked) {
@@ -3050,11 +2881,11 @@ p {
             
             // Header elementlarini yangilash
             elements.currentQ.textContent = currentQuestionIndex + 1;
-            elements.sectionNameDisplay.textContent = randomQuestion.section || "Umumiy";
-            elements.currentSectionName.textContent = randomQuestion.section || "Umumiy";
+            elements.sectionNameDisplay.textContent = question.section || "Umumiy";
+            elements.currentSectionName.textContent = question.section || "Umumiy";
             
             // Ballarni ko'rsatish
-            const points = randomQuestion.points || 1;
+            const points = question.points || 1;
             elements.currentQuestionPoints.textContent = `${points} ball`;
             
             // RASM YUKLASH
@@ -3062,9 +2893,8 @@ p {
             elements.questionImage.classList.add('hidden');
             elements.imageNotFound.classList.add('hidden');
             
-            // Rasm uchun original index ishlatamiz
-            if (randomQuestion.hasImage) {
-                const imgNum = originalIndex + 1;
+            if (question.hasImage) {
+                const imgNum = currentQuestionIndex + 1;
                 const imgPath = `${currentTestCode}/${imgNum}.png`;
                 
                 elements.questionImageContainer.classList.remove('hidden');
@@ -3083,32 +2913,28 @@ p {
             }
             
             // SAVOL MATNI
-            elements.questionText.innerHTML = randomQuestion.text || '';
+            elements.questionText.innerHTML = question.text || '';
             
             // VARIANTLAR YOKI OCHIQ JAVOB
             elements.optionsContainer.classList.add('hidden');
             elements.openAnswerContainer.classList.add('hidden');
             
-            if (randomQuestion.type === 'variant') {
+            if (question.type === 'variant') {
                 elements.optionsContainer.classList.remove('hidden');
                 elements.optionsContainer.innerHTML = '';
                 
-                // Random tartiblangan variantlarni olish
-                const randomOptions = shuffledOptionsMap[originalIndex] || randomQuestion.options || [];
-                
-                randomOptions.forEach((option, optionIndex) => {
+                const options = question.options || [];
+                options.forEach((option, index) => {
                     const optionDiv = document.createElement('div');
                     optionDiv.className = 'option';
                     
                     const input = document.createElement('input');
                     input.type = 'radio';
                     input.name = 'questionOption';
-                    input.value = optionIndex;
-                    input.id = `option_${optionIndex}`;
+                    input.value = index;
+                    input.id = `option_${index}`;
                     
-                    // User javobini tekshirish (random tartibda)
-                    if (userAnswers[originalIndex] !== undefined && 
-                        userAnswers[originalIndex] === optionIndex) {
+                    if (userAnswers[currentQuestionIndex] === index) {
                         input.checked = true;
                         optionDiv.classList.add('selected');
                     }
@@ -3118,23 +2944,21 @@ p {
                             opt.classList.remove('selected');
                         });
                         optionDiv.classList.add('selected');
-                        
-                        // User javobini random tartibdagi index bilan saqlash
-                        userAnswers[originalIndex] = optionIndex;
+                        userAnswers[currentQuestionIndex] = index;
                         updateNavDots();
                     });
                     
                     const label = document.createElement('label');
-                    label.htmlFor = `option_${optionIndex}`;
+                    label.htmlFor = `option_${index}`;
                     label.innerHTML = option;
                     
                     optionDiv.appendChild(input);
                     optionDiv.appendChild(label);
                     elements.optionsContainer.appendChild(optionDiv);
                 });
-            } else if (randomQuestion.type === 'open') {
+            } else if (question.type === 'open') {
                 elements.openAnswerContainer.classList.remove('hidden');
-                loadMathEditor(userAnswers[originalIndex]);
+                loadMathEditor(userAnswers[currentQuestionIndex]);
             }
             
             // NAVIGATION BUTTONLARI
@@ -3151,8 +2975,7 @@ p {
             // Oldingi tugma - qulflanmagan oldingi savol bormi?
             let hasPrevUnlocked = false;
             for (let i = currentQuestionIndex - 1; i >= 0; i--) {
-                const originalIndex = shuffledToOriginalMap[i];
-                if (!isQuestionLocked(originalIndex)) {
+                if (!isQuestionLocked(i)) {
                     hasPrevUnlocked = true;
                     break;
                 }
@@ -3160,9 +2983,8 @@ p {
             
             // Keyingi tugma - qulflanmagan keyingi savol bormi?
             let hasNextUnlocked = false;
-            for (let i = currentQuestionIndex + 1; i < shuffledQuestions.length; i++) {
-                const originalIndex = shuffledToOriginalMap[i];
-                if (!isQuestionLocked(originalIndex)) {
+            for (let i = currentQuestionIndex + 1; i < testData.questions.length; i++) {
+                if (!isQuestionLocked(i)) {
                     hasNextUnlocked = true;
                     break;
                 }
@@ -3202,33 +3024,20 @@ p {
             let correctCount = 0;
             let totalScore = 0;
             
-            // Original tartib asosida hisoblash
-            testData.questions.forEach((originalQuestion, originalIndex) => {
-                const userAnswer = userAnswers[originalIndex];
+            testData.questions.forEach((question, index) => {
+                const userAnswer = userAnswers[index];
                 
-                if (originalQuestion.type === 'variant') {
-                    // Random tartiblangan variantlar uchun to'g'ri javobni topish
-                    if (originalQuestion.correctIndex !== undefined && userAnswer !== undefined) {
-                        // Random tartiblangan variantlar
-                        const randomOptions = shuffledOptionsMap[originalIndex] || originalQuestion.options || [];
-                        
-                        // Random tartibdagi javobni original tartibdagi index ga o'girish
-                        const userSelectedOption = randomOptions[userAnswer];
-                        
-                        // Original tartibda qaysi index ekanligini topish
-                        const originalCorrectIndex = originalQuestion.options.indexOf(originalQuestion.options[originalQuestion.correctIndex]);
-                        const userAnswerInOriginal = originalQuestion.options.indexOf(userSelectedOption);
-                        
-                        if (userAnswerInOriginal === originalCorrectIndex) {
-                            correctCount++;
-                            totalScore += (originalQuestion.points || 1);
-                        }
+                if (question.type === 'variant') {
+                    // Agar correctIndex bo'lsa, uni tekshiramiz
+                    if (question.correctIndex !== undefined && userAnswer === question.correctIndex) {
+                        correctCount++;
+                        totalScore += (question.points || 1);
                     }
-                } else if (originalQuestion.type === 'open') {
+                } else if (question.type === 'open') {
                     // Ochiq javobda faqat javob berilganligini tekshiramiz
                     if (userAnswer && userAnswer.trim() !== '') {
                         correctCount++;
-                        totalScore += (originalQuestion.points || 1);
+                        totalScore += (question.points || 1);
                     }
                 }
             });
@@ -3347,7 +3156,7 @@ p {
             });
             
             elements.nextBtn.addEventListener('click', () => {
-                if (currentQuestionIndex < shuffledQuestions.length - 1) {
+                if (currentQuestionIndex < testData.questions.length - 1) {
                     const nextIndex = navigateToNextUnlockedQuestion('next');
                     if (nextIndex !== currentQuestionIndex) {
                         currentQuestionIndex = nextIndex;
