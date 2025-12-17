@@ -2124,6 +2124,17 @@
             }
             
             try {
+                // LocalStorage'dan tekshirish (birinchidan)
+                const localStorageKey = `test_attempt_${currentTestCode}_${currentStudent.id}`;
+                const storedAttempt = localStorage.getItem(localStorageKey);
+                
+                if (storedAttempt) {
+                    previousAttempt = JSON.parse(storedAttempt);
+                    console.log('LocalStorage dan oldingi urinish topildi:', previousAttempt);
+                    return previousAttempt;
+                }
+                
+                // Firebase dan tekshirish
                 if (CONFIG.useFirebase && firebaseAvailable && db) {
                     const attemptsRef = db.collection('test_results')
                         .where('studentId', '==', currentStudent.id)
@@ -2138,17 +2149,13 @@
                             id: doc.id,
                             ...doc.data()
                         };
+                        
+                        // LocalStorage ga saqlash keyingi tekshirishlar uchun
+                        localStorage.setItem(localStorageKey, JSON.stringify(previousAttempt));
+                        
+                        console.log('Firebase dan oldingi urinish topildi:', previousAttempt);
                         return previousAttempt;
                     }
-                }
-                
-                // Agar Firebase bo'lmasa, localStorage dan tekshirish
-                const localStorageKey = `test_attempt_${currentTestCode}_${currentStudent.id}`;
-                const storedAttempt = localStorage.getItem(localStorageKey);
-                
-                if (storedAttempt) {
-                    previousAttempt = JSON.parse(storedAttempt);
-                    return previousAttempt;
                 }
                 
                 return null;
@@ -2337,7 +2344,7 @@
                 
                 return true;
             } catch (error) {
-                console.error('Full screen ga o\'tishda xato:', error);
+                console.error('Full screen ga o'tishda xato:', error);
                 cancelTest("Full screen rejimiga o'tish muvaffaqiyatsiz. Testni davom ettirish mumkin emas");
                 return false;
             }
@@ -2526,8 +2533,8 @@
         
         function createRandomOrderForStudent(studentId, testCode, questions) {
             try {
-                if (!questions || !Array.isArray(questions)) {
-                    console.error('Savollar array emas:', questions);
+                if (!questions || !Array.isArray(questions) || questions.length === 0) {
+                    console.error('Savollar array emas yoki bo\'sh:', questions);
                     return {
                         shuffledQuestions: [],
                         originalToShuffled: {},
@@ -2538,27 +2545,23 @@
                 
                 const seed = generateSeed(studentId, testCode);
                 
-                const shuffledQuestions = seededShuffle(questions, seed);
+                // Savollar nusxasini olish
+                const questionsCopy = questions.map((q, idx) => ({...q, originalIndex: idx}));
+                
+                // Random tartibda saralash
+                const shuffledQuestions = seededShuffle(questionsCopy, seed);
                 
                 const originalToShuffled = {};
                 const shuffledToOriginal = {};
                 const shuffledOptions = {};
                 
-                questions.forEach((question, originalIndex) => {
-                    const shuffledIndex = shuffledQuestions.findIndex(q => {
-                        return q.text === question.text && 
-                               q.type === question.type &&
-                               q.points === question.points;
-                    });
+                // Mapping'larni to'g'ri to'ldirish
+                shuffledQuestions.forEach((question, shuffledIndex) => {
+                    const originalIndex = question.originalIndex;
+                    originalToShuffled[originalIndex] = shuffledIndex;
+                    shuffledToOriginal[shuffledIndex] = originalIndex;
                     
-                    if (shuffledIndex !== -1) {
-                        originalToShuffled[originalIndex] = shuffledIndex;
-                        shuffledToOriginal[shuffledIndex] = originalIndex;
-                    } else {
-                        originalToShuffled[originalIndex] = originalIndex;
-                        shuffledToOriginal[originalIndex] = originalIndex;
-                    }
-                    
+                    // Variantli savollar uchun random variantlar
                     if (question.type === 'variant' && question.options && 
                         Array.isArray(question.options) && CONFIG.enableRandomOptions) {
                         const optionsSeed = generateSeed(`${studentId}_${testCode}_${originalIndex}`);
@@ -2568,18 +2571,33 @@
                     }
                 });
                 
+                console.log('Random tartib yaratildi:', {
+                    totalQuestions: questions.length,
+                    originalToShuffled,
+                    shuffledToOriginal
+                });
+                
                 return {
-                    shuffledQuestions: shuffledQuestions,
+                    shuffledQuestions: shuffledQuestions.map(q => {
+                        const {originalIndex, ...rest} = q;
+                        return rest;
+                    }),
                     originalToShuffled: originalToShuffled,
                     shuffledToOriginal: shuffledToOriginal,
                     shuffledOptions: shuffledOptions
                 };
             } catch (error) {
                 console.error('Random tartib yaratishda xato:', error);
+                // Xato yuz berganda oddiy tartib qaytarish
+                const simpleMap = {};
+                questions.forEach((_, i) => {
+                    simpleMap[i] = i;
+                });
+                
                 return {
                     shuffledQuestions: [...questions],
-                    originalToShuffled: questions.reduce((acc, _, i) => { acc[i] = i; return acc; }, {}),
-                    shuffledToOriginal: questions.reduce((acc, _, i) => { acc[i] = i; return acc; }, {}),
+                    originalToShuffled: simpleMap,
+                    shuffledToOriginal: simpleMap,
                     shuffledOptions: {}
                 };
             }
@@ -2770,7 +2788,7 @@
                     }
                 }
                 
-                elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
+                elements.studentSelect.innerHTML = '<option value="">O'quvchini tanlang</option>';
                 if (students.length > 0) {
                     students.forEach(student => {
                         const option = document.createElement('option');
@@ -2801,7 +2819,7 @@
                         fullName: student.fullName || student.name || `O'quvchi ${index + 1}`
                     }));
                     
-                    elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
+                    elements.studentSelect.innerHTML = '<option value="">O'quvchini tanlang</option>';
                     students.forEach(student => {
                         const option = document.createElement('option');
                         option.value = student.id;
@@ -2846,6 +2864,77 @@
                     document.body.removeChild(alertDiv);
                 }
             }, 3000);
+        }
+        
+        // ==================== YANGI FUNKSIYA: TESTGA KIRISHNI BLOKLASH ====================
+        function blockTestAccess() {
+            if (CONFIG.singleAttempt && previousAttempt) {
+                // Agar testni oldin ishlagan bo'lsa, sahifani bloklash
+                document.body.innerHTML = `
+                    <div style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 100000;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    ">
+                        <div style="
+                            background: white;
+                            padding: 30px;
+                            border-radius: 12px;
+                            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+                            text-align: center;
+                            max-width: 500px;
+                            width: 90%;
+                        ">
+                            <div style="font-size: 60px; color: #dc2626; margin-bottom: 20px;">🚫</div>
+                            <h1 style="color: #dc2626; margin-bottom: 15px;">Testga Kirish Bloklangan</h1>
+                            <p style="color: #4b5563; margin-bottom: 20px; line-height: 1.6;">
+                                Hurmatli <strong>${currentStudent.fullName}</strong>,<br>
+                                Siz bu testni <strong>${new Date(previousAttempt.completedAt).toLocaleDateString('uz-UZ')}</strong> 
+                                sanaida ishlagansiz.
+                            </p>
+                            <div style="
+                                background: #fef3c7;
+                                border: 2px solid #f59e0b;
+                                border-radius: 8px;
+                                padding: 15px;
+                                margin: 20px 0;
+                                text-align: left;
+                            ">
+                                <h3 style="color: #b45309; margin-bottom: 10px;">📊 Oldingi Natijangiz:</h3>
+                                <p><strong>Ball:</strong> ${previousAttempt.score.toFixed(1)} / ${previousAttempt.totalScore}</p>
+                                <p><strong>To'g'ri javoblar:</strong> ${previousAttempt.correctAnswers}</p>
+                                <p><strong>Vaqt:</strong> ${Math.floor(previousAttempt.timeSpent / 60)}:${(previousAttempt.timeSpent % 60).toString().padStart(2, '0')}</p>
+                            </div>
+                            <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                                Har bir o'quvchi testni faqat bir marta ishlash huquqiga ega.
+                            </p>
+                            <button onclick="window.location.href = window.location.pathname" style="
+                                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                                color: white;
+                                border: none;
+                                padding: 12px 24px;
+                                border-radius: 8px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                margin-top: 20px;
+                                width: 100%;
+                            ">
+                                🏠 Bosh Sahifaga Qaytish
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return true;
+            }
+            return false;
         }
         
         // ==================== CHEKSIZ BANNERLAR ====================
@@ -2967,16 +3056,10 @@
         // ==================== TEST BOSHLASH (YANGILANGAN) ====================
         async function startTest() {
             try {
-                // Oldin urinib ko'rganligini tekshirish
+                // Oldin urinib ko'rganligini tekshirish va to'xtatish
                 if (CONFIG.singleAttempt && previousAttempt) {
-                    const confirmContinue = confirm(
-                        "Siz bu testni oldin ishlagansiz. Yana urinib ko'rmoqchimisiz?\n\n" +
-                        "Eslatma: Yangi urinish oldingi natijangizni o'chiradi."
-                    );
-                    
-                    if (!confirmContinue) {
-                        return;
-                    }
+                    alert("❌ Siz bu testni oldin ishlagansiz!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.\n\nOldingi natijangizni ko'rish uchun 'Oldingi Natijani Ko'rish' tugmasini bosing.");
+                    return;
                 }
                 
                 if (!testData || !testData.questions) {
@@ -3160,26 +3243,29 @@
             }
             
             const randomQuestion = shuffledQuestions[currentQuestionIndex];
-            const originalIndex = shuffledToOriginalMap[currentQuestionIndex] || currentQuestionIndex;
+            // TASHQI O'ZGARUVCHI: originalIndex ni to'g'ri olish
+            const originalIndex = shuffledToOriginalMap[currentQuestionIndex] !== undefined ? 
+                                shuffledToOriginalMap[currentQuestionIndex] : currentQuestionIndex;
             
-            // Foydalanuvchi harakatini yozish
-            logUserAction('question_viewed', {
-                questionIndex: originalIndex,
-                currentViewCount: questionViews[originalIndex] || 0
-            });
+            console.log(`Savol: ${currentQuestionIndex + 1}, Original: ${originalIndex + 1}, Views: ${questionViews[originalIndex] || 0}`);
             
-            questionViews[originalIndex] = (questionViews[originalIndex] || 0) + 1;
-            const views = questionViews[originalIndex];
-            
-            if (views >= CONFIG.maxViews) {
-                showLockedQuestionMessage();
-                return;
+            // Ko'rishlar sonini yangilash - faqat agar qulfdanmagan bo'lsa
+            const currentViews = questionViews[originalIndex] || 0;
+            if (currentViews < CONFIG.maxViews) {
+                questionViews[originalIndex] = currentViews + 1;
+                
+                // Foydalanuvchi harakatini yozish
+                logUserAction('question_viewed', {
+                    questionIndex: originalIndex,
+                    currentViewCount: questionViews[originalIndex]
+                });
             }
             
             // Savol raqami uchun belgilarni yangilash
             elements.currentQ.textContent = currentQuestionIndex + 1;
             elements.currentQ.classList.remove('viewed-once', 'viewed-twice', 'viewed-thrice');
             
+            const views = questionViews[originalIndex] || 0;
             if (views >= 3) {
                 elements.currentQ.classList.add('viewed-thrice');
             } else if (views === 2) {
@@ -3799,9 +3885,34 @@
             const urlParams = new URLSearchParams(window.location.search);
             const urlCode = urlParams.get('code');
             
+            // Agar URL da kod bo'lsa, testni yuklash
             if (urlCode) {
                 elements.testCodeInput.value = urlCode;
-                await handleTestCodeLoad();
+                const loaded = await loadTestData(urlCode);
+                if (loaded) {
+                    // Testni yuklagandan so'ng, sinflarni yuklash
+                    await loadClassesFromFirestore();
+                    
+                    // Agar URL da sinf va o'quvchi parametrlari bo'lsa, ularni tekshirish
+                    const urlClass = urlParams.get('class');
+                    const urlStudent = urlParams.get('student');
+                    
+                    if (urlClass && urlStudent) {
+                        // Sinf va o'quvchini tekshirish
+                        currentClass = urlClass;
+                        currentStudent = { id: urlStudent, fullName: "URL orqali kiritilgan" };
+                        
+                        // Oldingi urinishni tekshirish
+                        previousAttempt = await checkPreviousAttempt();
+                        
+                        // Agar oldin urinib ko'rgan bo'lsa, sahifani bloklash
+                        if (blockTestAccess()) {
+                            return;
+                        }
+                    }
+                    
+                    showScreen('classSelection');
+                }
             } else {
                 showScreen('codeInput');
             }
@@ -3836,7 +3947,7 @@
                 
                 currentStudent = students.find(s => s.id == studentId);
                 if (!currentStudent) {
-                    showMessage('O\'quvchi topilmadi', 'error');
+                    showMessage('O'quvchi topilmadi', 'error');
                     return;
                 }
                 
@@ -3891,9 +4002,31 @@
                         }
                         
                         elements.viewPreviousAttemptBtn.classList.remove('hidden');
+                        
+                        // Testni boshlash tugmasini o'chirish yoki disable qilish
+                        elements.startTestBtn.disabled = true;
+                        elements.startTestBtn.textContent = "🚫 Siz bu testni oldin ishlagansiz";
+                        elements.startTestBtn.style.background = "linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)";
+                        elements.startTestBtn.style.cursor = "not-allowed";
+                        elements.startTestBtn.onclick = null;
+                        
+                        // O'quvchi ma'lumotlarini qizil rangda ko'rsatish
+                        elements.studentName.style.color = "var(--danger)";
+                        document.getElementById('selectedStudentInfo').style.borderLeftColor = "var(--danger)";
                     } else {
                         elements.alreadyAttemptedWarning.classList.add('hidden');
                         elements.viewPreviousAttemptBtn.classList.add('hidden');
+                        
+                        // Testni boshlash tugmasini normal holatga qaytarish
+                        elements.startTestBtn.disabled = false;
+                        elements.startTestBtn.textContent = "🚀 Testni Boshlash";
+                        elements.startTestBtn.style.background = "";
+                        elements.startTestBtn.style.cursor = "pointer";
+                        elements.startTestBtn.onclick = startTest;
+                        
+                        // O'quvchi ma'lumotlarini normal rangga qaytarish
+                        elements.studentName.style.color = "";
+                        document.getElementById('selectedStudentInfo').style.borderLeftColor = "var(--brand)";
                     }
                 }
                 
