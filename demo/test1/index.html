@@ -616,7 +616,7 @@ p {
 }
 
 .timer {
-    display: none; /* Savol oynasidagi vaqtni yashiramiz */
+    display: none;
 }
 
 /* ========== 10. YORQIN VARIANTLAR ========== */
@@ -1056,6 +1056,30 @@ p {
     font-size: 10px;
     background: white;
     color: var(--danger);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Random tartib uchun dot */
+.dot.random {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%) !important;
+    color: white !important;
+    border-color: #8b5cf6 !important;
+}
+
+.dot.random::after {
+    content: "🎲";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    font-size: 10px;
+    background: white;
+    color: #8b5cf6;
     width: 18px;
     height: 18px;
     border-radius: 50%;
@@ -1548,7 +1572,7 @@ p {
         <!-- Kod kiritish -->
         <div id="codeInputCard" class="card hidden">
             <h1>📝 Test Tizimi</h1>
-            <p style="text-align: center; margin-bottom: 25px;">Professional matematik test tizimi</p>
+            <p style="text-align: center; margin-bottom: 25px;">Professional matematik test tizimi (Random tartib)</p>
             
             <div class="input-group">
                 <label for="testCodeInput">Test kodini kiriting</label>
@@ -1770,6 +1794,10 @@ p {
             penaltyPerViolation: 5, // Har bir qoidabuzarlik uchun jarima
             enableSecurity: true, // Xavfsizlik rejimi yoqilgan
             allowNavigationToLocked: false, // Qulflangan savollarga o'tishga ruxsat berish
+            enableRandomOrder: true, // Random tartibni yoqish
+            enableRandomOptions: true, // Variantlarni random tartiblash
+            useFirebase: true, // Firebase dan foydalanish
+            fallbackToJSON: true // Agar Firebaseda xatolik bo'lsa JSON ga o'tish
         };
         
         // ==================== FIREBASE KONFIGURATSIYA ====================
@@ -1802,6 +1830,13 @@ p {
         let isFullScreen = false;
         let securityEnabled = false;
         let db = null;
+        let firebaseAvailable = false;
+        
+        // ==================== RANDOM TARTIB ====================
+        let shuffledQuestions = []; // Random tartiblangan savollar
+        let originalToShuffledMap = {}; // Original index -> Random index
+        let shuffledToOriginalMap = {}; // Random index -> Original index
+        let shuffledOptionsMap = {}; // Har bir savol uchun random tartiblangan variantlar
         
         // ==================== DOM ELEMENTLARI ====================
         const elements = {
@@ -1882,119 +1917,329 @@ p {
             bottomBanner: document.getElementById('bottomBanner')
         };
         
-        // ==================== FIREBASE FUNKSIYALARI ====================
+        // ==================== RANDOM FUNCTIONS (TO'G'IRLANGAN) ====================
+        
+        // Seeded random generator
+        function seededRandom(seed) {
+            if (typeof seed !== 'number') {
+                seed = parseInt(seed) || 12345;
+            }
+            let x = Math.sin(seed) * 10000;
+            return x - Math.floor(x);
+        }
+        
+        // Seeded shuffle (Fisher-Yates algoritmi)
+        function seededShuffle(array, seed) {
+            const result = [...array];
+            let randomFunc;
+            
+            if (typeof seed === 'number') {
+                randomFunc = () => seededRandom(seed++);
+            } else {
+                randomFunc = Math.random;
+            }
+            
+            for (let i = result.length - 1; i > 0; i--) {
+                const j = Math.floor(randomFunc() * (i + 1));
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+            
+            return result;
+        }
+        
+        // Random seed yaratish
+        function generateSeed(studentId, testCode) {
+            if (!studentId) studentId = 'anonymous';
+            if (!testCode) testCode = 'test';
+            
+            let hash = 0;
+            const str = `${studentId}_${testCode}`;
+            
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            
+            return Math.abs(hash);
+        }
+        
+        // Har bir o'quvchi uchun random tartibni yaratish
+        function createRandomOrderForStudent(studentId, testCode, questions) {
+            try {
+                if (!questions || !Array.isArray(questions)) {
+                    console.error('Savollar array emas:', questions);
+                    return {
+                        shuffledQuestions: [],
+                        originalToShuffled: {},
+                        shuffledToOriginal: {},
+                        shuffledOptions: {}
+                    };
+                }
+                
+                const seed = generateSeed(studentId, testCode);
+                
+                // Savollarni random tartiblash
+                const shuffledQuestions = seededShuffle(questions, seed);
+                
+                // Mapping yaratish
+                const originalToShuffled = {};
+                const shuffledToOriginal = {};
+                const shuffledOptions = {};
+                
+                questions.forEach((question, originalIndex) => {
+                    const shuffledIndex = shuffledQuestions.findIndex(q => {
+                        // Savolni solishtirish
+                        return q.text === question.text && 
+                               q.type === question.type &&
+                               q.points === question.points;
+                    });
+                    
+                    if (shuffledIndex !== -1) {
+                        originalToShuffled[originalIndex] = shuffledIndex;
+                        shuffledToOriginal[shuffledIndex] = originalIndex;
+                    } else {
+                        // Agar topilmasa, index o'zi
+                        originalToShuffled[originalIndex] = originalIndex;
+                        shuffledToOriginal[originalIndex] = originalIndex;
+                    }
+                    
+                    // Variantlarni random tartiblash
+                    if (question.type === 'variant' && question.options && 
+                        Array.isArray(question.options) && CONFIG.enableRandomOptions) {
+                        const optionsSeed = generateSeed(`${studentId}_${testCode}_${originalIndex}`);
+                        shuffledOptions[originalIndex] = seededShuffle(question.options, optionsSeed);
+                    } else if (question.type === 'variant' && question.options) {
+                        // Random yoqilgan bo'lsa oddiy tartib
+                        shuffledOptions[originalIndex] = [...question.options];
+                    }
+                });
+                
+                return {
+                    shuffledQuestions: shuffledQuestions,
+                    originalToShuffled: originalToShuffled,
+                    shuffledToOriginal: shuffledToOriginal,
+                    shuffledOptions: shuffledOptions
+                };
+            } catch (error) {
+                console.error('Random tartib yaratishda xato:', error);
+                // Xatolik bo'lsa oddiy tartib qaytarish
+                return {
+                    shuffledQuestions: [...questions],
+                    originalToShuffled: questions.reduce((acc, _, i) => { acc[i] = i; return acc; }, {}),
+                    shuffledToOriginal: questions.reduce((acc, _, i) => { acc[i] = i; return acc; }, {}),
+                    shuffledOptions: {}
+                };
+            }
+        }
+        
+        // ==================== FIREBASE FUNKSIYALARI (TO'G'IRLANGAN) ====================
         async function initializeFirebase() {
             try {
+                if (!CONFIG.useFirebase) {
+                    console.log("Firebase o'chirilgan");
+                    firebaseAvailable = false;
+                    return false;
+                }
+                
                 if (!firebase.apps.length) {
                     firebase.initializeApp(firebaseConfig);
                 }
                 db = firebase.firestore();
+                
+                // Firestore sozlamalarini o'rnatish
+                db.settings({
+                    cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
+                });
+                
                 console.log("Firestore muvaffaqiyatli ishga tushdi");
+                firebaseAvailable = true;
                 return true;
             } catch (error) {
                 console.error("Firestore ishga tushirishda xato:", error);
+                firebaseAvailable = false;
+                
+                if (CONFIG.fallbackToJSON) {
+                    console.log("Firebaseda xatolik. JSON fayllardan foydalanamiz.");
+                    return true;
+                }
+                
                 return false;
             }
         }
         
         async function loadTestFromFirestore(code) {
             try {
-                const testDoc = await db.collection('testlar').doc(code).get();
-                if (!testDoc.exists) {
-                    throw new Error(`"${code}" testi topilmadi`);
+                if (!firebaseAvailable || !db) {
+                    console.log("Firebase mavjud emas, JSON ga o'tamiz");
+                    return null;
                 }
-                return testDoc.data();
+                
+                console.log(`Firestore'dan test yuklanmoqda: ${code}`);
+                const testDoc = await db.collection('testlar').doc(code).get({
+                    source: 'server'
+                });
+                
+                if (!testDoc.exists) {
+                    console.log(`Firestore'da "${code}" testi topilmadi`);
+                    return null;
+                }
+                
+                const data = testDoc.data();
+                console.log('Firestore\'dan test yuklandi:', data);
+                return data;
             } catch (error) {
                 console.error('Firestore test yuklashda xato:', error);
+                
+                // Ruxsat xatosini tekshirish
+                if (error.code === 'permission-denied' || error.message.includes('permission')) {
+                    console.warn('Firestore ruxsati yo\'q. JSON fayllardan foydalanamiz.');
+                    showMessage("Firebase ruxsati yo'q. Mahalliy testlar yuklanmoqda...", "warning");
+                }
+                
                 return null;
             }
         }
         
         async function loadClassesFromFirestore() {
             try {
-                // 1-usul: davomat/sinf hujjatidan o'qish
-                const sinfDoc = await db.collection('davomat').doc('sinf').get();
+                if (!firebaseAvailable || !db) {
+                    console.log("Firebase mavjud emas, mahalliy sinflar yuklanadi");
+                    return await loadJSON('classes.json');
+                }
                 
-                if (sinfDoc.exists) {
-                    const data = sinfDoc.data();
-                    classes = data.classes || [];
-                    console.log('Sinf ma\'lumotlari Firestore\'dan yuklandi (davomat/sinf):', classes);
-                } else {
-                    // 2-usul: sinflar collectionidan o'qish
-                    const sinflarSnapshot = await db.collection('sinflar').get();
+                console.log("Firestore'dan sinflar yuklanmoqda...");
+                
+                // 1-usul: sinflar collection
+                const sinflarSnapshot = await db.collection('sinflar').get();
+                
+                if (!sinflarSnapshot.empty) {
                     classes = [];
-                    
                     sinflarSnapshot.forEach(doc => {
                         classes.push({
                             id: doc.id,
+                            name: doc.data().name || doc.id,
                             ...doc.data()
                         });
                     });
-                    
-                    console.log('Sinf ma\'lumotlari Firestore\'dan yuklandi (sinflar):', classes);
+                    console.log('Firestore\'dan sinflar yuklandi:', classes);
+                } else {
+                    // 2-usul: davomat/sinf
+                    const sinfDoc = await db.collection('davomat').doc('sinf').get();
+                    if (sinfDoc.exists) {
+                        classes = sinfDoc.data().classes || [];
+                        console.log('Firestore\'dan sinflar yuklandi (davomat/sinf):', classes);
+                    } else {
+                        console.warn('Firestore\'da sinf ma\'lumotlari topilmadi');
+                        classes = [];
+                    }
                 }
                 
+                // Sinf select ni to'ldirish
+                elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
                 if (classes.length > 0) {
-                    elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
                     classes.forEach(cls => {
                         const option = document.createElement('option');
-                        option.value = cls.id;
+                        option.value = cls.id || cls.name;
                         option.textContent = cls.name || cls.id;
                         elements.classSelect.appendChild(option);
                     });
                 } else {
-                    console.warn('Firestore\'da hech qanday sinf ma\'lumoti topilmadi!');
-                    showMessage("Sinf ma'lumotlari topilmadi. Iltimos, Firebase'ni tekshiring.", 'error');
+                    // Agar sinf topilmasa, mahalliy JSON dan yuklash
+                    const localClasses = await loadJSON('classes.json');
+                    if (localClasses) {
+                        classes = localClasses;
+                        localClasses.forEach(cls => {
+                            const option = document.createElement('option');
+                            option.value = cls.id;
+                            option.textContent = cls.name;
+                            elements.classSelect.appendChild(option);
+                        });
+                    }
                 }
                 
                 return classes;
             } catch (error) {
-                console.error('Sinf ma\'lumotlarini Firestore\'dan yuklashda xato:', error);
-                classes = [];
-                showMessage("Sinf ma'lumotlarini yuklashda xato. Internet aloqasini tekshiring.", 'error');
+                console.error('Sinf ma\'lumotlarini yuklashda xato:', error);
+                
+                // Mahalliy JSON dan yuklash
+                try {
+                    const localClasses = await loadJSON('classes.json');
+                    if (localClasses) {
+                        classes = localClasses;
+                        elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
+                        localClasses.forEach(cls => {
+                            const option = document.createElement('option');
+                            option.value = cls.id;
+                            option.textContent = cls.name;
+                            elements.classSelect.appendChild(option);
+                        });
+                        return classes;
+                    }
+                } catch (e) {
+                    console.error('Mahalliy sinf faylini yuklashda xato:', e);
+                }
+                
+                showMessage("Sinf ma'lumotlarini yuklashda xato. Admin bilan bog'laning.", "error");
                 return [];
             }
         }
         
         async function loadStudentsFromFirestore(className) {
             try {
-                // Sinf ID sini topish
+                console.log(`O'quvchilar yuklanmoqda: ${className}`);
+                
+                // Agar Firebase yo'q bo'lsa
+                if (!firebaseAvailable || !db) {
+                    return await loadStudentsFromJSON(className);
+                }
+                
+                // Sinfni topish
                 const classObj = classes.find(c => c.id === className || c.name === className);
                 if (!classObj) {
                     console.error('Sinf topilmadi:', className);
-                    showMessage('Tanlangan sinf topilmadi', 'error');
-                    return [];
+                    return await loadStudentsFromJSON(className);
                 }
                 
-                // 1-usul: Sinf hujjatidan o'quvchilarni olish
-                if (classObj.students && classObj.students.length > 0) {
+                // 1-usul: Sinf hujjatidan
+                if (classObj.students && Array.isArray(classObj.students)) {
                     students = classObj.students.map((student, index) => ({
                         id: student.id || `student_${index}`,
                         fullName: student.fullName || student.fullname || `O'quvchi ${index + 1}`
                     }));
-                } else {
-                    // 2-usul: alohida o'quvchilar collectionidan olish
-                    const studentsSnapshot = await db.collection('sinflar').doc(classObj.id)
-                        .collection('o_quvchilar').get();
-                    
-                    students = [];
-                    studentsSnapshot.forEach(doc => {
-                        students.push({
-                            id: doc.id,
-                            ...doc.data()
-                        });
-                    });
-                    
-                    // Agar hali ham o'quvchi topilmasa, test faylidan o'qishga urinish
-                    if (students.length === 0) {
-                        console.warn('Firestore\'da o\'quvchilar topilmadi, JSON faylidan yuklanmoqda...');
-                        students = await loadJSON(`${className}.json`);
-                        if (!students) students = [];
+                    console.log('Sinf hujjatidan o\'quvchilar yuklandi:', students);
+                } 
+                // 2-usul: alohida collection
+                else {
+                    try {
+                        const studentsSnapshot = await db.collection('sinflar')
+                            .doc(classObj.id)
+                            .collection('o_quvchilar')
+                            .get();
+                        
+                        if (!studentsSnapshot.empty) {
+                            students = [];
+                            studentsSnapshot.forEach(doc => {
+                                students.push({
+                                    id: doc.id,
+                                    fullName: doc.data().fullName || doc.data().name || `O'quvchi ${doc.id}`,
+                                    ...doc.data()
+                                });
+                            });
+                            console.log('O\'quvchilar collection\'dan yuklandi:', students);
+                        } else {
+                            // Agar collection bo'sh bo'lsa
+                            return await loadStudentsFromJSON(className);
+                        }
+                    } catch (collectionError) {
+                        console.warn('Collection dan yuklashda xato:', collectionError);
+                        return await loadStudentsFromJSON(className);
                     }
                 }
                 
+                // O'quvchilarni select ga joylash
+                elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
                 if (students.length > 0) {
-                    elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
                     students.forEach(student => {
                         const option = document.createElement('option');
                         option.value = student.id;
@@ -2002,16 +2247,46 @@ p {
                         elements.studentSelect.appendChild(option);
                     });
                 } else {
-                    console.warn('O\'quvchilar topilmadi!');
+                    console.warn('O\'quvchilar topilmadi');
                     showMessage('Bu sinfda o\'quvchilar mavjud emas', 'warning');
-                    students = [];
                 }
                 
                 return students;
             } catch (error) {
-                console.error('O\'quvchilarni Firestore\'dan yuklashda xato:', error);
-                students = [];
-                showMessage('O\'quvchilarni yuklashda xato', 'error');
+                console.error('O\'quvchilarni yuklashda xato:', error);
+                
+                // Mahalliy JSON dan yuklash
+                return await loadStudentsFromJSON(className);
+            }
+        }
+        
+        // JSON fayldan o'quvchilarni yuklash
+        async function loadStudentsFromJSON(className) {
+            try {
+                const fileName = `${className.toLowerCase().replace(/\s+/g, '_')}.json`;
+                const data = await loadJSON(fileName);
+                
+                if (data && Array.isArray(data)) {
+                    students = data.map((student, index) => ({
+                        id: student.id || `student_${index}`,
+                        fullName: student.fullName || student.name || `O'quvchi ${index + 1}`
+                    }));
+                    
+                    elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
+                    students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.id;
+                        option.textContent = student.fullName;
+                        elements.studentSelect.appendChild(option);
+                    });
+                    
+                    console.log(`JSON dan o'quvchilar yuklandi (${fileName}):`, students);
+                    return students;
+                }
+                
+                return [];
+            } catch (error) {
+                console.error(`JSON dan o'quvchilarni yuklashda xato (${className}):`, error);
                 return [];
             }
         }
@@ -2031,13 +2306,16 @@ p {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.2);
                 font-weight: 500;
                 min-width: 300px;
+                max-width: 90%;
                 text-align: center;
             `;
             alertDiv.textContent = message;
             document.body.appendChild(alertDiv);
             
             setTimeout(() => {
-                document.body.removeChild(alertDiv);
+                if (alertDiv.parentNode) {
+                    document.body.removeChild(alertDiv);
+                }
             }, 3000);
         }
         
@@ -2076,331 +2354,20 @@ p {
             elements.bottomBanner.innerHTML = `<div class="bottom-banner-wrapper">${bottomHTML}</div>`;
         }
         
-        // ==================== XAVFSIZLIK FUNKSIYALARI ====================
-        function enableSecurity() {
-            if (securityEnabled) return;
-            
-            elements.securityMonitor.classList.remove('hidden');
-            elements.monitorText.textContent = "Xavfsizlik rejimi faol";
-            
-            // Fullscreen ni yoqish
-            enableFullScreen();
-            
-            // Event listener'lar
-            window.addEventListener('blur', handleWindowBlur);
-            window.addEventListener('focus', handleWindowFocus);
-            document.addEventListener('fullscreenchange', handleFullScreenChange);
-            document.addEventListener('visibilitychange', handleVisibilityChange);
-            
-            // Clipboard block
-            document.addEventListener('copy', handleCopy);
-            document.addEventListener('paste', handlePaste);
-            document.addEventListener('cut', handleCut);
-            
-            // Context menu block
-            document.addEventListener('contextmenu', handleContextMenu);
-            
-            // Developer tools block
-            document.addEventListener('keydown', handleKeyDown);
-            
-            securityEnabled = true;
-            console.log("Xavfsizlik tizimlari faollashtirildi");
-        }
-        
-        function disableSecurity() {
-            elements.securityMonitor.classList.add('hidden');
-            
-            // Event listener'larni olib tashlash
-            window.removeEventListener('blur', handleWindowBlur);
-            window.removeEventListener('focus', handleWindowFocus);
-            document.removeEventListener('fullscreenchange', handleFullScreenChange);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            document.removeEventListener('copy', handleCopy);
-            document.removeEventListener('paste', handlePaste);
-            document.removeEventListener('cut', handleCut);
-            document.removeEventListener('contextmenu', handleContextMenu);
-            document.removeEventListener('keydown', handleKeyDown);
-            
-            // Fullscreen dan chiqish
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
-            
-            securityEnabled = false;
-            console.log("Xavfsizlik tizimlari o'chirildi");
-        }
-        
-        function enableFullScreen() {
-            const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            }
-            isFullScreen = true;
-        }
-        
-        function handleWindowBlur() {
-            if (testStarted) {
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Boshqa oynaga o'tildi!";
-                
-                if (violations >= 3) {
-                    cancelTest("3 marta boshqa oynaga o'tilgani uchun test bekor qilindi");
-                }
-            }
-        }
-        
-        function handleWindowFocus() {
-            // Hech narsa
-        }
-        
-        function handleFullScreenChange() {
-            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
-            isFullScreen = isFullscreen;
-            
-            if (testStarted && !isFullscreen) {
-                violations = 3;
-                elements.violationCount.textContent = violations;
-                cancelTest("To'liq ekran rejimidan chiqilgani uchun test bekor qilindi");
-            }
-        }
-        
-        function handleVisibilityChange() {
-            if (testStarted && document.hidden) {
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Boshqa tabga o'tildi!";
-                
-                if (violations >= 3) {
-                    cancelTest("3 marta boshqa tabga o'tilgani uchun test bekor qilindi");
-                }
-            }
-        }
-        
-        function handleCopy(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Nusxa ko'chirish bloklandi!";
-            }
-        }
-        
-        function handlePaste(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Qo'shish bloklandi!";
-            }
-        }
-        
-        function handleCut(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Kesish bloklandi!";
-            }
-        }
-        
-        function handleContextMenu(e) {
-            if (testStarted) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "O'ng tugma bloklandi!";
-            }
-        }
-        
-        function handleKeyDown(e) {
-            if (!testStarted) return;
-            
-            // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U bloklash
-            if (e.key === 'F12' || 
-                (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
-                (e.ctrlKey && e.key === 'u')) {
-                e.preventDefault();
-                violations++;
-                elements.violationCount.textContent = violations;
-                elements.monitorText.textContent = "Ruxsat etilmagan tugma!";
-                
-                if (violations >= 3) {
-                    cancelTest("3 marta ruxsat etilmagan tugma bosilgani uchun test bekor qilindi");
-                }
-            }
-        }
-        
-        function cancelTest(reason) {
-            clearInterval(timerInterval);
-            testStarted = false;
-            
-            disableSecurity();
-            elements.testHeader.classList.add('hidden');
-            
-            const modal = document.createElement('div');
-            modal.style.cssText = `
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0,0,0,0.95); z-index: 10000;
-                display: flex; align-items: center; justify-content: center;
-                color: white; text-align: center; padding: 20px;
-            `;
-            modal.innerHTML = `
-                <div style="background: rgba(220,53,69,0.9); padding: 40px; border-radius: 15px; max-width: 500px;">
-                    <h2 style="margin-bottom: 20px; color: white;">⚠️ TEST BEKOR QILINDI!</h2>
-                    <p style="margin-bottom: 20px; font-size: 18px;">${reason}</p>
-                    <p style="margin-bottom: 30px;"><strong>Qoidabuzarliklar: ${violations}/3</strong></p>
-                    <button onclick="window.location.reload()" 
-                            style="padding: 12px 30px; background: white; color: #dc3545;
-                                   border: none; border-radius: 8px; font-weight: 600;
-                                   cursor: pointer; font-size: 16px;">
-                        Qayta boshlash
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-        
-        // ==================== 3-MARTALIK KO'RISH FUNKSIYALARI ====================
-        function checkQuestionView(questionIndex) {
-            // Ko'rish sonini hisoblash
-            if (!questionViews[questionIndex]) {
-                questionViews[questionIndex] = 1;
-            } else {
-                questionViews[questionIndex]++;
-            }
-            
-            const views = questionViews[questionIndex];
-            const maxViews = CONFIG.maxViews;
-            
-            // Qulf holatini tekshirish
-            const isLocked = views >= maxViews;
-            
-            // O'zgartirish: 3 marta ko'rishi uchun ruxsat berish
-            // 1-marta: yashil rang
-            // 2-marta: sariq rang  
-            // 3-marta: qizil rang va qulf
-            updateQuestionStatus(questionIndex, views, isLocked);
-            
-            // OGOHLANTIRISHNI KO'RSATISH
-            if (views >= (maxViews - 1)) { // 2 yoki undan ko'p marta ko'rganida
-                elements.viewWarning.classList.remove('hidden');
-                elements.viewCount.textContent = views;
-            } else {
-                elements.viewWarning.classList.add('hidden');
-            }
-            
-            return views;
-        }
-        
-        function updateQuestionStatus(questionIndex, views, isLocked) {
-            const dots = elements.navDots.querySelectorAll('.dot');
-            const dot = dots[questionIndex];
-            const qNumber = document.getElementById('currentQ');
-            
-            if (!dot) return;
-            
-            // Eski klasslarni olib tashlash
-            dot.classList.remove('view-1', 'view-2', 'view-3', 'locked', 'active');
-            qNumber.classList.remove('view-1', 'view-2', 'view-3');
-            
-            // Ko'rish soniga qarab rang o'zgartirish
-            if (views === 1) {
-                dot.classList.add('view-1');
-                qNumber.classList.add('view-1');
-            } else if (views === 2) {
-                dot.classList.add('view-2');
-                qNumber.classList.add('view-2');
-            } else if (views >= 3) {
-                dot.classList.add('view-3');
-                qNumber.classList.add('view-3');
-                
-                if (isLocked) {
-                    dot.classList.add('locked');
-                    qNumber.classList.add('locked');
-                }
-            }
-            
-            // Joriy savolni active qilish
-            if (questionIndex === currentQuestionIndex) {
-                dot.classList.add('active');
-            }
-        }
-        
-        function isQuestionLocked(questionIndex) {
-            return questionViews[questionIndex] >= CONFIG.maxViews;
-        }
-        
-        function showLockedQuestionMessage() {
-            elements.questionText.innerHTML = `
-                <div style="text-align: center; padding: 40px;">
-                    <div style="font-size: 48px; color: var(--danger); margin-bottom: 20px;">🔒</div>
-                    <h2 style="color: var(--danger); margin-bottom: 15px;">Bu savol qulfdanadi</h2>
-                    <p style="color: var(--text-light); margin-bottom: 20px;">
-                        Bu savolni maksimal (${CONFIG.maxViews}) marta ko'rganingiz uchun qulfdanadi.
-                    </p>
-                    <p style="color: var(--warning); font-weight: 500;">
-                        Iltimos, boshqa savolga o'ting.
-                    </p>
-                </div>
-            `;
-            
-            // Variantlar va ochiq javoblarni yashirish
-            elements.optionsContainer.classList.add('hidden');
-            elements.openAnswerContainer.classList.add('hidden');
-            elements.questionImageContainer.classList.add('hidden');
-            
-            // Tugmalarni o'chirish
-            document.querySelectorAll('.option').forEach(option => {
-                option.style.pointerEvents = 'none';
-                option.style.opacity = '0.5';
-            });
-            
-            // Matematik editorni o'chirish
-            if (mathEditor) {
-                mathEditor.contentEditable = false;
-                mathEditor.style.pointerEvents = 'none';
-                mathEditor.style.opacity = '0.5';
-            }
-        }
-        
-        function navigateToNextUnlockedQuestion(direction) {
-            let newIndex = currentQuestionIndex;
-            const increment = direction === 'next' ? 1 : -1;
-            const totalQuestions = testData.questions.length;
-            
-            // Barcha savollarni tekshirish
-            for (let i = 0; i < totalQuestions; i++) {
-                newIndex += increment;
-                
-                // Chegaralarni aylanma qilish
-                if (newIndex < 0) newIndex = totalQuestions - 1;
-                if (newIndex >= totalQuestions) newIndex = 0;
-                
-                // Qulflanmagan savolni qidirish
-                if (!isQuestionLocked(newIndex)) {
-                    return newIndex;
-                }
-                
-                // Agar barcha savollar qulflangan bo'lsa
-                if (i === totalQuestions - 1) {
-                    return currentQuestionIndex; // Hech qanday ochiq savol topilmadi
-                }
-            }
-            
-            return currentQuestionIndex;
-        }
-        
         // ==================== ASOSIY FUNKSIYALAR ====================
         async function loadJSON(file) {
             try {
+                console.log(`JSON fayl yuklanmoqda: ${file}`);
                 const response = await fetch(file);
-                if (!response.ok) throw new Error(`${file} yuklanmadi`);
-                return await response.json();
+                if (!response.ok) {
+                    console.warn(`${file} yuklanmadi: ${response.status}`);
+                    return null;
+                }
+                const data = await response.json();
+                console.log(`${file} yuklandi`);
+                return data;
             } catch (error) {
-                console.error('Xato:', error);
+                console.error(`JSON yuklashda xato (${file}):`, error);
                 return null;
             }
         }
@@ -2408,104 +2375,153 @@ p {
         async function loadTestData(code) {
             try {
                 showScreen('loading');
+                currentTestCode = code;
                 
-                // Avval Firestore'dan yuklashga urinish
-                testData = await loadTestFromFirestore(code);
-                
-                // Agar Firestore'da topilmasa, JSON fayldan yuklash
-                if (!testData) {
-                    testData = await loadJSON(`${code}.json`);
-                    if (!testData) throw new Error(`"${code}" testi topilmadi`);
+                // 1. Firestore'dan yuklashga urinish
+                if (CONFIG.useFirebase && firebaseAvailable) {
+                    testData = await loadTestFromFirestore(code);
                 }
                 
-                console.log('Test yuklandi:', testData);
+                // 2. Agar Firestore'dan topilmasa yoki xatolik bo'lsa, JSON fayldan
+                if (!testData && CONFIG.fallbackToJSON) {
+                    console.log(`Firestore'dan topilmadi, JSON yuklanmoqda: ${code}.json`);
+                    testData = await loadJSON(`${code}.json`);
+                }
+                
+                // 3. Hech qanday usul bilan topilmasa
+                if (!testData) {
+                    throw new Error(`"${code}" testi topilmadi`);
+                }
+                
+                console.log('Test muvaffaqiyatli yuklandi:', testData);
                 return true;
             } catch (error) {
                 console.error('Test yuklashda xato:', error);
+                showMessage(error.message || "Test yuklashda xato", 'error');
+                showScreen('codeInput');
                 return false;
             }
         }
         
-        async function loadClasses() {
-            // Firestore'dan sinflarni yuklash
-            classes = await loadClassesFromFirestore();
-            return classes;
-        }
-        
-        async function loadStudents(className) {
-            // Firestore'dan o'quvchilarni yuklash
-            students = await loadStudentsFromFirestore(className);
-            return students;
-        }
-        
         function showScreen(screenName) {
-            elements.loadingScreen.classList.add('hidden');
-            elements.codeInputCard.classList.add('hidden');
-            elements.classSelectionCard.classList.add('hidden');
-            elements.studentSelectionCard.classList.add('hidden');
-            elements.introCard.classList.add('hidden');
-            elements.questionCard.classList.add('hidden');
-            elements.resultsCard.classList.add('hidden');
+            // Barcha screenlarni yashirish
+            const screens = [
+                'loadingScreen', 'codeInputCard', 'classSelectionCard', 
+                'studentSelectionCard', 'introCard', 'questionCard', 'resultsCard'
+            ];
             
+            screens.forEach(screen => {
+                if (elements[screen]) {
+                    elements[screen].classList.add('hidden');
+                }
+            });
+            
+            // Kerakli screenni ko'rsatish
             switch(screenName) {
+                case 'loading':
+                    if (elements.loadingScreen) elements.loadingScreen.classList.remove('hidden');
+                    break;
                 case 'codeInput':
-                    elements.codeInputCard.classList.remove('hidden');
+                    if (elements.codeInputCard) elements.codeInputCard.classList.remove('hidden');
                     break;
                 case 'classSelection':
-                    elements.classSelectionCard.classList.remove('hidden');
+                    if (elements.classSelectionCard) elements.classSelectionCard.classList.remove('hidden');
                     break;
                 case 'studentSelection':
-                    elements.studentSelectionCard.classList.remove('hidden');
+                    if (elements.studentSelectionCard) elements.studentSelectionCard.classList.remove('hidden');
                     break;
                 case 'intro':
-                    elements.introCard.classList.remove('hidden');
+                    if (elements.introCard) elements.introCard.classList.remove('hidden');
                     break;
                 case 'question':
-                    elements.questionCard.classList.remove('hidden');
+                    if (elements.questionCard) elements.questionCard.classList.remove('hidden');
                     break;
                 case 'results':
-                    elements.resultsCard.classList.remove('hidden');
-                    break;
-                case 'loading':
-                    elements.loadingScreen.classList.remove('hidden');
+                    if (elements.resultsCard) elements.resultsCard.classList.remove('hidden');
                     break;
             }
         }
         
         // ==================== TEST BOSHLASH ====================
         function startTest() {
-            testStarted = true;
-            userAnswers = new Array(testData.questions.length);
-            timeRemaining = (testData.durationMinutes || 30) * 60;
-            timeSpent = 0;
-            violations = 0;
-            questionViews = {};
-            
-            // Header elementlarini yangilash
-            elements.headerStudentName.textContent = currentStudent.fullName;
-            elements.headerStudentClass.textContent = currentClass;
-            elements.violationCount.textContent = '0';
-            
-            // Xavfsizlikni yoqish
-            if (CONFIG.enableSecurity) {
-                enableSecurity();
+            try {
+                if (!testData || !testData.questions) {
+                    throw new Error("Test ma'lumotlari yuklanmagan");
+                }
+                
+                if (!currentStudent) {
+                    throw new Error("O'quvchi tanlanmagan");
+                }
+                
+                testStarted = true;
+                
+                // Random tartib yaratish
+                if (CONFIG.enableRandomOrder) {
+                    const randomOrder = createRandomOrderForStudent(
+                        currentStudent.id,
+                        currentTestCode,
+                        testData.questions
+                    );
+                    
+                    shuffledQuestions = randomOrder.shuffledQuestions;
+                    originalToShuffledMap = randomOrder.originalToShuffled;
+                    shuffledToOriginalMap = randomOrder.shuffledToOriginal;
+                    shuffledOptionsMap = randomOrder.shuffledOptions;
+                    
+                    console.log('Random tartib yaratildi:', {
+                        student: currentStudent.fullName,
+                        questionsCount: shuffledQuestions.length
+                    });
+                } else {
+                    // Oddiy tartib
+                    shuffledQuestions = [...testData.questions];
+                    testData.questions.forEach((_, index) => {
+                        originalToShuffledMap[index] = index;
+                        shuffledToOriginalMap[index] = index;
+                    });
+                }
+                
+                // User answers array
+                userAnswers = new Array(testData.questions.length).fill(null);
+                
+                // Vaqt sozlash
+                timeRemaining = (testData.durationMinutes || 30) * 60;
+                timeSpent = 0;
+                violations = 0;
+                questionViews = {};
+                
+                // Header ma'lumotlari
+                elements.headerStudentName.textContent = currentStudent.fullName;
+                elements.headerStudentClass.textContent = currentClass;
+                elements.violationCount.textContent = '0';
+                
+                // Xavfsizlikni yoqish
+                if (CONFIG.enableSecurity) {
+                    enableSecurity();
+                }
+                
+                // Header va timer
+                elements.testHeader.classList.remove('hidden');
+                startTimer();
+                
+                // Navigation dots
+                buildNavDots();
+                
+                // Birinchi savol
+                currentQuestionIndex = 0;
+                renderQuestion();
+                showScreen('question');
+                
+            } catch (error) {
+                console.error('Testni boshlashda xato:', error);
+                showMessage(error.message || "Testni boshlashda xato", 'error');
+                showScreen('intro');
             }
-            
-            // Header va timer ko'rsatish
-            elements.testHeader.classList.remove('hidden');
-            startTimer();
-            
-            // Navigation dots
-            buildNavDots();
-            
-            // Birinchi savolni ko'rsatish
-            currentQuestionIndex = 0;
-            renderQuestion();
-            showScreen('question');
         }
         
         function startTimer() {
             updateTimerDisplay();
+            clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 timeRemaining--;
                 timeSpent++;
@@ -2526,20 +2542,245 @@ p {
             
             elements.timer.textContent = timeString;
             elements.headerTimer.textContent = timeString;
+        }
+        
+        // ==================== SAVOL KO'RSATISH ====================
+        function buildNavDots() {
+            if (!shuffledQuestions || shuffledQuestions.length === 0) return;
             
-            // Vaqt rangini o'zgartirish
-            elements.timer.classList.remove('warning', 'danger');
-            if (timeRemaining < 300) {
-                elements.timer.classList.add('warning');
+            elements.navDots.innerHTML = '';
+            
+            shuffledQuestions.forEach((_, randomIndex) => {
+                const originalIndex = shuffledToOriginalMap[randomIndex] || randomIndex;
+                
+                const dot = document.createElement('div');
+                dot.className = 'dot';
+                if (CONFIG.enableRandomOrder) {
+                    dot.classList.add('random');
+                }
+                dot.textContent = randomIndex + 1;
+                dot.dataset.index = randomIndex;
+                dot.dataset.originalIndex = originalIndex;
+                
+                // Qulf holatini tekshirish
+                if (isQuestionLocked(originalIndex)) {
+                    dot.classList.add('locked');
+                    dot.style.cursor = 'not-allowed';
+                    dot.style.pointerEvents = 'none';
+                } else {
+                    dot.addEventListener('click', () => {
+                        if (testStarted && !isQuestionLocked(originalIndex)) {
+                            currentQuestionIndex = randomIndex;
+                            renderQuestion();
+                        }
+                    });
+                }
+                
+                elements.navDots.appendChild(dot);
+            });
+            
+            updateNavDots();
+        }
+        
+        function updateNavDots() {
+            const dots = elements.navDots.querySelectorAll('.dot');
+            dots.forEach((dot, index) => {
+                const originalIndex = parseInt(dot.dataset.originalIndex) || index;
+                
+                dot.classList.remove('active', 'answered', 'view-1', 'view-2', 'view-3');
+                
+                // Joriy savol
+                if (index === currentQuestionIndex) {
+                    dot.classList.add('active');
+                }
+                
+                // Javob berilgan
+                if (userAnswers[originalIndex] !== null && userAnswers[originalIndex] !== undefined) {
+                    dot.classList.add('answered');
+                }
+                
+                // Ko'rish soni
+                const views = questionViews[originalIndex] || 0;
+                if (views >= 3) {
+                    dot.classList.add('view-3');
+                } else if (views === 2) {
+                    dot.classList.add('view-2');
+                } else if (views === 1) {
+                    dot.classList.add('view-1');
+                }
+            });
+        }
+        
+        function renderQuestion() {
+            if (!shuffledQuestions || !shuffledQuestions[currentQuestionIndex]) {
+                console.error('Savol topilmadi:', currentQuestionIndex);
+                return;
             }
-            if (timeRemaining < 60) {
-                elements.timer.classList.add('danger');
+            
+            const randomQuestion = shuffledQuestions[currentQuestionIndex];
+            const originalIndex = shuffledToOriginalMap[currentQuestionIndex] || currentQuestionIndex;
+            
+            // Ko'rish sonini hisoblash
+            questionViews[originalIndex] = (questionViews[originalIndex] || 0) + 1;
+            const views = questionViews[originalIndex];
+            
+            // Qulf holatini tekshirish
+            if (views >= CONFIG.maxViews) {
+                showLockedQuestionMessage();
+                return;
+            }
+            
+            // Header ma'lumotlari
+            elements.currentQ.textContent = currentQuestionIndex + 1;
+            elements.currentQ.classList.remove('view-1', 'view-2', 'view-3');
+            if (views >= 3) {
+                elements.currentQ.classList.add('view-3');
+            } else if (views === 2) {
+                elements.currentQ.classList.add('view-2');
+            } else if (views === 1) {
+                elements.currentQ.classList.add('view-1');
+            }
+            
+            elements.sectionNameDisplay.textContent = randomQuestion.section || "Umumiy";
+            elements.currentSectionName.textContent = randomQuestion.section || "Umumiy";
+            
+            const points = randomQuestion.points || 1;
+            elements.currentQuestionPoints.textContent = `${points} ball`;
+            
+            // Ko'rish ogohlantirishi
+            if (views >= CONFIG.maxViews - 1) {
+                elements.viewWarning.classList.remove('hidden');
+                elements.viewCount.textContent = views;
+            } else {
+                elements.viewWarning.classList.add('hidden');
+            }
+            
+            // Rasm yuklash
+            elements.questionImageContainer.classList.add('hidden');
+            elements.questionImage.classList.add('hidden');
+            elements.imageNotFound.classList.add('hidden');
+            
+            if (randomQuestion.hasImage) {
+                const imgNum = originalIndex + 1;
+                const imgPath = `images/${currentTestCode}/${imgNum}.png`;
+                
+                elements.questionImageContainer.classList.remove('hidden');
+                
+                const img = new Image();
+                img.onload = () => {
+                    elements.questionImage.src = imgPath;
+                    elements.questionImage.classList.remove('hidden');
+                };
+                img.onerror = () => {
+                    elements.imageNotFound.classList.remove('hidden');
+                };
+                img.src = imgPath;
+            }
+            
+            // Savol matni
+            elements.questionText.innerHTML = randomQuestion.text || '';
+            
+            // Variantlar yoki ochiq javob
+            elements.optionsContainer.classList.add('hidden');
+            elements.openAnswerContainer.classList.add('hidden');
+            
+            if (randomQuestion.type === 'variant') {
+                elements.optionsContainer.classList.remove('hidden');
+                elements.optionsContainer.innerHTML = '';
+                
+                // Random tartiblangan variantlar
+                const options = shuffledOptionsMap[originalIndex] || randomQuestion.options || [];
+                
+                options.forEach((option, index) => {
+                    const optionDiv = document.createElement('div');
+                    optionDiv.className = 'option';
+                    
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = 'questionOption';
+                    input.value = index;
+                    input.id = `option_${index}`;
+                    
+                    // Tanlangan variantni tekshirish
+                    if (userAnswers[originalIndex] === index) {
+                        input.checked = true;
+                        optionDiv.classList.add('selected');
+                    }
+                    
+                    input.addEventListener('change', () => {
+                        // Barcha variantlardan tanlangan classni olib tashlash
+                        document.querySelectorAll('.option').forEach(opt => {
+                            opt.classList.remove('selected');
+                        });
+                        
+                        // Yangi tanlov
+                        optionDiv.classList.add('selected');
+                        userAnswers[originalIndex] = index;
+                        updateNavDots();
+                    });
+                    
+                    const label = document.createElement('label');
+                    label.htmlFor = `option_${index}`;
+                    label.innerHTML = option;
+                    
+                    optionDiv.appendChild(input);
+                    optionDiv.appendChild(label);
+                    elements.optionsContainer.appendChild(optionDiv);
+                });
+            } else if (randomQuestion.type === 'open') {
+                elements.openAnswerContainer.classList.remove('hidden');
+                loadMathEditor(userAnswers[originalIndex]);
+            }
+            
+            // Navigation tugmalari
+            updateNavigationButtons();
+            updateNavDots();
+            
+            // MathJax
+            if (window.MathJax && MathJax.typesetPromise) {
+                setTimeout(() => {
+                    MathJax.typesetPromise([elements.questionText, elements.optionsContainer]);
+                }, 100);
             }
         }
         
-        // ==================== PROFESSIONAL MATEMATIK EDITOR FUNKSIYALARI ====================
+        function updateNavigationButtons() {
+            const totalQuestions = shuffledQuestions.length;
+            
+            // Oldingi tugma
+            elements.prevBtn.disabled = currentQuestionIndex <= 0;
+            
+            // Keyingi tugma
+            elements.nextBtn.disabled = currentQuestionIndex >= totalQuestions - 1;
+            
+            // Testni yakunlash tugmasi
+            elements.finishBtn.disabled = false;
+        }
         
-        // Raqam qo'shish
+        function showLockedQuestionMessage() {
+            elements.questionText.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 48px; color: var(--danger); margin-bottom: 20px;">🔒</div>
+                    <h2 style="color: var(--danger); margin-bottom: 15px;">Bu savol qulfdanadi</h2>
+                    <p style="color: var(--text-light); margin-bottom: 20px;">
+                        Bu savolni maksimal (${CONFIG.maxViews}) marta ko'rganingiz uchun qulfdanadi.
+                    </p>
+                    <p style="color: var(--warning); font-weight: 500;">
+                        Iltimos, boshqa savolga o'ting.
+                    </p>
+                </div>
+            `;
+            
+            elements.optionsContainer.classList.add('hidden');
+            elements.openAnswerContainer.classList.add('hidden');
+            elements.questionImageContainer.classList.add('hidden');
+        }
+        
+        function isQuestionLocked(questionIndex) {
+            return (questionViews[questionIndex] || 0) >= CONFIG.maxViews;
+        }
+        
+        // ==================== MATEMATIK EDITOR FUNKSIYALARI ====================
         function insertNumber(number) {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2547,7 +2788,6 @@ p {
             saveMathAnswer();
         }
         
-        // Matn qo'shish
         function insertText(text) {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2555,7 +2795,6 @@ p {
             saveMathAnswer();
         }
         
-        // Operator qo'shish
         function insertOperator(operator) {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2563,22 +2802,15 @@ p {
             const span = document.createElement('span');
             span.style.color = '#dc2626';
             span.style.fontWeight = '600';
-            span.style.padding = '0 2px';
             span.textContent = operator;
             
             const range = window.getSelection().getRangeAt(0);
             range.deleteContents();
             range.insertNode(span);
-            range.setStartAfter(span);
-            range.collapse(true);
             
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
             saveMathAnswer();
         }
         
-        // Kasr yaratish
         function createFraction() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2595,19 +2827,9 @@ p {
             range.deleteContents();
             range.insertNode(fraction);
             
-            setTimeout(() => {
-                const numerator = fraction.querySelector('.num');
-                numerator.focus();
-                const range = document.createRange();
-                range.selectNodeContents(numerator);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
+            saveMathAnswer();
         }
         
-        // Daraja yaratish
         function createPower() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2623,19 +2845,9 @@ p {
             range.deleteContents();
             range.insertNode(power);
             
-            setTimeout(() => {
-                const base = power.querySelector('.base');
-                base.focus();
-                const range = document.createRange();
-                range.selectNodeContents(base);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
+            saveMathAnswer();
         }
         
-        // Ildiz yaratish
         function createSqrt() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2651,19 +2863,9 @@ p {
             range.deleteContents();
             range.insertNode(sqrt);
             
-            setTimeout(() => {
-                const rad = sqrt.querySelector('.rad');
-                rad.focus();
-                const range = document.createRange();
-                range.selectNodeContents(rad);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
+            saveMathAnswer();
         }
         
-        // Logarifm yaratish
         function createLogarithm() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2680,19 +2882,9 @@ p {
             range.deleteContents();
             range.insertNode(log);
             
-            setTimeout(() => {
-                const base = log.querySelector('.base');
-                base.focus();
-                const range = document.createRange();
-                range.selectNodeContents(base);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
+            saveMathAnswer();
         }
         
-        // Trigonometrik funksiya yaratish
         function createFunction(funcName) {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2708,19 +2900,9 @@ p {
             range.deleteContents();
             range.insertNode(func);
             
-            setTimeout(() => {
-                const arg = func.querySelector('.arg');
-                arg.focus();
-                const range = document.createRange();
-                range.selectNodeContents(arg);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                saveMathAnswer();
-            }, 10);
+            saveMathAnswer();
         }
         
-        // Editorni tozalash
         function clearMathEditor() {
             if (!mathEditor) return;
             mathEditor.innerHTML = '';
@@ -2728,7 +2910,6 @@ p {
             saveMathAnswer();
         }
         
-        // Oxirgi belgini o'chirish
         function deleteLast() {
             if (!mathEditor) return;
             mathEditor.focus();
@@ -2736,278 +2917,134 @@ p {
             saveMathAnswer();
         }
         
-        // Math javobni saqlash
         function saveMathAnswer() {
             if (!mathEditor) return;
-            userAnswers[currentQuestionIndex] = mathEditor.innerHTML;
+            const originalIndex = shuffledToOriginalMap[currentQuestionIndex] || currentQuestionIndex;
+            userAnswers[originalIndex] = mathEditor.innerHTML;
             updateNavDots();
         }
         
-        // Math editorni yuklash
         function loadMathEditor(answer) {
             mathEditor = document.getElementById('mathEditor');
             if (!mathEditor) return;
             
-            if (answer && answer.trim() !== '') {
+            if (answer) {
                 mathEditor.innerHTML = answer;
             } else {
                 mathEditor.innerHTML = '';
             }
             
-            // Input event listener
             mathEditor.addEventListener('input', saveMathAnswer);
-            
-            // Tab va Enter boshqaruvi
-            mathEditor.addEventListener('keydown', function(e) {
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    
-                    const activeElement = document.activeElement;
-                    if (!activeElement || !activeElement.hasAttribute('contenteditable')) return;
-                    
-                    // Strukturalar orasida harakatlanish
-                    if (activeElement.classList.contains('num')) {
-                        const den = activeElement.parentElement.querySelector('.den');
-                        if (den) den.focus();
-                    } 
-                    else if (activeElement.classList.contains('den')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('base')) {
-                        const exp = activeElement.parentElement.querySelector('.exp');
-                        if (exp) exp.focus();
-                    }
-                    else if (activeElement.classList.contains('exp')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('rad')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                    else if (activeElement.classList.contains('arg')) {
-                        placeCursorAfter(activeElement.parentElement);
-                    }
-                }
-                
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    insertText(' ');
-                }
-            });
-            
-            // Fokus berish
-            setTimeout(() => {
-                mathEditor.focus();
-            }, 100);
+            mathEditor.focus();
         }
         
-        // Kursorni elementdan keyingi o'rnatish
-        function placeCursorAfter(element) {
-            const range = document.createRange();
-            const selection = window.getSelection();
-            range.setStartAfter(element);
-            range.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            if (mathEditor) mathEditor.focus();
+        // ==================== XAVFSIZLIK FUNKSIYALARI ====================
+        function enableSecurity() {
+            if (securityEnabled) return;
+            
+            elements.securityMonitor.classList.remove('hidden');
+            
+            // Event listenerlar
+            window.addEventListener('blur', handleWindowBlur);
+            document.addEventListener('fullscreenchange', handleFullScreenChange);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+            document.addEventListener('contextmenu', handleContextMenu);
+            document.addEventListener('keydown', handleKeyDown);
+            
+            securityEnabled = true;
         }
         
-        // ==================== SAVOL KO'RSATISH ====================
-        function buildNavDots() {
-            elements.navDots.innerHTML = '';
+        function disableSecurity() {
+            elements.securityMonitor.classList.add('hidden');
             
-            testData.questions.forEach((_, index) => {
-                const dot = document.createElement('div');
-                dot.className = 'dot';
-                dot.textContent = index + 1;
-                dot.dataset.index = index;
-                
-                if (isQuestionLocked(index)) {
-                    dot.classList.add('locked');
-                    dot.title = 'Bu savol qulfdanadi (3 marta ko\'rildi)';
-                    dot.style.cursor = 'not-allowed';
-                    dot.style.pointerEvents = 'none';
-                } else {
-                    dot.addEventListener('click', () => {
-                        if (testStarted) {
-                            const views = questionViews[index] || 0;
-                            if (views >= CONFIG.maxViews) {
-                                showMessage("Bu savol qulfdanadi! Boshqa savolga o'ting.", "warning");
-                            } else {
-                                currentQuestionIndex = index;
-                                renderQuestion();
-                            }
-                        }
-                    });
-                }
-                
-                elements.navDots.appendChild(dot);
-            });
+            // Event listenerlarni olib tashlash
+            window.removeEventListener('blur', handleWindowBlur);
+            document.removeEventListener('fullscreenchange', handleFullScreenChange);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('contextmenu', handleContextMenu);
+            document.removeEventListener('keydown', handleKeyDown);
             
-            updateNavDots();
+            securityEnabled = false;
         }
         
-        function updateNavDots() {
-            const dots = elements.navDots.querySelectorAll('.dot');
-            
-            dots.forEach((dot, index) => {
-                dot.classList.remove('active', 'answered');
+        function handleWindowBlur() {
+            if (testStarted) {
+                violations++;
+                elements.violationCount.textContent = violations;
+                elements.monitorText.textContent = "Boshqa oynaga o'tildi!";
                 
-                if (index === currentQuestionIndex) {
-                    dot.classList.add('active');
+                if (violations >= 3) {
+                    cancelTest("3 marta boshqa oynaga o'tilgani uchun test bekor qilindi");
                 }
-                
-                if (userAnswers[index] !== undefined && userAnswers[index] !== '') {
-                    dot.classList.add('answered');
-                }
-            });
-        }
-        
-        function renderQuestion() {
-            if (!testData || !testData.questions[currentQuestionIndex]) return;
-            
-            const question = testData.questions[currentQuestionIndex];
-            const views = checkQuestionView(currentQuestionIndex);
-            
-            // Qulf holatini tekshirish
-            const isLocked = isQuestionLocked(currentQuestionIndex);
-            
-            // Agar savol qulflangan bo'lsa
-            if (isLocked) {
-                showLockedQuestionMessage();
-                updateNavigationButtons();
-                updateNavDots();
-                return;
-            }
-            
-            // Header elementlarini yangilash
-            elements.currentQ.textContent = currentQuestionIndex + 1;
-            elements.sectionNameDisplay.textContent = question.section || "Umumiy";
-            elements.currentSectionName.textContent = question.section || "Umumiy";
-            
-            // Ballarni ko'rsatish
-            const points = question.points || 1;
-            elements.currentQuestionPoints.textContent = `${points} ball`;
-            
-            // RASM YUKLASH
-            elements.questionImageContainer.classList.add('hidden');
-            elements.questionImage.classList.add('hidden');
-            elements.imageNotFound.classList.add('hidden');
-            
-            if (question.hasImage) {
-                const imgNum = currentQuestionIndex + 1;
-                const imgPath = `${currentTestCode}/${imgNum}.png`;
-                
-                elements.questionImageContainer.classList.remove('hidden');
-                
-                const img = new Image();
-                img.onload = function() {
-                    elements.questionImage.src = imgPath;
-                    elements.questionImage.classList.remove('hidden');
-                    elements.imageNotFound.classList.add('hidden');
-                };
-                img.onerror = function() {
-                    elements.questionImage.classList.add('hidden');
-                    elements.imageNotFound.classList.remove('hidden');
-                };
-                img.src = imgPath;
-            }
-            
-            // SAVOL MATNI
-            elements.questionText.innerHTML = question.text || '';
-            
-            // VARIANTLAR YOKI OCHIQ JAVOB
-            elements.optionsContainer.classList.add('hidden');
-            elements.openAnswerContainer.classList.add('hidden');
-            
-            if (question.type === 'variant') {
-                elements.optionsContainer.classList.remove('hidden');
-                elements.optionsContainer.innerHTML = '';
-                
-                const options = question.options || [];
-                options.forEach((option, index) => {
-                    const optionDiv = document.createElement('div');
-                    optionDiv.className = 'option';
-                    
-                    const input = document.createElement('input');
-                    input.type = 'radio';
-                    input.name = 'questionOption';
-                    input.value = index;
-                    input.id = `option_${index}`;
-                    
-                    if (userAnswers[currentQuestionIndex] === index) {
-                        input.checked = true;
-                        optionDiv.classList.add('selected');
-                    }
-                    
-                    input.addEventListener('change', () => {
-                        document.querySelectorAll('.option').forEach(opt => {
-                            opt.classList.remove('selected');
-                        });
-                        optionDiv.classList.add('selected');
-                        userAnswers[currentQuestionIndex] = index;
-                        updateNavDots();
-                    });
-                    
-                    const label = document.createElement('label');
-                    label.htmlFor = `option_${index}`;
-                    label.innerHTML = option;
-                    
-                    optionDiv.appendChild(input);
-                    optionDiv.appendChild(label);
-                    elements.optionsContainer.appendChild(optionDiv);
-                });
-            } else if (question.type === 'open') {
-                elements.openAnswerContainer.classList.remove('hidden');
-                loadMathEditor(userAnswers[currentQuestionIndex]);
-            }
-            
-            // NAVIGATION BUTTONLARI
-            updateNavigationButtons();
-            updateNavDots();
-            
-            // MATHJAX
-            if (window.MathJax && MathJax.typesetPromise) {
-                MathJax.typesetPromise([elements.questionText, elements.optionsContainer]);
             }
         }
         
-        function updateNavigationButtons() {
-            // Oldingi tugma - qulflanmagan oldingi savol bormi?
-            let hasPrevUnlocked = false;
-            for (let i = currentQuestionIndex - 1; i >= 0; i--) {
-                if (!isQuestionLocked(i)) {
-                    hasPrevUnlocked = true;
-                    break;
+        function handleFullScreenChange() {
+            if (testStarted && !document.fullscreenElement) {
+                violations = 3;
+                elements.violationCount.textContent = violations;
+                cancelTest("To'liq ekran rejimidan chiqilgani uchun test bekor qilindi");
+            }
+        }
+        
+        function handleVisibilityChange() {
+            if (testStarted && document.hidden) {
+                violations++;
+                elements.violationCount.textContent = violations;
+                elements.monitorText.textContent = "Boshqa tabga o'tildi!";
+                
+                if (violations >= 3) {
+                    cancelTest("3 marta boshqa tabga o'tilgani uchun test bekor qilindi");
                 }
             }
+        }
+        
+        function handleContextMenu(e) {
+            if (testStarted) {
+                e.preventDefault();
+                violations++;
+                elements.violationCount.textContent = violations;
+                elements.monitorText.textContent = "O'ng tugma bloklandi!";
+            }
+        }
+        
+        function handleKeyDown(e) {
+            if (!testStarted) return;
             
-            // Keyingi tugma - qulflanmagan keyingi savol bormi?
-            let hasNextUnlocked = false;
-            for (let i = currentQuestionIndex + 1; i < testData.questions.length; i++) {
-                if (!isQuestionLocked(i)) {
-                    hasNextUnlocked = true;
-                    break;
+            // Developer tools bloklash
+            if (e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
+                (e.ctrlKey && e.key === 'u')) {
+                e.preventDefault();
+                violations++;
+                elements.violationCount.textContent = violations;
+                elements.monitorText.textContent = "Ruxsat etilmagan tugma!";
+                
+                if (violations >= 3) {
+                    cancelTest("3 marta ruxsat etilmagan tugma bosilgani uchun test bekor qilindi");
                 }
             }
+        }
+        
+        function cancelTest(reason) {
+            clearInterval(timerInterval);
+            testStarted = false;
+            disableSecurity();
+            elements.testHeader.classList.add('hidden');
             
-            elements.prevBtn.disabled = !hasPrevUnlocked;
-            elements.nextBtn.disabled = !hasNextUnlocked;
+            alert(`TEST BEKOR QILINDI!\nSabab: ${reason}\nQoidabuzarliklar: ${violations}/3`);
+            window.location.reload();
         }
         
         // ==================== TEST YAKUNLASH ====================
         function finishTest() {
             clearInterval(timerInterval);
             testStarted = false;
-            
-            if (CONFIG.enableSecurity) {
-                disableSecurity();
-            }
-            
-            elements.testHeader.classList.add('hidden');
+            disableSecurity();
             
             const results = calculateResults();
             
-            // NATIJALARNI KO'RSATISH
+            // Natijalarni ko'rsatish
             elements.finalScore.textContent = results.finalScore.toFixed(1);
             elements.correctCount.textContent = results.correctCount;
             elements.wrongCount.textContent = results.wrongCount;
@@ -3024,17 +3061,25 @@ p {
             let correctCount = 0;
             let totalScore = 0;
             
-            testData.questions.forEach((question, index) => {
-                const userAnswer = userAnswers[index];
+            testData.questions.forEach((question, originalIndex) => {
+                const userAnswer = userAnswers[originalIndex];
                 
                 if (question.type === 'variant') {
-                    // Agar correctIndex bo'lsa, uni tekshiramiz
-                    if (question.correctIndex !== undefined && userAnswer === question.correctIndex) {
-                        correctCount++;
-                        totalScore += (question.points || 1);
+                    // Random tartiblangan variantlar uchun to'g'ri javob
+                    if (question.correctIndex !== undefined && userAnswer !== null) {
+                        const randomOptions = shuffledOptionsMap[originalIndex] || question.options;
+                        if (randomOptions && randomOptions[userAnswer]) {
+                            const userAnswerText = randomOptions[userAnswer];
+                            const correctAnswerText = question.options[question.correctIndex];
+                            
+                            if (userAnswerText === correctAnswerText) {
+                                correctCount++;
+                                totalScore += (question.points || 1);
+                            }
+                        }
                     }
                 } else if (question.type === 'open') {
-                    // Ochiq javobda faqat javob berilganligini tekshiramiz
+                    // Ochiq javob - faqat javob berilganligini tekshirish
                     if (userAnswer && userAnswer.trim() !== '') {
                         correctCount++;
                         totalScore += (question.points || 1);
@@ -3042,7 +3087,7 @@ p {
                 }
             });
             
-            // Jarimalarni hisoblash
+            // Jarimalar
             const penalty = violations * CONFIG.penaltyPerViolation;
             const finalScore = Math.max(0, totalScore - penalty);
             
@@ -3060,12 +3105,10 @@ p {
             showScreen('loading');
             createInfiniteBanners();
             
-            // Firestore ni ishga tushirish
-            const firebaseInitialized = await initializeFirebase();
-            if (!firebaseInitialized) {
-                showMessage("Firestore ishga tushirishda xato. Internet aloqasini tekshiring.", 'error');
-            }
+            // Firebase ni ishga tushirish
+            await initializeFirebase();
             
+            // URL dan test kodi
             const urlParams = new URLSearchParams(window.location.search);
             const urlCode = urlParams.get('code');
             
@@ -3080,23 +3123,26 @@ p {
         }
         
         function setupEventListeners() {
+            // Test kodini yuklash
             elements.loadTestBtn.addEventListener('click', handleTestCodeLoad);
             elements.testCodeInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') handleTestCodeLoad();
             });
             
+            // Sinf tanlash
             elements.nextToStudentBtn.addEventListener('click', () => {
                 currentClass = elements.classSelect.value;
                 if (!currentClass) {
                     showMessage('Iltimos, sinfni tanlang', 'error');
                     return;
                 }
-                loadStudents(currentClass);
+                loadStudentsFromFirestore(currentClass);
                 showScreen('studentSelection');
             });
             
             elements.backToCodeBtn.addEventListener('click', () => showScreen('codeInput'));
             
+            // O'quvchi tanlash
             elements.nextToIntroBtn.addEventListener('click', () => {
                 const studentId = elements.studentSelect.value;
                 if (!studentId) {
@@ -3110,17 +3156,17 @@ p {
                     return;
                 }
                 
-                // Intro ma'lumotlarni to'ldirish
-                elements.testTitle.textContent = testData.title;
-                elements.testDescription.textContent = testData.description;
+                // Intro ma'lumotlari
+                elements.testTitle.textContent = testData.title || "Test";
+                elements.testDescription.textContent = testData.description || "";
                 elements.totalQuestions.textContent = testData.questions.length;
                 elements.testDuration.textContent = (testData.durationMinutes || 30) + ' daqiqa';
                 
-                // Umumiy ballni hisoblash
+                // Umumiy ball
                 const totalPoints = testData.questions.reduce((sum, q) => sum + (q.points || 1), 0);
                 elements.totalPoints.textContent = totalPoints;
                 
-                // Bo'limlarni ko'rsatish
+                // Bo'limlar
                 if (testData.sections && testData.sections.length > 0) {
                     elements.testSections.textContent = testData.sections.length;
                     elements.sectionList.innerHTML = '<h3>Bo\'limlar:</h3>';
@@ -3136,34 +3182,26 @@ p {
                 }
                 
                 elements.studentName.textContent = currentStudent.fullName;
-                
                 showScreen('intro');
             });
             
             elements.backToClassBtn.addEventListener('click', () => showScreen('classSelection'));
+            
+            // Testni boshlash
             elements.startTestBtn.addEventListener('click', startTest);
             
+            // Navigation
             elements.prevBtn.addEventListener('click', () => {
                 if (currentQuestionIndex > 0) {
-                    const nextIndex = navigateToNextUnlockedQuestion('prev');
-                    if (nextIndex !== currentQuestionIndex) {
-                        currentQuestionIndex = nextIndex;
-                        renderQuestion();
-                    } else {
-                        showMessage("Oldingi ochiq savol mavjud emas", 'warning');
-                    }
+                    currentQuestionIndex--;
+                    renderQuestion();
                 }
             });
             
             elements.nextBtn.addEventListener('click', () => {
-                if (currentQuestionIndex < testData.questions.length - 1) {
-                    const nextIndex = navigateToNextUnlockedQuestion('next');
-                    if (nextIndex !== currentQuestionIndex) {
-                        currentQuestionIndex = nextIndex;
-                        renderQuestion();
-                    } else {
-                        showMessage("Keyingi ochiq savol mavjud emas", 'warning');
-                    }
+                if (currentQuestionIndex < shuffledQuestions.length - 1) {
+                    currentQuestionIndex++;
+                    renderQuestion();
                 }
             });
             
@@ -3173,6 +3211,7 @@ p {
                 }
             });
             
+            // Qayta boshlash
             elements.restartBtn.addEventListener('click', () => window.location.reload());
         }
         
@@ -3183,17 +3222,12 @@ p {
                 return;
             }
             
-            currentTestCode = code;
             const loaded = await loadTestData(code);
-            
-            if (!loaded) {
-                showMessage(`"${code}" testi topilmadi`, 'error');
-                showScreen('codeInput');
-                return;
+            if (loaded) {
+                // Sinf ma'lumotlarini yuklash
+                await loadClassesFromFirestore();
+                showScreen('classSelection');
             }
-            
-            await loadClasses();
-            showScreen('classSelection');
         }
         
         // ==================== START ====================
