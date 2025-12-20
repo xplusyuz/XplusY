@@ -1,260 +1,51 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OrzuMall</title>
-
-<!-- Telegram WebApp -->
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-<!-- Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<style>
-body{
-  margin:0;
-  font-family:system-ui;
-  background:#0f172a;
-  color:#e5e7eb;
-}
-header{
-  padding:14px;
-  text-align:center;
-  font-size:22px;
-  font-weight:800;
-}
-.profile-btn{
-  position:fixed;
-  top:12px;
-  right:12px;
-  width:42px;
-  height:42px;
-  border-radius:50%;
-  border:none;
-  background:#1f2933;
-  color:#22c55e;
-  font-size:20px;
-  z-index:1000;
-}
-.chips{
-  display:flex;
-  gap:10px;
-  padding:10px;
-  overflow-x:auto;
-}
-.chip{
-  background:#1f2933;
-  padding:8px 14px;
-  border-radius:999px;
-  white-space:nowrap;
-}
-.products{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-  gap:14px;
-  padding:14px;
-}
-.card{
-  background:#111827;
-  border-radius:16px;
-  overflow:hidden;
-}
-.card img{
-  width:100%;
-  height:140px;
-  object-fit:cover;
-}
-.card .info{
-  padding:10px;
-}
-.price{
-  color:#22c55e;
-  font-weight:700;
-}
-
-/* Profile modal */
-#profileModal{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.6);
-  backdrop-filter:blur(6px);
-  z-index:9999;
-  align-items:center;
-  justify-content:center;
-}
-#profileModal .box{
-  background:#020617;
-  border-radius:20px;
-  width:90%;
-  max-width:360px;
-  padding:16px;
-}
-</style>
+  <meta charset="UTF-8">
+  <title>OrzuMall</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
-
 <body>
 
-<header>🛒 OrzuMall</header>
-<button class="profile-btn" onclick="openProfile()">👤</button>
-
-<div class="chips" id="chips"></div>
-<div class="products" id="products"></div>
-
-<!-- PROFILE MODAL -->
-<div id="profileModal">
-  <div class="box">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <h3>👤 Profil</h3>
-      <button onclick="closeProfile()" style="background:none;border:none;color:#94a3b8;font-size:20px">✕</button>
-    </div>
-
-    <div style="text-align:center;margin-top:10px">
-      <img id="pf_avatar"
-        style="width:80px;height:80px;border-radius:50%;background:#1f2933">
-    </div>
-
-    <div style="margin-top:14px;font-size:14px">
-      <div><b>Ism:</b> <span id="pf_name"></span></div>
-      <div><b>Username:</b> <span id="pf_username"></span></div>
-      <div><b>Telegram ID:</b> <span id="pf_tgid"></span></div>
-      <div><b>Role:</b> <span id="pf_role"></span></div>
-    </div>
-
-    <button onclick="closeProfile()" style="
-      margin-top:16px;
-      width:100%;
-      padding:12px;
-      border:none;
-      border-radius:14px;
-      background:#22c55e;
-      font-weight:700;
-    ">Yopish</button>
-  </div>
-</div>
+<h3>Telegram Login Test</h3>
 
 <script>
-/* ================= SUPABASE ================= */
-const SUPABASE_URL = "https://wxxfjklwgnxuvxhrs.supabase.co";
-const SUPABASE_KEY = "sb_publishable__b8F70lFPo2LaQrDjW7dcA_nP5m3HDn";
-
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_KEY
-);
-
-/* ================= TELEGRAM ================= */
-const tg = window.Telegram.WebApp;
+const tg = Telegram.WebApp;
 tg.ready();
 
-/* 🔴 MUHIM: faqat Telegram ichida ishlaydi */
-if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
-  document.body.innerHTML =
-    "<h2 style='color:white;text-align:center;margin-top:40px'>Telegram orqali oching</h2>";
-  throw new Error("Not opened inside Telegram");
-}
+console.log("Telegram object:", tg);
+console.log("Init data:", tg.initDataUnsafe);
 
-const tgUser = tg.initDataUnsafe.user;
+if (!tg.initDataUnsafe.user) {
+  alert("❌ Telegram user yo‘q. WebApp bot ichida ochilmagan!");
+} else {
+  const u = tg.initDataUnsafe.user;
 
-/* ================= TELEGRAM LOGIN (MUHIM) ================= */
-(async () => {
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/functions/v1/telegram-login`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_KEY
-        },
-        body: JSON.stringify({
-          telegram_id: tgUser.id,
-          username: tgUser.username || "",
-          full_name: tgUser.first_name || ""
-        })
-      }
-    );
+  alert("✅ Telegram user topildi: " + u.id);
 
-    const data = await res.json();
-    console.log("telegram-login OK:", data);
-  } catch (e) {
-    console.error("telegram-login ERROR:", e);
-  }
-})();
-
-/* ================= SHOP ================= */
-const chipsEl = document.getElementById("chips");
-const productsEl = document.getElementById("products");
-let currentCat = "all";
-
-async function loadCategories(){
-  const { data } = await supabaseClient
-    .from("categories")
-    .select("*")
-    .order("id");
-
-  chipsEl.innerHTML =
-    `<div class="chip" onclick="setCat('all')">Barchasi</div>`;
-
-  data?.forEach(c=>{
-    chipsEl.innerHTML +=
-      `<div class="chip" onclick="setCat('${c.slug}')">${c.title}</div>`;
+  fetch("https://wxxfjklwgnxuvxhrs.supabase.co/functions/v1/telegram-login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": "sb_publishable__b8F70lFPo2LaQrDjW7dcA_nP5m3HDn"
+    },
+    body: JSON.stringify({
+      telegram_id: u.id,
+      username: u.username || "",
+      full_name: u.first_name || ""
+    })
+  })
+  .then(r => r.text())
+  .then(t => {
+    console.log("Function response:", t);
+    alert("📤 Yuborildi: " + t);
+  })
+  .catch(e => {
+    console.error(e);
+    alert("❌ Xato: " + e.message);
   });
 }
-
-async function loadProducts(){
-  let q = supabaseClient.from("products").select("*");
-  if(currentCat !== "all") q = q.eq("category", currentCat);
-  const { data } = await q;
-
-  productsEl.innerHTML = "";
-  data?.forEach(p=>{
-    productsEl.innerHTML += `
-      <div class="card">
-        <img src="${p.image}">
-        <div class="info">
-          <div>${p.title}</div>
-          <div class="price">${p.price} so‘m</div>
-        </div>
-      </div>`;
-  });
-}
-
-window.setCat = function(c){
-  currentCat = c;
-  loadProducts();
-};
-
-loadCategories();
-loadProducts();
-
-/* ================= PROFILE ================= */
-window.openProfile = async function(){
-  document.getElementById("profileModal").style.display="flex";
-
-  document.getElementById("pf_name").textContent = tgUser.first_name || "-";
-  document.getElementById("pf_username").textContent =
-    tgUser.username ? "@"+tgUser.username : "-";
-  document.getElementById("pf_tgid").textContent = tgUser.id;
-
-  if(tgUser.photo_url){
-    document.getElementById("pf_avatar").src = tgUser.photo_url;
-  }
-
-  const { data } = await supabaseClient
-    .from("profiles")
-    .select("role")
-    .eq("telegram_id", tgUser.id)
-    .single();
-
-  document.getElementById("pf_role").textContent =
-    data?.role || "user";
-};
-
-window.closeProfile = function(){
-  document.getElementById("profileModal").style.display="none";
-};
 </script>
+
 </body>
 </html>
