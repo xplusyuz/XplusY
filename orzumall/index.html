@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OrzuMall</title>
 
-<!-- TELEGRAM -->
+<!-- Telegram WebApp -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-<!-- SUPABASE -->
+<!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
@@ -73,7 +73,7 @@ header{
   font-weight:700;
 }
 
-/* PROFILE MODAL */
+/* Profile modal */
 #profileModal{
   display:none;
   position:fixed;
@@ -111,7 +111,8 @@ header{
     </div>
 
     <div style="text-align:center;margin-top:10px">
-      <img id="pf_avatar" style="width:80px;height:80px;border-radius:50%;background:#1f2933">
+      <img id="pf_avatar"
+        style="width:80px;height:80px;border-radius:50%;background:#1f2933">
     </div>
 
     <div style="margin-top:14px;font-size:14px">
@@ -137,18 +138,23 @@ header{
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://wxxfjklwgnxuvxhrs.supabase.co";
 const SUPABASE_KEY = "sb_publishable__b8F70lFPo2LaQrDjW7dcA_nP5m3HDn";
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
 
 /* ================= TELEGRAM ================= */
 const tg = window.Telegram.WebApp;
 tg.ready();
+
 const tgUser = tg.initDataUnsafe?.user;
 if(!tgUser){
   alert("Telegram orqali oching");
 }
 
 /* ================= TELEGRAM LOGIN ================= */
-fetch(`${SUPABASE_URL}/functions/v1/telegram-login`,{
+fetch(`${SUPABASE_URL}/functions/v1/telegram-login`, {
   method:"POST",
   headers:{
     "Content-Type":"application/json",
@@ -167,18 +173,26 @@ const productsEl = document.getElementById("products");
 let currentCat = "all";
 
 async function loadCategories(){
-  const {data} = await supabase.from("categories").select("*").order("id");
-  chipsEl.innerHTML = `<div class="chip" onclick="setCat('all')">Barchasi</div>`;
+  const { data } = await supabaseClient
+    .from("categories")
+    .select("*")
+    .order("id");
+
+  chipsEl.innerHTML =
+    `<div class="chip" onclick="setCat('all')">Barchasi</div>`;
+
   data?.forEach(c=>{
-    chipsEl.innerHTML += `<div class="chip" onclick="setCat('${c.slug}')">${c.title}</div>`;
+    chipsEl.innerHTML +=
+      `<div class="chip" onclick="setCat('${c.slug}')">${c.title}</div>`;
   });
 }
 
 async function loadProducts(){
-  let q = supabase.from("products").select("*");
+  let q = supabaseClient.from("products").select("*");
   if(currentCat !== "all") q = q.eq("category", currentCat);
-  const {data} = await q;
-  productsEl.innerHTML="";
+  const { data } = await q;
+
+  productsEl.innerHTML = "";
   data?.forEach(p=>{
     productsEl.innerHTML += `
       <div class="card">
@@ -191,37 +205,40 @@ async function loadProducts(){
   });
 }
 
-function setCat(c){
+window.setCat = function(c){
   currentCat = c;
   loadProducts();
-}
+};
 
 loadCategories();
 loadProducts();
 
-/* ================= PROFILE ================= */
-async function openProfile(){
+/* ================= PROFILE (GLOBAL!) ================= */
+window.openProfile = async function(){
   document.getElementById("profileModal").style.display="flex";
 
   document.getElementById("pf_name").textContent = tgUser.first_name || "-";
-  document.getElementById("pf_username").textContent = tgUser.username ? "@"+tgUser.username : "-";
+  document.getElementById("pf_username").textContent =
+    tgUser.username ? "@"+tgUser.username : "-";
   document.getElementById("pf_tgid").textContent = tgUser.id;
+
   if(tgUser.photo_url){
     document.getElementById("pf_avatar").src = tgUser.photo_url;
   }
 
-  const {data} = await supabase
+  const { data } = await supabaseClient
     .from("profiles")
     .select("role")
     .eq("telegram_id", tgUser.id)
     .single();
 
-  document.getElementById("pf_role").textContent = data?.role || "user";
-}
+  document.getElementById("pf_role").textContent =
+    data?.role || "user";
+};
 
-function closeProfile(){
+window.closeProfile = function(){
   document.getElementById("profileModal").style.display="none";
-}
+};
 </script>
 
 </body>
