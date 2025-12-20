@@ -148,24 +148,40 @@ const supabaseClient = supabase.createClient(
 const tg = window.Telegram.WebApp;
 tg.ready();
 
-const tgUser = tg.initDataUnsafe?.user;
-if(!tgUser){
-  alert("Telegram orqali oching");
+/* 🔴 MUHIM: faqat Telegram ichida ishlaydi */
+if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+  document.body.innerHTML =
+    "<h2 style='color:white;text-align:center;margin-top:40px'>Telegram orqali oching</h2>";
+  throw new Error("Not opened inside Telegram");
 }
 
-/* ================= TELEGRAM LOGIN ================= */
-fetch(`${SUPABASE_URL}/functions/v1/telegram-login`, {
-  method:"POST",
-  headers:{
-    "Content-Type":"application/json",
-    "apikey":SUPABASE_KEY
-  },
-  body:JSON.stringify({
-    telegram_id: tgUser.id,
-    username: tgUser.username || "",
-    full_name: tgUser.first_name || ""
-  })
-});
+const tgUser = tg.initDataUnsafe.user;
+
+/* ================= TELEGRAM LOGIN (MUHIM) ================= */
+(async () => {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/functions/v1/telegram-login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_KEY
+        },
+        body: JSON.stringify({
+          telegram_id: tgUser.id,
+          username: tgUser.username || "",
+          full_name: tgUser.first_name || ""
+        })
+      }
+    );
+
+    const data = await res.json();
+    console.log("telegram-login OK:", data);
+  } catch (e) {
+    console.error("telegram-login ERROR:", e);
+  }
+})();
 
 /* ================= SHOP ================= */
 const chipsEl = document.getElementById("chips");
@@ -213,7 +229,7 @@ window.setCat = function(c){
 loadCategories();
 loadProducts();
 
-/* ================= PROFILE (GLOBAL!) ================= */
+/* ================= PROFILE ================= */
 window.openProfile = async function(){
   document.getElementById("profileModal").style.display="flex";
 
@@ -240,6 +256,5 @@ window.closeProfile = function(){
   document.getElementById("profileModal").style.display="none";
 };
 </script>
-
 </body>
 </html>
