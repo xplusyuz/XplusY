@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OrzuMall</title>
+
+<style>
+body{
+  margin:0;
+  font-family:system-ui;
+  background:#0f172a;
+  color:#e5e7eb;
+}
+header{
+  padding:14px;
+  text-align:center;
+  font-size:22px;
+  font-weight:800;
+}
+.chips{
+  display:flex;
+  gap:10px;
+  padding:10px;
+  overflow-x:auto;
+}
+.chip{
+  background:#1f2933;
+  padding:8px 14px;
+  border-radius:999px;
+  white-space:nowrap;
+}
+.products{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:14px;
+  padding:14px;
+}
+.card{
+  background:#111827;
+  border-radius:16px;
+  overflow:hidden;
+}
+.card img{
+  width:100%;
+  height:140px;
+  object-fit:cover;
+}
+.card .info{
+  padding:10px;
+}
+.price{
+  color:#22c55e;
+  font-weight:700;
+}
+</style>
+</head>
+
+<body>
+
+<header>🛒 OrzuMall</header>
+
+<div class="chips" id="chips"></div>
+<div class="products" id="products"></div>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="supabase.js"></script>
+
+<script>
+/* ================= TELEGRAM USER ================= */
+const tg = window.Telegram.WebApp;
+tg.ready();
+
+const tgUser = tg.initDataUnsafe?.user;
+if (!tgUser) {
+  alert("Iltimos Telegram orqali oching");
+}
+
+/* ================= TELEGRAM LOGIN ================= */
+async function telegramLogin(){
+  await fetch(
+    "https://wxxfjklwgnxuvxhrs.supabase.co/functions/v1/telegram-login",
+    {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "apikey": SUPABASE_KEY
+      },
+      body:JSON.stringify({
+        telegram_id: tgUser.id,
+        username: tgUser.username || "",
+        full_name: tgUser.first_name || ""
+      })
+    }
+  );
+}
+telegramLogin();
+
+/* ================= SHOP ================= */
+const chipsEl = document.getElementById("chips");
+const productsEl = document.getElementById("products");
+let currentCat = "all";
+
+async function loadCategories(){
+  const {data} = await supabase
+    .from("categories")
+    .select("*")
+    .order("id");
+
+  chipsEl.innerHTML =
+    `<div class="chip" onclick="setCat('all')">Barchasi</div>`;
+
+  data.forEach(c=>{
+    chipsEl.innerHTML +=
+      `<div class="chip" onclick="setCat('${c.slug}')">${c.title}</div>`;
+  });
+}
+
+async function loadProducts(){
+  let q = supabase.from("products").select("*");
+  if(currentCat !== "all"){
+    q = q.eq("category", currentCat);
+  }
+  const {data} = await q;
+  productsEl.innerHTML="";
+  data.forEach(p=>{
+    productsEl.innerHTML += `
+      <div class="card">
+        <img src="${p.image}">
+        <div class="info">
+          <div>${p.title}</div>
+          <div class="price">${p.price} so‘m</div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function setCat(c){
+  currentCat = c;
+  loadProducts();
+}
+
+loadCategories();
+loadProducts();
+</script>
+
+</body>
+</html>
