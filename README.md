@@ -31,3 +31,11 @@ Admin email: sohibjonmath@gmail.com
 1) npm i
 2) npx netlify dev
 3) http://localhost:8888
+
+
+## MUHIM: Netlify settings (404 /api bo'lsa)
+- Publish directory: **public**
+- Functions directory: **netlify/functions**
+- Redirect: public/_redirects bor ( /api/* -> /.netlify/functions/api/:splat )
+
+Agar siz URL'da `.../public/` ko'rayotgan bo'lsangiz — publish directory noto'g'ri qo'yilgan.
