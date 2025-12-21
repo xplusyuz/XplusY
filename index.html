@@ -3098,85 +3098,64 @@
 }
 
     async function updateUserProfile(updateData) {
-      try {
-        const sessionId = localStorage.getItem('leaderMathUserSession');
-        if (!sessionId) {
-          throw new Error('Session mavjud emas');
-        }
+  const sid = localStorage.getItem('lm_session');
+  if (!sid) throw new Error('Session mavjud emas');
 
-        const response = await fetch(`${API_BASE}/user/${sessionId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updateData)
-        });
+  const response = await fetch(`${API_BASE}/user/me`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-Id': sid
+    },
+    cache: 'no-store',
+    body: JSON.stringify(updateData)
+  });
 
-        if (!response.ok) {
-          throw new Error('Profil yangilashda xatolik');
-        }
+  const data = await response.json().catch(()=> ({}));
+  if (!response.ok) throw new Error(data.error || 'Profil yangilashda xatolik');
+  return data.user;
+}
 
-        const data = await response.json();
-        return data.user;
-      } catch (error) {
-        console.error('Profil yangilashda xatolik:', error);
-        throw error;
-      }
-    }
 
-    async function updateAvatar(avatarBase64) {
-      try {
-        const sessionId = localStorage.getItem('leaderMathUserSession');
-        if (!sessionId) {
-          throw new Error('Session mavjud emas');
-        }
+   async function updateAvatar(avatarBase64) {
+  const sid = localStorage.getItem('lm_session');
+  if (!sid) throw new Error('Session mavjud emas');
 
-        const response = await fetch(`${API_BASE}/user/${sessionId}/avatar`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ avatar: avatarBase64 })
-        });
+  const response = await fetch(`${API_BASE}/user/me/avatar`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-Id': sid
+    },
+    cache: 'no-store',
+    body: JSON.stringify({ avatar: avatarBase64 })
+  });
 
-        if (!response.ok) {
-          throw new Error('Avatar yangilashda xatolik');
-        }
+  const data = await response.json().catch(()=> ({}));
+  if (!response.ok) throw new Error(data.error || 'Avatar yangilashda xatolik');
+  return data.user;
+}
 
-        const data = await response.json();
-        return data.user;
-      } catch (error) {
-        console.error('Avatar yangilashda xatolik:', error);
-        throw error;
-      }
-    }
 
     async function changePassword(currentPassword, newPassword) {
-      try {
-        const sessionId = localStorage.getItem('leaderMathUserSession');
-        if (!sessionId) {
-          throw new Error('Session mavjud emas');
-        }
+  const sid = localStorage.getItem('lm_session');
+  if (!sid) throw new Error('Session mavjud emas');
 
-        const response = await fetch(`${API_BASE}/user/${sessionId}/password`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ currentPassword, newPassword })
-        });
+  const response = await fetch(`${API_BASE}/auth/password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Session-Id': sid
+    },
+    cache: 'no-store',
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
 
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Parol yangilashda xatolik');
-        }
+  const data = await response.json().catch(()=> ({}));
+  if (!response.ok) throw new Error(data.error || 'Parol yangilashda xatolik');
+  return true;
+}
 
-        return true;
-      } catch (error) {
-        console.error('Parol yangilashda xatolik:', error);
-        throw error;
-      }
-    }
 
     async function loadRankingDataFromAPI() {
       try {
@@ -3918,9 +3897,12 @@
 
     function logout() {
       if (confirm('Rostan ham tizimdan chiqmoqchimisiz?')) {
-        localStorage.removeItem('leaderMathUserSession');
-        window.location.href = 'login.html';
-      }
+       async function logout() {
+  if (!confirm('Rostan ham tizimdan chiqmoqchimisiz?')) return;
+  try { await fetch(`${API_BASE}/auth/logout`, { method:'POST', headers:{ 'X-Session-Id': localStorage.getItem('lm_session') || '' } }); } catch(e){}
+  localStorage.removeItem('lm_session');
+  location.replace('login.html');
+}
     }
 
     // =============== MATHLEAGUE TIMER ===============
