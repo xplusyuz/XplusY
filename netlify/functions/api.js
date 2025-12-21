@@ -58,7 +58,7 @@ function secret() {
 }
 
 function makeId(len = 6) {
-  const A = "0123456789";
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out = "";
   for (let i = 0; i < len; i++) out += A[Math.floor(Math.random() * A.length)];
   return out;
@@ -216,23 +216,31 @@ exports.handler = async (event) => {
       }
     }
 
-    // --- NAV (static from Firestore configs/nav, fallback demo) ---
+    // --- NAV (Firestore configs/nav + sections) ---
     if (path === "/nav" && method === "GET") {
       const doc = await db.collection("configs").doc("nav").get();
-      if (doc.exists) return json(200, doc.data());
-      return json(200, {
-        version: 1,
-        nav: [
-          { id: "home", label: "Bosh sahifa", icon: "🏠", sectionId: "home" },
-          { id: "courses", label: "Kurslar", icon: "📚", sectionId: "courses" },
-          { id: "tests", label: "Testlar", icon: "🧠", sectionId: "tests" },
-        ],
-        sections: {
-          home: { title: "Bosh sahifa", chips: [{ id: "all", label: "Hammasi" }], items: [] },
-          courses: { title: "Kurslar", chips: [{ id: "all", label: "Hammasi" }], items: [] },
-          tests: { title: "Testlar", chips: [{ id: "all", label: "Hammasi" }], items: [] },
-        },
-      });
+      const cfg = doc.exists ? doc.data() : null;
+
+      // Fallback demo config
+      const nav = (cfg?.nav && Array.isArray(cfg.nav) && cfg.nav.length)
+        ? cfg.nav
+        : [
+            { id: "home", label: "Bosh sahifa", icon: "fas fa-home", sectionId: "home" },
+            { id: "darsdan-tashqari", label: "Darsdan tashqari", icon: "fas fa-layer-group", sectionId: "darsdan-tashqari" },
+          ];
+
+      // Collect section docs referenced by nav
+      const sectionIds = [...new Set(nav.map(n => n.sectionId).filter(Boolean))];
+      const sections = {};
+      for (const sid of sectionIds) {
+        const s = await db.collection("sections").doc(sid).get();
+        sections[sid] = s.exists
+          ? s.data()
+          : { title: sid, chips: [{ id: "all", label: "Hammasi" }], items: [] };
+      }
+
+      const version = cfg?.version || Date.now();
+      return json(200, { version, nav, sections });
     }
 
     // --- RANKING ---
@@ -243,7 +251,7 @@ exports.handler = async (event) => {
         const name = `${u?.profile?.firstName || ""} ${u?.profile?.lastName || ""}`.trim() || u.id;
         return { place: i + 1, id: u.id, name, points: u.points || 0, avatarUrl: u.avatarUrl || "" };
       });
-      return json(200, { items });
+      return json(200, { items, users: items });
     }
 
     return json(404, { error: "Not found" });
