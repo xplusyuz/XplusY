@@ -1,147 +1,128 @@
-// /netlify/functions/api.js
-const { MongoClient, ObjectId } = require('mongodb');
+import admin from "firebase-admin";
 
-const mongoUri = process.env.MONGODB_URI;
-const client = new MongoClient(mongoUri);
-
-async function connectDB() {
-  await client.connect();
-  return client.db('leaderMathDB');
+// 🔐 Firebase init
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(
+      JSON.parse(process.env.FIREBASE_KEY)
+    )
+  });
 }
 
-exports.handler = async (event, context) => {
-  const path = event.path.replace('/.netlify/functions/api', '');
+const db = admin.firestore();
+
+export async function handler(event) {
+  const path = event.path.replace("/.netlify/functions/api", "");
   const method = event.httpMethod;
-  
+
   try {
-    const db = await connectDB();
-    const usersCollection = db.collection('foydalanuvchilar');
-    
-    // Login endpoint
-    if (path === '/auth/login' && method === 'POST') {
+    const usersCol = db.collection("foydalanuvchilar");
+
+    // ================= LOGIN =================
+    if (path === "/auth/login" && method === "POST") {
       const { id, password } = JSON.parse(event.body);
-      
-      const user = await usersCollection.findOne({ loginId: id });
-      
-      if (!user) {
-        return {
-          statusCode: 404,
-          body: JSON.stringify({ error: 'Bunday ID topilmadi' })
-        };
+
+      const snap = await usersCol
+        .where("loginId", "==", id)
+        .limit(1)
+        .get();
+
+      if (snap.empty) {
+        return json(404, { error: "Bunday ID topilmadi" });
       }
-      
+
+      const doc = snap.docs[0];
+      const user = doc.data();
+
       if (user.password !== password) {
-        return {
-          statusCode: 401,
-          body: JSON.stringify({ error: 'Parol noto‘g‘ri' })
-        };
+        return json(401, { error: "Parol noto‘g‘ri" });
       }
-      
-      // Session yaratish
-      const sessionId = new ObjectId().toString();
-      
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          sessionId,
-          user: {
-            id: user._id.toString(),
-            docId: user._id.toString(),
-            data: user
-          }
-        })
-      };
+
+      const sessionId = doc.id;
+
+      return json(200, {
+        sessionId,
+        user: {
+          id: doc.id,
+          docId: doc.id,
+          data: user
+        }
+      });
     }
-    
-    // Register endpoint
-    if (path === '/auth/register' && method === 'POST') {
+
+    // ================= REGISTER =================
+    if (path === "/auth/register" && method === "POST") {
       const loginId = Math.floor(100000 + Math.random() * 900000).toString();
       const password = generatePassword(8);
-      
+
       const newUser = {
         loginId,
         password,
-        fullName: '',
-        birthDate: '',
-        region: '',
-        district: '',
+        fullName: "",
+        birthDate: "",
+        region: "",
+        district: "",
         points: 0,
-        rank: 'Yangi foydalanuvchi',
+        rank: "Yangi foydalanuvchi",
         bestScore: 0,
-        role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        role: "user",
+        createdAt: Date.now(),
+        updatedAt: Date.now()
       };
-      
-      const result = await usersCollection.insertOne(newUser);
-      const sessionId = result.insertedId.toString();
-      
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          sessionId,
-          loginId,
-          password,
-          user: {
-            id: result.insertedId.toString(),
-            docId: result.insertedId.toString(),
-            data: newUser
-          }
-        })
-      };
-    }
-    
-    // Session tekshirish
-    if (path.startsWith('/auth/session/') && method === 'GET') {
-      const sessionId = path.split('/').pop();
-      
-      try {
-        const user = await usersCollection.findOne({ 
-          _id: new ObjectId(sessionId) 
-        });
-        
-        if (!user) {
-          return {
-            statusCode: 404,
-            body: JSON.stringify({ error: 'Session not found' })
-          };
+
+      const docRef = await usersCol.add(newUser);
+
+      return json(200, {
+        sessionId: docRef.id,
+        loginId,
+        password,
+        user: {
+          id: docRef.id,
+          docId: docRef.id,
+          data: newUser
         }
-        
-        return {
-          statusCode: 200,
-          body: JSON.stringify({
-            user: {
-              id: user._id.toString(),
-              docId: user._id.toString(),
-              data: user
-            }
-          })
-        };
-      } catch (err) {
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ error: 'Invalid session ID' })
-        };
-      }
+      });
     }
-    
-    return {
-      statusCode: 404,
-      body: JSON.stringify({ error: 'Endpoint not found' })
-    };
-    
-  } catch (error) {
-    console.error('API xatosi:', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Server xatosi' })
-    };
+
+    // ================= SESSION =================
+    if (path.startsWith("/auth/session/") && method === "GET") {
+      const sessionId = path.split("/").pop();
+
+      const doc = await usersCol.doc(sessionId).get();
+
+      if (!doc.exists) {
+        return json(404, { error: "Session not found" });
+      }
+
+      return json(200, {
+        user: {
+          id: doc.id,
+          docId: doc.id,
+          data: doc.data()
+        }
+      });
+    }
+
+    return json(404, { error: "Endpoint not found" });
+
+  } catch (e) {
+    console.error("API xatosi:", e);
+    return json(500, { error: "Server xatosi" });
   }
-};
+}
+
+// ================= HELPERS =================
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  };
+}
 
 function generatePassword(len = 8) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  let s = '';
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let s = "";
   for (let i = 0; i < len; i++) {
     s += chars[Math.floor(Math.random() * chars.length)];
   }
