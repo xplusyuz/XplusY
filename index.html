@@ -3063,29 +3063,39 @@
     }
 
     // =============== API FUNCTIONS ===============
-    async function loadCurrentUser() {
-      try {
-        const sessionId = localStorage.getItem('leaderMathUserSession');
-        if (!sessionId) {
-          window.location.href = 'login.html';
-          return null;
-        }
-
-        const response = await fetch(`${API_BASE}/auth/session/${sessionId}`);
-        if (!response.ok) {
-          localStorage.removeItem('leaderMathUserSession');
-          window.location.href = 'login.html';
-          return null;
-        }
-
-        const data = await response.json();
-        return data.user;
-      } catch (error) {
-        console.error('Foydalanuvchi yuklashda xatolik:', error);
-        window.location.href = 'login.html';
-        return null;
-      }
+   async function loadCurrentUser() {
+  try {
+    // ✅ yangi key
+    const sid = localStorage.getItem('lm_session');
+    if (!sid) {
+      location.replace('login.html?redirect=' + encodeURIComponent(location.href));
+      return null;
     }
+
+    // ✅ yangi endpoint
+    const response = await fetch(`${API_BASE}/auth/me`, {
+      method: 'GET',
+      headers: {
+        'X-Session-Id': sid
+      },
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      localStorage.removeItem('lm_session');
+      location.replace('login.html?redirect=' + encodeURIComponent(location.href));
+      return null;
+    }
+
+    const data = await response.json();
+    return data.user || null;
+  } catch (error) {
+    console.error('Foydalanuvchi yuklashda xatolik:', error);
+    // internet xatosida ham login ga majburlamaslik uchun:
+    // agar sid bor bo‘lsa — sahifani ishlatib turamiz
+    return null;
+  }
+}
 
     async function updateUserProfile(updateData) {
       try {
