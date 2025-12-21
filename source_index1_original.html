@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Namangan 1-IMI — 3D Interaktiv Portal</title>
+
+  <!-- LOGO / FAVICON -->
+  <link rel="icon" href="logo.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="logo.png" />
+  <meta name="theme-color" content="#0ea5e9">
+
+  <!-- FONTAWESOME -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- THREE.JS FOR 3D -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+
+  <style>
+    :root {
+      --brand: #0ea5e9;
+      --brand-light: #38bdf8;
+      --brand-dark: #0369a1;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card-bg: rgba(30, 41, 59, 0.8);
+      --glass: rgba(255, 255, 255, 0.05);
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      --radius: 24px;
+      --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    html, body {
+      width: 100%;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body {
+      position: relative;
+      min-height: 100vh;
+    }
+
+    /* 3D CANVAS - FIXED BACKGROUND */
+    #three-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* MAIN CONTENT */
+    .app {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 25px;
+    }
+
+    /* SCROLLBAR STYLING */
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border-radius: 5px;
+      border: 2px solid rgba(15, 23, 42, 0.8);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, var(--brand-light), var(--brand));
+    }
+
+    /* HEADER */
+    header {
+      animation: slideDown 0.8s ease-out;
+    }
+
+    .header-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+
+    .header-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--brand);
+      box-shadow: 0 25px 50px rgba(14, 165, 233, 0.2);
+    }
+
+    .logo-img {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid var(--brand);
+      box-shadow: 0 0 30px var(--brand);
+      animation: pulse 4s infinite;
+    }
+
+    .header-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .header-title {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(90deg, var(--brand), var(--brand-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .header-sub {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .header-tag {
+      padding: 10px 20px;
+      background: rgba(14, 165, 233, 0.15);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--brand-light);
+      backdrop-filter: blur(10px);
+      transition: var(--transition);
+    }
+
+    .header-tag:hover {
+      background: rgba(14, 165, 233, 0.25);
+      transform: scale(1.05);
+    }
+
+    /* MAIN SECTION */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .section-shell {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 25px;
+      box-shadow: var(--shadow);
+      animation: fadeIn 1s ease-out 0.2s both;
+    }
+
+    .section-header {
+      margin-bottom: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .section-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-title i {
+      color: var(--brand);
+      font-size: 24px;
+    }
+
+    .section-sub {
+      font-size: 14px;
+      color: var(--muted);
+      max-width: 600px;
+    }
+
+    .section-chip {
+      padding: 8px 16px;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px dashed var(--brand);
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--brand-light);
+    }
+
+    /* CARD GRID */
+    .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 25px;
+    }
+
+    .card {
+      background: rgba(30, 41, 59, 0.6);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      transition: var(--transition);
+      position: relative;
+      cursor: pointer;
+      transform-style: preserve-3d;
+      perspective: 1000px;
+      height: 100%;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), transparent);
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .card:hover {
+      transform: translateY(-15px) rotateX(5deg);
+      border-color: var(--brand);
+      box-shadow: 0 30px 60px rgba(14, 165, 233, 0.3);
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    .card-img-wrap {
+      position: relative;
+      height: 180px;
+      overflow: hidden;
+    }
+
+    .card-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s;
+    }
+
+    .card:hover .card-img-wrap img {
+      transform: scale(1.1);
+    }
+
+    .card-label {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      padding: 8px 15px;
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: white;
+      backdrop-filter: blur(10px);
+    }
+
+    .card-label i {
+      color: var(--brand);
+    }
+
+    .card-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: calc(100% - 180px);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      flex-grow: 1;
+    }
+
+    .card-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .card-meta-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--brand-light);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+      box-shadow: 0 0 10px var(--brand);
+    }
+
+    .card-tag-mini {
+      padding: 5px 12px;
+      background: rgba(14, 165, 233, 0.1);
+      border-radius: 50px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--brand-light);
+    }
+
+    .card-footer {
+      margin-top: auto;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+      transform: rotate(45deg);
+      transition: transform 0.6s;
+    }
+
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 15px 30px rgba(14, 165, 233, 0.4);
+    }
+
+    .btn:hover::after {
+      transform: rotate(45deg) translate(10%, 10%);
+    }
+
+    .btn i {
+      font-size: 16px;
+    }
+
+    /* FOOTER */
+    footer {
+      animation: slideUp 0.8s ease-out 0.4s both;
+      margin-top: 40px;
+    }
+
+    .footer-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 20px 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .footer-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .footer-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--brand);
+      letter-spacing: 1px;
+    }
+
+    .footer-right {
+      display: flex;
+      gap: 15px;
+    }
+
+    .footer-link {
+      padding: 10px 20px;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 50px;
+      color: var(--brand-light);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+
+    .footer-link:hover {
+      background: rgba(14, 165, 233, 0.2);
+      transform: translateY(-3px);
+    }
+
+    /* MODAL */
+    #page-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(20px);
+    }
+
+    #page-modal.open {
+      display: flex;
+      animation: modalFadeIn 0.3s ease-out;
+    }
+
+    .modal-inner {
+      flex: 1;
+      max-width: 1200px;
+      margin: auto;
+      padding: 20px;
+      position: relative;
+    }
+
+    .close-btn {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      width: 50px;
+      height: 50px;
+      background: rgba(14, 165, 233, 0.2);
+      border: 2px solid var(--brand);
+      border-radius: 50%;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 1001;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      background: var(--brand);
+      transform: rotate(90deg);
+    }
+
+    .modal-frame {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius);
+      border: 2px solid var(--brand);
+      background: white;
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    /* ANIMATIONS */
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 30px var(--brand);
+      }
+      50% {
+        box-shadow: 0 0 50px var(--brand-light);
+      }
+    }
+
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* SCROLL PROGRESS BAR */
+    .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(14, 165, 233, 0.1);
+      z-index: 1000;
+    }
+
+    .scroll-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand), var(--brand-light));
+      width: 0%;
+      transition: width 0.1s;
+      box-shadow: 0 0 10px var(--brand);
+    }
+
+    /* SCROLL TO TOP BUTTON */
+    .scroll-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 50px;
+      height: 50px;
+      background: rgba(14, 165, 233, 0.2);
+      border: 2px solid var(--brand);
+      border-radius: 50%;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 99;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition);
+      backdrop-filter: blur(10px);
+    }
+
+    .scroll-to-top:hover {
+      background: var(--brand);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(14, 165, 233, 0.3);
+    }
+
+    .scroll-to-top.show {
+      display: flex;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .app {
+        padding: 15px;
+      }
+      
+      .header-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+      }
+      
+      .header-tag {
+        margin-top: 10px;
+      }
+      
+      .card-list {
+        grid-template-columns: 1fr;
+      }
+      
+      .footer-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 20px;
+      }
+      
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .scroll-to-top {
+        bottom: 20px;
+        right: 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header-title {
+        font-size: 20px;
+      }
+      
+      .section-title {
+        font-size: 18px;
+      }
+      
+      .card-title {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SCROLL PROGRESS -->
+  <div class="scroll-progress">
+    <div class="scroll-progress-bar" id="scrollProgress"></div>
+  </div>
+
+  <!-- SCROLL TO TOP -->
+  <button class="scroll-to-top" id="scrollToTop">
+    <i class="fa-solid fa-arrow-up"></i>
+  </button>
+
+  <!-- 3D CANVAS -->
+  <canvas id="three-canvas"></canvas>
+
+  <!-- APP CONTENT -->
+  <div class="app">
+
+    <!-- HEADER -->
+    <header>
+      <div class="header-card">
+        <img src="logo.png" alt="Namangan shahar 1-IMI" class="logo-img">
+        <div class="header-text">
+          <div class="header-title">Namangan shahar 1-IMI</div>
+          <div class="header-sub">Ta'lim Sari Birinchi Qadam — 3D Interaktiv Portal</div>
+        </div>
+        <div class="header-tag">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+          Mobil Optimallashtirilgan
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- 3D NAVIGATION HINT -->
+      <div class="section-shell" style="text-align: center;">
+        <div class="section-title">
+          <i class="fa-solid fa-hand-pointer"></i>
+          3D Interaktiv Portalga Xush Kelibsiz!
+        </div>
+        <div class="section-sub" style="margin-top: 10px;">
+          Sichqonchani harakatlantirish orqali 3D sahna atrofida harakatlaning. 
+          Kartalarni aylantirish uchun hover qiling.
+        </div>
+      </div>
+
+      <!-- ASOSIY BO'LIMLAR -->
+      <section class="section-shell">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <div class="section-title">
+              <i class="fa-solid fa-cube"></i>
+              Bo'limlar Galereyasi
+            </div>
+            <div class="section-sub">Har bir bo'lim interaktiv 3D effektlar bilan jihozlangan</div>
+          </div>
+          <div class="section-chip">Sichqoncha orqali boshqarish</div>
+        </div>
+
+        <div class="card-list">
+          <!-- FANLAR -->
+          <div class="card" data-link="fanlar.html" data-title="Fanlar katalogi">
+            <div class="card-img-wrap">
+              <img src="img/fanlar.jpg" alt="Fanlar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-atom"></i> Fanlar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Fanlar katalogi</div>
+              <div class="card-desc">
+                Fanlar ro'yxati va tafsilotlar.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>Filtrlash</span>
+                </div>
+                <span class="card-tag-mini">CHSB tizimi</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- O'QUVCHILAR -->
+          <div class="card" data-link="davomat/index.html" data-title="O'quvchilar ma'lumotlari">
+            <div class="card-img-wrap">
+              <img src="img/talabalar.jpg" alt="Talabalar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-user-astronaut"></i> O'quvchilar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">O'quvchilar ma'lumotlari</div>
+              <div class="card-desc">
+                Sinf tuzilmalari va interaktiv profillar.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>Animatsion grafiklar</span>
+                </div>
+                <span class="card-tag-mini">Yillik yangilanish</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- DARS JADVALI -->
+          <div class="card" data-link="jadval.html" data-title="Dars jadvali">
+            <div class="card-img-wrap">
+              <img src="img/jadval.jpg" alt="Dars jadvali" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-calendar-star"></i> Jadval
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Dars jadvali</div>
+              <div class="card-desc">
+                Interaktiv jadval va haftalik rejalar.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>Vaqt o'qi</span>
+                </div>
+                <span class="card-tag-mini">Real-vaqt</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- IMTIHONLAR -->
+          <div class="card" data-link="test/test.html" data-title="Imtihonlar va baholash">
+            <div class="card-img-wrap">
+              <img src="img/imtihon.jpg" alt="Imtihonlar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-chart-network"></i> Imtihonlar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Imtihonlar va Olimpiadalar</div>
+              <div class="card-desc">
+                Reyting va natijalar tizimi.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>3D grafiklar</span>
+                </div>
+                <span class="card-tag-mini">Reyting tizimi</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- E'LONLAR -->
+          <div class="card" data-link="elonlar.html" data-title="E'lonlar va yangiliklar">
+            <div class="card-img-wrap">
+              <img src="img/elonlar.jpg" alt="E'lonlar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-broadcast-tower"></i> E'lonlar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Yangiliklar</div>
+              <div class="card-desc">
+               Yangiliklar va e'lonlar paneli.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>Animatsiyalar</span>
+                </div>
+                <span class="card-tag-mini">Real-vaqt</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- O'QITUVCHILAR -->
+          <div class="card" data-link="oqituvchilar.html" data-title="O'qituvchilar ro'yxati">
+            <div class="card-img-wrap">
+              <img src="img/oqituvchilar.png" alt="O'qituvchilar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-user-tie"></i> O'qituvchilar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">O'qituvchilar</div>
+              <div class="card-desc">
+                Interaktiv o'qituvchilar profillari.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>Katalog</span>
+                </div>
+                <span class="card-tag-mini">Kafedralar</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- KAFEDRALAR -->
+          <div class="card" data-link="kafedralar.html" data-title="Kafedralar va bo'limlar">
+            <div class="card-img-wrap">
+              <img src="img/kafedralar.jpg" alt="Kafedralar" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-building-columns"></i>Yo'nalishlar
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Yo'nalishlar</div>
+              <div class="card-desc">
+              Yo'nalishlar tuzilmasi.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>struktura</span>
+                </div>
+                <span class="card-tag-mini">Tashkilot</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- KUTUBXONA -->
+          <div class="card" data-link="kutubxona.html" data-title="Kutubxona va ARM">
+            <div class="card-img-wrap">
+              <img src="img/kutubxona.jpg" alt="Kutubxona" loading="lazy">
+              <div class="card-label">
+                <i class="fa-solid fa-book"></i> Kutubxona
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-title">Kutubxona</div>
+              <div class="card-desc">
+                Interaktiv elektron kutubxona.
+              </div>
+              <div class="card-meta-row">
+                <div class="card-meta-left">
+                  <span class="dot"></span>
+                  <span>kitoblar</span>
+                </div>
+                <span class="card-tag-mini">Digital</span>
+              </div>
+              <div class="card-footer">
+                <button class="btn">
+                  <i class="fa-solid fa-eye"></i>Ko'rish
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 3D EFEKTLAR PANELI -->
+      <div class="section-shell">
+        <div class="section-title" style="text-align: center; margin-bottom: 20px;">
+          <i class="fa-solid fa-sliders"></i>
+          3D Effektlarni Boshqarish
+        </div>
+        <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
+          <button id="effect-rotate" class="btn" style="width: auto; padding: 12px 24px;">
+            <i class="fa-solid fa-rotate"></i> Aylantirish
+          </button>
+          <button id="effect-zoom" class="btn" style="width: auto; padding: 12px 24px;">
+            <i class="fa-solid fa-magnifying-glass"></i> Zoom
+          </button>
+          <button id="effect-particles" class="btn" style="width: auto; padding: 12px 24px;">
+            <i class="fa-solid fa-sparkles"></i> Zarralar
+          </button>
+          <button id="effect-reset" class="btn" style="width: auto; padding: 12px 24px; background: linear-gradient(135deg, #64748b, #475569);">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- QOSHIMCHA MA'LUMOT -->
+      <div class="section-shell">
+        <div class="section-title">
+          <i class="fa-solid fa-circle-info"></i>
+          Platforma Haqida
+        </div>
+        <div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+          <div style="background: rgba(14, 165, 233, 0.1); padding: 20px; border-radius: 15px; border: 1px solid rgba(14, 165, 233, 0.2);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i class="fa-solid fa-rocket" style="color: var(--brand); font-size: 20px;"></i>
+              <h3 style="color: white; font-size: 18px;">Tezlik</h3>
+            </div>
+            <p style="color: var(--muted); font-size: 14px;">Platforma optimallashtirilgan 3D grafikalar bilan ishlaydi, yuqori tezlik va samaradorlikni ta'minlaydi.</p>
+          </div>
+          
+          <div style="background: rgba(14, 165, 233, 0.1); padding: 20px; border-radius: 15px; border: 1px solid rgba(14, 165, 233, 0.2);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i class="fa-solid fa-mobile-screen" style="color: var(--brand); font-size: 20px;"></i>
+              <h3 style="color: white; font-size: 18px;">Mobillik</h3>
+            </div>
+            <p style="color: var(--muted); font-size: 14px;">Barcha mobil qurilmalar va planshetlarda mukammal ishlaydigan responsiv dizayn.</p>
+          </div>
+          
+          <div style="background: rgba(14, 165, 233, 0.1); padding: 20px; border-radius: 15px; border: 1px solid rgba(14, 165, 233, 0.2);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i class="fa-solid fa-shield-halved" style="color: var(--brand); font-size: 20px;"></i>
+              <h3 style="color: white; font-size: 18px;">Xavfsizlik</h3>
+            </div>
+            <p style="color: var(--muted); font-size: 14px;">Zamonaviy xavfsizlik texnologiyalari va ma'lumotlarni himoya qilish tizimi.</p>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="footer-card">
+        <div class="footer-left">
+          <div class="footer-name">Namangan 1-IMI 3D Portal</div>
+          <div>Three.js asosida yaratilgan • 90% mobil foydalanuvchilar uchun optimallashtirilgan</div>
+          <div style="font-size: 12px; color: var(--muted); margin-top: 10px;">
+            © 2025 Namangan shahar 1-IMI. Barcha huquqlar himoyalangan.
+          </div>
+        </div>
+        <div class="footer-right">
+          <a href="#" class="footer-link">
+            <i class="fa-brands fa-telegram"></i>
+            Telegram bot
+          </a>
+          <a href="#" class="footer-link">
+            <i class="fa-solid fa-mobile-screen"></i>
+            3D App
+          </a>
+          <a href="#" class="footer-link">
+            <i class="fa-solid fa-headset"></i>
+            Yordam
+          </a>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- MODAL -->
+  <div id="page-modal">
+    <div class="modal-inner">
+      <button class="close-btn" id="modal-close">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <iframe class="modal-frame" id="modal-frame" src=""></iframe>
+    </div>
+  </div>
+
+  <script>
+    // SCROLL FUNCTIONALITY
+    const scrollProgress = document.getElementById('scrollProgress');
+    const scrollToTopBtn = document.getElementById('scrollToTop');
+
+    // Scroll progress tracking
+    window.addEventListener('scroll', () => {
+      const totalHeight = document.body.scrollHeight - window.innerHeight;
+      const progress = (window.pageYOffset / totalHeight) * 100;
+      scrollProgress.style.width = progress + '%';
+      
+      // Show/hide scroll to top button
+      if (window.pageYOffset > 300) {
+        scrollToTopBtn.classList.add('show');
+      } else {
+        scrollToTopBtn.classList.remove('show');
+      }
+    });
+
+    // Scroll to top functionality
+    scrollToTopBtn.addEventListener('click', () => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
+
+    // 3D SCENE SETUP
+    let scene, camera, renderer, controls;
+    let particles = [];
+    let isRotating = true;
+    let particleEffect = true;
+
+    function initThreeJS() {
+      scene = new THREE.Scene();
+      
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 15;
+      
+      renderer = new THREE.WebGLRenderer({ 
+        canvas: document.getElementById('three-canvas'),
+        antialias: true,
+        alpha: true 
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      
+      // Make canvas non-interactive
+      renderer.domElement.style.pointerEvents = 'none';
+      
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI;
+      controls.minDistance = 5;
+      controls.maxDistance = 50;
+      controls.enablePan = false;
+      controls.enableZoom = false;
+      
+      // LIGHTS
+      const ambientLight = new THREE.AmbientLight(0x0ea5e9, 0.3);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0x38bdf8, 0.8);
+      directionalLight.position.set(10, 10, 5);
+      scene.add(directionalLight);
+      
+      const pointLight = new THREE.PointLight(0x0ea5e9, 0.5, 100);
+      pointLight.position.set(-10, -10, 10);
+      scene.add(pointLight);
+      
+      // CREATE GEOMETRIES
+      createParticles();
+      createFloatingShapes();
+      
+      // RESIZE HANDLER
+      window.addEventListener('resize', onWindowResize);
+    }
+    
+    function createParticles() {
+      const particleCount = 1500;
+      const particlesGeometry = new THREE.BufferGeometry();
+      const posArray = new Float32Array(particleCount * 3);
+      
+      for(let i = 0; i < particleCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 100;
+      }
+      
+      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+      
+      const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.08,
+        color: 0x0ea5e9,
+        transparent: true,
+        opacity: 0.5
+      });
+      
+      const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+      particles.push(particlesMesh);
+    }
+    
+    function createFloatingShapes() {
+      // TORUS
+      const torusGeometry = new THREE.TorusGeometry(3, 1, 16, 100);
+      const torusMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0ea5e9,
+        transparent: true,
+        opacity: 0.2,
+        wireframe: true 
+      });
+      const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+      torus.position.x = -12;
+      torus.position.y = 8;
+      scene.add(torus);
+      
+      // ICOSAHEDRON
+      const icosahedronGeometry = new THREE.IcosahedronGeometry(2);
+      const icosahedronMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.3,
+        wireframe: true 
+      });
+      const icosahedron = new THREE.Mesh(icosahedronGeometry, icosahedronMaterial);
+      icosahedron.position.x = 12;
+      icosahedron.position.y = -8;
+      scene.add(icosahedron);
+      
+      // SPHERE
+      const sphereGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+      const sphereMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0369a1,
+        transparent: true,
+        opacity: 0.15,
+        wireframe: true 
+      });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.x = -10;
+      sphere.position.y = -12;
+      scene.add(sphere);
+      
+      // TETRAHEDRON
+      const tetraGeometry = new THREE.TetrahedronGeometry(1.8);
+      const tetraMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0.25,
+        wireframe: true 
+      });
+      const tetrahedron = new THREE.Mesh(tetraGeometry, tetraMaterial);
+      tetrahedron.position.x = 8;
+      tetrahedron.position.y = 12;
+      scene.add(tetrahedron);
+    }
+    
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      if(isRotating) {
+        scene.children.forEach(child => {
+          if(child instanceof THREE.Mesh && child.geometry.type !== 'PlaneGeometry') {
+            child.rotation.x += 0.003;
+            child.rotation.y += 0.003;
+          }
+        });
+      }
+      
+      particles.forEach(particle => {
+        if(particleEffect) {
+          particle.rotation.x += 0.0005;
+          particle.rotation.y += 0.0005;
+        }
+      });
+      
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    
+    // INITIALIZE 3D
+    initThreeJS();
+    animate();
+    
+    // EFFECT CONTROLS
+    document.getElementById('effect-rotate').addEventListener('click', () => {
+      isRotating = !isRotating;
+      const btn = document.getElementById('effect-rotate');
+      btn.innerHTML = isRotating ? 
+        '<i class="fa-solid fa-pause"></i> To\'xtatish' : 
+        '<i class="fa-solid fa-play"></i> Davom ettirish';
+    });
+    
+    document.getElementById('effect-zoom').addEventListener('click', () => {
+      camera.position.z = camera.position.z === 15 ? 8 : 15;
+    });
+    
+    document.getElementById('effect-particles').addEventListener('click', () => {
+      particleEffect = !particleEffect;
+      const btn = document.getElementById('effect-particles');
+      btn.innerHTML = particleEffect ? 
+        '<i class="fa-solid fa-sparkles"></i> Zarralar (ON)' : 
+        '<i class="fa-solid fa-ban"></i> Zarralar (OFF)';
+    });
+    
+    document.getElementById('effect-reset').addEventListener('click', () => {
+      camera.position.set(0, 0, 15);
+      controls.reset();
+      isRotating = true;
+      particleEffect = true;
+      document.getElementById('effect-rotate').innerHTML = '<i class="fa-solid fa-pause"></i> To\'xtatish';
+      document.getElementById('effect-particles').innerHTML = '<i class="fa-solid fa-sparkles"></i> Zarralar (ON)';
+    });
+    
+    // MODAL FUNCTIONALITY
+    const modal = document.getElementById('page-modal');
+    const frame = document.getElementById('modal-frame');
+    const closeBtn = document.getElementById('modal-close');
+    
+    document.querySelectorAll('[data-link]').forEach(card => {
+      card.addEventListener('click', () => {
+        const url = card.dataset.link;
+        const title = card.dataset.title;
+        
+        if(!url) return;
+        
+        // Add 3D transition effect
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          card.style.transform = '';
+        }, 200);
+        
+        frame.src = url;
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      });
+    });
+    
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('open');
+      frame.src = '';
+      document.body.style.overflow = '';
+    });
+    
+    modal.addEventListener('click', e => {
+      if(e.target === modal) {
+        modal.classList.remove('open');
+        frame.src = '';
+        document.body.style.overflow = '';
+      }
+    });
+    
+    // CARD HOVER EFFECTS
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        if (window.innerWidth > 768) {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          
+          const rotateY = (x - centerX) / 20;
+          const rotateX = (centerY - y) / 20;
+          
+          card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-10px)`;
+        }
+      });
+      
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateY(0)';
+      });
+    });
+
+    // Add some content to ensure scrolling works
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('3D Portal loaded successfully!');
+      console.log('Scroll enabled: Yes');
+      console.log('3D Effects: Active');
+    });
+  </script>
+</body>
+</html>
