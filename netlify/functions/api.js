@@ -10,9 +10,9 @@ function env(name, required=true){
 
 function initAdmin(){
   if (admin.apps.length) return;
-  const projectId = env('FB_PROJECT_ID');
-  const clientEmail = env('FB_CLIENT_EMAIL');
-  const privateKey = env('FB_PRIVATE_KEY').replace(/\n/g, '\n').replace(/\\n/g,'\n');
+  const projectId = env('PROJECT_ID');
+  const clientEmail = env('CLIENT_EMAIL');
+  const privateKey = env('PRIVATE_KEY').replace(/\n/g, '\n').replace(/\\n/g,'\n');
   admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
 }
 function db(){ initAdmin(); return admin.firestore(); }
