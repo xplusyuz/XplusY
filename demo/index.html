@@ -2662,16 +2662,14 @@
     </div>
   </div>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js"></script>
-  <script src="auth-utils.js"></script>
+  <!-- API UTILS -->
+  <script src="api-utils.js"></script>
 
   <script>
     // =============== GLOBAL VARIABLES ===============
     let regionData = null;
     let currentUserData = null;
+    const API_BASE = '/.netlify/functions/api';
 
     // =============== THEME MANAGEMENT ===============
     const themeToggle = document.getElementById('theme-toggle');
@@ -3064,6 +3062,127 @@
       districtSelect.disabled = false;
     }
 
+    // =============== API FUNCTIONS ===============
+    async function loadCurrentUser() {
+      try {
+        const sessionId = localStorage.getItem('leaderMathUserSession');
+        if (!sessionId) {
+          window.location.href = 'login.html';
+          return null;
+        }
+
+        const response = await fetch(`${API_BASE}/auth/session/${sessionId}`);
+        if (!response.ok) {
+          localStorage.removeItem('leaderMathUserSession');
+          window.location.href = 'login.html';
+          return null;
+        }
+
+        const data = await response.json();
+        return data.user;
+      } catch (error) {
+        console.error('Foydalanuvchi yuklashda xatolik:', error);
+        window.location.href = 'login.html';
+        return null;
+      }
+    }
+
+    async function updateUserProfile(updateData) {
+      try {
+        const sessionId = localStorage.getItem('leaderMathUserSession');
+        if (!sessionId) {
+          throw new Error('Session mavjud emas');
+        }
+
+        const response = await fetch(`${API_BASE}/user/${sessionId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+          throw new Error('Profil yangilashda xatolik');
+        }
+
+        const data = await response.json();
+        return data.user;
+      } catch (error) {
+        console.error('Profil yangilashda xatolik:', error);
+        throw error;
+      }
+    }
+
+    async function updateAvatar(avatarBase64) {
+      try {
+        const sessionId = localStorage.getItem('leaderMathUserSession');
+        if (!sessionId) {
+          throw new Error('Session mavjud emas');
+        }
+
+        const response = await fetch(`${API_BASE}/user/${sessionId}/avatar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ avatar: avatarBase64 })
+        });
+
+        if (!response.ok) {
+          throw new Error('Avatar yangilashda xatolik');
+        }
+
+        const data = await response.json();
+        return data.user;
+      } catch (error) {
+        console.error('Avatar yangilashda xatolik:', error);
+        throw error;
+      }
+    }
+
+    async function changePassword(currentPassword, newPassword) {
+      try {
+        const sessionId = localStorage.getItem('leaderMathUserSession');
+        if (!sessionId) {
+          throw new Error('Session mavjud emas');
+        }
+
+        const response = await fetch(`${API_BASE}/user/${sessionId}/password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Parol yangilashda xatolik');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Parol yangilashda xatolik:', error);
+        throw error;
+      }
+    }
+
+    async function loadRankingDataFromAPI() {
+      try {
+        const response = await fetch(`${API_BASE}/ranking`);
+        if (!response.ok) {
+          throw new Error('Reyting yuklashda xatolik');
+        }
+
+        const data = await response.json();
+        return data.users;
+      } catch (error) {
+        console.error('Reyting yuklashda xatolik:', error);
+        throw error;
+      }
+    }
+
     // =============== AVATAR MANAGEMENT ===============
     // Rasmni base64 ga o'tkazish
     function convertImageToBase64(file) {
@@ -3089,15 +3208,8 @@
         // Base64 ga o'tkazish
         const base64Image = await convertImageToBase64(file);
         
-        // Firestore ga saqlash
-        const user = authUtils.getUser();
-        if (!user) return;
-        
-        const db = firebase.firestore();
-        await db.collection('foydalanuvchilar').doc(user.id).update({
-          avatar: base64Image,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        // API orqali saqlash
+        await updateAvatar(base64Image);
         
         // Mahalliy ma'lumotlarni yangilash
         if (currentUserData) {
@@ -3261,77 +3373,6 @@
       }
     }
 
-    // Parolni yangilash
-    async function updatePassword() {
-      const currentPassword = document.getElementById('current-password').value;
-      const newPassword = document.getElementById('new-password').value;
-      const confirmPassword = document.getElementById('confirm-password').value;
-      
-      // Validatsiya
-      if (!currentPassword) {
-        showNotification('Joriy parolni kiriting', 'warning');
-        return;
-      }
-      
-      if (!newPassword) {
-        showNotification('Yangi parolni kiriting', 'warning');
-        return;
-      }
-      
-      if (newPassword.length < 6) {
-        showNotification('Yangi parol kamida 6 belgidan iborat bo\'lishi kerak', 'warning');
-        return;
-      }
-      
-      if (!checkPasswordMatch()) {
-        showNotification('Parollar mos kelmaydi', 'warning');
-        return;
-      }
-      
-      try {
-        // Parolni tekshirish (bu yerda authUtils.dan foydalanish kerak)
-        const user = authUtils.getUser();
-        if (!user) {
-          throw new Error('Foydalanuvchi topilmadi');
-        }
-        
-        // Firestore dan joriy parolni tekshirish
-        const db = firebase.firestore();
-        const userDoc = await db.collection('foydalanuvchilar').doc(user.id).get();
-        
-        if (!userDoc.exists) {
-          throw new Error('Foydalanuvchi ma\'lumotlari topilmadi');
-        }
-        
-        const userData = userDoc.data();
-        
-        // Parolni tekshirish (oddiy tekshirish - aslida hash qilinishi kerak)
-        if (userData.password !== currentPassword) {
-          showNotification('Joriy parol noto\'g\'ri', 'error');
-          return;
-        }
-        
-        // Yangi parolni saqlash
-        await db.collection('foydalanuvchilar').doc(user.id).update({
-          password: newPassword,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        showNotification('Parol muvaffaqiyatli yangilandi!', 'success');
-        closeChangePasswordModal();
-        
-        // Formani tozalash
-        document.getElementById('change-password-form').reset();
-        document.getElementById('password-strength-bar').className = 'strength-bar';
-        document.getElementById('password-strength-text').textContent = '';
-        document.getElementById('password-match-message').textContent = '';
-        
-      } catch (error) {
-        console.error('Parol yangilashda xatolik:', error);
-        showNotification('Xatolik: ' + error.message, 'error');
-      }
-    }
-
     // =============== MODAL MANAGEMENT ===============
     function openProfileModal() {
       loadProfileData();
@@ -3396,20 +3437,15 @@
         `;
         
         // Get current user
-        const currentUser = authUtils.getUser();
+        const currentUser = await loadCurrentUser();
         if (!currentUser) {
-          window.location.href = 'login.html';
           return;
         }
         
-        // Get all users from "foydalanuvchilar" collection sorted by points
-        const db = firebase.firestore();
-        const usersSnapshot = await db.collection('foydalanuvchilar')
-          .orderBy('points', 'desc')
-          .limit(1000)
-          .get();
+        // Get all users from API
+        const users = await loadRankingDataFromAPI();
         
-        if (usersSnapshot.empty) {
+        if (!users || users.length === 0) {
           rankingList.innerHTML = `
             <div class="loading-indicator">
               <i class="fas fa-users-slash"></i>
@@ -3419,18 +3455,8 @@
           return;
         }
         
-        const users = [];
-        usersSnapshot.forEach(doc => {
-          const userData = doc.data();
-          users.push({
-            id: doc.id,
-            ...userData
-          });
-        });
-        
         // Find current user position
-        let currentUserPosition = -1;
-        currentUserPosition = users.findIndex(user => user.id === currentUser.id);
+        const currentUserPosition = users.findIndex(user => user.id === currentUser.id);
         
         // Display current user rank WITH AVATAR
         if (currentUser && currentUserPosition !== -1) {
@@ -3521,56 +3547,28 @@
       } catch (error) {
         console.error('Reyting yuklashda xatolik:', error);
         
-        // Check if error is because points field is not indexed
-        if (error.message && error.message.includes('index')) {
-          console.error('Firestore indeksi kerak: "foydalanuvchilar" kolleksiyasida "points" maydoni bo\'yicha indeks yarating');
-          
-          const rankingList = document.getElementById('ranking-list');
-          const currentUserRank = document.getElementById('current-user-rank');
-          
-          if (rankingList) {
-            rankingList.innerHTML = `
-              <div class="loading-indicator">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>Firestore indeksi kerak. Iltimos, "points" maydoni bo\'yicha indeks yarating.</div>
-              </div>
-            `;
-          }
-          
-          if (currentUserRank) {
-            currentUserRank.innerHTML = `
-              <div class="loading-indicator">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>Indeks muammosi</div>
-              </div>
-            `;
-          }
-          
-          showNotification('Reyting yuklanmadi: Firestore indeksi kerak. Iltimos, konsolga qarang.', 'error');
-        } else {
-          const rankingList = document.getElementById('ranking-list');
-          const currentUserRank = document.getElementById('current-user-rank');
-          
-          if (rankingList) {
-            rankingList.innerHTML = `
-              <div class="loading-indicator">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>Reyting yuklanmadi. Iltimos, qayta urinib ko\'ring.</div>
-              </div>
-            `;
-          }
-          
-          if (currentUserRank) {
-            currentUserRank.innerHTML = `
-              <div class="loading-indicator">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>Ma\'lumotlar yuklanmadi</div>
-              </div>
-            `;
-          }
-          
-          showNotification('Reyting yuklanmadi: ' + error.message, 'error');
+        const rankingList = document.getElementById('ranking-list');
+        const currentUserRank = document.getElementById('current-user-rank');
+        
+        if (rankingList) {
+          rankingList.innerHTML = `
+            <div class="loading-indicator">
+              <i class="fas fa-exclamation-triangle"></i>
+              <div>Reyting yuklanmadi. Iltimos, qayta urinib ko'ring.</div>
+            </div>
+          `;
         }
+        
+        if (currentUserRank) {
+          currentUserRank.innerHTML = `
+            <div class="loading-indicator">
+              <i class="fas fa-exclamation-triangle"></i>
+              <div>Ma'lumotlar yuklanmadi</div>
+            </div>
+          `;
+        }
+        
+        showNotification('Reyting yuklanmadi: ' + error.message, 'error');
       }
     }
 
@@ -3633,7 +3631,7 @@
           }
           
           // Get current user
-          const currentUser = authUtils.getUser();
+          const currentUser = currentUserData;
           
           // Re-render ranking list WITH AVATARS
           rankingList.innerHTML = '';
@@ -3699,15 +3697,11 @@
     window.loadRankingData = loadRankingData;
 
     // =============== PROFILE MANAGEMENT ===============
-    function loadProfileData() {
-      const user = authUtils.getUser();
-      currentUserData = user?.data || {};
+    async function loadProfileData() {
+      const user = await loadCurrentUser();
+      currentUserData = user || {};
       
       if (!user) {
-        // Foydalanuvchi topilmasa, login sahifasiga yo'naltirish
-        setTimeout(() => {
-          window.location.href = 'login.html';
-        }, 500);
         return;
       }
       
@@ -3755,7 +3749,7 @@
         currentUserData.district || '—';
       document.getElementById('detail-created').textContent = 
         currentUserData.createdAt ? 
-        formatDate(currentUserData.createdAt.seconds * 1000) : '—';
+        formatDate(currentUserData.createdAt) : '—';
       
       // Edit form values
       document.getElementById('edit-firstname').value = firstName;
@@ -3855,7 +3849,7 @@
           district
         };
         
-        await authUtils.updateUserData(updateData);
+        await updateUserProfile(updateData);
         showNotification('Profil muvaffaqiyatli yangilandi!', 'success');
         
         // Update header greeting
@@ -3868,9 +3862,53 @@
       }
     }
 
+    async function updatePassword() {
+      const currentPassword = document.getElementById('current-password').value;
+      const newPassword = document.getElementById('new-password').value;
+      const confirmPassword = document.getElementById('confirm-password').value;
+      
+      // Validatsiya
+      if (!currentPassword) {
+        showNotification('Joriy parolni kiriting', 'warning');
+        return;
+      }
+      
+      if (!newPassword) {
+        showNotification('Yangi parolni kiriting', 'warning');
+        return;
+      }
+      
+      if (newPassword.length < 6) {
+        showNotification('Yangi parol kamida 6 belgidan iborat bo\'lishi kerak', 'warning');
+        return;
+      }
+      
+      if (!checkPasswordMatch()) {
+        showNotification('Parollar mos kelmaydi', 'warning');
+        return;
+      }
+      
+      try {
+        await changePassword(currentPassword, newPassword);
+        
+        showNotification('Parol muvaffaqiyatli yangilandi!', 'success');
+        closeChangePasswordModal();
+        
+        // Formani tozalash
+        document.getElementById('change-password-form').reset();
+        document.getElementById('password-strength-bar').className = 'strength-bar';
+        document.getElementById('password-strength-text').textContent = '';
+        document.getElementById('password-match-message').textContent = '';
+        
+      } catch (error) {
+        console.error('Parol yangilashda xatolik:', error);
+        showNotification('Xatolik: ' + error.message, 'error');
+      }
+    }
+
     function logout() {
       if (confirm('Rostan ham tizimdan chiqmoqchimisiz?')) {
-        authUtils.logout();
+        localStorage.removeItem('leaderMathUserSession');
         window.location.href = 'login.html';
       }
     }
@@ -4086,7 +4124,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
       // Check authentication
       try {
-        const user = await authUtils.loadSession();
+        const user = await loadCurrentUser();
         if (!user) {
           window.location.href = 'login.html';
           return;
