@@ -1,45 +1,45 @@
-# LeaderMath.uz — API-only (Netlify Functions + MongoDB)
+# LeaderMath — Firebase rulesiz (API-only) Platforma
 
-Bu loyiha **SDKsiz** ishlaydi: frontend faqat `fetch()` bilan Netlify Function API ga murojaat qiladi.
+Frontend Firebase SDK ishlatmaydi. Hamma narsa Netlify Function (Firebase Admin SDK) orqali ishlaydi.
 
-## 1) Kerakli narsalar
-- Node.js 18+
-- Netlify CLI (`npm i -g netlify-cli`)
-- MongoDB Atlas (yoki boshqa Mongo) URI
+## 1) Firestore rules
+`firebase/firestore.rules` dagidek hammasini yopiq qiling: `allow read, write: if false;`
 
-## 2) Sozlash
-Netlify dashboard yoki `.env` orqali:
-- `MONGODB_URI` = Mongo connection string
-- (ixtiyoriy) `ADMIN_TOKEN` = admin endpointlar uchun token
+## 2) Service Account ENV
+Firebase Console → Project settings → Service accounts → "Generate new private key"
 
-Netlify local dev:
+Netlify → Site → Environment variables:
+- FB_PROJECT_ID
+- FB_CLIENT_EMAIL
+- FB_PRIVATE_KEY (private_key ni qo'ying; kod `\n` ni `\n` ga aylantiradi)
+Ixtiyoriy:
+- SESSION_DAYS = 30
+- ADMIN_TOKEN = (admin publish uchun)
+
+## 3) Lokal
 ```bash
 npm i
 netlify dev
 ```
+http://localhost:8888/login.html
 
-Sayt: `http://localhost:8888`
-
-## 3) API
-Base: `/.netlify/functions/api`
+## 4) API
+Base: /.netlify/functions/api
 
 Auth:
-- `POST /auth/register`  -> auto 6 xonali ID + random parol, session yaratadi
-- `POST /auth/login`     -> ID+parol, session qaytaradi
-- `GET  /auth/session/:sid` -> session tekshiradi, user qaytaradi
-- `POST /auth/password`  -> session bilan parol yangilash
+- POST /auth/register  -> auto 6 xonali ID + random parol + session
+- POST /auth/login
+- GET  /auth/me
+- POST /auth/password
+- POST /auth/logout
+
+Content:
+- GET  /content/home (public)
+- POST /admin/content/home (admin; role=admin yoki X-Admin-Token)
 
 User:
-- `GET  /user/:id`       -> session bilan o'z profilini ko'rish
-- `PATCH /user/:id`      -> session bilan o'z profilini yangilash
-- `POST /user/:id/avatar`-> base64 avatar saqlash
+- GET/PATCH /user/me
+- POST /user/me/avatar
 
-Public:
-- `GET /content/home`    -> banner + cardlar (frontend dinamika)
-- `GET /ranking`         -> reyting uchun public list
-
-## 4) MongoDB indekslar (tavsiya)
-Mongo shell yoki Atlas UI:
-- `sessions.expiresAt` uchun TTL index: expireAfterSeconds=0
-- `users.loginId` unique index
-
+Ranking:
+- GET /ranking
