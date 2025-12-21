@@ -4160,6 +4160,328 @@
     });
   </script>
 
-<script src="lm-patch.js"></script>
+<!-- LM_PATCH_START -->
+<style>
+/* Profil to'ldirilmaguncha sayt blok */
+.lm-profile-lock { overflow: hidden !important; }
+</style>
+<script>
+(function(){
+  const API_BASE = (window.API_BASE || '/api').replace(/\/+$/,'');
+
+  const $ = (sel, root=document)=>root.querySelector(sel);
+  const $$ = (sel, root=document)=>Array.from(root.querySelectorAll(sel));
+  const esc = (s)=>String(s??'').replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+  function getSessionId(){
+    return localStorage.getItem('leaderMathUserSession')
+        || localStorage.getItem('sessionId')
+        || localStorage.getItem('lmSession')
+        || '';
+  }
+
+  async function apiGet(path){
+    const r = await fetch(`${API_BASE}${path}`, {cache:'no-store'});
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      throw new Error(t || ('HTTP '+r.status));
+    }
+    return await r.json();
+  }
+
+  // ---------- PROFILE GATE ----------
+  function findProfileModal(){
+    return $('#profile-modal') || $('#profileModal') || $('.profile-modal') || $('[data-profile-modal]') || $('.modal.profile');
+  }
+
+  function isProfileCompleteFromModal(modal){
+    if(window.__LM_PROFILE_COMPLETED===true) return true;
+
+    const ids = [
+      'firstName','lastName','birthDate','region','district',
+      'pfFirst','pfLast','pfBirth','pfRegion','pfDistrict'
+    ];
+
+    let any=false, ok=true;
+    ids.forEach(id=>{
+      const el = modal.querySelector('#'+id);
+      if(el){
+        any=true;
+        if(!String(el.value||'').trim()) ok=false;
+      }
+    });
+    if(any) return ok;
+
+    // fallback: required fields
+    const req = modal.querySelectorAll('input[required],select[required],textarea[required]');
+    if(req.length){
+      for(const el of req){
+        if(!String(el.value||'').trim()) return false;
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  function lockSiteBehindModal(modal){
+    if(!modal) return;
+
+    // show modal if hidden
+    modal.classList.add('active','open');
+    modal.style.display = modal.style.display || 'block';
+
+    // transparent blocker above everything except modal
+    let blocker = $('#lm-gate-blocker');
+    if(!blocker){
+      blocker = document.createElement('div');
+      blocker.id='lm-gate-blocker';
+      blocker.style.cssText='position:fixed;inset:0;z-index:9998;background:transparent;';
+      document.body.appendChild(blocker);
+    }
+
+    // ensure modal above blocker
+    modal.style.zIndex = 9999;
+
+    // disable close buttons
+    $$('.close, .modal-close, .btn-close, [data-close], button[aria-label="close"]', modal).forEach(btn=>{
+      btn.style.pointerEvents='none';
+      btn.style.opacity='0';
+    });
+
+    document.body.classList.add('lm-profile-lock');
+
+    // stop ESC
+    document.addEventListener('keydown', (e)=>{
+      if(!document.body.classList.contains('lm-profile-lock')) return;
+      if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); }
+    }, true);
+
+    // stop overlay click close
+    modal.addEventListener('click', (e)=>{
+      if(!document.body.classList.contains('lm-profile-lock')) return;
+      const panel = $('.modal-content, .dialog, .sheet, .card, .panel, .modalCard', modal);
+      if(panel && !panel.contains(e.target)){
+        e.preventDefault(); e.stopPropagation();
+      }
+    }, true);
+
+    // prevent clicks outside modal (capturing)
+    document.addEventListener('click', (e)=>{
+      if(!document.body.classList.contains('lm-profile-lock')) return;
+      if(modal.contains(e.target)) return;
+      e.preventDefault(); e.stopPropagation();
+    }, true);
+  }
+
+  function unlockSite(modal){
+    document.body.classList.remove('lm-profile-lock');
+    const b = $('#lm-gate-blocker');
+    if(b) b.remove();
+    if(modal){
+      $$('.close, .modal-close, .btn-close, [data-close], button[aria-label="close"]', modal).forEach(btn=>{
+        btn.style.pointerEvents='';
+        btn.style.opacity='';
+      });
+      // allow closing normally, but don't force-close
+    }
+  }
+
+  async function enforceProfileIfNeeded(){
+    const sid = getSessionId();
+    if(!sid) return;
+
+    let u=null;
+    try{
+      const j = await apiGet('/auth/session/' + encodeURIComponent(sid));
+      u = j && (j.user || (j.valid ? j.user : null));
+      if(!u && j && j.valid === false) return;
+    }catch(_){
+      return;
+    }
+    if(!u) return;
+
+    if(u.profileCompleted) {
+      window.__LM_PROFILE_COMPLETED = true;
+      return;
+    }
+
+    const modal = findProfileModal();
+    if(!modal) return;
+
+    lockSiteBehindModal(modal);
+
+    // watch for completion (after save)
+    const checkDone = async ()=>{
+      try{
+        const jj = await apiGet('/auth/session/' + encodeURIComponent(sid));
+        const uu = jj.user || null;
+        if(uu && uu.profileCompleted){
+          window.__LM_PROFILE_COMPLETED = true;
+          unlockSite(modal);
+        }else{
+          // also allow unlock if modal inputs are complete and save triggers later
+          if(isProfileCompleteFromModal(modal)===true){
+            // still wait for API update, but keep UX softer
+          }
+        }
+      }catch(_){}
+    };
+
+    // hook common save buttons
+    const saveBtn = $('#profile-save') || $('[data-profile-save]') || $('button[type="submit"]', modal);
+    if(saveBtn){
+      const orig = saveBtn.onclick;
+      saveBtn.onclick = async function(ev){
+        if(orig) await orig.call(this, ev);
+        setTimeout(checkDone, 800);
+        setTimeout(checkDone, 1600);
+      };
+    }
+
+    // also re-check on input/change
+    modal.addEventListener('input', ()=>{ /* keep locked until API says completed */ }, true);
+    modal.addEventListener('change', ()=>{ /* noop */ }, true);
+  }
+
+  // ---------- ADMIN NAV RENDER ----------
+  let NAV_DATA = null;
+
+  function findBottomNav(){
+    return $('.bottom-nav') || $('#bottomNav') || $('.nav-bottom') || $('[data-bottom-nav]');
+  }
+  function findChipBar(){
+    return $('#chipBar') || $('.chipbar') || $('.chips') || $('[data-chipbar]');
+  }
+  function findContentWrap(){
+    return $('#page-dynamic') || $('#content') || $('.page-content.active') || $('.content') || $('[data-content]');
+  }
+
+  async function loadNav(){
+    // try cache first
+    try{
+      const c = JSON.parse(localStorage.getItem('lmNavCache')||'null');
+      if(c && c.data) NAV_DATA = c.data;
+    }catch(_){}
+    try{
+      const fresh = await apiGet('/nav');
+      NAV_DATA = fresh;
+      try{ localStorage.setItem('lmNavCache', JSON.stringify({data:fresh, at:Date.now()})); }catch(_){}
+    }catch(_){}
+  }
+
+  function renderBottomNav(){
+    const navWrap = findBottomNav();
+    if(!navWrap || !NAV_DATA || !Array.isArray(NAV_DATA.nav)) return;
+
+    // preserve if user already has items and you want to append? -> replace for admin-driven
+    navWrap.innerHTML = '';
+    NAV_DATA.nav.forEach((n, idx)=>{
+      const btn = document.createElement('button');
+      btn.className = (btn.className || '') + ' nav-item';
+      if(idx===0) btn.classList.add('active');
+      btn.dataset.page = n.sectionId || n.id;
+      btn.innerHTML = `<span class="nav-icon">${esc(n.icon||'✨')}</span><span class="nav-text">${esc(n.label||n.id)}</span>`;
+      btn.addEventListener('click', ()=>{
+        $$('.nav-item', navWrap).forEach(x=>x.classList.remove('active'));
+        btn.classList.add('active');
+        openSection(btn.dataset.page);
+      });
+      navWrap.appendChild(btn);
+    });
+  }
+
+  function renderChips(section){
+    const chipWrap = findChipBar();
+    if(!chipWrap) return;
+    const chips = (section.chips && section.chips.length) ? section.chips : [{id:'all', label:'Hammasi'}];
+    chipWrap.innerHTML = '';
+    chips.forEach((c, idx)=>{
+      const b = document.createElement('button');
+      b.className = 'chip';
+      if(idx===0) b.classList.add('active');
+      b.dataset.chip = c.id;
+      b.textContent = c.label;
+      b.addEventListener('click', ()=>{
+        $$('.chip', chipWrap).forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        renderItems(section, c.id);
+      });
+      chipWrap.appendChild(b);
+    });
+  }
+
+  function renderItems(section, chipId){
+    const wrap = findContentWrap();
+    if(!wrap) return;
+
+    // create container if missing
+    let itemsWrap = $('#lm-items', wrap);
+    if(!itemsWrap){
+      itemsWrap = document.createElement('div');
+      itemsWrap.id='lm-items';
+      itemsWrap.className='lm-items';
+      wrap.innerHTML='';
+      wrap.appendChild(itemsWrap);
+    }
+
+    const all = Array.isArray(section.items) ? section.items : [];
+    const items = all.filter(it => chipId==='all' || (it.chipId||'all')===chipId);
+
+    if(!items.length){
+      itemsWrap.innerHTML = `<div class="empty-state">Hozircha kontent yo‘q</div>`;
+      return;
+    }
+
+    itemsWrap.innerHTML = items.map(it=>{
+      const kind = it.kind || 'card';
+      const img = it.imageUrl ? `<img class="lm-img" src="${esc(it.imageUrl)}" alt="">` : '';
+      const sub = it.subtitle ? `<div class="lm-sub">${esc(it.subtitle)}</div>` : '';
+      const href = it.href ? `data-href="${esc(it.href)}"` : '';
+      return `<div class="lm-item ${kind==='banner'?'banner':'card'}" ${href}>
+        ${img}
+        <div class="lm-body">
+          <div class="lm-title">${esc(it.title||'')}</div>
+          ${sub}
+        </div>
+      </div>`;
+    }).join('');
+
+    itemsWrap.addEventListener('click', (e)=>{
+      const card = e.target.closest('.lm-item');
+      if(!card) return;
+      const href = card.getAttribute('data-href');
+      if(href) location.href = href;
+    }, {once:true});
+  }
+
+  function openSection(sectionId){
+    if(!NAV_DATA) return;
+    const section = (NAV_DATA.sections||{})[sectionId];
+    if(!section) return;
+
+    // try to show a dynamic page if your site uses pages
+    // if you have a showPage function, call it first
+    if(typeof window.showPage === 'function'){
+      try{ window.showPage(sectionId); }catch(_){}
+    }
+    renderChips(section);
+    renderItems(section, 'all');
+  }
+
+  async function boot(){
+    await enforceProfileIfNeeded();
+    await loadNav();
+    renderBottomNav();
+    if(NAV_DATA?.nav?.[0]){
+      openSection(NAV_DATA.nav[0].sectionId || NAV_DATA.nav[0].id);
+    }
+  }
+
+  window.addEventListener('load', boot);
+})();
+</script>
+<!-- LM_PATCH_END -->
+
 </body>
 </html>
