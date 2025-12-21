@@ -1,65 +1,36 @@
-// improved auth-utils.js (API version)
-(function(){
+// auth-utils.js (API-only)
+(function () {
   const STORAGE_KEY = 'leaderMathUserSession';
-
   let currentUser = null;
-  let isSessionLoading = false;
-  let sessionPromise = null;
+
+  function getSessionId(){
+    try { return localStorage.getItem(STORAGE_KEY); } catch(e){ return null; }
+  }
+  function setSessionId(sid){
+    try { localStorage.setItem(STORAGE_KEY, sid); } catch(e){}
+  }
+  function clearSession(){
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+    currentUser = null;
+  }
 
   async function loadSession(){
-    if (isSessionLoading && sessionPromise) {
-      return sessionPromise;
+    const sid = getSessionId();
+    if (!sid) return null;
+    try {
+      const data = await window.apiUtils.session(sid);
+      currentUser = data.user;
+      return currentUser;
+    } catch(e){
+      clearSession();
+      return null;
     }
-
-    isSessionLoading = true;
-    sessionPromise = (async () => {
-      let sessionId = null;
-      try{ 
-        sessionId = localStorage.getItem(STORAGE_KEY); 
-      } catch(e) {
-        console.error('LocalStorage error:', e);
-      }
-
-      if (!sessionId){
-        currentUser = null;
-        isSessionLoading = false;
-        return null;
-      }
-
-      try{
-        // API orqali sessionni tekshirish
-        const response = await fetch(`/.netlify/functions/api/auth/session/${sessionId}`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Session not found');
-        }
-        
-        currentUser = data.user;
-        isSessionLoading = false;
-        return currentUser;
-      }catch(err){
-        console.error('Session yuklashda xatolik:', err);
-        try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-        currentUser = null;
-        isSessionLoading = false;
-        return null;
-      }
-    })();
-
-    return sessionPromise;
   }
 
   async function requireSession(){
-    if (currentUser) {
-      return currentUser;
-    }
-
-    const user = await loadSession();
-    
-    if (user) {
-      return user;
-    }
+    if (currentUser) return currentUser;
+    const u = await loadSession();
+    if (u) return u;
 
     const currentPath = window.location.pathname;
     if (!currentPath.includes('login.html')) {
@@ -67,138 +38,45 @@
       window.location.href = `login.html?redirect=${redirect}`;
       return new Promise(() => {});
     }
-    
     return null;
   }
 
-  async function checkSession() {
-    if (currentUser) return currentUser;
-    
-    const user = await loadSession();
-    return user;
-  }
-
-  function getUser(){
+  async function loginWithIdPassword(id, password){
+    const data = await window.apiUtils.login((id||'').trim(), (password||'').trim());
+    setSessionId(data.sessionId);
+    currentUser = data.user;
     return currentUser;
   }
 
-  async function loginWithIdPassword(loginId, password){
-    const id   = (loginId || '').trim();
-    const pass = (password || '').trim();
-    if (!id || !pass) throw new Error('ID va parol talab qilinadi');
-
-    try {
-      const response = await fetch('/.netlify/functions/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id, password: pass })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      try{ 
-        localStorage.setItem(STORAGE_KEY, data.sessionId); 
-      } catch(e) {
-        console.error('LocalStorage error:', e);
-      }
-
-      currentUser = data.user;
-      return currentUser;
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
-  }
-
   async function registerAuto(){
-    try {
-      const response = await fetch('/.netlify/functions/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Registration failed');
-      }
-
-      try{ 
-        localStorage.setItem(STORAGE_KEY, data.sessionId); 
-      } catch(e) {
-        console.error('LocalStorage error:', e);
-      }
-
-      currentUser = data.user;
-      
-      return { 
-        loginId: data.loginId, 
-        password: data.password, 
-        user: currentUser 
-      };
-    } catch (error) {
-      console.error('Register error:', error);
-      throw error;
-    }
+    const data = await window.apiUtils.register();
+    setSessionId(data.sessionId);
+    currentUser = data.user;
+    return data; // {loginId,password,sessionId,user}
   }
 
   async function logout(){
-    try{ 
-      localStorage.removeItem(STORAGE_KEY); 
-    } catch(e) {
-      console.error('LocalStorage error:', e);
-    }
-    currentUser = null;
-    isSessionLoading = false;
-    sessionPromise = null;
+    clearSession();
   }
 
-  async function updateUserData(partial){
-    if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
-    
-    try {
-      const response = await fetch(`/.netlify/functions/api/user/${currentUser.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(partial)
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Update failed');
-      }
-      
-      currentUser = data.user;
-      return currentUser;
-    } catch (error) {
-      console.error('Update error:', error);
-      throw error;
-    }
+  async function updateUserData(patch){
+    if (!currentUser) throw new Error("Session yo'q");
+    const data = await window.apiUtils.updateUser(currentUser.id, patch);
+    currentUser = data.user;
+    return currentUser;
   }
 
-  // Avvalgi sessionni yuklash
+  // auto warm
   loadSession();
 
   window.authUtils = {
-    requireSession,
-    checkSession,
-    getUser,
     loadSession,
+    requireSession,
     loginWithIdPassword,
     registerAuto,
     logout,
-    updateUserData
+    updateUserData,
+    getUser: () => currentUser,
+    getSessionId
   };
-
 })();
