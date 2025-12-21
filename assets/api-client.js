@@ -41,13 +41,33 @@
   window.lmApi = {
     API_BASE,
     sid, setSid, clearSid,
+
+    // auth
     register: () => req("/auth/register", "POST"),
     login: (id, password) => req("/auth/login", "POST", { id, password }),
     me: () => req("/auth/me", "GET"),
     logout: () => req("/auth/logout", "POST"),
     changePassword: (currentPassword, newPassword) => req("/auth/password", "POST", { currentPassword, newPassword }),
+
+    // user
     userMe: () => req("/user/me", "GET"),
     userPatch: (patch) => req("/user/me", "PATCH", patch),
+    userAvatar: ({ avatar }) => req("/user/me/avatar", "POST", { avatar }),
+
+    // content
+    pageGet: (pageId) => req(`/content/pages/${encodeURIComponent(pageId)}`, "GET"),
+
+    // public ranking (optional)
     ranking: () => req("/ranking", "GET"),
+
+    // admin (requires X-Admin-Token)
+    adminGetPage: (pageId, adminToken) =>
+      req(`/admin/content/pages/${encodeURIComponent(pageId)}`, "GET", null, adminToken ? { "X-Admin-Token": adminToken } : {}),
+    adminSetPage: (pageId, doc, adminToken) =>
+      req(`/admin/content/pages/${encodeURIComponent(pageId)}`, "POST", doc, adminToken ? { "X-Admin-Token": adminToken } : {}),
+    adminUsers: (q, adminToken) =>
+      req(`/admin/users${q ? ("?q=" + encodeURIComponent(q)) : ""}`, "GET", null, adminToken ? { "X-Admin-Token": adminToken } : {}),
+    adminUserPatch: (loginId, patch, adminToken) =>
+      req(`/admin/users/${encodeURIComponent(loginId)}`, "PATCH", patch, adminToken ? { "X-Admin-Token": adminToken } : {}),
   };
 })();
