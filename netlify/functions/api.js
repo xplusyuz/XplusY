@@ -58,7 +58,7 @@ function secret() {
 }
 
 function makeId(len = 6) {
-  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const A = "0123456789";
   let out = "";
   for (let i = 0; i < len; i++) out += A[Math.floor(Math.random() * A.length)];
   return out;
