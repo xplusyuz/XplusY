@@ -5,13 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Tenglamalar — Viet Usuli</title>
     
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
-    
     <!-- Auth tizimi -->
-    <script src="../firebase-config.js"></script>
     <script src="../auth-utils.js"></script>
     
     <!-- MathJax for LaTeX -->
@@ -1720,28 +1714,32 @@
             document.getElementById("final-correct").textContent = gameState.correctCount;
             document.getElementById("final-xp").textContent = gameState.xpCount;
 
-            // ============ YANGI: TO'G'RI NATIJALAR SAQLASH ============
+            // ============ NETLIFY FUNCTIONS orqali NATIJALAR SAQLASH ============
             try {
                 const user = authUtils.getUser();
                 if (user) {
+                    console.log('O\'yin tugadi, natijalar saqlanmoqda...');
+                    
                     // 1. Avval bestScore ni yangilash
                     const updateResult = await authUtils.updateBestScore(gameState.xpCount);
+                    console.log('Best score yangilash natijasi:', updateResult);
                     
                     // 2. Agar bestScore muvaffaqiyatli yangilangan bo'lsa
                     if (updateResult.success) {
                         const currentUser = authUtils.getUser();
-                        const currentPoints = Number(currentUser.data.points || 0);
+                        const currentPoints = Number(currentUser.points || 0);
                         
                         // Points ga faqat bu o'yindagi XP larni qo'shamiz
-                        // Bu har safar o'yin tugaganda to'g'ri ishlaydi
                         const pointsToAdd = gameState.xpCount;
                         const newPoints = currentPoints + pointsToAdd;
                         
-                        await authUtils.updateUserData({
+                        console.log(`Points yangilanmoqda: ${currentPoints} + ${pointsToAdd} = ${newPoints}`);
+                        
+                        const userDataResult = await authUtils.updateUserData({
                             points: newPoints
                         });
                         
-                        console.log(`Natija saqlandi: ${gameState.xpCount} XP, Total points: ${currentPoints} + ${pointsToAdd} = ${newPoints}`);
+                        console.log('User data yangilash natijasi:', userDataResult);
                     }
                 }
             } catch (error) {
@@ -1783,16 +1781,19 @@
         // ================ RATING FUNCTIONS ================
         async function loadLeaderboard() {
             try {
+                console.log('Reyting yuklanmoqda...');
                 const result = await authUtils.getLeaderboard(10);
+                console.log('Reyting natijasi:', result);
+                
                 if (result.success) {
-                    displayLeaderboard(result.leaderboard);
+                    displayLeaderboard(result.leaderboard || []);
                 } else {
-                    throw new Error(result.error);
+                    throw new Error(result.error || 'Noma\'lum xato');
                 }
             } catch (error) {
                 console.error('Reyting yuklash xatosi:', error);
                 const content = document.getElementById('leaderboard-content');
-                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Reyting yuklanmadi</div>';
+                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Reyting yuklanmadi: ' + error.message + '</div>';
             }
         }
 
@@ -1820,6 +1821,7 @@
                             <div class="leaderboard-user-name">${user.fullName || 'Foydalanuvchi'}</div>
                             <div class="leaderboard-user-stats">
                                 <div class="leaderboard-stat">XP: <strong>${user.bestScore || 0}</strong></div>
+                                <div class="leaderboard-stat">Umumiy: <strong>${user.points || 0}</strong></div>
                             </div>
                         </div>
                     </div>
@@ -1832,12 +1834,16 @@
         // ================ MAIN INITIALIZATION ================
         async function initializeGame() {
             try {
+                console.log('O\'yin ishga tushmoqda...');
+                
                 // Sessionni tekshirish
                 const user = await authUtils.requireSession();
+                console.log('Foydalanuvchi:', user);
                 
                 if (user) {
                     // Foydalanuvchi ma'lumotlarini ko'rsatish
-                    document.getElementById('user-name').textContent = user.data.fullName || user.data.loginId || 'Foydalanuvchi';
+                    const displayName = user.fullName || user.email || 'Foydalanuvchi';
+                    document.getElementById('user-name').textContent = displayName;
                     
                     // O'yinni boshlash
                     document.getElementById('loading-screen').style.display = 'none';
@@ -1873,9 +1879,14 @@
             });
             
             // Rating button
-            document.getElementById('rating-btn').addEventListener('click', () => {
-                loadLeaderboard();
-                document.getElementById('leaderboard-modal').style.display = 'flex';
+            document.getElementById('rating-btn').addEventListener('click', async () => {
+                try {
+                    await loadLeaderboard();
+                    document.getElementById('leaderboard-modal').style.display = 'flex';
+                } catch (error) {
+                    console.error('Rating yuklashda xato:', error);
+                    alert('Reyting yuklanmadi: ' + error.message);
+                }
             });
             
             // Modal close button
