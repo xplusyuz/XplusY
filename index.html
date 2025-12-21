@@ -1985,26 +1985,7 @@
   backdrop-filter:blur(6px);
 }
 
-  
-    /* ===== LeaderMath dynamic nav/chips/cards ===== */
-    .bottom-nav.scrollable-nav{overflow-x:auto;gap:10px;justify-content:flex-start;scrollbar-width:none}
-    .bottom-nav.scrollable-nav::-webkit-scrollbar{display:none}
-    .nav-emoji{font-size:20px;line-height:1}
-    .lm-chipbar{display:flex;gap:10px;overflow-x:auto;padding:10px 4px 14px;scrollbar-width:none}
-    .lm-chipbar::-webkit-scrollbar{display:none}
-    .lm-chip{border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;padding:10px 14px;border-radius:999px;white-space:nowrap;backdrop-filter:blur(10px);transition:.2s}
-    .lm-chip.active{background:linear-gradient(90deg, rgba(99,102,241,.7), rgba(34,211,238,.55));border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
-    .lm-banners{display:grid;gap:12px;margin-bottom:14px}
-    .lm-banner{display:block;min-height:140px;border-radius:18px;background-size:cover;background-position:center;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 50px rgba(0,0,0,.35)}
-    .lm-bannerOverlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:16px;background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 65%, rgba(0,0,0,.75) 100%)}
-    .lm-bannerTitle{font-weight:800;font-size:18px}
-    .lm-bannerSub{opacity:.85;font-size:13px;margin-top:4px}
-    .lm-cardHeader{background-size:cover;background-position:center;position:relative}
-    .lm-cardHeader::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.35));}
-    .lm-cardHeader > *{position:relative;z-index:1}
-    .lm-card{cursor:pointer}
-
-</style>
+  </style>
 </head>
 <body>
   <div class="app">
@@ -2724,135 +2705,6 @@
     themeToggle.addEventListener('click', toggleTheme);
 
     // =============== PAGE MANAGEMENT ===============
-    // =============== DYNAMIC NAV + SECTIONS (ADMIN CONFIG) ===============
-    let __LM_NAVCFG = null;
-
-    async function loadNavConfig() {
-      try {
-        const res = await fetch(`${API_BASE}/nav`);
-        if (!res.ok) throw new Error('Nav yuklashda xatolik');
-        const data = await res.json();
-        __LM_NAVCFG = data;
-        return data;
-      } catch (e) {
-        console.warn('Nav config yuklanmadi, default ishlaydi:', e.message);
-        return null;
-      }
-    }
-
-    function buildBottomNavFromConfig(cfg) {
-      if (!cfg?.nav || !Array.isArray(cfg.nav)) return;
-      const navEl = document.querySelector('.bottom-nav');
-      if (!navEl) return;
-
-      navEl.innerHTML = '';
-      cfg.nav.forEach((n, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'nav-item' + (i === 0 ? ' active' : '');
-        btn.dataset.page = n.id;
-        const iconHtml = (n.icon || '').includes('fa') 
-          ? `<i class="${n.icon} nav-icon"></i>`
-          : `<span class="nav-emoji">${n.icon || '✨'}</span>`;
-        btn.innerHTML = `${iconHtml}<span class="nav-text">${n.label || n.id}</span>`;
-        navEl.appendChild(btn);
-      });
-
-      // allow horizontal scroll if many
-      navEl.classList.add('scrollable-nav');
-    }
-
-    function renderSectionPage(pageId) {
-      if (!__LM_NAVCFG?.nav) return null;
-      const navItem = __LM_NAVCFG.nav.find(n => n.id === pageId);
-      if (!navItem) return null;
-
-      const sec = __LM_NAVCFG.sections?.[navItem.sectionId] || { title: navItem.label, chips:[{id:'all',label:'Hammasi'}], items:[] };
-      const title = sec.title || navItem.label || pageId;
-      const chips = Array.isArray(sec.chips) && sec.chips.length ? sec.chips : [{ id:'all', label:'Hammasi' }];
-      const items = Array.isArray(sec.items) ? sec.items : [];
-
-      // remember selected chip per page
-      window.__LM_chipState = window.__LM_chipState || {};
-      const activeChip = window.__LM_chipState[pageId] || 'all';
-
-      const chipBar = `
-        <div class="lm-chipbar">
-          ${chips.map(c => `
-            <button class="lm-chip ${c.id === activeChip ? 'active' : ''}" data-chip="${c.id}" data-page="${pageId}">
-              ${c.label || c.id}
-            </button>`).join('')}
-        </div>
-      `;
-
-      const filtered = items.filter(it => activeChip === 'all' ? true : String(it.chipId||'') === String(activeChip));
-
-      const banners = filtered.filter(it => (it.type||'card') === 'banner');
-      const cards = filtered.filter(it => (it.type||'card') !== 'banner');
-
-      const bannerHtml = banners.map(b => `
-        <a class="lm-banner" href="${b.href || '#'}" ${b.href ? '' : 'onclick="return false"'} style="background-image:url('${b.imageUrl||''}')">
-          <div class="lm-bannerOverlay">
-            <div class="lm-bannerTitle">${b.title||''}</div>
-            ${b.subtitle ? `<div class="lm-bannerSub">${b.subtitle}</div>` : ''}
-          </div>
-        </a>
-      `).join('');
-
-      const cardsHtml = cards.map(c => `
-        <div class="card lm-card" data-href="${c.href||''}">
-          <div class="card-header lm-cardHeader" style="${c.imageUrl ? `background-image:url('${c.imageUrl}')` : ''}">
-            <div class="card-icon"><i class="${c.icon || 'fas fa-sparkles'}"></i></div>
-            ${c.badge ? `<div class="card-badge"><i class="fas fa-star"></i>${c.badge}</div>` : ''}
-          </div>
-          <div class="card-body">
-            <h3 class="card-title">${c.title||''}</h3>
-            ${c.subtitle ? `<p class="card-description">${c.subtitle}</p>` : ''}
-            <div class="card-meta">
-              <span class="card-tag">${c.tag || (navItem.label||'')}</span>
-              <i class="fas fa-arrow-right card-arrow"></i>
-            </div>
-          </div>
-        </div>
-      `).join('');
-
-      return `
-        <section class="content-section">
-          <div class="section-header">
-            <h2 class="section-title">${title}</h2>
-          </div>
-          ${chipBar}
-          ${bannerHtml ? `<div class="lm-banners">${bannerHtml}</div>` : ''}
-          <div class="card-grid lm-cardgrid">${cardsHtml}</div>
-        </section>
-      `;
-    }
-
-    // Patch dynamic page loader to use admin-config sections
-    const __LM_originalGetPageContent = getPageContent;
-    getPageContent = function(pageId) {
-      const html = renderSectionPage(pageId);
-      if (html) return html;
-      return __LM_originalGetPageContent(pageId);
-    };
-
-    // click handlers for chips & cards in dynamic area
-    document.addEventListener('click', (e) => {
-      const chip = e.target.closest('.lm-chip');
-      if (chip) {
-        const page = chip.dataset.page;
-        const cid = chip.dataset.chip;
-        window.__LM_chipState = window.__LM_chipState || {};
-        window.__LM_chipState[page] = cid;
-        showPage(page);
-        return;
-      }
-      const card = e.target.closest('.lm-card');
-      if (card) {
-        const href = card.dataset.href;
-        if (href) window.location.href = href;
-      }
-    });
-
     function showPage(pageId) {
       // Hide all pages
       document.querySelectorAll('.page-content').forEach(page => {
@@ -3324,7 +3176,7 @@
         }
 
         const data = await response.json();
-        return data.users || data.items || data || [];
+        return data.users;
       } catch (error) {
         console.error('Reyting yuklashda xatolik:', error);
         throw error;
@@ -4278,9 +4130,7 @@
           return;
         }
         
-        
-        try { const cfg = await loadNavConfig(); if (cfg) buildBottomNavFromConfig(cfg); } catch(e) {}
-// Load region data first
+        // Load region data first
         await loadRegionData();
         
         // Load user profile data for header
@@ -4309,5 +4159,7 @@
       });
     });
   </script>
+
+<script src="lm-patch.js"></script>
 </body>
 </html>

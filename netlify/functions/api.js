@@ -35,18 +35,6 @@ function jwtVerify(token, secret) {
   return payload;
 }
 
-function getSessionIdFromReq(event) {
-  const a = event.headers.authorization || event.headers.Authorization || "";
-  if (a.startsWith("Bearer ")) return a.slice(7);
-  // compatibility: allow ?sessionId=
-  try {
-    const u = new URL("https://x.local" + (event.rawUrl ? new URL(event.rawUrl).pathname + (new URL(event.rawUrl).search||"") : (event.path||"")));
-    const sid = u.searchParams.get("sessionId");
-    if (sid) return sid;
-  } catch {}
-  return null;
-}
-
 function initAdmin() {
   if (admin.apps.length) return;
   const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -68,7 +56,6 @@ function pwWarn(pw) {
   if (pw.length <= 3) w.push("Maxfiy so‘z juda qisqa (4+ tavsiya).");
   if (/^\d+$/.test(pw)) w.push("Faqat raqam — juda oson.");
   if (/^[a-zA-Z]+$/.test(pw)) w.push("Faqat harf — kuchsiz.");
-  if (!/[A-Z]/.test(pw) && !/[a-z]/.test(pw)) w.push("Harf bo‘lsa yaxshiroq.");
   return w;
 }
 
@@ -101,15 +88,13 @@ exports.handler = async (event) => {
     const path = (event.path || "").replace("/.netlify/functions/api", "");
     const method = event.httpMethod;
 
-    // --- AUTH REGISTER (AUTO) ---
+    // AUTH register (auto id + password)
     if (path === "/auth/register" && method === "POST") {
       const body = JSON.parse(event.body || "{}");
-      // if UI doesn't send password, generate 8 chars
       let password = (body.password ?? "").toString();
-      if (!password) password = makeId(8); // 8 chars mixed
+      if (!password) password = makeId(8);
       if (password.length < 1 || password.length > 20) return json(400, { error: "Parol 1..20 bo‘lsin" });
 
-      // unique id
       let id = "";
       for (let i = 0; i < 20; i++) {
         id = makeId(6);
@@ -133,21 +118,14 @@ exports.handler = async (event) => {
       await db.collection("users").doc(id).set(userDoc);
 
       const sessionId = jwtSign({ uid: id }, secret());
-      return json(200, {
-        sessionId,
-        loginId: id,
-        password,
-        user: publicUser(userDoc),
-        warnings: pwWarn(password),
-      });
+      return json(200, { sessionId, loginId: id, password, user: publicUser(userDoc), warnings: pwWarn(password) });
     }
 
-    // --- AUTH LOGIN ---
+    // AUTH login
     if (path === "/auth/login" && method === "POST") {
       const { id, password } = JSON.parse(event.body || "{}");
       const uid = String(id || "").trim().toUpperCase();
       const pw = String(password || "");
-
       if (!uid || !pw) return json(400, { error: "ID va parol kerak" });
 
       const snap = await db.collection("users").doc(uid).get();
@@ -161,7 +139,7 @@ exports.handler = async (event) => {
       return json(200, { sessionId, user: publicUser(u) });
     }
 
-    // --- AUTH SESSION CHECK ---
+    // AUTH session
     if (path.startsWith("/auth/session/") && method === "GET") {
       const sessionId = decodeURIComponent(path.split("/").pop() || "");
       const u = await getUserBySession(db, sessionId);
@@ -169,18 +147,15 @@ exports.handler = async (event) => {
       return json(200, { valid: true, user: publicUser(u) });
     }
 
-    // --- USER GET/UPDATE ---
+    // USER routes
     if (path.startsWith("/user/")) {
       const parts = path.split("/").filter(Boolean); // ["user", "{sessionId}", ...]
       const sessionId = decodeURIComponent(parts[1] || "");
       const u = await getUserBySession(db, sessionId);
       if (!u) return json(401, { error: "Token yo‘q" });
-
       const uid = u.id;
 
-      if (parts.length === 2 && method === "GET") {
-        return json(200, { user: publicUser(u) });
-      }
+      if (parts.length === 2 && method === "GET") return json(200, { user: publicUser(u) });
 
       if (parts.length === 2 && method === "PATCH") {
         const b = JSON.parse(event.body || "{}");
@@ -216,34 +191,20 @@ exports.handler = async (event) => {
       }
     }
 
-    // --- NAV (Firestore configs/nav + sections) ---
+    // NAV: configs/nav + sections/*
     if (path === "/nav" && method === "GET") {
-      const doc = await db.collection("configs").doc("nav").get();
-      const cfg = doc.exists ? doc.data() : null;
-
-      // Fallback demo config
-      const nav = (cfg?.nav && Array.isArray(cfg.nav) && cfg.nav.length)
-        ? cfg.nav
-        : [
-            { id: "home", label: "Bosh sahifa", icon: "fas fa-home", sectionId: "home" },
-            { id: "darsdan-tashqari", label: "Darsdan tashqari", icon: "fas fa-layer-group", sectionId: "darsdan-tashqari" },
-          ];
-
-      // Collect section docs referenced by nav
-      const sectionIds = [...new Set(nav.map(n => n.sectionId).filter(Boolean))];
+      const navSnap = await db.collection("configs").doc("nav").get();
+      const navDoc = navSnap.exists ? navSnap.data() : { version: 1, nav: [] };
+      const ids = [...new Set((navDoc.nav || []).map((n) => n.sectionId).filter(Boolean))];
       const sections = {};
-      for (const sid of sectionIds) {
-        const s = await db.collection("sections").doc(sid).get();
-        sections[sid] = s.exists
-          ? s.data()
-          : { title: sid, chips: [{ id: "all", label: "Hammasi" }], items: [] };
+      for (const sid of ids) {
+        const sSnap = await db.collection("sections").doc(sid).get();
+        sections[sid] = sSnap.exists ? sSnap.data() : { title: sid, chips: [{ id: "all", label: "Hammasi" }], items: [] };
       }
-
-      const version = cfg?.version || Date.now();
-      return json(200, { version, nav, sections });
+      return json(200, { version: navDoc.version || 1, nav: navDoc.nav || [], sections });
     }
 
-    // --- RANKING ---
+    // RANKING: return both items and users for frontend compatibility
     if ((path === "/ranking" || path === "/rank") && method === "GET") {
       const top = await db.collection("users").orderBy("points", "desc").limit(50).get();
       const items = top.docs.map((d, i) => {

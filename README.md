@@ -1,14 +1,14 @@
-# LeaderMath — Dizayn saqlangan + API moslangan
+# LeaderMath (no public folder)
+Publish root (.) on Netlify.
 
-## Netlify settings
-- Publish directory: public
-- Functions directory: netlify/functions
+## Netlify
+- Build publish: .
+- Functions: netlify/functions
+- Redirect: /api/* -> /.netlify/functions/api/:splat
 
 ## ENV
-- FIREBASE_SERVICE_ACCOUNT: service account JSON (string)
-- APP_JWT_SECRET: uzun secret
+- FIREBASE_SERVICE_ACCOUNT
+- APP_JWT_SECRET
 
-## Eslatma
-Sizning dizayndagi JS /api/auth/register, /api/auth/login, /api/auth/session/:id,
- /api/user/:sessionId (GET/PATCH), /api/user/:sessionId/avatar, /api/user/:sessionId/password,
- /api/nav, /api/ranking endpointlarni ishlatadi — hammasi API’da bor.
+## Admin
+admin.html ishlashi uchun admin-config.js ni to'ldiring.
