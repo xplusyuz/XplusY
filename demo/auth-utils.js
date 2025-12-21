@@ -1,77 +1,46 @@
-// improved auth-utils.js (compat-compatible, backward-compatible)
+// improved auth-utils.js (API version)
 (function(){
   const STORAGE_KEY = 'leaderMathUserSession';
-  const COL = 'foydalanuvchilar';
 
-  let db = null;
   let currentUser = null;
   let isSessionLoading = false;
   let sessionPromise = null;
 
-  function ensureDb(){
-    if (db) return db;
-    // Avval global db dan foydalanish
-    if (window.db) {
-      db = window.db;
-      return db;
-    }
-    if (typeof window.firebase === 'undefined' || !firebase.firestore){
-      console.error('Firestore topilmadi. Iltimos firebase-app-compat va firebase-firestore-compat yuklang.');
-      return null;
-    }
-    try {
-      db = firebase.firestore();
-      return db;
-    } catch (e) {
-      console.error('Firestore init xatosi:', e);
-      return null;
-    }
-  }
-
   async function loadSession(){
-    // Agar sessiya yuklanayotgan bo'lsa, shu promise'ni qaytarish
     if (isSessionLoading && sessionPromise) {
       return sessionPromise;
     }
 
     isSessionLoading = true;
     sessionPromise = (async () => {
-      const dbi = ensureDb();
-      if (!dbi) {
-        isSessionLoading = false;
-        return null;
-      }
-      
-      let docId = null;
+      let sessionId = null;
       try{ 
-        docId = localStorage.getItem(STORAGE_KEY); 
+        sessionId = localStorage.getItem(STORAGE_KEY); 
       } catch(e) {
         console.error('LocalStorage error:', e);
       }
 
-      if (!docId){
+      if (!sessionId){
         currentUser = null;
         isSessionLoading = false;
         return null;
       }
 
       try{
-        const snap = await dbi.collection(COL).doc(docId).get();
-        if (!snap.exists){
-          try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-          currentUser = null;
-          isSessionLoading = false;
-          return null;
+        // API orqali sessionni tekshirish
+        const response = await fetch(`/.netlify/functions/api/auth/session/${sessionId}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Session not found');
         }
-        currentUser = { 
-          docId: snap.id, 
-          id: snap.id,
-          data: snap.data() || {} 
-        };
+        
+        currentUser = data.user;
         isSessionLoading = false;
         return currentUser;
       }catch(err){
         console.error('Session yuklashda xatolik:', err);
+        try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
         currentUser = null;
         isSessionLoading = false;
         return null;
@@ -82,25 +51,20 @@
   }
 
   async function requireSession(){
-    // Agar currentUser allaqachon mavjud bo'lsa, darhol qaytarish
     if (currentUser) {
       return currentUser;
     }
 
-    // Sessionni yuklash
     const user = await loadSession();
     
     if (user) {
       return user;
     }
 
-    // Agar session mavjud bo'lmasa, login sahifasiga yo'naltirish
     const currentPath = window.location.pathname;
-    // Faqat login sahifasida bo'lmasak, redirect qilamiz
     if (!currentPath.includes('login.html')) {
       const redirect = encodeURIComponent(window.location.href);
       window.location.href = `login.html?redirect=${redirect}`;
-      // Redirect qilgandan so'ng, yangi promise qaytaramiz, chunki bu sahifa yuklanmaydi
       return new Promise(() => {});
     }
     
@@ -108,7 +72,6 @@
   }
 
   async function checkSession() {
-    // Session borligini tekshirish, lekin redirect qilmaslik
     if (currentUser) return currentUser;
     
     const user = await loadSession();
@@ -120,80 +83,71 @@
   }
 
   async function loginWithIdPassword(loginId, password){
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-
     const id   = (loginId || '').trim();
     const pass = (password || '').trim();
     if (!id || !pass) throw new Error('ID va parol talab qilinadi');
 
-    const snap = await dbi.collection(COL)
-      .where('loginId','==',id)
-      .limit(1)
-      .get();
+    try {
+      const response = await fetch('/.netlify/functions/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, password: pass })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
 
-    if (snap.empty) throw new Error('Bunday ID topilmadi');
+      try{ 
+        localStorage.setItem(STORAGE_KEY, data.sessionId); 
+      } catch(e) {
+        console.error('LocalStorage error:', e);
+      }
 
-    const doc  = snap.docs[0];
-    const data = doc.data() || {};
-
-    // Plaintext password comparison
-    if (!data.password || data.password !== pass){
-      throw new Error('Parol noto‘g‘ri');
+      currentUser = data.user;
+      return currentUser;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
-
-    try{ 
-      localStorage.setItem(STORAGE_KEY, doc.id); 
-    } catch(e) {
-      console.error('LocalStorage error:', e);
-    }
-
-    currentUser = { 
-      docId: doc.id, 
-      id: doc.id,
-      data: data 
-    };
-    
-    return currentUser;
   }
 
   async function registerAuto(){
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
+    try {
+      const response = await fetch('/.netlify/functions/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Registration failed');
+      }
 
-    const loginId = await generateUniqueId();
-    const password = generatePassword(8);
+      try{ 
+        localStorage.setItem(STORAGE_KEY, data.sessionId); 
+      } catch(e) {
+        console.error('LocalStorage error:', e);
+      }
 
-    const payload = {
-      loginId,
-      password,
-      fullName: '',
-      birthDate: '',
-      region: '',
-      district: '',
-      points: 0,
-      rank: 'Yangi foydalanuvchi',
-      bestScore: 0,
-      role: 'user',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    const docRef = await dbi.collection(COL).add(payload);
-
-    try{ 
-      localStorage.setItem(STORAGE_KEY, docRef.id); 
-    } catch(e) {
-      console.error('LocalStorage error:', e);
+      currentUser = data.user;
+      
+      return { 
+        loginId: data.loginId, 
+        password: data.password, 
+        user: currentUser 
+      };
+    } catch (error) {
+      console.error('Register error:', error);
+      throw error;
     }
-
-    currentUser = { 
-      docId: docRef.id, 
-      id: docRef.id,
-      data: payload 
-    };
-
-    return { loginId, password, user: currentUser };
   }
 
   async function logout(){
@@ -209,47 +163,28 @@
 
   async function updateUserData(partial){
     if (!currentUser) throw new Error('Foydalanuvchi topilmadi');
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
     
-    const updateData = {
-      ...partial,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    
-    await dbi.collection(COL).doc(currentUser.docId).set(updateData, { merge: true });
-    
-    currentUser = {
-      docId: currentUser.docId,
-      id: currentUser.docId,
-      data: { ...currentUser.data, ...updateData }
-    };
-    
-    return currentUser;
-  }
-
-  async function generateUniqueId(){
-    const dbi = ensureDb();
-    if (!dbi) throw new Error('Firestore mavjud emas');
-
-    for (let i=0;i<9999;i++){
-      const id = String(Math.floor(100000 + Math.random()*900000));
-      const q  = await dbi.collection(COL)
-        .where('loginId','==',id)
-        .limit(1)
-        .get();
-      if (q.empty) return id;
+    try {
+      const response = await fetch(`/.netlify/functions/api/user/${currentUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(partial)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Update failed');
+      }
+      
+      currentUser = data.user;
+      return currentUser;
+    } catch (error) {
+      console.error('Update error:', error);
+      throw error;
     }
-    return String(Date.now()).slice(-6);
-  }
-
-  function generatePassword(len = 8){
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let s = '';
-    for (let i=0; i<len; i++){
-      s += chars[Math.floor(Math.random()*chars.length)];
-    }
-    return s;
   }
 
   // Avvalgi sessionni yuklash
@@ -263,9 +198,7 @@
     loginWithIdPassword,
     registerAuto,
     logout,
-    updateUserData,
-    generateUniqueId,
-    generatePassword
+    updateUserData
   };
 
 })();
