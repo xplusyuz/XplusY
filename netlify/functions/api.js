@@ -10,11 +10,15 @@ function env(name, required=true){
 
 function initAdmin(){
   if (admin.apps.length) return;
-  const projectId = env('PROJECT_ID');
-  const clientEmail = env('CLIENT_EMAIL');
-  const privateKey = env('PRIVATE_KEY').replace(/\n/g, '\n').replace(/\\n/g,'\n');
-  admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+
+  // FIREBASE_KEY ichida BUTUN service account JSON bor
+  const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
 }
+
 function db(){ initAdmin(); return admin.firestore(); }
 
 function json(statusCode, body){
