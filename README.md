@@ -1,45 +1,30 @@
-# LeaderMath — Firebase rulesiz (API-only) Platforma
+# LeaderMath API-only (Rebuild)
 
-Frontend Firebase SDK ishlatmaydi. Hamma narsa Netlify Function (Firebase Admin SDK) orqali ishlaydi.
+## Netlify ENV
+- FIREBASE_KEY = Firebase service account JSON (string)
 
-## 1) Firestore rules
-`firebase/firestore.rules` dagidek hammasini yopiq qiling: `allow read, write: if false;`
+Optional:
+- SESSION_DAYS = 30 (default)
 
-## 2) Service Account ENV
-Firebase Console → Project settings → Service accounts → "Generate new private key"
-
-Netlify → Site → Environment variables:
-- FB_PROJECT_ID
-- FB_CLIENT_EMAIL
-- FB_PRIVATE_KEY (private_key ni qo'ying; kod `\n` ni `\n` ga aylantiradi)
-Ixtiyoriy:
-- SESSION_DAYS = 30
-- ADMIN_TOKEN = (admin publish uchun)
-
-## 3) Lokal
-```bash
-npm i
-netlify dev
+## Firestore Rules (tavsiya)
+Hamma narsani yopib qo‘ying — API (Admin SDK) baribir ishlaydi:
 ```
-http://localhost:8888/login.html
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if false; }
+  }
+}
+```
 
-## 4) API
-Base: /.netlify/functions/api
+## Run locally
+```
+npm i
+npx netlify dev
+```
 
-Auth:
-- POST /auth/register  -> auto 6 xonali ID + random parol + session
-- POST /auth/login
-- GET  /auth/me
-- POST /auth/password
-- POST /auth/logout
+Open: /login.html
 
-Content:
-- GET  /content/home (public)
-- POST /admin/content/home (admin; role=admin yoki X-Admin-Token)
-
-User:
-- GET/PATCH /user/me
-- POST /user/me/avatar
-
-Ranking:
-- GET /ranking
+## Collection
+users/{loginId}
+fields: firstName,lastName,region,district,birthdate,password,points,updatedAt (+ sessionId/sessionExp)
