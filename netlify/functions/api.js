@@ -28,3 +28,11 @@ export async function handler(event) {
 
   return ok(result);
 }
+import { PROJECTS } from "./projects.js";
+
+const projectId = req.project || "leadermath";
+const project = PROJECTS[projectId];
+
+if (!project) {
+  return error("Unknown project");
+}
