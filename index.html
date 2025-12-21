@@ -4160,328 +4160,290 @@
     });
   </script>
 
-<!-- LM_PATCH_START -->
+<!-- LM_PATCH_V2_START -->
 <style>
-/* Profil to'ldirilmaguncha sayt blok */
-.lm-profile-lock { overflow: hidden !important; }
+.lm-profile-lock { overflow:hidden !important; }
+#lm-gate-blocker{ position:fixed; inset:0; z-index:9998; background:transparent; }
 </style>
 <script>
+/**
+ * LM Patch v2:
+ * - API_BASE const sizning faylda scope ichida bo'lgani uchun window.API_BASE bo'lmaydi.
+ *   Shuning uchun default: "/.netlify/functions/api" (sizdagi kabi).
+ * - profileCompleted=false bo'lsa: edit-profile-modal majburiy ochiladi va yopilmaydi.
+ * - region.json format mosligini ham qo'llab-quvvatlaydi (object map yoki {regions:[...]}).
+ * - Admin nav/chip/itemlarni /nav endpointdan olib bottom-nav'ga chizadi.
+ */
 (function(){
-  const API_BASE = (window.API_BASE || '/api').replace(/\/+$/,'');
-
+  const API = (window.API_BASE || "/.netlify/functions/api").replace(/\/+$/,"");
   const $ = (sel, root=document)=>root.querySelector(sel);
   const $$ = (sel, root=document)=>Array.from(root.querySelectorAll(sel));
-  const esc = (s)=>String(s??'').replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const esc = (s)=>String(s??"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
-  function getSessionId(){
-    return localStorage.getItem('leaderMathUserSession')
-        || localStorage.getItem('sessionId')
-        || localStorage.getItem('lmSession')
-        || '';
+  function sessionId(){
+    return localStorage.getItem("leaderMathUserSession") || "";
   }
 
-  async function apiGet(path){
-    const r = await fetch(`${API_BASE}${path}`, {cache:'no-store'});
-    if(!r.ok){
-      const t = await r.text().catch(()=> '');
-      throw new Error(t || ('HTTP '+r.status));
-    }
+  async function jget(url){
+    const r = await fetch(url, {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
     return await r.json();
   }
 
+  // ---------- REGION.JSON compatibility ----------
+  // Sizdagi loadRegionData() regionData.regions kutadi.
+  // Agar region.json object-map bo'lsa ({"Namangan":[...]}), uni avtomatik o'girib qo'yamiz.
+  const _fetch = window.fetch;
+  window.fetch = async function(input, init){
+    const res = await _fetch(input, init);
+    try{
+      const url = (typeof input === "string") ? input : (input && input.url) || "";
+      if(url.endsWith("region.json")){
+        const clone = res.clone();
+        const data = await clone.json();
+        if(data && !data.regions && typeof data === "object" && !Array.isArray(data)){
+          const regions = Object.keys(data).map(name=>({ name, districts: Array.isArray(data[name])?data[name]:[] }));
+          return new Response(JSON.stringify({ regions }), {status: res.status, headers: res.headers});
+        }
+      }
+    }catch(_){}
+    return res;
+  };
+
   // ---------- PROFILE GATE ----------
-  function findProfileModal(){
-    return $('#profile-modal') || $('#profileModal') || $('.profile-modal') || $('[data-profile-modal]') || $('.modal.profile');
-  }
-
-  function isProfileCompleteFromModal(modal){
-    if(window.__LM_PROFILE_COMPLETED===true) return true;
-
-    const ids = [
-      'firstName','lastName','birthDate','region','district',
-      'pfFirst','pfLast','pfBirth','pfRegion','pfDistrict'
-    ];
-
-    let any=false, ok=true;
-    ids.forEach(id=>{
-      const el = modal.querySelector('#'+id);
-      if(el){
-        any=true;
-        if(!String(el.value||'').trim()) ok=false;
-      }
-    });
-    if(any) return ok;
-
-    // fallback: required fields
-    const req = modal.querySelectorAll('input[required],select[required],textarea[required]');
-    if(req.length){
-      for(const el of req){
-        if(!String(el.value||'').trim()) return false;
-      }
-      return true;
+  function openEdit(){
+    const profileModal = $("#profile-modal");
+    const editModal = $("#edit-profile-modal");
+    if(profileModal) profileModal.classList.add("active");
+    if(editModal){
+      // existing UI uses transition; force show
+      editModal.classList.add("active");
     }
-
-    return false;
   }
 
-  function lockSiteBehindModal(modal){
-    if(!modal) return;
-
-    // show modal if hidden
-    modal.classList.add('active','open');
-    modal.style.display = modal.style.display || 'block';
-
-    // transparent blocker above everything except modal
-    let blocker = $('#lm-gate-blocker');
-    if(!blocker){
-      blocker = document.createElement('div');
-      blocker.id='lm-gate-blocker';
-      blocker.style.cssText='position:fixed;inset:0;z-index:9998;background:transparent;';
-      document.body.appendChild(blocker);
-    }
-
-    // ensure modal above blocker
-    modal.style.zIndex = 9999;
-
-    // disable close buttons
-    $$('.close, .modal-close, .btn-close, [data-close], button[aria-label="close"]', modal).forEach(btn=>{
-      btn.style.pointerEvents='none';
-      btn.style.opacity='0';
-    });
-
-    document.body.classList.add('lm-profile-lock');
-
-    // stop ESC
-    document.addEventListener('keydown', (e)=>{
-      if(!document.body.classList.contains('lm-profile-lock')) return;
-      if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); }
-    }, true);
-
-    // stop overlay click close
-    modal.addEventListener('click', (e)=>{
-      if(!document.body.classList.contains('lm-profile-lock')) return;
-      const panel = $('.modal-content, .dialog, .sheet, .card, .panel, .modalCard', modal);
-      if(panel && !panel.contains(e.target)){
-        e.preventDefault(); e.stopPropagation();
-      }
-    }, true);
-
-    // prevent clicks outside modal (capturing)
-    document.addEventListener('click', (e)=>{
-      if(!document.body.classList.contains('lm-profile-lock')) return;
-      if(modal.contains(e.target)) return;
-      e.preventDefault(); e.stopPropagation();
-    }, true);
+  function lockUI(){
+    if($("#lm-gate-blocker")) return;
+    const b=document.createElement("div");
+    b.id="lm-gate-blocker";
+    document.body.appendChild(b);
+    document.body.classList.add("lm-profile-lock");
   }
 
-  function unlockSite(modal){
-    document.body.classList.remove('lm-profile-lock');
-    const b = $('#lm-gate-blocker');
+  function unlockUI(){
+    const b=$("#lm-gate-blocker");
     if(b) b.remove();
-    if(modal){
-      $$('.close, .modal-close, .btn-close, [data-close], button[aria-label="close"]', modal).forEach(btn=>{
-        btn.style.pointerEvents='';
-        btn.style.opacity='';
-      });
-      // allow closing normally, but don't force-close
-    }
+    document.body.classList.remove("lm-profile-lock");
   }
 
-  async function enforceProfileIfNeeded(){
-    const sid = getSessionId();
-    if(!sid) return;
+  function disableCloseButtons(){
+    const modals = [$("#profile-modal"), $("#edit-profile-modal")].filter(Boolean);
+    modals.forEach(m=>{
+      $$(".profile-close,.modal-close,.btn-close,[data-close],button[aria-label='close']", m).forEach(btn=>{
+        btn.style.pointerEvents="none";
+        btn.style.opacity="0";
+      });
+    });
+    // ESC block
+    document.addEventListener("keydown", (e)=>{
+      if(!window.__LM_REQUIRE_PROFILE) return;
+      if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); }
+    }, true);
+  }
 
+  async function requireProfile(){
+    const sid=sessionId();
+    if(!sid) return;
     let u=null;
     try{
-      const j = await apiGet('/auth/session/' + encodeURIComponent(sid));
-      u = j && (j.user || (j.valid ? j.user : null));
-      if(!u && j && j.valid === false) return;
-    }catch(_){
-      return;
-    }
+      const sess = await jget(`${API}/auth/session/${encodeURIComponent(sid)}`);
+      u = sess.user || null;
+    }catch(_){ return; }
     if(!u) return;
 
-    if(u.profileCompleted) {
-      window.__LM_PROFILE_COMPLETED = true;
+    if(u.profileCompleted){
+      window.__LM_REQUIRE_PROFILE = false;
+      unlockUI();
       return;
     }
 
-    const modal = findProfileModal();
-    if(!modal) return;
+    window.__LM_REQUIRE_PROFILE = true;
+    openEdit();
+    lockUI();
+    disableCloseButtons();
 
-    lockSiteBehindModal(modal);
-
-    // watch for completion (after save)
-    const checkDone = async ()=>{
-      try{
-        const jj = await apiGet('/auth/session/' + encodeURIComponent(sid));
-        const uu = jj.user || null;
-        if(uu && uu.profileCompleted){
-          window.__LM_PROFILE_COMPLETED = true;
-          unlockSite(modal);
-        }else{
-          // also allow unlock if modal inputs are complete and save triggers later
-          if(isProfileCompleteFromModal(modal)===true){
-            // still wait for API update, but keep UX softer
-          }
-        }
-      }catch(_){}
-    };
-
-    // hook common save buttons
-    const saveBtn = $('#profile-save') || $('[data-profile-save]') || $('button[type="submit"]', modal);
-    if(saveBtn){
-      const orig = saveBtn.onclick;
-      saveBtn.onclick = async function(ev){
-        if(orig) await orig.call(this, ev);
-        setTimeout(checkDone, 800);
-        setTimeout(checkDone, 1600);
-      };
+    // override close functions if exist
+    if(typeof window.closeProfileModal === "function"){
+      const orig = window.closeProfileModal;
+      window.closeProfileModal = function(){
+        if(window.__LM_REQUIRE_PROFILE) { openEdit(); lockUI(); return; }
+        return orig.apply(this, arguments);
+      }
+    }
+    if(typeof window.closeEditProfileModal === "function"){
+      const orig2 = window.closeEditProfileModal;
+      window.closeEditProfileModal = function(){
+        if(window.__LM_REQUIRE_PROFILE) { openEdit(); lockUI(); return; }
+        return orig2.apply(this, arguments);
+      }
     }
 
-    // also re-check on input/change
-    modal.addEventListener('input', ()=>{ /* keep locked until API says completed */ }, true);
-    modal.addEventListener('change', ()=>{ /* noop */ }, true);
+    // after saveProfileChanges -> recheck
+    if(typeof window.saveProfileChanges === "function"){
+      const origSave = window.saveProfileChanges;
+      window.saveProfileChanges = async function(){
+        await origSave.apply(this, arguments);
+        // recheck from API
+        setTimeout(requireProfile, 800);
+        setTimeout(requireProfile, 1600);
+      }
+    }
+
+    // also hook form submit button just in case
+    const form = $("#edit-profile-form");
+    if(form && !form.__lm_hooked){
+      form.__lm_hooked = true;
+      form.addEventListener("submit", ()=>{
+        setTimeout(requireProfile, 800);
+        setTimeout(requireProfile, 1600);
+      }, true);
+    }
   }
 
-  // ---------- ADMIN NAV RENDER ----------
-  let NAV_DATA = null;
-
-  function findBottomNav(){
-    return $('.bottom-nav') || $('#bottomNav') || $('.nav-bottom') || $('[data-bottom-nav]');
-  }
-  function findChipBar(){
-    return $('#chipBar') || $('.chipbar') || $('.chips') || $('[data-chipbar]');
-  }
-  function findContentWrap(){
-    return $('#page-dynamic') || $('#content') || $('.page-content.active') || $('.content') || $('[data-content]');
-  }
+  // ---------- ADMIN NAV ----------
+  let NAV=null;
 
   async function loadNav(){
-    // try cache first
     try{
-      const c = JSON.parse(localStorage.getItem('lmNavCache')||'null');
-      if(c && c.data) NAV_DATA = c.data;
+      const cached = JSON.parse(localStorage.getItem("lmNavCache")||"null");
+      if(cached?.data) NAV=cached.data;
     }catch(_){}
     try{
-      const fresh = await apiGet('/nav');
-      NAV_DATA = fresh;
-      try{ localStorage.setItem('lmNavCache', JSON.stringify({data:fresh, at:Date.now()})); }catch(_){}
+      const fresh = await jget(`${API}/nav`);
+      NAV=fresh;
+      try{ localStorage.setItem("lmNavCache", JSON.stringify({data:fresh, at:Date.now()})); }catch(_){}
     }catch(_){}
+  }
+
+  function bottomNavEl(){
+    return $(".bottom-nav") || $("#bottomNav") || $(".nav-bottom") || $("[data-bottom-nav]");
   }
 
   function renderBottomNav(){
-    const navWrap = findBottomNav();
-    if(!navWrap || !NAV_DATA || !Array.isArray(NAV_DATA.nav)) return;
-
-    // preserve if user already has items and you want to append? -> replace for admin-driven
-    navWrap.innerHTML = '';
-    NAV_DATA.nav.forEach((n, idx)=>{
-      const btn = document.createElement('button');
-      btn.className = (btn.className || '') + ' nav-item';
-      if(idx===0) btn.classList.add('active');
+    const navEl = bottomNavEl();
+    if(!navEl || !NAV?.nav?.length) return;
+    navEl.innerHTML = "";
+    NAV.nav.forEach((n, idx)=>{
+      const btn = document.createElement("button");
+      btn.className = "nav-item" + (idx===0?" active":"");
       btn.dataset.page = n.sectionId || n.id;
-      btn.innerHTML = `<span class="nav-icon">${esc(n.icon||'✨')}</span><span class="nav-text">${esc(n.label||n.id)}</span>`;
-      btn.addEventListener('click', ()=>{
-        $$('.nav-item', navWrap).forEach(x=>x.classList.remove('active'));
-        btn.classList.add('active');
+      btn.innerHTML = `<i class="fas fa-sparkles nav-icon"></i><span class="nav-text">${esc(n.label||n.id)}</span>`;
+      btn.addEventListener("click", ()=>{
+        $$(".nav-item", navEl).forEach(x=>x.classList.remove("active"));
+        btn.classList.add("active");
         openSection(btn.dataset.page);
       });
-      navWrap.appendChild(btn);
+      navEl.appendChild(btn);
     });
   }
 
-  function renderChips(section){
-    const chipWrap = findChipBar();
-    if(!chipWrap) return;
-    const chips = (section.chips && section.chips.length) ? section.chips : [{id:'all', label:'Hammasi'}];
-    chipWrap.innerHTML = '';
-    chips.forEach((c, idx)=>{
-      const b = document.createElement('button');
-      b.className = 'chip';
-      if(idx===0) b.classList.add('active');
-      b.dataset.chip = c.id;
-      b.textContent = c.label;
-      b.addEventListener('click', ()=>{
-        $$('.chip', chipWrap).forEach(x=>x.classList.remove('active'));
-        b.classList.add('active');
-        renderItems(section, c.id);
-      });
-      chipWrap.appendChild(b);
-    });
+  function chipBarEl(){
+    return $(".chips-container") || $(".chips-bar") || $("#chips-bar") || $("#chipBar") || $(".chipbar") || $("[data-chipbar]");
+  }
+  function dynamicPageEl(){
+    return $("#page-dynamic") || $("#page_dynamic") || $(".page-content.active") || $("#content") || $(".content") || $("[data-content]");
   }
 
-  function renderItems(section, chipId){
-    const wrap = findContentWrap();
-    if(!wrap) return;
+  function openSection(sectionId){
+    const section = NAV?.sections?.[sectionId];
+    if(!section) return;
+    const dyn = dynamicPageEl();
+    if(dyn){
+      // if site uses pages, try existing showPage
+      if(typeof window.showPage === "function"){
+        try{ window.showPage(sectionId); }catch(_){}
+      }
+      // ensure active
+      dyn.classList.add("active");
+    }
+    renderSection(section);
+  }
 
-    // create container if missing
-    let itemsWrap = $('#lm-items', wrap);
+  function renderSection(section){
+    const dyn = dynamicPageEl();
+    if(!dyn) return;
+
+    // build chips + items containers if missing
+    let chipWrap = chipBarEl();
+    if(!chipWrap){
+      chipWrap = document.createElement("div");
+      chipWrap.className="chips-bar";
+      chipWrap.id="lm-chips";
+      dyn.prepend(chipWrap);
+    }
+
+    let itemsWrap = $("#lm-items", dyn);
     if(!itemsWrap){
-      itemsWrap = document.createElement('div');
-      itemsWrap.id='lm-items';
-      itemsWrap.className='lm-items';
-      wrap.innerHTML='';
-      wrap.appendChild(itemsWrap);
+      itemsWrap=document.createElement("div");
+      itemsWrap.id="lm-items";
+      itemsWrap.className="lm-items";
+      dyn.appendChild(itemsWrap);
     }
 
-    const all = Array.isArray(section.items) ? section.items : [];
-    const items = all.filter(it => chipId==='all' || (it.chipId||'all')===chipId);
+    const chips = (section.chips && section.chips.length) ? section.chips : [{id:"all", label:"Hammasi"}];
+    chipWrap.innerHTML = chips.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-chip="${esc(c.id)}">${esc(c.label)}</button>`).join("");
 
-    if(!items.length){
-      itemsWrap.innerHTML = `<div class="empty-state">Hozircha kontent yo‘q</div>`;
-      return;
+    function draw(chipId){
+      const all = Array.isArray(section.items)?section.items:[];
+      const list = all.filter(it=> chipId==="all" || (it.chipId||"all")===chipId);
+      if(!list.length){
+        itemsWrap.innerHTML = `<div class="empty-state">Hozircha kontent yo‘q</div>`;
+        return;
+      }
+      itemsWrap.innerHTML = list.map(it=>{
+        const kind = it.kind || "card";
+        const img = it.imageUrl ? `<img class="lm-img" src="${esc(it.imageUrl)}" alt="">` : "";
+        const sub = it.subtitle ? `<div class="lm-sub">${esc(it.subtitle)}</div>` : "";
+        const href = it.href ? `data-href="${esc(it.href)}"` : "";
+        return `<div class="lm-item ${kind==='banner'?'banner-card':'competition-card'}" ${href}>
+          ${img}
+          <div class="lm-body">
+            <div class="lm-title">${esc(it.title||"")}</div>
+            ${sub}
+          </div>
+        </div>`;
+      }).join("");
     }
+    draw("all");
 
-    itemsWrap.innerHTML = items.map(it=>{
-      const kind = it.kind || 'card';
-      const img = it.imageUrl ? `<img class="lm-img" src="${esc(it.imageUrl)}" alt="">` : '';
-      const sub = it.subtitle ? `<div class="lm-sub">${esc(it.subtitle)}</div>` : '';
-      const href = it.href ? `data-href="${esc(it.href)}"` : '';
-      return `<div class="lm-item ${kind==='banner'?'banner':'card'}" ${href}>
-        ${img}
-        <div class="lm-body">
-          <div class="lm-title">${esc(it.title||'')}</div>
-          ${sub}
-        </div>
-      </div>`;
-    }).join('');
+    chipWrap.querySelectorAll("button[data-chip]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        chipWrap.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        draw(btn.dataset.chip||"all");
+      });
+    });
 
-    itemsWrap.addEventListener('click', (e)=>{
-      const card = e.target.closest('.lm-item');
+    itemsWrap.addEventListener("click",(e)=>{
+      const card = e.target.closest(".lm-item");
       if(!card) return;
-      const href = card.getAttribute('data-href');
+      const href = card.getAttribute("data-href");
       if(href) location.href = href;
     }, {once:true});
   }
 
-  function openSection(sectionId){
-    if(!NAV_DATA) return;
-    const section = (NAV_DATA.sections||{})[sectionId];
-    if(!section) return;
-
-    // try to show a dynamic page if your site uses pages
-    // if you have a showPage function, call it first
-    if(typeof window.showPage === 'function'){
-      try{ window.showPage(sectionId); }catch(_){}
-    }
-    renderChips(section);
-    renderItems(section, 'all');
-  }
-
   async function boot(){
-    await enforceProfileIfNeeded();
+    await requireProfile();
     await loadNav();
     renderBottomNav();
-    if(NAV_DATA?.nav?.[0]){
-      openSection(NAV_DATA.nav[0].sectionId || NAV_DATA.nav[0].id);
+    if(NAV?.nav?.[0]){
+      openSection(NAV.nav[0].sectionId || NAV.nav[0].id);
     }
   }
 
-  window.addEventListener('load', boot);
+  window.addEventListener("DOMContentLoaded", boot);
 })();
 </script>
-<!-- LM_PATCH_END -->
+<!-- LM_PATCH_V2_END -->
 
 </body>
 </html>
