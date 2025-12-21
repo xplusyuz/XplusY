@@ -1,48 +1,30 @@
-const { MongoClient, ObjectId } = require("mongodb");
+export async function handler(event) {
+  const req = JSON.parse(event.body || "{}");
 
-const client = new MongoClient(process.env.MONGODB_URI);
-let cachedDb = null;
+  // 1️⃣ Project aniqlash
+  const project = PROJECTS[req.project];
+  if (!project) return err("Unknown project");
 
-async function connectDB() {
-  if (cachedDb) return cachedDb;
-  await client.connect();
-  cachedDb = client.db("leaderMathDB");
-  return cachedDb;
-}
-
-exports.handler = async (event) => {
-  const path = event.path.replace("/.netlify/functions/api", "");
-  const method = event.httpMethod;
-
-  try {
-    const db = await connectDB();
-    const users = db.collection("foydalanuvchilar");
-
-    // LOGIN
-    if (path === "/auth/login" && method === "POST") {
-      const { id, password } = JSON.parse(event.body);
-      const user = await users.findOne({ loginId: id });
-
-      if (!user) return res(404, "Bunday ID yo‘q");
-      if (user.password !== password) return res(401, "Parol noto‘g‘ri");
-
-      return res(200, {
-        sessionId: user._id.toString(),
-        user
-      });
+  // 2️⃣ Auth
+  if (project.auth.required) {
+    if (!checkAuth(req.auth, project.auth)) {
+      return err("Auth failed");
     }
-
-    return res(404, "Endpoint not found");
-
-  } catch (e) {
-    console.error(e);
-    return res(500, "Server error");
   }
-};
 
-function res(code, body) {
-  return {
-    statusCode: code,
-    body: JSON.stringify(body)
-  };
+  // 3️⃣ Permission
+  if (!checkPermission(req.entity, req.action, project)) {
+    return err("Forbidden");
+  }
+
+  // 4️⃣ DB adapter
+  const db = await getDB(project.database);
+
+  // 5️⃣ UNIVERSAL CRUD
+  const result = await db[req.action](
+    project.collections[req.entity],
+    req.data
+  );
+
+  return ok(result);
 }
