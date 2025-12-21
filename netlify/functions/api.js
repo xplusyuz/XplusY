@@ -147,3 +147,47 @@ function err(msg) {
     body: JSON.stringify({ error: msg })
   };
 }
+// ========= ADMIN: ADD CONTENT =========
+if (path === "/admin/content/add" && method === "POST") {
+  const { secret, data } = JSON.parse(event.body || "{}");
+
+  if (secret !== process.env.ADMIN_SECRET) {
+    return err("Forbidden");
+  }
+
+  await db.collection("content").add({
+    ...data,
+    createdAt: Date.now()
+  });
+
+  return ok("Added");
+}
+
+// ========= ADMIN: LIST CONTENT =========
+if (path === "/admin/content/list" && method === "POST") {
+  const { secret } = JSON.parse(event.body || "{}");
+
+  if (secret !== process.env.ADMIN_SECRET) {
+    return err("Forbidden");
+  }
+
+  const snap = await db.collection("content")
+    .orderBy("order")
+    .get();
+
+  return ok(
+    snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  );
+}
+
+// ========= ADMIN: DELETE CONTENT =========
+if (path === "/admin/content/delete" && method === "POST") {
+  const { secret, id } = JSON.parse(event.body || "{}");
+
+  if (secret !== process.env.ADMIN_SECRET) {
+    return err("Forbidden");
+  }
+
+  await db.collection("content").doc(id).delete();
+  return ok("Deleted");
+}

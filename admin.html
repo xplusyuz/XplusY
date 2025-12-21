@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeaderMath — Admin</title>
+
+<style>
+body{
+  margin:0;
+  background:#0b0f1a;
+  color:#fff;
+  font-family:system-ui;
+}
+.page{
+  padding:20px;
+}
+h1{ margin:0 0 16px; }
+
+input,select,button,textarea{
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border-radius:12px;
+  border:none;
+  font-size:14px;
+}
+input,textarea,select{
+  background:rgba(255,255,255,.08);
+  color:#fff;
+}
+button{
+  background:#6c63ff;
+  color:#fff;
+}
+
+.card{
+  background:rgba(255,255,255,.06);
+  border-radius:16px;
+  padding:14px;
+  margin-top:14px;
+}
+small{ opacity:.7; }
+.del{ background:#ff4d4d; }
+</style>
+</head>
+
+<body>
+<div class="page">
+  <h1>🛠 Admin Content</h1>
+
+  <input id="secret" placeholder="Admin secret">
+
+  <!-- ADD CONTENT -->
+  <div class="card">
+    <small>Yangi kontent</small>
+
+    <select id="type">
+      <option value="banner">Banner</option>
+      <option value="card">Card</option>
+    </select>
+
+    <input id="page" placeholder="page (home, tests, profile)">
+    <input id="title" placeholder="Sarlavha">
+    <textarea id="subtitle" placeholder="Tavsif"></textarea>
+    <input id="order" type="number" placeholder="Tartib (order)">
+
+    <button onclick="add()">➕ Qo‘shish</button>
+  </div>
+
+  <!-- LIST -->
+  <div id="list"></div>
+</div>
+
+<script>
+const API = "/.netlify/functions/api";
+
+async function add(){
+  await fetch(API + "/admin/content/add", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      secret: secret.value,
+      data:{
+        type:type.value,
+        page:page.value,
+        title:title.value,
+        subtitle:subtitle.value,
+        order:+order.value
+      }
+    })
+  });
+  load();
+}
+
+async function load(){
+  const r = await fetch(API + "/admin/content/list", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ secret: secret.value })
+  });
+  const data = await r.json();
+
+  list.innerHTML = "";
+  data.forEach(c=>{
+    const el = document.createElement("div");
+    el.className="card";
+    el.innerHTML=`
+      <b>${c.type}</b> — ${c.page}<br>
+      ${c.title}<br>
+      <small>${c.subtitle || ""}</small><br>
+      <button class="del" onclick="del('${c.id}')">🗑 O‘chirish</button>
+    `;
+    list.appendChild(el);
+  });
+}
+
+async function del(id){
+  await fetch(API + "/admin/content/delete", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      secret: secret.value,
+      id
+    })
+  });
+  load();
+}
+</script>
+</body>
+</html>
