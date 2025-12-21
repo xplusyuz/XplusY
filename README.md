@@ -28,3 +28,8 @@ Open: /login.html
 ## Collection
 users/{loginId}
 fields: firstName,lastName,region,district,birthdate,password,points,updatedAt (+ sessionId/sessionExp)
+
+
+## Premium UI
+- assets/anim-bg.js adds neon math particles background.
+- login.html + index.html redesigned with glassmorphism + microinteractions.
