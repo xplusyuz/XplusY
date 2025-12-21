@@ -1,41 +1,435 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Admin — Telegram xabar</title>
-<style>
-body{font-family:system-ui;background:#f3f4f6;padding:40px}
-.card{background:#fff;padding:20px;border-radius:12px;max-width:400px}
-input,textarea,button{
-  width:100%;margin-top:10px;padding:10px;font-size:16px
-}
-button{background:#2563eb;color:#fff;border:none;border-radius:8px}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        .product-img {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+        }
+    </style>
 </head>
 <body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>⚙️ Admin Panel</h1>
+            <div>
+                <a href="index.html" class="btn btn-secondary">Back to Shop</a>
+                <button class="btn btn-danger" onclick="logout()">Logout</button>
+            </div>
+        </div>
 
-<div class="card">
-  <h2>📨 Telegram xabar yuborish</h2>
+        <!-- Tabs -->
+        <ul class="nav nav-tabs" id="adminTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#productsTab">
+                    📦 Products
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ordersTab">
+                    📋 Orders
+                </button>
+            </li>
+        </ul>
 
-  <input id="tid" placeholder="Telegram user ID">
-  <textarea id="msg" placeholder="Xabar matni"></textarea>
-  <button onclick="send()">Yuborish</button>
-</div>
+        <div class="tab-content">
+            <!-- Products Tab -->
+            <div class="tab-pane fade show active" id="productsTab">
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">Add New Product</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="addProductForm">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="productName" class="form-label">Product Name</label>
+                                    <input type="text" class="form-control" id="productName" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="productPrice" class="form-label">Price ($)</label>
+                                    <input type="number" step="0.01" class="form-control" id="productPrice" required>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label for="productDescription" class="form-label">Description</label>
+                                    <textarea class="form-control" id="productDescription" rows="3"></textarea>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label for="productImage" class="form-label">Image URL</label>
+                                    <input type="url" class="form-control" id="productImage" placeholder="https://example.com/image.jpg">
+                                </div>
+                                <div class="col-md-12">
+                                    <button type="submit" class="btn btn-primary">Add Product</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
 
-<script>
-async function send(){
-  const telegram_id = document.getElementById('tid').value;
-  const text = document.getElementById('msg').value;
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Product List</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Image</th>
+                                        <th>Name</th>
+                                        <th>Price</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productsList">
+                                    <!-- Products will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-  const r = await fetch('/.netlify/functions/sendMessage',{
-    method:'POST',
-    body:JSON.stringify({ telegram_id, text })
-  });
+            <!-- Orders Tab -->
+            <div class="tab-pane fade" id="ordersTab">
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">All Orders</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Order ID</th>
+                                        <th>Telegram ID</th>
+                                        <th>Total Amount</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ordersList">
+                                    <!-- Orders will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  if(r.ok) alert("✅ Xabar yuborildi");
-  else alert("❌ Xato");
-}
-</script>
+    <!-- Order Details Modal -->
+    <div class="modal fade" id="orderDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Order Details #<span id="modalOrderId"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="orderDetailsContent"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        const SUPABASE_URL = "https://wxxfjklwgnxuvxhrs.supabase.co";
+        const SUPABASE_KEY = "sb_publishable__b8F70lFPo2LaQrDjW7dcA_nP5m3HDn";
+        const ADMIN_USER_ID = "2049065724";
+
+        const supabase = window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let telegramUserId = null;
+
+        // Check admin access
+        function checkAdminAccess() {
+            if (window.Telegram && Telegram.WebApp) {
+                telegramUserId = Telegram.WebApp.initDataUnsafe.user?.id;
+            } else {
+                telegramUserId = localStorage.getItem('test_user_id') || prompt("Enter Telegram User ID:");
+            }
+            
+            if (telegramUserId.toString() !== ADMIN_USER_ID) {
+                alert('Access denied! You are not an admin.');
+                window.location.href = 'index.html';
+            } else {
+                loadProducts();
+                loadOrders();
+            }
+        }
+
+        // Load products
+        async function loadProducts() {
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error('Error loading products:', error);
+                return;
+            }
+            
+            const tbody = document.getElementById('productsList');
+            tbody.innerHTML = '';
+            
+            data.forEach(product => {
+                const row = `
+                    <tr>
+                        <td>
+                            <img src="${product.image_url || 'https://via.placeholder.com/50x50?text=Prod'}" 
+                                 class="product-img rounded" 
+                                 alt="${product.name}">
+                        </td>
+                        <td>${product.name}</td>
+                        <td>$${product.price}</td>
+                        <td>
+                            <span class="badge ${product.available ? 'bg-success' : 'bg-secondary'}">
+                                ${product.available ? 'Available' : 'Not Available'}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-warning" onclick="toggleProduct(${product.id}, ${!product.available})">
+                                ${product.available ? 'Disable' : 'Enable'}
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProduct(${product.id})">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Add product
+        document.getElementById('addProductForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const productData = {
+                name: document.getElementById('productName').value,
+                price: parseFloat(document.getElementById('productPrice').value),
+                description: document.getElementById('productDescription').value,
+                image_url: document.getElementById('productImage').value || null,
+                available: true,
+                created_at: new Date().toISOString()
+            };
+            
+            const { error } = await supabase
+                .from('products')
+                .insert([productData]);
+            
+            if (error) {
+                alert('Error adding product: ' + error.message);
+            } else {
+                alert('Product added successfully!');
+                document.getElementById('addProductForm').reset();
+                loadProducts();
+            }
+        });
+
+        // Toggle product availability
+        async function toggleProduct(productId, newStatus) {
+            const { error } = await supabase
+                .from('products')
+                .update({ available: newStatus })
+                .eq('id', productId);
+            
+            if (error) {
+                alert('Error updating product: ' + error.message);
+            } else {
+                loadProducts();
+            }
+        }
+
+        // Delete product
+        async function deleteProduct(productId) {
+            if (!confirm('Are you sure you want to delete this product?')) return;
+            
+            const { error } = await supabase
+                .from('products')
+                .delete()
+                .eq('id', productId);
+            
+            if (error) {
+                alert('Error deleting product: ' + error.message);
+            } else {
+                loadProducts();
+            }
+        }
+
+        // Load orders
+        async function loadOrders() {
+            const { data, error } = await supabase
+                .from('orders')
+                .select(`
+                    *,
+                    order_items (
+                        *,
+                        products (name)
+                    )
+                `)
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error('Error loading orders:', error);
+                return;
+            }
+            
+            const tbody = document.getElementById('ordersList');
+            tbody.innerHTML = '';
+            
+            data.forEach(order => {
+                const row = `
+                    <tr>
+                        <td>${order.id}</td>
+                        <td>${order.telegram_id}</td>
+                        <td>$${order.total_amount}</td>
+                        <td>
+                            <span class="badge ${getStatusBadgeClass(order.status)}">
+                                ${order.status}
+                            </span>
+                        </td>
+                        <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info" onclick="viewOrderDetails(${order.id})">
+                                View Details
+                            </button>
+                            <button class="btn btn-sm btn-success" onclick="updateOrderStatus(${order.id}, 'completed')">
+                                Complete
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="updateOrderStatus(${order.id}, 'cancelled')">
+                                Cancel
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Get status badge class
+        function getStatusBadgeClass(status) {
+            switch (status) {
+                case 'pending': return 'bg-warning';
+                case 'completed': return 'bg-success';
+                case 'cancelled': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+
+        // View order details
+        async function viewOrderDetails(orderId) {
+            const { data, error } = await supabase
+                .from('orders')
+                .select(`
+                    *,
+                    order_items (
+                        *,
+                        products (name, image_url)
+                    )
+                `)
+                .eq('id', orderId)
+                .single();
+            
+            if (error) {
+                alert('Error loading order details: ' + error.message);
+                return;
+            }
+            
+            document.getElementById('modalOrderId').textContent = orderId;
+            
+            let content = `
+                <p><strong>Order Date:</strong> ${new Date(data.created_at).toLocaleString()}</p>
+                <p><strong>Status:</strong> <span class="badge ${getStatusBadgeClass(data.status)}">${data.status}</span></p>
+                <p><strong>Total Amount:</strong> $${data.total_amount}</p>
+                <hr>
+                <h6>Order Items:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Price</th>
+                                <th>Quantity</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.order_items.forEach(item => {
+                content += `
+                    <tr>
+                        <td>
+                            <img src="${item.products.image_url || 'https://via.placeholder.com/30x30?text=Prod'}" 
+                                 class="rounded me-2" 
+                                 style="width: 30px; height: 30px; object-fit: cover;">
+                            ${item.products.name}
+                        </td>
+                        <td>$${item.price}</td>
+                        <td>${item.quantity}</td>
+                        <td>$${(item.price * item.quantity).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+            
+            content += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            document.getElementById('orderDetailsContent').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('orderDetailsModal')).show();
+        }
+
+        // Update order status
+        async function updateOrderStatus(orderId, newStatus) {
+            if (!confirm(`Are you sure you want to mark this order as ${newStatus}?`)) return;
+            
+            const { error } = await supabase
+                .from('orders')
+                .update({ status: newStatus })
+                .eq('id', orderId);
+            
+            if (error) {
+                alert('Error updating order: ' + error.message);
+            } else {
+                loadOrders();
+                alert('Order status updated!');
+            }
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('test_user_id');
+            window.location.href = 'index.html';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', checkAdminAccess);
+    </script>
 </body>
 </html>
