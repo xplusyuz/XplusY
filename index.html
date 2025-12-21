@@ -1987,79 +1987,17 @@
 
   </style>
 
-<!-- LM_PATCH_START -->
 <style>
-/* FIX: edit/password modal above profile blur */
-#edit-profile-modal{ z-index: 4500 !important; }
-#password-modal{ z-index: 4600 !important; }
-
-/* FIX: profile action buttons slimmer + spacing */
-.profile-actions{ gap:12px !important; }
-.profile-actions .profile-btn-edit,
-.profile-actions .profile-btn-logout{
-  padding: 12px 14px !important;
+/* Slim profile action buttons */
+#profile-edit-btn, #profile-logout-btn, #profile-password-btn {
+  padding: 10px 14px !important;
+  font-size: 13px !important;
   border-radius: 14px !important;
-  font-size: 14px !important;
-  line-height: 1.1 !important;
 }
-.profile-actions .profile-btn-edit i,
-.profile-actions .profile-btn-logout i{ font-size: 14px !important; }
-
-/* Optional: keep modal content reachable on small screens */
-.profile-container{ max-height: calc(100vh - 48px); overflow:auto; }
+.profile-actions{
+  gap: 10px !important;
+}
 </style>
-<script>
-(function(){
-  // ensure edit modal opens ON TOP (not behind blur) and close profile view modal
-  function $(sel, root=document){ return root.querySelector(sel); }
-
-  function openModal(id){
-    const m = document.getElementById(id);
-    if(!m) return;
-    m.style.display='flex';
-    m.classList.add('active','open');
-  }
-  function closeModal(id){
-    const m = document.getElementById(id);
-    if(!m) return;
-    m.classList.remove('active','open');
-    m.style.display='none';
-  }
-
-  window.addEventListener('load', ()=>{
-    const editBtn = document.getElementById('profile-edit-btn');
-    if(editBtn){
-      editBtn.addEventListener('click', (e)=>{
-        // stop any previous handler side effects
-        e.preventDefault();
-        e.stopPropagation();
-        // close profile view if open
-        closeModal('profile-modal');
-        // open edit
-        openModal('edit-profile-modal');
-      }, true);
-    }
-
-    const editClose = document.getElementById('edit-profile-close');
-    if(editClose){
-      editClose.addEventListener('click', (e)=>{
-        e.preventDefault();
-        e.stopPropagation();
-        closeModal('edit-profile-modal');
-        // optionally reopen profile view (not forced)
-        // openModal('profile-modal');
-      }, true);
-    }
-
-    // password modal z-index safety if exists
-    const passClose = document.getElementById('password-close');
-    if(passClose){
-      passClose.addEventListener('click', ()=>closeModal('password-modal'), true);
-    }
-  });
-})();
-</script>
-<!-- LM_PATCH_END -->
 
 </head>
 <body>
@@ -3088,10 +3026,74 @@
     // =============== REGION DATA MANAGEMENT ===============
     async function loadRegionData() {
       try {
-        const response = await fetch('region.json');
-        if (!response.ok) {
-          throw new Error('Region.json fayli topilmadi');
+        const tryUrls = ['/region.json','region.json','/assets/region.json','assets/region.json'];
+        let response = null;
+        for (const u of tryUrls) {
+          try {
+            const r = await fetch(u, { cache: 'no-store' });
+            if (r.ok) { response = r; break; }
+          } catch (_) {}
         }
+        if (!response) throw new Error('Region.json fayli topilmadi');
+
+        const raw = await response.json();
+
+        // Support formats:
+        // A) { regions:[{name, districts:[...]}, ...] }
+        // B) { "Namangan":[...], "Andijon":[...] } (map)
+        regionData = { regions: [] };
+        if (Array.isArray(raw?.regions)) {
+          regionData.regions = raw.regions.map(x=>({ name: x.name, districts: Array.isArray(x.districts)?x.districts:[] }));
+        } else if (raw && typeof raw === 'object') {
+          regionData.regions = Object.keys(raw).map(k=>({ name:k, districts: Array.isArray(raw[k])?raw[k]:[] }));
+        }
+
+        // Populate region select
+        const regionSelect = document.getElementById('edit-region');
+        const districtSelect = document.getElementById('edit-district');
+        if (regionSelect) {
+          regionSelect.innerHTML = '<option value="">Viloyatni tanlang</option>';
+          regionData.regions.forEach(region => {
+            const option = document.createElement('option');
+            option.value = region.name;
+            option.textContent = region.name;
+            regionSelect.appendChild(option);
+          });
+        }
+        if (districtSelect) {
+          districtSelect.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
+          districtSelect.disabled = true;
+        }
+
+        // Link change
+        if (regionSelect && districtSelect) {
+          regionSelect.addEventListener('change', () => {
+            const selectedRegion = regionSelect.value;
+            const region = regionData.regions.find(r => r.name === selectedRegion);
+            districtSelect.innerHTML = '';
+            if (region && Array.isArray(region.districts) && region.districts.length) {
+              districtSelect.disabled = false;
+              districtSelect.innerHTML = '<option value="">Tumanni tanlang</option>';
+              region.districts.forEach(d => {
+                const o = document.createElement('option');
+                o.value = d;
+                o.textContent = d;
+                districtSelect.appendChild(o);
+              });
+            } else {
+              districtSelect.disabled = true;
+              districtSelect.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
+            }
+          });
+        }
+
+        return regionData;
+      } catch (error) {
+        console.error("Region ma'lumotlarini yuklashda xatolik:", error);
+        try { showNotification('Viloyat ma\'lumotlari yuklanmadi', 'error'); } catch(_) {}
+        return null;
+      }
+    }
         
         regionData = await response.json();
         
@@ -3163,11 +3165,28 @@
     }
 
     async function updateUserProfile(updateData) {
-      try {
-        const sessionId = localStorage.getItem('leaderMathUserSession');
-        if (!sessionId) {
-          throw new Error('Session mavjud emas');
-        }
+      const sessionId = localStorage.getItem('leaderMathUserSession');
+      if (!sessionId) throw new Error('Session mavjud emas');
+
+      const url = `${API_BASE}/user/${encodeURIComponent(sessionId)}`;
+      const body = JSON.stringify(updateData);
+
+      // 1) PATCH (backend expects)
+      let response = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });
+
+      // 2) if backend is older, try PUT
+      if (!response.ok) {
+        response = await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body }).catch(()=>response);
+      }
+
+      if (!response.ok) {
+        const t = await response.text().catch(()=> '');
+        throw new Error(t || 'Profil yangilashda xatolik');
+      }
+
+      const data = await response.json().catch(()=> ({}));
+      return data.user || data;
+    }
 
         const response = await fetch(`${API_BASE}/user/${sessionId}`, {
           method: 'PATCH',
@@ -3888,52 +3907,50 @@
       return "Yangi ishtirokchi";
     }
 
-    async function saveProfileChanges() {
+    async async function saveProfileChanges() {
       const firstName = document.getElementById('edit-firstname').value.trim();
       const lastName = document.getElementById('edit-lastname').value.trim();
       const birthDate = document.getElementById('edit-birthdate').value;
       const region = document.getElementById('edit-region').value;
       const district = document.getElementById('edit-district').value;
-      
-      if (!firstName) {
-        showNotification('Iltimos, ismingizni kiriting', 'warning');
-        return;
-      }
-      
-      if (!birthDate) {
-        showNotification('Iltimos, tug\'ilgan sanangizni kiriting', 'warning');
-        return;
-      }
-      
-      if (!region) {
-        showNotification('Iltimos, viloyatingizni tanlang', 'warning');
-        return;
-      }
-      
-      if (!district) {
-        showNotification('Iltimos, tumaningizni tanlang', 'warning');
-        return;
-      }
-      
+
+      // required
+      if (!firstName) { showNotification('Iltimos, ismingizni kiriting', 'warning'); return; }
+      if (!lastName) { showNotification('Iltimos, familiyangizni kiriting', 'warning'); return; }
+      if (!birthDate) { showNotification('Iltimos, tug\'ilgan sanangizni kiriting', 'warning'); return; }
+      if (!region) { showNotification('Iltimos, viloyatni tanlang', 'warning'); return; }
+      if (!district) { showNotification('Iltimos, tumanni tanlang', 'warning'); return; }
+
+      const updateData = { firstName, lastName, birthDate, region, district };
+
+      // UI: disable save
+      const btn = document.getElementById('edit-save-btn');
+      const oldTxt = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saqlanmoqda...'; }
+
       try {
-        const updateData = {
-          firstName,
-          lastName,
-          birthDate,
-          region,
-          district
-        };
-        
-        await updateUserProfile(updateData);
+        const user = await updateUserProfile(updateData);
+
+        // profileCompleted gate
+        if (user && user.profileCompleted) {
+          window.__LM_PROFILE_COMPLETED = true;
+        }
+
+        // Update header greeting + profile view
+        const nameEl = document.getElementById('user-firstname');
+        if (nameEl) nameEl.textContent = firstName;
+
         showNotification('Profil muvaffaqiyatli yangilandi!', 'success');
-        
-        // Update header greeting
-        document.getElementById('user-firstname').textContent = firstName;
-        
+
+        // close edit, open view (optional)
         closeEditProfileModal();
-        loadProfileData();
+        await loadProfileData();
+
       } catch (error) {
-        showNotification('Xatolik: ' + error.message, 'error');
+        console.error(error);
+        showNotification('Xatolik: ' + (error?.message || 'profil saqlanmadi'), 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = oldTxt; }
       }
     }
 
@@ -4234,5 +4251,22 @@
       });
     });
   </script>
+<script>
+
+// ---- Profile UX fix: edit modal always on top & view modal closes ----
+(function(){
+  const btn = document.getElementById('profile-edit-btn');
+  const view = document.getElementById('profile-modal');
+  const edit = document.getElementById('edit-profile-modal');
+  if(btn && edit){
+    edit.style.zIndex = '4600';
+    btn.addEventListener('click', ()=>{
+      try{ if(view) view.classList.remove('active','open'); }catch(_){}
+      try{ edit.classList.add('active','open'); edit.style.display='block'; }catch(_){}
+    });
+  }
+})();
+
+</script>
 </body>
 </html>
