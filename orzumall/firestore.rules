@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ADMIN: Google login UID larni shu yerga kiriting
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid in [
+          "PASTE_ADMIN_UID_HERE"
+        ];
+    }
+
+    match /shop_nav/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      match /filters/{filterId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // one-click 6-digit id users
+    match /users/{id} {
+      allow get: if true;
+      allow create: if request.resource.data.id == id && id.matches('^[0-9]{6}$');
+      allow update: if request.resource.data.id == id; // minimal
+      allow list, delete: if isAdmin();
+    }
+
+    // cart (minimal public; for full security use Auth later)
+    match /carts/{userId}/items/{productId} {
+      allow read: if true;
+      allow create, update, delete: if userId.matches('^[0-9]{6}$');
+    }
+
+    // orders: create allowed for 6-digit userId, read/update for admin
+    match /orders/{orderId} {
+      allow create: if request.resource.data.userId.matches('^[0-9]{6}$');
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
