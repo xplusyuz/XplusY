@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mobile Shop — Chips + Filters</title>
+
+  <style>
+    :root{
+      --bg:#070A10;
+      --card:#0D1220;
+      --card2:#0B1020;
+      --text:#EAF0FF;
+      --muted:#A9B3CC;
+      --line:rgba(255,255,255,.10);
+      --brand:#2E8B57;
+      --brand2:#20C997;
+      --danger:#ff4d4d;
+      --radius:18px;
+      --shadow: 0 18px 50px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:
+        radial-gradient(900px 420px at 20% -10%, rgba(46,139,87,.35), transparent 60%),
+        radial-gradient(900px 420px at 90% 0%, rgba(32,201,151,.18), transparent 65%),
+        radial-gradient(900px 520px at 30% 120%, rgba(91,33,182,.18), transparent 60%),
+        var(--bg);
+      color:var(--text);
+      overflow-x:hidden;
+    }
+    .app{
+      max-width: 520px;
+      margin: 0 auto;
+      min-height:100vh;
+      padding-bottom: 92px; /* bottom nav */
+    }
+
+    /* Top bar */
+    .top{
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(14px);
+      background: linear-gradient(to bottom, rgba(7,10,16,.88), rgba(7,10,16,.55));
+      border-bottom: 1px solid var(--line);
+    }
+    .topInner{
+      padding: 14px 14px 10px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .brand{
+      display:flex; gap:10px; align-items:center;
+      min-width:0;
+    }
+    .logo{
+      width:38px;height:38px;border-radius:14px;
+      background: radial-gradient(circle at 30% 30%, rgba(32,201,151,.9), rgba(46,139,87,.35));
+      box-shadow: 0 10px 30px rgba(32,201,151,.18);
+      border:1px solid rgba(255,255,255,.14);
+    }
+    .brand h1{
+      margin:0;
+      font-size: 14px;
+      letter-spacing:.2px;
+      line-height:1.1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .brand small{color:var(--muted);display:block;font-size:12px;margin-top:2px}
+    .userChip{
+      display:flex; gap:10px; align-items:center;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.05);
+      border-radius: 999px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      cursor:pointer;
+      user-select:none;
+    }
+    .dot{
+      width:10px;height:10px;border-radius:50%;
+      background: var(--brand2);
+      box-shadow: 0 0 0 6px rgba(32,201,151,.12);
+    }
+    .userTxt{min-width:0}
+    .userTxt b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .userTxt span{display:block;font-size:12px;color:var(--muted)}
+
+    /* Filter chips (small) */
+    .smallChipsWrap{
+      padding: 0 12px 12px;
+    }
+    .scrollRow{
+      display:flex;
+      gap:10px;
+      overflow-x:auto;
+      padding: 10px 2px;
+      scroll-snap-type:x mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
+    .scrollRow::-webkit-scrollbar{height:0}
+    .chip{
+      flex:0 0 auto;
+      scroll-snap-align:start;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      font-size: 13px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      cursor:pointer;
+      user-select:none;
+      transition: transform .12s ease, background .12s ease, border-color .12s ease;
+      white-space:nowrap;
+    }
+    .chip:hover{transform: translateY(-1px)}
+    .chip.active{
+      background: linear-gradient(135deg, rgba(46,139,87,.34), rgba(32,201,151,.18));
+      border-color: rgba(32,201,151,.38);
+      box-shadow: 0 10px 28px rgba(32,201,151,.12);
+    }
+    .chip .pill{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      color: var(--muted);
+      background: rgba(0,0,0,.22);
+    }
+
+    /* Content */
+    .content{
+      padding: 14px;
+    }
+    .hero{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: var(--radius);
+      background:
+        radial-gradient(600px 240px at 20% 0%, rgba(32,201,151,.20), transparent 65%),
+        rgba(255,255,255,.04);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .hero h2{margin:0 0 6px;font-size:16px}
+    .hero p{margin:0;color:var(--muted);font-size:13px;line-height:1.35}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .card{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.04);
+      box-shadow: 0 16px 44px rgba(0,0,0,.30);
+      overflow:hidden;
+    }
+    .cardInner{display:flex; gap:12px; padding:12px}
+    .img{
+      width:88px;height:88px;border-radius:16px;flex:0 0 auto;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      overflow:hidden;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .img img{width:100%;height:100%;object-fit:cover;display:block}
+    .meta{min-width:0;flex:1}
+    .title{margin:0;font-size:14px;line-height:1.25}
+    .desc{margin:6px 0 0;color:var(--muted);font-size:12.5px;line-height:1.35}
+    .row{
+      margin-top:10px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+    }
+    .price{
+      font-weight:800;
+      letter-spacing:.2px;
+      background: linear-gradient(90deg, rgba(46,139,87,.30), rgba(32,201,151,.12));
+      border:1px solid rgba(32,201,151,.22);
+      padding:8px 10px;border-radius:999px;
+      font-size:13px;
+    }
+    .btn{
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 9px 12px;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .btn.primary{
+      border-color: rgba(32,201,151,.28);
+      background: linear-gradient(135deg, rgba(46,139,87,.40), rgba(32,201,151,.18));
+    }
+
+    /* Bottom big chips */
+    .bottom{
+      position: fixed;
+      left:0; right:0; bottom:0;
+      padding: 10px 0 16px;
+      background: linear-gradient(to top, rgba(7,10,16,.92), rgba(7,10,16,.35));
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--line);
+      z-index: 60;
+    }
+    .bottomInner{
+      max-width:520px;
+      margin:0 auto;
+      padding: 0 12px;
+    }
+    .bigChip{
+      padding: 12px 14px;
+      font-size: 13.5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .bigChip.active{
+      background: linear-gradient(135deg, rgba(46,139,87,.42), rgba(32,201,151,.18));
+      border-color: rgba(32,201,151,.38);
+      box-shadow: 0 10px 28px rgba(32,201,151,.12);
+    }
+
+    /* Modal (login) */
+    .overlay{
+      position:fixed; inset:0; display:none;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+      z-index: 120;
+      padding: 18px;
+    }
+    .modal{
+      max-width: 520px;
+      margin: 60px auto 0;
+      border-radius: 22px;
+      border:1px solid rgba(255,255,255,.12);
+      background: radial-gradient(600px 300px at 20% 0%, rgba(32,201,151,.20), transparent 65%),
+                  rgba(13,18,32,.92);
+      box-shadow: 0 24px 70px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+    .modalHead{
+      padding: 14px 14px 10px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.10);
+    }
+    .modalHead h3{margin:0;font-size:15px}
+    .close{
+      width:38px;height:38px;border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      cursor:pointer;
+    }
+    .modalBody{padding:14px}
+    .field{display:grid; gap:8px; margin: 10px 0}
+    .field label{color:var(--muted);font-size:12px}
+    input{
+      width:100%;
+      padding: 12px 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      outline:none;
+      font-size: 14px;
+    }
+    .actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px}
+    .hint{color:var(--muted);font-size:12.5px;line-height:1.35;margin-top:10px}
+    .toast{
+      position: fixed;
+      left:50%;
+      transform: translateX(-50%);
+      bottom: 110px;
+      z-index: 200;
+      display:none;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.65);
+      border: 1px solid rgba(255,255,255,.14);
+      color: var(--text);
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="top">
+      <div class="topInner">
+        <div class="brand">
+          <div class="logo"></div>
+          <div style="min-width:0">
+            <h1>Mobile Shop</h1>
+            <small id="subTitle">Katta chip + Mayda filter chip</small>
+          </div>
+        </div>
+
+        <div class="userChip" id="userChip" title="Kirish / ID">
+          <div class="dot"></div>
+          <div class="userTxt">
+            <b id="userLine">Mehmon</b>
+            <span id="userIdLine">ID: —</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="smallChipsWrap">
+        <div class="scrollRow" id="smallChips"></div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="hero">
+        <h2 id="heroTitle">Mahsulotlar</h2>
+        <p id="heroDesc">Pastdagi katta chipdan bo‘lim tanlang. Tepada shu bo‘limga tegishli mayda chip filterlar chiqadi.</p>
+      </div>
+
+      <div class="grid" id="productGrid"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="bottomInner">
+      <div class="scrollRow" id="bigChips"></div>
+    </div>
+  </div>
+
+  <!-- Login modal -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modalHead">
+        <h3>Tez kirish (6 xonali ID)</h3>
+        <button class="close" id="closeModal">✕</button>
+      </div>
+      <div class="modalBody">
+        <div class="field">
+          <label>Existing ID bilan kirish</label>
+          <input id="loginIdInput" inputmode="numeric" maxlength="6" placeholder="Masalan: 123456" />
+        </div>
+        <div class="actions">
+          <button class="btn" id="btnLogin">Kirish</button>
+          <button class="btn primary" id="btnCreate">1 bosishda ID olish</button>
+          <button class="btn" id="btnLogout" style="margin-left:auto;border-color:rgba(255,255,255,.12)">Chiqish</button>
+        </div>
+        <div class="hint">
+          “1 bosishda ID olish” bosilganda sizga <b>random 6 xonali ID</b> beriladi va shu ID bilan avtomatik kiriladi.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getFirestore, collection, doc, getDoc, setDoc, updateDoc,
+      query, where, orderBy, limit, onSnapshot, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    // 1) Firebase config ni shu yerga qo'ying
+    const firebaseConfig = {
+      apiKey: "AIzaSyADOv69HBuAJkaYs2Ukgab-VgqkJIv1Cro",
+  authDomain: "orzumall.firebaseapp.com",
+  projectId: "orzumall",
+  storageBucket: "orzumall.firebasestorage.app",
+  messagingSenderId: "873732887270",
+  appId: "1:873732887270:web:15b73dbb37f4fdabe8a127",
+  measurementId: "G-2LEH8YWPLF"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ---------- UI refs ----------
+    const bigChipsEl = document.getElementById("bigChips");
+    const smallChipsEl = document.getElementById("smallChips");
+    const productGridEl = document.getElementById("productGrid");
+    const heroTitleEl = document.getElementById("heroTitle");
+
+    const overlay = document.getElementById("overlay");
+    const userChip = document.getElementById("userChip");
+    const closeModal = document.getElementById("closeModal");
+    const btnLogin = document.getElementById("btnLogin");
+    const btnCreate = document.getElementById("btnCreate");
+    const btnLogout = document.getElementById("btnLogout");
+    const loginIdInput = document.getElementById("loginIdInput");
+    const userLine = document.getElementById("userLine");
+    const userIdLine = document.getElementById("userIdLine");
+    const toastEl = document.getElementById("toast");
+
+    // ---------- State ----------
+    let bigNav = [];       // [{id,title,order,active}]
+    let smallNav = [];     // filters
+    let selectedBigId = null;
+    let selectedFilterId = "all";
+    let unsubFilters = null;
+    let unsubProducts = null;
+
+    let currentUserId = localStorage.getItem("SHOP_USER_ID") || "";
+
+    // ---------- Helpers ----------
+    function toast(msg){
+      toastEl.textContent = msg;
+      toastEl.style.display = "block";
+      clearTimeout(toastEl._t);
+      toastEl._t = setTimeout(()=> toastEl.style.display="none", 2200);
+    }
+
+    function openModal(){
+      overlay.style.display = "block";
+      loginIdInput.value = (currentUserId || "");
+      loginIdInput.focus();
+      syncUserUI();
+    }
+    function close(){
+      overlay.style.display = "none";
+    }
+
+    function fmtPrice(n, currency="UZS"){
+      const num = Number(n || 0);
+      return num.toLocaleString("uz-UZ") + " " + currency;
+    }
+
+    function chipButton({text, active, kind="small", onClick, badgeText=""}){
+      const el = document.createElement("div");
+      el.className = "chip " + (kind === "big" ? "bigChip" : "") + (active ? " active" : "");
+      el.innerHTML = `
+        <span>${escapeHtml(text)}</span>
+        ${badgeText ? `<span class="pill">${escapeHtml(badgeText)}</span>` : ``}
+      `;
+      el.addEventListener("click", onClick);
+      return el;
+    }
+
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    // ---------- User (6-digit ID) ----------
+    function syncUserUI(){
+      if(currentUserId){
+        userLine.textContent = "Foydalanuvchi";
+        userIdLine.textContent = "ID: " + currentUserId;
+      }else{
+        userLine.textContent = "Mehmon";
+        userIdLine.textContent = "ID: —";
+      }
+    }
+
+    function isValidId(id){
+      return /^[0-9]{6}$/.test(id);
+    }
+
+    async function loginWithId(id){
+      id = String(id || "").trim();
+      if(!isValidId(id)) return toast("ID 6 xonali bo‘lishi kerak.");
+      const ref = doc(db, "users", id);
+      const snap = await getDoc(ref);
+      if(!snap.exists()) return toast("Bunday ID topilmadi. ID oling yoki tekshiring.");
+      await updateDoc(ref, { lastSeenAt: serverTimestamp() }).catch(()=>{});
+      currentUserId = id;
+      localStorage.setItem("SHOP_USER_ID", id);
+      syncUserUI();
+      toast("Kirish: " + id);
+      close();
+    }
+
+    async function createOneClickId(){
+      // unique 6-digit ID create (client-side loop)
+      for(let i=0; i<12; i++){
+        const id = String(Math.floor(100000 + Math.random()*900000));
+        const ref = doc(db, "users", id);
+        const snap = await getDoc(ref);
+        if(snap.exists()) continue;
+
+        await setDoc(ref, {
+          id,
+          createdAt: serverTimestamp(),
+          lastSeenAt: serverTimestamp()
+        });
+
+        currentUserId = id;
+        localStorage.setItem("SHOP_USER_ID", id);
+        syncUserUI();
+        toast("Sizning ID: " + id);
+        close();
+        return;
+      }
+      toast("ID yaratib bo‘lmadi. Qayta urinib ko‘ring.");
+    }
+
+    function logout(){
+      currentUserId = "";
+      localStorage.removeItem("SHOP_USER_ID");
+      syncUserUI();
+      toast("Chiqildi");
+    }
+
+    // ---------- Firestore live UI ----------
+    function renderBigChips(){
+      bigChipsEl.innerHTML = "";
+      if(!bigNav.length){
+        bigChipsEl.appendChild(chipButton({
+          text:"Bo‘lim yo‘q (admin qo‘shadi)",
+          active:false,
+          kind:"big",
+          onClick:()=>toast("Admin paneldan bo‘lim qo‘shing")
+        }));
+        return;
+      }
+      for(const b of bigNav){
+        if(b.active === false) continue;
+        bigChipsEl.appendChild(chipButton({
+          text: b.title,
+          active: b.id === selectedBigId,
+          kind:"big",
+          onClick:()=> selectBig(b.id)
+        }));
+      }
+    }
+
+    function renderSmallChips(){
+      smallChipsEl.innerHTML = "";
+      // "Barchasi" default
+      smallChipsEl.appendChild(chipButton({
+        text:"Barchasi",
+        active: selectedFilterId === "all",
+        kind:"small",
+        onClick:()=> selectFilter("all"),
+        badgeText: "ALL"
+      }));
+
+      for(const f of smallNav){
+        if(f.active === false) continue;
+        smallChipsEl.appendChild(chipButton({
+          text: f.title,
+          active: f.id === selectedFilterId,
+          kind:"small",
+          onClick:()=> selectFilter(f.id)
+        }));
+      }
+    }
+
+    function renderProducts(list){
+      productGridEl.innerHTML = "";
+      if(!list.length){
+        const empty = document.createElement("div");
+        empty.className = "card";
+        empty.innerHTML = `
+          <div class="cardInner">
+            <div class="meta">
+              <p class="title" style="margin:0">Hozircha mahsulot yo‘q</p>
+              <p class="desc">Admin paneldan mahsulot qo‘shing yoki filterlarni tekshiring.</p>
+            </div>
+          </div>`;
+        productGridEl.appendChild(empty);
+        return;
+      }
+
+      for(const p of list){
+        const el = document.createElement("div");
+        el.className = "card";
+        const imgHtml = p.img
+          ? `<img src="${escapeHtml(p.img)}" alt="">`
+          : `<span style="color:var(--muted);font-size:12px">No image</span>`;
+        el.innerHTML = `
+          <div class="cardInner">
+            <div class="img">${imgHtml}</div>
+            <div class="meta">
+              <p class="title">${escapeHtml(p.title || "Mahsulot")}</p>
+              <p class="desc">${escapeHtml(p.desc || "")}</p>
+              <div class="row">
+                <div class="price">${escapeHtml(fmtPrice(p.price, p.currency || "UZS"))}</div>
+                <button class="btn primary">Savatga</button>
+              </div>
+            </div>
+          </div>
+        `;
+        el.querySelector("button").addEventListener("click", ()=>{
+          toast("Savat: " + (p.title || "Mahsulot"));
+        });
+        productGridEl.appendChild(el);
+      }
+    }
+
+    function selectBig(bigId){
+      selectedBigId = bigId;
+      selectedFilterId = "all";
+      const found = bigNav.find(x=>x.id===bigId);
+      heroTitleEl.textContent = found ? found.title : "Mahsulotlar";
+      renderBigChips();
+      watchFilters();
+      watchProducts();
+    }
+
+    function selectFilter(filterId){
+      selectedFilterId = filterId;
+      renderSmallChips();
+      watchProducts();
+    }
+
+    function watchBigNav(){
+      const qNav = query(collection(db, "shop_nav"), orderBy("order","asc"), limit(200));
+      onSnapshot(qNav, (snap)=>{
+        bigNav = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        if(!selectedBigId){
+          const first = bigNav.find(x=>x.active !== false);
+          if(first) selectedBigId = first.id;
+        }else{
+          // if selected disabled/deleted -> fallback
+          const sel = bigNav.find(x=>x.id===selectedBigId && x.active !== false);
+          if(!sel){
+            const first = bigNav.find(x=>x.active !== false);
+            selectedBigId = first ? first.id : null;
+          }
+        }
+        renderBigChips();
+        if(selectedBigId){
+          const found = bigNav.find(x=>x.id===selectedBigId);
+          heroTitleEl.textContent = found ? found.title : "Mahsulotlar";
+          watchFilters();
+          watchProducts();
+        }else{
+          smallNav = [];
+          renderSmallChips();
+          renderProducts([]);
+        }
+      });
+    }
+
+    function watchFilters(){
+      if(unsubFilters) unsubFilters();
+      smallNav = [];
+      renderSmallChips();
+      if(!selectedBigId) return;
+
+      const qFilters = query(
+        collection(db, "shop_nav", selectedBigId, "filters"),
+        orderBy("order","asc"),
+        limit(200)
+      );
+      unsubFilters = onSnapshot(qFilters, (snap)=>{
+        smallNav = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        // if selectedFilter removed, reset
+        if(selectedFilterId !== "all"){
+          const ok = smallNav.find(x=>x.id===selectedFilterId && x.active !== false);
+          if(!ok) selectedFilterId = "all";
+        }
+        renderSmallChips();
+      });
+    }
+
+    function watchProducts(){
+      if(unsubProducts) unsubProducts();
+      if(!selectedBigId){
+        renderProducts([]);
+        return;
+      }
+
+      let qProd;
+      if(selectedFilterId === "all"){
+        qProd = query(
+          collection(db, "products"),
+          where("active","==", true),
+          where("bigId","==", selectedBigId),
+          orderBy("order","asc"),
+          limit(200)
+        );
+      }else{
+        qProd = query(
+          collection(db, "products"),
+          where("active","==", true),
+          where("bigId","==", selectedBigId),
+          where("filterId","==", selectedFilterId),
+          orderBy("order","asc"),
+          limit(200)
+        );
+      }
+
+      unsubProducts = onSnapshot(qProd, (snap)=>{
+        const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderProducts(list);
+      }, (err)=>{
+        console.error(err);
+        toast("Products o‘qishda xato. Index kerak bo‘lishi mumkin.");
+      });
+    }
+
+    // ---------- Events ----------
+    userChip.addEventListener("click", openModal);
+    closeModal.addEventListener("click", close);
+    overlay.addEventListener("click", (e)=>{ if(e.target === overlay) close(); });
+
+    btnLogin.addEventListener("click", ()=> loginWithId(loginIdInput.value));
+    btnCreate.addEventListener("click", ()=> createOneClickId());
+    btnLogout.addEventListener("click", ()=>{ logout(); syncUserUI(); });
+
+    loginIdInput.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter") loginWithId(loginIdInput.value);
+    });
+
+    // init
+    syncUserUI();
+    watchBigNav();
+  </script>
+</body>
+</html>

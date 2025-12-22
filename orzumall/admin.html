@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Shop Chips + Filters</title>
+  <style>
+    :root{
+      --bg:#070A10;
+      --card:#0D1220;
+      --text:#EAF0FF;
+      --muted:#A9B3CC;
+      --line:rgba(255,255,255,.10);
+      --brand:#2E8B57;
+      --brand2:#20C997;
+      --radius:18px;
+      --shadow: 0 18px 50px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:
+        radial-gradient(900px 420px at 20% -10%, rgba(46,139,87,.35), transparent 60%),
+        radial-gradient(900px 420px at 90% 0%, rgba(32,201,151,.18), transparent 65%),
+        var(--bg);
+      color:var(--text);
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:18px}
+    .top{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.04);
+      padding:14px;border-radius:22px;
+      box-shadow: var(--shadow);
+    }
+    .top h1{margin:0;font-size:16px}
+    .top small{color:var(--muted)}
+    .btn{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:800;
+    }
+    .btn.primary{
+      border-color: rgba(32,201,151,.28);
+      background: linear-gradient(135deg, rgba(46,139,87,.40), rgba(32,201,151,.18));
+    }
+    .btn.danger{border-color: rgba(255,77,77,.30)}
+    .grid{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} }
+
+    .card{
+      border:1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,.04);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .cardHead{
+      padding: 14px;
+      border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+    }
+    .cardHead h2{margin:0;font-size:14px}
+    .cardBody{padding: 14px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .field{display:grid;gap:6px;margin:10px 0}
+    label{color:var(--muted);font-size:12px}
+    input, textarea, select{
+      width:100%;
+      padding: 10px 10px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color: var(--text);
+      outline:none;
+      font-size: 14px;
+    }
+    textarea{min-height:80px;resize:vertical}
+    .list{
+      display:grid;
+      gap:10px;
+      margin-top:10px;
+    }
+    .item{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+      border-radius: 18px;
+      padding: 12px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+    }
+    .meta{min-width:0}
+    .meta b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meta span{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tools{display:flex;gap:8px;flex:0 0 auto}
+    .mini{
+      width:38px;height:38px;border-radius:14px;
+      display:grid;place-items:center;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      cursor:pointer;
+      user-select:none;
+      font-weight:900;
+    }
+    .mini.primary{border-color: rgba(32,201,151,.28)}
+    .mini.danger{border-color: rgba(255,77,77,.30)}
+    .note{color:var(--muted);font-size:12.5px;line-height:1.35}
+    .pill{
+      font-size:11px;
+      padding:2px 8px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      color:var(--muted);
+      background: rgba(0,0,0,.22);
+      display:inline-block;
+      margin-left:6px;
+    }
+    .blocked{
+      margin-top:14px;
+      border:1px solid rgba(255,77,77,.25);
+      background: rgba(255,77,77,.08);
+      border-radius: 22px;
+      padding: 14px;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Admin Panel <span class="pill">shop_nav / filters / products</span></h1>
+        <small id="who">Kirish: —</small>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btnGoogle">Google bilan kirish</button>
+        <button class="btn" id="btnLogout" style="display:none">Chiqish</button>
+      </div>
+    </div>
+
+    <div class="blocked" id="blocked">
+      <b>Ruxsat yo‘q.</b>
+      <div class="note">Bu email admin ro‘yxatida emas. ADMIN_EMAILS ga qo‘shing.</div>
+    </div>
+
+    <div class="grid" id="adminUI" style="display:none">
+
+      <!-- Big chips -->
+      <div class="card">
+        <div class="cardHead">
+          <h2>Katta chiplar (pastki nav)</h2>
+          <button class="btn primary" id="addBig">+ Katta chip</button>
+        </div>
+        <div class="cardBody">
+          <div class="note">Tartib: <b>order</b> bo‘yicha. ↑ ↓ bilan o‘zgartirasiz.</div>
+          <div class="list" id="bigList"></div>
+
+          <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:14px 0">
+
+          <div id="bigEditor" style="display:none">
+            <b>Tanlangan katta chip:</b> <span id="bigSelTitle" class="pill"></span>
+            <div class="field">
+              <label>Title</label>
+              <input id="bigTitle" placeholder="Masalan: Elektronika" />
+            </div>
+            <div class="row">
+              <button class="btn primary" id="saveBig">Saqlash</button>
+              <button class="btn danger" id="delBig">O‘chirish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card">
+        <div class="cardHead">
+          <h2>Mayda chiplar (filter)</h2>
+          <button class="btn primary" id="addFilter">+ Filter</button>
+        </div>
+        <div class="cardBody">
+          <div class="note">Filterlar faqat tanlangan katta chipga biriktiriladi.</div>
+          <div class="list" id="filterList"></div>
+
+          <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:14px 0">
+
+          <div id="filterEditor" style="display:none">
+            <b>Tanlangan filter:</b> <span id="filterSelTitle" class="pill"></span>
+            <div class="field">
+              <label>Title</label>
+              <input id="filterTitle" placeholder="Masalan: Telefon" />
+            </div>
+            <div class="row">
+              <button class="btn primary" id="saveFilter">Saqlash</button>
+              <button class="btn danger" id="delFilter">O‘chirish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Products -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="cardHead">
+          <h2>Mahsulotlar</h2>
+          <button class="btn primary" id="addProd">+ Mahsulot</button>
+        </div>
+        <div class="cardBody">
+          <div class="note">
+            Mahsulot <b>bigId</b> va <b>filterId</b> orqali bog‘lanadi. FilterId “all” bo‘lsa — “Barchasi”ga tushadi.
+          </div>
+          <div class="list" id="prodList"></div>
+
+          <hr style="border:0;border-top:1px solid rgba(255,255,255,.10);margin:14px 0">
+
+          <div id="prodEditor" style="display:none">
+            <b>Tanlangan mahsulot:</b> <span id="prodSelTitle" class="pill"></span>
+
+            <div class="row">
+              <div style="flex:1;min-width:240px" class="field">
+                <label>Title</label>
+                <input id="pTitle" placeholder="Masalan: iPhone 14" />
+              </div>
+              <div style="width:180px" class="field">
+                <label>Price</label>
+                <input id="pPrice" inputmode="numeric" placeholder="1200000" />
+              </div>
+              <div style="width:140px" class="field">
+                <label>Currency</label>
+                <input id="pCur" placeholder="UZS" value="UZS" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div style="flex:1;min-width:240px" class="field">
+                <label>Image URL</label>
+                <input id="pImg" placeholder="https://..." />
+              </div>
+              <div style="width:240px" class="field">
+                <label>Filter</label>
+                <select id="pFilter"></select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Description</label>
+              <textarea id="pDesc" placeholder="Qisqa tavsif..."></textarea>
+            </div>
+
+            <div class="row">
+              <button class="btn primary" id="saveProd">Saqlash</button>
+              <button class="btn danger" id="delProd">O‘chirish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- adminUI -->
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+      query, where, orderBy, limit, onSnapshot, getDocs, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    // Firebase config
+    const firebaseConfig = {
+     apiKey: "AIzaSyADOv69HBuAJkaYs2Ukgab-VgqkJIv1Cro",
+  authDomain: "orzumall.firebaseapp.com",
+  projectId: "orzumall",
+  storageBucket: "orzumall.firebasestorage.app",
+  messagingSenderId: "873732887270",
+  appId: "1:873732887270:web:15b73dbb37f4fdabe8a127",
+  measurementId: "G-2LEH8YWPLF"
+    };
+
+    // Admin emails
+    const ADMIN_EMAILS = [
+      "sohibjonmath@gmail.com"
+      // "you@domain.com"
+    ];
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    // UI
+    const who = document.getElementById("who");
+    const btnGoogle = document.getElementById("btnGoogle");
+    const btnLogout = document.getElementById("btnLogout");
+    const blocked = document.getElementById("blocked");
+    const adminUI = document.getElementById("adminUI");
+
+    const bigList = document.getElementById("bigList");
+    const filterList = document.getElementById("filterList");
+    const prodList = document.getElementById("prodList");
+
+    const addBig = document.getElementById("addBig");
+    const addFilter = document.getElementById("addFilter");
+    const addProd = document.getElementById("addProd");
+
+    // Editors
+    const bigEditor = document.getElementById("bigEditor");
+    const bigSelTitle = document.getElementById("bigSelTitle");
+    const bigTitle = document.getElementById("bigTitle");
+    const saveBig = document.getElementById("saveBig");
+    const delBig = document.getElementById("delBig");
+
+    const filterEditor = document.getElementById("filterEditor");
+    const filterSelTitle = document.getElementById("filterSelTitle");
+    const filterTitle = document.getElementById("filterTitle");
+    const saveFilter = document.getElementById("saveFilter");
+    const delFilter = document.getElementById("delFilter");
+
+    const prodEditor = document.getElementById("prodEditor");
+    const prodSelTitle = document.getElementById("prodSelTitle");
+    const pTitle = document.getElementById("pTitle");
+    const pPrice = document.getElementById("pPrice");
+    const pCur = document.getElementById("pCur");
+    const pImg = document.getElementById("pImg");
+    const pFilter = document.getElementById("pFilter");
+    const pDesc = document.getElementById("pDesc");
+    const saveProd = document.getElementById("saveProd");
+    const delProd = document.getElementById("delProd");
+
+    let isAdmin = false;
+    let bigNav = [];
+    let filters = [];
+    let prods = [];
+
+    let selectedBigId = "";
+    let selectedFilterId = "";
+    let selectedProdId = "";
+
+    let unsubBig = null;
+    let unsubFilters = null;
+    let unsubProds = null;
+
+    function esc(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function nowOrder(){
+      return Math.floor(Date.now()/1000);
+    }
+
+    function mustAdmin(){
+      if(!isAdmin) throw new Error("Admin emas");
+    }
+
+    // Auth
+    btnGoogle.onclick = async ()=>{
+      await signInWithPopup(auth, provider);
+    };
+    btnLogout.onclick = async ()=>{
+      await signOut(auth);
+    };
+
+    onAuthStateChanged(auth, (user)=>{
+      const email = user?.email || "";
+      who.textContent = user ? ("Kirish: " + email) : "Kirish: —";
+
+      isAdmin = !!user && ADMIN_EMAILS.includes(email);
+      blocked.style.display = user && !isAdmin ? "block" : "none";
+      adminUI.style.display = isAdmin ? "grid" : "none";
+      btnLogout.style.display = user ? "inline-block" : "none";
+
+      if(isAdmin){
+        startLive();
+      }else{
+        stopLive();
+      }
+    });
+
+    function startLive(){
+      stopLive();
+
+      const qBig = query(collection(db,"shop_nav"), orderBy("order","asc"), limit(200));
+      unsubBig = onSnapshot(qBig, (snap)=>{
+        bigNav = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderBigList();
+        if(!selectedBigId && bigNav.length) selectBig(bigNav[0].id);
+        if(selectedBigId && !bigNav.find(x=>x.id===selectedBigId)) {
+          selectedBigId = bigNav[0]?.id || "";
+          if(selectedBigId) selectBig(selectedBigId);
+        }
+      });
+
+      // products live (depends on selectedBigId, started in selectBig)
+    }
+
+    function stopLive(){
+      unsubBig?.(); unsubBig=null;
+      unsubFilters?.(); unsubFilters=null;
+      unsubProds?.(); unsubProds=null;
+      bigNav = []; filters=[]; prods=[];
+      selectedBigId=""; selectedFilterId=""; selectedProdId="";
+      bigList.innerHTML=""; filterList.innerHTML=""; prodList.innerHTML="";
+      bigEditor.style.display="none";
+      filterEditor.style.display="none";
+      prodEditor.style.display="none";
+    }
+
+    // ---------- Rendering ----------
+    function renderBigList(){
+      bigList.innerHTML = "";
+      for(const b of bigNav){
+        const el = document.createElement("div");
+        el.className = "item";
+        el.innerHTML = `
+          <div class="meta">
+            <b>${esc(b.title || "—")}${b.active===false ? ' <span class="pill">OFF</span>' : ""}</b>
+            <span>ID: ${esc(b.id)} · order: ${esc(b.order)}</span>
+          </div>
+          <div class="tools">
+            <div class="mini" title="Yuqoriga">↑</div>
+            <div class="mini" title="Pastga">↓</div>
+            <div class="mini primary" title="Tanlash">✎</div>
+          </div>
+        `;
+        const [up, down, edit] = el.querySelectorAll(".mini");
+        up.onclick = ()=> shiftOrder("shop_nav", b.id, -1);
+        down.onclick = ()=> shiftOrder("shop_nav", b.id, +1);
+        edit.onclick = ()=> selectBig(b.id);
+        bigList.appendChild(el);
+      }
+    }
+
+    function renderFilterList(){
+      filterList.innerHTML = "";
+      if(!selectedBigId){
+        filterList.innerHTML = `<div class="note">Avval katta chip tanlang.</div>`;
+        return;
+      }
+      for(const f of filters){
+        const el = document.createElement("div");
+        el.className="item";
+        el.innerHTML = `
+          <div class="meta">
+            <b>${esc(f.title || "—")}${f.active===false ? ' <span class="pill">OFF</span>' : ""}</b>
+            <span>ID: ${esc(f.id)} · order: ${esc(f.order)}</span>
+          </div>
+          <div class="tools">
+            <div class="mini" title="Yuqoriga">↑</div>
+            <div class="mini" title="Pastga">↓</div>
+            <div class="mini primary" title="Tahrir">✎</div>
+          </div>
+        `;
+        const [up, down, edit] = el.querySelectorAll(".mini");
+        up.onclick = ()=> shiftOrder(`shop_nav/${selectedBigId}/filters`, f.id, -1);
+        down.onclick = ()=> shiftOrder(`shop_nav/${selectedBigId}/filters`, f.id, +1);
+        edit.onclick = ()=> selectFilter(f.id);
+        filterList.appendChild(el);
+      }
+    }
+
+    function renderProdList(){
+      prodList.innerHTML = "";
+      if(!selectedBigId){
+        prodList.innerHTML = `<div class="note">Avval katta chip tanlang.</div>`;
+        return;
+      }
+      for(const p of prods){
+        const el = document.createElement("div");
+        el.className="item";
+        el.innerHTML = `
+          <div class="meta">
+            <b>${esc(p.title || "—")}${p.active===false ? ' <span class="pill">OFF</span>' : ""}</b>
+            <span>${esc(p.price)} ${esc(p.currency || "UZS")} · filterId: ${esc(p.filterId || "all")} · order: ${esc(p.order)}</span>
+          </div>
+          <div class="tools">
+            <div class="mini" title="Yuqoriga">↑</div>
+            <div class="mini" title="Pastga">↓</div>
+            <div class="mini primary" title="Tahrir">✎</div>
+          </div>
+        `;
+        const [up, down, edit] = el.querySelectorAll(".mini");
+        up.onclick = ()=> shiftOrder("products", p.id, -1);
+        down.onclick = ()=> shiftOrder("products", p.id, +1);
+        edit.onclick = ()=> selectProd(p.id);
+        prodList.appendChild(el);
+      }
+    }
+
+    // ---------- Selection ----------
+    function selectBig(id){
+      selectedBigId = id;
+      const b = bigNav.find(x=>x.id===id);
+      bigSelTitle.textContent = b?.title || id;
+      bigTitle.value = b?.title || "";
+      bigEditor.style.display = "block";
+
+      // live filters
+      unsubFilters?.();
+      const qF = query(collection(db, "shop_nav", selectedBigId, "filters"), orderBy("order","asc"), limit(200));
+      unsubFilters = onSnapshot(qF, (snap)=>{
+        filters = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderFilterList();
+        rebuildFilterSelect();
+      });
+
+      // live products (only selectedBigId)
+      unsubProds?.();
+      const qP = query(
+        collection(db,"products"),
+        where("bigId","==", selectedBigId),
+        orderBy("order","asc"),
+        limit(500)
+      );
+      unsubProds = onSnapshot(qP, (snap)=>{
+        prods = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderProdList();
+      });
+
+      // reset filter/product editor
+      selectedFilterId = "";
+      filterEditor.style.display = "none";
+      selectedProdId = "";
+      prodEditor.style.display = "none";
+    }
+
+    function selectFilter(id){
+      selectedFilterId = id;
+      const f = filters.find(x=>x.id===id);
+      filterSelTitle.textContent = f?.title || id;
+      filterTitle.value = f?.title || "";
+      filterEditor.style.display = "block";
+    }
+
+    function selectProd(id){
+      selectedProdId = id;
+      const p = prods.find(x=>x.id===id);
+      prodSelTitle.textContent = p?.title || id;
+      pTitle.value = p?.title || "";
+      pPrice.value = p?.price ?? "";
+      pCur.value = p?.currency || "UZS";
+      pImg.value = p?.img || "";
+      pDesc.value = p?.desc || "";
+      rebuildFilterSelect(p?.filterId || "all");
+      prodEditor.style.display = "block";
+    }
+
+    function rebuildFilterSelect(selected="all"){
+      pFilter.innerHTML = "";
+      const optAll = document.createElement("option");
+      optAll.value = "all";
+      optAll.textContent = "Barchasi (all)";
+      pFilter.appendChild(optAll);
+
+      for(const f of filters){
+        const o = document.createElement("option");
+        o.value = f.id;
+        o.textContent = f.title || f.id;
+        pFilter.appendChild(o);
+      }
+      pFilter.value = selected;
+    }
+
+    // ---------- Reorder helper ----------
+    async function shiftOrder(pathOrCollection, docId, dir){
+      mustAdmin();
+      // simple: order +/- 10, then normalize later if needed
+      const ref = doc(db, ...pathOrCollection.split("/"), docId);
+      const cur =
+        pathOrCollection === "shop_nav" ? bigNav.find(x=>x.id===docId) :
+        pathOrCollection.endsWith("/filters") ? filters.find(x=>x.id===docId) :
+        prods.find(x=>x.id===docId);
+
+      const order = Number(cur?.order ?? nowOrder());
+      const next = order + (dir < 0 ? -10 : 10);
+      await updateDoc(ref, { order: next });
+    }
+
+    // ---------- CRUD ----------
+    addBig.onclick = async ()=>{
+      mustAdmin();
+      const title = prompt("Katta chip nomi?");
+      if(!title) return;
+      const ref = doc(collection(db,"shop_nav"));
+      await setDoc(ref, {
+        title,
+        order: nowOrder(),
+        active: true,
+        createdAt: serverTimestamp()
+      });
+      selectBig(ref.id);
+    };
+
+    saveBig.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId) return;
+      await updateDoc(doc(db,"shop_nav",selectedBigId), { title: bigTitle.value.trim() });
+    };
+
+    delBig.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId) return;
+      if(!confirm("Katta chip o‘chiriladi. Davom etasizmi?")) return;
+      await deleteDoc(doc(db,"shop_nav",selectedBigId));
+      // NOTE: subcollection filters va products avtomatik o‘chmaydi (Firestore limitation).
+      // Istasangiz “active:false” qilishingiz mumkin.
+      selectedBigId="";
+      bigEditor.style.display="none";
+    };
+
+    addFilter.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId) return alert("Avval katta chip tanlang.");
+      const title = prompt("Filter nomi?");
+      if(!title) return;
+      const ref = doc(collection(db,"shop_nav",selectedBigId,"filters"));
+      await setDoc(ref, { title, order: nowOrder(), active:true, createdAt: serverTimestamp() });
+      selectFilter(ref.id);
+    };
+
+    saveFilter.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId || !selectedFilterId) return;
+      await updateDoc(doc(db,"shop_nav",selectedBigId,"filters",selectedFilterId), {
+        title: filterTitle.value.trim()
+      });
+    };
+
+    delFilter.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId || !selectedFilterId) return;
+      if(!confirm("Filter o‘chiriladi. Davom etasizmi?")) return;
+      await deleteDoc(doc(db,"shop_nav",selectedBigId,"filters",selectedFilterId));
+      selectedFilterId="";
+      filterEditor.style.display="none";
+      rebuildFilterSelect("all");
+    };
+
+    addProd.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedBigId) return alert("Avval katta chip tanlang.");
+      const title = prompt("Mahsulot nomi?");
+      if(!title) return;
+      const ref = doc(collection(db,"products"));
+      await setDoc(ref, {
+        title,
+        price: 0,
+        currency: "UZS",
+        img: "",
+        desc: "",
+        bigId: selectedBigId,
+        filterId: "all",
+        order: nowOrder(),
+        active: true,
+        createdAt: serverTimestamp()
+      });
+      selectProd(ref.id);
+    };
+
+    saveProd.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedProdId) return;
+      const price = Number(String(pPrice.value || "0").replace(/[^\d.]/g,"")) || 0;
+      await updateDoc(doc(db,"products",selectedProdId), {
+        title: pTitle.value.trim(),
+        price,
+        currency: (pCur.value.trim() || "UZS"),
+        img: pImg.value.trim(),
+        desc: pDesc.value.trim(),
+        filterId: pFilter.value || "all"
+      });
+    };
+
+    delProd.onclick = async ()=>{
+      mustAdmin();
+      if(!selectedProdId) return;
+      if(!confirm("Mahsulot o‘chiriladi. Davom etasizmi?")) return;
+      await deleteDoc(doc(db,"products",selectedProdId));
+      selectedProdId="";
+      prodEditor.style.display="none";
+    };
+  </script>
+</body>
+</html>
