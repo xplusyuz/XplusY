@@ -44,3 +44,8 @@ Checkout paytida `/.netlify/functions/notify-order` chaqiriladi.
 ## 6) Deploy (Netlify)
 Project rootni Netlify’ga upload qiling (publish = ".")
 Functions folder: `netlify/functions`
+
+
+## ✅ Index haqida
+Mahsulotlar endi `where(bigId==...)` bilan o'qiladi va `order` bo'yicha client-side sort qilinadi — shuning uchun **index bo'lmasa ham ishlaydi**.
+Lekin tezlik uchun xohlasangiz `products (bigId ASC, order ASC)` index yaratsangiz bo'ladi.
