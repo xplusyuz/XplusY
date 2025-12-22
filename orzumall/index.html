@@ -1,875 +1,110 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mobile Shop — Chips + Filters + Cart</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="favicon.ico">
-  <meta name="theme-color" content="#7C3AED">
-  <style>
-    :root{
-      --bg:#070016;
-      --text:#F6F7FF;
-      --muted:#B8C0DA;
-      --line:rgba(255,255,255,.12);
-
-      /* Neon palette */
-      --brand:#7C3AED;      /* purple */
-      --brand2:#22D3EE;     /* cyan */
-      --accent:#F97316;     /* orange */
-      --pink:#FB7185;       /* pink */
-      --lime:#A3E635;       /* lime */
-
-      --radius:20px;
-      --shadow:0 20px 60px rgba(0,0,0,.55);
-      --danger:#FF4D6D;
-    }
-
-    *{box-sizing:border-box}
-    body{
-      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; color:var(--text); overflow-x:hidden;
-      background:
-        radial-gradient(900px 420px at 20% -10%, rgba(124,58,237,.35), transparent 60%),
-        radial-gradient(900px 420px at 90% 0%, rgba(34,211,238,.18), transparent 65%),
-        radial-gradient(900px 520px at 30% 120%, rgba(91,33,182,.18), transparent 60%),
-        var(--bg);
-    }
-    .app{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:92px}
-    .top{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-      background:linear-gradient(to bottom, rgba(7,10,16,.88), rgba(7,10,16,.55));
-      border-bottom:1px solid var(--line);}
-    .topInner{padding:14px 14px 10px;display:flex;gap:10px;align-items:center;justify-content:space-between}
-    .brand{display:flex;gap:10px;align-items:center;min-width:0}
-    .logo{width:38px;height:38px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.14);
-      box-shadow:0 10px 30px rgba(34,211,238,.18);background:#0b1220;display:grid;place-items:center}
-    .logo img{width:100%;height:100%;object-fit:cover;display:block}
-    .brand h1{margin:0;font-size:14px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .brand small{color:var(--muted);display:block;font-size:12px;margin-top:2px}
-    .userRow{display:flex;gap:10px;align-items:center}
-    .userChip{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);
-      background:rgba(255,255,255,.05);border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.25);
-      cursor:pointer;user-select:none;max-width:260px}
-    .dot{width:10px;height:10px;border-radius:50%;background:var(--brand2);box-shadow:0 0 0 6px rgba(34,211,238,.12)}
-    .userTxt{min-width:0}
-    .userTxt b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .userTxt span{display:block;font-size:12px;color:var(--muted)}
-    .cartBtn{width:44px;height:44px;border-radius:16px;border:1px solid rgba(255,255,255,.12);
-      background:rgba(255,255,255,.05);color:var(--text);display:grid;place-items:center;cursor:pointer;position:relative}
-    .badge{position:absolute;right:-4px;top:-4px;min-width:18px;height:18px;padding:0 6px;border-radius:999px;
-      background:linear-gradient(135deg, rgba(124,58,237,.9), rgba(34,211,238,.65));
-      border:1px solid rgba(255,255,255,.18);display:grid;place-items:center;font-size:11px;font-weight:900}
-    .smallChipsWrap{padding:0 12px 12px}
-    .scrollRow{display:flex;gap:10px;overflow-x:auto;padding:10px 2px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
-    .scrollRow::-webkit-scrollbar{height:0}
-    .chip{flex:0 0 auto;scroll-snap-align:start;padding:10px 12px;border-radius:999px;border:1px solid var(--line);
-      background:rgba(255,255,255,.04);font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
-      white-space:nowrap;transition:transform .12s ease, background .12s ease, border-color .12s ease}
-    .chip:hover{transform:translateY(-1px)}
-    .chip.active{background:linear-gradient(135deg, rgba(124,58,237,.34), rgba(34,211,238,.18));
-      border-color:rgba(34,211,238,.38);box-shadow:0 10px 28px rgba(34,211,238,.12)}
-    .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.14);color:var(--muted);background:rgba(0,0,0,.22)}
-    .content{padding:14px}
-    .hero{border:1px solid rgba(255,255,255,.10);border-radius:var(--radius);
-      background:radial-gradient(600px 240px at 20% 0%, rgba(34,211,238,.20), transparent 65%), rgba(255,255,255,.04);
-      box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
-    .hero h2{margin:0 0 6px;font-size:16px}
-    .hero p{margin:0;color:var(--muted);font-size:13px;line-height:1.35}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    .card{border:1px solid rgba(255,255,255,.10);border-radius:var(--radius);background:rgba(255,255,255,.04);
-      box-shadow:0 16px 44px rgba(0,0,0,.30);overflow:hidden}
-    .cardInner{display:flex;gap:12px;padding:12px}
-    .img{width:88px;height:88px;border-radius:16px;flex:0 0 auto;background:rgba(255,255,255,.06);
-      border:1px solid rgba(255,255,255,.10);overflow:hidden;display:flex;align-items:center;justify-content:center}
-    .img img{width:100%;height:100%;object-fit:cover;display:block}
-    .meta{min-width:0;flex:1}
-    .title{margin:0;font-size:14px;line-height:1.25}
-    .desc{margin:6px 0 0;color:var(--muted);font-size:12.5px;line-height:1.35}
-    .row{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .price{font-weight:800;letter-spacing:.2px;background:linear-gradient(90deg, rgba(124,58,237,.30), rgba(34,211,238,.12));
-      border:1px solid rgba(34,211,238,.22);padding:8px 10px;border-radius:999px;font-size:13px}
-    .btn{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:var(--text);
-      border-radius:14px;padding:9px 12px;cursor:pointer;font-weight:800}
-    .btn.primary{border-color:rgba(34,211,238,.28);background:linear-gradient(135deg, rgba(124,58,237,.40), rgba(34,211,238,.18))}
-    .btn.danger{border-color:rgba(255,77,77,.30)}
-    .bottom{position:fixed;left:0;right:0;bottom:0;padding:10px 0 16px;
-      background:linear-gradient(to top, rgba(7,10,16,.92), rgba(7,10,16,.35));
-      backdrop-filter:blur(14px);border-top:1px solid var(--line);z-index:60}
-    .bottomInner{max-width:520px;margin:0 auto;padding:0 12px}
-    .bigChip{padding:12px 14px;font-size:13.5px;border-radius:999px;background:rgba(255,255,255,.05);
-      border:1px solid rgba(255,255,255,.12)}
-    .bigChip.active{background:linear-gradient(135deg, rgba(124,58,237,.42), rgba(34,211,238,.18));
-      border-color:rgba(34,211,238,.38);box-shadow:0 10px 28px rgba(34,211,238,.12)}
-    .overlay{position:fixed;inset:0;display:none;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
-      z-index:120;padding:18px}
-    .modal{max-width:520px;margin:60px auto 0;border-radius:22px;border:1px solid rgba(255,255,255,.12);
-      background:radial-gradient(600px 300px at 20% 0%, rgba(34,211,238,.20), transparent 65%), rgba(13,18,32,.92);
-      box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
-    .modalHead{padding:14px 14px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;
-      border-bottom:1px solid rgba(255,255,255,.10)}
-    .modalHead h3{margin:0;font-size:15px}
-    .close{width:38px;height:38px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);
-      color:var(--text);cursor:pointer}
-    .modalBody{padding:14px}
-    .field{display:grid;gap:8px;margin:10px 0}
-    .field label{color:var(--muted);font-size:12px}
-    input{width:100%;padding:12px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);
-      background:rgba(255,255,255,.05);color:var(--text);outline:none;font-size:14px}
-    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    .hint{color:var(--muted);font-size:12.5px;line-height:1.35;margin-top:10px}
-    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:110px;z-index:200;display:none;
-      padding:10px 12px;border-radius:999px;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.14);
-      color:var(--text);font-size:13px;backdrop-filter:blur(10px)}
-    .cartList{display:grid;gap:10px;margin-top:10px}
-    .cartItem{border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.18);border-radius:18px;padding:12px;
-      display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .cartItem b{font-size:13px}
-    .cartItem small{color:var(--muted);display:block;margin-top:3px}
-    .qtyRow{display:flex;align-items:center;gap:8px}
-    .mini{width:34px;height:34px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);
-      color:var(--text);cursor:pointer;font-weight:900}
-    .tabs{display:flex;gap:10px;margin:8px 0 0}
-    .tab{padding:8px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);
-      cursor:pointer;font-weight:800;font-size:12.5px}
-    .tab.active{border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.10)}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savdo Platformasi</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
-
 <body>
-  <div class="app">
-    <div class="top">
-      <div class="topInner">
-        <div class="brand">
-          <div class="logo"><img src="logo.png" alt="logo"></div>
-          <div style="min-width:0">
-            <h1>Mobile Shop</h1>
-            <small id="subTitle">Premium mobil do‘kon</small>
-          </div>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loadingText">Platformaga kirilmoqda...</p>
+            <div id="userIdDisplay" class="user-id-display"></div>
         </div>
+    </div>
 
-        <div class="userRow">
-          <button class="cartBtn" id="cartBtn" title="Savat">🛒<div class="badge" id="cartBadge" style="display:none">0</div></button>
-          <div class="userChip" id="userChip" title="Kirish / ID">
-            <div class="dot"></div>
-            <div class="userTxt">
-              <b id="userLine">Mehmon</b>
-              <span id="userIdLine">ID: —</span>
+    <!-- Main App (hidden initially) -->
+    <div id="mainApp" class="d-none">
+        <!-- Header -->
+        <header class="header sticky-top">
+            <div class="container">
+                <div class="d-flex justify-content-between align-items-center py-2">
+                    <div class="logo">
+                        <h3 class="mb-0 text-primary">Savdo<span class="text-warning">Uz</span></h3>
+                    </div>
+                    <div class="user-info">
+                        <span class="badge bg-primary" id="userBadge">ID: ...</span>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" id="refreshBtn">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Selected Category Display -->
+                <div class="selected-category-display mt-2">
+                    <div class="d-flex align-items-center">
+                        <h5 id="selectedCategoryName" class="mb-0 me-2">Barcha tovarlar</h5>
+                        <span class="badge bg-info" id="subCategoryCount">0 ta</span>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
+        </header>
 
-      <div class="smallChipsWrap">
-        <div class="scrollRow" id="smallChips"></div>
-      </div>
-    </div>
-
-    <div class="content">
-      <div class="hero">
-        <h2 id="heroTitle">Mahsulotlar</h2>
-        <p id="heroDesc">Pastdagi katta chipdan bo‘lim tanlang. Tepada shu bo‘limga tegishli filterlar va sonlari chiqadi.</p>
-      </div>
-      <div class="grid" id="productGrid"></div>
-    </div>
-  </div>
-
-  <div class="bottom">
-    <div class="bottomInner">
-      <div class="scrollRow" id="bigChips"></div>
-    </div>
-  </div>
-
-  <!-- Login modal -->
-  <div class="overlay" id="overlayLogin">
-    <div class="modal">
-      <div class="modalHead">
-        <div>
-          <h3>Tez kirish (6 xonali ID)</h3>
-          <div class="tabs">
-            <div class="tab active" id="tabLogin">Kirish</div>
-            <div class="tab" id="tabOrders">Buyurtmalarim</div>
-          </div>
-        </div>
-        <button class="close" id="closeLogin">✕</button>
-      </div>
-      <div class="modalBody" id="loginBody">
-        <div class="field">
-          <label>Existing ID bilan kirish</label>
-          <input id="loginIdInput" inputmode="numeric" maxlength="6" placeholder="Masalan: 123456" />
-        </div>
-        <div class="actions">
-          <button class="btn" id="btnLogin">Kirish</button>
-          <button class="btn primary" id="btnCreate">1 bosishda ID olish</button>
-          <button class="btn" id="btnLogout" style="margin-left:auto">Chiqish</button>
-        </div>
-        <div class="hint">ID yaratishda random 6 xonali ID beriladi va avtomatik kiradi.</div>
-      </div>
-
-      <div class="modalBody" id="ordersBody" style="display:none">
-        <div class="hint" style="margin-top:0">Bu yerda sizning buyurtmalaringiz (orders) ko‘rinadi.</div>
-        <div class="cartList" id="myOrdersList"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cart modal -->
-  <div class="overlay" id="overlayCart">
-    <div class="modal">
-      <div class="modalHead">
-        <h3>Savat</h3>
-        <button class="close" id="closeCart">✕</button>
-      </div>
-      <div class="modalBody">
-        <div id="cartInfo" class="hint" style="margin-top:0">—</div>
-
-        <div class="field">
-          <label>Ism</label>
-          <input id="custName" placeholder="Masalan: Sohibjon" />
-        </div>
-        <div class="field">
-          <label>Telefon raqam</label>
-          <input id="custPhone" inputmode="tel" placeholder="+998 90 123 45 67" />
-        </div>
-
-        <div class="cartList" id="cartList"></div>
-        <div class="actions" style="margin-top:14px">
-          <button class="btn danger" id="clearCart">Savatni tozalash</button>
-          <button class="btn primary" id="checkout">Buyurtma berish</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import {
-      getFirestore, collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
-      query, where, orderBy, limit, onSnapshot, serverTimestamp,
-      runTransaction, writeBatch
-    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-    // ====== 1) Firebase config ni o'zingiznikiga almashtiring ======
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    // UI
-    const bigChipsEl = document.getElementById("bigChips");
-    const smallChipsEl = document.getElementById("smallChips");
-    const productGridEl = document.getElementById("productGrid");
-    const heroTitleEl = document.getElementById("heroTitle");
-
-    const overlayLogin = document.getElementById("overlayLogin");
-    const userChip = document.getElementById("userChip");
-    const closeLogin = document.getElementById("closeLogin");
-    const btnLogin = document.getElementById("btnLogin");
-    const btnCreate = document.getElementById("btnCreate");
-    const btnLogout = document.getElementById("btnLogout");
-    const loginIdInput = document.getElementById("loginIdInput");
-    const userLine = document.getElementById("userLine");
-    const userIdLine = document.getElementById("userIdLine");
-
-    const cartBtn = document.getElementById("cartBtn");
-    const cartBadge = document.getElementById("cartBadge");
-    const overlayCart = document.getElementById("overlayCart");
-    const closeCart = document.getElementById("closeCart");
-    const cartListEl = document.getElementById("cartList");
-    const cartInfo = document.getElementById("cartInfo");
-    const clearCartBtn = document.getElementById("clearCart");
-    const checkoutBtn = document.getElementById("checkout");
-    const custName = document.getElementById("custName");
-    const custPhone = document.getElementById("custPhone");
-
-    const tabLogin = document.getElementById("tabLogin");
-    const tabOrders = document.getElementById("tabOrders");
-    const loginBody = document.getElementById("loginBody");
-    const ordersBody = document.getElementById("ordersBody");
-    const myOrdersList = document.getElementById("myOrdersList");
-
-    const toastEl = document.getElementById("toast");
-
-    // State
-    let bigNav = [];
-    let smallNav = [];
-    let selectedBigId = null;
-    let selectedFilterId = "all";
-
-    let unsubFilters = null;
-    let unsubProducts = null;
-    let unsubCart = null;
-    let unsubMyOrders = null;
-
-    let productsCache = [];
-    let filterCounts = {};
-
-    let currentUserId = localStorage.getItem("SHOP_USER_ID") || "";
-
-    let cartItems = [];
-    let cartTotalQty = 0;
-
-    function toast(msg){
-      toastEl.textContent = msg;
-      toastEl.style.display = "block";
-      clearTimeout(toastEl._t);
-      toastEl._t = setTimeout(()=> toastEl.style.display="none", 2200);
-    }
-    function escapeHtml(s){
-      return String(s ?? "")
-        .replaceAll("&","&amp;").replaceAll("<","&lt;")
-        .replaceAll(">","&gt;").replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
-    function fmtPrice(n, currency="UZS"){
-      const num = Number(n || 0);
-      return num.toLocaleString("uz-UZ") + " " + currency;
-    }
-    function chipButton({text, active, kind="small", onClick, badgeText=""}){
-      const el = document.createElement("div");
-      el.className = "chip " + (kind === "big" ? "bigChip" : "") + (active ? " active" : "");
-el.innerHTML =
-  `<span>${escapeHtml(text)}</span>` +
-  (badgeText
-    ? `<span class="pill">${escapeHtml(badgeText)}</span>`
-    : '');
-      el.addEventListener("click", onClick);
-      return el;
-    }
-
-    // ---------- Login ----------
-    function syncUserUI(){
-      if(currentUserId){
-        userLine.textContent = "Foydalanuvchi";
-        userIdLine.textContent = "ID: " + currentUserId;
-      }else{
-        userLine.textContent = "Mehmon";
-        userIdLine.textContent = "ID: —";
-      }
-    }
-    function isValidId(id){ return /^[0-9]{6}$/.test(id); }
-
-    function openLogin(){
-      overlayLogin.style.display = "block";
-      loginIdInput.value = (currentUserId || "");
-      loginIdInput.focus();
-      syncUserUI();
-      showLoginTab();
-    }
-    function closeLoginModal(){ overlayLogin.style.display = "none"; }
-
-    function showLoginTab(){
-      tabLogin.classList.add("active");
-      tabOrders.classList.remove("active");
-      loginBody.style.display="block";
-      ordersBody.style.display="none";
-    }
-    function showOrdersTab(){
-      tabOrders.classList.add("active");
-      tabLogin.classList.remove("active");
-      loginBody.style.display="none";
-      ordersBody.style.display="block";
-      startMyOrdersLive();
-    }
-
-    async function loginWithId(id){
-      id = String(id || "").trim();
-      if(!isValidId(id)) return toast("ID 6 xonali bo‘lishi kerak.");
-      const ref = doc(db, "users", id);
-      const snap = await getDoc(ref);
-      if(!snap.exists()) return toast("Bunday ID topilmadi.");
-      await updateDoc(ref, { lastSeenAt: serverTimestamp() }).catch(()=>{});
-      currentUserId = id;
-      localStorage.setItem("SHOP_USER_ID", id);
-      syncUserUI();
-      toast("Kirish: " + id);
-      startCartLive();
-    }
-
-    async function createOneClickId(){
-      for(let i=0; i<12; i++){
-        const id = String(Math.floor(100000 + Math.random()*900000));
-        const ref = doc(db, "users", id);
-        const snap = await getDoc(ref);
-        if(snap.exists()) continue;
-
-        await setDoc(ref, { id, createdAt: serverTimestamp(), lastSeenAt: serverTimestamp() });
-        currentUserId = id;
-        localStorage.setItem("SHOP_USER_ID", id);
-        syncUserUI();
-        toast("Sizning ID: " + id);
-        startCartLive();
-        return;
-      }
-      toast("ID yaratib bo‘lmadi. Qayta urinib ko‘ring.");
-    }
-
-    function logout(){
-      currentUserId = "";
-      localStorage.removeItem("SHOP_USER_ID");
-      syncUserUI();
-      stopCartLive();
-      stopMyOrdersLive();
-      updateCartBadge();
-      toast("Chiqildi");
-    }
-
-    // ---------- Big/Small chips ----------
-    function renderBigChips(){
-      bigChipsEl.innerHTML = "";
-      const activeBig = bigNav.filter(b => b.active !== false);
-      if(!activeBig.length){
-        bigChipsEl.appendChild(chipButton({
-          text:"Bo‘lim yo‘q (admin qo‘shadi)", active:false, kind:"big",
-          onClick:()=>toast("Admin paneldan bo‘lim qo‘shing")
-        }));
-        return;
-      }
-      for(const b of activeBig){
-        bigChipsEl.appendChild(chipButton({
-          text: b.title, active: b.id === selectedBigId, kind:"big",
-          onClick:()=> selectBig(b.id)
-        }));
-      }
-    }
-
-    function calcFilterCountsFromProducts(){
-      const counts = {};
-      let total = 0;
-      for(const p of productsCache){
-        if(p.active === false) continue;
-        total++;
-        const fid = p.filterId || "all";
-        counts[fid] = (counts[fid] || 0) + 1;
-      }
-      counts["all"] = total;
-      filterCounts = counts;
-    }
-
-    function renderSmallChips(){
-      smallChipsEl.innerHTML = "";
-      const allCount = String(filterCounts["all"] ?? 0);
-      smallChipsEl.appendChild(chipButton({
-        text:"Barchasi", active: selectedFilterId === "all", kind:"small",
-        onClick:()=> selectFilter("all"), badgeText: allCount
-      }));
-
-      for(const f of smallNav){
-        if(f.active === false) continue;
-        const c = String(filterCounts[f.id] ?? 0);
-        smallChipsEl.appendChild(chipButton({
-          text: f.title, active: f.id === selectedFilterId, kind:"small",
-          onClick:()=> selectFilter(f.id), badgeText: c
-        }));
-      }
-    }
-
-    function renderProducts(list){
-      productGridEl.innerHTML = "";
-      if(!list.length){
-        const empty = document.createElement("div");
-        empty.className = "card";
-        empty.innerHTML = `<div class="cardInner"><div class="meta">
-          <p class="title" style="margin:0">Hozircha mahsulot yo‘q</p>
-          <p class="desc">Admin paneldan mahsulot qo‘shing yoki index/rules ni tekshiring.</p>
-        </div></div>`;
-        productGridEl.appendChild(empty);
-        return;
-      }
-
-      for(const p of list){
-        const el = document.createElement("div");
-        el.className = "card";
-        const imgHtml = p.img ? `<img src="${escapeHtml(p.img)}" alt="">`
-                              : `<span style="color:var(--muted);font-size:12px">No image</span>`;
-        el.innerHTML = `
-          <div class="cardInner">
-            <div class="img">${imgHtml}</div>
-            <div class="meta">
-              <p class="title">${escapeHtml(p.title || "Mahsulot")}</p>
-              <p class="desc">${escapeHtml(p.desc || "")}</p>
-              <div class="row">
-                <div class="price">${escapeHtml(fmtPrice(p.price, p.currency || "UZS"))}</div>
-                <button class="btn primary">Savatga</button>
-              </div>
+        <!-- Main Categories Chips -->
+        <section class="main-categories py-3 bg-light">
+            <div class="container">
+                <h6 class="mb-3 text-secondary">Asosiy kategoriyalar</h6>
+                <div id="mainCategories" class="d-flex flex-nowrap overflow-auto main-chips">
+                    <!-- Main chips will be loaded here -->
+                </div>
             </div>
-          </div>
-        `;
-        el.querySelector("button").addEventListener("click", ()=> addToCart(p));
-        productGridEl.appendChild(el);
-      }
-    }
+        </section>
 
-    function selectBig(bigId){
-      selectedBigId = bigId;
-      selectedFilterId = "all";
-      const found = bigNav.find(x=>x.id===bigId);
-      heroTitleEl.textContent = found ? found.title : "Mahsulotlar";
-      renderBigChips();
-      watchFilters();
-      watchProducts();
-    }
+        <!-- Sub Categories Scroll -->
+        <section class="sub-categories py-3">
+            <div class="container">
+                <div id="subCategories" class="d-flex flex-nowrap overflow-auto sub-chips">
+                    <!-- Sub chips will be loaded here -->
+                </div>
+            </div>
+        </section>
 
-    function selectFilter(filterId){
-      selectedFilterId = filterId;
-      renderSmallChips();
-      applyFilterAndRender();
-    }
+        <!-- Products Grid -->
+        <section class="products-section py-4">
+            <div class="container">
+                <div class="row" id="productsGrid">
+                    <!-- Products will be loaded here -->
+                </div>
+            </div>
+        </section>
 
-    function applyFilterAndRender(){
-      const activeList = productsCache.filter(p => p.active !== false);
-      let list = activeList;
-      if(selectedFilterId !== "all"){
-        list = activeList.filter(p => (p.filterId || "all") === selectedFilterId);
-      }
-      renderProducts(list);
-    }
+        <!-- Product Modal -->
+        <div class="modal fade" id="productModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="productModalTitle"></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <img id="productModalImage" src="" class="img-fluid mb-3 rounded" alt="">
+                        <p id="productModalDescription"></p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h4 class="text-primary mb-0" id="productModalPrice"></h4>
+                            <span class="badge bg-success" id="productModalCategory"></span>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Yopish</button>
+                        <button type="button" class="btn btn-primary" id="orderBtn">
+                            <i class="fas fa-shopping-cart me-2"></i>Buyurtma qilish
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    function watchBigNav(){
-      const qNav = query(collection(db, "shop_nav"), orderBy("order","asc"), limit(200));
-      onSnapshot(qNav, (snap)=>{
-        bigNav = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        if(!selectedBigId){
-          const first = bigNav.find(x=>x.active !== false);
-          if(first) selectedBigId = first.id;
-        }else{
-          const sel = bigNav.find(x=>x.id===selectedBigId && x.active !== false);
-          if(!sel){
-            const first = bigNav.find(x=>x.active !== false);
-            selectedBigId = first ? first.id : null;
-          }
-        }
-        renderBigChips();
-        if(selectedBigId){
-          const found = bigNav.find(x=>x.id===selectedBigId);
-          heroTitleEl.textContent = found ? found.title : "Mahsulotlar";
-          watchFilters();
-          watchProducts();
-        }else{
-          smallNav = [];
-          productsCache = [];
-          calcFilterCountsFromProducts();
-          renderSmallChips();
-          renderProducts([]);
-        }
-      });
-    }
-
-    function watchFilters(){
-      if(unsubFilters) unsubFilters();
-      smallNav = [];
-      renderSmallChips();
-      if(!selectedBigId) return;
-
-      const qFilters = query(
-        collection(db, "shop_nav", selectedBigId, "filters"),
-        orderBy("order","asc"),
-        limit(200)
-      );
-      unsubFilters = onSnapshot(qFilters, (snap)=>{
-        smallNav = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        if(selectedFilterId !== "all"){
-          const ok = smallNav.find(x=>x.id===selectedFilterId && x.active !== false);
-          if(!ok) selectedFilterId = "all";
-        }
-        renderSmallChips();
-      });
-    }
-
-    function watchProducts(){
-      if(unsubProducts) unsubProducts();
-      if(!selectedBigId){
-        productsCache = [];
-        calcFilterCountsFromProducts();
-        renderSmallChips();
-        renderProducts([]);
-        return;
-      }
-
-      // NOTE: Tez ishlash uchun index yarating, lekin index bo'lmasa ham ishlashi uchun fallback qildik.
-// Optimal index: products (bigId ASC, order ASC) yoki (active ASC, bigId ASC, order ASC)
-const qProd = query(
-  collection(db, "products"),
-  where("bigId","==", selectedBigId),
-  limit(800)
-);
-
-unsubProducts = onSnapshot(qProd, (snap)=>{
-  // active filterni client-side qildik (index talab qilmasin)
-  productsCache = snap.docs.map(d=>({id:d.id, ...d.data()}))
-    .filter(p => p.active !== false); // default true
-  // order bo'yicha client-side sort
-  productsCache.sort((a,b)=> (Number(a.order)||0) - (Number(b.order)||0));
-
-  calcFilterCountsFromProducts();
-  renderSmallChips();
-  applyFilterAndRender();
-}, (err)=>{
-  console.error(err);
-  toast("Mahsulotlarda xato: rules yoki ulanish.");
-});
-
-
-    // ---------- CART ----------
-    function cartPath(){
-      if(!currentUserId) return null;
-      return collection(db, "carts", currentUserId, "items");
-    }
-
-    function updateCartBadge(){
-      if(cartTotalQty > 0){
-        cartBadge.style.display = "grid";
-        cartBadge.textContent = String(cartTotalQty);
-      }else{
-        cartBadge.style.display = "none";
-      }
-    }
-
-    function stopCartLive(){
-      if(unsubCart) unsubCart();
-      unsubCart = null;
-      cartItems = [];
-      cartTotalQty = 0;
-      updateCartBadge();
-    }
-
-    function startCartLive(){
-      stopCartLive();
-      if(!currentUserId) return;
-      const qItems = query(cartPath(), orderBy("updatedAt","desc"), limit(200));
-      unsubCart = onSnapshot(qItems, (snap)=>{
-        cartItems = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        cartTotalQty = cartItems.reduce((s,it)=> s + (Number(it.qty)||0), 0);
-        updateCartBadge();
-      }, (err)=>{
-        console.error(err);
-        toast("Cart o‘qishda xato (rules?)");
-      });
-    }
-
-    async function addToCart(product){
-      if(!currentUserId) return toast("Avval ID bilan kiring.");
-      const itemRef = doc(db, "carts", currentUserId, "items", product.id);
-
-      await runTransaction(db, async (tx)=>{
-        const snap = await tx.get(itemRef);
-        const prev = snap.exists() ? (snap.data().qty || 0) : 0;
-        const next = prev + 1;
-        tx.set(itemRef, {
-          productId: product.id,
-          title: product.title || "",
-          price: Number(product.price || 0),
-          currency: product.currency || "UZS",
-          img: product.img || "",
-          qty: next,
-          updatedAt: serverTimestamp(),
-          createdAt: snap.exists() ? (snap.data().createdAt || serverTimestamp()) : serverTimestamp()
-        }, { merge:true });
-      });
-
-      toast("Savatga qo‘shildi");
-    }
-
-    function openCart(){
-      if(!currentUserId) return openLogin();
-      overlayCart.style.display = "block";
-      renderCartModal();
-    }
-    function closeCartModal(){ overlayCart.style.display = "none"; }
-
-    function renderCartModal(){
-      const totalSum = cartItems.reduce((s,it)=> s + (Number(it.qty)||0) * (Number(it.price)||0), 0);
-      cartInfo.textContent = `ID: ${currentUserId} · ${cartTotalQty} ta · Jami: ${fmtPrice(totalSum, "UZS")}`;
-      cartListEl.innerHTML = "";
-
-      if(cartItems.length === 0){
-        cartListEl.innerHTML = `<div class="hint">Savat bo‘sh.</div>`;
-        return;
-      }
-
-      for(const it of cartItems){
-        const row = document.createElement("div");
-        row.className = "cartItem";
-        row.innerHTML = `
-          <div style="min-width:0">
-            <b>${escapeHtml(it.title || it.id)}</b>
-            <small>${escapeHtml(fmtPrice(it.price, it.currency || "UZS"))}</small>
-          </div>
-          <div class="qtyRow">
-            <button class="mini" data-act="minus">−</button>
-            <b style="width:26px;text-align:center">${escapeHtml(it.qty)}</b>
-            <button class="mini" data-act="plus">+</button>
-            <button class="mini" data-act="del" title="O‘chirish">✕</button>
-          </div>
-        `;
-        row.querySelector('[data-act="plus"]').onclick = ()=> changeQty(it.id, +1);
-        row.querySelector('[data-act="minus"]').onclick = ()=> changeQty(it.id, -1);
-        row.querySelector('[data-act="del"]').onclick = ()=> removeItem(it.id);
-        cartListEl.appendChild(row);
-      }
-    }
-
-    async function changeQty(productId, delta){
-      const ref = doc(db, "carts", currentUserId, "items", productId);
-      await runTransaction(db, async (tx)=>{
-        const snap = await tx.get(ref);
-        if(!snap.exists()) return;
-        const qty = Number(snap.data().qty || 0) + delta;
-        if(qty <= 0) tx.delete(ref);
-        else tx.update(ref, { qty, updatedAt: serverTimestamp() });
-      });
-    }
-
-    async function removeItem(productId){
-      await deleteDoc(doc(db, "carts", currentUserId, "items", productId));
-    }
-
-    async function clearCart(){
-      if(!cartItems.length) return;
-      const batch = writeBatch(db);
-      for(const it of cartItems){
-        batch.delete(doc(db, "carts", currentUserId, "items", it.id));
-      }
-      await batch.commit();
-    }
-
-    // ---------- ORDERS ----------
-    function stopMyOrdersLive(){
-      if(unsubMyOrders) unsubMyOrders();
-      unsubMyOrders = null;
-      myOrdersList.innerHTML = "";
-    }
-
-    function startMyOrdersLive(){
-      stopMyOrdersLive();
-      if(!currentUserId){
-        myOrdersList.innerHTML = `<div class="hint">Avval ID bilan kiring.</div>`;
-        return;
-      }
-      const q = query(collection(db,"orders"), where("userId","==", currentUserId), limit(50));
-      unsubMyOrders = onSnapshot(q, (snap)=>{
-        const orders = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        // sort locally by createdAt (avoid composite index)
-        orders.sort((a,b)=>{
-          const ta = a.createdAt?.seconds || 0;
-          const tb = b.createdAt?.seconds || 0;
-          return tb - ta;
-        });
-        renderMyOrders(orders);
-      }, (err)=>{
-        console.error(err);
-        myOrdersList.innerHTML = `<div class="hint">Orders o‘qishda xato (rules?)</div>`;
-      });
-    }
-
-    function renderMyOrders(orders){
-      myOrdersList.innerHTML = "";
-      if(!orders.length){
-        myOrdersList.innerHTML = `<div class="hint">Hozircha buyurtma yo‘q.</div>`;
-        return;
-      }
-      for(const o of orders){
-        const itemsCount = Array.isArray(o.items) ? o.items.reduce((s,x)=>s+(Number(x.qty)||0),0) : 0;
-        const box = document.createElement("div");
-        box.className = "cartItem";
-        box.innerHTML = `
-          <div style="min-width:0">
-            <b>${escapeHtml(o.status || "new")} · ${escapeHtml(String(itemsCount))} ta</b>
-            <small>${escapeHtml(fmtPrice(o.total || 0, o.currency || "UZS"))}</small>
-          </div>
-          <div class="pill">${escapeHtml(o.orderId || o.id)}</div>
-        `;
-        myOrdersList.appendChild(box);
-      }
-    }
-
-    async function notifyTelegram(orderPayload){
-      // Netlify function ixtiyoriy (env bor bo'lsa ishlaydi)
-      try{
-        await fetch("/.netlify/functions/notify-order", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify(orderPayload)
-        });
-      }catch(e){ /* ignore */ }
-    }
-
-    async function checkout(){
-      if(!currentUserId) return toast("Avval kiring.");
-      if(cartItems.length === 0) return toast("Savat bo‘sh.");
-
-      const name = String(custName.value || "").trim();
-      const phone = String(custPhone.value || "").trim();
-      if(name.length < 2) return toast("Ismni kiriting.");
-      if(phone.length < 7) return toast("Telefon raqamni kiriting.");
-
-      const items = cartItems.map(it=>({
-        productId: it.productId || it.id,
-        title: it.title || "",
-        price: Number(it.price||0),
-        currency: it.currency || "UZS",
-        qty: Number(it.qty||0)
-      }));
-      const total = items.reduce((s,x)=> s + x.price * x.qty, 0);
-
-      const orderId = `${Date.now()}-${currentUserId}-${Math.floor(Math.random()*1000)}`;
-      const orderRef = doc(db, "orders", orderId);
-
-      const orderDoc = {
-        orderId,
-        userId: currentUserId,
-        customer: { name, phone },
-        status: "new",
-        total,
-        currency: "UZS",
-        items,
-        createdAt: serverTimestamp()
-      };
-
-      await setDoc(orderRef, orderDoc);
-      await clearCart();
-
-      closeCartModal();
-      custName.value = "";
-      custPhone.value = "";
-
-      toast("✅ Buyurtmangiz qabul qilindi!");
-
-      // optional Telegram notify (best-effort)
-      notifyTelegram({ orderId, userId: currentUserId, name, phone, total, items });
-    }
-
-    // Events
-    userChip.addEventListener("click", openLogin);
-    closeLogin.addEventListener("click", ()=>{ closeLoginModal(); stopMyOrdersLive(); });
-    overlayLogin.addEventListener("click", (e)=>{ if(e.target === overlayLogin){ closeLoginModal(); stopMyOrdersLive(); } });
-
-    tabLogin.addEventListener("click", showLoginTab);
-    tabOrders.addEventListener("click", showOrdersTab);
-
-    btnLogin.addEventListener("click", ()=> loginWithId(loginIdInput.value));
-    btnCreate.addEventListener("click", ()=> createOneClickId());
-    btnLogout.addEventListener("click", ()=> logout());
-    loginIdInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") loginWithId(loginIdInput.value); });
-
-    cartBtn.addEventListener("click", openCart);
-    closeCart.addEventListener("click", closeCartModal);
-    overlayCart.addEventListener("click", (e)=>{ if(e.target === overlayCart) closeCartModal(); });
-    clearCartBtn.addEventListener("click", async ()=>{ await clearCart(); toast("Savat tozalandi"); });
-    checkoutBtn.addEventListener("click", checkout);
-
-    // init
-    syncUserUI();
-    watchBigNav();
-    if(currentUserId) startCartLive();
-</script>
+    <!-- Firebase Config -->
+    <script src="firebase-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
