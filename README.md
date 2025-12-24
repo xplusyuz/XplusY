@@ -48,3 +48,8 @@ Aks holda register/login/menu ishlashi uchun shart emas.
 
 
 Note: Agar FIREBASE_STORAGE_BUCKET qo‘ymasangiz, server projectId'dan avtomatik <projectId>.appspot.com deb taxmin qiladi. Eng yaxshisi baribir env bilan aniq qo‘ying.
+
+
+## v11 Avatar upload (server-side)
+Avatar endi brauzerdan Storage’ga PUT qilmaydi. `/avatarUpload` endpoint base64 rasmni serverga yuboradi, server Storage’ga saqlaydi va photoURL ni user doc’ga yozadi.
+Env: FIREBASE_STORAGE_BUCKET tavsiya qilinadi.
