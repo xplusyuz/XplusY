@@ -129,8 +129,10 @@ const path = getPath(event);
 
     // ===== AUTH: ID+Password login =====
     if (path === "/auth/login" && method === "POST") {
-      const { loginId, password } = JSON.parse(event.body || "{}");
-      if (!loginId || !password) return json(400, { error: "loginId & password required" });
+      const body = JSON.parse(event.body || "{}");
+      const loginId = String(body.loginId || "").trim();
+      const password = String(body.password || "");
+      if (!loginId || !password) return json(400, { error: "loginId & password required" }); // password is not trimmed
 
       const snap = await usersCol.doc(loginId).get();
       if (!snap.exists) return json(404, { error: "Bunday ID topilmadi" });
@@ -193,7 +195,7 @@ const path = getPath(event);
       const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
 
       // Verify Firebase ID token using Admin SDK
-      const decoded = await auth.verifyIdToken(idToken);
+      const decoded = await admin.auth().verifyIdToken(idToken);
       const email = String(decoded.email || "").toLowerCase();
       if (email !== adminEmail) return json(403, { error: "Admin only" });
 
@@ -238,7 +240,7 @@ const path = getPath(event);
       const sess = await authRequired(event);
       const body = JSON.parse(event.body || "{}");
       const profile = body.profile || {};
-      const newPassword = body.newPassword || null;
+      const newPassword = (body.newPassword !== undefined && body.newPassword !== null) ? String(body.newPassword) : "";
 
       const ref = usersCol.doc(sess.uid);
       const snap = await ref.get();
@@ -251,15 +253,20 @@ const path = getPath(event);
           lastName: (profile.lastName || "").trim(),
           birthdate: profile.birthdate || "",
           region: profile.region || "",
-          district: (profile.district || "").trim()
+          district: (profile.district || "").trim(),
+          avatarPath: profile.avatarPath ? String(profile.avatarPath) : (u.profile && u.profile.avatarPath ? u.profile.avatarPath : "")
         },
         updatedAt: nowISO(),
         ...(avatarSmall ? { avatarSmall } : {})
       };
 
       if (u.provider === "password") {
-        if (!newPassword || newPassword.length < 6) return json(400, { error: "New password min 6" });
-        upd.passHash = await bcrypt.hash(newPassword, 10);
+        // ✅ Password change is OPTIONAL: only when user provided newPassword
+        if (newPassword.length > 0) {
+          if (newPassword.length < 6) return json(400, { error: "New password min 6" });
+          upd.passHash = await bcrypt.hash(newPassword, 10);
+          upd.passwordUpdatedAt = nowISO();
+        }
       }
 
       await ref.set(upd, { merge: true });
@@ -309,6 +316,7 @@ const path = getPath(event);
         cacheControl: "public, max-age=31536000"
       });
 
+      const bucket = getBucket();
       const bucketName = bucket.name;
       const encodedPath = encodeURIComponent(objectPath);
       const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
