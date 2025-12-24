@@ -15,7 +15,7 @@ function nowISO() { return new Date().toISOString(); }
 
 function initFirebaseAdmin() {
   if (admin.apps.length) return;
-  const svc = ((process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT) || process.env.FIREBASE_SERVICE_ACCOUNT);
+  const svc = ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || process.env.FIREBASE_SERVICE_ACCOUNT);
   if (!svc) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON env");
   const cred = admin.credential.cert(JSON.parse(svc));
   admin.initializeApp({ credential: cred, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined });
@@ -73,9 +73,12 @@ exports.handler = async (event) => {
   try {
     initFirebaseAdmin();
     const db = admin.firestore();
-    const bucket = admin.storage().bucket();
-
-    const path = getPath(event);
+    function getBucket(){
+  const b = String(process.env.FIREBASE_STORAGE_BUCKET || "");
+  if(!b) throw new Error("Missing FIREBASE_STORAGE_BUCKET env");
+  return admin.storage().bucket(b);
+}
+const path = getPath(event);
     const method = event.httpMethod;
 
     const usersCol = db.collection("users");
@@ -256,7 +259,7 @@ exports.handler = async (event) => {
       const contentType = body.contentType || contentTypeForExt(ext);
 
       const objectPath = `avatars/${sess.uid}.${ext}`;
-      const file = bucket.file(objectPath);
+      const file = getBucket().file(objectPath);
 
       const [uploadUrl] = await file.getSignedUrl({
         version: "v4",
@@ -275,7 +278,7 @@ exports.handler = async (event) => {
       const objectPath = body.path;
       if (!objectPath || !objectPath.startsWith("avatars/")) return json(400, { error: "Invalid path" });
 
-      const file = bucket.file(objectPath);
+      const file = getBucket().file(objectPath);
 
       // Ensure file exists
       const [exists] = await file.exists();

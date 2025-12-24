@@ -39,3 +39,9 @@ Admin login Firebase Web SDKsiz ishlaydi.
 
 ### Admin Firebase config
 admin.html ichida firebaseConfig ni to‘ldiring (apiKey/authDomain/projectId).
+
+
+### Storage bucket
+Avatar upload ishlatmoqchi bo‘lsangiz Netlify env:
+- FIREBASE_STORAGE_BUCKET (masalan: your-project-id.appspot.com)
+Aks holda register/login/menu ishlashi uchun shart emas.
