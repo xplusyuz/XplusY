@@ -19,3 +19,10 @@
 
 ## Region JSON
 - region.json is used for Viloyat → Tuman selects.
+
+
+## v3 Admin login
+Netlify env qo‘ying:
+- ADMIN_EMAIL (optional, default sohibjonmath@gmail.com)
+- ADMIN_PASSWORD (required)
+Admin login Firebase Web SDKsiz ishlaydi.

@@ -44,7 +44,9 @@ async function authRequired(event) {
 }
 async function adminRequired(event) {
   const sess = await authRequired(event);
-  if (!sess.email || sess.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) throw new Error("Admin only");
+  const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+  const ok = (sess.isAdmin === true) || (sess.provider === "admin") || (sess.email && sess.email.toLowerCase() === adminEmail);
+  if (!ok) throw new Error("Admin only");
   return sess;
 }
 
@@ -127,6 +129,43 @@ exports.handler = async (event) => {
       const token = signSession({ uid: u.uid, provider: "password", loginId: u.loginId });
       return json(200, { token });
     }
+
+
+    // ===== AUTH: Admin login (email + ADMIN_PASSWORD) =====
+    if (path === "/auth/adminLogin" && method === "POST") {
+      const { email, password } = JSON.parse(event.body || "{}");
+      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+      const adminPass = String(process.env.ADMIN_PASSWORD || "");
+      if (!adminPass) return json(500, { error: "Missing ADMIN_PASSWORD env" });
+
+      const em = String(email || "").toLowerCase().trim();
+      if (em !== adminEmail) return json(403, { error: "Admin email noto‘g‘ri" });
+      if (String(password || "") !== adminPass) return json(401, { error: "Admin parol noto‘g‘ri" });
+
+      // Ensure admin user doc exists
+      const uid = "admin_" + adminEmail.replace(/[^a-z0-9]/g, "_");
+      const ref = usersCol.doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          uid,
+          provider: "admin",
+          loginId: adminEmail,
+          email: adminEmail,
+          photoURL: "",
+          points: 0,
+          profile: { firstName:"Sohibjon", lastName:"", birthdate:"", region:"", district:"" },
+          createdAt: nowISO(),
+          updatedAt: nowISO()
+        });
+      } else {
+        await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO() }, { merge: true });
+      }
+
+      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
+      return json(200, { token });
+    }
+
 
     // ===== ME =====
     if (path === "/me" && method === "GET") {
