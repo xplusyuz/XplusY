@@ -53,3 +53,8 @@ Note: Agar FIREBASE_STORAGE_BUCKET qo‘ymasangiz, server projectId'dan avtomati
 ## v11 Avatar upload (server-side)
 Avatar endi brauzerdan Storage’ga PUT qilmaydi. `/avatarUpload` endpoint base64 rasmni serverga yuboradi, server Storage’ga saqlaydi va photoURL ni user doc’ga yozadi.
 Env: FIREBASE_STORAGE_BUCKET tavsiya qilinadi.
+
+
+## v13 Avatar (Firestore small base64)
+Storage ishlatilmaydi. Avatar 96x96 qilib klientda kichraytiriladi va user doc’ga `avatarSmall` sifatida saqlanadi. Shuning uchun CORS/Storage muammolari yo‘q.
+Env: FIREBASE_STORAGE_BUCKET endi shart emas.
