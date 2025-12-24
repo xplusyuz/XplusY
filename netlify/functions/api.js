@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
 const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+// global fallback (avoid ReferenceError in spreads)
+const avatarSmall = null;
 const MENU_DOC_PATH = { col: "configs", doc: "spa_menu" };
 
 function json(statusCode, body) {
@@ -55,8 +57,8 @@ async function adminRequired(event) {
 }
 
 function genLoginId() {
-  const n = Math.floor(10000 + Math.random() * 90000);
-  return `LM-${n}`;
+  const n = Math.floor(100000 + Math.random() * 900000);
+  return String(n);
 }
 function genPassword() {
   return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
