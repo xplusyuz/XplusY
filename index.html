@@ -6,10 +6,8 @@
   <title>LeaderMath.UZ — SPA</title>
 
   <!-- Firebase Auth (faqat Google login uchun) -->
-  <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 
-  <style>
+<style>
     :root{
       --bg1:#ecfff4; --bg2:#fff7e6; --bg3:#eef7ff;
       --ink:#0b1220; --muted:#6b7280;
@@ -116,6 +114,16 @@
     }
 
     .main{flex:1; display:flex; flex-direction:column; gap:12px; min-height:0;}
+.bottombar{display:none}
+@media (max-width:720px){
+  .topbar{display:none}
+  .bottombar{display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--stroke); border-radius: 22px; background: rgba(255,255,255,.70); backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(2,6,23,.10);}
+  .bchips{display:flex; gap:8px; overflow:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex:1;}
+  .bchips::-webkit-scrollbar{display:none}
+  .bchip{flex:0 0 auto; padding:12px 14px; border-radius: 18px; border:1px solid var(--stroke); background: rgba(255,255,255,.72); font-weight:900; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:8px;}
+  .bchip[aria-current="page"]{background: linear-gradient(135deg, rgba(46,139,87,.16), rgba(56,189,248,.12)); border-color: rgba(46,139,87,.30)}
+}
+
     .topbar{
       display:flex; align-items:center; justify-content:space-between; gap:10px;
       padding:10px 12px;
@@ -296,7 +304,12 @@
         </div>
         <iframe id="pageFrame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer"></iframe>
       </section>
-    </main>
+    
+      <div class="bottombar" id="bottomBar">
+        <div class="bchips" id="bottomChips"></div>
+        <button class="btn ghost" id="btnLogout2" style="display:none;">Chiqish</button>
+      </div>
+</main>
   </div>
 
   <!-- AUTH MODAL -->
@@ -316,13 +329,12 @@
           <div class="field">
             <label>Parol</label>
             <input id="loginPass" type="password" placeholder="******" autocomplete="current-password">
-            <div class="hint">Agar parolni unutgan bo‘lsangiz, Google bilan kiring.</div>
+            <div class="hint">Agar parolni unutgan bo‘lsangiz, admin orqali tiklash mumkin (keyin qo‘shamiz).</div>
           </div>
         </div>
         <div class="actions">
           <button class="btn ghost" id="btnOneClick">Bir bosishda ro‘yxatdan o‘tish</button>
-          <button class="btn ghost" id="btnGoogle">Google bilan kirish</button>
-          <button class="btn" id="btnIdLogin">ID+Parol Kirish</button>
+                    <button class="btn" id="btnIdLogin">ID+Parol Kirish</button>
         </div>
         <div class="hint" id="authHint"></div>
       </div>
@@ -398,13 +410,6 @@
   <script>
     const ADMIN_EMAIL = "sohibjonmath@gmail.com";
     const API_BASE = "/.netlify/functions/api";
-
-    // Firebase config (Google login uchun) — o'zingiznikiga almashtiring
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-    };
 
     const $ = (id)=>document.getElementById(id);
     const toast = (msg)=>{
@@ -626,8 +631,29 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
 
     function setActiveChip(id){
       document.querySelectorAll(".chip").forEach(c=>c.removeAttribute("aria-current"));
+      document.querySelectorAll(".bchip").forEach(c=>c.removeAttribute("aria-current"));
       const chip = [...document.querySelectorAll(".chip")].find(x=>x.dataset.id===id);
       if(chip) chip.setAttribute("aria-current","page");
+    }
+
+    function renderBottomMenu(menu, activeId){
+      const wrap = $("bottomChips");
+      if(!wrap) return;
+      wrap.innerHTML = "";
+      menu.forEach(item=>{
+        const b = document.createElement("button");
+        b.className = "bchip";
+        b.type="button";
+        b.dataset.id = item.id;
+        b.innerHTML = `<span class="dot"></span> <span>${item.title}</span>`;
+        if(item.id === activeId) b.setAttribute("aria-current","page");
+        b.addEventListener("click", async ()=>{
+          setActiveChip(item.id);
+          try{ await loadPage(item); }catch(e){ toast(e.message); }
+        });
+        wrap.appendChild(b);
+      });
+      renderBottomMenu(menu, activeId);
     }
 
     function renderMenu(menu, activeId){
@@ -646,10 +672,27 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
         });
         wrap.appendChild(b);
       });
+      renderBottomMenu(menu, activeId);
     }
 
     // ===== Header
     function setHeader(me){
+      if(!me){
+        $("btnLogout").style.display = "none";
+        $("btnLogin").textContent = "Kirish";
+        $("hello").textContent = "Kirish kerak";
+        $("displayName").textContent = "Mehmon";
+        $("pillId").textContent = "ID: —";
+        $("pillPts").textContent = "Ball: —";
+        $("pillAge").textContent = "Yosh: —";
+        $("avatarImg").style.display = "none";
+        $("avatarFallback").style.display = "block";
+        $("avatarFallback").textContent = "🙂";
+        $("btnAdmin").style.display = "none";
+        const bl=$("btnLogout2"); if(bl) bl.style.display="none";
+        return;
+      }
+
       const logged = !!me;
       $("btnLogout").style.display = logged ? "inline-flex" : "none";
       $("btnLogin").textContent = logged ? "Profil" : "Kirish";
@@ -707,17 +750,6 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
       $("profileHint").textContent = forced ? "Davom etish uchun profilni to‘ldiring." : "";
       openModal($("profileModal"));
     }
-
-    // ===== Firebase Google auth init
-    let fbReady = false;
-    function initFirebaseIfPossible(){
-      try{
-        if(!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("YOUR_")) return;
-        firebase.initializeApp(firebaseConfig);
-        fbReady = true;
-      }catch(e){ fbReady = false; }
-    }
-
     async function refreshMe(){
       if(!Session.token) { Session.me=null; setHeader(null); return null; }
       const me = await api("/me", {method:"GET"});
@@ -750,15 +782,7 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
       requireProfileIfNeeded(Session.me);
       await loadMenuAndAutoOpen();
     }
-
-    async function doGoogleLogin(){
-      if(!fbReady) return toast("Firebase config to‘ldirilmagan (Google login ishlamaydi).");
-      $("authHint").textContent = "Google oynasi ochilmoqda…";
-      const provider = new firebase.auth.GoogleAuthProvider();
-      const cred = await firebase.auth().signInWithPopup(provider);
-      const idToken = await cred.user.getIdToken(true);
-
-      const out = await api("/auth/googleExchange", {method:"POST", body: JSON.stringify({idToken})});
+)});
       Session.token = out.token;
       await refreshMe();
       closeModal($("authModal"));
@@ -827,8 +851,7 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
 
     async function logout(){
       Session.clear();
-      try{ if(fbReady) await firebase.auth().signOut(); }catch(e){}
-      setHeader(null);
+setHeader(null);
       $("menuChips").innerHTML = "";
       $("emptyState").style.display = "grid";
       $("pageFrame").srcdoc = "";
@@ -889,10 +912,11 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
 
       $("btnIdLogin").addEventListener("click", async ()=>{ try{ await doIdLogin(); }catch(e){ $("authHint").textContent=e.message; toast(e.message);} });
       $("btnOneClick").addEventListener("click", async ()=>{ try{ await doOneClickRegister(); }catch(e){ $("authHint").textContent=e.message; toast(e.message);} });
-      $("btnGoogle").addEventListener("click", async ()=>{ try{ await doGoogleLogin(); }catch(e){ $("authHint").textContent=e.message; toast(e.message);} });
+}catch(e){ $("authHint").textContent=e.message; toast(e.message);} });
       $("btnSaveProfile").addEventListener("click", async ()=>{ try{ await saveProfile(); }catch(e){ $("profileHint").textContent=e.message; toast(e.message);} });
 
       $("btnLogout").addEventListener("click", logout);
+      const bl=$("btnLogout2"); if(bl) bl.addEventListener("click", logout);
       $("btnAdmin").addEventListener("click", ()=>location.href="admin.html");
 
       // Session restore

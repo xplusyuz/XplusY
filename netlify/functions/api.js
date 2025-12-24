@@ -128,39 +128,6 @@ exports.handler = async (event) => {
       return json(200, { token });
     }
 
-    // ===== AUTH: Google exchange =====
-    if (path === "/auth/googleExchange" && method === "POST") {
-      const { idToken } = JSON.parse(event.body || "{}");
-      if (!idToken) return json(400, { error: "idToken required" });
-
-      const decoded = await admin.auth().verifyIdToken(idToken);
-      const uid = decoded.uid;
-      const email = (decoded.email || "").toLowerCase();
-      const photoURL = decoded.picture || "";
-
-      const ref = usersCol.doc(uid);
-      const snap = await ref.get();
-
-      if (!snap.exists) {
-        await ref.set({
-          uid,
-          provider: "google",
-          loginId: "",
-          email,
-          photoURL,
-          points: 0,
-          profile: { firstName:"", lastName:"", birthdate:"", region:"", district:"" },
-          createdAt: nowISO(),
-          updatedAt: nowISO()
-        });
-      } else {
-        await ref.set({ email, photoURL, updatedAt: nowISO() }, { merge: true });
-      }
-
-      const token = signSession({ uid, provider: "google", email });
-      return json(200, { token });
-    }
-
     // ===== ME =====
     if (path === "/me" && method === "GET") {
       const sess = await authRequired(event);
