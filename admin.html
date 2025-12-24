@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>Admin — SPA Builder</title>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
   <style>
     :root{
       --ink:#0b1220; --muted:#6b7280;
@@ -105,6 +108,18 @@
   </style>
 </head>
 <body>
+<div id="adminAuthGate" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);backdrop-filter:blur(8px);z-index:9999;">
+  <div style="width:min(520px,92vw);background:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.6);border-radius:22px;padding:18px;box-shadow:0 20px 80px rgba(0,0,0,.2);">
+    <div style="font-weight:900;font-size:18px;">Admin kirish</div>
+    <div style="opacity:.75;margin-top:6px;">Faqat sohibjonmath@gmail.com Google akkaunti.</div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button id="btnGoogleAdmin" style="flex:1;padding:12px 14px;border-radius:16px;border:0;font-weight:900;cursor:pointer;background:linear-gradient(135deg,rgba(46,139,87,.95),rgba(56,189,248,.65));color:#fff;">Google bilan kirish</button>
+      <button id="btnAdminSignOut" style="padding:12px 14px;border-radius:16px;border:1px solid rgba(2,6,23,.12);background:rgba(255,255,255,.7);font-weight:900;cursor:pointer;">Chiqish</button>
+    </div>
+    <div id="adminAuthMsg" style="margin-top:10px;font-weight:700;"></div>
+  </div>
+</div>
+
   <div class="wrap">
     <div class="top">
       <div>
@@ -262,11 +277,97 @@
       return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
       ${baseTag}
       <title>${(title||"Preview").replace(/</g,"&lt;")}</title>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
       <style>html,body{margin:0;padding:0;font-family:system-ui}</style>
       <style>${css||""}</style>
-      </head><body>${html||""}
+      </head><body>
+<div id="adminAuthGate" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);backdrop-filter:blur(8px);z-index:9999;">
+  <div style="width:min(520px,92vw);background:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.6);border-radius:22px;padding:18px;box-shadow:0 20px 80px rgba(0,0,0,.2);">
+    <div style="font-weight:900;font-size:18px;">Admin kirish</div>
+    <div style="opacity:.75;margin-top:6px;">Faqat sohibjonmath@gmail.com Google akkaunti.</div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button id="btnGoogleAdmin" style="flex:1;padding:12px 14px;border-radius:16px;border:0;font-weight:900;cursor:pointer;background:linear-gradient(135deg,rgba(46,139,87,.95),rgba(56,189,248,.65));color:#fff;">Google bilan kirish</button>
+      <button id="btnAdminSignOut" style="padding:12px 14px;border-radius:16px;border:1px solid rgba(2,6,23,.12);background:rgba(255,255,255,.7);font-weight:900;cursor:pointer;">Chiqish</button>
+    </div>
+    <div id="adminAuthMsg" style="margin-top:10px;font-weight:700;"></div>
+  </div>
+</div>
+${html||""}
       <script>${js||""}<\/script>
-      </body></html>`;
+      
+<script>
+(function(){
+  const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+  let sessionToken = localStorage.getItem("lm_token") || "";
+
+  async function api(path, opts={}){
+    const r = await fetch("/.netlify/functions/api"+path, {
+      ...opts,
+      headers: {
+        "Content-Type":"application/json",
+        ...(opts.headers||{}),
+        ...(sessionToken ? {"Authorization":"Bearer "+sessionToken} : {})
+      }
+    });
+    const data = await r.json().catch(()=> ({}));
+    if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
+    return data;
+  }
+
+  async function doGoogle(){
+    const msg = document.getElementById("adminAuthMsg");
+    msg.textContent = "Google oynasi ochilmoqda…";
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const res = await auth.signInWithPopup(provider);
+    const user = res.user;
+    const email = (user.email||"").toLowerCase();
+    if(email !== ADMIN_EMAIL.toLowerCase()){
+      await auth.signOut();
+      throw new Error("Bu akkaunt admin emas.");
+    }
+    const idToken = await user.getIdToken();
+    msg.textContent = "Server tekshiryapti…";
+    const out = await api("/auth/adminGoogle", {method:"POST", body: JSON.stringify({idToken})});
+    sessionToken = out.token;
+    localStorage.setItem("lm_token", sessionToken);
+    msg.textContent = "Admin kirish ✅";
+    document.getElementById("adminAuthGate").style.display="none";
+    // reload admin data after auth
+    if(window.loadAll) window.loadAll();
+  }
+
+  async function signOutAll(){
+    localStorage.removeItem("lm_token");
+    sessionToken="";
+    try{ await auth.signOut(); }catch(e){}
+    location.reload();
+  }
+
+  window.addEventListener("load", ()=>{
+    document.getElementById("btnGoogleAdmin").addEventListener("click", ()=>doGoogle().catch(e=>{
+      document.getElementById("adminAuthMsg").textContent = e.message;
+      console.error(e);
+    }));
+    document.getElementById("btnAdminSignOut").addEventListener("click", signOutAll);
+
+    // if already have session token, try to open gate off by calling /me
+    (async()=>{
+      if(!sessionToken) return;
+      try{
+        await api("/me");
+        document.getElementById("adminAuthGate").style.display="none";
+        if(window.loadAll) window.loadAll();
+      }catch(e){
+        // keep gate
+      }
+    })();
+  });
+})();
+</script>
+
+</body></html>`;
     }
 
     function builderToCustom(item){
@@ -865,5 +966,76 @@ body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
       }
     });
   </script>
+
+<script>
+(function(){
+  const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+  let sessionToken = localStorage.getItem("lm_token") || "";
+
+  async function api(path, opts={}){
+    const r = await fetch("/.netlify/functions/api"+path, {
+      ...opts,
+      headers: {
+        "Content-Type":"application/json",
+        ...(opts.headers||{}),
+        ...(sessionToken ? {"Authorization":"Bearer "+sessionToken} : {})
+      }
+    });
+    const data = await r.json().catch(()=> ({}));
+    if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
+    return data;
+  }
+
+  async function doGoogle(){
+    const msg = document.getElementById("adminAuthMsg");
+    msg.textContent = "Google oynasi ochilmoqda…";
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const res = await auth.signInWithPopup(provider);
+    const user = res.user;
+    const email = (user.email||"").toLowerCase();
+    if(email !== ADMIN_EMAIL.toLowerCase()){
+      await auth.signOut();
+      throw new Error("Bu akkaunt admin emas.");
+    }
+    const idToken = await user.getIdToken();
+    msg.textContent = "Server tekshiryapti…";
+    const out = await api("/auth/adminGoogle", {method:"POST", body: JSON.stringify({idToken})});
+    sessionToken = out.token;
+    localStorage.setItem("lm_token", sessionToken);
+    msg.textContent = "Admin kirish ✅";
+    document.getElementById("adminAuthGate").style.display="none";
+    // reload admin data after auth
+    if(window.loadAll) window.loadAll();
+  }
+
+  async function signOutAll(){
+    localStorage.removeItem("lm_token");
+    sessionToken="";
+    try{ await auth.signOut(); }catch(e){}
+    location.reload();
+  }
+
+  window.addEventListener("load", ()=>{
+    document.getElementById("btnGoogleAdmin").addEventListener("click", ()=>doGoogle().catch(e=>{
+      document.getElementById("adminAuthMsg").textContent = e.message;
+      console.error(e);
+    }));
+    document.getElementById("btnAdminSignOut").addEventListener("click", signOutAll);
+
+    // if already have session token, try to open gate off by calling /me
+    (async()=>{
+      if(!sessionToken) return;
+      try{
+        await api("/me");
+        document.getElementById("adminAuthGate").style.display="none";
+        if(window.loadAll) window.loadAll();
+      }catch(e){
+        // keep gate
+      }
+    })();
+  });
+})();
+</script>
+
 </body>
 </html>

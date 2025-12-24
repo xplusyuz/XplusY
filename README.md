@@ -26,3 +26,16 @@ Netlify env qo‘ying:
 - ADMIN_EMAIL (optional, default sohibjonmath@gmail.com)
 - ADMIN_PASSWORD (required)
 Admin login Firebase Web SDKsiz ishlaydi.
+
+
+## v7 O‘zgarishlar
+- Index: admin login olib tashlandi, admin tugmasi yo‘q.
+- Admin: alohida Firebase Auth (Google) bilan kiradi va serverga idToken yuborib sessiya oladi.
+
+### Netlify env
+- FIREBASE_SERVICE_ACCOUNT (yoki FIREBASE_SERVICE_ACCOUNT_JSON) — service account JSON string
+- SESSION_JWT_SECRET
+- ADMIN_EMAIL (default sohibjonmath@gmail.com)
+
+### Admin Firebase config
+admin.html ichida firebaseConfig ni to‘ldiring (apiKey/authDomain/projectId).

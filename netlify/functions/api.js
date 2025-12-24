@@ -15,7 +15,7 @@ function nowISO() { return new Date().toISOString(); }
 
 function initFirebaseAdmin() {
   if (admin.apps.length) return;
-  const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const svc = (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT);
   if (!svc) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON env");
   const cred = admin.credential.cert(JSON.parse(svc));
   admin.initializeApp({ credential: cred, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined });
@@ -160,6 +160,43 @@ exports.handler = async (event) => {
         });
       } else {
         await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO() }, { merge: true });
+      }
+
+      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
+      return json(200, { token });
+    }
+
+
+
+    // ===== AUTH: Admin via Firebase Google ID token =====
+    if (path === "/auth/adminGoogle" && method === "POST") {
+      const { idToken } = JSON.parse(event.body || "{}");
+      if (!idToken) return json(400, { error: "Missing idToken" });
+
+      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+
+      // Verify Firebase ID token using Admin SDK
+      const decoded = await auth.verifyIdToken(idToken);
+      const email = String(decoded.email || "").toLowerCase();
+      if (email !== adminEmail) return json(403, { error: "Admin only" });
+
+      const uid = decoded.uid || ("admin_" + adminEmail.replace(/[^a-z0-9]/g, "_"));
+      const ref = usersCol.doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          uid,
+          provider: "admin",
+          loginId: adminEmail,
+          email: adminEmail,
+          photoURL: decoded.picture || "",
+          points: 0,
+          profile: { firstName: decoded.name || "Admin", lastName:"", birthdate:"", region:"", district:"" },
+          createdAt: nowISO(),
+          updatedAt: nowISO()
+        });
+      } else {
+        await ref.set({ provider:"admin", email: adminEmail, photoURL: decoded.picture || "", updatedAt: nowISO() }, { merge: true });
       }
 
       const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
