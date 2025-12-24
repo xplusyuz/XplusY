@@ -58,3 +58,8 @@ Env: FIREBASE_STORAGE_BUCKET tavsiya qilinadi.
 ## v13 Avatar (Firestore small base64)
 Storage ishlatilmaydi. Avatar 96x96 qilib klientda kichraytiriladi va user doc’ga `avatarSmall` sifatida saqlanadi. Shuning uchun CORS/Storage muammolari yo‘q.
 Env: FIREBASE_STORAGE_BUCKET endi shart emas.
+
+
+## v14
+- Avatar: Storage/PUT yo‘q. Faqat Firestore `avatarSmall`.
+- Agar sizda eski kod keshlangan bo‘lsa: Ctrl+F5 yoki Incognito’da tekshiring.

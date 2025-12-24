@@ -116,7 +116,8 @@ const path = getPath(event);
         points: 0,
         profile: { firstName:"", lastName:"", birthdate:"", region:"", district:"" },
         createdAt: nowISO(),
-        updatedAt: nowISO()
+        updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
       };
       await usersCol.doc(loginId).set(user, { merge: false });
 
@@ -168,10 +169,12 @@ const path = getPath(event);
           points: 0,
           profile: { firstName:"Sohibjon", lastName:"", birthdate:"", region:"", district:"" },
           createdAt: nowISO(),
-          updatedAt: nowISO()
+          updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
         });
       } else {
-        await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO() }, { merge: true });
+        await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
       }
 
       const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
@@ -205,10 +208,12 @@ const path = getPath(event);
           points: 0,
           profile: { firstName: decoded.name || "Admin", lastName:"", birthdate:"", region:"", district:"" },
           createdAt: nowISO(),
-          updatedAt: nowISO()
+          updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
         });
       } else {
-        await ref.set({ provider:"admin", email: adminEmail, photoURL: decoded.picture || "", updatedAt: nowISO() }, { merge: true });
+        await ref.set({ provider:"admin", email: adminEmail, photoURL: decoded.picture || "", updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
       }
 
       const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
@@ -246,7 +251,8 @@ const path = getPath(event);
           region: profile.region || "",
           district: (profile.district || "").trim()
         },
-        updatedAt: nowISO()
+        updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
       };
 
       if (u.provider === "password") {
@@ -305,7 +311,8 @@ const path = getPath(event);
       const encodedPath = encodeURIComponent(objectPath);
       const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
 
-      await usersCol.doc(sess.uid).set({ photoURL: downloadURL, updatedAt: nowISO() }, { merge: true });
+      await usersCol.doc(sess.uid).set({ photoURL: downloadURL, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
 
       const outSnap = await usersCol.doc(sess.uid).get();
       const out = outSnap.data();
@@ -341,7 +348,8 @@ const path = getPath(event);
         inlineJs: it.mode === "custom" ? (it.inlineJs || "") : undefined,
       })).filter(it => it.id && it.title);
 
-      await menuDoc.set({ items: cleaned, updatedAt: nowISO() }, { merge: true });
+      await menuDoc.set({ items: cleaned, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
       return json(200, { ok: true });
     }
 
