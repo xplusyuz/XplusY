@@ -11,6 +11,10 @@ function json(statusCode, body) {
   return { statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
 }
 function getPath(event) { return (event.path || "").replace("/.netlify/functions/api", "") || "/"; }
+function generateLoginId6(){
+  return String(Math.floor(100000 + Math.random()*900000));
+}
+
 function nowISO() { return new Date().toISOString(); }
 
 function initFirebaseAdmin() {
