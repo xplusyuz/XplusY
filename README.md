@@ -45,3 +45,6 @@ admin.html ichida firebaseConfig ni to‘ldiring (apiKey/authDomain/projectId).
 Avatar upload ishlatmoqchi bo‘lsangiz Netlify env:
 - FIREBASE_STORAGE_BUCKET (masalan: your-project-id.appspot.com)
 Aks holda register/login/menu ishlashi uchun shart emas.
+
+
+Note: Agar FIREBASE_STORAGE_BUCKET qo‘ymasangiz, server projectId'dan avtomatik <projectId>.appspot.com deb taxmin qiladi. Eng yaxshisi baribir env bilan aniq qo‘ying.

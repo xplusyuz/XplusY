@@ -74,10 +74,15 @@ exports.handler = async (event) => {
     initFirebaseAdmin();
     const db = admin.firestore();
     function getBucket(){
-  const b = String(process.env.FIREBASE_STORAGE_BUCKET || "");
-  if(!b) throw new Error("Missing FIREBASE_STORAGE_BUCKET env");
+  let b = String(process.env.FIREBASE_STORAGE_BUCKET || "");
+  if(!b){
+    // infer: <projectId>.appspot.com
+    try{ const pid = admin.app().options.projectId; if(pid) b = pid + ".appspot.com"; }catch(e){}
+  }
+  if(!b) throw new Error("Storage bucket topilmadi. Netlify env FIREBASE_STORAGE_BUCKET ni qo‘ying.");
   return admin.storage().bucket(b);
 }
+
 const path = getPath(event);
     const method = event.httpMethod;
 
