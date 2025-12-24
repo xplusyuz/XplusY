@@ -15,7 +15,7 @@ function nowISO() { return new Date().toISOString(); }
 
 function initFirebaseAdmin() {
   if (admin.apps.length) return;
-  const svc = (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT);
+  const svc = ((process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT) || process.env.FIREBASE_SERVICE_ACCOUNT);
   if (!svc) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON env");
   const cred = admin.credential.cert(JSON.parse(svc));
   admin.initializeApp({ credential: cred, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined });
