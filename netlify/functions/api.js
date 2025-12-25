@@ -334,7 +334,18 @@ const path = getPath(event);
     if (path === "/menu" && method === "GET") {
       await authRequired(event);
       const snap = await menuDoc.get();
-      const data = snap.exists ? snap.data() : { items: [] };
+      if (!snap.exists) {
+        // Default demo menu (static pages in /pages). Admin can overwrite from admin panel.
+        const items = [
+          { id: "home", title: "Bosh sahifa", mode: "custom", htmlUrl: "pages/home.html", cssUrl: "pages/home.css", jsUrl: "pages/home.js" },
+          { id: "courses", title: "Kurslar", mode: "custom", htmlUrl: "pages/courses.html", cssUrl: "pages/courses.css", jsUrl: "pages/courses.js" },
+          { id: "tests", title: "Testlar", mode: "custom", htmlUrl: "pages/tests.html", cssUrl: "pages/tests.css", jsUrl: "pages/tests.js" },
+          { id: "leaderboard", title: "Reyting", mode: "custom", htmlUrl: "pages/leaderboard.html", cssUrl: "pages/leaderboard.css", jsUrl: "pages/leaderboard.js" },
+        ];
+        await menuDoc.set({ items, updatedAt: nowISO() }, { merge: true });
+        return json(200, { items });
+      }
+      const data = snap.data() || { items: [] };
       return json(200, { items: data.items || [] });
     }
 
