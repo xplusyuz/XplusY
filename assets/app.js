@@ -85,8 +85,7 @@ $("#logoutBtn2").addEventListener("click", logout);
 function lock(on){
   $("#lockScreen").style.display = on ? "grid" : "none";
 }
-$("#lockLogin").addEventListener("click", ()=>showOverlay("#authOverlay"));
-
+$("#lockLogin").addEventListener("click", ()=>{ lock(false); showOverlay("#authOverlay"); $("#loginId")?.focus?.(); });
 /* Tabs */
 $$(".seg button").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -255,7 +254,6 @@ function logout(){
   session = null;
   renderUserChip();
   lock(true);
-  showOverlay("#authOverlay");
 }
 
 /* Profile view/edit */
@@ -385,7 +383,7 @@ async function loadQuestion(qIndex){
 }
 async function submitAnswer(){
   if(!session?.user){
-    showOverlay("#authOverlay"); lock(true); return;
+    lock(false); showOverlay("#authOverlay"); return;
   }
   const qIndex = currentQIndex;
   const userAns = normalizeAnswer($("#answerInp").value);
@@ -463,8 +461,8 @@ async function loadLeaderboard(){
   const token = loadToken();
   if(token){
     try{ await refreshMe(); lock(false); }
-    catch{ clearToken(); lock(true); showOverlay("#authOverlay"); }
+    catch{ clearToken(); lock(true); }
   }else{
-    lock(true); showOverlay("#authOverlay");
+    lock(true);
   }
 })();
