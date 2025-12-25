@@ -2,382 +2,189 @@
 const admin = require("firebase-admin");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 
-const ADMIN_EMAIL = "sohibjonmath@gmail.com";
-// global fallback (avoid ReferenceError in spreads)
-const avatarSmall = null;
-const MENU_DOC_PATH = { col: "configs", doc: "spa_menu" };
-
-function json(statusCode, body) {
-  return { statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+function initAdmin(){
+  if(admin.apps.length) return;
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if(!b64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env");
+  const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+  admin.initializeApp({ credential: admin.credential.cert(json) });
 }
-function getPath(event) { return (event.path || "").replace("/.netlify/functions/api", "") || "/"; }
-function generateLoginId6(){
-  return String(Math.floor(100000 + Math.random()*900000));
+function db(){ initAdmin(); return admin.firestore(); }
+
+function json(statusCode, body){
+  return {
+    statusCode,
+    headers: {
+      "Content-Type":"application/json",
+      "Access-Control-Allow-Origin":"*",
+      "Access-Control-Allow-Headers":"Content-Type, Authorization",
+      "Access-Control-Allow-Methods":"GET,POST,OPTIONS"
+    },
+    body: JSON.stringify(body)
+  };
+}
+const ok = (b)=>json(200,b);
+const bad = (m,c=400)=>json(c,{error:m});
+
+function parsePath(event){
+  const p = event.path || "";
+  if(p.includes("/.netlify/functions/api")) return p.split("/.netlify/functions/api")[1] || "/";
+  if(p.startsWith("/api")) return p.slice(4) || "/";
+  return "/";
 }
 
-function nowISO() { return new Date().toISOString(); }
-
-function initFirebaseAdmin() {
-  if (admin.apps.length) return;
-  const svc = ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || process.env.FIREBASE_SERVICE_ACCOUNT);
-  if (!svc) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON env");
-  const cred = admin.credential.cert(JSON.parse(svc));
-  admin.initializeApp({ credential: cred, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined });
+function getToken(event){
+  const h = event.headers?.authorization || event.headers?.Authorization || "";
+  const m = /^Bearer\s+(.+)$/.exec(h);
+  return m ? m[1] : "";
 }
-
-function signSession(payload) {
-  const secret = process.env.SESSION_JWT_SECRET;
-  if (!secret) throw new Error("Missing SESSION_JWT_SECRET env");
-  return jwt.sign(payload, secret, { expiresIn: "30d" });
-}
-function verifySessionToken(token) {
-  const secret = process.env.SESSION_JWT_SECRET;
-  if (!secret) throw new Error("Missing SESSION_JWT_SECRET env");
+function requireAuth(event){
+  const token = getToken(event);
+  if(!token) throw new Error("Auth token yo‘q");
+  const secret = process.env.JWT_SECRET;
+  if(!secret) throw new Error("Missing JWT_SECRET env");
   return jwt.verify(token, secret);
 }
-function getBearer(event) {
-  const h = event.headers || {};
-  const auth = h.authorization || h.Authorization || "";
-  if (!auth.startsWith("Bearer ")) return "";
-  return auth.slice(7).trim();
-}
-async function authRequired(event) {
-  const token = getBearer(event);
-  if (!token) throw new Error("Unauthorized");
-  return verifySessionToken(token); // {uid, provider, email?, loginId?}
-}
-async function adminRequired(event) {
-  const sess = await authRequired(event);
-  const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
-  const ok = (sess.isAdmin === true) || (sess.provider === "admin") || (sess.email && sess.email.toLowerCase() === adminEmail);
-  if (!ok) throw new Error("Admin only");
-  return sess;
+function isValidDOB(dob){
+  const m = /^(\d{2}):(\d{2}):(\d{4})$/.exec(String(dob||"").trim());
+  if(!m) return false;
+  const dd = +m[1], mm = +m[2], yy = +m[3];
+  if(yy < 1900 || yy > new Date().getFullYear()) return false;
+  if(mm < 1 || mm > 12) return false;
+  const dim = new Date(yy, mm, 0).getDate();
+  return dd >= 1 && dd <= dim;
 }
 
-function genLoginId() {
-  const n = Math.floor(100000 + Math.random() * 900000);
-  return String(n);
+async function nextLoginId(){
+  const ref = db().doc("meta/counters");
+  const out = await db().runTransaction(async (tx)=>{
+    const snap = await tx.get(ref);
+    let next = 10000;
+    if(snap.exists && typeof snap.data().nextLoginId === "number") next = snap.data().nextLoginId;
+    next += 1;
+    tx.set(ref, { nextLoginId: next }, { merge:true });
+    return next;
+  });
+  return String(out);
 }
-function genPassword() {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+async function userByLoginId(loginId){
+  const snap = await db().collection("users").doc(String(loginId)).get();
+  if(!snap.exists) return null;
+  return { id: snap.id, ...snap.data() };
 }
-
-function safeExt(ext) {
-  const e = (ext || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return ["png","jpg","jpeg","webp"].includes(e) ? e : "png";
-}
-function contentTypeForExt(ext) {
-  const e = safeExt(ext);
-  if (e === "jpg" || e === "jpeg") return "image/jpeg";
-  if (e === "webp") return "image/webp";
-  return "image/png";
+function signToken(payload){
+  const secret = process.env.JWT_SECRET;
+  if(!secret) throw new Error("Missing JWT_SECRET env");
+  return jwt.sign(payload, secret, { expiresIn: "30d" });
 }
 
 exports.handler = async (event) => {
-  try {
-    initFirebaseAdmin();
-    const db = admin.firestore();
-    function getBucket(){
-  let b = String(process.env.FIREBASE_STORAGE_BUCKET || "");
-  if(!b){
-    // infer: <projectId>.appspot.com
-    try{ const pid = admin.app().options.projectId; if(pid) b = pid + ".appspot.com"; }catch(e){}
-  }
-  if(!b) throw new Error("Storage bucket topilmadi. Netlify env FIREBASE_STORAGE_BUCKET ni qo‘ying.");
-  return admin.storage().bucket(b);
-}
+  try{
+    if(event.httpMethod === "OPTIONS") return ok({});
 
-const path = getPath(event);
+    const path = parsePath(event);
     const method = event.httpMethod;
 
-    const usersCol = db.collection("users");
-    const menuDoc = db.collection(MENU_DOC_PATH.col).doc(MENU_DOC_PATH.doc);
+    if(path === "/auth/signup" && method === "POST"){
+      const body = JSON.parse(event.body || "{}");
+      const { firstName, lastName, dob, region, district, password, avatar } = body;
 
-    // ===== AUTH: One-click register =====
-    if (path === "/auth/register" && method === "POST") {
-      let loginId;
-      for (let i = 0; i < 12; i++) {
-        const candidate = genLoginId();
-        const snap = await usersCol.doc(candidate).get();
-        if (!snap.exists) { loginId = candidate; break; }
-      }
-      if (!loginId) return json(500, { error: "Try again" });
+      if(!firstName) return bad("Ism majburiy.");
+      if(!lastName) return bad("Familiya majburiy.");
+      if(!isValidDOB(dob)) return bad("Tug‘ilgan sana DD:MM:YYYY bo‘lsin.");
+      if(!region) return bad("Viloyat majburiy.");
+      if(!district) return bad("Tuman majburiy.");
+      if(!password || String(password).length < 6) return bad("Parol kamida 6 bo‘lsin.");
+      if(!avatar) return bad("Avatar majburiy.");
 
-      const password = genPassword();
-      const hash = await bcrypt.hash(password, 10);
+      const loginId = await nextLoginId();
+      const passHash = await bcrypt.hash(String(password), 10);
 
-      const user = {
-        uid: loginId,
-        provider: "password",
+      const doc = {
         loginId,
-        passHash: hash,
-        email: "",
-        photoURL: "",
+        passHash,
+        firstName: String(firstName).trim(),
+        lastName: String(lastName).trim(),
+        dob: String(dob).trim(),
+        region: String(region).trim(),
+        district: String(district).trim(),
+        avatar: String(avatar).trim(),
         points: 0,
-        profile: { firstName:"", lastName:"", birthdate:"", region:"", district:"" },
-        createdAt: nowISO(),
-        updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {})
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
-      await usersCol.doc(loginId).set(user, { merge: false });
+      await db().collection("users").doc(loginId).set(doc);
 
-      const token = signSession({ uid: loginId, provider: "password", loginId });
-      return json(200, { loginId, password, token });
+      const token = signToken({ loginId, uid: loginId });
+      return ok({ token, loginId });
     }
 
-    // ===== AUTH: ID+Password login =====
-    if (path === "/auth/login" && method === "POST") {
+    if(path === "/auth/login" && method === "POST"){
       const body = JSON.parse(event.body || "{}");
-      const loginId = String(body.loginId || "").trim();
-      const password = String(body.password || "");
-      if (!loginId || !password) return json(400, { error: "loginId & password required" }); // password is not trimmed
+      const { loginId, password } = body;
+      if(!loginId || !password) return bad("ID va parol majburiy.");
 
-      const snap = await usersCol.doc(loginId).get();
-      if (!snap.exists) return json(404, { error: "Bunday ID topilmadi" });
-      const u = snap.data();
+      const u = await userByLoginId(String(loginId).trim());
+      if(!u) return bad("Bunday ID topilmadi.", 404);
 
-      if (!u.passHash) return json(400, { error: "Bu user parol bilan emas" });
+      const okPass = await bcrypt.compare(String(password), u.passHash || "");
+      if(!okPass) return bad("Parol noto‘g‘ri.", 401);
 
-      const ok = await bcrypt.compare(password, u.passHash);
-      if (!ok) return json(401, { error: "Parol noto‘g‘ri" });
-
-      const token = signSession({ uid: u.uid, provider: "password", loginId: u.loginId });
-      return json(200, { token });
+      const token = signToken({ loginId: u.loginId, uid: u.loginId });
+      return ok({ token });
     }
 
-
-    // ===== AUTH: Admin login (email + ADMIN_PASSWORD) =====
-    if (path === "/auth/adminLogin" && method === "POST") {
-      const { email, password } = JSON.parse(event.body || "{}");
-      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
-      const adminPass = String(process.env.ADMIN_PASSWORD || "");
-      if (!adminPass) return json(500, { error: "Missing ADMIN_PASSWORD env" });
-
-      const em = String(email || "").toLowerCase().trim();
-      if (em !== adminEmail) return json(403, { error: "Admin email noto‘g‘ri" });
-      if (String(password || "") !== adminPass) return json(401, { error: "Admin parol noto‘g‘ri" });
-
-      // Ensure admin user doc exists
-      const uid = "admin_" + adminEmail.replace(/[^a-z0-9]/g, "_");
-      const ref = usersCol.doc(uid);
-      const snap = await ref.get();
-      if (!snap.exists) {
-        await ref.set({
-          uid,
-          provider: "admin",
-          loginId: adminEmail,
-          email: adminEmail,
-          photoURL: "",
-          points: 0,
-          profile: { firstName:"Sohibjon", lastName:"", birthdate:"", region:"", district:"" },
-          createdAt: nowISO(),
-          updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {})
-        });
-      } else {
-        await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
-      }
-
-      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
-      return json(200, { token });
+    if(path === "/auth/me" && method === "GET"){
+      const auth = requireAuth(event);
+      const u = await userByLoginId(auth.loginId);
+      if(!u) return bad("User topilmadi", 404);
+      const { passHash, ...safe } = u;
+      return ok({ user: safe });
     }
 
-
-
-    // ===== AUTH: Admin via Firebase Google ID token =====
-    if (path === "/auth/adminGoogle" && method === "POST") {
-      const { idToken } = JSON.parse(event.body || "{}");
-      if (!idToken) return json(400, { error: "Missing idToken" });
-
-      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
-
-      // Verify Firebase ID token using Admin SDK
-      const decoded = await admin.auth().verifyIdToken(idToken);
-      const email = String(decoded.email || "").toLowerCase();
-      if (email !== adminEmail) return json(403, { error: "Admin only" });
-
-      const uid = decoded.uid || ("admin_" + adminEmail.replace(/[^a-z0-9]/g, "_"));
-      const ref = usersCol.doc(uid);
-      const snap = await ref.get();
-      if (!snap.exists) {
-        await ref.set({
-          uid,
-          provider: "admin",
-          loginId: adminEmail,
-          email: adminEmail,
-          photoURL: decoded.picture || "",
-          points: 0,
-          profile: { firstName: decoded.name || "Admin", lastName:"", birthdate:"", region:"", district:"" },
-          createdAt: nowISO(),
-          updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {})
-        });
-      } else {
-        await ref.set({ provider:"admin", email: adminEmail, photoURL: decoded.picture || "", updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
-      }
-
-      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
-      return json(200, { token });
-    }
-
-
-    // ===== ME =====
-    if (path === "/me" && method === "GET") {
-      const sess = await authRequired(event);
-      const snap = await usersCol.doc(sess.uid).get();
-      if (!snap.exists) return json(404, { error: "User not found" });
-      const u = snap.data();
-      delete u.passHash;
-      return json(200, u);
-    }
-
-    // ===== Update profile (+ optional password change) =====
-    if (path === "/me/profile" && method === "PUT") {
-      const sess = await authRequired(event);
+    if(path === "/profile/update" && method === "POST"){
+      const auth = requireAuth(event);
       const body = JSON.parse(event.body || "{}");
-      const profile = body.profile || {};
-      const newPassword = (body.newPassword !== undefined && body.newPassword !== null) ? String(body.newPassword) : "";
+      const { firstName, lastName, dob, region, district, avatar } = body;
 
-      const ref = usersCol.doc(sess.uid);
-      const snap = await ref.get();
-      if (!snap.exists) return json(404, { error: "User not found" });
-      const u = snap.data();
+      if(!firstName) return bad("Ism majburiy.");
+      if(!lastName) return bad("Familiya majburiy.");
+      if(!isValidDOB(dob)) return bad("Tug‘ilgan sana DD:MM:YYYY bo‘lsin.");
+      if(!region) return bad("Viloyat majburiy.");
+      if(!district) return bad("Tuman majburiy.");
+      if(!avatar) return bad("Avatar majburiy.");
 
-      const upd = {
-        profile: {
-          firstName: (profile.firstName || "").trim(),
-          lastName: (profile.lastName || "").trim(),
-          birthdate: profile.birthdate || "",
-          region: profile.region || "",
-          district: (profile.district || "").trim(),
-          avatarPath: profile.avatarPath ? String(profile.avatarPath) : (u.profile && u.profile.avatarPath ? u.profile.avatarPath : "")
-        },
-        updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {})
-      };
+      const ref = db().collection("users").doc(auth.loginId);
+      await ref.set({
+        firstName: String(firstName).trim(),
+        lastName: String(lastName).trim(),
+        dob: String(dob).trim(),
+        region: String(region).trim(),
+        district: String(district).trim(),
+        avatar: String(avatar).trim(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge:true });
 
-      if (u.provider === "password") {
-        // ✅ Password change is OPTIONAL: only when user provided newPassword
-        if (newPassword.length > 0) {
-          if (newPassword.length < 6) return json(400, { error: "New password min 6" });
-          upd.passHash = await bcrypt.hash(newPassword, 10);
-          upd.passwordUpdatedAt = nowISO();
-        }
-      }
-
-      await ref.set(upd, { merge: true });
-      const out = (await ref.get()).data();
-      delete out.passHash;
-      return json(200, out);
+      return ok({ ok:true });
     }
 
-    // ===== Avatar: signed upload URL =====
-    if (path === "/me/avatarUploadUrl" && method === "POST") {
-      const sess = await authRequired(event);
-      const body = JSON.parse(event.body || "{}");
-      const ext = safeExt(body.ext || "png");
-      const contentType = body.contentType || contentTypeForExt(ext);
-
-      const objectPath = `avatars/${sess.uid}.${ext}`;
-      const file = getBucket().file(objectPath);
-
-      const [uploadUrl] = await file.getSignedUrl({
-        version: "v4",
-        action: "write",
-        expires: Date.now() + 10 * 60 * 1000, // 10 min
-        contentType
+    if(path === "/leaderboard" && method === "GET"){
+      requireAuth(event);
+      const snap = await db().collection("users").orderBy("points","desc").limit(30).get();
+      const rows = snap.docs.map(d=>{
+        const x = d.data();
+        return {
+          loginId: x.loginId,
+          name: `${x.firstName || ""} ${x.lastName || ""}`.trim() || ("ID " + x.loginId),
+          points: x.points || 0
+        };
       });
-
-      return json(200, { uploadUrl, path: objectPath, contentType });
+      return ok({ rows });
     }
 
-    // ===== Avatar: finalize => set download token + store photoURL in user doc =====
-    if (path === "/me/avatarFinalize" && method === "POST") {
-      const sess = await authRequired(event);
-      const body = JSON.parse(event.body || "{}");
-      const objectPath = body.path;
-      if (!objectPath || !objectPath.startsWith("avatars/")) return json(400, { error: "Invalid path" });
-
-      const file = getBucket().file(objectPath);
-
-      // Ensure file exists
-      const [exists] = await file.exists();
-      if (!exists) return json(404, { error: "File not found" });
-
-      // Create stable download token (Firebase style)
-      const token = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex");
-
-      await file.setMetadata({
-        metadata: { firebaseStorageDownloadTokens: token },
-        cacheControl: "public, max-age=31536000"
-      });
-
-      const bucket = getBucket();
-      const bucketName = bucket.name;
-      const encodedPath = encodeURIComponent(objectPath);
-      const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
-
-      await usersCol.doc(sess.uid).set({ photoURL: downloadURL, updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
-
-      const outSnap = await usersCol.doc(sess.uid).get();
-      const out = outSnap.data();
-      delete out.passHash;
-      return json(200, out);
-    }
-
-    // ===== MENU (for logged-in) =====
-    if (path === "/menu" && method === "GET") {
-      await authRequired(event);
-      const snap = await menuDoc.get();
-      if (!snap.exists) {
-        // Default demo menu (static pages in /pages). Admin can overwrite from admin panel.
-        const items = [
-          { id: "home", title: "Bosh sahifa", mode: "custom", htmlUrl: "pages/home.html", cssUrl: "pages/home.css", jsUrl: "pages/home.js" },
-          { id: "courses", title: "Kurslar", mode: "custom", htmlUrl: "pages/courses.html", cssUrl: "pages/courses.css", jsUrl: "pages/courses.js" },
-          { id: "tests", title: "Testlar", mode: "custom", htmlUrl: "pages/tests.html", cssUrl: "pages/tests.css", jsUrl: "pages/tests.js" },
-          { id: "leaderboard", title: "Reyting", mode: "custom", htmlUrl: "pages/leaderboard.html", cssUrl: "pages/leaderboard.css", jsUrl: "pages/leaderboard.js" },
-        ];
-        await menuDoc.set({ items, updatedAt: nowISO() }, { merge: true });
-        return json(200, { items });
-      }
-      const data = snap.data() || { items: [] };
-      return json(200, { items: data.items || [] });
-    }
-
-    // ===== ADMIN: set all menu items (keeps order) =====
-    if (path === "/admin/menuSetAll" && method === "POST") {
-      await adminRequired(event);
-      const body = JSON.parse(event.body || "{}");
-      const items = Array.isArray(body.items) ? body.items : [];
-      // basic sanitize
-      const cleaned = items.map(it => ({
-        id: String(it.id || "").trim(),
-        title: String(it.title || "").trim(),
-        mode: it.mode === "custom" ? "custom" : "builder",
-        baseHref: String(it.baseHref || "").trim(),
-        builder: it.mode === "builder" ? (it.builder || {banners:[],cards:[]}) : undefined,
-        htmlUrl: it.mode === "custom" ? String(it.htmlUrl || "").trim() : undefined,
-        cssUrl: it.mode === "custom" ? String(it.cssUrl || "").trim() : undefined,
-        jsUrl: it.mode === "custom" ? String(it.jsUrl || "").trim() : undefined,
-        inlineHtml: it.mode === "custom" ? (it.inlineHtml || "") : undefined,
-        inlineCss: it.mode === "custom" ? (it.inlineCss || "") : undefined,
-        inlineJs: it.mode === "custom" ? (it.inlineJs || "") : undefined,
-      })).filter(it => it.id && it.title);
-
-      await menuDoc.set({ items: cleaned, updatedAt: nowISO(),
-        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
-      return json(200, { ok: true });
-    }
-
-    return json(404, { error: "Not found", path, method });
-  } catch (e) {
-    const msg = e && e.message ? e.message : String(e);
-    const code = /Unauthorized/i.test(msg) ? 401 : (/Admin only/i.test(msg) ? 403 : 500);
-    return json(code, { error: msg });
+    return bad("Not found", 404);
+  }catch(e){
+    return bad(e.message || "Server xato", 500);
   }
 };
