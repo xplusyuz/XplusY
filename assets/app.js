@@ -195,9 +195,8 @@ function injectChrome(){
               <div class="k">Parol</div>
               <div class="v" id="pPass">••••••</div>
             </div>
-            <button class="eye" id="togglePass" title="Ko‘rsatish">👁</button>
-          </div>
-          <div class="mini">Eslatma: parolni ko‘rsatish xavfsizlik uchun keyin “tasdiqlash” bilan qilinadi. Hozir demo.</div>
+                      </div>
+          <div class="mini">Parol xavfsizlik uchun yashirilgan (ko‘rsatish funksiyasi o‘chirildi).</div>
         </div>
 
         <div class="row">
@@ -366,21 +365,6 @@ function wireUI(){
       setStatus(statusEl,`✅ ID berildi: ${out.loginId} (eslab qoling!)`,true);
       setTimeout(()=>hideOverlay("#authOverlay"),900);
     }catch(e){ setStatus(statusEl,"❌ "+e.message,false); }
-  });
-
-  let passShown=false;
-  document.getElementById("togglePass")?.addEventListener("click",async()=>{
-    if(!session) return;
-    const el=document.getElementById("pPass");
-    if(!passShown){
-      try{
-        const out=await api("/profile/password",{method:"GET",auth:true});
-        el.textContent=out.password||"—";
-        passShown=true;
-      }catch(e){ el.textContent="••••••"; passShown=false; alert("Xato: "+e.message); }
-    }else{
-      el.textContent="••••••"; passShown=false;
-    }
   });
 }
 

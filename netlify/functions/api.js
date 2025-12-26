@@ -7,7 +7,6 @@ const crypto = require("crypto");
 // Env:
 // FIREBASE_SERVICE_ACCOUNT_BASE64  (service account JSON base64)
 // JWT_SECRET
-// PASS_ENC_KEY_BASE64  (32-byte key base64 for AES-256-GCM)  <-- for password reveal feature
 
 function initAdmin(){
   if(admin.apps.length) return;
@@ -90,33 +89,7 @@ function signToken(payload){
   return jwt.sign(payload, secret, { expiresIn:"60d" });
 }
 
-// Password reveal feature: encrypt password with AES-256-GCM (server key)
-function encKey(){
-  const b64 = process.env.PASS_ENC_KEY_BASE64;
-  if(!b64) throw new Error("Missing PASS_ENC_KEY_BASE64 env");
-  const key = Buffer.from(b64, "base64");
-  if(key.length !== 32) throw new Error("PASS_ENC_KEY_BASE64 must be 32 bytes base64");
-  return key;
-}
-function encryptPassword(plain){
-  const iv = crypto.randomBytes(12);
-  const key = encKey();
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const enc = Buffer.concat([cipher.update(String(plain), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, enc]).toString("base64"); // iv(12)+tag(16)+ciphertext
-}
-function decryptPassword(b64){
-  const buf = Buffer.from(b64, "base64");
-  const iv = buf.subarray(0,12);
-  const tag = buf.subarray(12,28);
-  const enc = buf.subarray(28);
-  const key = encKey();
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
-  return dec.toString("utf8");
-}
+// Password reveal removed (no PASS_ENC_KEY_BASE64 required)
 
 async function getUser(loginId){
   const snap = await db().collection("users").doc(String(loginId)).get();
@@ -142,7 +115,6 @@ exports.handler = async (event) => {
 
       const loginId = await nextLoginId();
       const passHash = await bcrypt.hash(String(password), 10);
-      const passEnc  = encryptPassword(String(password));
 
       const doc = {
         loginId,
@@ -150,7 +122,6 @@ exports.handler = async (event) => {
         lastName: String(lastName).trim(),
         dob: String(dob).trim(),
         passHash,
-        passEnc,
         points: 0,
         balance: 0,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -195,18 +166,6 @@ exports.handler = async (event) => {
         createdAtText
       };
       return ok({ user: safe });
-    }
-
-    if(path === "/profile/password" && method === "GET"){
-      const a = requireAuth(event);
-      if(!a.ok) return err(a.status, a.error);
-
-      const u = await getUser(a.payload.loginId);
-      if(!u) return err(404, "User topilmadi.");
-      if(!u.passEnc) return err(400, "Password saqlanmagan.");
-
-      const plain = decryptPassword(u.passEnc);
-      return ok({ password: plain });
     }
 
     return err(404, "Not found");
