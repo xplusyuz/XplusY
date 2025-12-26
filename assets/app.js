@@ -2,6 +2,21 @@
 const $ = (s)=>document.querySelector(s);
 const $$ = (s)=>document.querySelectorAll(s);
 
+function formatUzDateTime(d){
+  const date = d.toLocaleDateString("uz-UZ", {
+    weekday:"long", year:"numeric", month:"long", day:"numeric"
+  });
+  const time = d.toLocaleTimeString("uz-UZ", { hour12:false });
+  return `${date} • ${time}`;
+}
+function startClock(){
+  const el = $("#todayLabel");
+  const tick = ()=>{ el.textContent = formatUzDateTime(new Date()); };
+  tick();
+  setInterval(tick, 1000);
+}
+
+
 const API_BASE = "/api";
 const TOKEN_KEY = "lm_token_v1";
 let session = null;
@@ -9,9 +24,7 @@ let regionsData = null;
 let answersMap = null;
 let currentQIndex = 1;
 
-$("#todayLabel").textContent = "Bugun: " + new Date().toLocaleDateString("uz-UZ", {
-  weekday:"long", year:"numeric", month:"long", day:"numeric"
-});
+
 
 function setStatus(el, msg, ok=true){
   el.className = "status show " + (ok ? "ok" : "bad");
@@ -438,6 +451,7 @@ async function loadLeaderboard(){
 
 /* INIT */
 (async function init(){
+  startClock();
   await loadRegions();
   fillRegionSelect($("#regionSel"), $("#districtSel"));
   fillRegionSelect($("#eRegionSel"), $("#eDistrictSel"));
@@ -465,4 +479,162 @@ async function loadLeaderboard(){
   }else{
     lock(true);
   }
+  startSeasonFx();
 })();
+
+
+/* ===============================
+   SEASON FX (Canvas, optimized)
+=============================== */
+function getSeason(date = new Date()){
+  const m = date.getMonth() + 1; // 1..12
+  if(m===12 || m===1 || m===2) return "winter";
+  if(m>=3 && m<=5) return "spring";
+  if(m>=6 && m<=8) return "summer";
+  return "autumn";
+}
+
+function startSeasonFx(){
+  const canvas = document.getElementById("seasonFx");
+  if(!canvas) return;
+
+  const ctx = canvas.getContext("2d", { alpha:true });
+  let W=0,H=0, DPR=1;
+  const particles = [];
+  let season = getSeason();
+  let lastT = performance.now();
+
+  const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(prefersReduced) return;
+
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W+"px";
+    canvas.style.height = H+"px";
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener("resize", resize, {passive:true});
+  resize();
+
+  function makeParticle(){
+    const s = season;
+    const base = {
+      x: Math.random()*W,
+      y: Math.random()*H,
+      vx: 0,
+      vy: 0,
+      r: 2,
+      rot: Math.random()*Math.PI*2,
+      vr: (Math.random()*2-1)*0.8,
+      a: 0.9,
+      t: Math.random()*1000
+    };
+
+    if(s==="winter"){
+      base.r = 1 + Math.random()*2.2;
+      base.vx = -0.2 + Math.random()*0.4;
+      base.vy = 0.6 + Math.random()*1.3;
+      base.a  = 0.55 + Math.random()*0.35;
+      base.kind = "snow";
+    }else if(s==="spring"){
+      base.r = 2.5 + Math.random()*3.5;
+      base.vx = -0.35 + Math.random()*0.7;
+      base.vy = 0.45 + Math.random()*1.0;
+      base.a  = 0.55 + Math.random()*0.35;
+      base.kind = "petal";
+      base.hue = 320 + Math.random()*40;
+    }else if(s==="summer"){
+      base.r = 1.2 + Math.random()*2.2;
+      base.vx = -0.15 + Math.random()*0.3;
+      base.vy = 0.15 + Math.random()*0.35;
+      base.a  = 0.25 + Math.random()*0.25;
+      base.kind = "spark";
+      base.hue = 45 + Math.random()*30;
+    }else{
+      base.r = 3 + Math.random()*4.5;
+      base.vx = -0.5 + Math.random()*0.9;
+      base.vy = 0.55 + Math.random()*1.2;
+      base.a  = 0.55 + Math.random()*0.35;
+      base.kind = "leaf";
+      base.hue = 18 + Math.random()*28;
+    }
+    return base;
+  }
+
+  function spawn(n){
+    particles.length = 0;
+    for(let i=0;i<n;i++) particles.push(makeParticle());
+  }
+
+  function ensureSeason(){
+    const nowSeason = getSeason();
+    if(nowSeason !== season){
+      season = nowSeason;
+      spawn((season==="summer") ? 40 : 70);
+    }
+  }
+
+  spawn((season==="summer") ? 40 : 70);
+
+  function step(t){
+    ensureSeason();
+    const dt = Math.min(33, t - lastT);
+    lastT = t;
+
+    ctx.clearRect(0,0,W,H);
+
+    const wind = Math.sin(t/2200) * 0.25;
+
+    for(const p of particles){
+      p.t += dt;
+      p.x += (p.vx + wind) * (dt/16);
+      p.y += p.vy * (dt/16);
+      p.rot += p.vr * (dt/1000);
+
+      if(p.y > H + 30){ p.y = -20; p.x = Math.random()*W; }
+      if(p.x < -40) p.x = W + 30;
+      if(p.x > W + 40) p.x = -30;
+
+      if(p.kind === "snow"){
+        ctx.globalAlpha = p.a;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255,255,255,1)";
+        ctx.fill();
+      } else if(p.kind === "petal"){
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = p.a;
+        ctx.fillStyle = `hsla(${p.hue}, 75%, 75%, 1)`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.r*1.2, p.r*0.7, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      } else if(p.kind === "leaf"){
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = p.a;
+        ctx.fillStyle = `hsla(${p.hue}, 78%, 55%, 1)`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.r*1.35, p.r*0.75, 0.6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      } else if(p.kind === "spark"){
+        ctx.globalAlpha = p.a * (0.35 + 0.65*Math.sin((p.t/500)+p.rot));
+        ctx.fillStyle = `hsla(${p.hue}, 95%, 60%, 1)`;
+        ctx.fillRect(p.x, p.y, p.r, p.r);
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(step);
+  }
+
+  requestAnimationFrame(step);
+}
