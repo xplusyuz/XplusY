@@ -15,3 +15,6 @@ Push qiling, Netlify o'zi build qiladi.
 
 ## Deploy (manual)
 ZIP’ni Netlify manual deployga tashlasangiz ham ishlaydi (lekin functions uchun baribir build ishlaydi).
+
+
+✅ Fix: Netlify Functions endi local `firebase-admin-key.json` talab qilmaydi. Faqat `FIREBASE_SERVICE_ACCOUNT_JSON` ishlaydi.

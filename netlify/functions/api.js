@@ -6,18 +6,14 @@ const jwt = require("jsonwebtoken");
 function initFirebaseAdmin() {
   if (admin.apps.length) return;
 
-  // Variant A (tavsiya): Netlify ENV orqali JSON string
-  // FIREBASE_SERVICE_ACCOUNT_JSON = {"type":"service_account",...}
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const svc = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    admin.initializeApp({ credential: admin.credential.cert(svc) });
-    return;
+  // Netlify’da faqat ENV orqali service account JSON ishlatiladi
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT_JSON topilmadi. Netlify Environment variables ga service account JSON ni qo‘ying."
+    );
   }
-
-  // Variant B: local dev uchun fayl (Netlify’da ishlatilmang)
-  // firebase-admin-key.json ni root’ga qo‘ying
-  // eslint-disable-next-line global-require
-  const svc = require("../../firebase-admin-key.json");
+  const svc = JSON.parse(raw);
   admin.initializeApp({ credential: admin.credential.cert(svc) });
 }
 
