@@ -1,42 +1,17 @@
-# Leader Platform (Netlify Functions + Firestore)
+# Leader Platform — Perfect Netlify Deploy Starter
 
-## 1) Netlify ENV (shart)
-Netlify → Site settings → Environment variables:
+## Nega bu "mukammal"?
+- Netlify GitHub deploy'da ham, manual deploy'da ham yiqilmaydi.
+- `netlify.toml` publish = `site` (hamma HTML/CSS/JS shu yerda).
+- `npm run build` doim OK (build shart emas, lekin Netlify build stage muammosiz o'tadi).
+- Functions `netlify/functions/` ichida, alohida `package.json` bilan.
 
-- JWT_SECRET = uzun random string (40+ belgili)
-- FIREBASE_SERVICE_ACCOUNT_JSON = Firebase service account JSON (to‘liq string)
+## Netlify ENV
+- JWT_SECRET
+- FIREBASE_SERVICE_ACCOUNT_JSON (service account JSON string)
 
-Firebase Console → Project settings → Service accounts → Generate new private key.
+## Deploy (GitHub)
+Push qiling, Netlify o'zi build qiladi.
 
-## 2) Firestore
-Collections:
-- meta/counters  -> { nextUserId: 1000 }
-- users/{id}     -> user hujjatlari
-
-Tavsiya rules (client’dan yopiq):
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{doc=**} { allow read, write: if false; }
-  }
-}
-```
-API (Admin SDK) baribir ishlaydi.
-
-## 3) Ishga tushirish (lokal)
-1) `npm i`
-2) local dev uchun xohlasangiz rootga `firebase-admin-key.json` qo‘ying (Netlify’da kerak emas).
-3) Netlify CLI bilan run qiling yoki Netlify deploy.
-
-## 4) Endpoints
-- POST /.netlify/functions/api/auth/register
-- POST /.netlify/functions/api/auth/login
-- GET  /.netlify/functions/api/auth/me
-
-## Eslatma
-Parol hech qachon qaytarilmaydi. Profil kartadagi "ko‘z" UX uchun. Keyin "parolni almashtirish" qo‘shamiz.
-
-
-## Netlify build
-Bu repo statik HTML. Netlify build fail bo'lmasligi uchun `npm run build` faqat echo qiladi.
+## Deploy (manual)
+ZIP’ni Netlify manual deployga tashlasangiz ham ishlaydi (lekin functions uchun baribir build ishlaydi).
