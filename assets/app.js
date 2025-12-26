@@ -15,18 +15,35 @@ async function api(path,{method="GET",body=null,auth=true}={}){
     const token=loadToken();
     if(token) headers["Authorization"]="Bearer "+token;
   }
-  const res=await fetch(API_BASE+path,{method,headers,body:body?JSON.stringify(body):null});
+  const res = await fetch(API_BASE+path,{
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null
+  });
 
-  // Netlify error pages can be HTML (not JSON). Read text first, then parse safely.
-  const rawText = await res.text();
+  // Netlify function errors sometimes return HTML/text (not JSON). Read text first.
+  const raw = await res.text();
   let data = {};
-  try{ data = rawText ? JSON.parse(rawText) : {}; }catch{ data = { _raw: rawText }; }
+  if(raw){
+    try{ data = JSON.parse(raw); }
+    catch{
+      data = { _raw: raw };
+    }
+  }
 
   if(!res.ok){
-    const msg = (data && data.error) ? data.error : (rawText?.slice(0,180) || `HTTP ${res.status}`);
-    const err=new Error(msg);
-    err.status=res.status;
+    const msg =
+      (data && data.error) ? data.error :
+      (data && data._raw) ? (String(data._raw).replace(/\s+/g,' ').trim().slice(0,160)) :
+      `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.raw = raw;
     throw err;
+  }
+
+  if(data && data._raw){
+    return { raw };
   }
   return data;
 }
@@ -112,7 +129,7 @@ function injectChrome(){
       <div class="mbody">
         <div id="authStatus" class="status"></div>
 
-        <div class="card" style="padding:12px;border-radius:22px">
+        <div class="card" id="loginBox" style="padding:12px;border-radius:22px">
           <div style="font-weight:1000;margin-bottom:8px">Kirish</div>
           <div class="two">
             <input id="loginId" class="input" placeholder="ID (1000...)" />
@@ -255,6 +272,16 @@ function wireUI(){
   const profileOverlay=document.getElementById("profileOverlay");
   const statusEl=document.getElementById("authStatus");
   const signupBox=document.getElementById("signupBox");
+  const loginBox=document.getElementById("loginBox");
+
+  function setAuthMode(mode){
+    const isSignup = mode === "signup";
+    if(loginBox) loginBox.style.display = isSignup ? "none" : "block";
+    if(signupBox) signupBox.style.display = isSignup ? "block" : "none";
+    clearStatus(statusEl);
+  }
+  setAuthMode("login");
+
   // DOB date-picker -> hidden DD:MM:YYYY
   const dobPicker = document.getElementById("suDobPicker");
   const dobHidden = document.getElementById("suDob");
@@ -266,8 +293,8 @@ function wireUI(){
 
 
 
-  document.getElementById("loginBtn")?.addEventListener("click",()=>showOverlay("#authOverlay"));
-  document.getElementById("closeAuth")?.addEventListener("click",()=>hideOverlay("#authOverlay"));
+  document.getElementById("loginBtn")?.addEventListener("click",()=>{ setAuthMode("login"); showOverlay("#authOverlay"); });
+  document.getElementById("closeAuth")?.addEventListener("click",()=>{ setAuthMode("login"); hideOverlay("#authOverlay"); });
   authOverlay?.addEventListener("click",(e)=>{ if(e.target===authOverlay) hideOverlay("#authOverlay"); });
 
   document.getElementById("profileBtn")?.addEventListener("click",()=>{ fillProfile(); showOverlay("#profileOverlay"); });
@@ -279,8 +306,8 @@ function wireUI(){
   document.getElementById("logoutBtn")?.addEventListener("click",logout);
   document.getElementById("logoutBtn2")?.addEventListener("click",logout);
 
-  document.getElementById("openSignup")?.addEventListener("click",()=>{ signupBox.style.display="block"; });
-  document.getElementById("closeSignup")?.addEventListener("click",()=>{ signupBox.style.display="none"; });
+  document.getElementById("openSignup")?.addEventListener("click",()=>{ setAuthMode("signup"); });
+  document.getElementById("closeSignup")?.addEventListener("click",()=>{ setAuthMode("login"); });
 
   document.getElementById("doLoginBtn")?.addEventListener("click",async()=>{
     clearStatus(statusEl);
@@ -295,6 +322,23 @@ function wireUI(){
     }catch(e){ setStatus(statusEl,"❌ "+e.message,false); }
   });
 
+  const suPass = document.getElementById("suPass");
+  const suPass2 = document.getElementById("suPass2");
+  const doSignupBtn = document.getElementById("doSignupBtn");
+
+  function syncSignupState(){
+    if(!doSignupBtn) return;
+    const p1 = suPass?.value || "";
+    const p2 = suPass2?.value || "";
+    const okLen = p1.length >= 6;
+    const okEq  = p1 && p2 && (p1 === p2);
+    doSignupBtn.disabled = !(okLen && okEq);
+    doSignupBtn.style.opacity = doSignupBtn.disabled ? ".55" : "1";
+  }
+  suPass?.addEventListener("input", syncSignupState);
+  suPass2?.addEventListener("input", syncSignupState);
+  syncSignupState();
+
   document.getElementById("doSignupBtn")?.addEventListener("click",async()=>{
     clearStatus(statusEl);
     try{
@@ -302,13 +346,19 @@ function wireUI(){
       const password2=document.getElementById("suPass2").value;
       const firstName=document.getElementById("suFirst").value.trim();
       const lastName=document.getElementById("suLast").value.trim();
-      const dob=document.getElementById("suDob").value.trim();
+      const dobRaw=document.getElementById("suDob").value.trim(); // YYYY-MM-DD
+      const dob = (()=> {
+        if(!dobRaw) return "";
+        const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(dobRaw);
+        if(!m) return dobRaw;
+        return `${m[3]}:${m[2]}:${m[1]}`;
+      })();
 
       if(!password||password.length<6) throw new Error("Parol kamida 6 bo‘lsin.");
       if(password!==password2) throw new Error("Parol takror mos emas.");
       if(!firstName) throw new Error("Ism majburiy.");
       if(!lastName) throw new Error("Familiya majburiy.");
-      if(!isValidDOB(dob)) throw new Error("Tug‘ilgan sana DD:MM:YYYY bo‘lsin.");
+      if(!isValidDOB(dob)) throw new Error("Tug‘ilgan sana noto‘g‘ri (kalendar orqali tanlang).");
 
       const out=await api("/auth/signup",{method:"POST",auth:false,body:{password,firstName,lastName,dob}});
       saveToken(out.token);
