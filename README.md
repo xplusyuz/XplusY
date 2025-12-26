@@ -36,3 +36,7 @@ API (Admin SDK) baribir ishlaydi.
 
 ## Eslatma
 Parol hech qachon qaytarilmaydi. Profil kartadagi "ko‘z" UX uchun. Keyin "parolni almashtirish" qo‘shamiz.
+
+
+## Netlify build
+Bu repo statik HTML. Netlify build fail bo'lmasligi uchun `npm run build` faqat echo qiladi.
