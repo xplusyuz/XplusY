@@ -16,10 +16,17 @@ async function api(path,{method="GET",body=null,auth=true}={}){
     if(token) headers["Authorization"]="Bearer "+token;
   }
   const res=await fetch(API_BASE+path,{method,headers,body:body?JSON.stringify(body):null});
-  const data=await res.json().catch(()=>({}));
+
+  // Netlify error pages can be HTML (not JSON). Read text first, then parse safely.
+  const rawText = await res.text();
+  let data = {};
+  try{ data = rawText ? JSON.parse(rawText) : {}; }catch{ data = { _raw: rawText }; }
+
   if(!res.ok){
-    const msg=data?.error||`HTTP ${res.status}`;
-    const err=new Error(msg); err.status=res.status; throw err;
+    const msg = (data && data.error) ? data.error : (rawText?.slice(0,180) || `HTTP ${res.status}`);
+    const err=new Error(msg);
+    err.status=res.status;
+    throw err;
   }
   return data;
 }
@@ -127,7 +134,9 @@ function injectChrome(){
             <input id="suFirst" class="input" placeholder="Ism" />
             <input id="suLast" class="input" placeholder="Familiya" />
           </div>
-          <input id="suDob" class="input" style="margin-top:10px" placeholder="Tug‘ilgan sana (DD:MM:YYYY)" />
+          <input id="suDobPicker" class="input" style="margin-top:10px" type="date" />
+          <input id="suDob" type="hidden" />
+          <div class="mini" style="margin-top:6px">Tug‘ilgan sana avtomatik DD:MM:YYYY formatga o‘tkaziladi.</div>
           <div class="row" style="margin-top:10px">
             <button class="btn btn-primary" id="doSignupBtn">ID berish</button>
             <button class="btn btn-ghost" id="closeSignup">Bekor</button>
@@ -218,6 +227,15 @@ function isValidDOB(s){
   const dim=new Date(yy,mm,0).getDate();
   return dd>=1&&dd<=dim;
 }
+function dobFromISO(iso){
+  // iso: YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||"").trim());
+  if(!m) return "";
+  const yyyy=m[1], mm=m[2], dd=m[3];
+  return `${dd}:${mm}:${yyyy}`;
+}
+
+
 
 function fillProfile(){
   if(!session) return;
@@ -237,6 +255,16 @@ function wireUI(){
   const profileOverlay=document.getElementById("profileOverlay");
   const statusEl=document.getElementById("authStatus");
   const signupBox=document.getElementById("signupBox");
+  // DOB date-picker -> hidden DD:MM:YYYY
+  const dobPicker = document.getElementById("suDobPicker");
+  const dobHidden = document.getElementById("suDob");
+  if(dobPicker && dobHidden){
+    dobPicker.addEventListener("change", ()=>{
+      dobHidden.value = dobFromISO(dobPicker.value);
+    });
+  }
+
+
 
   document.getElementById("loginBtn")?.addEventListener("click",()=>showOverlay("#authOverlay"));
   document.getElementById("closeAuth")?.addEventListener("click",()=>hideOverlay("#authOverlay"));
