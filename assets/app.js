@@ -428,8 +428,26 @@ $("#nextQuestion").addEventListener("click", async ()=>{
 });
 $("#showRating").addEventListener("click", ()=>{ loadLeaderboard().catch(()=>{}); });
 
+let __lbInFlight = false;
 async function loadLeaderboard(){
-  const out = await api("/leaderboard", {method:"GET", auth:true});
+  // Login bo‘lmasa serverga urmaymiz (aks holda 401/500 spam bo‘ladi)
+  if(!session?.user){
+    lock(false);
+    showOverlay("#authOverlay");
+    return;
+  }
+  if(__lbInFlight) return;
+  __lbInFlight = true;
+  let out;
+  try{
+    out = await api("/leaderboard", {method:"GET", auth:true});
+  }catch(err){
+    // UI’da sokin ko‘rsatamiz
+    alert("Reytingni yuklab bo‘lmadi: " + (err?.message || "xato"));
+    throw err;
+  }finally{
+    __lbInFlight = false;
+  }
   const rows = out.rows || [];
   const body = $("#ratingBody");
   body.innerHTML = "";

@@ -41,10 +41,24 @@ function getToken(event){
 }
 function requireAuth(event){
   const token = getToken(event);
-  if(!token) throw new Error("Auth token yo‘q");
+  if(!token){
+    const err = new Error("Auth token yo‘q");
+    err.statusCode = 401;
+    throw err;
+  }
   const secret = process.env.JWT_SECRET;
-  if(!secret) throw new Error("Missing JWT_SECRET env");
-  return jwt.verify(token, secret);
+  if(!secret){
+    const err = new Error("Missing JWT_SECRET env");
+    err.statusCode = 500;
+    throw err;
+  }
+  try{
+    return jwt.verify(token, secret);
+  }catch(e){
+    const err = new Error("Token noto‘g‘ri yoki muddati tugagan");
+    err.statusCode = 401;
+    throw err;
+  }
 }
 function isValidDOB(dob){
   const m = /^(\d{2}):(\d{2}):(\d{4})$/.exec(String(dob||"").trim());
@@ -185,6 +199,7 @@ exports.handler = async (event) => {
 
     return bad("Not found", 404);
   }catch(e){
-    return bad(e.message || "Server xato", 500);
+    const code = (typeof e?.statusCode === "number") ? e.statusCode : 500;
+    return bad(e.message || "Server xato", code);
   }
 };
