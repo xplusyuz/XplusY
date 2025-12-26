@@ -1,15 +1,15 @@
 // netlify/functions/api.js
-const admin = require("firebase-admin");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 
-// Env:
-// FIREBASE_SERVICE_ACCOUNT_BASE64  (service account JSON base64)
-// JWT_SECRET
-// PASS_ENC_KEY_BASE64  (32-byte key base64 for AES-256-GCM)  <-- for password reveal feature
+function safeRequire(name){
+  try{ return { mod: require(name) }; }
+  catch(e){ return { error: `Missing dependency: ${name}. Netlify build did not install node_modules? (${e.message})` }; }
+}
 
 function initAdmin(){
+
+  const r = safeRequire("firebase-admin");
+  if(r.error) throw new Error(r.error);
+  const admin = r.mod;
   if(admin.apps.length) return;
 
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
@@ -17,7 +17,14 @@ function initAdmin(){
   const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
   admin.initializeApp({ credential: admin.credential.cert(json) });
 }
-function db(){ initAdmin(); return admin.firestore(); }
+function db(){
+  // firebase-admin is required lazily inside initAdmin, but we need the module here too
+  const r = safeRequire("firebase-admin");
+  if(r.error) throw new Error(r.error);
+  const admin = r.mod;
+  initAdmin();
+  return admin.firestore();
+}
 
 function json(statusCode, body){
   return {
@@ -128,8 +135,28 @@ exports.handler = async (event) => {
   try{
     if(event.httpMethod === "OPTIONS") return ok({});
 
+    // Lightweight diagnostics endpoint (works even if firebase deps/env are missing)
+    if(parsePath(event) === "/diag" && event.httpMethod === "GET"){
+      const missing = [];
+      ["FIREBASE_SERVICE_ACCOUNT_BASE64","JWT_SECRET","PASS_ENC_KEY_BASE64"].forEach(k=>{
+        if(!process.env[k]) missing.push(k);
+      });
+      return ok({
+        ok:true,
+        missing_env: missing,
+        note: "If missing_env is empty but you still get 500, check Netlify build logs for missing node_modules."
+      });
+    }
+
+
     const path = parsePath(event);
     const method = event.httpMethod;
+
+    const rb = safeRequire("bcryptjs"); if(rb.error) throw new Error(rb.error); const bcrypt = rb.mod;
+    const rj = safeRequire("jsonwebtoken"); if(rj.error) throw new Error(rj.error); const jwt = rj.mod;
+    const rc = safeRequire("crypto"); if(rc.error) throw new Error(rc.error); const crypto = rc.mod;
+    // firebase-admin module (for timestamps) loaded lazily:
+    const ra = safeRequire("firebase-admin"); if(ra.error) throw new Error(ra.error); const admin = ra.mod;
 
     if(path === "/auth/signup" && method === "POST"){
       const body = JSON.parse(event.body || "{}");
