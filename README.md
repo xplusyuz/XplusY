@@ -1,13 +1,38 @@
-# LeaderMath demo (Netlify + Firebase Admin)
+# Leader Platform (Netlify Functions + Firestore)
 
-## 1) Local test (frontend only)
-- Open index.html with a static server (VSCode Live Server recommended).
-- API calls require Netlify functions, so login/signup works only after deploying / running netlify dev.
+## 1) Netlify ENV (shart)
+Netlify → Site settings → Environment variables:
 
-## 2) Netlify deploy
-- Set environment variables:
-  - JWT_SECRET
-  - FIREBASE_SERVICE_ACCOUNT_BASE64 (base64 of serviceAccount.json)
-- Firestore collections:
-  - users (doc id = loginId)
-  - meta/counters (doc id = 'counters' with field nextLoginId number)
+- JWT_SECRET = uzun random string (40+ belgili)
+- FIREBASE_SERVICE_ACCOUNT_JSON = Firebase service account JSON (to‘liq string)
+
+Firebase Console → Project settings → Service accounts → Generate new private key.
+
+## 2) Firestore
+Collections:
+- meta/counters  -> { nextUserId: 1000 }
+- users/{id}     -> user hujjatlari
+
+Tavsiya rules (client’dan yopiq):
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{doc=**} { allow read, write: if false; }
+  }
+}
+```
+API (Admin SDK) baribir ishlaydi.
+
+## 3) Ishga tushirish (lokal)
+1) `npm i`
+2) local dev uchun xohlasangiz rootga `firebase-admin-key.json` qo‘ying (Netlify’da kerak emas).
+3) Netlify CLI bilan run qiling yoki Netlify deploy.
+
+## 4) Endpoints
+- POST /.netlify/functions/api/auth/register
+- POST /.netlify/functions/api/auth/login
+- GET  /.netlify/functions/api/auth/me
+
+## Eslatma
+Parol hech qachon qaytarilmaydi. Profil kartadagi "ko‘z" UX uchun. Keyin "parolni almashtirish" qo‘shamiz.
