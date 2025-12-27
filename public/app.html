@@ -1,5 +1,3 @@
-[file name]: app.html
-[file content begin]
 <!doctype html>
 <html lang="uz">
 <head>
@@ -7,51 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>LeaderMath.UZ — Ilova</title>
   <link rel="stylesheet" href="./assets/css/app.css"/>
-  <style>
-    /* Initial loading animation */
-    #appLoader {
-      position: fixed;
-      inset: 0;
-      background: linear-gradient(135deg, #dff3ff, #e8fff0);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      animation: loaderOut 0.8s ease-out 1s forwards;
-    }
-    
-    @keyframes loaderOut {
-      to { opacity: 0; visibility: hidden; }
-    }
-    
-    .loader-logo {
-      width: 80px;
-      height: 80px;
-      border-radius: 20px;
-      background: radial-gradient(circle at 35% 25%, #bfffd6, #54d18f 35%, #2E8B57 75%);
-      box-shadow: 0 15px 40px rgba(46,139,87,.3);
-      animation: loaderPulse 1s ease-in-out infinite;
-    }
-    
-    @keyframes loaderPulse {
-      0%, 100% { transform: scale(1) rotate(0deg); }
-      50% { transform: scale(1.1) rotate(180deg); }
-    }
-  </style>
 </head>
 <body>
-  <!-- Initial loader -->
-  <div id="appLoader">
-    <div class="loader-logo"></div>
-  </div>
-
 <div class="wrap"><div class="phone app-shell">
   <div class="glass header" style="border-radius:24px">
     <div class="brand">
       <img class="logo-img" src="/assets/img/logo.png" alt="LeaderMath logo">
       <div>
         <div class="brandTitle">LeaderMath.UZ</div>
-        <div class="date-box"><span class="date-icon">🕒</span><div class="brandSub" id="dt"></div></div>
+        <div class="brandSub" id="dt"></div>
       </div>
     </div>
     <button class="btn ghost" id="btnLogout">Chiqish</button>
@@ -68,7 +30,7 @@
   </div>
 
   <div class="glass card">
-    <div style="font-weight:950">Bo'limlar</div>
+    <div style="font-weight:950">Bo‘limlar</div>
     <div class="sectionGrid" style="margin-top:10px" id="sections"></div>
   </div>
 </div></div>
@@ -77,8 +39,8 @@
 <div id="onboardOverlay" style="position:fixed; inset:0; display:none; align-items:flex-end; justify-content:center; background:rgba(2,6,23,.45); backdrop-filter: blur(10px); z-index:60; padding:16px;">
   <div class="glass" style="width:min(560px, 100%); border-radius:28px; overflow:hidden;">
     <div style="padding:16px 16px 8px">
-      <div style="font-weight:900; font-size:18px">Profilni to'ldiring</div>
-      <div style="color:var(--muted); font-size:13px; margin-top:4px">Birinchi kirishda ism, familiya, tug'ilgan sana va yangi parolni kiritish majburiy.</div>
+      <div style="font-weight:900; font-size:18px">Profilni to‘ldiring</div>
+      <div style="color:var(--muted); font-size:13px; margin-top:4px">Birinchi kirishda ism, familiya, tug‘ilgan sana va yangi parolni kiritish majburiy.</div>
     </div>
     <div class="hr" style="margin:0"></div>
     <div style="padding:14px 16px 16px; display:grid; gap:10px">
@@ -99,29 +61,26 @@
 <div id="toast" class="toast"></div>
 
 <script type="module">
-  import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
-  import { SeasonalAnimations } from "./assets/js/seasons.js";
-  
-  const $=id=>document.getElementById(id);
-  const toast=(t)=>{ 
-    const el=$("toast"); 
-    el.textContent=t; 
-    el.style.display="block";
-    clearTimeout(window.__t); 
-    window.__t=setTimeout(()=>el.style.display="none", 2600); 
-  };
+  import { initSeasonalBackground } from "./assets/js/seasons.js";
+initSeasonalBackground();
+document.addEventListener('click',(e)=>{
+  const card=e.target.closest('.hero-card');
+  if(!card) return;
+  const go=card.getAttribute('data-go')||'';
+  (window.toast?toast:alert)(go.toUpperCase()+": Tez kunda ✅");
+});
 
-  // Initialize seasonal animations
-  let seasonalAnimations = null;
-  
+import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
+  const $=id=>document.getElementById(id);
+  const toast=(t)=>{ const el=$("toast"); el.textContent=t; el.style.display="block";
+    clearTimeout(window.__t); window.__t=setTimeout(()=>el.style.display="none", 2600); };
+
   function fmtUZ(){
     const d=new Date();
     return d.toLocaleDateString("uz-UZ",{weekday:"long", year:"numeric", month:"long", day:"numeric"})+
       " • " + d.toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"});
   }
-  
-  $("dt").textContent=fmtUZ(); 
-  setInterval(()=>$("dt").textContent=fmtUZ(), 1000*30);
+  $("dt").textContent=fmtUZ(); setInterval(()=>$("dt").textContent=fmtUZ(), 1000*30);
 
   function calcAgePrecise(birth){
     if(!birth) return "-";
@@ -135,49 +94,28 @@
     return `${y} yosh ${m} oy ${d} kun`;
   }
 
-  
-function renderSections(){
-  const list = [
-    {key:"online", title:"Online Challenge", desc:"Kunlik/haftalik jonli masalalar. Reyting va sovg'alar.", icon:"⚡", img:"/assets/img/online.jpg"},
-    {key:"exam", title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija va tarix.", icon:"📝", img:"/assets/img/exam.jpg"},
-    {key:"play", title:"PLAY", desc:"O'yin tarzida mantiqiy mashqlar va mini-challenge'lar.", icon:"🎮", img:"/assets/img/play.jpg"},
-  ];
-  const wrap = $("sections");
-  if(!wrap) return;
-  wrap.innerHTML = "";
-  const grid = document.createElement("div");
-  grid.className = "heroGrid";
-  list.forEach(s=>{
-    const card = document.createElement("div");
-    card.className = "heroCard";
-    card.setAttribute("data-go", s.key);
-    card.innerHTML = `
-      <div class="heroImg" style="background-image:url('${s.img}')"></div>
-      <div class="heroOverlay"></div>
-      <div class="heroBody">
-        <h3>${s.title}</h3>
-        <p>${s.desc}</p>
-        <div class="cta"><span>${s.icon}</span> Boshlash</div>
-      </div>
-    `;
-    card.addEventListener("click", ()=>{
-      toast(`${s.title}: Tez kunda ✅`);
+  function renderSections(){
+    const list = [
+      {title:"Online Challenge", desc:"Kunlik/haftalik jonli masalalar"},
+      {title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija"},
+      {title:"PLAY", desc:"O‘yin tarzida mantiqiy mashqlar"},
+    ];
+    const wrap=$("sections"); wrap.innerHTML="";
+    list.forEach(s=>{
+      const el=document.createElement("div");
+      el.className="glass sectionItem";
+      el.innerHTML = `<div class="title">${s.title}</div><div class="desc">${s.desc}</div>
+        <button class="btn primary" style="width:100%; margin-top:10px">Tez kunda</button>`;
+      el.querySelector("button").onclick=()=>toast("Tez kunda 🚀");
+      wrap.appendChild(el);
     });
-    grid.appendChild(card);
-  });
-  wrap.appendChild(grid);
-}
-
+  }
 
   async function runOnboarding(){
     return new Promise((resolve)=>{
       const overlay=$("onboardOverlay");
       const bSave=$("obSave");
       overlay.style.display="flex";
-      
-      // Add animation to overlay
-      overlay.style.animation = "fadeIn 0.3s ease-out";
-      
       bSave.onclick = async ()=>{
         bSave.disabled=true;
         try{
@@ -185,126 +123,45 @@ function renderSections(){
           const last=$("obLast").value.trim();
           const birth=$("obBirth").value.trim();
           const p1=$("obPass1").value, p2=$("obPass2").value;
-          
-          if(first.length<2) throw new Error("Ism kamida 2 ta harf bo'lsin");
-          if(last.length<2) throw new Error("Familiya kamida 2 ta harf bo'lsin");
-          if(!birth) throw new Error("Tug'ilgan sanani tanlang");
-          if(p1.length<6) throw new Error("Yangi parol kamida 6 belgidan iborat bo'lsin");
+          if(first.length<2) throw new Error("Ism kamida 2 ta harf bo‘lsin");
+          if(last.length<2) throw new Error("Familiya kamida 2 ta harf bo‘lsin");
+          if(!birth) throw new Error("Tug‘ilgan sanani tanlang");
+          if(p1.length<6) throw new Error("Yangi parol kamida 6 belgidan iborat bo‘lsin");
           if(p1!==p2) throw new Error("Parollar mos emas");
-          
           await changePassword(p1);
           await updateProfile(first,last,birth);
-          
-          // Success animation
-          bSave.textContent = "✅ Muvaffaqiyatli!";
-          bSave.style.background = "linear-gradient(135deg, #4CAF50, #2E8B57)";
-          
-          setTimeout(() => {
-            overlay.style.animation = "fadeOut 0.3s ease-out";
-            setTimeout(() => {
-              overlay.style.display = "none";
-              resolve(true);
-            }, 300);
-          }, 500);
-          
-        }catch(e){ 
-          toast(e.message||"Xatolik"); 
-          bSave.disabled=false;
-        }
+          overlay.style.display="none";
+          resolve(true);
+        }catch(e){ toast(e.message||"Xatolik"); }
+        finally{ bSave.disabled=false; }
       };
     });
   }
 
-  $("btnLogout").onclick=()=>{
-    // Logout animation
-    $("btnLogout").textContent = "Chiqilmoqda...";
-    $("btnLogout").disabled = true;
-    
-    setTimeout(() => {
-      logout(); 
-      location.href="./";
-    }, 800);
-  };
+  $("btnLogout").onclick=()=>{ logout(); location.href="./"; };
 
   async function boot(){
     try{
-      // Remove loader after 1s
-      setTimeout(() => {
-        document.getElementById('appLoader').style.animation = "loaderOut 0.5s ease-out forwards";
-      }, 1000);
-      
       const r = await me();
       const u = r.user;
-      
-      // Animate user info appearance
       $("userId").textContent = u.loginId;
       $("userName").textContent = u.name || u.loginId;
       $("userPoints").textContent = String(u.points ?? 0);
       $("userBalance").textContent = String(u.balance ?? 0);
       $("userAge").textContent = calcAgePrecise(u.birthdate);
-      
-      // Initialize seasonal animations
-      seasonalAnimations = new SeasonalAnimations();
-      
       renderSections();
-      
       if(!u.profileComplete){
         await runOnboarding();
         const r2 = await me();
         $("userName").textContent = r2.user.name || r2.user.loginId;
         $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
-        
-        // Animate profile update
-        $("userName").style.animation = "textPulse 0.5s ease-out";
-        setTimeout(() => {
-          $("userName").style.animation = "";
-        }, 500);
       }
-      
-      // Add seasonal particles
-      setTimeout(() => {
-        if(seasonalAnimations) {
-          seasonalAnimations.enhanceUIElements();
-        }
-      }, 1000);
-      
     }catch(e){
-      toast(e.message||"Kirish yo'q");
+      toast(e.message||"Kirish yo‘q");
       setTimeout(()=>location.href="./", 600);
     }
   }
-  
   boot();
-  
-  // Add CSS animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-    
-    @keyframes textPulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-    }
-    
-    .user-stats {
-      transition: all 0.3s ease;
-    }
-    
-    .user-stats:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 15px 40px rgba(0,0,0,0.1);
-    }
-  `;
-  document.head.appendChild(style);
 </script>
 </body>
 </html>
-[file content end]
