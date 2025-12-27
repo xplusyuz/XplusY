@@ -194,6 +194,10 @@ export async function handler(event){
 
       const user = {
         loginId,
+        firstName: "",
+        lastName: "",
+        birthdate: "",
+        profileComplete: false,
         salt,
         passwordHash,
         name: "",
@@ -237,7 +241,63 @@ export async function handler(event){
       return json(200, { user: pickPublic(user) });
     }
 
-    // ===== USER CONTENT =====
+    
+    // ===== AUTH UPDATE PROFILE (mandatory onboarding) =====
+    if(path === "/auth/update-profile" && method === "POST"){
+      const token = getBearer(event);
+      if(!token) return json(401, {error:"Token yo‘q"});
+      const payload = verifyToken(token);
+      const body = JSON.parse(event.body || "{}");
+
+      const firstName = String(body.firstName||"").trim();
+      const lastName  = String(body.lastName||"").trim();
+      const birthdate = String(body.birthdate||"").trim(); // YYYY-MM-DD
+
+      if(firstName.length < 2) return json(400, {error:"Ism kamida 2 ta harf bo‘lsin"});
+      if(lastName.length < 2) return json(400, {error:"Familiya kamida 2 ta harf bo‘lsin"});
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return json(400, {error:"Tug‘ilgan sana noto‘g‘ri"});
+
+      const users = await loadUsers();
+      const user = users[payload.sub];
+      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
+
+      user.firstName = firstName.slice(0,40);
+      user.lastName  = lastName.slice(0,60);
+      user.birthdate = birthdate;
+      user.name = (user.firstName + " " + user.lastName).trim();
+      user.profileComplete = true;
+
+      users[payload.sub] = user;
+      await saveUsers(users);
+      return json(200, { ok:true, user: pickPublic(user) });
+    }
+
+    // ===== AUTH CHANGE PASSWORD =====
+    if(path === "/auth/change-password" && method === "POST"){
+      const token = getBearer(event);
+      if(!token) return json(401, {error:"Token yo‘q"});
+      const payload = verifyToken(token);
+      const body = JSON.parse(event.body || "{}");
+
+      const newPassword = String(body.newPassword||"");
+      if(newPassword.length < 6) return json(400, {error:"Yangi parol kamida 6 belgidan iborat bo‘lsin"});
+
+      const users = await loadUsers();
+      const user = users[payload.sub];
+      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
+
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = scryptHash(newPassword, salt);
+      user.salt = salt;
+      user.passwordHash = passwordHash;
+
+      users[payload.sub] = user;
+      await saveUsers(users);
+
+      return json(200, { ok:true });
+    }
+
+// ===== USER CONTENT =====
     if(path === "/content" && method === "GET"){
       const token = getBearer(event);
       if(!token) return json(401, {error:"Token yo‘q"});
@@ -309,6 +369,10 @@ function pickPublic(u){
   return {
     loginId: u.loginId,
     name: u.name || "",
+    firstName: u.firstName || "",
+    lastName: u.lastName || "",
+    birthdate: u.birthdate || "",
+    profileComplete: !!u.profileComplete,
     points: u.points ?? 0,
     balance: u.balance ?? 0,
     createdAt: u.createdAt || ""

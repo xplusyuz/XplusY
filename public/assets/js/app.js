@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { getToken, clearSession, me } from "./auth.js";
+import { getToken, clearSession, me, updateProfile, changePassword } from "./auth.js";
 import { $, $all, toast, setText } from "./ui.js";
 import { startClock, startSeasonParticles } from "./season.js";
 
@@ -10,6 +10,54 @@ function guard(){
     return false;
   }
   return true;
+}
+
+async function runOnboarding(user){
+  return new Promise((resolve)=>{
+    const overlay = document.getElementById("onboardOverlay");
+    const bSave = document.getElementById("obSave");
+    const f = document.getElementById("obFirst");
+    const l = document.getElementById("obLast");
+    const bd = document.getElementById("obBirth");
+    const p1 = document.getElementById("obPass1");
+    const p2 = document.getElementById("obPass2");
+
+    // prefill if exists
+    f.value = user.firstName || "";
+    l.value = user.lastName || "";
+    bd.value = user.birthdate || "";
+
+    overlay.style.display = "flex";
+
+    const doSave = async ()=>{
+      bSave.disabled = true;
+      try{
+        const firstName = f.value.trim();
+        const lastName = l.value.trim();
+        const birthdate = bd.value.trim();
+        const pass1 = p1.value;
+        const pass2 = p2.value;
+
+        if(firstName.length < 2) throw new Error("Ism kamida 2 ta harf bo‘lsin");
+        if(lastName.length < 2) throw new Error("Familiya kamida 2 ta harf bo‘lsin");
+        if(!birthdate) throw new Error("Tug‘ilgan sanani tanlang");
+        if(pass1.length < 6) throw new Error("Yangi parol kamida 6 belgidan iborat bo‘lsin");
+        if(pass1 !== pass2) throw new Error("Parollar mos emas");
+
+        await changePassword({newPassword: pass1});
+        await updateProfile({firstName,lastName,birthdate});
+
+        overlay.style.display = "none";
+        resolve(true);
+      }catch(e){
+        toast(e.message || "Xatolik");
+      }finally{
+        bSave.disabled = false;
+      }
+    };
+
+    bSave.onclick = doSave;
+  });
 }
 
 let content = null;
@@ -125,6 +173,16 @@ async function load(){
     setText("userId", profile.user.loginId);
     setText("userPoints", String(profile.user.points ?? 0));
     setText("userBalance", String(profile.user.balance ?? 0));
+    // mandatory onboarding
+    if(!profile.user.profileComplete){
+      await runOnboarding(profile.user);
+      const refreshed = await me();
+      setText("userName", refreshed.user.name || refreshed.user.loginId);
+      setText("userId", refreshed.user.loginId);
+      setText("userPoints", String(refreshed.user.points ?? 0));
+      setText("userBalance", String(refreshed.user.balance ?? 0));
+    }
+
   }catch(e){
     clearSession();
     location.href="/index.html";

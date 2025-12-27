@@ -28,6 +28,16 @@ export async function login({loginId, password}){
   return d;
 }
 
+export async function updateProfile({firstName,lastName,birthdate}){
+  const token = getToken();
+  return await api("/auth/update-profile", {method:"POST", token, body:{firstName,lastName,birthdate}});
+}
+
+export async function changePassword({newPassword}){
+  const token = getToken();
+  return await api("/auth/change-password", {method:"POST", token, body:{newPassword}});
+}
+
 export async function me(){
   const token = getToken();
   if(!token) throw new Error("Token yo‘q");
