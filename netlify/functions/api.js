@@ -4,44 +4,7 @@ import { getStore } from "@netlify/blobs";
 const ADMIN_KEY = process.env.ADMIN_KEY || "LEADERMATH_SUPER_2026";
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
 
-// Storage: Netlify Blobs when available, otherwise in-memory fallback (works everywhere but not persistent).
-let store = null;
-const mem = new Map();
-
-async function getStoreSafe(){
-  if(store) return store;
-  try{
-    const siteID = process.env.NETLIFY_SITE_ID || process.env.BLOBS_SITE_ID || "";
-    const token = process.env.NETLIFY_API_TOKEN || process.env.BLOBS_TOKEN || "";
-    // If running outside Netlify Blobs environment, you can provide siteID+token manually.
-    const opts = (siteID && token) ? { siteID, token } : undefined;
-    store = getStore("leadermath", opts);
-    // Touch to ensure environment is configured (will throw MissingBlobsEnvironmentError otherwise)
-    await store.get("__ping__", { type: "text" }).catch(()=>null);
-    return store;
-  }catch(e){
-    store = null;
-    return null;
-  }
-}
-
-async function kvGet(key){
-  const s = await getStoreSafe();
-  if(s){
-    return await s.get(key, { type: "json" });
-  }
-  return mem.has(key) ? mem.get(key) : null;
-}
-
-async function kvSet(key, valueObj){
-  const s = await getStoreSafe();
-  if(s){
-    await s.set(key, JSON.stringify(valueObj), { contentType: "application/json" });
-    return;
-  }
-  mem.set(key, valueObj);
-}
-
+const store = getStore("leadermath");
 
 function json(statusCode, obj, headers={}){
   return {
@@ -102,15 +65,15 @@ function scryptHash(password, salt){
 }
 
 async function loadUsers(){
-  const raw = await kvGet("users");
+  const raw = await store.get("users", { type: "json" });
   return raw || {};
 }
 async function saveUsers(users){
-  await kvSet("users", users);
+  await store.set("users", JSON.stringify(users), { contentType: "application/json" });
 }
 
 async function loadContent(){
-  const raw = await kvGet("content");
+  const raw = await store.get("content", { type: "json" });
   if(raw) return raw;
   const seed = {
     banners: [
@@ -121,11 +84,11 @@ async function loadContent(){
       { id: crypto.randomUUID(), title:"Olimpiada", desc:"Agentlik/olimpiada tayyorlov", href:"", tag:"Olimpiada", active:true }
     ]
   };
-  await kvSet("content", seed);
+  await store.set("content", JSON.stringify(seed), { contentType:"application/json" });
   return seed;
 }
 async function saveContent(content){
-  await kvSet("content", content);
+  await store.set("content", JSON.stringify(content), { contentType:"application/json" });
 }
 
 function getBearer(event){
@@ -137,7 +100,12 @@ function getBearer(event){
 export async function handler(event){
   try{
     const method = event.httpMethod || "GET";
-    const qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
+    let qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
+    // fallback: if called as /.netlify/functions/api/<path>
+    if(!qpath){
+      const p = (event.path || "").replace(/^.*\/\.netlify\/functions\/api\/?/,"");
+      qpath = String(p||"").replace(/^\/+/,"");
+    }
     const path = "/" + qpath;
 
     // CORS (optional)
