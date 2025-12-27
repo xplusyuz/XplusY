@@ -6,9 +6,14 @@ export async function api(path, {method="GET", body=null, token=null} = {}){
   const headers = { "Content-Type":"application/json" };
   if(token) headers.Authorization = "Bearer " + token;
   const res = await fetch(url, { method, headers, body: body? JSON.stringify(body): null });
-  const txt = await res.text();
+  const ct = (res.headers.get('content-type')||'').toLowerCase();
   let data = null;
-  try{ data = txt? JSON.parse(txt): null; }catch(_){ data = { raw: txt }; }
+  if(ct.includes('application/json')){
+    try{ data = await res.json(); }catch(e){ data = { error:'JSON parse xato', detail:String(e) }; }
+  }else{
+    const txt = await res.text();
+    data = { raw: txt };
+  }
   if(!res.ok){
     // AUTO_LOGOUT: if token invalid, clear and redirect
     if(res.status===401 || res.status===403){

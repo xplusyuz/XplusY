@@ -13,13 +13,29 @@ function getEnv(name, fallback=""){
 function getDb(){
   if(admin.apps.length) return admin.firestore();
   const b64 = getEnv("FIREBASE_SERVICE_ACCOUNT_BASE64");
-  if(!b64) throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 yo‘q (Netlify env ga qo‘ying)");
-  const serviceAccount = JSON.parse(Buffer.from(b64, "base64").toString("utf-8"));
+  if(!b64) throw new Error("ENV: FIREBASE_SERVICE_ACCOUNT_BASE64 yo‘q");
+  let jsonText = "";
+  try{
+    jsonText = Buffer.from(b64, "base64").toString("utf-8");
+  }catch(_){
+    throw new Error("ENV: FIREBASE_SERVICE_ACCOUNT_BASE64 base64 emas");
+  }
+  let serviceAccount;
+  try{
+    serviceAccount = JSON.parse(jsonText);
+  }catch(e){
+    const head = (jsonText||"").slice(0,80).replace(/\s+/g," ");
+    throw new Error("ENV: SERVICE_ACCOUNT JSON xato. Boshi: " + head);
+  }
+  if(!serviceAccount.client_email || !serviceAccount.private_key){
+    throw new Error("ENV: SERVICE_ACCOUNT maydonlari yetishmaydi (client_email/private_key)");
+  }
   admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
   const db = admin.firestore();
   db.settings({ ignoreUndefinedProperties: true });
   return db;
 }
+
 
 const JWT_SECRET = getEnv("JWT_SECRET", "dev_secret_change_me");
 
