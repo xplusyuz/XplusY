@@ -1,11 +1,13 @@
-const API_BASE = "/api";
+const API_BASE = "/.netlify/functions/api";
 
 export async function api(path, {method="GET", body=null, token=null, adminKey=null} = {}){
   const headers = {"Content-Type":"application/json"};
   if(token) headers["Authorization"] = "Bearer " + token;
   if(adminKey) headers["x-admin-key"] = adminKey;
 
-  const res = await fetch(API_BASE + path, {
+  const clean = String(path||"").replace(/^\//,"");
+  const url = API_BASE + "?path=" + encodeURIComponent(clean);
+  const res = await fetch(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : null
