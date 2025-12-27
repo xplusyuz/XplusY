@@ -1,3 +1,23 @@
+
+function calcAgePrecise(birth){
+  if(!birth) return "-";
+  const b = new Date(birth+"T00:00:00");
+  const n = new Date();
+  let y = n.getFullYear() - b.getFullYear();
+  let m = n.getMonth() - b.getMonth();
+  let d = n.getDate() - b.getDate();
+  if(d < 0){
+    m--;
+    const pm = new Date(n.getFullYear(), n.getMonth(), 0).getDate();
+    d += pm;
+  }
+  if(m < 0){
+    y--;
+    m += 12;
+  }
+  return `${y} yosh ${m} oy ${d} kun`;
+}
+
 import { api } from "./api.js";
 import { getToken, clearSession, me, updateProfile, changePassword } from "./auth.js";
 import { $, $all, toast, setText } from "./ui.js";
@@ -173,6 +193,7 @@ async function load(){
     setText("userId", profile.user.loginId);
     setText("userPoints", String(profile.user.points ?? 0));
     setText("userBalance", String(profile.user.balance ?? 0));
+setText("userAge", calcAgePrecise(profile.user.birthdate));
     // mandatory onboarding
     if(!profile.user.profileComplete){
       await runOnboarding(profile.user);
@@ -192,9 +213,7 @@ async function load(){
   content = await api("/content", {token:getToken()});
   renderCarousel();
 
-  const cards = (content?.cards || []).filter(c=>c.active!==false);
-  buildChips(cards);
-  renderCards();
+  renderFixedSections();
 
   $("#logoutBtn").onclick = ()=>{
     clearSession();
