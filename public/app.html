@@ -31,7 +31,7 @@
 
   <div class="glass card">
     <div style="font-weight:950">Bo‘limlar</div>
-    <div class="sectionGrid" style="margin-top:10px" id="sections"></div>
+    <div class="sectionGrid hero-grid" style="margin-top:10px" id="sections"></div>
   </div>
 </div></div>
 
@@ -62,7 +62,7 @@
 
 <script type="module">
   import { initSeasonalBackground } from "./assets/js/seasons.js";
-initSeasonalBackground();
+initSeasonalBackground({ demoParam:"demoSeasons" });
 document.addEventListener('click',(e)=>{
   const card=e.target.closest('.hero-card');
   if(!card) return;
@@ -105,24 +105,23 @@ import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
     const wrap=$("sections"); wrap.innerHTML="";
     list.forEach(s=>{
       const a=document.createElement("a");
-      a.className="hero-card "+s.key;
+      a.className="hero-card tilt "+s.key;
       a.href=s.href;
+      a.setAttribute("aria-label", s.title);
       a.innerHTML = `
         <div class="hero-media">
-          <img src="${s.img}" alt="${s.title}">
-          <div class="hero-overlay" aria-hidden="true"></div>
+          <img src="${s.img}" alt="${s.title}" loading="lazy" decoding="async">
+          <div class="hero-shine" aria-hidden="true"></div>
+          <div class="hero-badge"><span class="emoji">${s.emoji}</span><span class="txt">${s.key.toUpperCase()}</span></div>
         </div>
-        <div class="hero-body">
-          <div class="hero-title">${s.title}</div>
-          <div class="hero-desc">${s.desc}</div>
-          <div class="hero-cta">
-            <span class="hero-pill"><span>${s.emoji}</span><span>Boshlash</span></span>
-            <span>→</span>
-          </div>
+        <div class="hero-content">
+          <h3>${s.title}</h3>
+          <p>${s.desc}</p>
+          <div class="hero-cta">Boshlash <span aria-hidden="true">→</span></div>
         </div>`;
       wrap.appendChild(a);
     });
-  }
+}
 
   async function runOnboarding(){
     return new Promise((resolve)=>{
@@ -176,6 +175,28 @@ import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
   }
   boot();
 
+
+  function initTilt(sel){
+    const els=[...document.querySelectorAll(sel)];
+    const isTouch = matchMedia("(hover: none)").matches;
+    if(isTouch) return;
+    els.forEach(el=>{
+      let rect=null;
+      const reset=()=>{ el.style.transform=""; };
+      el.addEventListener("mouseenter",()=>{ rect=el.getBoundingClientRect(); el.classList.add("is-tilting"); });
+      el.addEventListener("mouseleave",()=>{ el.classList.remove("is-tilting"); reset(); });
+      el.addEventListener("mousemove",(e)=>{
+        if(!rect) rect=el.getBoundingClientRect();
+        const x=(e.clientX-rect.left)/rect.width;
+        const y=(e.clientY-rect.top)/rect.height;
+        const rx=(0.5-y)*8;
+        const ry=(x-0.5)*10;
+        el.style.transform=`perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`;
+      });
+    });
+  }
+
+  initTilt('.tilt');
 </script>
 </body>
 </html>
