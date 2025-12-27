@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>LeaderMath.UZ — Ilova</title>
+  <link rel="stylesheet" href="./assets/css/app.css"/>
+</head>
+<body>
+<div class="wrap"><div class="phone">
+  <div class="glass header" style="border-radius:24px">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <div class="brandTitle">LeaderMath.UZ</div>
+        <div class="brandSub" id="dt"></div>
+      </div>
+    </div>
+    <button class="btn ghost" id="btnLogout">Chiqish</button>
+  </div>
+
+  <div class="glass card">
+    <div style="font-weight:950; font-size:18px" id="userName">...</div>
+    <div style="color:var(--muted); font-size:12px">ID: <b id="userId"></b></div>
+    <div style="color:var(--muted); font-size:12px">Yosh: <b id="userAge"></b></div>
+    <div class="kpi">
+      <div class="pill">⭐ Ball: <b id="userPoints">0</b></div>
+      <div class="pill">🪙 Balans: <b id="userBalance">0</b></div>
+    </div>
+  </div>
+
+  <div class="glass card">
+    <div style="font-weight:950">Bo‘limlar</div>
+    <div class="sectionGrid" style="margin-top:10px" id="sections"></div>
+  </div>
+</div></div>
+
+<!-- Mandatory onboarding -->
+<div id="onboardOverlay" style="position:fixed; inset:0; display:none; align-items:flex-end; justify-content:center; background:rgba(2,6,23,.45); backdrop-filter: blur(10px); z-index:60; padding:16px;">
+  <div class="glass" style="width:min(560px, 100%); border-radius:28px; overflow:hidden;">
+    <div style="padding:16px 16px 8px">
+      <div style="font-weight:900; font-size:18px">Profilni to‘ldiring</div>
+      <div style="color:var(--muted); font-size:13px; margin-top:4px">Birinchi kirishda ism, familiya, tug‘ilgan sana va yangi parolni kiritish majburiy.</div>
+    </div>
+    <div class="hr" style="margin:0"></div>
+    <div style="padding:14px 16px 16px; display:grid; gap:10px">
+      <div class="row">
+        <input class="input" id="obFirst" placeholder="Ism"/>
+        <input class="input" id="obLast" placeholder="Familiya"/>
+      </div>
+      <input class="input" id="obBirth" type="date"/>
+      <div class="hr" style="margin:2px 0"></div>
+      <input class="input" id="obPass1" type="password" placeholder="Yangi parol (kamida 6)"/>
+      <input class="input" id="obPass2" type="password" placeholder="Yangi parolni takrorlang"/>
+      <button class="btn primary" id="obSave" style="width:100%">Saqlash va davom etish</button>
+      <small class="p">⚠️ Parolni eslab qoling. Keyingi kirishda shu parol ishlaydi.</small>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+  import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
+  const $=id=>document.getElementById(id);
+  const toast=(t)=>{ const el=$("toast"); el.textContent=t; el.style.display="block";
+    clearTimeout(window.__t); window.__t=setTimeout(()=>el.style.display="none", 2600); };
+
+  function fmtUZ(){
+    const d=new Date();
+    return d.toLocaleDateString("uz-UZ",{weekday:"long", year:"numeric", month:"long", day:"numeric"})+
+      " • " + d.toLocaleTimeString("uz-UZ",{hour:"2-digit",minute:"2-digit"});
+  }
+  $("dt").textContent=fmtUZ(); setInterval(()=>$("dt").textContent=fmtUZ(), 1000*30);
+
+  function calcAgePrecise(birth){
+    if(!birth) return "-";
+    const b = new Date(birth+"T00:00:00");
+    const n = new Date();
+    let y=n.getFullYear()-b.getFullYear();
+    let m=n.getMonth()-b.getMonth();
+    let d=n.getDate()-b.getDate();
+    if(d<0){ m--; d += new Date(n.getFullYear(), n.getMonth(), 0).getDate(); }
+    if(m<0){ y--; m+=12; }
+    return `${y} yosh ${m} oy ${d} kun`;
+  }
+
+  function renderSections(){
+    const list = [
+      {title:"Online Challenge", desc:"Kunlik/haftalik jonli masalalar"},
+      {title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija"},
+      {title:"PLAY", desc:"O‘yin tarzida mantiqiy mashqlar"},
+    ];
+    const wrap=$("sections"); wrap.innerHTML="";
+    list.forEach(s=>{
+      const el=document.createElement("div");
+      el.className="glass sectionItem";
+      el.innerHTML = `<div class="title">${s.title}</div><div class="desc">${s.desc}</div>
+        <button class="btn primary" style="width:100%; margin-top:10px">Tez kunda</button>`;
+      el.querySelector("button").onclick=()=>toast("Tez kunda 🚀");
+      wrap.appendChild(el);
+    });
+  }
+
+  async function runOnboarding(){
+    return new Promise((resolve)=>{
+      const overlay=$("onboardOverlay");
+      const bSave=$("obSave");
+      overlay.style.display="flex";
+      bSave.onclick = async ()=>{
+        bSave.disabled=true;
+        try{
+          const first=$("obFirst").value.trim();
+          const last=$("obLast").value.trim();
+          const birth=$("obBirth").value.trim();
+          const p1=$("obPass1").value, p2=$("obPass2").value;
+          if(first.length<2) throw new Error("Ism kamida 2 ta harf bo‘lsin");
+          if(last.length<2) throw new Error("Familiya kamida 2 ta harf bo‘lsin");
+          if(!birth) throw new Error("Tug‘ilgan sanani tanlang");
+          if(p1.length<6) throw new Error("Yangi parol kamida 6 belgidan iborat bo‘lsin");
+          if(p1!==p2) throw new Error("Parollar mos emas");
+          await changePassword(p1);
+          await updateProfile(first,last,birth);
+          overlay.style.display="none";
+          resolve(true);
+        }catch(e){ toast(e.message||"Xatolik"); }
+        finally{ bSave.disabled=false; }
+      };
+    });
+  }
+
+  $("btnLogout").onclick=()=>{ logout(); location.href="./"; };
+
+  async function boot(){
+    try{
+      const r = await me();
+      const u = r.user;
+      $("userId").textContent = u.loginId;
+      $("userName").textContent = u.name || u.loginId;
+      $("userPoints").textContent = String(u.points ?? 0);
+      $("userBalance").textContent = String(u.balance ?? 0);
+      $("userAge").textContent = calcAgePrecise(u.birthdate);
+      renderSections();
+      if(!u.profileComplete){
+        await runOnboarding();
+        const r2 = await me();
+        $("userName").textContent = r2.user.name || r2.user.loginId;
+        $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
+      }
+    }catch(e){
+      toast(e.message||"Kirish yo‘q");
+      setTimeout(()=>location.href="./", 600);
+    }
+  }
+  boot();
+</script>
+</body>
+</html>
