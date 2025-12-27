@@ -4,7 +4,23 @@ import { getStore } from "@netlify/blobs";
 const ADMIN_KEY = process.env.ADMIN_KEY || "LEADERMATH_SUPER_2026";
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
 
-const store = getStore("leadermath");
+let _store = null;
+const mem = globalThis.__LM_MEM__ || (globalThis.__LM_MEM__ = { users:{}, content:null });
+
+function hasBlobsEnvError(err){
+  const msg = String(err?.message || err || "");
+  return msg.includes("MissingBlobsEnvironmentError") || msg.includes("has not been configured to use Netlify Blobs");
+}
+
+function getStoreSafe(){
+  if(_store) return _store;
+  try{
+    _store = getStore("leadermath");
+    return _store;
+  }catch(e){
+    return null;
+  }
+}
 
 function json(statusCode, obj, headers={}){
   return {
@@ -65,16 +81,43 @@ function scryptHash(password, salt){
 }
 
 async function loadUsers(){
-  const raw = await store.get("users", { type: "json" });
-  return raw || {};
+  const store = getStoreSafe();
+  if(store){
+    try{
+      const raw = await store.get("users", { type: "json" });
+      return raw || {};
+    }catch(e){
+      if(hasBlobsEnvError(e)) return mem.users;
+      throw e;
+    }
+  }
+  return mem.users;
 }
 async function saveUsers(users){
-  await store.set("users", JSON.stringify(users), { contentType: "application/json" });
+  mem.users = users;
+  const store = getStoreSafe();
+  if(store){
+    try{
+      await store.set("users", JSON.stringify(users), { contentType: "application/json" });
+    }catch(e){
+      if(hasBlobsEnvError(e)) return;
+      throw e;
+    }
+  }
 }
 
 async function loadContent(){
-  const raw = await store.get("content", { type: "json" });
-  if(raw) return raw;
+  const store = getStoreSafe();
+  if(store){
+    try{
+      const raw = await store.get("content", { type: "json" });
+      if(raw) { mem.content = raw; return raw; }
+    }catch(e){
+      if(!hasBlobsEnvError(e)) throw e;
+      // fall through
+    }
+  }
+  if(mem.content) return mem.content;
   const seed = {
     banners: [
       { id: crypto.randomUUID(), title:"LeaderMath.UZ", subtitle:"Boshlang — ID+Parol avtomatik", img:"", href:"", active:true }
@@ -84,11 +127,23 @@ async function loadContent(){
       { id: crypto.randomUUID(), title:"Olimpiada", desc:"Agentlik/olimpiada tayyorlov", href:"", tag:"Olimpiada", active:true }
     ]
   };
-  await store.set("content", JSON.stringify(seed), { contentType:"application/json" });
+  mem.content = seed;
+  if(store){
+    try{ await store.set("content", JSON.stringify(seed), { contentType:"application/json" }); }catch(e){ if(!hasBlobsEnvError(e)) throw e; }
+  }
   return seed;
 }
 async function saveContent(content){
-  await store.set("content", JSON.stringify(content), { contentType:"application/json" });
+  mem.content = content;
+  const store = getStoreSafe();
+  if(store){
+    try{
+      await store.set("content", JSON.stringify(content), { contentType:"application/json" });
+    }catch(e){
+      if(hasBlobsEnvError(e)) return;
+      throw e;
+    }
+  }
 }
 
 function getBearer(event){
