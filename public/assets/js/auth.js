@@ -1,32 +1,38 @@
+// assets/js/auth.js — auth helpers
 import { api } from "./api.js";
 
-const KEY="lm_token";
-export function getToken(){ return localStorage.getItem(KEY) || ""; }
-export function setToken(t){ localStorage.setItem(KEY, t); }
-export function clearToken(){ localStorage.removeItem(KEY); }
+const KEY = "lm_token";
+export const getToken = () => (localStorage.getItem(KEY) || "");
+export const setToken = (t) => localStorage.setItem(KEY, t);
+export const clearToken = () => localStorage.removeItem(KEY);
 
 export async function registerAuto(){
   const r = await api("auth/register", { method:"POST" });
-  setToken(r.token);
+  if(r?.token) setToken(r.token);
   return r;
 }
+
 export async function login(loginId, password){
-  const r = await api("auth/login", { method:"POST", body:{loginId, password} });
-  setToken(r.token);
+  const r = await api("auth/login", { method:"POST", body:{ loginId, password } });
+  if(r?.token) setToken(r.token);
   return r;
 }
+
 export async function me(){
   const token = getToken();
   return await api("auth/me", { token });
 }
+
 export async function changePassword(newPassword){
   const token = getToken();
-  return await api("auth/change-password", { method:"POST", token, body:{newPassword} });
+  return await api("auth/change-password", { method:"POST", token, body:{ newPassword } });
 }
-export async function updateProfile(firstName,lastName,birthdate){
+
+export async function updateProfile(firstName, lastName, birthdate){
   const token = getToken();
-  return await api("auth/update-profile", { method:"POST", token, body:{firstName,lastName,birthdate} });
+  return await api("auth/update-profile", { method:"POST", token, body:{ firstName, lastName, birthdate } });
 }
+
 export async function logout(){
   clearToken();
 }
