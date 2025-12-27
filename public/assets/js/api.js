@@ -10,6 +10,12 @@ export async function api(path, {method="GET", body=null, token=null} = {}){
   let data = null;
   try{ data = txt? JSON.parse(txt): null; }catch(_){ data = { raw: txt }; }
   if(!res.ok){
+    // AUTO_LOGOUT: if token invalid, clear and redirect
+    if(res.status===401 || res.status===403){
+      try{ localStorage.removeItem('lm_token'); }catch(_){ }
+      if(location.pathname.endsWith('app.html')) location.href = './';
+    }
+
     const msg = data?.error || data?.message || ("HTTP "+res.status);
     const err = new Error(msg);
     err.status = res.status;

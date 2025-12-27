@@ -139,7 +139,8 @@ export const handler = async (event) => {
     if(path === "/auth/me" && method === "GET"){
       const token = getBearer(event);
       if(!token) return json(401, { error:"Token yo‘q" });
-      const payload = verifyToken(token);
+      let payload;
+      try{ payload = verifyToken(token); }catch(e){ return json(401, { error:"Token yaroqsiz" }); }
       const loginId = payload.sub;
       const found = await getUser(db, loginId);
       if(!found) return json(401, { error:"User topilmadi" });
@@ -150,7 +151,8 @@ export const handler = async (event) => {
     if(path === "/auth/change-password" && method === "POST"){
       const token = getBearer(event);
       if(!token) return json(401, { error:"Token yo‘q" });
-      const payload = verifyToken(token);
+      let payload;
+      try{ payload = verifyToken(token); }catch(e){ return json(401, { error:"Token yaroqsiz" }); }
       const loginId = payload.sub;
 
       const body = JSON.parse(event.body || "{}");
@@ -171,7 +173,8 @@ export const handler = async (event) => {
     if(path === "/auth/update-profile" && method === "POST"){
       const token = getBearer(event);
       if(!token) return json(401, { error:"Token yo‘q" });
-      const payload = verifyToken(token);
+      let payload;
+      try{ payload = verifyToken(token); }catch(e){ return json(401, { error:"Token yaroqsiz" }); }
       const loginId = payload.sub;
 
       const body = JSON.parse(event.body || "{}");
