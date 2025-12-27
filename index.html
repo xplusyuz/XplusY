@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>LeaderMath.UZ — SPA</title>
+
+  <style>
+    :root{
+      --bg1:#ecfff4; --bg2:#fff7e6; --bg3:#eef7ff;
+      --ink:#0b1220; --muted:#6b7280;
+      --brand:#2E8B57; --brand2:#38bdf8; --brand3:#f59e0b;
+      --card:rgba(255,255,255,.70);
+      --stroke:rgba(15,23,42,.10);
+      --shadow: 0 20px 60px rgba(2,6,23,.12);
+      --radius:22px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--ink); font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:
+        radial-gradient(900px 700px at 12% 10%, var(--bg2), transparent 55%),
+        radial-gradient(900px 700px at 88% 18%, var(--bg3), transparent 55%),
+        radial-gradient(900px 700px at 45% 95%, var(--bg1), transparent 55%),
+        linear-gradient(180deg,#ffffff 0%, #f7fff9 100%);
+      overflow:hidden;
+    }
+
+    .blobs{position:fixed; inset:-40px; pointer-events:none; opacity:.65; filter: blur(24px); z-index:0;}
+    .blob{position:absolute; width:320px; height:320px; border-radius:50%;
+      background: radial-gradient(circle at 30% 30%, rgba(46,139,87,.55), rgba(56,189,248,.25) 55%, transparent 70%);
+      animation: drift 12s ease-in-out infinite;
+    }
+    .blob.b2{width:420px;height:420px; left:65%; top:6%; background: radial-gradient(circle at 30% 30%, rgba(245,158,11,.40), rgba(46,139,87,.22) 55%, transparent 70%); animation-duration: 15s;}
+    .blob.b3{width:380px;height:380px; left:10%; top:62%; background: radial-gradient(circle at 30% 30%, rgba(56,189,248,.40), rgba(46,139,87,.20) 55%, transparent 70%); animation-duration: 18s;}
+    @keyframes drift{
+      0%{transform: translate(0,0) scale(1)}
+      50%{transform: translate(40px,-20px) scale(1.06)}
+      100%{transform: translate(0,0) scale(1)}
+    }
+
+    .app{
+      position:relative; z-index:1;
+      height:100%; display:flex; flex-direction:column;
+      padding: env(safe-area-inset-top) 14px env(safe-area-inset-bottom) 14px;
+      gap:12px;
+    }
+
+    /* HEADER */
+    .header{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 12px;
+      border:1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,.78), rgba(255,255,255,.60));
+      backdrop-filter: blur(14px);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .brand{display:flex; align-items:center; gap:10px; min-width:0;}
+    .logo{
+      width:42px; height:42px; border-radius:14px;
+      background: linear-gradient(135deg, rgba(46,139,87,.18), rgba(56,189,248,.16));
+      border:1px solid var(--stroke);
+      display:grid; place-items:center;
+      overflow:hidden;
+      flex:0 0 auto;
+    }
+    .logo img{width:100%;height:100%;object-fit:cover}
+    .site{display:flex; flex-direction:column; line-height:1.05; min-width:0;}
+    .site b{font-size:15px; letter-spacing:.2px}
+    .site small{color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+
+    .userchip{
+      display:flex; align-items:center; gap:10px;
+      padding:8px 10px;
+      border:1px solid var(--stroke);
+      border-radius: 18px;
+      background: rgba(255,255,255,.62);
+      min-width:0;
+    }
+    .avatar{
+      width:36px; height:36px; border-radius:14px;
+      background: linear-gradient(135deg, rgba(46,139,87,.18), rgba(245,158,11,.12));
+      border:1px solid var(--stroke);
+      display:grid; place-items:center; overflow:hidden; flex:0 0 auto;
+      cursor:pointer;
+      user-select:none;
+    }
+    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .uinfo{min-width:0}
+    .uinfo .hello{font-size:12px; color:var(--muted)}
+    .uinfo .name{font-size:14px; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:42vw;}
+    .stats{display:flex; gap:6px; flex-wrap:wrap; margin-top:3px;}
+    .pill{
+      font-size:11px; padding:4px 8px; border-radius:999px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.65);
+      color:rgba(2,6,23,.8);
+    }
+
+    .btn{
+      appearance:none; border:0; cursor:pointer;
+      padding:10px 12px; border-radius:14px;
+      background: linear-gradient(135deg, rgba(46,139,87,.92), rgba(56,189,248,.72));
+      color:white; font-weight:900; letter-spacing:.2px;
+      box-shadow: 0 14px 28px rgba(46,139,87,.18);
+      transition: transform .12s ease, filter .12s ease;
+      white-space:nowrap;
+    }
+    .btn:active{transform: translateY(1px) scale(.99); filter:brightness(.98)}
+    .btn.ghost{
+      background: rgba(255,255,255,.65);
+      color: var(--ink);
+      border:1px solid var(--stroke);
+      box-shadow:none;
+    }
+
+    .main{flex:1; display:flex; flex-direction:column; gap:12px; min-height:0;}
+
+    /* Menubar (desktop) */
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:10px 12px;
+      border:1px solid var(--stroke);
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.62);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 50px rgba(2,6,23,.10);
+    }
+    .chips{
+      display:flex; gap:8px; overflow:auto; padding-bottom:2px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width:none;
+      flex:1; min-width:0;
+    }
+    .chips::-webkit-scrollbar{display:none}
+    .chip{
+      flex:0 0 auto;
+      padding:10px 12px;
+      border-radius:999px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.70);
+      font-weight:900; font-size:12px;
+      cursor:pointer;
+      transition: transform .12s ease, background .12s ease;
+      display:flex; align-items:center; gap:8px;
+    }
+    .chip[aria-current="page"]{
+      background: linear-gradient(135deg, rgba(46,139,87,.15), rgba(56,189,248,.12));
+      border-color: rgba(46,139,87,.28);
+      transform: translateY(-1px);
+    }
+    .chip .dot{width:8px;height:8px;border-radius:50%; background: rgba(46,139,87,.85)}
+    .chip .tag{opacity:.7; font-weight:800}
+
+    /* Viewport */
+    .viewport{
+      flex:1; min-height:0;
+      border:1px solid var(--stroke);
+      border-radius: var(--radius);
+      overflow:hidden;
+      background: rgba(255,255,255,.55);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      position:relative;
+    }
+    iframe#pageFrame{width:100%; height:100%; border:0; display:block; background:white;}
+    .empty{
+      position:absolute; inset:0;
+      display:grid; place-items:center; padding:18px;
+      color: var(--muted);
+      text-align:center;
+    }
+    .empty .card{
+      max-width:520px;
+      padding:18px; border-radius: 22px;
+      background: rgba(255,255,255,.70);
+      border:1px solid var(--stroke);
+    }
+    .empty h2{margin:0 0 8px; color:var(--ink)}
+    .empty p{margin:0 0 10px}
+
+    /* Bottom bar (mobile) */
+    .bottombar{display:none}
+    @media (max-width:720px){
+      .app{padding-left:10px;padding-right:10px;gap:10px}
+      .header{padding:10px 10px;border-radius:18px}
+      .logo{width:36px;height:36px;border-radius:12px}
+      .site small{display:none}
+      .userchip{padding:7px 8px;border-radius:16px;gap:8px}
+      .avatar{width:34px;height:34px;border-radius:12px}
+      .uinfo .hello{font-size:11px}
+      .uinfo .name{font-size:13px;max-width:46vw}
+      .pill{font-size:10px;padding:4px 8px}
+      .topbar{display:none}
+      .bottombar{
+        display:flex; align-items:center; gap:10px;
+        padding:10px 12px;
+        border:1px solid var(--stroke);
+        border-radius: 22px;
+        background: rgba(255,255,255,.70);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 18px 50px rgba(2,6,23,.10);
+      }
+      .bchips{display:flex; gap:8px; overflow:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex:1;}
+      .bchips::-webkit-scrollbar{display:none}
+      .bchip{
+        flex:0 0 auto;
+        padding:12px 14px;
+        border-radius: 18px;
+        border:1px solid var(--stroke);
+        background: rgba(255,255,255,.72);
+        font-weight:900; font-size:12px;
+        cursor:pointer; display:flex; align-items:center; gap:8px;
+      }
+      .bchip[aria-current="page"]{
+        background: linear-gradient(135deg, rgba(46,139,87,.16), rgba(56,189,248,.12));
+        border-color: rgba(46,139,87,.30)
+      }
+    }
+
+    /* Modals */
+    .backdrop{
+      position:fixed; inset:0; z-index:50;
+      background: rgba(2,6,23,.35);
+      backdrop-filter: blur(10px);
+      display:none;
+      align-items:flex-end;
+      justify-content:center;
+      padding: 16px;
+    }
+    .backdrop.show{display:flex}
+    .sheet{
+      width:min(820px, 100%);
+      border-radius: 26px;
+      background: rgba(255,255,255,.85);
+      border:1px solid var(--stroke);
+      box-shadow: 0 30px 90px rgba(2,6,23,.25);
+      overflow:hidden;
+    }
+    .sheetHeader{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:14px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.80));
+      border-bottom:1px solid var(--stroke);
+    }
+    .sheetHeader b{font-size:15px}
+    .sheetBody{padding:14px; display:grid; gap:10px}
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+    @media (max-width:640px){ .row{grid-template-columns:1fr} }
+
+    .field{display:grid; gap:6px;}
+    .field label{font-size:12px; color:rgba(2,6,23,.72); font-weight:900}
+    input,select{
+      width:100%;
+      padding:12px 12px;
+      border-radius:16px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.8);
+      font-size:14px;
+      outline:none;
+    }
+    input:focus,select:focus{border-color: rgba(46,139,87,.45); box-shadow: 0 0 0 4px rgba(46,139,87,.12)}
+    .hint{font-size:12px; color:var(--muted)}
+    .actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; padding-top:4px}
+
+    /* Profile View (avatar click) */
+    .pvBox{display:grid; gap:12px; text-align:center}
+    .pvAvatar{
+      width:96px;height:96px;border-radius:26px;margin:0 auto;
+      overflow:hidden; border:1px solid var(--stroke);
+      background: linear-gradient(135deg, rgba(46,139,87,.18), rgba(56,189,248,.14));
+      display:grid; place-items:center;
+    }
+    .pvAvatar img{width:100%;height:100%;object-fit:cover;display:block}
+    .pvName{font-size:16px;font-weight:1000}
+    .pvMeta{display:flex; gap:8px; justify-content:center; flex-wrap:wrap}
+    .pvMeta .pill{font-size:11px}
+
+    /* Avatar picker modal */
+    .apm.hidden{display:none}
+    .apm{
+      position:fixed; inset:0; z-index:70;
+      background: rgba(2,6,23,.35);
+      backdrop-filter: blur(10px);
+      display:flex; align-items:flex-end; justify-content:center;
+      padding: 16px;
+    }
+    .apmSheet{
+      width:min(820px, 100%);
+      border-radius: 26px;
+      background: rgba(255,255,255,.88);
+      border:1px solid var(--stroke);
+      box-shadow: 0 30px 90px rgba(2,6,23,.25);
+      overflow:hidden;
+    }
+    .apmHead{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:14px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.80));
+      border-bottom:1px solid var(--stroke);
+    }
+    .apmHead b{font-size:15px}
+    .apmBody{padding:14px}
+    .apmGrid{
+      display:grid; gap:10px;
+      grid-template-columns: repeat(6, 1fr);
+      max-height: 56vh;
+      overflow:auto;
+      padding:10px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(46,139,87,.08), rgba(56,189,248,.05));
+      border:1px dashed rgba(46,139,87,.25);
+    }
+    @media (max-width:720px){ .apmGrid{grid-template-columns: repeat(5, 1fr);} }
+    @media (max-width:520px){ .apmGrid{grid-template-columns: repeat(4, 1fr);} }
+    .apmItem{
+      aspect-ratio: 1/1;
+      border-radius: 16px;
+      overflow:hidden;
+      border: 2px solid transparent;
+      background: rgba(255,255,255,.85);
+      cursor:pointer;
+      position:relative;
+    }
+    .apmItem img{width:100%;height:100%;object-fit:cover;display:block}
+    .apmItem.active{border-color: rgba(46,139,87,.85)}
+    .apmCheck{
+      position:absolute; right:8px; top:8px;
+      width:22px; height:22px; border-radius:999px;
+      display:grid; place-items:center;
+      background: rgba(46,139,87,.92); color:white; font-weight:900;
+      box-shadow: 0 14px 28px rgba(46,139,87,.20);
+    }
+
+    .toast{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom: calc(env(safe-area-inset-bottom) + 18px);
+      z-index:80;
+      background: rgba(2,6,23,.85);
+      color:white; padding:10px 12px; border-radius: 14px;
+      display:none; max-width:min(700px, 92vw);
+      box-shadow: 0 18px 50px rgba(2,6,23,.25);
+      font-weight:800; font-size:13px;
+    }
+    .toast.show{display:block}
+  </style>
+</head>
+
+<body>
+  <div class="blobs">
+    <div class="blob" style="left:6%; top:8%"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
+
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="logo" title="Logo">
+          <img src="logo.png" alt="Logo"
+               onerror="this.style.display='none'; this.parentElement.textContent='π'; this.parentElement.style.fontWeight='900';">
+        </div>
+        <div class="site">
+          <b id="siteName">LeaderMath.UZ</b>
+          <small id="siteTag">Avatar bos → Profile panel • Edit alohida</small>
+        </div>
+      </div>
+
+      <div class="userchip" id="userChip">
+        <!-- Avatar bosilganda profil panel ochiladi -->
+        <div class="avatar" id="avatarBox" title="Profil">
+          <img id="avatarImg" alt="Avatar" style="display:none;">
+          <span id="avatarFallback" style="font-weight:900;">🙂</span>
+        </div>
+        <div class="uinfo">
+          <div class="hello" id="hello">Kirish kerak</div>
+          <div class="name" id="displayName">Mehmon</div>
+          <div class="stats">
+            <span class="pill" id="pillId">ID: —</span>
+            <span class="pill" id="pillPts">Ball: —</span>
+            <span class="pill" id="pillAge">Yosh: —</span>
+          </div>
+        </div>
+
+        <!-- Admin faqat admin emailga ko‘rinadi -->
+        <button class="btn ghost" id="btnAdmin" style="display:none;">Admin</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="chips" id="menuChips"></div>
+      </div>
+
+      <section class="viewport">
+        <div class="empty" id="emptyState">
+          <div class="card">
+            <h2>SPA tayyor ✅</h2>
+            <p>Menyu serverdan keladi. Sahifalar <b>iframe</b> ichida — CSS/JS saytni <b>buzmaydi</b>.</p>
+            <p class="hint">Kirish uchun avatarga bosing.</p>
+          </div>
+        </div>
+        <iframe id="pageFrame" sandbox="allow-scripts allow-forms" referrerpolicy="no-referrer"></iframe>
+      </section>
+
+      <div class="bottombar" id="bottomBar">
+        <div class="bchips" id="bottomChips"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- AUTH MODAL -->
+  <div class="backdrop" id="authModal">
+    <div class="sheet">
+      <div class="sheetHeader">
+        <b>Kirish / Ro‘yxatdan o‘tish</b>
+        <button class="btn ghost" id="authClose">Yopish</button>
+      </div>
+      <div class="sheetBody">
+        <div class="row">
+          <div class="field">
+            <label>ID</label>
+            <input id="loginId" placeholder="Masalan: 123456" autocomplete="username">
+            <div class="hint">ID+Parol bilan kirish uchun.</div>
+          </div>
+          <div class="field">
+            <label>Parol</label>
+            <input id="loginPass" type="password" placeholder="******" autocomplete="current-password">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn ghost" id="btnOneClick">Bir bosishda ro‘yxatdan o‘tish</button>
+          <button class="btn" id="btnIdLogin">ID+Parol Kirish</button>
+        </div>
+        <div class="hint" id="authHint"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE VIEW (Avatar click opens this) -->
+  <div class="backdrop" id="profileView">
+    <div class="sheet">
+      <div class="sheetHeader">
+        <b>Profil</b>
+        <button class="btn ghost" id="pvClose">Yopish</button>
+      </div>
+      <div class="sheetBody">
+        <div class="pvBox">
+          <div class="pvAvatar" id="pvAvatarBox">
+            <img id="pvAvatarImg" alt="Avatar">
+          </div>
+          <div class="pvName" id="pvName">—</div>
+          <div class="pvMeta">
+            <span class="pill" id="pvId">ID: —</span>
+            <span class="pill" id="pvPts">Ball: —</span>
+            <span class="pill" id="pvAge">Yosh: —</span>
+          </div>
+          <div class="hint" id="pvHint"></div>
+
+          <div class="actions" style="justify-content:center">
+            <button class="btn ghost" id="pvEdit">✏️ Tahrirlash</button>
+            <button class="btn" id="pvLogout">🚪 Chiqish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE EDIT (separate modal) -->
+  <div class="backdrop" id="profileEdit">
+    <div class="sheet">
+      <div class="sheetHeader">
+        <b>Profilni tahrirlash</b>
+        <button class="btn ghost" id="peClose">Yopish</button>
+      </div>
+      <div class="sheetBody">
+        <div class="hint" style="margin-bottom:6px">
+          Avatarni tanlash uchun pastdagi tugmani bosing (upload yo‘q).
+        </div>
+
+        <div class="actions" style="justify-content:flex-start">
+          <button class="btn ghost" id="btnPickAvatar">Avatar tanlash</button>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Ism</label>
+            <input id="pfFirst" placeholder="Ism">
+          </div>
+          <div class="field">
+            <label>Familiya</label>
+            <input id="pfLast" placeholder="Familiya">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Tug‘ilgan sana</label>
+            <input id="pfBirth" type="date">
+          </div>
+          <div class="field" id="pfNewPassBox" style="display:none;">
+            <label>Yangi parol</label>
+            <input id="pfNewPass" type="password" placeholder="Kamida 6 ta belgi">
+            <div class="hint">ID+Parol foydalanuvchilari uchun.</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>Viloyat</label>
+            <select id="pfRegion"></select>
+          </div>
+          <div class="field">
+            <label>Tuman / Shahar</label>
+            <select id="pfDistrict"></select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="btnSaveProfile">Saqlash</button>
+        </div>
+        <div class="hint" id="profileHint"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AVATAR PICKER MODAL -->
+  <div class="apm hidden" id="avatarPicker">
+    <div class="apmSheet">
+      <div class="apmHead">
+        <b>Avatar tanlang</b>
+        <button class="btn ghost" id="avatarClose">Yopish</button>
+      </div>
+      <div class="apmBody">
+        <div class="apmGrid" id="avatarGrid"></div>
+        <div class="actions" style="padding:12px 0 0">
+          <button class="btn ghost" id="avatarClear">Avatarsiz</button>
+          <button class="btn" id="avatarDone">Tayyor</button>
+        </div>
+        <div class="hint">Fayllar: <code>avatars/1.png</code> … <code>avatars/N.png</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ====== CONFIG ======
+    const API_BASE = "/.netlify/functions/api";
+    const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+
+    // Avatar assets:
+    const AVATAR_COUNT = 30; // <-- avatars papkangizdagi son (1..N)
+    const AVATAR_KEY = "lm_avatar_path";
+
+    // ====== HELPERS ======
+    const $ = (id)=>document.getElementById(id);
+    const toast = (msg)=>{
+      const t=$("toast");
+      t.textContent=msg;
+      t.classList.add("show");
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer=setTimeout(()=>t.classList.remove("show"), 2200);
+    };
+    const openModal=(el)=>el.classList.add("show");
+    const closeModal=(el)=>el.classList.remove("show");
+
+    function calcAge(birthISO){
+      if(!birthISO) return null;
+      const d = new Date(birthISO);
+      if(isNaN(d.getTime())) return null;
+      const now = new Date();
+      let age = now.getFullYear() - d.getFullYear();
+      const m = now.getMonth() - d.getMonth();
+      if(m < 0 || (m===0 && now.getDate() < d.getDate())) age--;
+      return age;
+    }
+
+    const Session = {
+      get token(){ return localStorage.getItem("lm_token") || ""; },
+      set token(v){ v ? localStorage.setItem("lm_token", v) : localStorage.removeItem("lm_token"); },
+      get me(){ try{ return JSON.parse(localStorage.getItem("lm_me")||"null"); }catch(e){return null} },
+      set me(v){ v ? localStorage.setItem("lm_me", JSON.stringify(v)) : localStorage.removeItem("lm_me"); },
+      clear(){ this.token=""; this.me=null; }
+    };
+
+    async function api(path, opts={}){
+      const headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
+      if(Session.token) headers.Authorization = "Bearer " + Session.token;
+      const res = await fetch(API_BASE + path, {...opts, headers});
+      let data=null;
+      try{ data = await res.json(); }catch(e){}
+      if(!res.ok){
+        const msg = (data && (data.error || data.message)) || (res.status+" "+res.statusText);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    // ===== Region → District from region.json
+    let REGION_MAP = null;
+
+    async function loadRegions(){
+      if(REGION_MAP) return REGION_MAP;
+      const r = await fetch("region.json", {cache:"no-store"});
+      REGION_MAP = await r.json();
+      return REGION_MAP;
+    }
+    function fillRegionSelect(map, regionVal="", districtVal=""){
+      const regionSel = $("pfRegion");
+      const distSel = $("pfDistrict");
+
+      regionSel.innerHTML = `<option value="">Tanlang…</option>` + Object.keys(map)
+        .map(r=>`<option value="${r}">${r}</option>`).join("");
+
+      regionSel.value = regionVal || "";
+      const districts = map[regionSel.value] || [];
+      distSel.innerHTML = `<option value="">Tanlang…</option>` + districts.map(d=>`<option value="${d}">${d}</option>`).join("");
+      distSel.value = districtVal || "";
+    }
+    function bindRegionHandlers(map){
+      $("pfRegion").addEventListener("change", ()=>{
+        const districts = map[$("pfRegion").value] || [];
+        $("pfDistrict").innerHTML = `<option value="">Tanlang…</option>` + districts.map(d=>`<option value="${d}">${d}</option>`).join("");
+      });
+    }
+
+    // ===== Isolated page loader (iframe srcdoc)
+    function buildSrcDoc({title, html="", css="", js="", baseHref=""}){
+      const safeTitle = (title||"Page").replace(/</g,"&lt;");
+      const baseTag = baseHref ? `<base href="${baseHref}">` : "";
+      return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+${baseTag}
+<title>${safeTitle}</title>
+<style>html,body{margin:0;padding:0;font-family:system-ui}</style>
+<style>${css||""}</style>
+</head>
+<body>
+${html||""}
+<script>${js||""}<\/script>
+</body>
+</html>`;
+    }
+
+    async function loadPage(page){
+      const frame = $("pageFrame");
+      $("emptyState").style.display = "none";
+
+      let html = page.inlineHtml || "";
+      let css  = page.inlineCss  || "";
+      let js   = page.inlineJs   || "";
+
+      async function fetchText(url){
+        const r = await fetch(url, {cache:"no-store"});
+        if(!r.ok) throw new Error("Yuklab bo‘lmadi: " + url);
+        return await r.text();
+      }
+      if(page.htmlUrl) html = await fetchText(page.htmlUrl);
+      if(page.cssUrl)  css  = await fetchText(page.cssUrl);
+      if(page.jsUrl)   js   = await fetchText(page.jsUrl);
+
+      frame.srcdoc = buildSrcDoc({title:page.title, html, css, js, baseHref: page.baseHref || ""});
+    }
+
+    function setActiveChip(id){
+      document.querySelectorAll(".chip").forEach(c=>c.removeAttribute("aria-current"));
+      document.querySelectorAll(".bchip").forEach(c=>c.removeAttribute("aria-current"));
+      const chip = [...document.querySelectorAll(".chip")].find(x=>x.dataset.id===id);
+      const bchip = [...document.querySelectorAll(".bchip")].find(x=>x.dataset.id===id);
+      if(chip) chip.setAttribute("aria-current","page");
+      if(bchip) bchip.setAttribute("aria-current","page");
+    }
+
+    function renderBottomMenu(menu, activeId){
+      const wrap = $("bottomChips");
+      if(!wrap) return;
+      wrap.innerHTML = "";
+      menu.forEach(item=>{
+        const b = document.createElement("button");
+        b.className = "bchip";
+        b.type="button";
+        b.dataset.id = item.id;
+        b.innerHTML = `<span class="dot"></span> <span>${item.title}</span>`;
+        if(item.id === activeId) b.setAttribute("aria-current","page");
+        b.addEventListener("click", async ()=>{
+          setActiveChip(item.id);
+          try{ await loadPage(item); }catch(e){ toast(e.message || "Sahifa yuklashda xato"); }
+        });
+        wrap.appendChild(b);
+      });
+    }
+
+    function renderMenu(menu, activeId){
+      const wrap = $("menuChips");
+      wrap.innerHTML = "";
+      menu.forEach(item=>{
+        const b = document.createElement("button");
+        b.className = "chip";
+        b.type="button";
+        b.dataset.id = item.id;
+        b.innerHTML = `<span class="dot"></span> <span>${item.title}</span> <span class="tag">#${item.id}</span>`;
+        if(item.id === activeId) b.setAttribute("aria-current","page");
+        b.addEventListener("click", async ()=>{
+          setActiveChip(item.id);
+          try{ await loadPage(item); }catch(e){ toast(e.message || "Sahifa yuklashda xato"); }
+        });
+        wrap.appendChild(b);
+      });
+      renderBottomMenu(menu, activeId);
+    }
+
+    // ===== Avatar assets picker =====
+    function getLocalAvatar(){ return localStorage.getItem(AVATAR_KEY) || ""; }
+    function setLocalAvatar(path){
+      if(path) localStorage.setItem(AVATAR_KEY, path);
+      else localStorage.removeItem(AVATAR_KEY);
+      applyAvatarToUI();
+    }
+    function bestAvatarPath(){
+      // local tanlangan bo‘lsa o‘sha, bo‘lmasa profile.avatarPath bo‘lsa o‘sha, bo‘lmasa bo‘sh
+      return getLocalAvatar() || (Session.me?.profile?.avatarPath || "") || "";
+    }
+    function applyAvatarToUI(){
+      const path = bestAvatarPath();
+      const has = !!path;
+
+      const headerImg = $("avatarImg");
+      const headerFallback = $("avatarFallback");
+
+      if(has){
+        headerImg.src = path;
+        headerImg.style.display = "block";
+        headerFallback.style.display = "none";
+      }else{
+        headerImg.style.display = "none";
+        headerFallback.style.display = "block";
+        headerFallback.textContent = (Session.me?.profile?.firstName || "🙂").slice(0,1).toUpperCase();
+      }
+    }
+
+    function openAvatarPicker(){
+      $("avatarPicker").classList.remove("hidden");
+      renderAvatarGrid();
+    }
+    function closeAvatarPicker(){
+      $("avatarPicker").classList.add("hidden");
+    }
+    function renderAvatarGrid(){
+      const grid = $("avatarGrid");
+      const selected = bestAvatarPath();
+      grid.innerHTML = "";
+      for(let i=1;i<=AVATAR_COUNT;i++){
+        const path = `avatars/${i}.png`;
+        const div = document.createElement("div");
+        div.className = "apmItem" + (selected === path ? " active":"");
+        div.innerHTML = `
+          <img src="${path}" alt="avatar ${i}" loading="lazy">
+          ${selected === path ? `<div class="apmCheck">✓</div>` : ``}
+        `;
+        div.addEventListener("click", ()=>{
+          setLocalAvatar(path);
+          renderAvatarGrid();
+          toast(`Tanlandi: ${i}.png`);
+        });
+        grid.appendChild(div);
+      }
+    }
+
+    // ===== Header
+    function setHeader(me){
+      if(!me){
+        $("hello").textContent = "Kirish kerak";
+        $("displayName").textContent = "Mehmon";
+        $("pillId").textContent = "ID: —";
+        $("pillPts").textContent = "Ball: —";
+        $("pillAge").textContent = "Yosh: —";
+        $("btnAdmin").style.display = "none";
+        applyAvatarToUI();
+        return;
+      }
+
+      $("hello").textContent = "Salom 👋";
+      $("displayName").textContent =
+        me.profile?.firstName
+          ? (me.profile.firstName + " " + (me.profile.lastName||""))
+          : (me.email || me.loginId || "Foydalanuvchi");
+
+      $("pillId").textContent = "ID: " + (me.loginId || "—");
+      $("pillPts").textContent = "Ball: " + (me.points ?? 0);
+      const age = calcAge(me.profile?.birthdate);
+      $("pillAge").textContent = "Yosh: " + (age ?? "—");
+
+      const isAdmin = !!(me.email && me.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+      $("btnAdmin").style.display = isAdmin ? "inline-flex" : "none";
+
+      applyAvatarToUI();
+    }
+
+    function requireProfileIfNeeded(me){
+      if(!me) return;
+      const p = me.profile || {};
+      const ok = !!(p.firstName && p.lastName && p.birthdate && p.region && p.district);
+      if(!ok){
+        openProfileEdit(true);
+      }
+    }
+
+    // ===== Profile VIEW (Avatar click)
+    function openProfileView(){
+      const me = Session.me;
+      if(!me) return;
+
+      const path = bestAvatarPath();
+      $("pvAvatarImg").src = path || "";
+      if(!path){
+        // show default if empty (use a safe default)
+        $("pvAvatarImg").src = "avatars/1.png";
+      }
+
+      $("pvName").textContent = (me.profile?.firstName || "—") + " " + (me.profile?.lastName || "");
+      $("pvId").textContent = "ID: " + (me.loginId || "—");
+      $("pvPts").textContent = "Ball: " + (me.points ?? 0);
+      $("pvAge").textContent = "Yosh: " + (calcAge(me.profile?.birthdate) ?? "—");
+      $("pvHint").textContent = me.email ? ("Email: " + me.email) : "";
+
+      openModal($("profileView"));
+    }
+    function closeProfileView(){ closeModal($("profileView")); }
+
+    // ===== Profile EDIT (separate)
+    function openProfileEdit(forced=false){
+      // close view if open
+      closeProfileView();
+
+      const me = Session.me;
+      if(!me) return;
+
+      const p = me.profile || {};
+      $("pfFirst").value = p.firstName || "";
+      $("pfLast").value = p.lastName || "";
+      $("pfBirth").value = p.birthdate || "";
+
+      fillRegionSelect(REGION_MAP || {}, p.region || "", p.district || "");
+
+      // show new pass only for password-provider users
+      const needsNewPass = (me.provider === "password");
+      $("pfNewPassBox").style.display = needsNewPass ? "block" : "none";
+      $("pfNewPass").value = "";
+
+      $("profileHint").textContent = forced ? "Davom etish uchun profilni to‘ldiring." : "";
+      openModal($("profileEdit"));
+    }
+    function closeProfileEdit(){ closeModal($("profileEdit")); }
+
+    async function refreshMe(){
+      if(!Session.token) { Session.me=null; setHeader(null); return null; }
+      const me = await api("/me", {method:"GET"});
+      Session.me = me;
+      setHeader(me);
+      return me;
+    }
+
+    async function doIdLogin(){
+      const id = $("loginId").value.trim();
+      const password = $("loginPass").value;
+      if(!id || !password) return toast("ID va parol kiriting.");
+      $("authHint").textContent = "Tekshirilmoqda…";
+
+      const out = await api("/auth/login", {
+        method:"POST",
+        body: JSON.stringify({ loginId: id, password })
+      });
+
+      Session.token = out.token;
+      await refreshMe();
+      closeModal($("authModal"));
+      toast("Kirish muvaffaqiyatli ✅");
+      requireProfileIfNeeded(Session.me);
+      await loadMenuAndAutoOpen();
+    }
+
+    async function doOneClickRegister(){
+      $("authHint").textContent = "ID+Parol yaratilmoqda…";
+      const out = await api("/auth/register", { method:"POST" });
+
+      $("authHint").innerHTML =
+        `✅ ID: <b>${out.loginId}</b> | Parol: <b>${out.password}</b><br><span class="hint">Buni saqlab qo‘ying.</span>`;
+
+      Session.token = out.token;
+      await refreshMe();
+      toast("Ro‘yxatdan o‘tildi ✅");
+      requireProfileIfNeeded(Session.me);
+      await loadMenuAndAutoOpen();
+    }
+
+    async function saveProfile(){
+      const firstName = $("pfFirst").value.trim();
+      const lastName = $("pfLast").value.trim();
+      const birthdate = $("pfBirth").value;
+      const region = $("pfRegion").value;
+      const district = $("pfDistrict").value;
+      const newPassword = $("pfNewPass").value;
+
+      // avatar from assets:
+      const avatarPath = bestAvatarPath() || null;
+
+      if(!firstName || !lastName || !birthdate || !region || !district){
+        $("profileHint").textContent = "Hamma maydonlarni to‘ldiring.";
+        return;
+      }
+      if(Session.me?.provider === "password"){
+        if(!newPassword || newPassword.length < 6){
+          $("profileHint").textContent = "Yangi parol kamida 6 ta belgi bo‘lsin.";
+          return;
+        }
+      }
+
+      $("profileHint").textContent = "Saqlanmoqda…";
+      const out = await api("/me/profile", {
+        method:"PUT",
+        body: JSON.stringify({
+          profile:{firstName,lastName,birthdate,region,district, avatarPath},
+          newPassword: (Session.me?.provider==="password") ? newPassword : null
+        })
+      });
+
+      Session.me = out;
+      setHeader(out);
+      closeProfileEdit();
+      toast("Profil saqlandi ✅");
+    }
+
+    async function logout(){
+      Session.clear();
+      setHeader(null);
+      $("menuChips").innerHTML = "";
+      $("bottomChips").innerHTML = "";
+      $("emptyState").style.display = "grid";
+      $("pageFrame").srcdoc = "";
+      closeProfileView();
+      closeProfileEdit();
+      toast("Chiqildi");
+    }
+
+    async function loadMenu(){
+      const data = await api("/menu", {method:"GET"});
+      return data.items || [];
+    }
+
+    async function loadMenuAndAutoOpen(){
+      try{
+        const menu = await loadMenu();
+        if(!menu.length){
+          renderMenu([], "");
+          $("emptyState").style.display = "grid";
+          return;
+        }
+        renderMenu(menu, menu[0].id);
+        await loadPage(menu[0]);
+      }catch(e){
+        toast(e.message || "Menyu yuklashda xato");
+      }
+    }
+
+    // ===== Boot
+    window.addEventListener("DOMContentLoaded", async ()=>{
+      setHeader(Session.me);
+
+      // Regions
+      try{
+        const map = await loadRegions();
+        fillRegionSelect(map);
+        bindRegionHandlers(map);
+      }catch(e){
+        toast("region.json yuklanmadi");
+      }
+
+      // Admin
+      $("btnAdmin").addEventListener("click", ()=> window.location.href = "admin.html");
+
+      // Avatar click -> if not logged open auth else open profile view
+      $("avatarBox").addEventListener("click", ()=>{
+        if(!Session.me) openModal($("authModal"));
+        else openProfileView();
+      });
+
+      // Auth modal
+      $("authClose").addEventListener("click", ()=>closeModal($("authModal")));
+      $("btnIdLogin").addEventListener("click", async ()=>{
+        try{ await doIdLogin(); }
+        catch(e){ $("authHint").textContent = e.message; toast(e.message); }
+      });
+      $("btnOneClick").addEventListener("click", async ()=>{
+        try{ await doOneClickRegister(); }
+        catch(e){ $("authHint").textContent = e.message; toast(e.message); }
+      });
+
+      // Profile view modal buttons
+      $("pvClose").addEventListener("click", closeProfileView);
+      $("pvEdit").addEventListener("click", ()=>openProfileEdit(false));
+      $("pvLogout").addEventListener("click", logout);
+
+      // Profile edit modal
+      $("peClose").addEventListener("click", closeProfileEdit);
+      $("btnSaveProfile").addEventListener("click", async ()=>{
+        try{ await saveProfile(); }
+        catch(e){ $("profileHint").textContent = e.message; toast(e.message); }
+      });
+
+      // Avatar picker
+      $("btnPickAvatar").addEventListener("click", openAvatarPicker);
+      $("avatarClose").addEventListener("click", closeAvatarPicker);
+      $("avatarDone").addEventListener("click", ()=>{ closeAvatarPicker(); toast("Avatar tanlandi ✅"); });
+      $("avatarClear").addEventListener("click", ()=>{ setLocalAvatar(""); renderAvatarGrid(); toast("Avatar o‘chirildi"); });
+
+      $("avatarPicker").addEventListener("click", (e)=>{
+        if(e.target === $("avatarPicker")) closeAvatarPicker();
+      });
+
+      // Session restore
+      try{
+        if(Session.token){
+          await refreshMe();
+          requireProfileIfNeeded(Session.me);
+          await loadMenuAndAutoOpen();
+        }else{
+          $("emptyState").style.display = "grid";
+        }
+      }catch(e){
+        Session.clear();
+        setHeader(null);
+      }
+
+      applyAvatarToUI();
+    });
+  </script>
+</body>
+</html>

@@ -1,242 +1,364 @@
+// netlify/functions/api.js
 const admin = require("firebase-admin");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
-function json(statusCode, data) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    },
-    body: JSON.stringify(data),
-  };
+const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+// global fallback (avoid ReferenceError in spreads)
+const avatarSmall = null;
+const MENU_DOC_PATH = { col: "configs", doc: "spa_menu" };
+
+function json(statusCode, body) {
+  return { statusCode, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+function getPath(event) { return (event.path || "").replace("/.netlify/functions/api", "") || "/"; }
+function generateLoginId6(){
+  return String(Math.floor(100000 + Math.random()*900000));
 }
 
-function sha256(s) {
-  return crypto.createHash("sha256").update(s).digest("hex");
-}
+function nowISO() { return new Date().toISOString(); }
 
-function b64url(input) {
-  const buf = Buffer.isBuffer(input) ? input : Buffer.from(String(input));
-  return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-}
-
-function signJWT(payload, secret, expSec = 60 * 60 * 24 * 14) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const full = { ...payload, iat: now, exp: now + expSec };
-  const h = b64url(JSON.stringify(header));
-  const p = b64url(JSON.stringify(full));
-  const sig = b64url(crypto.createHmac("sha256", secret).update(`${h}.${p}`).digest());
-  return `${h}.${p}.${sig}`;
-}
-
-function verifyJWT(token, secret) {
-  const parts = (token || "").split(".");
-  if (parts.length !== 3) return null;
-  const [h, p, s] = parts;
-  const sig = b64url(crypto.createHmac("sha256", secret).update(`${h}.${p}`).digest());
-  if (sig !== s) return null;
-  const payload = JSON.parse(Buffer.from(p.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && now > payload.exp) return null;
-  return payload;
-}
-
-function initAdmin() {
+function initFirebaseAdmin() {
   if (admin.apps.length) return;
-  const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!svc) throw new Error("FIREBASE_SERVICE_ACCOUNT env yo‘q");
-  const cred = JSON.parse(svc);
-  admin.initializeApp({ credential: admin.credential.cert(cred) });
+  const svc = ((process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON) || process.env.FIREBASE_SERVICE_ACCOUNT);
+  if (!svc) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_JSON env");
+  const cred = admin.credential.cert(JSON.parse(svc));
+  admin.initializeApp({ credential: cred, storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined });
 }
 
-function makeId(len = 6) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
+function signSession(payload) {
+  const secret = process.env.SESSION_JWT_SECRET;
+  if (!secret) throw new Error("Missing SESSION_JWT_SECRET env");
+  return jwt.sign(payload, secret, { expiresIn: "30d" });
+}
+function verifySessionToken(token) {
+  const secret = process.env.SESSION_JWT_SECRET;
+  if (!secret) throw new Error("Missing SESSION_JWT_SECRET env");
+  return jwt.verify(token, secret);
+}
+function getBearer(event) {
+  const h = event.headers || {};
+  const auth = h.authorization || h.Authorization || "";
+  if (!auth.startsWith("Bearer ")) return "";
+  return auth.slice(7).trim();
+}
+async function authRequired(event) {
+  const token = getBearer(event);
+  if (!token) throw new Error("Unauthorized");
+  return verifySessionToken(token); // {uid, provider, email?, loginId?}
+}
+async function adminRequired(event) {
+  const sess = await authRequired(event);
+  const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+  const ok = (sess.isAdmin === true) || (sess.provider === "admin") || (sess.email && sess.email.toLowerCase() === adminEmail);
+  if (!ok) throw new Error("Admin only");
+  return sess;
 }
 
-function passwordWarnings(pw) {
-  const w = [];
-  if (pw.length < 4) w.push("Maxfiy so‘z juda qisqa (4+ tavsiya).");
-  if (/^\d+$/.test(pw)) w.push("Faqat raqam — juda oson taxmin qilinadi.");
-  if (/^[a-zA-Z]+$/.test(pw)) w.push("Faqat harf — kuchsiz bo‘lishi mumkin.");
-  if (!/[A-Z]/.test(pw) && !/[0-9]/.test(pw) && pw.length < 8) w.push("Kuchliroq qilish: harf+raqam aralashtir.");
-  return w;
+function genLoginId() {
+  const n = Math.floor(100000 + Math.random() * 900000);
+  return String(n);
+}
+function genPassword() {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
 }
 
-async function getUser(db, id) {
-  const ref = db.collection("users").doc(id);
-  const snap = await ref.get();
-  return { ref, snap, data: snap.exists ? snap.data() : null };
+function safeExt(ext) {
+  const e = (ext || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return ["png","jpg","jpeg","webp"].includes(e) ? e : "png";
 }
-
-function authIdFromReq(event) {
-  const auth = event.headers.authorization || event.headers.Authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const secret = process.env.APP_JWT_SECRET || "dev_secret_change_me";
-  const payload = verifyJWT(token, secret);
-  return payload?.uid || null;
+function contentTypeForExt(ext) {
+  const e = safeExt(ext);
+  if (e === "jpg" || e === "jpeg") return "image/jpeg";
+  if (e === "webp") return "image/webp";
+  return "image/png";
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
-
   try {
-    initAdmin();
+    initFirebaseAdmin();
     const db = admin.firestore();
+    function getBucket(){
+  let b = String(process.env.FIREBASE_STORAGE_BUCKET || "");
+  if(!b){
+    // infer: <projectId>.appspot.com
+    try{ const pid = admin.app().options.projectId; if(pid) b = pid + ".appspot.com"; }catch(e){}
+  }
+  if(!b) throw new Error("Storage bucket topilmadi. Netlify env FIREBASE_STORAGE_BUCKET ni qo‘ying.");
+  return admin.storage().bucket(b);
+}
 
-    const path = (event.path || "").replace("/.netlify/functions/api", "");
+const path = getPath(event);
     const method = event.httpMethod;
 
-    if (path === "/auth/login-step1" && method === "POST") {
-      const { id } = JSON.parse(event.body || "{}");
-      if (!id) return json(400, { error: "ID kerak" });
-      const { snap } = await getUser(db, id.trim().toUpperCase());
-      return json(200, { exists: snap.exists });
-    }
+    const usersCol = db.collection("users");
+    const menuDoc = db.collection(MENU_DOC_PATH.col).doc(MENU_DOC_PATH.doc);
 
-    if (path === "/auth/new" && method === "POST") {
-      const { password } = JSON.parse(event.body || "{}");
-      const pw = (password ?? "").toString();
-      if (pw.length < 1 || pw.length > 20) return json(400, { error: "Maxfiy so‘z 1..20 bo‘lsin" });
-
-      let id = "";
-      for (let i = 0; i < 8; i++) {
-        id = makeId(6);
-        const { snap } = await getUser(db, id);
-        if (!snap.exists) break;
-        if (i === 7) return json(500, { error: "ID yaratib bo‘lmadi, qayta urinib ko‘r" });
+    // ===== AUTH: One-click register =====
+    if (path === "/auth/register" && method === "POST") {
+      let loginId;
+      for (let i = 0; i < 12; i++) {
+        const candidate = genLoginId();
+        const snap = await usersCol.doc(candidate).get();
+        if (!snap.exists) { loginId = candidate; break; }
       }
+      if (!loginId) return json(500, { error: "Try again" });
 
-      const warn = passwordWarnings(pw);
-      await db.collection("users").doc(id).set({
-        id,
-        passHash: sha256(pw),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      const password = genPassword();
+      const hash = await bcrypt.hash(password, 10);
+
+      const user = {
+        uid: loginId,
+        provider: "password",
+        loginId,
+        passHash: hash,
+        email: "",
+        photoURL: "",
         points: 0,
-        avatarUrl: "",
-        profile: {},
-        profileCompleted: false,
-      });
+        profile: { firstName:"", lastName:"", birthdate:"", region:"", district:"" },
+        createdAt: nowISO(),
+        updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
+      };
+      await usersCol.doc(loginId).set(user, { merge: false });
 
-      const secret = process.env.APP_JWT_SECRET || "dev_secret_change_me";
-      const token = signJWT({ uid: id }, secret);
-
-      return json(200, { id, token, warnings: warn });
+      const token = signSession({ uid: loginId, provider: "password", loginId });
+      return json(200, { loginId, password, token });
     }
 
+    // ===== AUTH: ID+Password login =====
     if (path === "/auth/login" && method === "POST") {
-      const { id, password } = JSON.parse(event.body || "{}");
-      const uid = (id || "").toString().trim().toUpperCase();
-      const pw = (password || "").toString();
-      if (!uid || !pw) return json(400, { error: "ID va maxfiy so‘z kerak" });
+      const { loginId, password } = JSON.parse(event.body || "{}");
+      if (!loginId || !password) return json(400, { error: "loginId & password required" });
 
-      const { data } = await getUser(db, uid);
-      if (!data) return json(404, { error: "Bunday ID topilmadi" });
+      const snap = await usersCol.doc(loginId).get();
+      if (!snap.exists) return json(404, { error: "Bunday ID topilmadi" });
+      const u = snap.data();
 
-      if (data.passHash !== sha256(pw)) return json(401, { error: "Maxfiy so‘z noto‘g‘ri" });
+      if (!u.passHash) return json(400, { error: "Bu user parol bilan emas" });
 
-      const secret = process.env.APP_JWT_SECRET || "dev_secret_change_me";
-      const token = signJWT({ uid }, secret);
+      const ok = await bcrypt.compare(password, u.passHash);
+      if (!ok) return json(401, { error: "Parol noto‘g‘ri" });
+
+      const token = signSession({ uid: u.uid, provider: "password", loginId: u.loginId });
       return json(200, { token });
     }
 
-    if (path === "/me" && method === "GET") {
-      const uid = authIdFromReq(event);
-      if (!uid) return json(401, { error: "Token yo‘q" });
 
-      const { data } = await getUser(db, uid);
-      if (!data) return json(404, { error: "User topilmadi" });
+    // ===== AUTH: Admin login (email + ADMIN_PASSWORD) =====
+    if (path === "/auth/adminLogin" && method === "POST") {
+      const { email, password } = JSON.parse(event.body || "{}");
+      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+      const adminPass = String(process.env.ADMIN_PASSWORD || "");
+      if (!adminPass) return json(500, { error: "Missing ADMIN_PASSWORD env" });
 
-      let age = null;
-      const bd = data?.profile?.birthDate;
-      if (bd) {
-        const d = new Date(bd);
-        if (!isNaN(d.getTime())) {
-          const now = new Date();
-          age = now.getFullYear() - d.getFullYear();
-          const m = now.getMonth() - d.getMonth();
-          if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-        }
+      const em = String(email || "").toLowerCase().trim();
+      if (em !== adminEmail) return json(403, { error: "Admin email noto‘g‘ri" });
+      if (String(password || "") !== adminPass) return json(401, { error: "Admin parol noto‘g‘ri" });
+
+      // Ensure admin user doc exists
+      const uid = "admin_" + adminEmail.replace(/[^a-z0-9]/g, "_");
+      const ref = usersCol.doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          uid,
+          provider: "admin",
+          loginId: adminEmail,
+          email: adminEmail,
+          photoURL: "",
+          points: 0,
+          profile: { firstName:"Sohibjon", lastName:"", birthdate:"", region:"", district:"" },
+          createdAt: nowISO(),
+          updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
+        });
+      } else {
+        await ref.set({ provider:"admin", email: adminEmail, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
       }
 
-      return json(200, {
-        id: data.id,
-        points: data.points || 0,
-        avatarUrl: data.avatarUrl || "",
-        profile: data.profile || {},
-        profileCompleted: !!data.profileCompleted,
-        age,
-      });
+      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
+      return json(200, { token });
     }
 
-    if (path === "/me/profile" && method === "POST") {
-      const uid = authIdFromReq(event);
-      if (!uid) return json(401, { error: "Token yo‘q" });
 
-      const { firstName, lastName, birthDate, region, district } = JSON.parse(event.body || "{}");
-      const profile = {
-        firstName: (firstName || "").trim(),
-        lastName: (lastName || "").trim(),
-        birthDate: (birthDate || "").trim(),
-        region: (region || "").trim(),
-        district: (district || "").trim(),
+
+    // ===== AUTH: Admin via Firebase Google ID token =====
+    if (path === "/auth/adminGoogle" && method === "POST") {
+      const { idToken } = JSON.parse(event.body || "{}");
+      if (!idToken) return json(400, { error: "Missing idToken" });
+
+      const adminEmail = (String(process.env.ADMIN_EMAIL || "") || ADMIN_EMAIL).toLowerCase();
+
+      // Verify Firebase ID token using Admin SDK
+      const decoded = await auth.verifyIdToken(idToken);
+      const email = String(decoded.email || "").toLowerCase();
+      if (email !== adminEmail) return json(403, { error: "Admin only" });
+
+      const uid = decoded.uid || ("admin_" + adminEmail.replace(/[^a-z0-9]/g, "_"));
+      const ref = usersCol.doc(uid);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          uid,
+          provider: "admin",
+          loginId: adminEmail,
+          email: adminEmail,
+          photoURL: decoded.picture || "",
+          points: 0,
+          profile: { firstName: decoded.name || "Admin", lastName:"", birthdate:"", region:"", district:"" },
+          createdAt: nowISO(),
+          updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
+        });
+      } else {
+        await ref.set({ provider:"admin", email: adminEmail, photoURL: decoded.picture || "", updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
+      }
+
+      const token = signSession({ uid, provider: "admin", email: adminEmail, isAdmin: true });
+      return json(200, { token });
+    }
+
+
+    // ===== ME =====
+    if (path === "/me" && method === "GET") {
+      const sess = await authRequired(event);
+      const snap = await usersCol.doc(sess.uid).get();
+      if (!snap.exists) return json(404, { error: "User not found" });
+      const u = snap.data();
+      delete u.passHash;
+      return json(200, u);
+    }
+
+    // ===== Update profile (+ optional password change) =====
+    if (path === "/me/profile" && method === "PUT") {
+      const sess = await authRequired(event);
+      const body = JSON.parse(event.body || "{}");
+      const profile = body.profile || {};
+      const newPassword = body.newPassword || null;
+
+      const ref = usersCol.doc(sess.uid);
+      const snap = await ref.get();
+      if (!snap.exists) return json(404, { error: "User not found" });
+      const u = snap.data();
+
+      const upd = {
+        profile: {
+          firstName: (profile.firstName || "").trim(),
+          lastName: (profile.lastName || "").trim(),
+          birthdate: profile.birthdate || "",
+          region: profile.region || "",
+          district: (profile.district || "").trim()
+        },
+        updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {})
       };
 
-      if (!profile.firstName || !profile.lastName || !profile.birthDate || !profile.region || !profile.district) {
-        return json(400, { error: "Barcha maydonlar majburiy" });
+      if (u.provider === "password") {
+        if (!newPassword || newPassword.length < 6) return json(400, { error: "New password min 6" });
+        upd.passHash = await bcrypt.hash(newPassword, 10);
       }
 
-      await db.collection("users").doc(uid).update({ profile, profileCompleted: true });
-      return json(200, { ok: true });
+      await ref.set(upd, { merge: true });
+      const out = (await ref.get()).data();
+      delete out.passHash;
+      return json(200, out);
     }
 
-    if (path === "/me/avatar" && method === "POST") {
-      const uid = authIdFromReq(event);
-      if (!uid) return json(401, { error: "Token yo‘q" });
+    // ===== Avatar: signed upload URL =====
+    if (path === "/me/avatarUploadUrl" && method === "POST") {
+      const sess = await authRequired(event);
+      const body = JSON.parse(event.body || "{}");
+      const ext = safeExt(body.ext || "png");
+      const contentType = body.contentType || contentTypeForExt(ext);
 
-      const { avatarUrl } = JSON.parse(event.body || "{}");
-      const url = (avatarUrl || "").toString().trim();
-      await db.collection("users").doc(uid).update({ avatarUrl: url });
-      return json(200, { ok: true });
-    }
+      const objectPath = `avatars/${sess.uid}.${ext}`;
+      const file = getBucket().file(objectPath);
 
-    if (path === "/app" && method === "GET") {
-      const appSnap = await db.collection("configs").doc("app").get();
-      const app = appSnap.exists ? appSnap.data() : { version: 1, nav: [] };
-
-      const sectionIds = [...new Set((app.nav || []).map(n => n.sectionId).filter(Boolean))];
-      const sections = {};
-      for (const sid of sectionIds) {
-        const sSnap = await db.collection("sections").doc(sid).get();
-        sections[sid] = sSnap.exists ? sSnap.data() : { title: sid, chips: [{ id: "all", label: "Hammasi" }], items: [] };
-      }
-
-      return json(200, { version: app.version || 1, nav: app.nav || [], sections });
-    }
-
-    if (path === "/rank" && method === "GET") {
-      const top = await db.collection("users").orderBy("points", "desc").limit(50).get();
-      const items = top.docs.map((d, i) => {
-        const u = d.data();
-        return {
-          place: i + 1,
-          id: u.id,
-          name: `${u?.profile?.firstName || "?"} ${u?.profile?.lastName || ""}`.trim(),
-          points: u.points || 0,
-          avatarUrl: u.avatarUrl || "",
-        };
+      const [uploadUrl] = await file.getSignedUrl({
+        version: "v4",
+        action: "write",
+        expires: Date.now() + 10 * 60 * 1000, // 10 min
+        contentType
       });
-      return json(200, { items });
+
+      return json(200, { uploadUrl, path: objectPath, contentType });
     }
 
-    return json(404, { error: "Not found" });
+    // ===== Avatar: finalize => set download token + store photoURL in user doc =====
+    if (path === "/me/avatarFinalize" && method === "POST") {
+      const sess = await authRequired(event);
+      const body = JSON.parse(event.body || "{}");
+      const objectPath = body.path;
+      if (!objectPath || !objectPath.startsWith("avatars/")) return json(400, { error: "Invalid path" });
+
+      const file = getBucket().file(objectPath);
+
+      // Ensure file exists
+      const [exists] = await file.exists();
+      if (!exists) return json(404, { error: "File not found" });
+
+      // Create stable download token (Firebase style)
+      const token = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex");
+
+      await file.setMetadata({
+        metadata: { firebaseStorageDownloadTokens: token },
+        cacheControl: "public, max-age=31536000"
+      });
+
+      const bucketName = bucket.name;
+      const encodedPath = encodeURIComponent(objectPath);
+      const downloadURL = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
+
+      await usersCol.doc(sess.uid).set({ photoURL: downloadURL, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
+
+      const outSnap = await usersCol.doc(sess.uid).get();
+      const out = outSnap.data();
+      delete out.passHash;
+      return json(200, out);
+    }
+
+    // ===== MENU (for logged-in) =====
+    if (path === "/menu" && method === "GET") {
+      await authRequired(event);
+      const snap = await menuDoc.get();
+      const data = snap.exists ? snap.data() : { items: [] };
+      return json(200, { items: data.items || [] });
+    }
+
+    // ===== ADMIN: set all menu items (keeps order) =====
+    if (path === "/admin/menuSetAll" && method === "POST") {
+      await adminRequired(event);
+      const body = JSON.parse(event.body || "{}");
+      const items = Array.isArray(body.items) ? body.items : [];
+      // basic sanitize
+      const cleaned = items.map(it => ({
+        id: String(it.id || "").trim(),
+        title: String(it.title || "").trim(),
+        mode: it.mode === "custom" ? "custom" : "builder",
+        baseHref: String(it.baseHref || "").trim(),
+        builder: it.mode === "builder" ? (it.builder || {banners:[],cards:[]}) : undefined,
+        htmlUrl: it.mode === "custom" ? String(it.htmlUrl || "").trim() : undefined,
+        cssUrl: it.mode === "custom" ? String(it.cssUrl || "").trim() : undefined,
+        jsUrl: it.mode === "custom" ? String(it.jsUrl || "").trim() : undefined,
+        inlineHtml: it.mode === "custom" ? (it.inlineHtml || "") : undefined,
+        inlineCss: it.mode === "custom" ? (it.inlineCss || "") : undefined,
+        inlineJs: it.mode === "custom" ? (it.inlineJs || "") : undefined,
+      })).filter(it => it.id && it.title);
+
+      await menuDoc.set({ items: cleaned, updatedAt: nowISO(),
+        ...(avatarSmall ? { avatarSmall } : {}) }, { merge: true });
+      return json(200, { ok: true });
+    }
+
+    return json(404, { error: "Not found", path, method });
   } catch (e) {
-    return json(500, { error: e.message || "Server error" });
+    const msg = e && e.message ? e.message : String(e);
+    const code = /Unauthorized/i.test(msg) ? 401 : (/Admin only/i.test(msg) ? 403 : 500);
+    return json(code, { error: msg });
   }
 };

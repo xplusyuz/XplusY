@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>Admin — SPA Builder</title>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+  <style>
+    :root{
+      --ink:#0b1220; --muted:#6b7280;
+      --brand:#2E8B57; --brand2:#38bdf8; --brand3:#f59e0b;
+      --stroke:rgba(15,23,42,.12);
+      --bg: linear-gradient(180deg,#ffffff 0%, #f1fff6 100%);
+      --card: rgba(255,255,255,.78);
+      --shadow: 0 20px 60px rgba(2,6,23,.12);
+      --r: 22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background: var(--bg); color: var(--ink);
+      padding: 14px; min-height:100vh;
+    }
+    .wrap{max-width:1180px; margin:0 auto; display:grid; gap:12px}
+    .top{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:12px 12px; border:1px solid var(--stroke); border-radius: var(--r);
+      background: var(--card); box-shadow: var(--shadow);
+    }
+    .btn{
+      border:0; cursor:pointer;
+      padding:10px 12px; border-radius: 14px;
+      background: linear-gradient(135deg, rgba(46,139,87,.95), rgba(56,189,248,.72));
+      color:white; font-weight:900;
+      transition: transform .12s ease;
+    }
+    .btn:active{transform: translateY(1px) scale(.99)}
+    .btn.ghost{background: rgba(255,255,255,.7); color:var(--ink); border:1px solid var(--stroke); box-shadow:none}
+    .grid{display:grid; grid-template-columns: 420px 1fr; gap:12px;}
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} }
+    .card{
+      border:1px solid var(--stroke);
+      border-radius: var(--r);
+      background: var(--card);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .hd{
+      padding:12px 12px; border-bottom:1px solid var(--stroke);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .hd b{font-size:14px}
+    .bd{padding:12px; display:grid; gap:10px}
+    .hint{color:var(--muted); font-size:12px; font-weight:700}
+    .warn{color:#b45309; font-weight:900; font-size:12px}
+
+    /* Menu list */
+    .list{display:grid; gap:8px}
+    .item{
+      padding:10px 10px; border:1px solid var(--stroke);
+      border-radius: 16px;
+      background: rgba(255,255,255,.75);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      cursor:grab;
+    }
+    .item:active{cursor:grabbing}
+    .item.active{outline: 3px solid rgba(46,139,87,.16); border-color: rgba(46,139,87,.28)}
+    .item b{font-size:13px}
+    .item small{color:var(--muted)}
+    .mini{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+    .mini button{
+      padding:8px 10px; border-radius: 12px; border:1px solid var(--stroke);
+      background: rgba(255,255,255,.75);
+      cursor:pointer; font-weight:900;
+    }
+
+    /* Form */
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    @media(max-width:520px){ .row{grid-template-columns:1fr} }
+    label{font-size:12px; font-weight:900; color: rgba(2,6,23,.72)}
+    input,textarea,select{
+      width:100%; padding:12px; border-radius: 16px;
+      border:1px solid var(--stroke); background: rgba(255,255,255,.85);
+      font-size:14px; outline:none;
+    }
+    textarea{min-height:92px; resize:vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+    input:focus,textarea:focus,select:focus{border-color: rgba(46,139,87,.45); box-shadow: 0 0 0 4px rgba(46,139,87,.12)}
+
+    /* Builder blocks */
+    .tabs{display:flex; gap:8px; flex-wrap:wrap}
+    .tab{
+      padding:10px 12px; border-radius:999px; border:1px solid var(--stroke);
+      background: rgba(255,255,255,.75); font-weight:900; cursor:pointer;
+    }
+    .tab.on{background: linear-gradient(135deg, rgba(46,139,87,.15), rgba(56,189,248,.12)); border-color: rgba(46,139,87,.28)}
+    .blockList{display:grid; gap:8px}
+    .block{
+      border:1px solid var(--stroke); border-radius:18px; background: rgba(255,255,255,.82);
+      padding:10px; display:grid; gap:8px;
+    }
+    .blockHead{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .blockHead b{font-size:13px}
+    .split{display:grid; grid-template-columns: 1fr 1fr; gap:10px}
+    @media(max-width:720px){ .split{grid-template-columns:1fr} }
+    iframe{width:100%; height:520px; border:0; display:block; background:white; border-radius:18px; overflow:hidden}
+  </style>
+</head>
+<body>
+
+<div id="adminAuthGate" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);backdrop-filter:blur(8px);z-index:9999;">
+  <div style="width:min(520px,92vw);background:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.6);border-radius:22px;padding:18px;box-shadow:0 20px 80px rgba(0,0,0,.2);">
+    <div style="font-weight:900;font-size:18px;">Admin kirish</div>
+    <div style="opacity:.75;margin-top:6px;">Faqat sohibjonmath@gmail.com Google akkaunti.</div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button id="btnGoogleAdmin" style="flex:1;padding:12px 14px;border-radius:16px;border:0;font-weight:900;cursor:pointer;background:linear-gradient(135deg,rgba(46,139,87,.95),rgba(56,189,248,.65));color:#fff;">Google bilan kirish</button>
+      <button id="btnAdminSignOut" style="padding:12px 14px;border-radius:16px;border:1px solid rgba(2,6,23,.12);background:rgba(255,255,255,.7);font-weight:900;cursor:pointer;">Chiqish</button>
+    </div>
+    <div id="adminAuthMsg" style="margin-top:10px;font-weight:700;"></div>
+  </div>
+</div>
+
+
+<div class="wrap">
+    <div class="top">
+      <div>
+        <b>Admin — SPA Menu + Banner/Card Builder</b>
+        <div class="hint">Drag&drop bilan menyu tartibi, ↑↓ reorder, builder yoki custom (HTML/CSS/JS/URL) sahifalar.</div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn ghost" id="btnBack">← Sayt</button>
+        <button class="btn ghost" id="btnLogout">Chiqish</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="hd">
+          <b>Menyu</b>
+          <div class="mini">
+            <button id="btnNew">+ Yangi</button>
+            <button id="btnPublish" class="btn" style="padding:10px 12px">Saqlash</button>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="hint">Tartiblash: itemni ushlab sudrang (drag&drop) yoki ↑↓.</div>
+          <div class="list" id="menuList"></div>
+          <div class="warn" id="guardMsg" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">
+          <b>Tahrirlash / Preview</b>
+          <div class="mini">
+            <button id="btnPreview">Preview</button>
+            <button id="btnDelete">O‘chirish</button>
+          </div>
+        </div>
+        <div class="bd">
+          <div class="row">
+            <div>
+              <label>ID (route)</label>
+              <input id="fId" placeholder="home, testpro, shop">
+              <div class="hint">Unikal bo‘lsin.</div>
+            </div>
+            <div>
+              <label>Title</label>
+              <input id="fTitle" placeholder="Masalan: Bosh sahifa">
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Base Href (ixtiyoriy)</label>
+              <input id="fBase" placeholder="https://example.com/">
+              <div class="hint">Nisbiy linklar uchun.</div>
+            </div>
+            <div>
+              <label>Mode</label>
+              <select id="fMode">
+                <option value="builder">Builder (Banners + Cards)</option>
+                <option value="custom">Custom (HTML/CSS/JS/URL)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- BUILDER -->
+          <div id="builderBox">
+            <div class="tabs">
+              <button class="tab on" id="tabBanners">Banners</button>
+              <button class="tab" id="tabCards">Cards</button>
+            </div>
+
+            <div id="bannersBox">
+              <div class="mini" style="justify-content:flex-end">
+                <button id="addBannerUrl">+ Banner URL</button>
+                <button id="addBannerHtml">+ Banner HTML</button>
+              </div>
+              <div class="blockList" id="bannerList"></div>
+            </div>
+
+            <div id="cardsBox" style="display:none">
+              <div class="mini" style="justify-content:flex-end">
+                <button id="addCard">+ Card</button>
+              </div>
+              <div class="blockList" id="cardList"></div>
+            </div>
+          </div>
+
+          <!-- CUSTOM -->
+          <div id="customBox" style="display:none">
+            <div class="row">
+              <div>
+                <label>HTML URL (ixtiyoriy)</label>
+                <input id="fHtmlUrl" placeholder="https://.../page.html">
+              </div>
+              <div>
+                <label>CSS URL (ixtiyoriy)</label>
+                <input id="fCssUrl" placeholder="https://.../page.css">
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>JS URL (ixtiyoriy)</label>
+                <input id="fJsUrl" placeholder="https://.../page.js">
+              </div>
+              <div>
+                <label>Inline (URL bo‘lmasa ishlatiladi)</label>
+                <div class="hint">Pastdagi inline HTML/CSS/JS ni to‘ldiring.</div>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>Inline HTML</label>
+                <textarea id="fHtml"></textarea>
+              </div>
+              <div>
+                <label>Inline CSS</label>
+                <textarea id="fCss"></textarea>
+              </div>
+            </div>
+            <div>
+              <label>Inline JS</label>
+              <textarea id="fJs"></textarea>
+              <div class="hint">JS faqat iframe ichida ishlaydi.</div>
+            </div>
+          </div>
+
+          <iframe id="previewFrame" sandbox="allow-scripts allow-forms"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+    const API_BASE = "/.netlify/functions/api";
+    const $ = (id)=>document.getElementById(id);
+
+    const Session = {
+      get token(){ return localStorage.getItem("lm_token") || ""; },
+      get me(){ try{ return JSON.parse(localStorage.getItem("lm_me")||"null"); }catch(e){return null} },
+      clear(){ localStorage.removeItem("lm_token"); localStorage.removeItem("lm_me"); }
+    };
+
+    async function api(path, opts={}){
+      const headers = Object.assign({"Content-Type":"application/json"}, opts.headers||{});
+      if(Session.token) headers.Authorization = "Bearer " + Session.token;
+      const res = await fetch(API_BASE + path, {...opts, headers});
+      const data = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data && (data.error||data.message)) || (res.status+" "+res.statusText));
+      return data;
+    }
+
+    function buildSrcDoc({title, html="", css="", js="", baseHref=""}){
+      const baseTag = baseHref ? `<base href="${baseHref}">` : "";
+      return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      ${baseTag}
+      <title>${(title||"Preview").replace(/</g,"&lt;")}</title>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+      <style>html,body{margin:0;padding:0;font-family:system-ui}</style>
+      <style>${css||""}</style>
+      </head><body>
+${html||""}
+      <script>${js||""}<\/script>
+      
+</body></html>`;
+    }
+
+    function builderToCustom(item){
+      // Builder preview uses same template as index
+      const b = item.builder || { banners:[], cards:[] };
+      const banners = b.banners || [];
+      const cards = b.cards || [];
+      const html = `
+<div class="wrap">
+  <header class="hero">
+    <div class="heroTop">
+      <h1>${(item.title||"Sahifa")}</h1>
+      <p>Banner + Card builder (admin’dan boshqariladi)</p>
+    </div>
+    <div class="carousel" id="car">
+      ${banners.map((bn,i)=>{
+        if(bn.mode==="html"){
+          return `<div class="slide" data-i="${i}"><div class="slideInner">${bn.html||""}</div></div>`;
+        }
+        return `<div class="slide" data-i="${i}"><img alt="banner" src="${bn.src||""}"></div>`;
+      }).join("")}
+      <div class="dots" id="dots"></div>
+    </div>
+  </header>
+  <section class="cards">
+    ${cards.map(c=>{
+      const style = c.cardStyle || "available";
+      const active = (c.active !== false);
+      const badge = style==="soon" ? "Tez kunda" : (style==="timed" ? "Muddatli" : "Mavjud");
+      return `
+      <article class="card ${style} ${active? "" : "inactive"}">
+        <div class="cardHead">
+          <b>${c.title||"Card"}</b>
+          <span class="badge">${badge}</span>
+        </div>
+        <div class="info">${c.infoHtml||""}</div>
+        <div class="ctaRow">
+          <a class="cta" href="${c.ctaHref||"#"}" target="_blank" rel="noreferrer">${c.ctaLabel||"Ochish"}</a>
+        </div>
+      </article>`;
+    }).join("")}
+  </section>
+</div>`;
+      const css = `
+:root{--ink:#0b1220;--muted:#6b7280;--brand:#2E8B57;--stroke:rgba(15,23,42,.12);--shadow:0 18px 60px rgba(2,6,23,.12);--r:22px;}
+body{background:linear-gradient(180deg,#ffffff,#f3fff7);color:var(--ink)}
+.wrap{padding:14px;max-width:1100px;margin:0 auto;display:grid;gap:14px}
+.hero{border:1px solid var(--stroke);border-radius:var(--r);background:rgba(255,255,255,.78);box-shadow:var(--shadow);overflow:hidden}
+.heroTop{padding:14px 14px 6px}
+.heroTop h1{margin:0;font-size:20px}
+.heroTop p{margin:6px 0 0;color:var(--muted);font-weight:700}
+.carousel{position:relative;padding:10px 12px 12px}
+.slide{border-radius:18px;overflow:hidden;border:1px solid var(--stroke);background:#fff}
+.slide img{width:100%;height:220px;object-fit:cover;display:block}
+.slideInner{padding:16px}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(2,6,23,.18)}
+.dot.on{background:rgba(46,139,87,.85)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:920px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.cards{grid-template-columns:1fr}}
+.card{border:1px solid var(--stroke);border-radius:22px;background:rgba(255,255,255,.80);box-shadow:0 14px 40px rgba(2,6,23,.08);padding:14px;display:grid;gap:10px}
+.card.inactive{opacity:.55;filter:grayscale(.2)}
+.cardHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cardHead b{font-size:14px}
+.badge{font-size:11px;font-weight:900;padding:6px 10px;border-radius:999px;border:1px solid var(--stroke);background:rgba(255,255,255,.8)}
+.card.available .badge{border-color:rgba(46,139,87,.25);background:rgba(46,139,87,.08)}
+.card.soon .badge{border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.10)}
+.card.timed .badge{border-color:rgba(56,189,248,.25);background:rgba(56,189,248,.10)}
+.info{color:rgba(2,6,23,.86);line-height:1.35}
+.ctaRow{display:flex;justify-content:flex-end}
+.cta{display:inline-flex;align-items:center;justify-content:center;
+  padding:10px 12px;border-radius:14px;font-weight:900;text-decoration:none;color:white;
+  background:linear-gradient(135deg, rgba(46,139,87,.92), rgba(56,189,248,.72));}
+`;
+      const js = `
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const dots=document.getElementById('dots');
+  if(!slides.length) return;
+  let i=0;
+  function renderDots(){
+    dots.innerHTML = slides.map((_,k)=>'<span class="dot '+(k===i?'on':'')+'" data-k="'+k+'"></span>').join('');
+    dots.querySelectorAll('.dot').forEach(d=>d.onclick=()=>{i=+d.dataset.k; show();});
+  }
+  function show(){
+    slides.forEach((s,k)=>s.style.display=(k===i?'block':'none'));
+    renderDots();
+  }
+  show();
+  setInterval(()=>{ i=(i+1)%slides.length; show(); }, 4500);
+})();`;
+      return {html,css,js};
+    }
+
+    let state = { items: [], selId: null, draggingId: null };
+
+    function uid(){ return Math.random().toString(36).slice(2,9); }
+
+    function guard(){
+      if(!Session.token || !Session.me) throw new Error("Avval index.html orqali kirish qiling.");
+      const me = Session.me;
+      const ok = (me.provider==="admin") || (me.isAdmin===true) || (me.email && me.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+      if(!ok) throw new Error("Admin faqat " + ADMIN_EMAIL + " uchun.");
+    }
+
+    function defaultItem(){
+      return {
+        id: "home",
+        title: "Bosh sahifa",
+        mode: "builder",
+        baseHref: "",
+        builder: {
+          banners: [
+            { id: uid(), mode:"url", src:"https://picsum.photos/1200/520?random=11" }
+          ],
+          cards: [
+            { id: uid(), title:"Test Pro", cardStyle:"available", ctaLabel:"Boshlash", ctaHref:"#", infoHtml:"<p>Premium testlar</p>", active:true }
+          ]
+        },
+        htmlUrl:"", cssUrl:"", jsUrl:"",
+        inlineHtml:"", inlineCss:"", inlineJs:""
+      };
+    }
+
+    function renderMenuList(){
+      const box = $("menuList");
+      box.innerHTML = "";
+      if(!state.items.length){
+        box.innerHTML = `<div class="hint">Hali menyu yo‘q. “Yangi” bosing.</div>`;
+        return;
+      }
+
+      state.items.forEach((it, idx)=>{
+        const el = document.createElement("div");
+        el.className = "item" + (it.id===state.selId ? " active" : "");
+        el.draggable = true;
+        el.dataset.id = it.id;
+        el.innerHTML = `
+          <div>
+            <b>${it.title || "(no title)"}</b><br>
+            <small>#${it.id} • ${it.mode || "builder"}</small>
+          </div>
+          <div class="mini">
+            <button data-act="up">↑</button>
+            <button data-act="down">↓</button>
+            <button data-act="edit">Edit</button>
+          </div>
+        `;
+
+        el.querySelector("[data-act='edit']").onclick = ()=>selectItem(it.id);
+        el.querySelector("[data-act='up']").onclick = ()=>move(it.id, -1);
+        el.querySelector("[data-act='down']").onclick = ()=>move(it.id, +1);
+
+        // drag
+        el.addEventListener("dragstart", (e)=>{
+          state.draggingId = it.id;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", it.id);
+        });
+        el.addEventListener("dragover", (e)=>{
+          e.preventDefault();
+          e.dataTransfer.dropEffect="move";
+        });
+        el.addEventListener("drop", (e)=>{
+          e.preventDefault();
+          const from = state.draggingId || e.dataTransfer.getData("text/plain");
+          const to = it.id;
+          if(from && to && from!==to) reorderById(from, to);
+        });
+
+        box.appendChild(el);
+      });
+    }
+
+    function move(id, dir){
+      const i = state.items.findIndex(x=>x.id===id);
+      if(i<0) return;
+      const j = i + dir;
+      if(j<0 || j>=state.items.length) return;
+      const arr = state.items.slice();
+      const [it] = arr.splice(i,1);
+      arr.splice(j,0,it);
+      state.items = arr;
+      renderMenuList();
+    }
+
+    function reorderById(fromId, toId){
+      const arr = state.items.slice();
+      const fromI = arr.findIndex(x=>x.id===fromId);
+      const toI = arr.findIndex(x=>x.id===toId);
+      if(fromI<0||toI<0) return;
+      const [it] = arr.splice(fromI,1);
+      arr.splice(toI,0,it);
+      state.items = arr;
+      renderMenuList();
+    }
+
+    function selectItem(id){
+      state.selId = id;
+      const it = state.items.find(x=>x.id===id);
+      fillForm(it);
+      renderMenuList();
+      renderBuilderLists(it);
+      preview();
+    }
+
+    function fillForm(it){
+      $("fId").value = it?.id || "";
+      $("fTitle").value = it?.title || "";
+      $("fBase").value = it?.baseHref || "";
+      $("fMode").value = it?.mode || "builder";
+
+      $("fHtmlUrl").value = it?.htmlUrl || "";
+      $("fCssUrl").value = it?.cssUrl || "";
+      $("fJsUrl").value = it?.jsUrl || "";
+      $("fHtml").value = it?.inlineHtml || "";
+      $("fCss").value = it?.inlineCss || "";
+      $("fJs").value = it?.inlineJs || "";
+
+      toggleModeUI($("fMode").value);
+    }
+
+    function toggleModeUI(mode){
+      const isBuilder = mode === "builder";
+      $("builderBox").style.display = isBuilder ? "block" : "none";
+      $("customBox").style.display = isBuilder ? "none" : "block";
+    }
+
+    function readForm(){
+      const base = {
+        id: $("fId").value.trim(),
+        title: $("fTitle").value.trim(),
+        baseHref: $("fBase").value.trim(),
+        mode: $("fMode").value
+      };
+      if(base.mode==="custom"){
+        return {
+          ...base,
+          htmlUrl: $("fHtmlUrl").value.trim(),
+          cssUrl: $("fCssUrl").value.trim(),
+          jsUrl: $("fJsUrl").value.trim(),
+          inlineHtml: $("fHtml").value,
+          inlineCss: $("fCss").value,
+          inlineJs: $("fJs").value
+        };
+      }
+      // builder: keep builder in state by selId
+      const cur = state.items.find(x=>x.id===state.selId);
+      return { ...base, builder: cur?.builder || {banners:[],cards:[]} };
+    }
+
+    function ensureSelected(){
+      const it = state.items.find(x=>x.id===state.selId);
+      if(!it) throw new Error("Item tanlanmagan.");
+      return it;
+    }
+
+    function renderBuilderLists(it){
+      // banners
+      const bList = $("bannerList");
+      const cList = $("cardList");
+      bList.innerHTML = "";
+      cList.innerHTML = "";
+
+      const banners = (it.builder?.banners || []);
+      const cards = (it.builder?.cards || []);
+
+      banners.forEach((bn, idx)=>{
+        const el = document.createElement("div");
+        el.className = "block";
+        el.draggable = true;
+        el.dataset.kind="banner";
+        el.dataset.id=bn.id;
+
+        el.innerHTML = `
+          <div class="blockHead">
+            <b>Banner #${idx+1} • ${bn.mode==="html" ? "HTML" : "URL"}</b>
+            <div class="mini">
+              <button data-act="up">↑</button>
+              <button data-act="down">↓</button>
+              <button data-act="del">O‘chirish</button>
+            </div>
+          </div>
+          ${bn.mode==="html" ? `
+            <label>HTML</label>
+            <textarea data-field="html">${bn.html||""}</textarea>
+          ` : `
+            <label>Image URL</label>
+            <input data-field="src" value="${bn.src||""}" placeholder="https://.../banner.jpg">
+          `}
+        `;
+
+        el.querySelector("[data-act='up']").onclick=()=>moveBlock("banners", bn.id, -1);
+        el.querySelector("[data-act='down']").onclick=()=>moveBlock("banners", bn.id, +1);
+        el.querySelector("[data-act='del']").onclick=()=>delBlock("banners", bn.id);
+
+        el.querySelectorAll("[data-field]").forEach(inp=>{
+          inp.addEventListener("input", ()=>{
+            const field = inp.dataset.field;
+            bn[field] = inp.value;
+          });
+        });
+
+        // drag within banners
+        el.addEventListener("dragstart",(e)=>{ state.draggingId = bn.id; e.dataTransfer.setData("text/plain", bn.id); });
+        el.addEventListener("dragover",(e)=>{ e.preventDefault(); });
+        el.addEventListener("drop",(e)=>{
+          e.preventDefault();
+          const from = state.draggingId || e.dataTransfer.getData("text/plain");
+          const to = bn.id;
+          if(from && to && from!==to) reorderBlock("banners", from, to);
+        });
+
+        bList.appendChild(el);
+      });
+
+      cards.forEach((c, idx)=>{
+        const el = document.createElement("div");
+        el.className="block";
+        el.draggable = true;
+        el.dataset.kind="card";
+        el.dataset.id=c.id;
+
+        el.innerHTML = `
+          <div class="blockHead">
+            <b>Card #${idx+1}</b>
+            <div class="mini">
+              <button data-act="up">↑</button>
+              <button data-act="down">↓</button>
+              <button data-act="del">O‘chirish</button>
+            </div>
+          </div>
+
+          <div class="split">
+            <div>
+              <label>Sarlavha</label>
+              <input data-field="title" value="${c.title||""}">
+            </div>
+            <div>
+              <label>Status</label>
+              <select data-field="cardStyle">
+                <option value="available" ${c.cardStyle==="available"?"selected":""}>Available</option>
+                <option value="soon" ${c.cardStyle==="soon"?"selected":""}>Soon</option>
+                <option value="timed" ${c.cardStyle==="timed"?"selected":""}>Timed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="split">
+            <div>
+              <label>CTA Label</label>
+              <input data-field="ctaLabel" value="${c.ctaLabel||""}">
+            </div>
+            <div>
+              <label>CTA Href</label>
+              <input data-field="ctaHref" value="${c.ctaHref||""}">
+            </div>
+          </div>
+
+          <div class="split">
+            <div>
+              <label>Active</label>
+              <select data-field="active">
+                <option value="true" ${(c.active!==false)?"selected":""}>true</option>
+                <option value="false" ${(c.active===false)?"selected":""}>false</option>
+              </select>
+            </div>
+            <div>
+              <label>Muddat (ixtiyoriy)</label>
+              <input data-field="startAt" value="${c.startAt||""}" placeholder="2026-01-01T00:00:00Z">
+            </div>
+          </div>
+
+          <label>Info HTML</label>
+          <textarea data-field="infoHtml">${c.infoHtml||""}</textarea>
+        `;
+
+        el.querySelector("[data-act='up']").onclick=()=>moveBlock("cards", c.id, -1);
+        el.querySelector("[data-act='down']").onclick=()=>moveBlock("cards", c.id, +1);
+        el.querySelector("[data-act='del']").onclick=()=>delBlock("cards", c.id);
+
+        el.querySelectorAll("[data-field]").forEach(inp=>{
+          inp.addEventListener("input", ()=>{
+            const field = inp.dataset.field;
+            if(inp.tagName==="SELECT" && field==="active"){
+              c.active = (inp.value==="true");
+            }else{
+              c[field] = inp.value;
+            }
+          });
+        });
+
+        // drag within cards
+        el.addEventListener("dragstart",(e)=>{ state.draggingId = c.id; e.dataTransfer.setData("text/plain", c.id); });
+        el.addEventListener("dragover",(e)=>{ e.preventDefault(); });
+        el.addEventListener("drop",(e)=>{
+          e.preventDefault();
+          const from = state.draggingId || e.dataTransfer.getData("text/plain");
+          const to = c.id;
+          if(from && to && from!==to) reorderBlock("cards", from, to);
+        });
+
+        cList.appendChild(el);
+      });
+    }
+
+    function moveBlock(kind, id, dir){
+      const it = ensureSelected();
+      const arr = (it.builder?.[kind] || []);
+      const i = arr.findIndex(x=>x.id===id);
+      const j = i + dir;
+      if(i<0||j<0||j>=arr.length) return;
+      const [obj] = arr.splice(i,1);
+      arr.splice(j,0,obj);
+      renderBuilderLists(it);
+    }
+
+    function reorderBlock(kind, fromId, toId){
+      const it = ensureSelected();
+      const arr = (it.builder?.[kind] || []);
+      const fromI = arr.findIndex(x=>x.id===fromId);
+      const toI = arr.findIndex(x=>x.id===toId);
+      if(fromI<0||toI<0) return;
+      const [obj] = arr.splice(fromI,1);
+      arr.splice(toI,0,obj);
+      renderBuilderLists(it);
+    }
+
+    function delBlock(kind, id){
+      const it = ensureSelected();
+      it.builder[kind] = (it.builder?.[kind] || []).filter(x=>x.id!==id);
+      renderBuilderLists(it);
+    }
+
+    function addBanner(mode){
+      const it = ensureSelected();
+      it.builder = it.builder || {banners:[],cards:[]};
+      it.builder.banners.push({ id: uid(), mode, src:"", html:"" });
+      renderBuilderLists(it);
+    }
+
+    function addCard(){
+      const it = ensureSelected();
+      it.builder = it.builder || {banners:[],cards:[]};
+      it.builder.cards.push({ id: uid(), title:"Yangi card", cardStyle:"available", ctaLabel:"Ochish", ctaHref:"#", infoHtml:"<p>Info</p>", active:true });
+      renderBuilderLists(it);
+    }
+
+    async function preview(){
+      const it = ensureSelected();
+      const f = readForm();
+      // sync basic fields
+      it.id = f.id; it.title = f.title; it.baseHref = f.baseHref; it.mode = f.mode;
+
+      if(it.mode === "custom"){
+        it.htmlUrl = f.htmlUrl; it.cssUrl = f.cssUrl; it.jsUrl = f.jsUrl;
+        it.inlineHtml = f.inlineHtml; it.inlineCss = f.inlineCss; it.inlineJs = f.inlineJs;
+
+        let html=it.inlineHtml||"", css=it.inlineCss||"", js=it.inlineJs||"";
+        async function fetchText(url){
+          const r = await fetch(url, {cache:"no-store"});
+          if(!r.ok) throw new Error("Yuklab bo‘lmadi: " + url);
+          return await r.text();
+        }
+        if(it.htmlUrl) html = await fetchText(it.htmlUrl);
+        if(it.cssUrl)  css  = await fetchText(it.cssUrl);
+        if(it.jsUrl)   js   = await fetchText(it.jsUrl);
+        $("previewFrame").srcdoc = buildSrcDoc({title:it.title, html, css, js, baseHref: it.baseHref||""});
+        return;
+      }
+
+      // builder
+      const tpl = builderToCustom(it);
+      $("previewFrame").srcdoc = buildSrcDoc({title: it.title, html: tpl.html, css: tpl.css, js: tpl.js, baseHref: it.baseHref||""});
+    }
+
+    function normalizeIds(){
+      // ensure unique IDs
+      const seen = new Set();
+      state.items.forEach(it=>{
+        if(!it.id) it.id = "page-" + uid();
+        let base = it.id;
+        while(seen.has(it.id)){
+          it.id = base + "-" + uid();
+        }
+        seen.add(it.id);
+        it.mode = it.mode || "builder";
+        it.builder = it.builder || {banners:[],cards:[]};
+      });
+    }
+
+    async function loadItems(){
+      const data = await api("/menu", {method:"GET"});
+      state.items = data.items || [];
+      if(!state.items.length){
+        state.items = [ defaultItem() ];
+      }
+      normalizeIds();
+      state.selId = state.items[0].id;
+      renderMenuList();
+      selectItem(state.selId);
+    }
+
+    async function publish(){
+      // commit current form to selected item
+      const it = ensureSelected();
+      const f = readForm();
+      if(!f.id || !f.title) throw new Error("ID va Title shart.");
+
+      // if id changed, update in list ensuring uniqueness
+      if(it.id !== f.id){
+        const exists = state.items.some(x=>x.id===f.id);
+        if(exists) throw new Error("Bu ID band: " + f.id);
+        it.id = f.id;
+        state.selId = it.id;
+      }
+      it.title = f.title;
+      it.baseHref = f.baseHref;
+      it.mode = f.mode;
+
+      if(it.mode==="custom"){
+        it.htmlUrl = f.htmlUrl; it.cssUrl = f.cssUrl; it.jsUrl = f.jsUrl;
+        it.inlineHtml = f.inlineHtml; it.inlineCss = f.inlineCss; it.inlineJs = f.inlineJs;
+        delete it.builder;
+      }else{
+        it.builder = it.builder || {banners:[],cards:[]};
+        delete it.htmlUrl; delete it.cssUrl; delete it.jsUrl;
+        delete it.inlineHtml; delete it.inlineCss; delete it.inlineJs;
+      }
+
+      await api("/admin/menuSetAll", {method:"POST", body: JSON.stringify({items: state.items})});
+      alert("Saqlangan ✅");
+      renderMenuList();
+    }
+
+    async function delSelected(){
+      const it = ensureSelected();
+      if(!confirm("O‘chirishni tasdiqlaysizmi?")) return;
+      state.items = state.items.filter(x=>x.id!==it.id);
+      if(!state.items.length) state.items = [ defaultItem() ];
+      state.selId = state.items[0].id;
+      renderMenuList();
+      selectItem(state.selId);
+    }
+
+    function newItem(){
+      const it = defaultItem();
+      it.id = "page-" + uid();
+      it.title = "Yangi sahifa";
+      state.items.push(it);
+      state.selId = it.id;
+      renderMenuList();
+      selectItem(it.id);
+    }
+
+    function setTab(which){
+      const bannersOn = which==="banners";
+      $("tabBanners").classList.toggle("on", bannersOn);
+      $("tabCards").classList.toggle("on", !bannersOn);
+      $("bannersBox").style.display = bannersOn ? "block" : "none";
+      $("cardsBox").style.display = bannersOn ? "none" : "block";
+    }
+
+    async function logout(){
+      Session.clear();
+      location.href="index.html";
+    }
+
+    window.addEventListener("DOMContentLoaded", async ()=>{
+      $("btnBack").onclick = ()=>location.href="index.html";
+      $("btnLogout").onclick = logout;
+      $("btnNew").onclick = newItem;
+      $("btnPublish").onclick = ()=>publish().catch(e=>alert(e.message));
+      $("btnPreview").onclick = ()=>preview().catch(e=>alert(e.message));
+      $("btnDelete").onclick = ()=>delSelected().catch(e=>alert(e.message));
+
+      $("tabBanners").onclick = ()=>setTab("banners");
+      $("tabCards").onclick = ()=>setTab("cards");
+
+      $("addBannerUrl").onclick = ()=>addBanner("url");
+      $("addBannerHtml").onclick = ()=>addBanner("html");
+      $("addCard").onclick = ()=>addCard();
+
+      $("fMode").addEventListener("change", (e)=>{
+        toggleModeUI(e.target.value);
+        preview().catch(()=>{});
+      });
+
+      try{
+        guard();
+        await loadItems();
+      }catch(e){
+        $("guardMsg").style.display="block";
+        $("guardMsg").textContent = e.message;
+      }
+    });
+  </script>
+
+
+<script>
+(function(){
+  const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+  let sessionToken = localStorage.getItem("lm_token") || "";
+
+  async function api(path, opts={}){
+    const r = await fetch("/.netlify/functions/api"+path, {
+      ...opts,
+      headers: {
+        "Content-Type":"application/json",
+        ...(opts.headers||{}),
+        ...(sessionToken ? {"Authorization":"Bearer "+sessionToken} : {})
+      }
+    });
+    const data = await r.json().catch(()=> ({}));
+    if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
+    return data;
+  }
+
+  async function doGoogle(){
+    const msg = document.getElementById("adminAuthMsg");
+    msg.textContent = "Google oynasi ochilmoqda…";
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const res = await auth.signInWithPopup(provider);
+    const user = res.user;
+    const email = (user.email||"").toLowerCase();
+    if(email !== ADMIN_EMAIL.toLowerCase()){
+      await auth.signOut();
+      throw new Error("Bu akkaunt admin emas.");
+    }
+    const idToken = await user.getIdToken();
+    msg.textContent = "Server tekshiryapti…";
+    const out = await api("/auth/adminGoogle", {method:"POST", body: JSON.stringify({idToken})});
+    sessionToken = out.token;
+    localStorage.setItem("lm_token", sessionToken);
+    msg.textContent = "Admin kirish ✅";
+    document.getElementById("adminAuthGate").style.display="none";
+    if(window.loadAll) window.loadAll();
+  }
+
+  async function signOutAll(){
+    localStorage.removeItem("lm_token");
+    sessionToken="";
+    try{ await auth.signOut(); }catch(e){}
+    location.reload();
+  }
+
+  window.addEventListener("load", ()=>{
+    document.getElementById("btnGoogleAdmin").addEventListener("click", ()=>doGoogle().catch(e=>{
+      document.getElementById("adminAuthMsg").textContent = e.message;
+      console.error(e);
+    }));
+    document.getElementById("btnAdminSignOut").addEventListener("click", signOutAll);
+
+    (async()=>{
+      if(!sessionToken) return;
+      try{
+        await api("/me");
+        document.getElementById("adminAuthGate").style.display="none";
+        if(window.loadAll) window.loadAll();
+      }catch(e){}
+    })();
+  });
+})();
+</script>
+
+</body>
+</html>

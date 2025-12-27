@@ -1,33 +1,65 @@
-# LeaderMath.uz — Starter (ZIP)
+# LeaderMath.UZ SPA — ZIP project
 
-## 0) Nima bor?
-- Oddiy foydalanuvchi: ID+maxfiy so'z login **faqat /api orqali** (Firebase SDK yo'q → tejamkor)
-- Majburiy profil: ism, familiya, tug'ilgan sana, viloyat/tuman (region.json)
-- Header: Salom, name + tiny ID/age/points + avatar
-- Pastki bottom-nav: admin.html orqali boshqariladi
-- Har section: chip filter + banner/card
-- Reyting: o'ngdan chiqadigan panel (points bo'yicha TOP)
+## Deploy (Netlify)
+1) `npm i`
+2) Set Netlify env vars:
+- FIREBASE_SERVICE_ACCOUNT_JSON
+- SESSION_JWT_SECRET
+- FIREBASE_STORAGE_BUCKET (optional; default from service account project)
+3) Deploy.
 
-## 1) Netlify ENV
-- FIREBASE_SERVICE_ACCOUNT = Firebase service account JSON (to'liq JSON matn)
-- APP_JWT_SECRET = random secret (uzun)
+## Firebase
+- Enable Google Auth (if you want Google login)
+- Create Storage bucket (default)
+- Firestore used only by server (rules can be closed).
 
-## 2) Firestore rules (tavsiya)
-Client to'g'ridan-to'g'ri kira olmasin:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{doc=**} { allow read, write: if false; }
-  }
-}
-```
+## Admin
+- Admin button appears only for: sohibjonmath@gmail.com
+- Admin API endpoints require that email too.
 
-## 3) Admin sozlash
-`public/admin.js` ichidagi firebaseConfig ni o'zingnikiga mosla.
-Admin email: sohibjonmath@gmail.com
+## Region JSON
+- region.json is used for Viloyat → Tuman selects.
 
-## 4) Lokal ishga tushirish
-1) npm i
-2) npx netlify dev
-3) http://localhost:8888
+
+## v3 Admin login
+Netlify env qo‘ying:
+- ADMIN_EMAIL (optional, default sohibjonmath@gmail.com)
+- ADMIN_PASSWORD (required)
+Admin login Firebase Web SDKsiz ishlaydi.
+
+
+## v7 O‘zgarishlar
+- Index: admin login olib tashlandi, admin tugmasi yo‘q.
+- Admin: alohida Firebase Auth (Google) bilan kiradi va serverga idToken yuborib sessiya oladi.
+
+### Netlify env
+- FIREBASE_SERVICE_ACCOUNT (yoki FIREBASE_SERVICE_ACCOUNT_JSON) — service account JSON string
+- SESSION_JWT_SECRET
+- ADMIN_EMAIL (default sohibjonmath@gmail.com)
+
+### Admin Firebase config
+admin.html ichida firebaseConfig ni to‘ldiring (apiKey/authDomain/projectId).
+
+
+### Storage bucket
+Avatar upload ishlatmoqchi bo‘lsangiz Netlify env:
+- FIREBASE_STORAGE_BUCKET (masalan: your-project-id.appspot.com)
+Aks holda register/login/menu ishlashi uchun shart emas.
+
+
+Note: Agar FIREBASE_STORAGE_BUCKET qo‘ymasangiz, server projectId'dan avtomatik <projectId>.appspot.com deb taxmin qiladi. Eng yaxshisi baribir env bilan aniq qo‘ying.
+
+
+## v11 Avatar upload (server-side)
+Avatar endi brauzerdan Storage’ga PUT qilmaydi. `/avatarUpload` endpoint base64 rasmni serverga yuboradi, server Storage’ga saqlaydi va photoURL ni user doc’ga yozadi.
+Env: FIREBASE_STORAGE_BUCKET tavsiya qilinadi.
+
+
+## v13 Avatar (Firestore small base64)
+Storage ishlatilmaydi. Avatar 96x96 qilib klientda kichraytiriladi va user doc’ga `avatarSmall` sifatida saqlanadi. Shuning uchun CORS/Storage muammolari yo‘q.
+Env: FIREBASE_STORAGE_BUCKET endi shart emas.
+
+
+## v14
+- Avatar: Storage/PUT yo‘q. Faqat Firestore `avatarSmall`.
+- Agar sizda eski kod keshlangan bo‘lsa: Ctrl+F5 yoki Incognito’da tekshiring.
