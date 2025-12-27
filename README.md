@@ -25,3 +25,11 @@ If not set, dev defaults are used (works locally, but set them for production).
 - App: banners carousel + cards + bottom nav (scrollable)
 - Admin: content editor + users list (points/balance)
 - Storage: Netlify Blobs (works on Netlify + netlify dev)
+
+
+## If you see MissingBlobsEnvironmentError on Netlify
+If Netlify Blobs is not enabled for your site, the project will fall back to in-memory storage (not persistent).
+To force persistent storage, set env vars:
+- BLOBS_SITE_ID=<your Netlify site id>
+- BLOBS_TOKEN=<Netlify Personal Access Token>
+Or enable Blobs in Netlify UI (Project -> Blobs).

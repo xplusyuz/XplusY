@@ -4,7 +4,44 @@ import { getStore } from "@netlify/blobs";
 const ADMIN_KEY = process.env.ADMIN_KEY || "LEADERMATH_SUPER_2026";
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
 
-const store = getStore("leadermath");
+// Storage: Netlify Blobs when available, otherwise in-memory fallback (works everywhere but not persistent).
+let store = null;
+const mem = new Map();
+
+async function getStoreSafe(){
+  if(store) return store;
+  try{
+    const siteID = process.env.NETLIFY_SITE_ID || process.env.BLOBS_SITE_ID || "";
+    const token = process.env.NETLIFY_API_TOKEN || process.env.BLOBS_TOKEN || "";
+    // If running outside Netlify Blobs environment, you can provide siteID+token manually.
+    const opts = (siteID && token) ? { siteID, token } : undefined;
+    store = getStore("leadermath", opts);
+    // Touch to ensure environment is configured (will throw MissingBlobsEnvironmentError otherwise)
+    await store.get("__ping__", { type: "text" }).catch(()=>null);
+    return store;
+  }catch(e){
+    store = null;
+    return null;
+  }
+}
+
+async function kvGet(key){
+  const s = await getStoreSafe();
+  if(s){
+    return await s.get(key, { type: "json" });
+  }
+  return mem.has(key) ? mem.get(key) : null;
+}
+
+async function kvSet(key, valueObj){
+  const s = await getStoreSafe();
+  if(s){
+    await s.set(key, JSON.stringify(valueObj), { contentType: "application/json" });
+    return;
+  }
+  mem.set(key, valueObj);
+}
+
 
 function json(statusCode, obj, headers={}){
   return {
@@ -65,15 +102,15 @@ function scryptHash(password, salt){
 }
 
 async function loadUsers(){
-  const raw = await store.get("users", { type: "json" });
+  const raw = await kvGet("users");
   return raw || {};
 }
 async function saveUsers(users){
-  await store.set("users", JSON.stringify(users), { contentType: "application/json" });
+  await kvSet("users", users);
 }
 
 async function loadContent(){
-  const raw = await store.get("content", { type: "json" });
+  const raw = await kvGet("content");
   if(raw) return raw;
   const seed = {
     banners: [
@@ -84,11 +121,11 @@ async function loadContent(){
       { id: crypto.randomUUID(), title:"Olimpiada", desc:"Agentlik/olimpiada tayyorlov", href:"", tag:"Olimpiada", active:true }
     ]
   };
-  await store.set("content", JSON.stringify(seed), { contentType:"application/json" });
+  await kvSet("content", seed);
   return seed;
 }
 async function saveContent(content){
-  await store.set("content", JSON.stringify(content), { contentType:"application/json" });
+  await kvSet("content", content);
 }
 
 function getBearer(event){
