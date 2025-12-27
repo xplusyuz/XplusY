@@ -1,243 +1,256 @@
-// netlify/functions/api.js
+import crypto from "node:crypto";
+import { getStore } from "@netlify/blobs";
 
-function safeRequire(name){
-  try{ return { mod: require(name) }; }
-  catch(e){ return { error: `Missing dependency: ${name}. Netlify build did not install node_modules? (${e.message})` }; }
-}
+const ADMIN_KEY = process.env.ADMIN_KEY || "LEADERMATH_SUPER_2026";
+const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
 
-function initAdmin(){
+const store = getStore("leadermath");
 
-  const r = safeRequire("firebase-admin");
-  if(r.error) throw new Error(r.error);
-  const admin = r.mod;
-  if(admin.apps.length) return;
-
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if(!b64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env");
-  const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-  admin.initializeApp({ credential: admin.credential.cert(json) });
-}
-function db(){
-  // firebase-admin is required lazily inside initAdmin, but we need the module here too
-  const r = safeRequire("firebase-admin");
-  if(r.error) throw new Error(r.error);
-  const admin = r.mod;
-  initAdmin();
-  return admin.firestore();
-}
-
-function json(statusCode, body){
+function json(statusCode, obj, headers={}){
   return {
     statusCode,
-    headers:{
-      "Content-Type":"application/json",
-      "Access-Control-Allow-Origin":"*",
-      "Access-Control-Allow-Headers":"Content-Type, Authorization",
-      "Access-Control-Allow-Methods":"GET,POST,OPTIONS"
-    },
-    body: JSON.stringify(body)
+    headers: { "Content-Type":"application/json; charset=utf-8", ...headers },
+    body: JSON.stringify(obj)
   };
 }
-function ok(body){ return json(200, body); }
-function err(status, message){ return json(status, { error: message }); }
 
-function parsePath(event){
-  const p = event.path || "";
-  if(p.includes("/.netlify/functions/api")) return p.split("/.netlify/functions/api")[1] || "/";
-  if(p.startsWith("/api")) return p.slice(4) || "/";
-  return "/";
+function b64url(buf){
+  return Buffer.from(buf).toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
-
-function getToken(event){
-  const h = event.headers?.authorization || event.headers?.Authorization || "";
-  const m = /^Bearer\s+(.+)$/.exec(h);
-  return m ? m[1] : "";
-}
-function requireAuth(event){
-  const token = getToken(event);
-  if(!token) return { ok:false, status:401, error:"Auth token yo‘q" };
-  const secret = process.env.JWT_SECRET;
-  if(!secret) return { ok:false, status:500, error:"Missing JWT_SECRET env" };
-  try{
-    const payload = jwt.verify(token, secret);
-    return { ok:true, payload };
-  }catch{
-    return { ok:false, status:401, error:"Token yaroqsiz" };
-  }
-}
-
-function isValidDOB(dob){
-  const m = /^(\d{2}):(\d{2}):(\d{4})$/.exec(String(dob||"").trim());
-  if(!m) return false;
-  const dd = +m[1], mm = +m[2], yy = +m[3];
-  if(yy < 1900 || yy > new Date().getFullYear()) return false;
-  if(mm < 1 || mm > 12) return false;
-  const dim = new Date(yy, mm, 0).getDate();
-  return dd >= 1 && dd <= dim;
-}
-
-async function nextLoginId(){
-  const ref = db().doc("meta/counters");
-  const out = await db().runTransaction(async (tx)=>{
-    const snap = await tx.get(ref);
-    let next = 999; // so first becomes 1000
-    if(snap.exists && typeof snap.data().nextLoginId === "number"){
-      next = snap.data().nextLoginId;
-    }
-    next += 1;
-    tx.set(ref, { nextLoginId: next }, { merge:true });
-    return next;
-  });
-  return String(out);
+function b64urlDecode(str){
+  str = str.replace(/-/g,"+").replace(/_/g,"/");
+  while(str.length % 4) str += "=";
+  return Buffer.from(str, "base64");
 }
 
 function signToken(payload){
-  const secret = process.env.JWT_SECRET;
-  if(!secret) throw new Error("Missing JWT_SECRET env");
-  return jwt.sign(payload, secret, { expiresIn:"60d" });
+  const header = {alg:"HS256", typ:"JWT"};
+  const encHeader = b64url(JSON.stringify(header));
+  const encPayload = b64url(JSON.stringify(payload));
+  const data = `${encHeader}.${encPayload}`;
+  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest();
+  return `${data}.${b64url(sig)}`;
+}
+function verifyToken(token){
+  const parts = String(token||"").split(".");
+  if(parts.length!==3) throw new Error("Token noto‘g‘ri");
+  const [h,p,s] = parts;
+  const data = `${h}.${p}`;
+  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest();
+  const expected = b64url(sig);
+  if(expected !== s) throw new Error("Token imzosi xato");
+  const payload = JSON.parse(b64urlDecode(p).toString("utf8"));
+  if(payload.exp && Date.now() > payload.exp) throw new Error("Token eskirgan");
+  return payload;
 }
 
-// Password reveal feature: encrypt password with AES-256-GCM (server key)
-function encKey(){
-  const b64 = process.env.PASS_ENC_KEY_BASE64;
-  if(!b64) throw new Error("Missing PASS_ENC_KEY_BASE64 env");
-  const key = Buffer.from(b64, "base64");
-  if(key.length !== 32) throw new Error("PASS_ENC_KEY_BASE64 must be 32 bytes base64");
-  return key;
+function randDigits(n){
+  let out = "";
+  for(let i=0;i<n;i++) out += String(Math.floor(Math.random()*10));
+  return out;
 }
-function encryptPassword(plain){
-  const iv = crypto.randomBytes(12);
-  const key = encKey();
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const enc = Buffer.concat([cipher.update(String(plain), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, enc]).toString("base64"); // iv(12)+tag(16)+ciphertext
+function genLoginId(){
+  return `LM-${randDigits(6)}`;
 }
-function decryptPassword(b64){
-  const buf = Buffer.from(b64, "base64");
-  const iv = buf.subarray(0,12);
-  const tag = buf.subarray(12,28);
-  const enc = buf.subarray(28);
-  const key = encKey();
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
-  return dec.toString("utf8");
+function genPassword(){
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$";
+  let p = "";
+  for(let i=0;i<9;i++) p += alphabet[Math.floor(Math.random()*alphabet.length)];
+  return p;
 }
 
-async function getUser(loginId){
-  const snap = await db().collection("users").doc(String(loginId)).get();
-  if(!snap.exists) return null;
-  return { id: snap.id, ...snap.data() };
+function scryptHash(password, salt){
+  const hash = crypto.scryptSync(password, salt, 32);
+  return hash.toString("hex");
 }
 
-exports.handler = async (event) => {
+async function loadUsers(){
+  const raw = await store.get("users", { type: "json" });
+  return raw || {};
+}
+async function saveUsers(users){
+  await store.set("users", JSON.stringify(users), { contentType: "application/json" });
+}
+
+async function loadContent(){
+  const raw = await store.get("content", { type: "json" });
+  if(raw) return raw;
+  const seed = {
+    banners: [
+      { id: crypto.randomUUID(), title:"LeaderMath.UZ", subtitle:"Boshlang — ID+Parol avtomatik", img:"", href:"", active:true }
+    ],
+    cards: [
+      { id: crypto.randomUUID(), title:"DTM Mashqlar", desc:"DTM formatdagi savollar", href:"", tag:"DTM", active:true },
+      { id: crypto.randomUUID(), title:"Olimpiada", desc:"Agentlik/olimpiada tayyorlov", href:"", tag:"Olimpiada", active:true }
+    ]
+  };
+  await store.set("content", JSON.stringify(seed), { contentType:"application/json" });
+  return seed;
+}
+async function saveContent(content){
+  await store.set("content", JSON.stringify(content), { contentType:"application/json" });
+}
+
+function getBearer(event){
+  const h = event.headers?.authorization || event.headers?.Authorization || "";
+  const m = String(h).match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : "";
+}
+
+export async function handler(event){
   try{
-    if(event.httpMethod === "OPTIONS") return ok({});
+    const method = event.httpMethod || "GET";
+    const qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
+    const path = "/" + qpath;
 
-    // Lightweight diagnostics endpoint (works even if firebase deps/env are missing)
-    if(parsePath(event) === "/diag" && event.httpMethod === "GET"){
-      const missing = [];
-      ["FIREBASE_SERVICE_ACCOUNT_BASE64","JWT_SECRET","PASS_ENC_KEY_BASE64"].forEach(k=>{
-        if(!process.env[k]) missing.push(k);
-      });
-      return ok({
-        ok:true,
-        missing_env: missing,
-        note: "If missing_env is empty but you still get 500, check Netlify build logs for missing node_modules."
-      });
+    // CORS (optional)
+    if(method === "OPTIONS"){
+      return {
+        statusCode: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "content-type, authorization, x-admin-key",
+          "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
+        },
+        body: ""
+      };
     }
 
+    // ===== AUTH REGISTER =====
+    if(path === "/auth/register" && method === "POST"){
+      const users = await loadUsers();
 
-    const path = parsePath(event);
-    const method = event.httpMethod;
+      // generate unique id
+      let loginId = genLoginId();
+      let tries = 0;
+      while(users[loginId] && tries < 10){
+        loginId = genLoginId(); tries++;
+      }
+      if(users[loginId]) return json(500, {error:"ID yaratib bo‘lmadi, qayta urinib ko‘ring"});
 
-    const rb = safeRequire("bcryptjs"); if(rb.error) throw new Error(rb.error); const bcrypt = rb.mod;
-    const rj = safeRequire("jsonwebtoken"); if(rj.error) throw new Error(rj.error); const jwt = rj.mod;
-    const rc = safeRequire("crypto"); if(rc.error) throw new Error(rc.error); const crypto = rc.mod;
-    // firebase-admin module (for timestamps) loaded lazily:
-    const ra = safeRequire("firebase-admin"); if(ra.error) throw new Error(ra.error); const admin = ra.mod;
+      const passwordPlain = genPassword();
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = scryptHash(passwordPlain, salt);
 
-    if(path === "/auth/signup" && method === "POST"){
-      const body = JSON.parse(event.body || "{}");
-      const { password, firstName, lastName, dob } = body;
-
-      if(!password || String(password).length < 6) return err(400, "Parol kamida 6 bo‘lsin.");
-      if(!firstName) return err(400, "Ism majburiy.");
-      if(!lastName)  return err(400, "Familiya majburiy.");
-      if(!isValidDOB(dob)) return err(400, "Tug‘ilgan sana DD:MM:YYYY bo‘lsin.");
-
-      const loginId = await nextLoginId();
-      const passHash = await bcrypt.hash(String(password), 10);
-      const passEnc  = encryptPassword(String(password));
-
-      const doc = {
+      const user = {
         loginId,
-        firstName: String(firstName).trim(),
-        lastName: String(lastName).trim(),
-        dob: String(dob).trim(),
-        passHash,
-        passEnc,
+        salt,
+        passwordHash,
+        name: "",
         points: 0,
         balance: 0,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        createdAt: new Date().toISOString()
       };
+      users[loginId] = user;
+      await saveUsers(users);
 
-      await db().collection("users").doc(loginId).set(doc);
-      const token = signToken({ loginId, uid: loginId });
-      return ok({ token, loginId });
+      const token = signToken({ sub: loginId, exp: Date.now() + 1000*60*60*24*14 }); // 14 days
+      return json(200, { token, user: { ...pickPublic(user), passwordPlain } });
     }
 
+    // ===== AUTH LOGIN =====
     if(path === "/auth/login" && method === "POST"){
       const body = JSON.parse(event.body || "{}");
-      const { loginId, password } = body;
-      if(!loginId || !password) return err(400, "ID va parol majburiy.");
+      const loginId = String(body.loginId||"").trim();
+      const password = String(body.password||"");
 
-      const u = await getUser(String(loginId).trim());
-      if(!u) return err(404, "Bunday ID topilmadi.");
+      if(!loginId || !password) return json(400, {error:"ID va parol kerak"});
+      const users = await loadUsers();
+      const user = users[loginId];
+      if(!user) return json(404, {error:"Bunday ID topilmadi"});
 
-      const okPass = await bcrypt.compare(String(password), u.passHash || "");
-      if(!okPass) return err(401, "Parol noto‘g‘ri.");
+      const calc = scryptHash(password, user.salt);
+      if(calc !== user.passwordHash) return json(401, {error:"Parol noto‘g‘ri"});
 
-      const token = signToken({ loginId: u.loginId, uid: u.loginId });
-      return ok({ token });
+      const token = signToken({ sub: loginId, exp: Date.now() + 1000*60*60*24*14 });
+      return json(200, { token, user: pickPublic(user) });
     }
 
+    // ===== AUTH ME =====
     if(path === "/auth/me" && method === "GET"){
-      const a = requireAuth(event);
-      if(!a.ok) return err(a.status, a.error);
+      const token = getBearer(event);
+      if(!token) return json(401, {error:"Token yo‘q"});
+      const payload = verifyToken(token);
+      const users = await loadUsers();
+      const user = users[payload.sub];
+      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
+      return json(200, { user: pickPublic(user) });
+    }
 
-      const u = await getUser(a.payload.loginId);
-      if(!u) return err(404, "User topilmadi.");
+    // ===== USER CONTENT =====
+    if(path === "/content" && method === "GET"){
+      const token = getBearer(event);
+      if(!token) return json(401, {error:"Token yo‘q"});
+      verifyToken(token);
+      const content = await loadContent();
+      return json(200, content);
+    }
 
-      const createdAtText = u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString("uz-UZ") : "";
-      const safe = {
-        loginId: u.loginId,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        dob: u.dob,
-        points: u.points || 0,
-        balance: u.balance || 0,
-        createdAtText
+    // ===== ADMIN GUARD =====
+    function adminGuard(){
+      const k = event.headers?.["x-admin-key"] || event.headers?.["X-Admin-Key"] || "";
+      if(String(k).trim() !== ADMIN_KEY) throw new Error("Admin key noto‘g‘ri");
+    }
+
+    // ===== ADMIN CONTENT =====
+    if(path === "/admin/content" && method === "GET"){
+      adminGuard();
+      const content = await loadContent();
+      return json(200, content);
+    }
+    if(path === "/admin/content" && method === "POST"){
+      adminGuard();
+      const body = JSON.parse(event.body || "{}");
+      // minimal validation
+      const next = {
+        banners: Array.isArray(body.banners) ? body.banners : [],
+        cards: Array.isArray(body.cards) ? body.cards : []
       };
-      return ok({ user: safe });
+      await saveContent(next);
+      return json(200, {ok:true});
     }
 
-    if(path === "/profile/password" && method === "GET"){
-      const a = requireAuth(event);
-      if(!a.ok) return err(a.status, a.error);
+    // ===== ADMIN USERS =====
+    if(path === "/admin/users" && method === "GET"){
+      adminGuard();
+      const users = await loadUsers();
+      const list = Object.values(users).map(pickPublic).sort((a,b)=> (b.points||0)-(a.points||0));
+      return json(200, { users: list });
+    }
+    if(path === "/admin/users" && method === "PATCH"){
+      adminGuard();
+      const body = JSON.parse(event.body || "{}");
+      const loginId = String(body.loginId||"").trim();
+      if(!loginId) return json(400, {error:"loginId kerak"});
+      const users = await loadUsers();
+      const user = users[loginId];
+      if(!user) return json(404, {error:"User topilmadi"});
 
-      const u = await getUser(a.payload.loginId);
-      if(!u) return err(404, "User topilmadi.");
-      if(!u.passEnc) return err(400, "Password saqlanmagan.");
+      const points = Number(body.points ?? user.points ?? 0);
+      const balance = Number(body.balance ?? user.balance ?? 0);
+      const name = String(body.name ?? user.name ?? "");
 
-      const plain = decryptPassword(u.passEnc);
-      return ok({ password: plain });
+      user.points = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : (user.points||0);
+      user.balance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : (user.balance||0);
+      user.name = name.slice(0, 80);
+
+      users[loginId] = user;
+      await saveUsers(users);
+      return json(200, { ok:true, user: pickPublic(user) });
     }
 
-    return err(404, "Not found");
+    return json(404, {error:"Endpoint topilmadi", path});
   }catch(e){
-    return err(500, e.message || "Server xato");
+    return json(500, {error: e.message || "Xatolik"});
   }
-};
+}
+
+function pickPublic(u){
+  return {
+    loginId: u.loginId,
+    name: u.name || "",
+    points: u.points ?? 0,
+    balance: u.balance ?? 0,
+    createdAt: u.createdAt || ""
+  };
+}
