@@ -19,25 +19,36 @@
     <button class="btn ghost" id="btnLogout">Chiqish</button>
   </div>
 
-  <div class="glass card">
-    <div style="font-weight:950; font-size:18px" id="userName">...</div>
-    <div style="color:var(--muted); font-size:12px">ID: <b id="userId"></b></div>
-    <div style="color:var(--muted); font-size:12px">Yosh: <b id="userAge"></b></div>
-    <div class="kpi">
-      <div class="pill">⭐ Ball: <b id="userPoints">0</b></div>
-      <div class="pill">🪙 Balans: <b id="userBalance">0</b></div>
+  
+<div class="glass card profile-compact">
+  <div class="profile-top">
+    <div class="nameRow">
+      <div class="chip chip-strong" id="userName">...</div>
+      <div class="chip" id="userSurnameChip" style="display:none"></div>
+    </div>
+    <div class="metaRow">
+      <div class="chip">ID: <b id="userId"></b></div>
+      <div class="chip">Yosh: <b id="userAge"></b></div>
     </div>
   </div>
+  <div class="kpi kpi-compact">
+    <div class="pill">⭐ Ball: <b id="userPoints">0</b></div>
+    <div class="pill">🪙 Balans: <b id="userBalance">0</b></div>
+  </div>
+</div>
 
-  <div class="glass card">
-    <div style="font-weight:950">Bo‘limlar</div>
-    <div class="sectionGrid hero-grid" style="margin-top:10px" id="sections"></div>
+<div class="glass card">
+    <div class="sectionHead">
+      <div class="sectionTitle">Bo‘limlar</div>
+      <div class="sectionHint">Swipe / scroll — autoplay yoqilgan</div>
+    </div>
+    <div class="carousel">
+      <div class="sectionGrid hero-grid" style="margin-top:12px" id="sections"></div>
+      <div class="carouselDots" id="secDots" aria-label="Bo‘limlar indikatorlari"></div>
+    </div>
   </div>
 </div></div>
-
-<!-- Mandatory onboarding -->
-<div id="onboardOverlay" style="position:fixed; inset:0; display:none; align-items:flex-end; justify-content:center; background:rgba(2,6,23,.45); backdrop-filter: blur(10px); z-index:60; padding:16px;">
-  <div class="glass" style="width:min(560px, 100%); border-radius:28px; overflow:hidden;">
+<div class="glass" style="width:min(560px, 100%); border-radius:28px; overflow:hidden;">
     <div style="padding:16px 16px 8px">
       <div style="font-weight:900; font-size:18px">Profilni to‘ldiring</div>
       <div style="color:var(--muted); font-size:13px; margin-top:4px">Birinchi kirishda ism, familiya, tug‘ilgan sana va yangi parolni kiritish majburiy.</div>
@@ -134,6 +145,94 @@ import { me, logout, changePassword, updateProfile } from "./assets/js/auth.js";
     frame.addEventListener('click', ()=>{ if (matchMedia('(hover: none)').matches) go(); });
     wrap.appendChild(card);
   });
+
+function setupSectionsCarousel(){
+  const track = $('sections');
+  const dotsWrap = $('secDots');
+  if(!track) return;
+  const cards = Array.from(track.querySelectorAll('.poster-card'));
+  if(!cards.length) return;
+  // build dots
+  if(dotsWrap){
+    dotsWrap.innerHTML = '';
+    cards.forEach((_,i)=>{
+      const d = document.createElement('button');
+      d.className = 'dot' + (i===0?' active':'');
+      d.type = 'button';
+      d.setAttribute('aria-label', `Slide ${i+1}`);
+      d.addEventListener('click', ()=> scrollToIndex(i, true));
+      dotsWrap.appendChild(d);
+    });
+  }
+
+  let idx = 0;
+  let timer = null;
+  let paused = false;
+  const setActive = (i)=>{
+    idx = i;
+    if(!dotsWrap) return;
+    const dots = dotsWrap.querySelectorAll('.dot');
+    dots.forEach((d,k)=> d.classList.toggle('active', k===i));
+  };
+  const nearestIndex = ()=>{
+    const rect = track.getBoundingClientRect();
+    const center = rect.left + rect.width/2;
+    let best = 0, bestDist = 1e9;
+    cards.forEach((c,i)=>{
+      const r = c.getBoundingClientRect();
+      const cCenter = r.left + r.width/2;
+      const dist = Math.abs(center - cCenter);
+      if(dist < bestDist){ bestDist = dist; best = i; }
+    });
+    return best;
+  };
+
+  function scrollToIndex(i, smooth){
+    const el = cards[i];
+    if(!el) return;
+    el.scrollIntoView({behavior: smooth ? 'smooth' : 'auto', inline:'center', block:'nearest'});
+    setActive(i);
+  }
+
+  const start = ()=>{
+    stop();
+    timer = setInterval(()=>{
+      if(paused) return;
+      const cur = nearestIndex();
+      const next = (cur + 1) % cards.length;
+      scrollToIndex(next, true);
+    }, 4200);
+  };
+  const stop = ()=>{ if(timer){ clearInterval(timer); timer=null; } };
+
+  // pause on hover (desktop)
+  track.addEventListener('mouseenter', ()=>{ paused = true; });
+  track.addEventListener('mouseleave', ()=>{ paused = false; });
+
+  // touch/scroll interaction pauses briefly then resumes
+  let resumeT=null;
+  const pauseBrief = ()=>{
+    paused = true;
+    if(resumeT) clearTimeout(resumeT);
+    resumeT = setTimeout(()=>{ paused=false; }, 2200);
+  };
+  track.addEventListener('touchstart', pauseBrief, {passive:true});
+  track.addEventListener('scroll', ()=>{
+    const cur = nearestIndex();
+    setActive(cur);
+    pauseBrief();
+  }, {passive:true});
+
+  // initial
+  scrollToIndex(0, false);
+  start();
+  // expose for internal use
+  track.__lmCarouselStop = stop;
+  track.__lmCarouselStart = start;
+}
+
+
+    setupSectionsCarousel();
 }
 
   async function runOnboarding(){
