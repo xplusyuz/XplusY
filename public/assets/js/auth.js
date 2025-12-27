@@ -1,45 +1,32 @@
 import { api } from "./api.js";
 
-const LS_TOKEN = "lm_token";
-const LS_USER = "lm_user";
+const KEY="lm_token";
+export function getToken(){ return localStorage.getItem(KEY) || ""; }
+export function setToken(t){ localStorage.setItem(KEY, t); }
+export function clearToken(){ localStorage.removeItem(KEY); }
 
-export function getToken(){ return localStorage.getItem(LS_TOKEN) || ""; }
-export function getUser(){ 
-  try{ return JSON.parse(localStorage.getItem(LS_USER) || "null"); }catch{ return null; }
+export async function registerAuto(){
+  const r = await api("auth/register", { method:"POST" });
+  setToken(r.token);
+  return r;
 }
-export function setSession({token, user}){
-  localStorage.setItem(LS_TOKEN, token);
-  localStorage.setItem(LS_USER, JSON.stringify(user));
+export async function login(loginId, password){
+  const r = await api("auth/login", { method:"POST", body:{loginId, password} });
+  setToken(r.token);
+  return r;
 }
-export function clearSession(){
-  localStorage.removeItem(LS_TOKEN);
-  localStorage.removeItem(LS_USER);
-}
-
-export async function register(){
-  const d = await api("/auth/register", {method:"POST"});
-  setSession(d);
-  return d;
-}
-
-export async function login({loginId, password}){
-  const d = await api("/auth/login", {method:"POST", body:{loginId, password}});
-  setSession(d);
-  return d;
-}
-
-export async function updateProfile({firstName,lastName,birthdate}){
-  const token = getToken();
-  return await api("/auth/update-profile", {method:"POST", token, body:{firstName,lastName,birthdate}});
-}
-
-export async function changePassword({newPassword}){
-  const token = getToken();
-  return await api("/auth/change-password", {method:"POST", token, body:{newPassword}});
-}
-
 export async function me(){
   const token = getToken();
-  if(!token) throw new Error("Token yo‘q");
-  return await api("/auth/me", {token});
+  return await api("auth/me", { token });
+}
+export async function changePassword(newPassword){
+  const token = getToken();
+  return await api("auth/change-password", { method:"POST", token, body:{newPassword} });
+}
+export async function updateProfile(firstName,lastName,birthdate){
+  const token = getToken();
+  return await api("auth/update-profile", { method:"POST", token, body:{firstName,lastName,birthdate} });
+}
+export async function logout(){
+  clearToken();
 }

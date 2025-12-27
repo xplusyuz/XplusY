@@ -1,149 +1,34 @@
-import crypto from "node:crypto";
-import { getStore } from "@netlify/blobs";
+import admin from "firebase-admin";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
-const ADMIN_KEY = process.env.ADMIN_KEY || "LEADERMATH_SUPER_2026";
-const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
-
-let _store = null;
-const mem = globalThis.__LM_MEM__ || (globalThis.__LM_MEM__ = { users:{}, content:null });
-
-function hasBlobsEnvError(err){
-  const msg = String(err?.message || err || "");
-  return msg.includes("MissingBlobsEnvironmentError") || msg.includes("has not been configured to use Netlify Blobs");
+function json(statusCode, obj){
+  return { statusCode, headers: { "Content-Type":"application/json" }, body: JSON.stringify(obj) };
 }
 
-function getStoreSafe(){
-  if(_store) return _store;
-  try{
-    _store = getStore("leadermath");
-    return _store;
-  }catch(e){
-    return null;
-  }
+function getEnv(name, fallback=""){
+  return process.env[name] || fallback;
 }
 
-function json(statusCode, obj, headers={}){
-  return {
-    statusCode,
-    headers: { "Content-Type":"application/json; charset=utf-8", ...headers },
-    body: JSON.stringify(obj)
-  };
+function getDb(){
+  if(admin.apps.length) return admin.firestore();
+  const b64 = getEnv("FIREBASE_SERVICE_ACCOUNT_BASE64");
+  if(!b64) throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 yo‘q (Netlify env ga qo‘ying)");
+  const serviceAccount = JSON.parse(Buffer.from(b64, "base64").toString("utf-8"));
+  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  const db = admin.firestore();
+  db.settings({ ignoreUndefinedProperties: true });
+  return db;
 }
 
-function b64url(buf){
-  return Buffer.from(buf).toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-}
-function b64urlDecode(str){
-  str = str.replace(/-/g,"+").replace(/_/g,"/");
-  while(str.length % 4) str += "=";
-  return Buffer.from(str, "base64");
+const JWT_SECRET = getEnv("JWT_SECRET", "dev_secret_change_me");
+
+function signToken(loginId){
+  return jwt.sign({ sub: loginId }, JWT_SECRET, { expiresIn: "30d" });
 }
 
-function signToken(payload){
-  const header = {alg:"HS256", typ:"JWT"};
-  const encHeader = b64url(JSON.stringify(header));
-  const encPayload = b64url(JSON.stringify(payload));
-  const data = `${encHeader}.${encPayload}`;
-  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest();
-  return `${data}.${b64url(sig)}`;
-}
 function verifyToken(token){
-  const parts = String(token||"").split(".");
-  if(parts.length!==3) throw new Error("Token noto‘g‘ri");
-  const [h,p,s] = parts;
-  const data = `${h}.${p}`;
-  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(data).digest();
-  const expected = b64url(sig);
-  if(expected !== s) throw new Error("Token imzosi xato");
-  const payload = JSON.parse(b64urlDecode(p).toString("utf8"));
-  if(payload.exp && Date.now() > payload.exp) throw new Error("Token eskirgan");
-  return payload;
-}
-
-function randDigits(n){
-  let out = "";
-  for(let i=0;i<n;i++) out += String(Math.floor(Math.random()*10));
-  return out;
-}
-function genLoginId(){
-  return `LM-${randDigits(6)}`;
-}
-function genPassword(){
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$";
-  let p = "";
-  for(let i=0;i<9;i++) p += alphabet[Math.floor(Math.random()*alphabet.length)];
-  return p;
-}
-
-function scryptHash(password, salt){
-  const hash = crypto.scryptSync(password, salt, 32);
-  return hash.toString("hex");
-}
-
-async function loadUsers(){
-  const store = getStoreSafe();
-  if(store){
-    try{
-      const raw = await store.get("users", { type: "json" });
-      return raw || {};
-    }catch(e){
-      if(hasBlobsEnvError(e)) return mem.users;
-      throw e;
-    }
-  }
-  return mem.users;
-}
-async function saveUsers(users){
-  mem.users = users;
-  const store = getStoreSafe();
-  if(store){
-    try{
-      await store.set("users", JSON.stringify(users), { contentType: "application/json" });
-    }catch(e){
-      if(hasBlobsEnvError(e)) return;
-      throw e;
-    }
-  }
-}
-
-async function loadContent(){
-  const store = getStoreSafe();
-  if(store){
-    try{
-      const raw = await store.get("content", { type: "json" });
-      if(raw) { mem.content = raw; return raw; }
-    }catch(e){
-      if(!hasBlobsEnvError(e)) throw e;
-      // fall through
-    }
-  }
-  if(mem.content) return mem.content;
-  const seed = {
-    banners: [
-      { id: crypto.randomUUID(), title:"LeaderMath.UZ", subtitle:"Boshlang — ID+Parol avtomatik", img:"", href:"", active:true }
-    ],
-    cards: [
-      { id: crypto.randomUUID(), title:"DTM Mashqlar", desc:"DTM formatdagi savollar", href:"", tag:"DTM", active:true },
-      { id: crypto.randomUUID(), title:"Olimpiada", desc:"Agentlik/olimpiada tayyorlov", href:"", tag:"Olimpiada", active:true }
-    ]
-  };
-  mem.content = seed;
-  if(store){
-    try{ await store.set("content", JSON.stringify(seed), { contentType:"application/json" }); }catch(e){ if(!hasBlobsEnvError(e)) throw e; }
-  }
-  return seed;
-}
-async function saveContent(content){
-  mem.content = content;
-  const store = getStoreSafe();
-  if(store){
-    try{
-      await store.set("content", JSON.stringify(content), { contentType:"application/json" });
-    }catch(e){
-      if(hasBlobsEnvError(e)) return;
-      throw e;
-    }
-  }
+  return jwt.verify(token, JWT_SECRET);
 }
 
 function getBearer(event){
@@ -152,217 +37,29 @@ function getBearer(event){
   return m ? m[1] : "";
 }
 
-export async function handler(event){
-  try{
-    const method = event.httpMethod || "GET";
-    let qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
-    // fallback: if called as /.netlify/functions/api/<path>
-    if(!qpath){
-      const p = (event.path || "").replace(/^.*\/\.netlify\/functions\/api\/?/,"");
-      qpath = String(p||"").replace(/^\/+/,"");
-    }
-    const path = "/" + qpath;
+function scryptHash(password, salt){
+  const buf = crypto.scryptSync(password, salt, 32);
+  return buf.toString("hex");
+}
 
-    // CORS (optional)
-    if(method === "OPTIONS"){
-      return {
-        statusCode: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "content-type, authorization, x-admin-key",
-          "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
-        },
-        body: ""
-      };
-    }
+async function nextLoginId(db){
+  const counterRef = db.doc("meta/counters");
+  const out = await db.runTransaction(async (tx)=>{
+    const snap = await tx.get(counterRef);
+    const data = snap.exists ? snap.data() : {};
+    const cur = Number(data?.users ?? 0);
+    const next = cur + 1;
+    tx.set(counterRef, { users: next }, { merge:true });
+    const loginId = "LM-" + String(next).padStart(6,"0");
+    return loginId;
+  });
+  return out;
+}
 
-    // ===== AUTH REGISTER =====
-    if(path === "/auth/register" && method === "POST"){
-      const users = await loadUsers();
-
-      // generate unique id
-      let loginId = genLoginId();
-      let tries = 0;
-      while(users[loginId] && tries < 10){
-        loginId = genLoginId(); tries++;
-      }
-      if(users[loginId]) return json(500, {error:"ID yaratib bo‘lmadi, qayta urinib ko‘ring"});
-
-      const passwordPlain = genPassword();
-      const salt = crypto.randomBytes(16).toString("hex");
-      const passwordHash = scryptHash(passwordPlain, salt);
-
-      const user = {
-        loginId,
-        firstName: "",
-        lastName: "",
-        birthdate: "",
-        profileComplete: false,
-        salt,
-        passwordHash,
-        name: "",
-        points: 0,
-        balance: 0,
-        createdAt: new Date().toISOString()
-      };
-      users[loginId] = user;
-      await saveUsers(users);
-
-      const token = signToken({ sub: loginId, exp: Date.now() + 1000*60*60*24*14 }); // 14 days
-      return json(200, { token, user: { ...pickPublic(user), passwordPlain } });
-    }
-
-    // ===== AUTH LOGIN =====
-    if(path === "/auth/login" && method === "POST"){
-      const body = JSON.parse(event.body || "{}");
-      const loginId = String(body.loginId||"").trim();
-      const password = String(body.password||"");
-
-      if(!loginId || !password) return json(400, {error:"ID va parol kerak"});
-      const users = await loadUsers();
-      const user = users[loginId];
-      if(!user) return json(404, {error:"Bunday ID topilmadi"});
-
-      const calc = scryptHash(password, user.salt);
-      if(calc !== user.passwordHash) return json(401, {error:"Parol noto‘g‘ri"});
-
-      const token = signToken({ sub: loginId, exp: Date.now() + 1000*60*60*24*14 });
-      return json(200, { token, user: pickPublic(user) });
-    }
-
-    // ===== AUTH ME =====
-    if(path === "/auth/me" && method === "GET"){
-      const token = getBearer(event);
-      if(!token) return json(401, {error:"Token yo‘q"});
-      const payload = verifyToken(token);
-      const users = await loadUsers();
-      const user = users[payload.sub];
-      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
-      return json(200, { user: pickPublic(user) });
-    }
-
-    
-    // ===== AUTH UPDATE PROFILE (mandatory onboarding) =====
-    if(path === "/auth/update-profile" && method === "POST"){
-      const token = getBearer(event);
-      if(!token) return json(401, {error:"Token yo‘q"});
-      const payload = verifyToken(token);
-      const body = JSON.parse(event.body || "{}");
-
-      const firstName = String(body.firstName||"").trim();
-      const lastName  = String(body.lastName||"").trim();
-      const birthdate = String(body.birthdate||"").trim(); // YYYY-MM-DD
-
-      if(firstName.length < 2) return json(400, {error:"Ism kamida 2 ta harf bo‘lsin"});
-      if(lastName.length < 2) return json(400, {error:"Familiya kamida 2 ta harf bo‘lsin"});
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return json(400, {error:"Tug‘ilgan sana noto‘g‘ri"});
-
-      const users = await loadUsers();
-      const user = users[payload.sub];
-      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
-
-      user.firstName = firstName.slice(0,40);
-      user.lastName  = lastName.slice(0,60);
-      user.birthdate = birthdate;
-      user.name = (user.firstName + " " + user.lastName).trim();
-      user.profileComplete = true;
-
-      users[payload.sub] = user;
-      await saveUsers(users);
-      return json(200, { ok:true, user: pickPublic(user) });
-    }
-
-    // ===== AUTH CHANGE PASSWORD =====
-    if(path === "/auth/change-password" && method === "POST"){
-      const token = getBearer(event);
-      if(!token) return json(401, {error:"Token yo‘q"});
-      const payload = verifyToken(token);
-      const body = JSON.parse(event.body || "{}");
-
-      const newPassword = String(body.newPassword||"");
-      if(newPassword.length < 6) return json(400, {error:"Yangi parol kamida 6 belgidan iborat bo‘lsin"});
-
-      const users = await loadUsers();
-      const user = users[payload.sub];
-      if(!user) return json(401, {error:"Foydalanuvchi topilmadi"});
-
-      const salt = crypto.randomBytes(16).toString("hex");
-      const passwordHash = scryptHash(newPassword, salt);
-      user.salt = salt;
-      user.passwordHash = passwordHash;
-
-      users[payload.sub] = user;
-      await saveUsers(users);
-
-      return json(200, { ok:true });
-    }
-
-// ===== USER CONTENT =====
-    if(path === "/content" && method === "GET"){
-      const token = getBearer(event);
-      if(!token) return json(401, {error:"Token yo‘q"});
-      verifyToken(token);
-      const content = await loadContent();
-      return json(200, content);
-    }
-
-    // ===== ADMIN GUARD =====
-    function adminGuard(){
-      const k = event.headers?.["x-admin-key"] || event.headers?.["X-Admin-Key"] || "";
-      if(String(k).trim() !== ADMIN_KEY) throw new Error("Admin key noto‘g‘ri");
-    }
-
-    // ===== ADMIN CONTENT =====
-    if(path === "/admin/content" && method === "GET"){
-      adminGuard();
-      const content = await loadContent();
-      return json(200, content);
-    }
-    if(path === "/admin/content" && method === "POST"){
-      adminGuard();
-      const body = JSON.parse(event.body || "{}");
-      // minimal validation
-      const next = {
-        banners: Array.isArray(body.banners) ? body.banners : [],
-        cards: Array.isArray(body.cards) ? body.cards : []
-      };
-      await saveContent(next);
-      return json(200, {ok:true});
-    }
-
-    // ===== ADMIN USERS =====
-    if(path === "/admin/users" && method === "GET"){
-      adminGuard();
-      const users = await loadUsers();
-      const list = Object.values(users).map(pickPublic).sort((a,b)=> (b.points||0)-(a.points||0));
-      return json(200, { users: list });
-    }
-    if(path === "/admin/users" && method === "PATCH"){
-      adminGuard();
-      const body = JSON.parse(event.body || "{}");
-      const loginId = String(body.loginId||"").trim();
-      if(!loginId) return json(400, {error:"loginId kerak"});
-      const users = await loadUsers();
-      const user = users[loginId];
-      if(!user) return json(404, {error:"User topilmadi"});
-
-      const points = Number(body.points ?? user.points ?? 0);
-      const balance = Number(body.balance ?? user.balance ?? 0);
-      const name = String(body.name ?? user.name ?? "");
-
-      user.points = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : (user.points||0);
-      user.balance = Number.isFinite(balance) ? Math.max(0, Math.floor(balance)) : (user.balance||0);
-      user.name = name.slice(0, 80);
-
-      users[loginId] = user;
-      await saveUsers(users);
-      return json(200, { ok:true, user: pickPublic(user) });
-    }
-
-    return json(404, {error:"Endpoint topilmadi", path});
-  }catch(e){
-    return json(500, {error: e.message || "Xatolik"});
-  }
+async function getUser(db, loginId){
+  const ref = db.collection("users").doc(loginId);
+  const snap = await ref.get();
+  return snap.exists ? { ref, data: snap.data() } : null;
 }
 
 function pickPublic(u){
@@ -375,6 +72,132 @@ function pickPublic(u){
     profileComplete: !!u.profileComplete,
     points: u.points ?? 0,
     balance: u.balance ?? 0,
-    createdAt: u.createdAt || ""
+    createdAt: u.createdAt || null
   };
 }
+
+export const handler = async (event) => {
+  try{
+    const db = getDb();
+    let qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
+    if(!qpath){
+      const p = (event.path || "").replace(/^.*\/\.netlify\/functions\/api\/?/,"");
+      qpath = String(p||"").replace(/^\/+/,"");
+    }
+    const path = "/" + qpath;
+    const method = event.httpMethod;
+
+    // ===== HEALTH =====
+    if(path === "/health") return json(200, { ok:true });
+
+    // ===== REGISTER AUTO =====
+    if(path === "/auth/register" && method === "POST"){
+      const loginId = await nextLoginId(db);
+      const password = (Math.random().toString(36).slice(2,8) + "A!").slice(0,10);
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = scryptHash(password, salt);
+
+      const user = {
+        loginId,
+        salt,
+        passwordHash,
+        name:"",
+        firstName:"",
+        lastName:"",
+        birthdate:"",
+        profileComplete:false,
+        points:0,
+        balance:0,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      await db.collection("users").doc(loginId).set(user, { merge:false });
+
+      const token = signToken(loginId);
+      return json(200, { ok:true, loginId, password, token });
+    }
+
+    // ===== LOGIN =====
+    if(path === "/auth/login" && method === "POST"){
+      const body = JSON.parse(event.body || "{}");
+      const loginId = String(body.loginId || "").trim();
+      const password = String(body.password || "");
+      if(!loginId || !password) return json(400, { error:"ID va Parol kerak" });
+
+      const found = await getUser(db, loginId);
+      if(!found) return json(404, { error:"Bunday ID topilmadi" });
+      const u = found.data;
+
+      const hash = scryptHash(password, u.salt);
+      if(hash !== u.passwordHash) return json(401, { error:"Parol noto‘g‘ri" });
+
+      const token = signToken(loginId);
+      return json(200, { ok:true, token, user: pickPublic(u) });
+    }
+
+    // ===== ME =====
+    if(path === "/auth/me" && method === "GET"){
+      const token = getBearer(event);
+      if(!token) return json(401, { error:"Token yo‘q" });
+      const payload = verifyToken(token);
+      const loginId = payload.sub;
+      const found = await getUser(db, loginId);
+      if(!found) return json(401, { error:"User topilmadi" });
+      return json(200, { ok:true, user: pickPublic(found.data) });
+    }
+
+    // ===== CHANGE PASSWORD =====
+    if(path === "/auth/change-password" && method === "POST"){
+      const token = getBearer(event);
+      if(!token) return json(401, { error:"Token yo‘q" });
+      const payload = verifyToken(token);
+      const loginId = payload.sub;
+
+      const body = JSON.parse(event.body || "{}");
+      const newPassword = String(body.newPassword || "");
+      if(newPassword.length < 6) return json(400, { error:"Yangi parol kamida 6 belgi" });
+
+      const found = await getUser(db, loginId);
+      if(!found) return json(401, { error:"User topilmadi" });
+
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = scryptHash(newPassword, salt);
+
+      await found.ref.update({ salt, passwordHash, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      return json(200, { ok:true });
+    }
+
+    // ===== UPDATE PROFILE =====
+    if(path === "/auth/update-profile" && method === "POST"){
+      const token = getBearer(event);
+      if(!token) return json(401, { error:"Token yo‘q" });
+      const payload = verifyToken(token);
+      const loginId = payload.sub;
+
+      const body = JSON.parse(event.body || "{}");
+      const firstName = String(body.firstName || "").trim();
+      const lastName  = String(body.lastName  || "").trim();
+      const birthdate = String(body.birthdate || "").trim();
+      if(firstName.length < 2) return json(400, { error:"Ism kamida 2 harf" });
+      if(lastName.length < 2) return json(400, { error:"Familiya kamida 2 harf" });
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return json(400, { error:"Tug‘ilgan sana noto‘g‘ri" });
+
+      const found = await getUser(db, loginId);
+      if(!found) return json(401, { error:"User topilmadi" });
+
+      const name = (firstName + " " + lastName).trim();
+      await found.ref.update({
+        firstName, lastName, birthdate, name,
+        profileComplete:true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const fresh = (await found.ref.get()).data();
+      return json(200, { ok:true, user: pickPublic(fresh) });
+    }
+
+    return json(404, { error:"Endpoint topilmadi", path, method });
+  }catch(e){
+    return json(500, { error: e.message || "Server error" });
+  }
+};

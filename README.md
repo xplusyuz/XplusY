@@ -1,9 +1,15 @@
-# LeaderMath.UZ — Rebuild (FIX2)
+# LeaderMath.UZ — Netlify API + Firebase Admin (NO firebase-config.js)
 
-✅ /api/* redirect ishlashi uchun netlify.toml + public/_redirects qo‘shildi.
-✅ Zip ichida root to‘g‘ri (Netlify zip deploy uchun).
+## Netlify Environment Variables
+- FIREBASE_SERVICE_ACCOUNT_BASE64 = base64(JSON service account)
+- JWT_SECRET = uzun random secret
 
-## Local
+## Firestore
+Collections:
+- users/{loginId}
+- meta/counters (doc)
+
+## Local dev
 npm i -g netlify-cli
 npm install
 netlify dev
