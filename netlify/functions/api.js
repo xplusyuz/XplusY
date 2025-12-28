@@ -92,6 +92,24 @@ function pickPublic(u){
   };
 }
 
+function toMillis(ts){
+  return (ts && typeof ts.toMillis === "function") ? ts.toMillis() : (ts || null);
+}
+
+function parseBody(event){
+  try{ return JSON.parse(event.body || "{}"); }
+  catch(_){ return {}; }
+}
+
+function requireToken(event){
+  const token = getBearer(event);
+  if(!token) return { ok:false, error: json(401, { error:"Token yo‘q" }) };
+  let payload;
+  try{ payload = verifyToken(token); }
+  catch(_){ return { ok:false, error: json(401, { error:"Token yaroqsiz" }) }; }
+  return { ok:true, loginId: payload.sub, token };
+}
+
 export const handler = async (event) => {
   try{
     const db = getDb();
@@ -235,22 +253,45 @@ export const handler = async (event) => {
     // GET public (latest 30)
     if(path === "/comments" && method === "GET"){
       try{
+        const withReplies = String(event.queryStringParameters?.replies || "") === "1";
+        const limitReplies = Math.max(0, Math.min(20, Number(event.queryStringParameters?.limitReplies || 3)));
         const snap = await db.collection("comments")
           .orderBy("createdAt","desc")
           .limit(30)
           .get();
-        const items = snap.docs.map(d=>{
+        const items = [];
+        for(const d of snap.docs){
           const c = d.data() || {};
-          const createdAt = c.createdAt && typeof c.createdAt.toMillis === "function"
-            ? c.createdAt.toMillis()
-            : (c.createdAt || null);
-          return {
+          const item = {
+            id: d.id,
             loginId: c.loginId || "",
             name: c.name || "",
             text: c.text || "",
-            createdAt
+            createdAt: toMillis(c.createdAt),
+            likeCount: Number(c.likeCount || 0),
+            replyCount: Number(c.replyCount || 0),
           };
-        });
+          if(withReplies && limitReplies>0){
+            try{
+              const rs = await db.collection("comments").doc(d.id)
+                .collection("replies")
+                .orderBy("createdAt","desc")
+                .limit(limitReplies)
+                .get();
+              item.replies = rs.docs.map(rd=>{
+                const r = rd.data() || {};
+                return {
+                  id: rd.id,
+                  loginId: r.loginId || "",
+                  name: r.name || "",
+                  text: r.text || "",
+                  createdAt: toMillis(r.createdAt)
+                };
+              }).reverse();
+            }catch(_){ item.replies = []; }
+          }
+          items.push(item);
+        }
         return json(200, { items });
       }catch(e){
         // collection may not exist yet
@@ -260,34 +301,160 @@ export const handler = async (event) => {
 
     // POST requires JWT (same token as other endpoints)
     if(path === "/comments" && method === "POST"){
-      const auth = event.headers.authorization || event.headers.Authorization || "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-      if(!token) return json(401, { error:"Token yo‘q" });
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
 
-      let decoded;
-      try{
-        decoded = verifyToken(token);
-      }catch(e){
-        return json(401, { error:"Token noto‘g‘ri" });
-      }
-
-      const body = JSON.parse(event.body || "{}");
+      const body = parseBody(event);
       const text = String(body.text || "").trim().slice(0, 140);
       if(!text) return json(400, { error:"Izoh bo‘sh" });
 
       try{
-        const loginId = decoded.sub;
+        const loginId = auth.loginId;
         const userDoc = await db.collection("users").doc(loginId).get();
         const u = userDoc.exists ? userDoc.data() : {};
         await db.collection("comments").add({
           loginId,
           name: (u && (u.name || u.fullName)) || "",
           text,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
+          likeCount: 0,
+          replyCount: 0,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         return json(200, { ok:true });
       }catch(e){
         return json(500, { error:"Comment error", message: e.message });
+      }
+    }
+
+    // ===== Comment likes =====
+    // POST (auth) toggle like: {commentId}
+    if(path === "/comments/like" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      const body = parseBody(event);
+      const commentId = String(body.commentId || "").trim();
+      if(!commentId) return json(400, { error:"commentId kerak" });
+
+      const commentRef = db.collection("comments").doc(commentId);
+      const likeRef = commentRef.collection("likes").doc(auth.loginId);
+
+      try{
+        const out = await db.runTransaction(async (tx)=>{
+          const cs = await tx.get(commentRef);
+          if(!cs.exists) throw new Error("Izoh topilmadi");
+          const cur = Number(cs.data()?.likeCount || 0);
+          const ls = await tx.get(likeRef);
+          if(ls.exists){
+            tx.delete(likeRef);
+            const next = Math.max(0, cur - 1);
+            tx.set(commentRef, { likeCount: next, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+            return { liked:false, likeCount: next };
+          }else{
+            tx.set(likeRef, {
+              loginId: auth.loginId,
+              commentId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge:false });
+            const next = cur + 1;
+            tx.set(commentRef, { likeCount: next, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+            return { liked:true, likeCount: next };
+          }
+        });
+        return json(200, { ok:true, ...out });
+      }catch(e){
+        return json(500, { error:"Like error", message: e.message });
+      }
+    }
+
+    // GET (auth) list liked comment ids
+    if(path === "/comments/liked" && method === "GET"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const snap = await db.collectionGroup("likes")
+          .where("loginId","==", auth.loginId)
+          .orderBy("createdAt","desc")
+          .limit(500)
+          .get();
+        const ids = [];
+        for(const d of snap.docs){
+          const v = d.data() || {};
+          if(v.commentId) ids.push(String(v.commentId));
+        }
+        return json(200, { ok:true, ids });
+      }catch(e){
+        return json(200, { ok:true, ids: [] });
+      }
+    }
+
+    // ===== Comment replies =====
+    // Replies list (public)
+    // GET: /comments/replies?commentId=...&limit=20
+    // POST: {commentId, limit}
+    if(path === "/comments/replies" && (method === "GET" || method === "POST")){
+      const body = method === "POST" ? parseBody(event) : {};
+      const commentId = String((method === "POST" ? body.commentId : event.queryStringParameters?.commentId) || "").trim();
+      const limitRaw = method === "POST" ? body.limit : event.queryStringParameters?.limit;
+      const limit = Math.max(1, Math.min(50, Number(limitRaw || 20)));
+      if(!commentId) return json(400, { error:"commentId kerak" });
+      try{
+        const rs = await db.collection("comments").doc(commentId)
+          .collection("replies")
+          .orderBy("createdAt","asc")
+          .limit(limit)
+          .get();
+        const items = rs.docs.map(rd=>{
+          const r = rd.data() || {};
+          return {
+            id: rd.id,
+            loginId: r.loginId || "",
+            name: r.name || "",
+            text: r.text || "",
+            createdAt: toMillis(r.createdAt)
+          };
+        });
+        return json(200, { items });
+      }catch(_){
+        return json(200, { items: [] });
+      }
+    }
+
+    // POST (auth) create reply: {commentId,text}
+    if(path === "/comments/reply" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      const body = parseBody(event);
+      const commentId = String(body.commentId || "").trim();
+      const text = String(body.text || "").trim().slice(0, 160);
+      if(!commentId) return json(400, { error:"commentId kerak" });
+      if(!text) return json(400, { error:"Javob bo‘sh" });
+
+      try{
+        const userDoc = await db.collection("users").doc(auth.loginId).get();
+        const u = userDoc.exists ? userDoc.data() : {};
+        const name = (u && (u.name || u.fullName)) || "";
+        const commentRef = db.collection("comments").doc(commentId);
+        const repliesRef = commentRef.collection("replies");
+
+        await db.runTransaction(async (tx)=>{
+          const cs = await tx.get(commentRef);
+          if(!cs.exists) throw new Error("Izoh topilmadi");
+          tx.set(repliesRef.doc(), {
+            loginId: auth.loginId,
+            name,
+            text,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge:false });
+          const cur = Number(cs.data()?.replyCount || 0);
+          tx.set(commentRef, {
+            replyCount: cur + 1,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge:true });
+        });
+        return json(200, { ok:true });
+      }catch(e){
+        return json(500, { error:"Reply error", message: e.message });
       }
     }
 

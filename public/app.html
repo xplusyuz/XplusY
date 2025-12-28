@@ -266,26 +266,150 @@
       const d = ts ? new Date(ts) : new Date();
       return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
+    let likedSet = new Set();
+
+    function renderReplies(replies){
+      const items = (replies||[]).map(r=>`
+        <li class="replyItem">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(r.name || r.loginId || "—")}</div>
+            <div class="small">${escapeHtml(fmtTime(r.createdAt))}</div>
+          </div>
+          <div class="replyText">${escapeHtml(r.text || "")}</div>
+        </li>
+      `).join("");
+      return items || `<li class="small">Hozircha javob yo‘q</li>`;
+    }
+
+    function renderCommentItem(c){
+      const liked = likedSet.has(String(c.id));
+      return `
+        <li class="commentItem" data-id="${escapeHtml(c.id)}">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(c.name || c.loginId || "—")}</div>
+            <div class="small">${escapeHtml(fmtTime(c.createdAt))}</div>
+          </div>
+          <div class="commentText">${escapeHtml(c.text || "")}</div>
+
+          <div class="commentActions">
+            <button class="actBtn ${liked?"liked":""}" data-act="like" type="button" aria-label="Like">
+              <span class="ic">❤</span>
+              <span class="lbl">Like</span>
+              <span class="cnt" data-k="likeCount">${Number(c.likeCount||0)}</span>
+            </button>
+            <button class="actBtn" data-act="toggleReplies" type="button" aria-label="Javoblar">
+              <span class="ic">↩</span>
+              <span class="lbl">Reply</span>
+              <span class="cnt" data-k="replyCount">${Number(c.replyCount||0)}</span>
+            </button>
+          </div>
+
+          <div class="repliesWrap" data-open="0">
+            <ul class="replyList" data-loaded="0"></ul>
+            <div class="replyBox">
+              <input class="replyInput" maxlength="160" placeholder="Javob yozing… (160)" />
+              <button class="btn btnPrimary replySend" data-act="sendReply" type="button">Yuborish</button>
+            </div>
+          </div>
+        </li>
+      `;
+    }
+
+    async function loadLiked(){
+      likedSet = new Set();
+      try{
+        const token = await getToken();
+        const data = await api("comments/liked", { token });
+        for(const id of (data?.ids || [])) likedSet.add(String(id));
+      }catch(_){ /* ignore */ }
+    }
+
     async function loadComments(){
       const list = $("commentList");
       const count = $("commentCount");
       try{
+        await loadLiked();
         const data = await api("comments");
         const items = data?.items || [];
         count.textContent = items.length;
-        list.innerHTML = items.map(c=>`
-          <li class="commentItem">
-            <div class="top">
-              <div class="nameLine">${escapeHtml(c.name || c.loginId || "—")}</div>
-              <div class="small">${escapeHtml(fmtTime(c.createdAt))}</div>
-            </div>
-            <div style="margin-top:6px;">${escapeHtml(c.text || "")}</div>
-          </li>
-        `).join("") || `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
+        list.innerHTML = items.map(renderCommentItem).join("") || `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
       }catch(_){
         list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
       }
     }
+
+    async function loadReplies(commentId, li){
+      const wrap = li.querySelector(".repliesWrap");
+      const ul = li.querySelector(".replyList");
+      if(!wrap || !ul) return;
+      try{
+        const data = await api("comments/replies", { method:"POST", body:{ commentId, limit: 30 } });
+        ul.innerHTML = renderReplies(data?.items || []);
+        ul.setAttribute("data-loaded","1");
+      }catch(_){
+        ul.innerHTML = `<li class="small">Javoblarni yuklab bo‘lmadi</li>`;
+      }
+    }
+
+    function setRepliesOpen(li, open){
+      const wrap = li.querySelector(".repliesWrap");
+      if(!wrap) return;
+      wrap.setAttribute("data-open", open?"1":"0");
+    }
+
+    // Delegated actions on comment list
+    $("commentList").addEventListener("click", async (e)=>{
+      const btn = e.target.closest("button[data-act]");
+      if(!btn) return;
+      const li = e.target.closest(".commentItem");
+      if(!li) return;
+      const id = li.getAttribute("data-id");
+      const act = btn.getAttribute("data-act");
+
+      if(act === "like"){
+        try{
+          const token = await getToken();
+          const out = await api("comments/like", { method:"POST", token, body:{ commentId: id } });
+          const liked = !!out.liked;
+          if(liked) likedSet.add(String(id)); else likedSet.delete(String(id));
+          btn.classList.toggle("liked", liked);
+          const cnt = li.querySelector('[data-k="likeCount"]');
+          if(cnt) cnt.textContent = String(out.likeCount ?? 0);
+        }catch(_){ toast("Like uchun kirish kerak"); }
+        return;
+      }
+
+      if(act === "toggleReplies"){
+        const wrap = li.querySelector(".repliesWrap");
+        const isOpen = wrap?.getAttribute("data-open") === "1";
+        setRepliesOpen(li, !isOpen);
+        const ul = li.querySelector(".replyList");
+        if(!isOpen && ul && ul.getAttribute("data-loaded") !== "1"){
+          await loadReplies(id, li);
+        }
+        return;
+      }
+
+      if(act === "sendReply"){
+        const input = li.querySelector(".replyInput");
+        const text = (input?.value || "").trim();
+        if(!text) return toast("Javob bo‘sh");
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/reply", { method:"POST", token, body:{ commentId: id, text } });
+          if(input) input.value = "";
+          toast("Javob yuborildi ✅");
+          // update reply count UI
+          const rc = li.querySelector('[data-k="replyCount"]');
+          if(rc) rc.textContent = String(Number(rc.textContent||0) + 1);
+          await loadReplies(id, li);
+          setRepliesOpen(li, true);
+        }catch(_){ toast("Reply uchun kirish kerak"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
+    }, { passive:false });
     async function sendComment(){
       const input = $("commentInput");
       const text = (input.value||"").trim();
