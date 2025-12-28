@@ -86,10 +86,17 @@
           <div class="panelHead">
             <div>
               <div class="nameLine">Reyting</div>
-              <div class="small">Top-20 (point bo‘yicha)</div>
+              <div class="small">Top-20 (point bo‘yicha) • Podium + qidiruv</div>
             </div>
             <button class="linkBtn" id="btnLbAll" type="button">Barchasini ko‘rish</button>
           </div>
+
+          <div class="lbTools">
+            <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…" />
+            <button class="chipBtn" id="lbOnlyMe" type="button" aria-pressed="false">⭐ Meni</button>
+          </div>
+
+          <div class="lbPodium" id="lbPodium" aria-label="Top-3 podium"></div>
           <table class="table" aria-label="Leaderboard">
             <thead>
               <tr>
@@ -111,11 +118,10 @@
           <div class="panelHead">
             <div>
               <div class="nameLine">Izohlar</div>
-              <div class="small">Oxirgi 20 ta izoh (like + reply)</div>
+              <div class="small">Barcha izohlar (paging) • like + reply</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;">
               <span class="pill" id="commentCount">20</span>
-              <button class="linkBtn" id="btnCommentAll" type="button">Barchasini ko‘rish</button>
             </div>
           </div>
 
@@ -126,6 +132,9 @@
 
           <div class="hr"></div>
           <ul class="commentList" id="commentList"></ul>
+
+          <div style="height:10px;"></div>
+          <button class="btn" id="cmLoadMoreInline" type="button">Yana yuklash</button>
         </div>
         </div>
       </div>
@@ -163,24 +172,7 @@
     </div>
   </div>
 
-  <!-- Comments Modal -->
-  <div class="modalOverlay modalApp" id="cmModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Izohlar">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Izohlar — barchasi</div>
-          <div class="small">Oxirgi izohlar (like + reply bilan)</div>
-        </div>
-        <button class="iconBtn" id="cmModalClose" type="button" aria-label="Yopish">✕</button>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <ul class="commentList" id="commentAllList"></ul>
-        <div style="height:10px;"></div>
-        <button class="btn" id="cmLoadMore" type="button">Yana yuklash</button>
-      </div>
-    </div>
-  </div>
+
 
   <!-- Onboarding overlay (original flow preserved) -->
   <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
@@ -345,23 +337,81 @@
       });
     }
 
-    // Leaderboard
-    // ===== Leaderboard preview (Top-20) =====
-    async function loadLeaderboard(){
+    // Leaderboard (interactive)
+    let lbAll = [];
+    let lbMeOnly = false;
+    let lbQuery = "";
+    let myLoginId = null;
+
+    function medal(i){
+      return i===0 ? "🥇" : i===1 ? "🥈" : i===2 ? "🥉" : "";
+    }
+
+    function renderLeaderboard(){
       const body = $("lbBody");
-      try{
-        const data = await api("leaderboard", { query: { limit: 20 } });
-        const items = (data?.items || []);
-        body.innerHTML = items.map((u,i)=>`
-          <tr>
+      const podium = $("lbPodium");
+      const q = (lbQuery||"").toLowerCase();
+
+      let items = lbAll.slice();
+      if(lbMeOnly && myLoginId){
+        items = items.filter(u=>String(u.loginId||"")===String(myLoginId));
+      }
+      if(q){
+        items = items.filter(u=>
+          String(u.loginId||"").toLowerCase().includes(q) ||
+          String(u.name||"").toLowerCase().includes(q)
+        );
+      }
+
+      const top = items.slice(0,3);
+      const topPts = Number(top?.[0]?.points || 0) || 1;
+
+      // Podium (Top-3)
+      podium.innerHTML = top.map((u,i)=>{
+        const pts = Number(u.points||0);
+        const pct = Math.max(8, Math.round((pts/topPts)*100));
+        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+        return `
+          <button class="podCard ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}" title="${escapeHtml(u.name||u.loginId||"")}">
+            <div class="podTop">
+              <div class="podMedal">${medal(i)}</div>
+              <div class="podRank">#${i+1}</div>
+            </div>
+            <div class="podName">${escapeHtml(u.name || u.loginId || "—")}</div>
+            <div class="podId">${escapeHtml(u.loginId || "")}</div>
+            <div class="podBar"><span style="width:${pct}%"></span></div>
+            <div class="podPts">${pts} ball</div>
+          </button>
+        `;
+      }).join("") || `<div class="small">Hozircha reyting yo‘q</div>`;
+
+      // Table (Top-20 of filtered)
+      const show = items.slice(0,20);
+      body.innerHTML = show.map((u,i)=>{
+        const pts = Number(u.points||0);
+        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+        const pct = Math.max(6, Math.round((pts/topPts)*100));
+        return `
+          <tr class="lbRow ${me?"me":""}" data-pick="${escapeHtml(u.loginId||"")}">
             <td><span class="rankBadge">${i+1}</span></td>
             <td>
               <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
               <div class="small">${escapeHtml(u.loginId || "")}</div>
+              <div class="miniBar"><span style="width:${pct}%"></span></div>
             </td>
-            <td><b>${Number(u.points||0)}</b></td>
+            <td><b>${pts}</b></td>
           </tr>
-        `).join("") || `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
+        `;
+      }).join("") || `<tr><td colspan="3" class="small">Mos natija topilmadi</td></tr>`;
+    }
+
+    async function loadLeaderboard(){
+      const body = $("lbBody");
+      body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+      try{
+        const data = await api("leaderboard", { query: { limit: 120 } });
+        lbAll = (data?.items || []);
+        renderLeaderboard();
       }catch(_){
         body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
       }
@@ -470,26 +520,12 @@
       }catch(_){ /* ignore */ }
     }
 
-    // ===== Comments preview (latest 20) =====
-    async function loadComments(){
-      const list = $("commentList");
-      const count = $("commentCount");
-      try{
-        await loadLiked();
-        const data = await api("comments", { query: { limit: 20 } });
-        const items = data?.items || [];
-        count.textContent = "20";
-        list.innerHTML = items.map(renderCommentItem).join("") || `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
-      }catch(_){
-        list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
-      }
-    }
-
-    // ===== Comments modal (all with paging) =====
+    // ===== Comments (always show all, paging in the panel) =====
     let cmCursor = null;
-    async function loadCommentsMore(reset=false){
-      const list = $("commentAllList");
-      const btn = $("cmLoadMore");
+    async function loadComments(reset=false){
+      const list = $("commentList");
+      const btn = $("cmLoadMoreInline");
+      const count = $("commentCount");
       try{
         btn.disabled = true;
         if(reset){
@@ -503,9 +539,14 @@
         list.insertAdjacentHTML("beforeend", items.map(renderCommentItem).join(""));
         cmCursor = data?.nextCursor || null;
         btn.style.display = cmCursor ? "inline-flex" : "none";
+        // total (if server returns it), else show loaded count
+        const total = Number(data?.total || 0);
+        const loaded = list.querySelectorAll(".commentItem").length;
+        count.textContent = total ? String(total) : String(loaded);
         if(!items.length && reset){
           list.innerHTML = `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
           btn.style.display = "none";
+          count.textContent = "0";
         }
       }catch(_){
         if(reset) list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
@@ -588,7 +629,6 @@
     }
 
     $("commentList").addEventListener("click", handleCommentActions, { passive:false });
-    $("commentAllList").addEventListener("click", handleCommentActions, { passive:false });
     async function sendComment(){
       const input = $("commentInput");
       const text = (input.value||"").trim();
@@ -598,32 +638,53 @@
         const token = await getToken();
         await api("comments", { method:"POST", token, body: { text } });
         toast("Yuborildi ✅");
-        await loadComments();
-        // if modal is open, refresh it too
-        const cmM = $("cmModal");
-        if(cmM && cmM.style.display === "flex") await loadCommentsMore(true);
+        await loadComments(true);
       }catch(e){
         toast("Xato: yuborilmadi");
       }
     }
 
-    // Modal wiring
+    // Modal wiring (leaderboard only)
     const lbModal = $("lbModal");
-    const cmModal = $("cmModal");
     $("btnLbAll").onclick = async ()=>{ openModal(lbModal); await loadLeaderboardMore(true); };
-    $("btnCommentAll").onclick = async ()=>{ openModal(cmModal); await loadCommentsMore(true); };
     $("lbModalClose").onclick = ()=>closeModal(lbModal);
-    $("cmModalClose").onclick = ()=>closeModal(cmModal);
     $("lbLoadMore").onclick = ()=>loadLeaderboardMore(false);
-    $("cmLoadMore").onclick = ()=>loadCommentsMore(false);
 
     // close on backdrop click
     lbModal.addEventListener("click", (e)=>{ if(e.target === lbModal) closeModal(lbModal); });
-    cmModal.addEventListener("click", (e)=>{ if(e.target === cmModal) closeModal(cmModal); });
 
     $("btnLogout").onclick = ()=>{ logout(); location.href="./"; };
     $("commentSend").onclick = sendComment;
     $("commentInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendComment(); });
+    $("cmLoadMoreInline").onclick = ()=>loadComments(false);
+
+    // Leaderboard interactivity
+    $("lbSearch")?.addEventListener("input", (e)=>{
+      lbQuery = e.target.value || "";
+      renderLeaderboard();
+    });
+    $("lbOnlyMe")?.addEventListener("click", (e)=>{
+      lbMeOnly = !lbMeOnly;
+      e.currentTarget.setAttribute("aria-pressed", String(lbMeOnly));
+      e.currentTarget.classList.toggle("active", lbMeOnly);
+      renderLeaderboard();
+    });
+    // Click to spotlight a user in the table/podium
+    function pickUser(loginId){
+      if(!loginId) return;
+      lbQuery = String(loginId);
+      const inp = $("lbSearch");
+      if(inp) inp.value = lbQuery;
+      renderLeaderboard();
+    }
+    $("lbPodium")?.addEventListener("click", (e)=>{
+      const b = e.target.closest("[data-pick]");
+      if(b) pickUser(b.getAttribute("data-pick"));
+    });
+    $("lbBody")?.addEventListener("click", (e)=>{
+      const r = e.target.closest("[data-pick]");
+      if(r) pickUser(r.getAttribute("data-pick"));
+    });
 
     async function boot(){
       setupSidePanel();
@@ -637,9 +698,10 @@
         $("userBalance").textContent = String(u.balance ?? 0);
         $("userAge").textContent = calcAgePrecise(u.birthdate);
 
+        myLoginId = u.loginId;
         renderSections();
         loadLeaderboard();
-        loadComments();
+        loadComments(true);
 
         if(!u.profileComplete){
           await runOnboarding();
