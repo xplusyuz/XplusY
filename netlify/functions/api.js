@@ -72,6 +72,17 @@ function randPassword(len=8){
   return s;
 }
 
+// Canonical user ID format: digits only (e.g., "000001").
+// If someone pastes "LM-000001" we strip non-digits for backward compatibility.
+function normalizeLoginId(raw) {
+  const s = (raw ?? "").toString().trim();
+  const digits = s.replace(/\D/g, "");
+  if (!digits) return null;
+  // keep up to 12 digits; pad short IDs to 6 (optional)
+  const clipped = digits.slice(-12);
+  return clipped.padStart(6, "0");
+}
+
 async function nextCounter(tx, ref, field, start=1) {
   const snap = await tx.get(ref);
   let cur = start;
@@ -99,7 +110,7 @@ async function handleAuthRegister(db) {
       const hash2 = await bcrypt.hash(password2, 10);
       tx.set(users.doc(loginId2), {
         loginId: loginId2,
-        publicId: "LM-" + String(n2).padStart(6,"0"),
+        publicId: loginId2,
         passwordHash: hash2,
         mustChangePassword: true,
         profileComplete: false,
@@ -115,7 +126,7 @@ async function handleAuthRegister(db) {
     }
     tx.set(userRef, {
       loginId,
-      publicId: "LM-" + String(n).padStart(6,"0"),
+      publicId: loginId,
       passwordHash,
       mustChangePassword: true,
       profileComplete: false,
@@ -136,19 +147,21 @@ async function handleAuthRegister(db) {
 async function handleAuthLogin(db, body) {
   const { loginId, password } = body || {};
   if (!loginId || !password) return { error: "loginId va password kerak" , status:400};
-  const snap = await db.collection("users").doc(String(loginId)).get();
+  const canonId = normalizeLoginId(loginId);
+  if (!canonId) return { error: "ID faqat raqam bo‘lishi kerak", status:400 };
+  const snap = await db.collection("users").doc(canonId).get();
   if (!snap.exists) return { error: "Bunday ID topilmadi", status:404};
   const data = snap.data();
   const ok = await bcrypt.compare(password, data.passwordHash || "");
   if (!ok) return { error: "Parol noto‘g‘ri", status:401};
-  const token = signToken(String(loginId));
+  const token = signToken(canonId);
   return { token, user: publicUser(data) };
 }
 
 function publicUser(u){
   return {
     loginId: u.loginId,
-    publicId: u.publicId || ("LM-" + String(u.loginId).padStart(6,"0")),
+    publicId: u.publicId || String(u.loginId),
     firstName: u.firstName || "",
     lastName: u.lastName || "",
     birthdate: u.birthdate || "",
