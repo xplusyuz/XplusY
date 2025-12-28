@@ -19,7 +19,13 @@
           <div class="subtitle" id="dt">—</div>
         </div>
       </div>
-      <button class="btn" id="btnLogout">Chiqish</button>
+      <div class="topbarRight">
+        <button class="iconBtn bellBtn" id="btnBell" type="button" aria-label="Bildirishnomalar" title="Bildirishnomalar">
+          🔔
+          <span class="badge" id="notifBadge" aria-label="o‘qilmagan">0</span>
+        </button>
+        <button class="btn" id="btnLogout">Chiqish</button>
+      </div>
     </div>
 
     <div class="glass section">
@@ -172,7 +178,27 @@
     </div>
   </div>
 
-
+  <!-- Notifications Modal -->
+  <div class="modalOverlay modalApp" id="notifModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Bildirishnomalar">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Bildirishnomalar</div>
+          <div class="small" id="notifHint">Yangi xabarlar shu yerda chiqadi</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="chipBtn" id="notifMarkAll" type="button">✅ Hammasini o‘qildi</button>
+          <button class="iconBtn" id="notifClose" type="button" aria-label="Yopish">✕</button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <ul class="notifList" id="notifList"></ul>
+        <div style="height:10px;"></div>
+        <button class="btn" id="notifLoadMore" type="button">Yana yuklash</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Onboarding overlay (original flow preserved) -->
   <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
@@ -479,15 +505,25 @@
 
     function renderCommentItem(c){
       const liked = likedSet.has(String(c.id));
+      const isOwner = myLoginId && String(c.loginId||"") === String(myLoginId);
+      const edited = c.edited === true;
       return `
         <li class="commentItem" data-id="${escapeHtml(c.id)}">
           <div class="top">
             <div class="nameLine">${escapeHtml(c.name || c.loginId || "—")}</div>
             <div class="small">${escapeHtml(fmtTime(c.createdAt))}</div>
           </div>
-          <div class="commentText">${escapeHtml(c.text || "")}</div>
+          <div class="commentText" data-role="text">${escapeHtml(c.text || "")}</div>
+          ${edited ? `<div class="small editedTag">tahrirlangan</div>` : ``}
 
-          <div class="commentActions">
+          ${isOwner ? `
+            <div class="ownerActions">
+              <button class="miniBtn" data-act="edit" type="button" title="Tahrirlash">✎</button>
+              <button class="miniBtn danger" data-act="delete" type="button" title="O‘chirish">🗑</button>
+            </div>
+          ` : ``}
+
+          <div class="commentActions compact">
             <button class="actBtn ${liked?"liked":""}" data-act="like" type="button" aria-label="Like">
               <span class="ic">❤</span>
               <span class="lbl">Like</span>
@@ -626,6 +662,57 @@
         finally{ btn.disabled = false; }
         return;
       }
+
+      if(act === "edit"){
+        const textEl = li.querySelector('[data-role="text"]');
+        const cur = textEl ? (textEl.textContent || "") : "";
+        // swap to editor
+        li.classList.add("editing");
+        if(textEl){
+          textEl.innerHTML = `
+            <textarea class="editArea" maxlength="140">${escapeHtml(cur)}</textarea>
+            <div class="editBar">
+              <button class="btn btnPrimary btnSm" data-act="saveEdit" type="button">Saqlash</button>
+              <button class="btn btnSm" data-act="cancelEdit" type="button">Bekor</button>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      if(act === "cancelEdit"){
+        // easiest: reload comments to restore template
+        await loadComments(true);
+        return;
+      }
+
+      if(act === "saveEdit"){
+        const area = li.querySelector(".editArea");
+        const text = (area?.value || "").trim();
+        if(!text) return toast("Izoh bo‘sh");
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/update", { method:"POST", token, body:{ commentId: id, text } });
+          toast("Tahrirlandi ✅");
+          await loadComments(true);
+        }catch(_){ toast("Tahrirlash uchun ruxsat yo‘q"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
+
+      if(act === "delete"){
+        if(!confirm("Izoh o‘chirilsinmi?")) return;
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/delete", { method:"POST", token, body:{ commentId: id } });
+          toast("O‘chirildi ✅");
+          await loadComments(true);
+        }catch(_){ toast("O‘chirish uchun ruxsat yo‘q"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
     }
 
     $("commentList").addEventListener("click", handleCommentActions, { passive:false });
@@ -652,6 +739,96 @@
 
     // close on backdrop click
     lbModal.addEventListener("click", (e)=>{ if(e.target === lbModal) closeModal(lbModal); });
+
+    // ===== Notifications =====
+    const notifModal = $("notifModal");
+    let notifCursor = null;
+    async function refreshUnread(){
+      try{
+        const token = await getToken();
+        const d = await api("notifications/unread-count", { token });
+        const n = Number(d?.unreadCount||0);
+        const b = $("notifBadge");
+        if(b){
+          b.textContent = String(n);
+          b.style.display = n>0 ? "inline-flex" : "none";
+        }
+      }catch(_){
+        const b = $("notifBadge");
+        if(b) b.style.display = "none";
+      }
+    }
+
+    function renderNotifItem(n){
+      const read = !!n.read;
+      return `
+        <li class="notifItem ${read?"read":"unread"}" data-id="${escapeHtml(n.id)}">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(n.title||"Xabar")}</div>
+            <div class="small">${escapeHtml(fmtTime(n.createdAt))}</div>
+          </div>
+          <div class="notifBody">${escapeHtml(n.body||"")}</div>
+          <div class="notifActions">
+            ${read?"":"<button class=\"miniBtn\" data-act=\"readNotif\" type=\"button\">O‘qildi</button>"}
+          </div>
+        </li>
+      `;
+    }
+
+    async function loadNotifs(reset=false){
+      const list = $("notifList");
+      const btn = $("notifLoadMore");
+      try{
+        btn.disabled = true;
+        if(reset){
+          notifCursor = null;
+          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
+        }
+        const token = await getToken();
+        const data = await api("notifications", { token, query:{ limit: 20, cursor: notifCursor } });
+        const items = data?.items || [];
+        if(reset) list.innerHTML = "";
+        list.insertAdjacentHTML("beforeend", items.map(renderNotifItem).join(""));
+        notifCursor = data?.nextCursor || null;
+        btn.style.display = notifCursor ? "inline-flex" : "none";
+        const unreadCount = Number(data?.unreadCount||0);
+        const b = $("notifBadge");
+        if(b){
+          b.textContent = String(unreadCount);
+          b.style.display = unreadCount>0 ? "inline-flex" : "none";
+        }
+        if(!items.length && reset){
+          list.innerHTML = `<li class="small">Hozircha bildirishnoma yo‘q 🙂</li>`;
+          btn.style.display = "none";
+        }
+      }catch(_){
+        if(reset) $("notifList").innerHTML = `<li class="small">Yuklab bo‘lmadi</li>`;
+      }finally{ btn.disabled = false; }
+    }
+
+    async function markNotifRead(id){
+      const token = await getToken();
+      await api("notifications/read", { method:"POST", token, body:{ id } });
+    }
+    async function markAllRead(){
+      const token = await getToken();
+      await api("notifications/read", { method:"POST", token, body:{ all:true } });
+    }
+
+    $("btnBell")?.addEventListener("click", async ()=>{ openModal(notifModal); await loadNotifs(true); });
+    $("notifClose")?.addEventListener("click", ()=>closeModal(notifModal));
+    $("notifLoadMore")?.addEventListener("click", ()=>loadNotifs(false));
+    $("notifMarkAll")?.addEventListener("click", async ()=>{ try{ await markAllRead(); await loadNotifs(true); await refreshUnread(); }catch(_){ toast("Xato"); } });
+    notifModal.addEventListener("click", (e)=>{ if(e.target===notifModal) closeModal(notifModal); });
+    $("notifList")?.addEventListener("click", async (e)=>{
+      const b = e.target.closest("button[data-act='readNotif']");
+      if(!b) return;
+      const li = e.target.closest(".notifItem");
+      const id = li?.getAttribute("data-id");
+      if(!id) return;
+      try{ b.disabled = true; await markNotifRead(id); li.classList.add("read"); li.classList.remove("unread"); await refreshUnread(); }catch(_){ toast("Xato"); }
+      finally{ b.disabled=false; }
+    });
 
     $("btnLogout").onclick = ()=>{ logout(); location.href="./"; };
     $("commentSend").onclick = sendComment;
@@ -699,6 +876,7 @@
         $("userAge").textContent = calcAgePrecise(u.birthdate);
 
         myLoginId = u.loginId;
+        await refreshUnread();
         renderSections();
         loadLeaderboard();
         loadComments(true);
