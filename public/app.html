@@ -749,13 +749,17 @@
         const d = await api("notifications/unread-count", { token });
         const n = Number(d?.unreadCount||0);
         const b = $("notifBadge");
+        const bell = $("btnBell");
         if(b){
           b.textContent = String(n);
           b.style.display = n>0 ? "inline-flex" : "none";
         }
+        if(bell) bell.classList.toggle("hasUnread", n>0);
       }catch(_){
         const b = $("notifBadge");
         if(b) b.style.display = "none";
+        const bell = $("btnBell");
+        if(bell) bell.classList.remove("hasUnread");
       }
     }
 
@@ -769,6 +773,7 @@
           </div>
           <div class="notifBody">${escapeHtml(n.body||"")}</div>
           <div class="notifActions">
+            <button class="miniBtn ghost" data-act="delNotif" type="button" aria-label="O‘chirish">🗑</button>
             ${read?"":"<button class=\"miniBtn\" data-act=\"readNotif\" type=\"button\">O‘qildi</button>"}
           </div>
         </li>
@@ -810,6 +815,10 @@
       const token = await getToken();
       await api("notifications/read", { method:"POST", token, body:{ id } });
     }
+    async function deleteNotif(id){
+      const token = await getToken();
+      await api("notifications/delete", { method:"POST", token, body:{ id } });
+    }
     async function markAllRead(){
       const token = await getToken();
       await api("notifications/read", { method:"POST", token, body:{ all:true } });
@@ -821,12 +830,22 @@
     $("notifMarkAll")?.addEventListener("click", async ()=>{ try{ await markAllRead(); await loadNotifs(true); await refreshUnread(); }catch(_){ toast("Xato"); } });
     notifModal.addEventListener("click", (e)=>{ if(e.target===notifModal) closeModal(notifModal); });
     $("notifList")?.addEventListener("click", async (e)=>{
-      const b = e.target.closest("button[data-act='readNotif']");
-      if(!b) return;
       const li = e.target.closest(".notifItem");
       const id = li?.getAttribute("data-id");
       if(!id) return;
-      try{ b.disabled = true; await markNotifRead(id); li.classList.add("read"); li.classList.remove("unread"); await refreshUnread(); }catch(_){ toast("Xato"); }
+
+      const del = e.target.closest("button[data-act='delNotif']");
+      if(del){
+        try{ del.disabled = true; await deleteNotif(id); li.remove(); await refreshUnread(); }
+        catch(_){ toast("Xato"); }
+        finally{ del.disabled = false; }
+        return;
+      }
+
+      const b = e.target.closest("button[data-act='readNotif']");
+      if(!b) return;
+      try{ b.disabled = true; await markNotifRead(id); li.classList.add("read"); li.classList.remove("unread"); await refreshUnread(); }
+      catch(_){ toast("Xato"); }
       finally{ b.disabled=false; }
     });
 

@@ -114,6 +114,22 @@ async function isAdminUser(db, loginId){
   }
 }
 
+// ===== Admin notifications (global tracking for read receipts) =====
+// Collection: admin_notifications/{globalId}
+// Subcollection: reads/{loginId}
+async function recordAdminRead(db, globalId, loginId){
+  if(!globalId) return;
+  const gref = db.collection("admin_notifications").doc(globalId);
+  const rref = gref.collection("reads").doc(loginId);
+  // Only write once; don't break if it already exists.
+  await db.runTransaction(async (tx)=>{
+    const rs = await tx.get(rref);
+    if(rs.exists) return;
+    tx.set(rref, { loginId, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:false });
+    tx.set(gref, { readCount: admin.firestore.FieldValue.increment(1) }, { merge:true });
+  });
+}
+
 async function deleteSubcollection(db, parentRef, subName, batchSize=400){
   // Deletes docs in parentRef.collection(subName) in batches.
   while(true){
@@ -620,16 +636,58 @@ export const handler = async (event) => {
             const snap = await col.where("read","==", false).limit(450).get();
             if(snap.empty) break;
             const batch = db.batch();
-            snap.docs.forEach(d=>batch.set(d.ref, { read:true, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true }));
+            snap.docs.forEach(d=>{
+              const n = d.data() || {};
+              batch.set(d.ref, { read:true, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+              // If this notification was sent by admin (has globalId), record read receipt (best-effort).
+              if(n.globalId){
+                const gref = db.collection("admin_notifications").doc(String(n.globalId));
+                const rref = gref.collection("reads").doc(auth.loginId);
+                batch.set(rref, { loginId: auth.loginId, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+                batch.set(gref, { readCount: admin.firestore.FieldValue.increment(1) }, { merge:true });
+              }
+            });
             await batch.commit();
           }
           return json(200, { ok:true });
         }
         if(!id) return json(400, { error:"id kerak" });
-        await col.doc(id).set({ read:true, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+        // transaction to avoid double-count on read receipts
+        await db.runTransaction(async (tx)=>{
+          const nref = col.doc(id);
+          const ns = await tx.get(nref);
+          if(!ns.exists) return;
+          const n = ns.data() || {};
+          if(n.read === true) return;
+          tx.set(nref, { read:true, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+          const gid = n.globalId ? String(n.globalId) : "";
+          if(gid){
+            const gref = db.collection("admin_notifications").doc(gid);
+            const rref = gref.collection("reads").doc(auth.loginId);
+            const rs = await tx.get(rref);
+            if(!rs.exists){
+              tx.set(rref, { loginId: auth.loginId, readAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:false });
+              tx.set(gref, { readCount: admin.firestore.FieldValue.increment(1) }, { merge:true });
+            }
+          }
+        });
         return json(200, { ok:true });
       }catch(e){
         return json(500, { error:"Read error", message: e.message });
+      }
+    }
+
+    if(path === "/notifications/delete" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      const body = parseBody(event);
+      const id = String(body.id || "").trim();
+      if(!id) return json(400, { error:"id kerak" });
+      try{
+        await db.collection("users").doc(auth.loginId).collection("notifications").doc(id).delete();
+        return json(200, { ok:true });
+      }catch(e){
+        return json(500, { error:"Delete notif error", message: e.message });
       }
     }
 
@@ -735,13 +793,29 @@ export const handler = async (event) => {
       const loginIds = Array.isArray(body.loginIds) ? body.loginIds.map(x=>String(x||"").trim()).filter(Boolean) : [];
       if(!title || !msg) return json(400, { error:"Sarlavha va matn kerak" });
 
+      // Create global notification for tracking (read receipts, history)
+      const globalRef = db.collection("admin_notifications").doc();
+      const globalId = globalRef.id;
       const notif = {
         title,
         body: msg,
         type: String(body.type || "info"),
         read: false,
+        globalId,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: auth.loginId,
+      };
+
+      const globalDoc = {
+        id: globalId,
+        title,
+        body: msg,
+        type: String(body.type || "info"),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: auth.loginId,
+        audience,
+        targetCount: 0,
+        readCount: 0,
       };
 
       async function writeToUsers(ids){
@@ -779,12 +853,76 @@ export const handler = async (event) => {
             await writeToUsers(ids);
             cursor = snap.docs[snap.docs.length-1];
           }
-          return json(200, { ok:true, audience:"all" });
+          await globalRef.set({ ...globalDoc, audience:"all" }, { merge:true });
+          // targetCount for all: approximate with a count query (best effort)
+          try{
+            const cs = await db.collection("users").count().get();
+            await globalRef.set({ targetCount: cs.data().count || 0 }, { merge:true });
+          }catch(_){ }
+          return json(200, { ok:true, audience:"all", globalId });
         }
         const wrote = await writeToUsers(targets);
-        return json(200, { ok:true, wrote, audience });
+        await globalRef.set({ ...globalDoc, targetCount: wrote }, { merge:true });
+        return json(200, { ok:true, wrote, audience, globalId });
       }catch(e){
         return json(500, { error:"Notify error", message: e.message });
+      }
+    }
+
+    if(path === "/admin/notifications/sent" && method === "GET"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
+      try{
+        const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 30)));
+        const cursor = String(event.queryStringParameters?.cursor || "").trim();
+        const col = db.collection("admin_notifications");
+        let q = col.orderBy("createdAt","desc");
+        if(cursor){
+          try{
+            const cdoc = await col.doc(cursor).get();
+            if(cdoc.exists) q = q.startAfter(cdoc);
+          }catch(_){ }
+        }
+        const snap = await q.limit(limit).get();
+        const items = snap.docs.map(d=>{
+          const n = d.data() || {};
+          return {
+            id: d.id,
+            title: n.title || "",
+            body: n.body || "",
+            type: n.type || "info",
+            audience: n.audience || "",
+            targetCount: Number(n.targetCount||0),
+            readCount: Number(n.readCount||0),
+            createdAt: toMillis(n.createdAt),
+            createdBy: n.createdBy || "",
+          };
+        });
+        const nextCursor = (snap.size === limit && snap.docs.length) ? snap.docs[snap.docs.length-1].id : null;
+        return json(200, { items, nextCursor });
+      }catch(e){
+        return json(500, { error:"Sent notifs error", message: e.message });
+      }
+    }
+
+    if(path === "/admin/notifications/reads" && method === "GET"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
+      try{
+        const globalId = String(event.queryStringParameters?.globalId || "").trim();
+        if(!globalId) return json(400, { error:"globalId kerak" });
+        const limit = Math.max(1, Math.min(200, Number(event.queryStringParameters?.limit || 100)));
+        const snap = await db.collection("admin_notifications").doc(globalId).collection("reads")
+          .orderBy("readAt","desc").limit(limit).get();
+        const items = snap.docs.map(d=>{
+          const r = d.data() || {};
+          return { loginId: r.loginId || d.id, readAt: toMillis(r.readAt) };
+        });
+        return json(200, { items });
+      }catch(e){
+        return json(500, { error:"Reads error", message: e.message });
       }
     }
 

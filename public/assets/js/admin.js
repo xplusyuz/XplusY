@@ -25,30 +25,87 @@ let selected = new Set();
 let usersCursor = null;
 let usersCache = [];
 let commentsCursor = null;
+let sentCursor = null;
 
 function setTab(name){
   const tabUsers = $("tabUsers");
   const tabComments = $("tabComments");
   const tabNotify = $("tabNotify");
+  const tabSent = $("tabSent");
   const paneUsers = $("paneUsers");
   const paneComments = $("paneComments");
   const paneNotify = $("paneNotify");
+  const paneSent = $("paneSent");
 
   const isUsers = name==="users";
   const isComments = name==="comments";
   const isNotify = name==="notify";
+  const isSent = name==="sent";
 
   tabUsers.classList.toggle("active", isUsers);
   tabComments.classList.toggle("active", isComments);
   tabNotify.classList.toggle("active", isNotify);
+  tabSent.classList.toggle("active", isSent);
 
   tabUsers.setAttribute("aria-selected", String(isUsers));
   tabComments.setAttribute("aria-selected", String(isComments));
   tabNotify.setAttribute("aria-selected", String(isNotify));
+  tabSent.setAttribute("aria-selected", String(isSent));
 
   paneUsers.style.display = isUsers ? "block" : "none";
   paneComments.style.display = isComments ? "block" : "none";
   paneNotify.style.display = isNotify ? "block" : "none";
+  paneSent.style.display = isSent ? "block" : "none";
+}
+
+function renderSentItem(n){
+  const when = n.createdAt ? new Date(n.createdAt).toLocaleString() : "";
+  const meta = `${escapeHtml(n.audience||"")} • 👥 ${Number(n.targetCount||0)} • ✅ ${Number(n.readCount||0)} • ${escapeHtml(when)}`;
+  return `
+    <li class="notifItem" data-gid="${escapeHtml(n.id)}">
+      <div class="top">
+        <div class="nameLine">${escapeHtml(n.title||"Xabar")}</div>
+        <div class="small">${meta}</div>
+      </div>
+      <div class="notifBody">${escapeHtml(n.body||"")}</div>
+      <div class="notifActions" style="gap:8px; justify-content:space-between;">
+        <button class="miniBtn" data-act="toggleReads" type="button">👀 O‘qiganlar</button>
+        <span class="small" style="opacity:.8;">ID: <b>${escapeHtml(n.id)}</b></span>
+      </div>
+      <div class="readsBox" style="display:none; margin-top:10px;"></div>
+    </li>
+  `;
+}
+
+async function loadSent(reset=false){
+  const list = $("sentList");
+  const more = $("sentLoadMore");
+  try{
+    more.disabled = true;
+    if(reset){
+      sentCursor = null;
+      list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
+    }
+    const token = getToken();
+    const data = await api("admin/notifications/sent", { token, query:{ limit: 20, cursor: sentCursor } });
+    const items = data?.items || [];
+    if(reset) list.innerHTML = "";
+    list.insertAdjacentHTML("beforeend", items.map(renderSentItem).join(""));
+    sentCursor = data?.nextCursor || null;
+    more.style.display = sentCursor ? "inline-flex" : "none";
+    if(!items.length && reset){
+      list.innerHTML = `<li class="small">Hozircha yuborilgan bildirishnoma yo‘q</li>`;
+      more.style.display = "none";
+    }
+  }catch(e){
+    if(reset) $("sentList").innerHTML = `<li class="small">Xato: ${escapeHtml(e.message||"yuklanmadi")}</li>`;
+  }finally{ more.disabled = false; }
+}
+
+async function loadReads(globalId){
+  const token = getToken();
+  const data = await api("admin/notifications/reads", { token, query:{ globalId, limit: 120 } });
+  return data?.items || [];
 }
 
 function renderUsers(){
@@ -210,6 +267,7 @@ function wire(){
   $("tabUsers").onclick = ()=>setTab("users");
   $("tabComments").onclick = ()=>{ setTab("comments"); loadComments(true); };
   $("tabNotify").onclick = ()=>setTab("notify");
+  $("tabSent").onclick = ()=>{ setTab("sent"); loadSent(true); };
 
   $("usersReload").onclick = ()=>loadUsers(true);
   $("usersLoadMore").onclick = ()=>loadUsers(false);
@@ -249,6 +307,35 @@ function wire(){
   });
 
   $("sendNotif").onclick = sendNotification;
+
+  $("sentReload").onclick = ()=>loadSent(true);
+  $("sentLoadMore").onclick = ()=>loadSent(false);
+  $("sentList").addEventListener("click", async (e)=>{
+    const btn = e.target.closest("button[data-act='toggleReads']");
+    if(!btn) return;
+    const li = e.target.closest(".notifItem");
+    const gid = li?.getAttribute("data-gid");
+    const box = li?.querySelector(".readsBox");
+    if(!gid || !box) return;
+    const isOpen = box.style.display !== "none";
+    if(isOpen){
+      box.style.display = "none";
+      btn.textContent = "👀 O‘qiganlar";
+      return;
+    }
+    try{
+      btn.disabled = true;
+      box.style.display = "block";
+      box.innerHTML = `<div class="small">Yuklanmoqda…</div>`;
+      const items = await loadReads(gid);
+      box.innerHTML = items.length
+        ? `<ul class="small" style="margin:0; padding-left:18px; line-height:1.7;">${items.map(r=>`<li><b>${escapeHtml(r.loginId)}</b> — ${escapeHtml(r.readAt? new Date(r.readAt).toLocaleString():"")}</li>`).join("")}</ul>`
+        : `<div class="small">Hali hech kim o‘qimagan</div>`;
+      btn.textContent = "🙈 Yopish";
+    }catch(err){
+      box.innerHTML = `<div class="small">Xato: ${escapeHtml(err.message||"")}</div>`;
+    }finally{ btn.disabled = false; }
+  });
 
   $("audience").addEventListener("change", ()=>{
     const v = $("audience").value;
