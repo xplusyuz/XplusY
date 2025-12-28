@@ -48,14 +48,41 @@
       <div class="cards" id="sections"></div>
     </div>
 
+    
     <div class="glass section">
       <div class="sectionTitle">
         <h2>Reyting va izohlar</h2>
-        <div class="hint">Point bo‘yicha Top-20 • “Barchasini ko‘rish” orqali to‘liq ro‘yxat</div>
+        <div class="hint">O‘ng tomondagi tugma orqali oching</div>
+      </div>
+      <div class="small" style="opacity:.9; line-height:1.5;">
+        Reyting va sharhlar yon panelga yashirildi. O‘ngdagi kichik tugmani bosing.
+      </div>
+    </div>
+
+
+  <!-- Side Panel Toggle (Reyting / Sharhlar) -->
+  <button class="sideFab" id="sidePanelBtn" type="button" aria-label="Reyting va sharhlar paneli" title="Reyting / Sharhlar">
+    <span class="sideFabIcon">≡</span>
+  </button>
+
+  <div class="sideOverlay" id="sidePanelOverlay" aria-hidden="true">
+    <aside class="sidePanel glass" id="sidePanel" role="dialog" aria-modal="true" aria-label="Reyting va sharhlar">
+      <div class="sideHead">
+        <div>
+          <div class="sideTitle">Reyting & Sharhlar</div>
+          <div class="small">Top-20 preview • “Barchasini ko‘rish” bilan to‘liq</div>
+        </div>
+        <button class="iconBtn" id="sideClose" type="button" aria-label="Yopish">✕</button>
       </div>
 
-      <div class="lbGrid">
-        <div class="glass" style="padding:14px;">
+      <div class="sideTabs" role="tablist" aria-label="Panel tablari">
+        <button class="tabBtn active" id="sideTabLb" type="button" role="tab" aria-selected="true">Reyting</button>
+        <button class="tabBtn" id="sideTabComments" type="button" role="tab" aria-selected="false">Sharhlar</button>
+      </div>
+
+      <div class="sideBody">
+        <div class="sidePane active" id="sidePaneLb" role="tabpanel">
+          <div class="glass" style="padding:14px;">
           <div class="panelHead">
             <div>
               <div class="nameLine">Reyting</div>
@@ -77,7 +104,10 @@
           </table>
         </div>
 
-        <div class="glass" style="padding:14px;">
+        
+        </div>
+        <div class="sidePane" id="sidePaneComments" role="tabpanel">
+          <div class="glass" style="padding:14px;">
           <div class="panelHead">
             <div>
               <div class="nameLine">Izohlar</div>
@@ -97,9 +127,11 @@
           <div class="hr"></div>
           <ul class="commentList" id="commentList"></ul>
         </div>
+        </div>
       </div>
-    </div>
+    </aside>
   </div>
+
 
   <!-- Leaderboard Modal -->
   <div class="modalOverlay modalApp" id="lbModal" aria-hidden="true">
@@ -594,6 +626,8 @@
     $("commentInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendComment(); });
 
     async function boot(){
+      setupSidePanel();
+
       try{
         const r = await me();
         const u = r.user;
@@ -618,7 +652,59 @@
         setTimeout(()=>location.href="./", 600);
       }
     }
+    
+    function setupSidePanel(){
+      const btn = $("sidePanelBtn");
+      const overlay = $("sidePanelOverlay");
+      const closeBtn = $("sideClose");
+      const panel = $("sidePanel");
+
+      const tabLb = $("sideTabLb");
+      const tabCm = $("sideTabComments");
+      const paneLb = $("sidePaneLb");
+      const paneCm = $("sidePaneComments");
+
+      function open(){
+        overlay.setAttribute("aria-hidden","false");
+        overlay.classList.add("open");
+        // focus
+        setTimeout(()=>closeBtn?.focus(), 50);
+        document.body.classList.add("noScroll");
+      }
+      function close(){
+        overlay.setAttribute("aria-hidden","true");
+        overlay.classList.remove("open");
+        document.body.classList.remove("noScroll");
+      }
+      function setTab(which){
+        const isLb = which==="lb";
+        tabLb.classList.toggle("active", isLb);
+        tabCm.classList.toggle("active", !isLb);
+        tabLb.setAttribute("aria-selected", String(isLb));
+        tabCm.setAttribute("aria-selected", String(!isLb));
+        paneLb.classList.toggle("active", isLb);
+        paneCm.classList.toggle("active", !isLb);
+      }
+
+      btn?.addEventListener("click", ()=> {
+        open();
+        // default tab: if user last used keep in session
+        const last = sessionStorage.getItem("sideTab") || "lb";
+        setTab(last);
+      });
+      closeBtn?.addEventListener("click", close);
+      overlay?.addEventListener("click", (e)=>{ if(e.target===overlay) close(); });
+
+      tabLb?.addEventListener("click", ()=>{ sessionStorage.setItem("sideTab","lb"); setTab("lb"); });
+      tabCm?.addEventListener("click", ()=>{ sessionStorage.setItem("sideTab","cm"); setTab("cm"); });
+
+      document.addEventListener("keydown",(e)=>{
+        if(e.key==="Escape" && overlay.classList.contains("open")) close();
+      });
+    }
+
     boot();
+
   </script>
 </body>
 </html>
