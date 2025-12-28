@@ -51,11 +51,18 @@
     <div class="glass section">
       <div class="sectionTitle">
         <h2>Reyting va izohlar</h2>
-        <div class="hint">Point bo‘yicha Top-20</div>
+        <div class="hint">Point bo‘yicha Top-20 • “Barchasini ko‘rish” orqali to‘liq ro‘yxat</div>
       </div>
 
       <div class="lbGrid">
         <div class="glass" style="padding:14px;">
+          <div class="panelHead">
+            <div>
+              <div class="nameLine">Reyting</div>
+              <div class="small">Top-20 (point bo‘yicha)</div>
+            </div>
+            <button class="linkBtn" id="btnLbAll" type="button">Barchasini ko‘rish</button>
+          </div>
           <table class="table" aria-label="Leaderboard">
             <thead>
               <tr>
@@ -71,12 +78,15 @@
         </div>
 
         <div class="glass" style="padding:14px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div class="panelHead">
             <div>
               <div class="nameLine">Izohlar</div>
-              <div class="small">Fikr qoldiring (qisqa)</div>
+              <div class="small">Oxirgi 20 ta izoh (like + reply)</div>
             </div>
-            <span class="pill" id="commentCount">0</span>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="pill" id="commentCount">20</span>
+              <button class="linkBtn" id="btnCommentAll" type="button">Barchasini ko‘rish</button>
+            </div>
           </div>
 
           <div class="commentBox">
@@ -87,6 +97,55 @@
           <div class="hr"></div>
           <ul class="commentList" id="commentList"></ul>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Modal -->
+  <div class="modalOverlay modalApp" id="lbModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Reyting">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Reyting — barcha o‘rinlar</div>
+          <div class="small" id="lbModalHint">Point bo‘yicha saralangan</div>
+        </div>
+        <button class="iconBtn" id="lbModalClose" type="button" aria-label="Yopish">✕</button>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <table class="table" aria-label="Leaderboard all">
+          <thead>
+            <tr>
+              <th style="width:60px;">#</th>
+              <th>Foydalanuvchi</th>
+              <th style="width:90px;">Ball</th>
+            </tr>
+          </thead>
+          <tbody id="lbAllBody">
+            <tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>
+          </tbody>
+        </table>
+        <div style="height:10px;"></div>
+        <button class="btn" id="lbLoadMore" type="button">Yana yuklash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comments Modal -->
+  <div class="modalOverlay modalApp" id="cmModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Izohlar">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Izohlar — barchasi</div>
+          <div class="small">Oxirgi izohlar (like + reply bilan)</div>
+        </div>
+        <button class="iconBtn" id="cmModalClose" type="button" aria-label="Yopish">✕</button>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <ul class="commentList" id="commentAllList"></ul>
+        <div style="height:10px;"></div>
+        <button class="btn" id="cmLoadMore" type="button">Yana yuklash</button>
       </div>
     </div>
   </div>
@@ -156,6 +215,20 @@
 
     function escapeHtml(s){
       return String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;" }[m]));
+    }
+
+    // Simple modal helpers
+    function openModal(el){
+      if(!el) return;
+      el.style.display = "flex";
+      el.setAttribute("aria-hidden","false");
+      document.body.style.overflow = "hidden";
+    }
+    function closeModal(el){
+      if(!el) return;
+      el.style.display = "none";
+      el.setAttribute("aria-hidden","true");
+      document.body.style.overflow = "";
     }
 
     function calcAgePrecise(iso){
@@ -241,11 +314,12 @@
     }
 
     // Leaderboard
+    // ===== Leaderboard preview (Top-20) =====
     async function loadLeaderboard(){
       const body = $("lbBody");
       try{
-        const data = await api("leaderboard");
-        const items = (data?.items || []).slice(0,20);
+        const data = await api("leaderboard", { query: { limit: 20 } });
+        const items = (data?.items || []);
         body.innerHTML = items.map((u,i)=>`
           <tr>
             <td><span class="rankBadge">${i+1}</span></td>
@@ -258,6 +332,46 @@
         `).join("") || `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
       }catch(_){
         body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+      }
+    }
+
+    // ===== Leaderboard modal (all with paging) =====
+    let lbCursor = null;
+    let lbRankBase = 0;
+    async function loadLeaderboardMore(reset=false){
+      const body = $("lbAllBody");
+      const btn = $("lbLoadMore");
+      try{
+        btn.disabled = true;
+        if(reset){
+          lbCursor = null;
+          lbRankBase = 0;
+          body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+        }
+        const data = await api("leaderboard", { query: { limit: 60, cursor: lbCursor } });
+        const items = data?.items || [];
+        if(reset) body.innerHTML = "";
+        body.insertAdjacentHTML("beforeend", items.map((u,i)=>`
+          <tr>
+            <td><span class="rankBadge">${lbRankBase + i + 1}</span></td>
+            <td>
+              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
+              <div class="small">${escapeHtml(u.loginId || "")}</div>
+            </td>
+            <td><b>${Number(u.points||0)}</b></td>
+          </tr>
+        `).join(""));
+        lbRankBase += items.length;
+        lbCursor = data?.nextCursor || null;
+        btn.style.display = lbCursor ? "inline-flex" : "none";
+        if(!items.length && reset){
+          body.innerHTML = `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
+          btn.style.display = "none";
+        }
+      }catch(_){
+        if(reset) body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+      }finally{
+        btn.disabled = false;
       }
     }
 
@@ -324,17 +438,47 @@
       }catch(_){ /* ignore */ }
     }
 
+    // ===== Comments preview (latest 20) =====
     async function loadComments(){
       const list = $("commentList");
       const count = $("commentCount");
       try{
         await loadLiked();
-        const data = await api("comments");
+        const data = await api("comments", { query: { limit: 20 } });
         const items = data?.items || [];
-        count.textContent = items.length;
+        count.textContent = "20";
         list.innerHTML = items.map(renderCommentItem).join("") || `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
       }catch(_){
         list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
+      }
+    }
+
+    // ===== Comments modal (all with paging) =====
+    let cmCursor = null;
+    async function loadCommentsMore(reset=false){
+      const list = $("commentAllList");
+      const btn = $("cmLoadMore");
+      try{
+        btn.disabled = true;
+        if(reset){
+          cmCursor = null;
+          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
+        }
+        await loadLiked();
+        const data = await api("comments", { query: { limit: 30, cursor: cmCursor } });
+        const items = data?.items || [];
+        if(reset) list.innerHTML = "";
+        list.insertAdjacentHTML("beforeend", items.map(renderCommentItem).join(""));
+        cmCursor = data?.nextCursor || null;
+        btn.style.display = cmCursor ? "inline-flex" : "none";
+        if(!items.length && reset){
+          list.innerHTML = `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
+          btn.style.display = "none";
+        }
+      }catch(_){
+        if(reset) list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
+      }finally{
+        btn.disabled = false;
       }
     }
 
@@ -357,8 +501,8 @@
       wrap.setAttribute("data-open", open?"1":"0");
     }
 
-    // Delegated actions on comment list
-    $("commentList").addEventListener("click", async (e)=>{
+    // Delegated actions on comment lists (preview + modal)
+    async function handleCommentActions(e){
       const btn = e.target.closest("button[data-act]");
       if(!btn) return;
       const li = e.target.closest(".commentItem");
@@ -409,7 +553,10 @@
         finally{ btn.disabled = false; }
         return;
       }
-    }, { passive:false });
+    }
+
+    $("commentList").addEventListener("click", handleCommentActions, { passive:false });
+    $("commentAllList").addEventListener("click", handleCommentActions, { passive:false });
     async function sendComment(){
       const input = $("commentInput");
       const text = (input.value||"").trim();
@@ -420,10 +567,27 @@
         await api("comments", { method:"POST", token, body: { text } });
         toast("Yuborildi ✅");
         await loadComments();
+        // if modal is open, refresh it too
+        const cmM = $("cmModal");
+        if(cmM && cmM.style.display === "flex") await loadCommentsMore(true);
       }catch(e){
         toast("Xato: yuborilmadi");
       }
     }
+
+    // Modal wiring
+    const lbModal = $("lbModal");
+    const cmModal = $("cmModal");
+    $("btnLbAll").onclick = async ()=>{ openModal(lbModal); await loadLeaderboardMore(true); };
+    $("btnCommentAll").onclick = async ()=>{ openModal(cmModal); await loadCommentsMore(true); };
+    $("lbModalClose").onclick = ()=>closeModal(lbModal);
+    $("cmModalClose").onclick = ()=>closeModal(cmModal);
+    $("lbLoadMore").onclick = ()=>loadLeaderboardMore(false);
+    $("cmLoadMore").onclick = ()=>loadCommentsMore(false);
+
+    // close on backdrop click
+    lbModal.addEventListener("click", (e)=>{ if(e.target === lbModal) closeModal(lbModal); });
+    cmModal.addEventListener("click", (e)=>{ if(e.target === cmModal) closeModal(cmModal); });
 
     $("btnLogout").onclick = ()=>{ logout(); location.href="./"; };
     $("commentSend").onclick = sendComment;

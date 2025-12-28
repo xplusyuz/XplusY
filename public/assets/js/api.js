@@ -1,8 +1,19 @@
 export const API_BASE = "/.netlify/functions/api";
 
-export async function api(path, {method="GET", body=null, token=null} = {}){
+// api(path, { method, body, token, query })
+// - path: "comments" | "leaderboard" ...
+// - query: { limit: 20, cursor: "..." }  -> becomes URL query params
+export async function api(path, {method="GET", body=null, token=null, query=null} = {}){
   const clean = String(path||"").replace(/^\//,"");
-  const url = API_BASE + "?path=" + encodeURIComponent(clean);
+  const u = new URL(API_BASE, location.origin);
+  u.searchParams.set("path", clean);
+  if(query && typeof query === "object"){
+    for(const [k,v] of Object.entries(query)){
+      if(v === undefined || v === null || v === "") continue;
+      u.searchParams.set(String(k), String(v));
+    }
+  }
+  const url = u.toString();
   const headers = { "Content-Type":"application/json" };
   if(token) headers.Authorization = "Bearer " + token;
   const res = await fetch(url, { method, headers, body: body? JSON.stringify(body): null });

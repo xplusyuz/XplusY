@@ -237,28 +237,44 @@ export const handler = async (event) => {
     // ===== Leaderboard (public) =====
     if(path === "/leaderboard" && method === "GET"){
       try{
+        const limit = Math.max(1, Math.min(200, Number(event.queryStringParameters?.limit || 20)));
+        const cursor = String(event.queryStringParameters?.cursor || "").trim();
+
         // users are stored in "users" (created by /auth/register)
-        const snap = await db.collection("users")
-          .orderBy("points","desc")
-          .limit(20)
-          .get();
+        let q = db.collection("users").orderBy("points","desc");
+        if(cursor){
+          try{
+            const cdoc = await db.collection("users").doc(cursor).get();
+            if(cdoc.exists) q = q.startAfter(cdoc);
+          }catch(_){ /* ignore invalid cursor */ }
+        }
+        const snap = await q.limit(limit).get();
         const items = snap.docs.map(d => pickPublic(d.data()));
-        return json(200, { items });
+        const nextCursor = (snap.size === limit && snap.docs.length) ? snap.docs[snap.docs.length-1].id : null;
+        return json(200, { items, nextCursor });
       }catch(e){
         return json(500, { error:"Leaderboard error", message: e.message });
       }
     }
 
     // ===== Comments =====
-    // GET public (latest 30)
+    // GET public (latest N, paging with cursor=lastDocId)
     if(path === "/comments" && method === "GET"){
       try{
         const withReplies = String(event.queryStringParameters?.replies || "") === "1";
         const limitReplies = Math.max(0, Math.min(20, Number(event.queryStringParameters?.limitReplies || 3)));
-        const snap = await db.collection("comments")
-          .orderBy("createdAt","desc")
-          .limit(30)
-          .get();
+        const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 30)));
+        const cursor = String(event.queryStringParameters?.cursor || "").trim();
+
+        let q = db.collection("comments").orderBy("createdAt","desc");
+        if(cursor){
+          try{
+            const cdoc = await db.collection("comments").doc(cursor).get();
+            if(cdoc.exists) q = q.startAfter(cdoc);
+          }catch(_){ /* ignore invalid cursor */ }
+        }
+
+        const snap = await q.limit(limit).get();
         const items = [];
         for(const d of snap.docs){
           const c = d.data() || {};
@@ -292,7 +308,8 @@ export const handler = async (event) => {
           }
           items.push(item);
         }
-        return json(200, { items });
+        const nextCursor = (snap.size === limit && snap.docs.length) ? snap.docs[snap.docs.length-1].id : null;
+        return json(200, { items, nextCursor });
       }catch(e){
         // collection may not exist yet
         return json(200, { items: [] });
