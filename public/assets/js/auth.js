@@ -1,35 +1,32 @@
-// assets/js/auth.js — auth helpers (Variant A)
-import { callApi } from "./api.js";
+import { api } from "./api.js";
 
-const KEY = "lm_token";
-export const getToken = () => (localStorage.getItem(KEY) || "");
-export const setToken = (t) => localStorage.setItem(KEY, t);
-export const clearToken = () => localStorage.removeItem(KEY);
+const KEY="lm_token";
+export function getToken(){ return localStorage.getItem(KEY) || ""; }
+export function setToken(t){ localStorage.setItem(KEY, t); }
+export function clearToken(){ localStorage.removeItem(KEY); }
 
 export async function registerAuto(){
-  const r = await callApi("register", { method:"POST" });
-  if(r?.token) setToken(r.token);
+  const r = await api("auth/register", { method:"POST" });
+  setToken(r.token);
   return r;
 }
-
-export async function login(id, password){
-  const r = await callApi("login", { method:"POST", body:{ id, password } });
-  if(r?.token) setToken(r.token);
+export async function login(loginId, password){
+  const r = await api("auth/login", { method:"POST", body:{loginId, password} });
+  setToken(r.token);
   return r;
 }
-
 export async function me(){
   const token = getToken();
-  return await callApi("me", { token });
+  return await api("auth/me", { token });
 }
-
-export async function updateProfileAndPassword({ firstName="", lastName="", birthdate="", newPassword="" } = {}){
+export async function changePassword(newPassword){
   const token = getToken();
-  const body = { profile:{ firstName, lastName, birthdate } };
-  if(newPassword) body.newPassword = newPassword;
-  return await callApi("update_profile", { method:"POST", token, body });
+  return await api("auth/change-password", { method:"POST", token, body:{newPassword} });
 }
-
+export async function updateProfile(firstName,lastName,birthdate){
+  const token = getToken();
+  return await api("auth/update-profile", { method:"POST", token, body:{firstName,lastName,birthdate} });
+}
 export async function logout(){
   clearToken();
 }

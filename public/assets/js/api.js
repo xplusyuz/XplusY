@@ -1,23 +1,31 @@
-// public/assets/js/api.js
-export const API_BASE = "/.netlify/functions";
+export const API_BASE = "/.netlify/functions/api";
 
-export async function callApi(fn, { method = "GET", token = "", body = null } = {}) {
-  const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+export async function api(path, {method="GET", body=null, token=null} = {}){
+  const clean = String(path||"").replace(/^\//,"");
+  const url = API_BASE + "?path=" + encodeURIComponent(clean);
+  const headers = { "Content-Type":"application/json" };
+  if(token) headers.Authorization = "Bearer " + token;
+  const res = await fetch(url, { method, headers, body: body? JSON.stringify(body): null });
+  const ct = (res.headers.get('content-type')||'').toLowerCase();
+  let data = null;
+  if(ct.includes('application/json')){
+    try{ data = await res.json(); }catch(e){ data = { error:'JSON parse xato', detail:String(e) }; }
+  }else{
+    const txt = await res.text();
+    data = { raw: txt };
+  }
+  if(!res.ok){
+    // AUTO_LOGOUT: if token invalid, clear and redirect
+    if(res.status===401 || res.status===403){
+      try{ localStorage.removeItem('lm_token'); }catch(_){ }
+      if(location.pathname.endsWith('app.html')) location.href = './';
+    }
 
-  const res = await fetch(`${API_BASE}/${fn}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const text = await res.text();
-  let data = {};
-  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-
-  if (!res.ok) {
-    const msg = data && (data.error || data.message) ? (data.error || data.message) : `HTTP ${res.status}`;
-    throw new Error(msg);
+    const msg = data?.error || data?.message || ("HTTP "+res.status);
+    const err = new Error(msg);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
   return data;
 }
