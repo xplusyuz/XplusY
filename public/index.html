@@ -29,32 +29,61 @@
         <div class="pi">π</div>
       </div>
       <div class="heroText">
-        <div class="badge">🚀 Bir bosishda boshlang</div>
-        <h1 class="h1">Premium Kirish</h1>
-        <p class="p">Bir marta bosing — tizim avtomatik <b>ID</b> va <b>Parol</b> yaratadi va darhol ichkariga kiritadi.</p>
-        <div class="chips" role="list">
-          <span class="chip" role="listitem">🔒 Xavfsiz token</span>
-          <span class="chip" role="listitem">⚡ Tez kirish</span>
-          <span class="chip" role="listitem">📱 Mobile‑first</span>
-        </div>
+        <div class="badge">🚀 Bir bosishda</div>
+        <h1 class="h1">Kirish</h1>
+        <p class="p">Yangi bo‘lsangiz — <b>Bir bosishda kirish</b> ni bosing. ID+Parol sizga alohida oynada ko‘rsatiladi.</p>
       </div>
     </div>
 
     <div class="loginActions">
       <button class="btn primary" id="btnStart">▶️ Bir bosishda kirish</button>
 
-	      <details class="loginDetails" id="haveId">
-        <summary class="loginSummary">Menda ID bor (kirish) <span class="chev" aria-hidden="true">⌄</span></summary>
-	        <div class="row" style="margin-top:10px">
-	          <input class="input" id="inId" inputmode="numeric" autocomplete="username" placeholder="ID (masalan 179604)"/>
-	          <input class="input" id="inPw" type="password" autocomplete="current-password" placeholder="Parol"/>
-	        </div>
-	        <button class="btn ghost" id="btnLogin" style="margin-top:10px">🔒 Kirish</button>
-	        <small class="hint">Birinchi kirishda profil to‘ldirish va parolni yangilash oynasi chiqadi.</small>
-	      </details>
+      <div class="miniDivider">yoki</div>
+
+      <div class="row">
+        <input class="input" id="inId" inputmode="numeric" autocomplete="username" placeholder="ID"/>
+        <input class="input" id="inPw" type="password" autocomplete="current-password" placeholder="Parol"/>
+      </div>
+      <button class="btn ghost" id="btnLogin" style="margin-top:10px">🔒 Kirish</button>
+      <small class="hint">Eslatma: birinchi kirishda profil to‘ldirish oynasi chiqadi.</small>
     </div>
   </div>
 </div></div>
+
+<!-- Credentials modal (shown after one-click register) -->
+<div class="modal" id="credModal" aria-hidden="true">
+  <div class="modalOverlay" data-close></div>
+  <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="credTitle">
+    <div class="modalTop">
+      <div>
+        <div class="modalBadge">🧾 ID + Parol</div>
+        <div class="modalTitle" id="credTitle">Saqlab oling</div>
+        <div class="modalSub">Bu ma’lumotlar keyingi kirishlarda kerak bo‘ladi.</div>
+      </div>
+      <button class="iconBtn" id="credClose" aria-label="Yopish">✕</button>
+    </div>
+
+    <div class="credGrid">
+      <div class="credBox">
+        <div class="credLabel">ID</div>
+        <div class="credValue" id="credId">—</div>
+        <button class="btn tiny" id="copyId">Nusxalash</button>
+      </div>
+      <div class="credBox">
+        <div class="credLabel">Parol</div>
+        <div class="credValue" id="credPw">—</div>
+        <button class="btn tiny" id="copyPw">Nusxalash</button>
+      </div>
+    </div>
+
+    <div class="modalActions">
+      <button class="btn ghost" id="copyBoth">ID+Parol nusxalash</button>
+      <button class="btn primary" id="goApp">Davom etish</button>
+    </div>
+
+    <div class="modalFoot" id="autoGoHint">Avto kirish: <b><span id="autoGo">10</span>s</b> (xohlasangiz darhol <b>Davom etish</b> ni bosing)</div>
+  </div>
+</div>
 
 <div id="toast" class="toast"></div>
 
@@ -75,11 +104,10 @@
     try{
       $("btnStart").disabled=true;
       const r = await registerAuto();
-      // Login token is set by registerAuto(); we still show credentials for user.
+      // Login token is set by registerAuto(); show credentials in a small modal for saving.
       $("inId").value = r.loginId;
       $("inPw").value = r.password;
-      toast("✅ Tayyor! Siz tizimga kiryapsiz… (ID+Parol saqlab qo‘ying)");
-      setTimeout(()=>{ location.href = "./app.html"; }, 700);
+      showCredModal(r.loginId, r.password);
     }catch(e){ toast(e.message||"Xatolik"); }
     finally{ $("btnStart").disabled=false; }
   };
@@ -95,6 +123,44 @@
     }catch(e){ toast("Kirish xato: "+(e.message||"")); }
     finally{ $("btnLogin").disabled=false; }
   };
+
+  // --- Credentials modal helpers ---
+  let autoTimer=null;
+  function openModal(){
+    const m=$("credModal");
+    m.classList.add("open");
+    m.setAttribute("aria-hidden","false");
+  }
+  function closeModal(){
+    const m=$("credModal");
+    m.classList.remove("open");
+    m.setAttribute("aria-hidden","true");
+    if(autoTimer) { clearInterval(autoTimer); autoTimer=null; }
+  }
+  async function copyText(t){
+    try{ await navigator.clipboard.writeText(t); toast("✅ Nusxalandi"); }
+    catch{ toast("⚠️ Nusxalab bo‘lmadi"); }
+  }
+  function showCredModal(id,pw){
+    $("credId").textContent = id;
+    $("credPw").textContent = pw;
+    openModal();
+
+    // countdown
+    let s=10;
+    $("autoGo").textContent=String(s);
+    autoTimer=setInterval(()=>{
+      s--; $("autoGo").textContent=String(Math.max(s,0));
+      if(s<=0){ clearInterval(autoTimer); autoTimer=null; location.href="./app.html"; }
+    },1000);
+  }
+
+  $("credClose").onclick = closeModal;
+  $("goApp").onclick = ()=> location.href="./app.html";
+  $("copyId").onclick = ()=> copyText($("credId").textContent.trim());
+  $("copyPw").onclick = ()=> copyText($("credPw").textContent.trim());
+  $("copyBoth").onclick = ()=> copyText(`ID: ${$("credId").textContent.trim()}\nParol: ${$("credPw").textContent.trim()}`);
+  $("credModal").addEventListener("click", (e)=>{ if(e.target && e.target.hasAttribute("data-close")) closeModal(); });
 </script>
 </body>
 </html>
