@@ -99,7 +99,8 @@ async function handleAuthRegister(db) {
       const hash2 = await bcrypt.hash(password2, 10);
       tx.set(users.doc(loginId2), {
         loginId: loginId2,
-        publicId: "LM-" + String(n2).padStart(6,"0"),
+        // Ko'rinadigan ID: faqat raqam (LM- prefiksi yo'q)
+        publicId: loginId2,
         passwordHash: hash2,
         mustChangePassword: true,
         profileComplete: false,
@@ -116,7 +117,7 @@ async function handleAuthRegister(db) {
     tx.set(userRef, {
       loginId,
       // Ko'rinadigan ID: faqat raqam (LM- prefiksi yo'q)
-      publicId: String(n).padStart(6,"0"),
+      publicId: loginId,
       passwordHash,
       mustChangePassword: true,
       profileComplete: false,
@@ -152,7 +153,8 @@ async function handleAuthLogin(db, body) {
 function publicUser(u){
   return {
     loginId: u.loginId,
-    publicId: u.publicId || String(u.loginId).padStart(6,"0"),
+    // UI uchun LM- prefikssiz ko‘rsatamiz
+    publicId: u.publicId || String(u.loginId),
     firstName: u.firstName || "",
     lastName: u.lastName || "",
     birthdate: u.birthdate || "",
@@ -262,7 +264,9 @@ exports.handler = async (event) => {
 
     const qs = event.queryStringParameters || {};
     const raw = qs.path ? decodeURIComponent(qs.path) : "";
-    const [pathname, query] = raw.split("?");
+    // Normalize path so both "auth/login" and "/auth/login" work
+    const [pathnameRaw, query] = raw.split("?");
+    const pathname = String(pathnameRaw || "").replace(/^\/+/, "");
     const qparams = {};
     if (query) {
       for (const part of query.split("&")) {
