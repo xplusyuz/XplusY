@@ -217,9 +217,10 @@ export const handler = async (event) => {
 
 
     // ===== Leaderboard (public) =====
-    if(path === "leaderboard" && method === "GET"){
+    if(path === "/leaderboard" && method === "GET"){
       try{
-        const snap = await db.collection("foydalanuvchilar")
+        // users are stored in "users" (created by /auth/register)
+        const snap = await db.collection("users")
           .orderBy("points","desc")
           .limit(20)
           .get();
@@ -232,7 +233,7 @@ export const handler = async (event) => {
 
     // ===== Comments =====
     // GET public (latest 30)
-    if(path === "comments" && method === "GET"){
+    if(path === "/comments" && method === "GET"){
       try{
         const snap = await db.collection("comments")
           .orderBy("createdAt","desc")
@@ -258,7 +259,7 @@ export const handler = async (event) => {
     }
 
     // POST requires JWT (same token as other endpoints)
-    if(path === "comments" && method === "POST"){
+    if(path === "/comments" && method === "POST"){
       const auth = event.headers.authorization || event.headers.Authorization || "";
       const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
       if(!token) return json(401, { error:"Token yo‘q" });
@@ -275,11 +276,12 @@ export const handler = async (event) => {
       if(!text) return json(400, { error:"Izoh bo‘sh" });
 
       try{
-        const userDoc = await db.collection("foydalanuvchilar").doc(decoded.loginId).get();
+        const loginId = decoded.sub;
+        const userDoc = await db.collection("users").doc(loginId).get();
         const u = userDoc.exists ? userDoc.data() : {};
         await db.collection("comments").add({
-          loginId: decoded.loginId,
-          name: u?.name || "",
+          loginId,
+          name: (u && (u.name || u.fullName)) || "",
           text,
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
