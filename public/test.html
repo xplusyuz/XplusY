@@ -30,6 +30,35 @@
     }
     .codeRow{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
     @media (max-width: 560px){ .codeRow{grid-template-columns:1fr;} }
+
+    /* Fullscreen runner overlay (fix: runner pastda osilib qolmasin) */
+    #runner.modal{
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(6,10,16,.55);
+      backdrop-filter: blur(14px) saturate(140%);
+    }
+    #runner.modal.show{ display:flex; }
+    #runner .modalBox{
+      width: min(1100px, 96vw);
+      height: min(92vh, 920px);
+      max-height: 92vh;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+    #runner .runnerGrid{ height:100%; min-height:0; }
+    #runner .runnerGrid > div{ min-height:0; }
+    #runner .runnerGrid > div:first-child{ overflow:auto; }
+    #runner .runnerGrid > div:last-child{ overflow:auto; }
+    @media (max-width: 920px){
+      #runner .runnerGrid{ grid-template-columns: 1fr !important; }
+    }
   </style>
 </head>
 
@@ -52,28 +81,7 @@
       </div>
     </div>
 
-    <div class="glass section">
-      <div class="sectionTitle">
-        <h2>Oddiy testlar (ochiq)</h2>
-        <div class="hint">JSON’dan · ball/balansga ta’sir qilmaydi</div>
-      </div>
-
-      <div class="filters">
-        <div>
-          <div class="nameLine">Sinf (filter)</div>
-          <select class="input" id="openGrade"></select>
-        </div>
-        <div>
-          <div class="nameLine">Tur (filter)</div>
-          <select class="input" id="openExamType"></select>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-      <div class="testList" id="openList"></div>
-      <div class="small" id="openStatus" style="margin-top:10px;opacity:.9"></div>
-    </div>
-
+    <!-- Challenge FIRST (talab: tepada chiqsin) -->
     <div class="glass section">
       <div class="sectionTitle">
         <h2>Challenge (yopiq)</h2>
@@ -98,11 +106,33 @@
       <div class="testList" id="chList"></div>
       <div class="small" id="chStatus" style="margin-top:10px;opacity:.9"></div>
     </div>
+
+    <div class="glass section">
+      <div class="sectionTitle">
+        <h2>Oddiy testlar (ochiq)</h2>
+        <div class="hint">JSON’dan · ball/balansga ta’sir qilmaydi</div>
+      </div>
+
+      <div class="filters">
+        <div>
+          <div class="nameLine">Sinf (filter)</div>
+          <select class="input" id="openGrade"></select>
+        </div>
+        <div>
+          <div class="nameLine">Tur (filter)</div>
+          <select class="input" id="openExamType"></select>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <div class="testList" id="openList"></div>
+      <div class="small" id="openStatus" style="margin-top:10px;opacity:.9"></div>
+    </div>
   </div>
 
   <!-- Runner modal (simple, image based) -->
   <div class="modal" id="runner" style="display:none;">
-    <div class="modalBox" style="width:min(980px,94vw);">
+    <div class="modalBox">
       <div class="modalHead">
         <div>
           <div class="nameLine" id="runTitle">Test</div>
@@ -341,7 +371,10 @@
 
       $("runTitle").textContent = test.title || (test._mode==="challenge" ? "Challenge" : "Test");
       $("runMeta").textContent = test._mode==="challenge" ? `Challenge · ID: ${test._id}` : `Oddiy test · JSON`;
+      // Fullscreen overlay + scroll lock
+      $("runner").classList.add("show");
       $("runner").style.display = "flex";
+      document.body.style.overflow = "hidden";
       buildDots();
       renderQ();
       tick();
@@ -352,7 +385,9 @@
     function runClose(){
       clearInterval(RUN.t);
       RUN.t = null;
+      $("runner").classList.remove("show");
       $("runner").style.display = "none";
+      document.body.style.overflow = "";
     }
 
     function tick(){
