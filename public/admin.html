@@ -3,147 +3,226 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>LeaderMath.UZ — Admin</title>
+  <title>LeaderMath.UZ — Admin Panel</title>
   <link rel="stylesheet" href="assets/css/app.css"/>
+  <style>
+    .adminShell{display:flex; gap:14px; align-items:stretch; min-height:calc(100vh - 30px);}
+    .adminSide{width:320px; max-width:90vw;}
+    .adminMain{flex:1; min-width:0;}
+    .adminTabs{display:flex; gap:8px; flex-wrap:wrap;}
+    .adminTabs .chip{cursor:pointer; user-select:none;}
+    .adminTabs .chip.active{outline:2px solid rgba(255,255,255,.25);}
+    .adminPane{display:none;}
+    .adminPane.active{display:block;}
+    .table{width:100%; border-collapse:separate; border-spacing:0 10px;}
+    .rowCard{background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.10); border-radius:16px; padding:10px;}
+    .rowCard:hover{transform:translateY(-1px); transition:.18s ease; border-color:rgba(255,255,255,.18);}
+    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+    .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+    @media(max-width:980px){ .adminShell{flex-direction:column;} .adminSide{width:100%;} .grid2,.grid3{grid-template-columns:1fr;} }
+    .miniBtn{padding:8px 10px; border-radius:12px;}
+    .danger{background:rgba(255,70,70,.14)!important; border-color:rgba(255,70,70,.35)!important;}
+    .success{background:rgba(40,210,120,.14)!important; border-color:rgba(40,210,120,.35)!important;}
+    .muted{opacity:.75}
+    .loginCover{position:fixed; inset:0; display:none; place-items:center; padding:20px; z-index:60;
+      background:radial-gradient(1000px 600px at 60% 30%, rgba(46,139,87,.22), transparent 60%),
+                 rgba(0,0,0,.55); backdrop-filter: blur(10px);}
+    .loginCover.show{display:grid;}
+    .loginCard{max-width:560px; width:100%;}
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px;
+      background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12);}
+    .selList{max-height:260px; overflow:auto; padding-right:4px;}
+    .selItem{display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:14px;
+      background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10); margin-bottom:8px;}
+    .selItem:hover{border-color:rgba(255,255,255,.18);}
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;}
+  </style>
 </head>
 <body>
   <canvas class="seasonCanvas" id="seasonCanvas"></canvas>
   <div class="toast" id="toast"></div>
+
+  <!-- Login cover -->
+  <div class="loginCover" id="loginCover">
+    <div class="glass loginCard">
+      <div class="brand" style="justify-content:center; margin-bottom:10px;">
+        <div class="logo" aria-hidden="true"><span>π</span></div>
+        <div class="titleWrap">
+          <div class="title">LeaderMath Admin</div>
+          <div class="subtitle">Google orqali kirish (faqat sohibjonmath@gmail.com)</div>
+        </div>
+      </div>
+
+      <div class="rowCard" style="margin-top:10px;">
+        <div class="muted" style="line-height:1.45">
+          1) <b>assets/js/firebase-web-config.js</b> faylga Firebase web config’ni qo‘ying.<br/>
+          2) Keyin pastdagi tugma orqali Google login qiling.
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+          <button class="btn primary" id="btnGoogleLogin">Google orqali kirish</button>
+          <button class="btn" id="btnReload">Qayta yuklash</button>
+        </div>
+        <div class="muted" id="loginErr" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
 
   <div class="container">
     <div class="glass topbar">
       <div class="brand">
         <div class="logo" aria-hidden="true"><span>π</span></div>
         <div class="titleWrap">
-          <div class="title">LeaderMath Admin</div>
-          <div class="subtitle" id="adminSub">—</div>
+          <div class="title">LeaderMath.UZ — Admin Panel</div>
+          <div class="subtitle" id="adminSub">Google Admin</div>
         </div>
       </div>
-      <div class="topbarRight">
-        <div class="chip"><span class="k">Admin:</span> <b id="adminId">—</b></div>
-        <button class="btn" id="btnBack">App</button>
-        <button class="btn" id="btnLogout">Chiqish</button>
+
+      <div class="topbarRight" style="gap:10px; align-items:center;">
+        <div class="pill">
+          <span class="muted">👤</span>
+          <b id="adminEmail">—</b>
+        </div>
+        <button class="btn miniBtn" id="btnRefresh">↻ Yangilash</button>
+        <button class="btn danger miniBtn" id="btnLogout">Chiqish</button>
       </div>
     </div>
 
-    <div class="glass section">
-      <div class="sectionTitle">
-        <h2>Boshqaruv paneli</h2>
-        <div class="hint">Foydalanuvchilar • Sharhlar • Bildirishnomalar</div>
-      </div>
-
-      <div class="sideTabs" role="tablist" aria-label="Admin tablari" style="padding: 0;">
-        <button class="tabBtn active" id="tabUsers" type="button" role="tab" aria-selected="true">Foydalanuvchilar</button>
-        <button class="tabBtn" id="tabComments" type="button" role="tab" aria-selected="false">Sharhlar</button>
-        <button class="tabBtn" id="tabNotify" type="button" role="tab" aria-selected="false">Bildirishnoma</button>
-        <button class="tabBtn" id="tabSent" type="button" role="tab" aria-selected="false">Tarix</button>
-      </div>
-
-      <div class="hr"></div>
-
-      <!-- USERS -->
-      <div class="adminPane" id="paneUsers">
-        <div class="panelHead">
-          <div>
-            <div class="nameLine">Foydalanuvchilar</div>
-            <div class="small">Qidirish + tanlash</div>
+    <div class="adminShell">
+      <div class="adminSide">
+        <div class="glass">
+          <div class="adminTabs" style="margin-bottom:10px;">
+            <div class="chip active" id="tabDashboard">📊 Dashboard</div>
+            <div class="chip" id="tabUsers">👥 Users</div>
+            <div class="chip" id="tabComments">💬 Sharhlar</div>
+            <div class="chip" id="tabNotify">🔔 Bildirishnoma</div>
+            <div class="chip" id="tabHistory">🧾 Tarix</div>
           </div>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <input class="lbSearch" id="userSearch" placeholder="Qidirish (LM-000001 yoki ism)…" />
-            <button class="btn" id="usersReload" type="button">Yangilash</button>
-          </div>
-        </div>
 
-        <div style="height:10px;"></div>
-        <table class="table" aria-label="Users">
-          <thead>
-            <tr>
-              <th style="width:60px;">Tanla</th>
-              <th>Foydalanuvchi</th>
-              <th style="width:90px;">Ball</th>
-              <th style="width:110px;">Balans</th>
-            </tr>
-          </thead>
-          <tbody id="usersBody">
-            <tr><td colspan="4" class="small">Yuklanmoqda…</td></tr>
-          </tbody>
-        </table>
-        <div style="height:10px;"></div>
-        <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-          <div class="small">Tanlanganlar: <b id="selCount">0</b></div>
-          <button class="btn" id="usersLoadMore" type="button">Yana yuklash</button>
+          <div class="rowCard">
+            <div class="muted">Tezkor:</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+              <button class="btn miniBtn" id="quickLoadUsers">Users</button>
+              <button class="btn miniBtn" id="quickLoadComments">Sharhlar</button>
+              <button class="btn miniBtn" id="quickLoadHistory">Tarix</button>
+            </div>
+          </div>
+
+          <div class="rowCard" style="margin-top:12px;">
+            <div class="muted">Holat</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+              <div class="chip"><span class="k">Users:</span> <b id="statUsers">—</b></div>
+              <div class="chip"><span class="k">Sharh:</span> <b id="statComments">—</b></div>
+              <div class="chip"><span class="k">Unread:</span> <b id="statUnread">—</b></div>
+            </div>
+            <div class="muted" style="margin-top:10px;">So‘nggi yangilanish: <span class="kbd" id="statAt">—</span></div>
+          </div>
         </div>
       </div>
 
-      <!-- COMMENTS -->
-      <div class="adminPane" id="paneComments" style="display:none;">
-        <div class="panelHead">
-          <div>
-            <div class="nameLine">Sharhlar moderatsiya</div>
-            <div class="small">Admin istalgan sharhni o‘chiradi</div>
+      <div class="adminMain">
+        <!-- Dashboard -->
+        <div class="glass adminPane active" id="paneDashboard">
+          <div class="title" style="font-size:18px;">Dashboard</div>
+          <div class="muted" style="margin-top:6px;">Admin panel: foydalanuvchilar, sharh moderatsiya, bildirishnoma yuborish va tarix.</div>
+          <div class="grid3" style="margin-top:14px;">
+            <div class="rowCard">
+              <div class="muted">Top users (preview)</div>
+              <div id="dashTopUsers" style="margin-top:8px;"></div>
+            </div>
+            <div class="rowCard">
+              <div class="muted">So‘nggi sharhlar</div>
+              <div id="dashLastComments" style="margin-top:8px;"></div>
+            </div>
+            <div class="rowCard">
+              <div class="muted">So‘nggi notif</div>
+              <div id="dashLastNotif" style="margin-top:8px;"></div>
+            </div>
           </div>
-          <button class="btn" id="commentsReload" type="button">Yangilash</button>
         </div>
-        <div style="height:10px;"></div>
-        <ul class="commentList" id="adminCommentList"></ul>
-        <div style="height:10px;"></div>
-        <button class="btn" id="commentsLoadMore" type="button">Yana yuklash</button>
+
+        <!-- Users -->
+        <div class="glass adminPane" id="paneUsers">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+            <div>
+              <div class="title" style="font-size:18px;">👥 Users</div>
+              <div class="muted">Qidirish, tanlash va bildirishnoma uchun belgilash.</div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <input class="input" id="userSearch" placeholder="ID / ism bo‘yicha qidirish..." style="min-width:240px;"/>
+              <button class="btn miniBtn" id="usersLoadMore">Yana</button>
+            </div>
+          </div>
+          <div class="selList" id="usersList" style="margin-top:14px;"></div>
+        </div>
+
+        <!-- Comments -->
+        <div class="glass adminPane" id="paneComments">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+            <div>
+              <div class="title" style="font-size:18px;">💬 Sharhlar</div>
+              <div class="muted">Admin sifatida tahrirlash/o‘chirish (moderatsiya).</div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <input class="input" id="commentSearch" placeholder="ID / matn bo‘yicha qidirish..." style="min-width:240px;"/>
+              <button class="btn miniBtn" id="commentsLoadMore">Yana</button>
+            </div>
+          </div>
+          <div class="selList" id="commentsList" style="margin-top:14px;"></div>
+        </div>
+
+        <!-- Notify -->
+        <div class="glass adminPane" id="paneNotify">
+          <div class="title" style="font-size:18px;">🔔 Bildirishnoma yuborish</div>
+          <div class="muted" style="margin-top:6px;">Umumiy / bitta user / tanlanganlarga yuboring. Read receipts Tarixda ko‘rinadi.</div>
+
+          <div class="grid2" style="margin-top:14px;">
+            <div class="rowCard">
+              <div class="muted">Audience</div>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                <label class="chip"><input type="radio" name="aud" value="all" checked> Barchaga</label>
+                <label class="chip"><input type="radio" name="aud" value="user"> Bitta user</label>
+                <label class="chip"><input type="radio" name="aud" value="selected"> Tanlanganlar</label>
+              </div>
+              <div style="margin-top:10px;">
+                <input class="input" id="singleUserId" placeholder="Bitta user ID (LM-000001)..." />
+                <div class="muted" style="margin-top:6px;">Tanlanganlar: Users bo‘limida checkbox bilan tanlang.</div>
+              </div>
+            </div>
+
+            <div class="rowCard">
+              <div class="muted">Xabar</div>
+              <input class="input" id="notifTitle" placeholder="Sarlavha (60gacha)..." style="margin-top:10px;"/>
+              <textarea class="input" id="notifBody" placeholder="Matn (240gacha)..." style="margin-top:10px; min-height:120px;"></textarea>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                <select class="input" id="notifType" style="max-width:220px;">
+                  <option value="info">ℹ️ Info</option>
+                  <option value="success">✅ Success</option>
+                  <option value="warning">⚠️ Warning</option>
+                  <option value="danger">⛔ Danger</option>
+                </select>
+                <button class="btn primary" id="btnSendNotif">Yuborish</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="rowCard" style="margin-top:12px;">
+            <div class="muted">Tanlanganlar (preview)</div>
+            <div id="selectedPreview" style="margin-top:10px;"></div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="glass adminPane" id="paneHistory">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+            <div>
+              <div class="title" style="font-size:18px;">🧾 Tarix</div>
+              <div class="muted">Yuborilgan bildirishnomalar va kim o‘qigani.</div>
+            </div>
+            <button class="btn miniBtn" id="historyLoadMore">Yana</button>
+          </div>
+          <div class="selList" id="historyList" style="margin-top:14px;"></div>
+        </div>
       </div>
-
-      <!-- NOTIFY -->
-      <div class="adminPane" id="paneNotify" style="display:none;">
-        <div class="panelHead">
-          <div>
-            <div class="nameLine">Bildirishnoma yuborish</div>
-            <div class="small">Umumiy / shaxsiy / tanlanganlarga</div>
-          </div>
-        </div>
-
-        <div style="height:12px;"></div>
-        <div class="row" style="align-items:flex-end;">
-          <div>
-            <div class="small" style="margin-bottom:6px;">Kimga?</div>
-            <select class="input" id="audience" style="height:44px;">
-              <option value="all">Barchaga (umumiy)</option>
-              <option value="single">Bitta foydalanuvchiga (shaxsiy)</option>
-              <option value="selected">Tanlanganlarga</option>
-            </select>
-          </div>
-          <div>
-            <div class="small" style="margin-bottom:6px;">Login ID (single)</div>
-            <input class="input" id="singleId" placeholder="LM-000001" />
-          </div>
-        </div>
-
-        <div style="height:10px;"></div>
-        <input class="input" id="ntTitle" maxlength="60" placeholder="Sarlavha (60)" />
-        <div style="height:10px;"></div>
-        <textarea class="editArea" id="ntBody" maxlength="240" placeholder="Matn (240)"></textarea>
-
-        <div class="editBar">
-          <button class="btn btnPrimary" id="sendNotif" type="button">Yuborish</button>
-        </div>
-
-        <div class="small" style="opacity:.85; line-height:1.5;">
-          <b>Tanlanganlarga</b> yuborish uchun yuqoridagi “Foydalanuvchilar” tabida checkbox bilan tanlang.
-        </div>
-      </div>
-
-      <!-- SENT HISTORY -->
-      <div class="adminPane" id="paneSent" style="display:none;">
-        <div class="panelHead">
-          <div>
-            <div class="nameLine">Bildirishnomalar tarixi</div>
-            <div class="small">Yuborilgan xabarlar • o‘qiganlar ro‘yxati</div>
-          </div>
-          <button class="btn" id="sentReload" type="button">Yangilash</button>
-        </div>
-        <div style="height:10px;"></div>
-        <ul class="notifList" id="sentList"></ul>
-        <div style="height:10px;"></div>
-        <button class="btn" id="sentLoadMore" type="button">Yana yuklash</button>
-      </div>
-
     </div>
   </div>
 
