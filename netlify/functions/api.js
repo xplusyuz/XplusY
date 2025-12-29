@@ -102,6 +102,82 @@ function parseBody(event){
   catch(_){ return {}; }
 }
 
+// ===== Tests helpers =====
+function safeStr(x, max=200){
+  const s = String(x ?? "");
+  return s.length > max ? s.slice(0,max) : s;
+}
+
+function parseMillis(v){
+  if(v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  if(!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
+function withinWindow(nowMs, startAt, endAt){
+  const s = toMillis(startAt);
+  const e = toMillis(endAt);
+  if(s && nowMs < s) return { ok:false, reason:"not_started", startAt:s, endAt:e };
+  if(e && nowMs > e) return { ok:false, reason:"ended", startAt:s, endAt:e };
+  return { ok:true, startAt:s, endAt:e };
+}
+
+function sanitizeTestForClient(t){
+  // Do NOT send correct answers to client.
+  const out = {
+    id: t.id || "",
+    code: t.code || t.id || "",
+    title: t.title || "",
+    grade: t.grade || "",
+    examType: t.examType || "",
+    mode: t.mode || "open",
+    access: t.mode === 'challenge' ? 'code' : 'open',
+    startAt: toMillis(t.startAt),
+    endAt: toMillis(t.endAt),
+    durationSec: Number(t.durationSec || 0) || 0,
+    questionCount: Array.isArray(t.questions) ? t.questions.length : Number(t.questionCount||0),
+    folder: t.folder || (t.code || t.id || ""),
+    shuffleQuestions: t.shuffleQuestions !== false,
+    shuffleOptions: t.shuffleOptions !== false,
+    questions: Array.isArray(t.questions) ? t.questions.map((q, i)=>({
+      i,
+      type: q.type || 'mcq',
+      points: Number(q.points||1) || 1,
+      img: safeStr(q.img || q.image || (String(i+1)+'.png'), 120),
+      // options for mcq
+      options: Array.isArray(q.options) ? q.options.map(o=>safeStr(o, 120)) : [],
+    })) : []
+  };
+  return out;
+}
+
+function scoreTest(test, answers){
+  const qs = Array.isArray(test.questions) ? test.questions : [];
+  const ans = Array.isArray(answers) ? answers : [];
+  let score = 0;
+  let correct = 0;
+  let wrong = 0;
+  const detail = [];
+  for(let i=0;i<qs.length;i++){
+    const q = qs[i] || {};
+    const pts = Number(q.points||1) || 1;
+    const a = ans[i];
+    let ok = false;
+    if((q.type||'mcq') === 'open'){
+      const list = Array.isArray(q.answers) ? q.answers : [];
+      const na = String(a ?? '').trim().toLowerCase().replace(/\s+/g,'');
+      ok = list.some(x => String(x ?? '').trim().toLowerCase().replace(/\s+/g,'') === na);
+    }else{
+      ok = (String(a ?? '') === String(q.correct ?? ''));
+    }
+    if(ok){ score += pts; correct++; }
+    else { wrong++; }
+    detail.push({ i, ok, pts });
+  }
+  return { score, correct, wrong, total: qs.length, detail };
+}
+
 async function isAdminUser(db, loginId){
   const envList = String(getEnv("ADMIN_LOGIN_IDS", "")).split(",").map(s=>s.trim()).filter(Boolean);
   if(envList.includes(loginId)) return true;
@@ -231,24 +307,7 @@ export const handler = async (event) => {
       return json(200, { ok:true, user: pickPublic(found.data) });
     }
 
-    // ===== TESTS: GET BY CODE (requires token) =====
-    if(path === "/tests/get" && method === "GET"){
-      const tok = requireToken(event);
-      if(!tok.ok) return tok.error;
-      const code = String(event.queryStringParameters?.code || "").trim();
-      if(!code) return json(400, { error:"code kerak" });
-
-      const doc = await db.collection("testlar").doc(code).get();
-      if(!doc.exists) return json(404, { error:"Test topilmadi" });
-
-      const test = doc.data() || {};
-      if(test.startAt) test.startAt = toMillis(test.startAt);
-      if(test.endAt) test.endAt = toMillis(test.endAt);
-      return json(200, { ok:true, test });
-    }
-
-
-// ===== CHANGE PASSWORD =====
+    // ===== CHANGE PASSWORD =====
     if(path === "/auth/change-password" && method === "POST"){
       const token = getBearer(event);
       if(!token) return json(401, { error:"Token yo‘q" });
@@ -992,6 +1051,173 @@ export const handler = async (event) => {
         return json(200, { items });
       }catch(e){
         return json(500, { error:"Reads error", message: e.message });
+      }
+    }
+
+    // =====================
+    // TESTS / CHALLENGES API
+    // Collection: tests/{id}
+    // Submissions: tests/{id}/submissions/{loginId}
+    // =====================
+
+    if(path === "/tests/list" && method === "GET"){
+      try{
+        const mode = String(event.queryStringParameters?.mode || "").trim(); // open|challenge|all
+        const grade = String(event.queryStringParameters?.grade || "").trim();
+        const examType = String(event.queryStringParameters?.examType || "").trim();
+        const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 30)));
+
+        let q = db.collection("tests").orderBy("updatedAt","desc");
+        if(mode && mode !== "all") q = q.where("mode","==", mode);
+        if(grade) q = q.where("grade","==", grade);
+        if(examType) q = q.where("examType","==", examType);
+        const snap = await q.limit(limit).get();
+
+        const now = Date.now();
+        const items = snap.docs.map(d=>{
+          const t = d.data() || {};
+          const w = withinWindow(now, t.startAt, t.endAt);
+          return {
+            id: d.id,
+            code: t.code || d.id,
+            title: t.title || "",
+            grade: t.grade || "",
+            examType: t.examType || "",
+            mode: t.mode || "open",
+            folder: t.folder || (t.code || d.id),
+            questionCount: Array.isArray(t.questions) ? t.questions.length : Number(t.questionCount||0),
+            durationSec: Number(t.durationSec||0) || 0,
+            startAt: w.startAt,
+            endAt: w.endAt,
+            status: (t.mode === 'challenge') ? (w.ok ? 'active' : w.reason) : 'open'
+          };
+        });
+        return json(200, { items });
+      }catch(e){
+        return json(500, { error:"Tests list error", message: e.message });
+      }
+    }
+
+    if(path === "/tests/get" && method === "GET"){
+      try{
+        const id = String(event.queryStringParameters?.id || "").trim();
+        if(!id) return json(400, { error:"id kerak" });
+        const code = String(event.queryStringParameters?.code || "").trim();
+
+        const ref = db.collection("tests").doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = { id: snap.id, ...(snap.data()||{}) };
+
+        if(String(t.mode||'open') === 'challenge'){
+          const w = withinWindow(Date.now(), t.startAt, t.endAt);
+          if(!w.ok) return json(403, { error: w.reason === 'not_started' ? "Challenge hali boshlanmagan" : "Challenge yakunlangan", startAt:w.startAt, endAt:w.endAt });
+          if(!code || String(code) !== String(t.accessCode||"")) return json(403, { error:"Kirish kodi noto‘g‘ri" });
+        }
+
+        return json(200, { test: sanitizeTestForClient(t) });
+      }catch(e){
+        return json(500, { error:"Tests get error", message: e.message });
+      }
+    }
+
+    if(path === "/tests/submit" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const body = parseBody(event);
+        const id = String(body.id || "").trim();
+        const answers = Array.isArray(body.answers) ? body.answers : [];
+        const timeSpentSec = Math.max(0, Math.min(24*3600, Number(body.timeSpentSec||0) || 0));
+        if(!id) return json(400, { error:"id kerak" });
+
+        const ref = db.collection("tests").doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = { id: snap.id, ...(snap.data()||{}) };
+
+        // window check for challenge
+        if(String(t.mode||'open') === 'challenge'){
+          const w = withinWindow(Date.now(), t.startAt, t.endAt);
+          if(!w.ok) return json(403, { error: w.reason === 'not_started' ? "Challenge hali boshlanmagan" : "Challenge yakunlangan" });
+        }
+
+        const res = scoreTest(t, answers);
+        const subRef = ref.collection('submissions').doc(auth.loginId);
+
+        await db.runTransaction(async (tx)=>{
+          const prev = await tx.get(subRef);
+          if(prev.exists) throw new Error("Siz bu testni avval topshirgansiz");
+          tx.set(subRef, {
+            loginId: auth.loginId,
+            submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+            score: res.score,
+            correct: res.correct,
+            wrong: res.wrong,
+            total: res.total,
+            timeSpentSec,
+            answers
+          }, { merge:false });
+
+          // points only for challenge
+          if(String(t.mode||'open') === 'challenge'){
+            const uref = db.collection('users').doc(auth.loginId);
+            tx.set(uref, { points: admin.firestore.FieldValue.increment(res.score) }, { merge:true });
+          }
+        });
+
+        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
+      }catch(e){
+        const msg = e.message || "Submit error";
+        return json(400, { error: msg });
+      }
+    }
+
+    if(path === "/admin/tests/upsert" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
+      try{
+        const body = parseBody(event);
+        const t = body.test || body;
+        const id = safeStr(t.id || t.code || "", 80).replace(/\s+/g,'').trim();
+        if(!id) return json(400, { error:"test.id yoki test.code kerak" });
+
+        // minimal validation
+        const testDoc = {
+          code: safeStr(t.code || id, 80),
+          title: safeStr(t.title || "", 140),
+          grade: safeStr(t.grade || "", 40),
+          examType: safeStr(t.examType || "", 40),
+          mode: (t.mode === 'challenge') ? 'challenge' : 'open',
+          folder: safeStr(t.folder || (t.code || id), 120),
+          accessCode: safeStr(t.accessCode || "", 80),
+          durationSec: Number(t.durationSec||0) || 0,
+          shuffleQuestions: t.shuffleQuestions !== false,
+          shuffleOptions: t.shuffleOptions !== false,
+          startAt: t.startAtMs ? admin.firestore.Timestamp.fromMillis(parseMillis(t.startAtMs)) : (t.startAt ? t.startAt : null),
+          endAt: t.endAtMs ? admin.firestore.Timestamp.fromMillis(parseMillis(t.endAtMs)) : (t.endAt ? t.endAt : null),
+          prizes: (t.prizes && typeof t.prizes === 'object') ? t.prizes : null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedBy: auth.loginId,
+        };
+        if(!t.createdAt) testDoc.createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+        const qs = Array.isArray(t.questions) ? t.questions : [];
+        testDoc.questions = qs.map((q,i)=>({
+          type: (q.type === 'open') ? 'open' : 'mcq',
+          points: Number(q.points||1) || 1,
+          img: safeStr(q.img || q.image || (String(i+1)+'.png'), 120),
+          options: Array.isArray(q.options) ? q.options.map(o=>safeStr(o,120)) : [],
+          correct: safeStr(q.correct || "", 120),
+          answers: Array.isArray(q.answers) ? q.answers.map(a=>safeStr(a,120)) : []
+        }));
+        testDoc.questionCount = testDoc.questions.length;
+
+        await db.collection('tests').doc(id).set(testDoc, { merge:true });
+        return json(200, { ok:true, id });
+      }catch(e){
+        return json(500, { error:"Upsert error", message: e.message });
       }
     }
 
