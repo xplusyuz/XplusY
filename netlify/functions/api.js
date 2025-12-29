@@ -231,7 +231,24 @@ export const handler = async (event) => {
       return json(200, { ok:true, user: pickPublic(found.data) });
     }
 
-    // ===== CHANGE PASSWORD =====
+    // ===== TESTS: GET BY CODE (requires token) =====
+    if(path === "/tests/get" && method === "GET"){
+      const tok = requireToken(event);
+      if(!tok.ok) return tok.error;
+      const code = String(event.queryStringParameters?.code || "").trim();
+      if(!code) return json(400, { error:"code kerak" });
+
+      const doc = await db.collection("testlar").doc(code).get();
+      if(!doc.exists) return json(404, { error:"Test topilmadi" });
+
+      const test = doc.data() || {};
+      if(test.startAt) test.startAt = toMillis(test.startAt);
+      if(test.endAt) test.endAt = toMillis(test.endAt);
+      return json(200, { ok:true, test });
+    }
+
+
+// ===== CHANGE PASSWORD =====
     if(path === "/auth/change-password" && method === "POST"){
       const token = getBearer(event);
       if(!token) return json(401, { error:"Token yo‘q" });
