@@ -157,32 +157,6 @@ function requireToken(event){
   return { ok:true, loginId: payload.sub, token };
 }
 
-async function requireAdminAuth(event, db){
-  const token = getBearer(event);
-  if(!token) return { ok:false, error: json(401, { error:"Token yo‘q" }) };
-
-  // 1) Try LeaderMath custom token (loginId based)
-  try{
-    const payload = verifyToken(token);
-    const ok = await isAdminUser(db, payload.loginId);
-    if(!ok) return { ok:false, error: json(403, { error:"Admin emas" }) };
-    return { ok:true, mode:"custom", loginId: payload.loginId, email: null };
-  }catch(_){}
-
-  // 2) Try Firebase Auth ID token (Google login)
-  try{
-    const decoded = await admin.auth().verifyIdToken(token);
-    const email = String(decoded.email || "").toLowerCase();
-    const verified = decoded.email_verified === true || decoded.emailVerified === true;
-    if(!email) return { ok:false, error: json(401, { error:"Email topilmadi" }) };
-    if(!verified) return { ok:false, error: json(403, { error:"Email tasdiqlanmagan" }) };
-    if(email !== "sohibjonmath@gmail.com") return { ok:false, error: json(403, { error:"Admin email mos emas" }) };
-    return { ok:true, mode:"google", loginId: null, email };
-  }catch(e){
-    return { ok:false, error: json(401, { error:"Admin token yaroqsiz", message: e.message }) };
-  }
-}
-
 export const handler = async (event) => {
   try{
     const db = getDb();
@@ -719,14 +693,17 @@ export const handler = async (event) => {
 
     // ===== Admin (users / comments / notifications) =====
     if(path === "/admin/me" && method === "GET"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
-      return json(200, { ok:true, admin: adm.mode, loginId: adm.loginId, email: adm.email });
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      const ok = await isAdminUser(db, auth.loginId);
+      if(!ok) return json(403, { error:"Admin emas" });
+      return json(200, { ok:true, loginId: auth.loginId });
     }
 
     if(path === "/admin/users" && method === "GET"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       try{
         const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 40)));
         const cursor = String(event.queryStringParameters?.cursor || "").trim();
@@ -755,8 +732,9 @@ export const handler = async (event) => {
     }
 
     if(path === "/admin/comments" && method === "GET"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       try{
         const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 50)));
         const cursor = String(event.queryStringParameters?.cursor || "").trim();
@@ -788,29 +766,10 @@ export const handler = async (event) => {
       }
     }
 
-    
-    if(path === "/admin/comments/update" && method === "POST"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
-      const body = parseBody(event);
-      const commentId = String(body.commentId || "").trim();
-      const text = String(body.text || "").trim().slice(0, 400);
-      if(!commentId || !text) return json(400, { error:"commentId va text kerak" });
-      try{
-        await db.collection("comments").doc(commentId).set({
-          text,
-          editedAt: admin.firestore.FieldValue.serverTimestamp(),
-          editedBy: (adm.loginId || adm.email),
-        }, { merge:true });
-        return json(200, { ok:true });
-      }catch(e){
-        return json(500, { error:"Update comment error", message: e.message });
-      }
-    }
-
-if(path === "/admin/comments/delete" && method === "POST"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+    if(path === "/admin/comments/delete" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       const body = parseBody(event);
       const commentId = String(body.commentId || "").trim();
       if(!commentId) return json(400, { error:"commentId kerak" });
@@ -823,8 +782,9 @@ if(path === "/admin/comments/delete" && method === "POST"){
     }
 
     if(path === "/admin/notify" && method === "POST"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       const body = parseBody(event);
       const audience = String(body.audience || "all");
       const title = String(body.title || "").trim().slice(0, 60);
@@ -843,7 +803,7 @@ if(path === "/admin/comments/delete" && method === "POST"){
         read: false,
         globalId,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: (adm.loginId || adm.email),
+        createdBy: auth.loginId,
       };
 
       const globalDoc = {
@@ -852,7 +812,7 @@ if(path === "/admin/comments/delete" && method === "POST"){
         body: msg,
         type: String(body.type || "info"),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: (adm.loginId || adm.email),
+        createdBy: auth.loginId,
         audience,
         targetCount: 0,
         readCount: 0,
@@ -910,8 +870,9 @@ if(path === "/admin/comments/delete" && method === "POST"){
     }
 
     if(path === "/admin/notifications/sent" && method === "GET"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       try{
         const limit = Math.max(1, Math.min(100, Number(event.queryStringParameters?.limit || 30)));
         const cursor = String(event.queryStringParameters?.cursor || "").trim();
@@ -946,8 +907,9 @@ if(path === "/admin/comments/delete" && method === "POST"){
     }
 
     if(path === "/admin/notifications/reads" && method === "GET"){
-      const adm = await requireAdminAuth(event, db);
-      if(!adm.ok) return adm.error;
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      if(!(await isAdminUser(db, auth.loginId))) return json(403, { error:"Admin emas" });
       try{
         const globalId = String(event.queryStringParameters?.globalId || "").trim();
         if(!globalId) return json(400, { error:"globalId kerak" });
