@@ -2,11 +2,12 @@
 // 1) Firebase Console -> Project settings -> General -> Your apps (Web) -> Config
 // 2) Paste values below.
 export const FIREBASE_WEB_CONFIG = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_AUTH_DOMAIN",
-  projectId: "PASTE_PROJECT_ID",
-  appId: "PASTE_APP_ID",
-  // optional:
-  storageBucket: "PASTE_STORAGE_BUCKET",
-  messagingSenderId: "PASTE_SENDER_ID",
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
 };
