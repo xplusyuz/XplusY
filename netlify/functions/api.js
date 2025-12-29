@@ -104,6 +104,8 @@ function parseBody(event){
 async function isAdminUser(db, loginId){
   const envList = String(getEnv("ADMIN_LOGIN_IDS", "")).split(",").map(s=>s.trim()).filter(Boolean);
   if(envList.includes(loginId)) return true;
+  // Hard allow by admin email loginId (Google admin flow)
+  if(String(loginId).toLowerCase() === 'sohibjonmath@gmail.com') return true;
   try{
     const snap = await db.collection("users").doc(loginId).get();
     if(!snap.exists) return false;
@@ -549,6 +551,27 @@ export const handler = async (event) => {
         return json(200, { ok:true });
       }catch(e){
         return json(500, { error:"Update error", message: e.message });
+      }
+    }    if(path === "/auth/google" && method === "POST"){
+      const body = parseBody(event);
+      const idToken = String(body.idToken || "");
+      if(!idToken) return json(400, { error:"idToken kerak" });
+      try{
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        const email = String(decoded.email || "").toLowerCase();
+        if(email !== "sohibjonmath@gmail.com"){
+          return json(403, { error:"Admin email mos emas" });
+        }
+        const token = signToken({
+          loginId: email,
+          name: decoded.name || "Sohibjon",
+          role: "admin",
+          provider: "google",
+          uid: decoded.uid || ""
+        });
+        return json(200, { token, loginId: email, name: decoded.name || "Sohibjon", role:"admin" });
+      }catch(e){
+        return json(401, { error:"Google token noto‘g‘ri", message: e.message });
       }
     }
 

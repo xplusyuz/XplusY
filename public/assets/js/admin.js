@@ -1,5 +1,6 @@
 import { api } from "./api.js";
-import { getToken, logout } from "./auth.js";
+import { getToken, setToken, logout } from "./auth.js";
+import { getGoogleIdToken, getSignedEmail } from "./firebase_google_admin.js";
 
 const $ = (id)=>document.getElementById(id);
 
@@ -244,24 +245,66 @@ async function sendNotification(){
 }
 
 async function guardAdmin(){
-  const token = getToken();
+  // Prefer existing session token; otherwise try Google admin auto-session.
+  let token = getToken();
+
+  // If no token, try restoring Google session silently
   if(!token){
-    location.href = "./";
+    const idToken = await getGoogleIdToken(false);
+    if(idToken){
+      try{
+        const out = await api("auth/google", { method:"POST", body:{ idToken } });
+        setToken(out.token);
+        token = out.token;
+      }catch(e){
+        // fall through to gate
+      }
+    }
+  }
+
+  // If still no token -> show gate (interactive Google login)
+  if(!token){
+    const gate = document.getElementById("googleGate");
+    gate.style.display = "flex";
+    const msg = document.getElementById("gateMsg");
+    const btn = document.getElementById("btnGoogleLogin");
+    msg.textContent = "Google akkaunt bilan kiring.";
+    btn.onclick = async ()=>{
+      btn.disabled = true;
+      msg.textContent = "Kirish...";
+      try{
+        const idToken = await getGoogleIdToken(true);
+        const out = await api("auth/google", { method:"POST", body:{ idToken } });
+        setToken(out.token);
+        gate.style.display = "none";
+        await guardAdmin(); // re-run
+      }catch(e){
+        const em = await getSignedEmail();
+        msg.textContent = em ? ("Bu email admin emas: " + em) : ("Xato: " + (e.message||"kira olmadi"));
+      }finally{
+        btn.disabled = false;
+      }
+    };
     return;
   }
+
+  // Verify admin
   try{
     const me = await api("admin/me", { token });
     $("adminId").textContent = me.loginId;
     $("adminSub").textContent = "Admin tasdiqlandi";
   }catch(e){
-    $("adminSub").textContent = "Kirish taqiqlangan";
+    // Don't redirect to home; just block here.
+    const gate = document.getElementById("googleGate");
+    gate.style.display = "flex";
+    document.getElementById("gateMsg").textContent = "Kirish taqiqlangan (admin emas).";
     toast("Admin emas");
-    setTimeout(()=>location.href = "./app.html", 800);
   }
 }
 
+
 function wire(){
-  $("btnBack").onclick = ()=>location.href = "./app.html";
+  $("btnBack").onclick = (e)=>{ e.preventDefault(); toast("Admin sahifadasiz"); };
   $("btnLogout").onclick = ()=>{ logout(); location.href = "./"; };
 
   $("tabUsers").onclick = ()=>setTab("users");
