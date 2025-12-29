@@ -85,6 +85,7 @@ function pickPublic(u){
     firstName: u.firstName || "",
     lastName: u.lastName || "",
     birthdate: u.birthdate || "",
+    avatarId: u.avatarId ?? null,
     profileComplete: !!u.profileComplete,
     points: u.points ?? 0,
     balance: u.balance ?? 0,
@@ -264,6 +265,10 @@ export const handler = async (event) => {
       const firstName = String(body.firstName || "").trim();
       const lastName  = String(body.lastName  || "").trim();
       const birthdate = String(body.birthdate || "").trim();
+      const avatarIdRaw = body.avatarId;
+      const avatarId = (avatarIdRaw === undefined || avatarIdRaw === null || avatarIdRaw === "")
+        ? undefined
+        : Math.max(1, Math.min(999, Number(avatarIdRaw)));
       if(firstName.length < 2) return json(400, { error:"Ism kamida 2 harf" });
       if(lastName.length < 2) return json(400, { error:"Familiya kamida 2 harf" });
       if(!/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return json(400, { error:"Tug‘ilgan sana noto‘g‘ri" });
@@ -274,10 +279,34 @@ export const handler = async (event) => {
       const name = (firstName + " " + lastName).trim();
       await found.ref.update({
         firstName, lastName, birthdate, name,
+        ...(avatarId ? { avatarId } : {}),
         profileComplete:true,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
+      const fresh = (await found.ref.get()).data();
+      return json(200, { ok:true, user: pickPublic(fresh) });
+    }
+
+    // ===== Set Avatar (token) =====
+    if(path === "/auth/set-avatar" && method === "POST"){
+      const token = getBearer(event);
+      if(!token) return json(401, { error:"Token yo‘q" });
+      let payload;
+      try{ payload = verifyToken(token); }catch(_){ return json(401, { error:"Token yaroqsiz" }); }
+      const loginId = payload.sub;
+
+      const body = parseBody(event);
+      const avatarId = Math.max(1, Math.min(999, Number(body.avatarId||0)));
+      if(!avatarId) return json(400, { error:"avatarId noto‘g‘ri" });
+
+      const found = await getUser(db, loginId);
+      if(!found) return json(401, { error:"User topilmadi" });
+
+      await found.ref.update({
+        avatarId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
       const fresh = (await found.ref.get()).data();
       return json(200, { ok:true, user: pickPublic(fresh) });
     }

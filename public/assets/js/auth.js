@@ -27,6 +27,11 @@ export async function updateProfile(firstName,lastName,birthdate){
   const token = getToken();
   return await api("auth/update-profile", { method:"POST", token, body:{firstName,lastName,birthdate} });
 }
+
+export async function setAvatar(avatarId){
+  const token = getToken();
+  return await api("auth/set-avatar", { method:"POST", token, body:{avatarId} });
+}
 export async function logout(){
   clearToken();
 }

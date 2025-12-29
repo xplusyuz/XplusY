@@ -22,8 +22,8 @@
       </div>
       <div class="topbarRight">
 
-        <div class="profileMini" title="Profil">
-          <div class="avatarDot" aria-hidden="true"></div>
+        <div class="profileMini" id="profileMini" title="Profil / Avatar">
+          <img class="avatarImg" id="userAvatar" alt="Avatar" src="" />
           <div style="display:flex; flex-direction:column; line-height:1.1;">
             <div class="line1"><span id="userName">—</span> · <b id="userId">—</b></div>
             <div class="line2">
@@ -198,6 +198,27 @@
     </div>
   </div>
 
+  <!-- Avatar Picker Modal -->
+  <div class="modalOverlay modalApp" id="avatarModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Avatar tanlash">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Avatar tanlang</div>
+          <div class="small">avatar/1.png, 2.png, 3.png... papkadan avtomatik topiladi</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="chipBtn" id="avatarRefresh" type="button">🔄 Qayta tekshir</button>
+          <button class="iconBtn" id="avatarClose" type="button" aria-label="Yopish">✕</button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <div class="avatarGrid" id="avatarGrid"></div>
+        <div class="small muted" id="avatarHint" style="margin-top:10px;">Yuklanmoqda…</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Onboarding overlay (original flow preserved) -->
   <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
     <div class="container" style="display:flex; align-items:center; justify-content:center; min-height: 100%;">
@@ -237,7 +258,7 @@
   </script>
 
   <script type="module">
-    import { me, logout, updateProfile, changePassword, getToken } from "./assets/js/auth.js";
+    import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "./assets/js/auth.js";
     import { api } from "./assets/js/api.js";
 
     const $ = (id)=>document.getElementById(id);
@@ -290,6 +311,95 @@
       if(d<0){ m--; d += new Date(n.getFullYear(), n.getMonth(), 0).getDate(); }
       if(m<0){ y--; m+=12; }
       return `${y} yosh ${m} oy ${d} kun`;
+    }
+
+    // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
+    function avatarUrl(id){
+      if(!id) return "";
+      return `avatar/${id}.png`;
+    }
+    function setUserAvatar(id){
+      const img = $("userAvatar");
+      if(!img) return;
+      const src = avatarUrl(id);
+      if(!src){
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+        return;
+      }
+      img.src = src;
+      img.dataset.avatarId = String(id);
+      img.onerror = ()=>{
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+      };
+    }
+
+    async function probeAvatar(id){
+      return new Promise((resolve)=>{
+        const im = new Image();
+        const t = setTimeout(()=>resolve(false), 900);
+        im.onload = ()=>{ clearTimeout(t); resolve(true); };
+        im.onerror = ()=>{ clearTimeout(t); resolve(false); };
+        im.src = avatarUrl(id) + `?v=${Date.now()}`;
+      });
+    }
+
+    async function loadAvatarGrid(){
+      const grid = $("avatarGrid");
+      const hint = $("avatarHint");
+      if(!grid) return;
+      grid.innerHTML = "";
+      hint.textContent = "Tekshirilmoqda…";
+      const found = [];
+      // probe 1..60 (fast) and keep those that exist
+      for(let i=1;i<=60;i++){
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await probeAvatar(i);
+        if(ok) found.push(i);
+      }
+      if(!found.length){
+        hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi (kamida bitta rasm qo‘ying)";
+        return;
+      }
+      const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
+      grid.innerHTML = found.map(i=>`
+        <button class="avaBtn ${i===cur?"active":""}" type="button" data-ava="${i}">
+          <img alt="Avatar ${i}" src="${avatarUrl(i)}" />
+          <div class="small">#${i}</div>
+        </button>
+      `).join("");
+      hint.textContent = `${found.length} ta avatar topildi`;
+    }
+
+    function setupAvatarPicker(){
+      const modal = $("avatarModal");
+      const openTargets = [$("profileMini"), $("userAvatar")].filter(Boolean);
+      const closeBtn = $("avatarClose");
+      const refresh = $("avatarRefresh");
+      openTargets.forEach(el=>el.addEventListener("click", async ()=>{
+        openModal(modal);
+        await loadAvatarGrid();
+      }));
+      closeBtn?.addEventListener("click", ()=>closeModal(modal));
+      modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
+      refresh?.addEventListener("click", loadAvatarGrid);
+      $("avatarGrid")?.addEventListener("click", async (e)=>{
+        const b = e.target.closest("[data-ava]");
+        if(!b) return;
+        const id = Number(b.getAttribute("data-ava"));
+        try{
+          b.disabled = true;
+          const r = await setAvatar(id);
+          setUserAvatar(r.user?.avatarId || id);
+          toast("Avatar saqlandi");
+          await loadAvatarGrid();
+        }catch(err){
+          toast(err.message||"Xatolik");
+        }finally{
+          b.disabled = false;
+        }
+      });
     }
 
     // Feature cards
@@ -882,10 +992,12 @@
 
     async function boot(){
       setupSidePanel();
+      setupAvatarPicker();
 
       try{
         const r = await me();
         const u = r.user;
+        setUserAvatar(u.avatarId);
         $("userId").textContent = u.loginId;
         $("userName").textContent = u.name || u.loginId;
         $("userPoints").textContent = String(u.points ?? 0);
@@ -903,6 +1015,7 @@
           const r2 = await me();
           $("userName").textContent = r2.user.name || r2.user.loginId;
           $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
+          setUserAvatar(r2.user.avatarId);
         }
       }catch(e){
         toast(e.message||"Kirish yo‘q");
