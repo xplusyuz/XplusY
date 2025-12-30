@@ -68,26 +68,38 @@
   }
 
   function createFloatingShapes(){
-    const colors = [0x0ea5e9, 0x38bdf8, 0x0369a1];
-    const geoms = [
-      new THREE.IcosahedronGeometry(1.2, 0),
-      new THREE.TorusGeometry(1.0, 0.35, 12, 32),
-      new THREE.OctahedronGeometry(1.1, 0),
-    ];
-    for(let i=0;i<10;i++){
-      const g = geoms[i % geoms.length];
-      const m = new THREE.MeshStandardMaterial({
-        color: colors[i % colors.length],
-        roughness: 0.3,
-        metalness: 0.65,
-        transparent:true,
-        opacity:0.35
-      });
-      const mesh = new THREE.Mesh(g, m);
-      mesh.position.set((Math.random()-0.5)*24, (Math.random()-0.5)*16, (Math.random()-0.5)*18);
-      mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, 0);
-      scene.add(mesh);
-      shapes.push(mesh);
+    // Math sprites (π, ∑, √ ...) to make background feel "mathy"
+    const glyphs = ["π","∑","√","∫","∞","Δ","θ","λ","μ","∂","≈","≠","≤","≥","x²","y²"];
+    const mkTex = (text)=>{
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      const x = c.getContext('2d');
+      x.clearRect(0,0,256,256);
+      x.textAlign='center'; x.textBaseline='middle';
+      x.font = '900 120px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      x.shadowColor = 'rgba(56,189,248,.45)';
+      x.shadowBlur = 18;
+      x.fillStyle = 'rgba(255,255,255,.9)';
+      x.fillText(text, 128, 128);
+      x.lineWidth = 6;
+      x.strokeStyle = 'rgba(14,165,233,.25)';
+      x.strokeText(text, 128, 128);
+      const t = new THREE.CanvasTexture(c);
+      t.needsUpdate = true;
+      return t;
+    };
+
+    for(let i=0;i<12;i++){
+      const g = glyphs[i % glyphs.length];
+      const tex = mkTex(g);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent:true, opacity: 0.35 });
+      const spr = new THREE.Sprite(mat);
+      spr.position.set((Math.random()-0.5)*26, (Math.random()-0.5)*16, (Math.random()-0.5)*18);
+      const s = 2.0 + Math.random()*2.2;
+      spr.scale.set(s, s, 1);
+      spr.userData = { drift: (Math.random()*0.3+0.2), wob: Math.random()*1.8+0.6 };
+      scene.add(spr);
+      shapes.push(spr);
     }
     const light1 = new THREE.PointLight(0x38bdf8, 1.2);
     light1.position.set(10, 10, 12);
@@ -123,9 +135,11 @@
     }
     for(let i=0;i<shapes.length;i++){
       const s = shapes[i];
-      s.rotation.x += 0.002 + i*0.00005;
-      s.rotation.y += 0.003 + i*0.00005;
-      s.position.y += Math.sin(t*0.6 + i) * 0.002;
+      const d = s.userData || {};
+      // sprites don't have x/y rotation in the same way; use gentle bobbing + drift
+      s.position.y += Math.sin(t*(0.45+(d.wob||1)) + i) * 0.003;
+      s.position.x += Math.cos(t*(0.28+(d.wob||1)) + i) * 0.0012;
+      s.material.opacity = 0.22 + (Math.sin(t*0.6 + i)*0.08 + 0.14);
     }
     camera.position.x += (mouse.x * 1.2 - camera.position.x) * 0.02;
     camera.position.y += (mouse.y * 0.8 - camera.position.y) * 0.02;
