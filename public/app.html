@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="assets/css/ui.css"/>
 <link rel="stylesheet" href="assets/css/app.css"/>
 <link rel="stylesheet" href="assets/css/bridge.css"/>
-<title>LeaderMath.UZ — App</title>
+<title>LeaderMath.UZ</title>
 </head>
 <body data-page="app">
   <div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
@@ -26,16 +26,10 @@
   <div class="app">
     <header>
       <div class="header-card">
-        <div class="brandBox" aria-label="LeaderMath">
-          <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
-          <div class="brandText">
-            <div class="brandName">LeaderMath<span class="dot">.uz</span></div>
-            <div class="brandTag" id="dtMini">...</div>
-          </div>
-        </div>
+        <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
         <!-- Desktop subtitle / time (mobile'da yashiriladi) -->
         <div class="header-text">
-          <div class="header-title">LeaderMath.UZ — App</div>
+          <div class="header-title">LeaderMath.UZ</div>
           <div class="header-sub" id="dt">...</div>
         </div>
 
@@ -286,9 +280,6 @@
       const d = new Date();
       const s = `${days[d.getDay()]}, ${d.getDate()}-${months[d.getMonth()]} ${d.getFullYear()} • ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       $("dt").textContent = s;
-      const mini = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      const dtMini = $("dtMini");
-      if(dtMini) dtMini.textContent = mini;
     }
     setDate(); setInterval(setDate, 15000);
 
@@ -308,18 +299,15 @@
     // Simple modal helpers
     function openModal(el){
       if(!el) return;
-      // bridge.css modalApp animatsiyasi .open orqali ishlaydi
-      el.classList.add("open");
       el.style.display = "flex";
       el.setAttribute("aria-hidden","false");
-      document.body.classList.add("noScroll");
+      document.body.style.overflow = "hidden";
     }
     function closeModal(el){
       if(!el) return;
-      el.classList.remove("open");
       el.style.display = "none";
       el.setAttribute("aria-hidden","true");
-      document.body.classList.remove("noScroll");
+      document.body.style.overflow = "";
     }
 
     function calcAgePrecise(iso){
@@ -338,7 +326,7 @@
     // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
     function avatarUrl(id){
       if(!id) return "";
-      return `avatar/${id}.png`;
+      return `/avatar/${id}.png`;// absolute path
     }
     function setUserAvatar(id){
       const img = $("userAvatar");
@@ -409,92 +397,76 @@
       });
     }
 
-    // Avatar grid: 404 ni deyarli nolga tushiramiz.
-    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
-    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
     async function loadAvatarGrid(){
       const grid = $("avatarGrid");
       const hint = $("avatarHint");
       if(!grid) return;
+
       grid.innerHTML = "";
-      hint.textContent = "Avatarlar yuklanmoqda…";
+      hint.textContent = "Yuklanmoqda…";
 
+      // Fast render: create candidates and hide missing ones via onerror (no slow sequential probing)
+      const MAX = 60;
       const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
-      let okCount = 0;
 
-      const loadOne = (i)=> new Promise((resolve)=>{
+      const frag = document.createDocumentFragment();
+      let alive = 0, checked = 0;
+
+      const finish = ()=>{
+        if(checked !== MAX) return;
+        if(alive === 0){
+          hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi (kamida bitta rasm qo‘ying)";
+        }else{
+          hint.textContent = `${alive} ta avatar topildi`;
+        }
+      };
+
+      for(let i=1;i<=MAX;i++){
         const btn = document.createElement("button");
+        btn.className = "avaBtn" + (i===cur ? " active" : "");
         btn.type = "button";
-        btn.className = `avaBtn ${i===cur?"active":""}`;
         btn.setAttribute("data-ava", String(i));
 
-        const im = document.createElement("img");
-        im.alt = `Avatar ${i}`;
-        im.decoding = "async";
-        im.loading = "lazy";
+        const img = document.createElement("img");
+        img.alt = `Avatar ${i}`;
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = avatarUrl(i) + `?v=${Date.now()}`;
 
-        const cap = document.createElement("div");
-        cap.className = "small";
-        cap.textContent = `#${i}`;
+        const label = document.createElement("div");
+        label.className = "small";
+        label.textContent = `#${i}`;
 
-        btn.appendChild(im);
-        btn.appendChild(cap);
-
-        const t = setTimeout(()=>resolve({ok:false}), 1200);
-        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
-        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
-        im.src = avatarUrl(i) + `?v=${Date.now()}`;
-      });
-
-      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
-      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
-      try{
-        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
-        if(mf.ok){
-          const data = await mf.json();
-          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
-          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
-          if(clean.length){
-            for(const i of clean){
-              const r = await loadOne(i);
-              if(r.ok){ okCount++; grid.appendChild(r.node); }
-            }
-            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
-            return;
+        const done = (ok)=>{
+          checked++;
+          if(ok){
+            alive++;
+          }else{
+            btn.remove();
           }
-        }
-      }catch(e){ /* ignore */ }
+          finish();
+        };
 
-      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
-      for(let i=1;i<=200;i++){
-        const r = await loadOne(i);
-        if(r.ok){
-          okCount++;
-          grid.appendChild(r.node);
-          hint.textContent = `${okCount} ta avatar topildi`;
-        }else{
-          if(okCount>0) break;
-          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
-          if(i>=6) break;
-        }
+        img.onload = ()=>done(true);
+        img.onerror = ()=>done(false);
+
+        btn.appendChild(img);
+        btn.appendChild(label);
+        frag.appendChild(btn);
       }
 
-      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
-      else hint.textContent = `${okCount} ta avatar topildi`;
+      grid.appendChild(frag);
     }
 
     function setupAvatarPicker(){
       const modal = $("avatarModal");
-      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
-      const openTargets = [$("userAvatar")].filter(Boolean);
+      const openTargets = [$("profileMini"), $("userAvatar")].filter(Boolean);
       const closeBtn = $("avatarClose");
       const refresh = $("avatarRefresh");
-      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
-        e?.preventDefault?.();
-        e?.stopPropagation?.();
+      openTargets.forEach(el=>el.addEventListener("click", async ()=>{
         openModal(modal);
         await loadAvatarGrid();
-      }, true));
+      }));
       closeBtn?.addEventListener("click", ()=>closeModal(modal));
       modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
       refresh?.addEventListener("click", loadAvatarGrid);
@@ -504,19 +476,12 @@
         const id = Number(b.getAttribute("data-ava"));
         try{
           b.disabled = true;
-          // 1) Try server-side save (Netlify/Firebase endpoint)
           const r = await setAvatar(id);
-          const savedId = r?.user?.avatarId || id;
-          localStorage.setItem("lm_avatarId", String(savedId));
-          setUserAvatar(savedId);
+          setUserAvatar(r.user?.avatarId || id);
           toast("Avatar saqlandi");
-          closeModal(modal);
+          await loadAvatarGrid();
         }catch(err){
-          // 2) Fallback: local save (if API endpoint is not available)
-          localStorage.setItem("lm_avatarId", String(id));
-          setUserAvatar(id);
-          toast("Avatar tanlandi");
-          closeModal(modal);
+          toast(err.message||"Xatolik");
         }finally{
           b.disabled = false;
         }
@@ -1159,9 +1124,7 @@
           FEATURES.push({ title:"TEST Builder", desc:"Test yaratish: Firestore + JSON eksport", img:"assets/images/play.svg", href:"test_builder.html" });
         }
 
-        // Agar server avatarId bermasa, localStorage'dagi tanlovni ishlatamiz
-        const localAva = Number(localStorage.getItem("lm_avatarId")||0) || 0;
-        setUserAvatarAuto(u.avatarId || localAva, u.loginId || u.numericId || u.id || "");
+        setUserAvatarAuto(u.avatarId, u.loginId || u.numericId || u.id || "");
         $("userId").textContent = u.loginId;
         $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
         $("userPoints").textContent = String(u.points ?? 0);
