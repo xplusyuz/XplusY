@@ -345,6 +345,48 @@
       };
     }
 
+    function _seedToAvatarId(seed){
+      if(seed==null) return 1;
+      const s = String(seed);
+      const digits = (s.match(/\d+/g)||[]).join("");
+      const n = digits ? Number(digits.slice(-6)) : 0;
+      // 1..60 range (we try others on error anyway)
+      return (Math.abs(n)%60)+1;
+    }
+
+    // Auto-load avatar from /avatar/1.png,2.png...; if missing => blank
+    function setUserAvatarAuto(preferredId, seed){
+      const img = $("userAvatar");
+      if(!img) return;
+
+      const candidates = [];
+      const add = (v)=>{
+        const id = Number(v);
+        if(!id || !Number.isFinite(id)) return;
+        if(!candidates.includes(id)) candidates.push(id);
+      };
+
+      add(preferredId);
+      add(_seedToAvatarId(seed));
+      // fallback pool (keeps it fast; onerror will hop)
+      for(let i=1;i<=20;i++) add(i);
+
+      let k = 0;
+      const tryNext = ()=>{
+        if(k >= candidates.length){
+          img.removeAttribute("src");
+          img.dataset.avatarId = "";
+          return;
+        }
+        const id = candidates[k++];
+        img.dataset.avatarId = String(id);
+        img.src = avatarUrl(id) + `?v=${Date.now()}`;
+      };
+
+      img.onerror = ()=> tryNext();
+      tryNext();
+    }
+
     async function probeAvatar(id){
       return new Promise((resolve)=>{
         const im = new Image();
@@ -1048,9 +1090,9 @@
           FEATURES.push({ title:"TEST Builder", desc:"Test yaratish: Firestore + JSON eksport", img:"assets/images/play.svg", href:"test_builder.html" });
         }
 
-        setUserAvatar(u.avatarId);
+        setUserAvatarAuto(u.avatarId, u.loginId || u.numericId || u.id || "");
         $("userId").textContent = u.loginId;
-        $("userName").textContent = u.name || u.loginId;
+        $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
         $("userPoints").textContent = String(u.points ?? 0);
         $("userBalance").textContent = String(u.balance ?? 0);
         $("userAge").textContent = calcAgePrecise(u.birthdate);
