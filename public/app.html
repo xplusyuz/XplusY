@@ -397,21 +397,20 @@
       });
     }
 
-    // NOTE: Old probing was sequential and could take long (blur shows but grid seems empty).
-    // New approach: render instantly, then remove missing images via onerror.
+    // Avatar grid: minimal 404 spam.
+    // We probe sequentially and STOP after a few consecutive misses (common when only 1..N exist).
     async function loadAvatarGrid(){
       const grid = $("avatarGrid");
       const hint = $("avatarHint");
       if(!grid) return;
       grid.innerHTML = "";
-      hint.textContent = "Yuklanmoqda…";
+      hint.textContent = "Avatarlar tekshirilmoqda…";
 
-      const max = 60;
       const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
       let okCount = 0;
-      let doneCount = 0;
+      let missStreak = 0;
 
-      const mk = (i)=>{
+      const mkBtn = (i)=>{
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `avaBtn ${i===cur?"active":""}`;
@@ -427,40 +426,42 @@
         cap.className = "small";
         cap.textContent = `#${i}`;
 
-        const finish = ()=>{
-          doneCount++;
-          // When all attempted, show result
-          if(doneCount===max){
-            if(okCount===0) hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi";
-            else hint.textContent = `${okCount} ta avatar topildi`;
-          }
-        };
-
-        im.onload = ()=>{ okCount++; finish(); };
-        im.onerror = ()=>{ btn.remove(); finish(); };
-
         btn.appendChild(im);
         btn.appendChild(cap);
         return btn;
       };
 
-      // Render immediately (no waiting)
-      const frag = document.createDocumentFragment();
-      for(let i=1;i<=max;i++) frag.appendChild(mk(i));
-      grid.appendChild(frag);
-      // If some images load quickly, update early as well
-      setTimeout(()=>{ if(okCount>0) hint.textContent = `${okCount} ta avatar topildi`; }, 350);
+      // Try up to 60 but stop early after 3 misses in a row once we already found something.
+      for(let i=1;i<=60;i++){
+        // probeAvatar will produce at most a few 404s, then we stop.
+        const ok = await probeAvatar(i);
+        if(ok){
+          okCount++;
+          missStreak = 0;
+          grid.appendChild(mkBtn(i));
+          hint.textContent = `${okCount} ta avatar topildi`;
+        }else{
+          missStreak++;
+          if(okCount>0 && missStreak>=3) break;
+        }
+      }
+
+      if(okCount===0) hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi";
+      else hint.textContent = `${okCount} ta avatar topildi`;
     }
 
     function setupAvatarPicker(){
       const modal = $("avatarModal");
-      const openTargets = [$("profileMini"), $("userAvatar")].filter(Boolean);
+      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
+      const openTargets = [$("userAvatar")].filter(Boolean);
       const closeBtn = $("avatarClose");
       const refresh = $("avatarRefresh");
-      openTargets.forEach(el=>el.addEventListener("click", async ()=>{
+      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
         openModal(modal);
         await loadAvatarGrid();
-      }));
+      }, true));
       closeBtn?.addEventListener("click", ()=>closeModal(modal));
       modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
       refresh?.addEventListener("click", loadAvatarGrid);
@@ -470,12 +471,19 @@
         const id = Number(b.getAttribute("data-ava"));
         try{
           b.disabled = true;
+          // 1) Try server-side save (Netlify/Firebase endpoint)
           const r = await setAvatar(id);
-          setUserAvatar(r.user?.avatarId || id);
+          const savedId = r?.user?.avatarId || id;
+          localStorage.setItem("lm_avatarId", String(savedId));
+          setUserAvatar(savedId);
           toast("Avatar saqlandi");
-          await loadAvatarGrid();
+          closeModal(modal);
         }catch(err){
-          toast(err.message||"Xatolik");
+          // 2) Fallback: local save (if API endpoint is not available)
+          localStorage.setItem("lm_avatarId", String(id));
+          setUserAvatar(id);
+          toast("Avatar tanlandi");
+          closeModal(modal);
         }finally{
           b.disabled = false;
         }
@@ -1118,7 +1126,9 @@
           FEATURES.push({ title:"TEST Builder", desc:"Test yaratish: Firestore + JSON eksport", img:"assets/images/play.svg", href:"test_builder.html" });
         }
 
-        setUserAvatarAuto(u.avatarId, u.loginId || u.numericId || u.id || "");
+        // Agar server avatarId bermasa, localStorage'dagi tanlovni ishlatamiz
+        const localAva = Number(localStorage.getItem("lm_avatarId")||0) || 0;
+        setUserAvatarAuto(u.avatarId || localAva, u.loginId || u.numericId || u.id || "");
         $("userId").textContent = u.loginId;
         $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
         $("userPoints").textContent = String(u.points ?? 0);
