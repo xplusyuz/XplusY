@@ -1,17 +1,6 @@
 
 // === index1 core (background + scroll) with guards ===
 (() => {
-  // Toast helper (shared)
-  window.LeaderUI = window.LeaderUI || {};
-  window.LeaderUI.toast = function(msg){
-    const el = document.getElementById("toast");
-    if(!el){ alert(msg); return; }
-    el.textContent = msg;
-    el.classList.add("show");
-    clearTimeout(window.LeaderUI.toast._t);
-    window.LeaderUI.toast._t = setTimeout(()=> el.classList.remove("show"), 2600);
-  };
-
   // Scroll progress
   const scrollProgress = document.getElementById('scrollProgress');
   const scrollToTop = document.getElementById('scrollToTop');
