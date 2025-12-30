@@ -320,7 +320,7 @@
       let d=n.getDate()-b.getDate();
       if(d<0){ m--; d += new Date(n.getFullYear(), n.getMonth(), 0).getDate(); }
       if(m<0){ y--; m+=12; }
-      return `${y} y ${m} o ${d} k`;
+      return `${y} yosh ${m} oy ${d} kun`;
     }
 
     // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
@@ -397,31 +397,59 @@
       });
     }
 
+    // NOTE: Old probing was sequential and could take long (blur shows but grid seems empty).
+    // New approach: render instantly, then remove missing images via onerror.
     async function loadAvatarGrid(){
       const grid = $("avatarGrid");
       const hint = $("avatarHint");
       if(!grid) return;
       grid.innerHTML = "";
-      hint.textContent = "Tekshirilmoqda…";
-      const found = [];
-      // probe 1..60 (fast) and keep those that exist
-      for(let i=1;i<=60;i++){
-        // eslint-disable-next-line no-await-in-loop
-        const ok = await probeAvatar(i);
-        if(ok) found.push(i);
-      }
-      if(!found.length){
-        hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi (kamida bitta rasm qo‘ying)";
-        return;
-      }
+      hint.textContent = "Yuklanmoqda…";
+
+      const max = 60;
       const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
-      grid.innerHTML = found.map(i=>`
-        <button class="avaBtn ${i===cur?"active":""}" type="button" data-ava="${i}">
-          <img alt="Avatar ${i}" src="${avatarUrl(i)}" />
-          <div class="small">#${i}</div>
-        </button>
-      `).join("");
-      hint.textContent = `${found.length} ta avatar topildi`;
+      let okCount = 0;
+      let doneCount = 0;
+
+      const mk = (i)=>{
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `avaBtn ${i===cur?"active":""}`;
+        btn.setAttribute("data-ava", String(i));
+
+        const im = document.createElement("img");
+        im.alt = `Avatar ${i}`;
+        im.decoding = "async";
+        im.loading = "lazy";
+        im.src = avatarUrl(i) + `?v=${Date.now()}`;
+
+        const cap = document.createElement("div");
+        cap.className = "small";
+        cap.textContent = `#${i}`;
+
+        const finish = ()=>{
+          doneCount++;
+          // When all attempted, show result
+          if(doneCount===max){
+            if(okCount===0) hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi";
+            else hint.textContent = `${okCount} ta avatar topildi`;
+          }
+        };
+
+        im.onload = ()=>{ okCount++; finish(); };
+        im.onerror = ()=>{ btn.remove(); finish(); };
+
+        btn.appendChild(im);
+        btn.appendChild(cap);
+        return btn;
+      };
+
+      // Render immediately (no waiting)
+      const frag = document.createDocumentFragment();
+      for(let i=1;i<=max;i++) frag.appendChild(mk(i));
+      grid.appendChild(frag);
+      // If some images load quickly, update early as well
+      setTimeout(()=>{ if(okCount>0) hint.textContent = `${okCount} ta avatar topildi`; }, 350);
     }
 
     function setupAvatarPicker(){
