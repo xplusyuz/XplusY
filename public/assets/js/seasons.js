@@ -21,7 +21,8 @@ export function initSeasons(canvasId = "seasonCanvas"){
   const glyphs = ["π","∑","√","∫","∞","≈","≠","≤","≥","Δ","θ","λ","μ","∂","×","÷","+","−","=","x²","y²","aₙ","bₙ","log","sin","cos"];
   const fontStack = "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
 
-  const N = 85;
+  // More dense math ambient (user requested "to'ldirish")
+  const N = 140;
   const parts = Array.from({length:N}, ()=>spawn(true));
   function spawn(init=false){
     const x = Math.random()*W;
@@ -31,7 +32,7 @@ export function initSeasons(canvasId = "seasonCanvas"){
     const vx = (Math.random()*0.25-0.125) * dpr;
     const rot = (Math.random()*Math.PI*2);
     const vr  = (Math.random()*0.008-0.004);
-    const a   = 0.10 + Math.random()*0.22;
+    const a   = 0.06 + Math.random()*0.14;
     const g   = glyphs[(Math.random()*glyphs.length)|0];
     return {x,y,s,vy,vx,rot,vr,a,g};
   }
@@ -46,10 +47,10 @@ export function initSeasons(canvasId = "seasonCanvas"){
     ctx.font = `900 ${fs}px ${fontStack}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowColor = "rgba(56,189,248,.35)";
+    ctx.shadowColor = "rgba(46,139,87,.22)";
     ctx.shadowBlur = 10*dpr;
-    ctx.fillStyle = "rgba(255,255,255,.92)";
-    ctx.strokeStyle = "rgba(56,189,248,.22)";
+    ctx.fillStyle = "rgba(15,23,42,.48)";
+    ctx.strokeStyle = "rgba(46,139,87,.18)";
     ctx.lineWidth = 2*dpr;
     ctx.strokeText(p.g, 0, 0);
     ctx.fillText(p.g, 0, 0);

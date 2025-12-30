@@ -65,7 +65,10 @@
     <button class="touchMain" id="touchMain" type="button" aria-expanded="false" aria-controls="touchMenu" title="Panel">☰</button>
     <div class="touchMenu" id="touchMenu" aria-hidden="true">
       <button class="touchAction" id="openRating" type="button"><span class="emo">🏆</span><span>Reyting</span></button>
-      <button class="touchAction" id="openComments" type="button"><span class="emo">💬</span><span>Izoh</span></button>
+      <button class="touchAction" id="openComments" type="button">
+        <span class="emo">💬</span><span>Izoh</span>
+        <span class="touchBadge" id="cmBadge" style="display:none">1</span>
+      </button>
     </div>
   </div>
 
@@ -672,6 +675,33 @@
 
     // ===== Comments (always show all, paging in the panel) =====
     let cmCursor = null;
+    let latestCommentMs = 0;
+    const COMMENTS_SEEN_KEY = "lm_comments_seen_ms";
+
+    function toMillis(v){
+      if(v==null) return 0;
+      if(typeof v === "number") return v;
+      const t = Date.parse(v);
+      return Number.isFinite(t) ? t : 0;
+    }
+
+    function updateCommentBadge(){
+      const b = $("cmBadge");
+      if(!b) return;
+      const seen = Number(localStorage.getItem(COMMENTS_SEEN_KEY) || 0);
+      const hasNew = seen > 0 && latestCommentMs > seen;
+      b.textContent = hasNew ? "NEW" : "";
+      b.style.display = hasNew ? "inline-flex" : "none";
+    }
+
+    function markCommentsSeen(){
+      if(latestCommentMs > 0){
+        localStorage.setItem(COMMENTS_SEEN_KEY, String(latestCommentMs));
+      }else{
+        localStorage.setItem(COMMENTS_SEEN_KEY, String(Date.now()));
+      }
+      updateCommentBadge();
+    }
     async function loadComments(reset=false){
       const list = $("commentList");
       const btn = $("cmLoadMoreInline");
@@ -685,6 +715,11 @@
         await loadLiked();
         const data = await api("comments", { query: { limit: 30, cursor: cmCursor } });
         const items = data?.items || [];
+        // Track newest comment time to show a tiny "NEW" badge on the touch button
+        for(const it of items){
+          const ms = toMillis(it.createdAt || it.time || it.ts);
+          if(ms > latestCommentMs) latestCommentMs = ms;
+        }
         if(reset) list.innerHTML = "";
         list.insertAdjacentHTML("beforeend", items.map(renderCommentItem).join(""));
         cmCursor = data?.nextCursor || null;
@@ -698,6 +733,8 @@
           btn.style.display = "none";
           count.textContent = "0";
         }
+
+        updateCommentBadge();
       }catch(_){
         if(reset) list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
       }finally{
@@ -1040,6 +1077,29 @@
       const menu = $("touchMenu");
       const fab = $("touchFab");
 
+      // --- iPhone-style draggable AssistiveTouch behavior ---
+      const POS_KEY = "lm_touchFab_pos_v1";
+      let drag = { active:false, moved:false, sx:0, sy:0, ox:0, oy:0 };
+      let suppressNextClick = false;
+
+      function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+      function applySavedPos(){
+        try{
+          const raw = localStorage.getItem(POS_KEY);
+          if(!raw) return;
+          const p = JSON.parse(raw);
+          if(!p || typeof p.x!=='number' || typeof p.y!=='number') return;
+          fab.style.left = p.x + "px";
+          fab.style.top = p.y + "px";
+          fab.style.right = "auto";
+          fab.style.bottom = "auto";
+        }catch(_){ }
+      }
+      function savePos(x,y){
+        try{ localStorage.setItem(POS_KEY, JSON.stringify({x,y})); }catch(_){ }
+      }
+      applySavedPos();
+
       const ratingModal = $("ratingModal");
       const commentModal = $("commentModal");
 
@@ -1065,14 +1125,62 @@
 
       // Toggle menu
       main?.addEventListener("click", (e)=>{
+        if(suppressNextClick){ suppressNextClick = false; return; }
         e.stopPropagation();
         const isOpen = fab.classList.contains("open");
         setMenu(!isOpen);
       });
 
+      // Drag (pointer)
+      main?.addEventListener("pointerdown", (e)=>{
+        // Allow drag everywhere, keep click if not moved
+        drag.active = true;
+        drag.moved = false;
+        drag.sx = e.clientX; drag.sy = e.clientY;
+        const r = fab.getBoundingClientRect();
+        drag.ox = r.left; drag.oy = r.top;
+        fab.setPointerCapture?.(e.pointerId);
+      });
+      main?.addEventListener("pointermove", (e)=>{
+        if(!drag.active) return;
+        const dx = e.clientX - drag.sx;
+        const dy = e.clientY - drag.sy;
+        if(Math.abs(dx) + Math.abs(dy) > 6){
+          drag.moved = true;
+          // close menu while dragging
+          setMenu(false);
+          // switch to absolute positioning
+          fab.style.right = "auto";
+          fab.style.bottom = "auto";
+          const w = fab.offsetWidth || 80;
+          const h = fab.offsetHeight || 80;
+          const x = clamp(drag.ox + dx, 8, window.innerWidth - w - 8);
+          const y = clamp(drag.oy + dy, 8, window.innerHeight - h - 8);
+          fab.style.left = x + "px";
+          fab.style.top = y + "px";
+        }
+      });
+      function endDrag(){
+        if(!drag.active) return;
+        drag.active = false;
+        if(drag.moved){
+          suppressNextClick = true;
+          const r = fab.getBoundingClientRect();
+          savePos(Math.round(r.left), Math.round(r.top));
+          setTimeout(()=>{ suppressNextClick = false; }, 250);
+        }
+      }
+      main?.addEventListener("pointerup", endDrag);
+      main?.addEventListener("pointercancel", endDrag);
+
       // Open actions
       $("openRating")?.addEventListener("click", ()=>{ setMenu(false); openModal(ratingModal, "ratingClose"); });
-      $("openComments")?.addEventListener("click", ()=>{ setMenu(false); openModal(commentModal, "commentClose"); });
+      $("openComments")?.addEventListener("click", ()=>{ 
+        setMenu(false); 
+        openModal(commentModal, "commentClose");
+        // user has seen latest comments
+        try{ markCommentsSeen(); }catch(_){ }
+      });
 
       // Close buttons
       $("ratingClose")?.addEventListener("click", ()=>closeModal(ratingModal));
