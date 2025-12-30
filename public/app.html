@@ -397,20 +397,20 @@
       });
     }
 
-    // Avatar grid: minimal 404 spam.
-    // We probe sequentially and STOP after a few consecutive misses (common when only 1..N exist).
+    // Avatar grid: 404 ni deyarli nolga tushiramiz.
+    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
+    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
     async function loadAvatarGrid(){
       const grid = $("avatarGrid");
       const hint = $("avatarHint");
       if(!grid) return;
       grid.innerHTML = "";
-      hint.textContent = "Avatarlar tekshirilmoqda…";
+      hint.textContent = "Avatarlar yuklanmoqda…";
 
       const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
       let okCount = 0;
-      let missStreak = 0;
 
-      const mkBtn = (i)=>{
+      const loadOne = (i)=> new Promise((resolve)=>{
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `avaBtn ${i===cur?"active":""}`;
@@ -420,7 +420,6 @@
         im.alt = `Avatar ${i}`;
         im.decoding = "async";
         im.loading = "lazy";
-        im.src = avatarUrl(i) + `?v=${Date.now()}`;
 
         const cap = document.createElement("div");
         cap.className = "small";
@@ -428,25 +427,28 @@
 
         btn.appendChild(im);
         btn.appendChild(cap);
-        return btn;
-      };
 
-      // Try up to 60 but stop early after 3 misses in a row once we already found something.
-      for(let i=1;i<=60;i++){
-        // probeAvatar will produce at most a few 404s, then we stop.
-        const ok = await probeAvatar(i);
-        if(ok){
+        const t = setTimeout(()=>resolve({ok:false}), 1200);
+        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
+        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
+        im.src = avatarUrl(i) + `?v=${Date.now()}`;
+      });
+
+      // 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
+      for(let i=1;i<=200;i++){
+        const r = await loadOne(i);
+        if(r.ok){
           okCount++;
-          missStreak = 0;
-          grid.appendChild(mkBtn(i));
+          grid.appendChild(r.node);
           hint.textContent = `${okCount} ta avatar topildi`;
         }else{
-          missStreak++;
-          if(okCount>0 && missStreak>=3) break;
+          if(okCount>0) break;
+          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
+          if(i>=6) break;
         }
       }
 
-      if(okCount===0) hint.textContent = "avatar/ papkada 1.png,2.png... topilmadi";
+      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
       else hint.textContent = `${okCount} ta avatar topildi`;
     }
 
