@@ -1,167 +1,1024 @@
-<!DOCTYPE html><html lang='uz'><head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>LeaderMath.UZ — App</title>
-<link rel="icon" href="logo.png" sizes="192x192" />
-<link rel="apple-touch-icon" href="logo.png" />
-<meta name="theme-color" content="#0ea5e9">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-<link rel="stylesheet" href="assets/index1-ui.css">
-<link rel="stylesheet" href="assets/index1-adapter.css">
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover"/>
+  <title>LeaderMath.UZ — App</title>
 
-</head><body class="page-app">
-  <!-- SCROLL PROGRESS -->
-  <div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
-  <!-- SCROLL TO TOP -->
-  <button class="scroll-to-top" id="scrollToTop"><i class="fa-solid fa-arrow-up"></i></button>
+  <link rel="icon" href="logo.png" sizes="192x192" />
+  <meta name="theme-color" content="#0ea5e9">
 
-  <!-- 3D CANVAS -->
-  <canvas id="three-canvas"></canvas>
+  <!-- Base UI -->
+  <link rel="stylesheet" href="assets/css/app.css"/>
+  <link rel="stylesheet" href="assets/css/ui.css"/>
 
-  <div class="app">
-    <header>
-  <div class="header-card" style="gap:16px;">
-    <img src="logo.png" alt="LeaderMath.UZ — App" class="logo-img" style="width:64px;height:64px;">
-    <div class="header-text" style="min-width:0;">
-      <div class="header-title">LeaderMath.UZ — App</div>
-      <div class="header-sub">Yagona index1 dizayn — premium glass + 3D fon</div>
-    </div>
+  <!-- Icons + 3D -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
 
-    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
-      <div class="header-tag" id="dt" style="padding:8px 14px;font-size:12px;">
-        <i class="fa-solid fa-calendar-days"></i> —
-      </div>
+  <style>
 
-      <div id="profileMini" style="
-        display:flex; gap:10px; align-items:center;
-        background: rgba(30,41,59,0.55);
-        border:1px solid rgba(255,255,255,0.06);
-        border-radius:999px;
-        padding:8px 10px;
-        max-width: 360px;">
-        <img id="userAvatar" src="avatar/1.png" alt="avatar"
-          style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--brand);box-shadow:0 0 18px rgba(14,165,233,.35);">
-        <div style="display:flex; flex-direction:column; line-height:1.05; min-width:0;">
-          <div style="font-weight:900; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            <span id="userName">—</span>
-          </div>
-          <div style="color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            <span>ID:</span> <b id="userId">—</b> • ⭐ <b id="userPoints">0</b> • 💰 <b id="userBalance">0</b>
-            <span style="display:none">Yosh: <span id="userAge">—</span></span>
-          </div>
-        </div>
-      </div>
+    :root {
+      --brand: #0ea5e9;
+      --brand-light: #38bdf8;
+      --brand-dark: #0369a1;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --card-bg: rgba(30, 41, 59, 0.8);
+      --glass: rgba(255, 255, 255, 0.05);
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      --radius: 24px;
+      --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+    }
 
-      <div style="display:flex; gap:10px; align-items:center;">
-        <div style="position:relative;">
-          <button class="iconBtn bellBtn" id="btnBell" title="Bildirishnomalar" style="width:46px;height:46px;"><i class="fa-solid fa-bell"></i></button>
-          <span class="badge" id="notifBadge" style="display:none;">0</span>
-        </div>
-        <button class="iconBtn" id="btnLogout" title="Chiqish" style="width:46px;height:46px;">
-          <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-</header>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-    <main>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    html, body {
+      width: 100%;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body {
+      position: relative;
+      min-height: 100vh;
+    }
+
+    /* 3D CANVAS - FIXED BACKGROUND */
+    .portal3d #three-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* MAIN CONTENT */
+    .portal3d .app {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 25px;
+    }
+
+    /* SCROLLBAR STYLING */
+    ::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border-radius: 5px;
+      border: 2px solid rgba(15, 23, 42, 0.8);
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, var(--brand-light), var(--brand));
+    }
+
+    /* HEADER */
+    .portal3d header {
+      animation: slideDown 0.8s ease-out;
+    }
+
+    .portal3d .header-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+
+    .portal3d .header-card:hover {
+      transform: translateY(-5px);
+      border-color: var(--brand);
+      box-shadow: 0 25px 50px rgba(14, 165, 233, 0.2);
+    }
+
+    .portal3d .logo-img {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid var(--brand);
+      box-shadow: 0 0 30px var(--brand);
+      animation: pulse 4s infinite;
+    }
+
+    .portal3d .header-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .portal3d .header-title {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(90deg, var(--brand), var(--brand-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .portal3d .header-sub {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .portal3d .header-tag {
+      padding: 10px 20px;
+      background: rgba(14, 165, 233, 0.15);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 50px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--brand-light);
+      backdrop-filter: blur(10px);
+      transition: var(--transition);
+    }
+
+    .portal3d .header-tag:hover {
+      background: rgba(14, 165, 233, 0.25);
+      transform: scale(1.05);
+    }
+
+    /* MAIN SECTION */
+    .portal3d main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .portal3d .section-shell {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 25px;
+      box-shadow: var(--shadow);
+      animation: fadeIn 1s ease-out 0.2s both;
+    }
+
+    .portal3d .section-header {
+      margin-bottom: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .portal3d .section-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .portal3d .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .portal3d .section-title i {
+      color: var(--brand);
+      font-size: 24px;
+    }
+
+    .portal3d .section-sub {
+      font-size: 14px;
+      color: var(--muted);
+      max-width: 600px;
+    }
+
+    .portal3d .section-chip {
+      padding: 8px 16px;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px dashed var(--brand);
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--brand-light);
+    }
+
+    /* CARD GRID */
+    .portal3d .card-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 25px;
+    }
+
+    .portal3d .card {
+      background: rgba(30, 41, 59, 0.6);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      transition: var(--transition);
+      position: relative;
+      cursor: pointer;
+      transform-style: preserve-3d;
+      perspective: 1000px;
+      height: 100%;
+    }
+
+    .portal3d .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), transparent);
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .portal3d .card:hover {
+      transform: translateY(-15px) rotateX(5deg);
+      border-color: var(--brand);
+      box-shadow: 0 30px 60px rgba(14, 165, 233, 0.3);
+    }
+
+    .portal3d .card:hover::before {
+      opacity: 1;
+    }
+
+    .portal3d .card-img-wrap {
+      position: relative;
+      height: 180px;
+      overflow: hidden;
+    }
+
+    .portal3d .card-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s;
+    }
+
+    .portal3d .card:hover .card-img-wrap img {
+      transform: scale(1.1);
+    }
+
+    .portal3d .card-label {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      padding: 8px 15px;
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: white;
+      backdrop-filter: blur(10px);
+    }
+
+    .portal3d .card-label i {
+      color: var(--brand);
+    }
+
+    .portal3d .card-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: calc(100% - 180px);
+    }
+
+    .portal3d .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .portal3d .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      flex-grow: 1;
+    }
+
+    .portal3d .card-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .portal3d .card-meta-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--brand-light);
+    }
+
+    .portal3d .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--brand);
+      box-shadow: 0 0 10px var(--brand);
+    }
+
+    .portal3d .card-tag-mini {
+      padding: 5px 12px;
+      background: rgba(14, 165, 233, 0.1);
+      border-radius: 50px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--brand-light);
+    }
+
+    .portal3d .card-footer {
+      margin-top: auto;
+    }
+
+    .portal3d .pbtn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .portal3d .pbtn::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+      transform: rotate(45deg);
+      transition: transform 0.6s;
+    }
+
+    .portal3d .pbtn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 15px 30px rgba(14, 165, 233, 0.4);
+    }
+
+    .portal3d .pbtn:hover::after {
+      transform: rotate(45deg) translate(10%, 10%);
+    }
+
+    .portal3d .pbtn i {
+      font-size: 16px;
+    }
+
+    /* FOOTER */
+    .portal3d footer {
+      animation: slideUp 0.8s ease-out 0.4s both;
+      margin-top: 40px;
+    }
+
+    .portal3d .footer-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass);
+      border-radius: var(--radius);
+      padding: 20px 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .portal3d .footer-left {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .portal3d .footer-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--brand);
+      letter-spacing: 1px;
+    }
+
+    .portal3d .footer-right {
+      display: flex;
+      gap: 15px;
+    }
+
+    .portal3d .footer-link {
+      padding: 10px 20px;
+      background: rgba(14, 165, 233, 0.1);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 50px;
+      color: var(--brand-light);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+
+    .portal3d .footer-link:hover {
+      background: rgba(14, 165, 233, 0.2);
+      transform: translateY(-3px);
+    }
+
+    /* MODAL */
+    .portal3d #page-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(20px);
+    }
+
+    .portal3d #page-modal.open {
+      display: flex;
+      animation: modalFadeIn 0.3s ease-out;
+    }
+
+    .portal3d .modal-inner {
+      flex: 1;
+      max-width: 1200px;
+      margin: auto;
+      padding: 20px;
+      position: relative;
+    }
+
+    .portal3d .close-btn {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      width: 50px;
+      height: 50px;
+      background: rgba(14, 165, 233, 0.2);
+      border: 2px solid var(--brand);
+      border-radius: 50%;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 1001;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .portal3d .close-btn:hover {
+      background: var(--brand);
+      transform: rotate(90deg);
+    }
+
+    .portal3d .modal-frame {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius);
+      border: 2px solid var(--brand);
+      background: white;
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+    }
+
+    /* ANIMATIONS */
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 30px var(--brand);
+      }
+      50% {
+        box-shadow: 0 0 50px var(--brand-light);
+      }
+    }
+
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* SCROLL PROGRESS BAR */
+    .portal3d .scroll-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(14, 165, 233, 0.1);
+      z-index: 1000;
+    }
+
+    .portal3d .scroll-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand), var(--brand-light));
+      width: 0%;
+      transition: width 0.1s;
+      box-shadow: 0 0 10px var(--brand);
+    }
+
+    /* SCROLL TO TOP BUTTON */
+    .portal3d .scroll-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      width: 50px;
+      height: 50px;
+      background: rgba(14, 165, 233, 0.2);
+      border: 2px solid var(--brand);
+      border-radius: 50%;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      z-index: 99;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition);
+      backdrop-filter: blur(10px);
+    }
+
+    .portal3d .scroll-to-top:hover {
+      background: var(--brand);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(14, 165, 233, 0.3);
+    }
+
+    .portal3d .scroll-to-top.show {
+      display: flex;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .portal3d .app {
+        padding: 15px;
+      }
       
-<div class="section-shell" style="text-align:center;">
-  <div class="section-title"><i class="fa-solid fa-hand-pointer"></i> LeaderMath.UZ ilovasi</div>
-  <div class="section-sub" style="margin-top:10px;">Barcha bo‘limlar — index1 premium UI (1:1). Kartani bosib oching.</div>
-</div>
+      .portal3d .header-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+      }
+      
+      .portal3d .header-tag {
+        margin-top: 10px;
+      }
+      
+      .portal3d .card-list {
+        grid-template-columns: 1fr;
+      }
+      
+      .portal3d .footer-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 20px;
+      }
+      
+      .portal3d .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .portal3d .scroll-to-top {
+        bottom: 20px;
+        right: 20px;
+      }
+    }
 
-<section class="section-shell">
-  <div class="section-header">
-    <div class="section-title-wrap">
-      <div class="section-title"><i class="fa-solid fa-cube"></i> Bo‘limlar</div>
-      <div class="section-sub">Cardlar Firebase’dan avtomatik chiqadi (mavjud logika saqlanadi).</div>
+    @media (max-width: 480px) {
+      .portal3d .header-title {
+        font-size: 20px;
+      }
+      
+      .portal3d .section-title {
+        font-size: 18px;
+      }
+      
+      .portal3d .card-title {
+        font-size: 16px;
+      }
+    }
+
+  /* small bridge styles for auth widgets inside portal header */
+  .portal3d .headerRight {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  .portal3d .headerRight .btn {
+    padding: 10px 14px;
+    border-radius: 14px;
+  }
+  .portal3d .headerRight .profileMini {
+    cursor:pointer;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+  .portal3d .headerRight .bellBtn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+  }
+  @media (max-width: 768px){
+    .portal3d .header-card { padding: 14px 16px; }
+    .portal3d .headerRight { width:100%; justify-content:center; }
+    .portal3d .logo-img { width: 62px; height: 62px; }
+  }
+  </style>
+</head>
+<body>
+
+  <canvas class="seasonCanvas" id="seasonCanvas" style="display:none;"></canvas>
+  <div class="toast" id="toast"></div>
+
+  <div class="portal3d">
+    <div class="scroll-progress">
+      <div class="scroll-progress-bar" id="scrollProgress"></div>
     </div>
-    <div class="section-chip">Kartani bosib oching</div>
-  </div>
 
-  <div class="card-list" id="sections"></div>
-</section>
+    <button class="scroll-to-top" id="scrollToTop" type="button" aria-label="Yuqoriga">
+      <i class="fa-solid fa-arrow-up"></i>
+    </button>
 
-<!-- Side Panel (leaderboard + comments) -->
-<button class="sideFab" id="sidePanelBtn" title="Panel"><i class="fa-solid fa-layer-group"></i></button>
-<div class="sideOverlay" id="sidePanelOverlay"></div>
+    <canvas id="three-canvas"></canvas>
 
-<aside class="sidePanel" id="sidePanel">
-  <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 16px; border-bottom:1px solid rgba(255,255,255,0.06);">
-    <div style="display:flex; gap:10px; align-items:center;">
-      <span class="dot"></span>
-      <b style="letter-spacing:.2px;">Panel</b>
-    </div>
-    <button class="iconBtn" id="sideClose" title="Yopish"><i class="fa-solid fa-xmark"></i></button>
-  </div>
+    <div class="app">
+      <header>
+        <div class="header-card">
+          <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
+          <div class="header-text">
+            <div class="header-title">LeaderMath.UZ</div>
+            <div class="header-sub" id="dt">—</div>
+          </div>
 
-  <div style="display:flex; gap:10px; padding:12px 16px;">
-    <button class="tabBtn active" id="sideTabLb">Reyting</button>
-    <button class="tabBtn" id="sideTabComments">Sharhlar <span class="pill" id="commentCount">0</span></button>
-  </div>
+          <div class="headerRight">
+            <div class="profileMini" id="profileMini" title="Profil / Avatar">
+              <img class="avatarImg" id="userAvatar" alt="Avatar" src="" />
+              <div style="display:flex; flex-direction:column; line-height:1.1;">
+                <div class="line1"><span id="userName">—</span> · <b id="userId">—</b></div>
+                <div class="line2">
+                  <span>🏆 <b id="userPoints">0</b></span>
+                  <span>💰 <b id="userBalance">0</b></span>
+                  <span class="muted">🎂 <span id="userAge">—</span></span>
+                </div>
+              </div>
+            </div>
 
-  <div class="sidePane active" id="sidePaneLb" style="padding:0 16px 16px; overflow:auto;">
-    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:6px 0 14px;">
-      <button class="linkBtn" id="btnLbAll">Hammasi</button>
-      <button class="chipBtn" id="lbOnlyMe">Faqat men</button>
-      <input id="lbSearch" class="lbSearch" placeholder="Qidirish..." style="flex:1; min-width:160px;">
-    </div>
+            <button class="iconBtn bellBtn" id="btnBell" type="button" aria-label="Bildirishnomalar" title="Bildirishnomalar">
+              🔔 <span class="badge" id="notifBadge" aria-label="o‘qilmagan">0</span>
+            </button>
 
-    <div id="lbPodium"></div>
-    <div class="tableShell" style="margin-top:14px;">
-      <table>
-        <thead><tr><th>#</th><th>Ism</th><th>Ball</th></tr></thead>
-        <tbody id="lbBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="sidePane" id="sidePaneComments" style="padding:0 16px 16px; overflow:auto;">
-    <div style="display:flex; gap:10px; padding:10px 0; align-items:center;">
-      <input id="commentInput" placeholder="Izoh yozing...">
-      <button class="btn" id="commentSend" style="width:auto; padding:12px 16px;"><i class="fa-solid fa-paper-plane"></i></button>
-    </div>
-    <ul class="commentList" id="commentList" style="list-style:none; display:flex; flex-direction:column; gap:10px; padding:0; margin:0;"></ul>
-    <button class="btn" id="cmLoadMoreInline" style="margin-top:12px; background: linear-gradient(135deg, #64748b, #475569);">Yana yuklash</button>
-  </div>
-</aside>
-
-<div class="toast" id="toast"></div>
-<canvas id="seasonCanvas" class="seasonCanvas"></canvas>
-
-    </main>
-
-    <footer>
-      <div class="footer-card">
-        <div class="footer-left">
-          <div class="footer-name">LeaderMath.UZ — App</div>
-          <div style="color:var(--muted);font-size:13px;">Premium glass • 3D фон • Yagona index1 UI</div>
-          <div style="font-size: 12px; color: var(--muted); margin-top: 10px;">© 2025 LeaderMath.UZ</div>
+            <button class="btn" id="btnLogout" type="button">Chiqish</button>
+          </div>
         </div>
-        <div class="footer-right">
-          <a href="app.html" class="footer-link"><i class="fa-solid fa-house"></i> App</a>
-          <a href="challenge.html" class="footer-link"><i class="fa-solid fa-bolt"></i> Challenge</a>
-          <a href="exam.html" class="footer-link"><i class="fa-solid fa-graduation-cap"></i> Exam</a>
+      </header>
+
+      <main>
+        <div class="section-shell" style="text-align:center;">
+          <div class="section-title">
+            <i class="fa-solid fa-hand-pointer"></i>
+            Xush kelibsiz!
+          </div>
+          <div class="section-sub" style="margin-top:10px;">
+            3D fon + premium kartalar. Bo‘limni tanlang — sahifa ochiladi.
+          </div>
+        </div>
+
+        <section class="section-shell">
+          <div class="section-header">
+            <div class="section-title-wrap">
+              <div class="section-title">
+                <i class="fa-solid fa-cube"></i>
+                Bo‘limlar
+              </div>
+              <div class="section-sub">Online challenge, exam, play va testlar</div>
+            </div>
+            <div class="section-chip">Karta → ochiladi</div>
+          </div>
+
+          <div class="card-list" id="sections"></div>
+        </section>
+
+        <div class="section-shell">
+          <div class="section-title" style="text-align:center; margin-bottom:20px;">
+            <i class="fa-solid fa-sliders"></i>
+            3D Effektlar
+          </div>
+          <div style="display:flex; justify-content:center; gap:15px; flex-wrap:wrap;">
+            <button id="effect-rotate" class="pbtn" style="width:auto; padding:12px 24px;" type="button">
+              <i class="fa-solid fa-rotate"></i> Aylantirish
+            </button>
+            <button id="effect-zoom" class="pbtn" style="width:auto; padding:12px 24px;" type="button">
+              <i class="fa-solid fa-magnifying-glass"></i> Zoom
+            </button>
+            <button id="effect-particles" class="pbtn" style="width:auto; padding:12px 24px;" type="button">
+              <i class="fa-solid fa-sparkles"></i> Zarralar
+            </button>
+            <button id="effect-reset" class="pbtn" style="width:auto; padding:12px 24px; background: linear-gradient(135deg, #64748b, #475569);" type="button">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+
+      </main>
+
+      <footer>
+        <div class="footer-card">
+          <div class="footer-left">
+            <div class="footer-name">LeaderMath.UZ</div>
+            <div>3D portal dizayn • Login/Profil/Reyting/Izohlar tizimi ulangan</div>
+            <div style="font-size:12px; color: var(--muted); margin-top:10px;">© 2025 LeaderMath.UZ</div>
+          </div>
+          <div class="footer-right">
+            <a href="#" class="footer-link"><i class="fa-brands fa-telegram"></i> Telegram</a>
+            <a href="#" class="footer-link"><i class="fa-solid fa-headset"></i> Yordam</a>
+          </div>
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- Side Panel Toggle (Reyting / Sharhlar) -->
+  <button class="sideFab" id="sidePanelBtn" type="button" aria-label="Reyting va sharhlar paneli" title="Reyting / Sharhlar">
+    <span class="sideFabIcon">🏆💬<small>TOP</small></span>
+  </button>
+
+  <div class="sideOverlay" id="sidePanelOverlay" aria-hidden="true">
+    <aside class="sidePanel glass" id="sidePanel" role="dialog" aria-modal="true" aria-label="Reyting va sharhlar">
+      <div class="sideHead">
+        <div>
+          <div class="sideTitle">Reyting & Sharhlar</div>
+          <div class="small">Top-20 preview • “Barchasini ko‘rish” bilan to‘liq</div>
+        </div>
+        <button class="iconBtn" id="sideClose" type="button" aria-label="Yopish">✕</button>
+      </div>
+
+      <div class="sideTabs" role="tablist" aria-label="Panel tablari">
+        <button class="tabBtn active" id="sideTabLb" type="button" role="tab" aria-selected="true">Reyting</button>
+        <button class="tabBtn" id="sideTabComments" type="button" role="tab" aria-selected="false">Sharhlar</button>
+      </div>
+
+      <div class="sideBody">
+        <div class="sidePane active" id="sidePaneLb" role="tabpanel">
+          <div class="glass" style="padding:14px;">
+          <div class="panelHead">
+            <div>
+              <div class="nameLine">Reyting</div>
+              <div class="small">Top-20 (point bo‘yicha) • Podium + qidiruv</div>
+            </div>
+            <button class="linkBtn" id="btnLbAll" type="button">Barchasini ko‘rish</button>
+          </div>
+
+          <div class="lbTools">
+            <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…" />
+            <button class="chipBtn" id="lbOnlyMe" type="button" aria-pressed="false">⭐ Meni</button>
+          </div>
+
+          <div class="lbPodium" id="lbPodium" aria-label="Top-3 podium"></div>
+          <table class="table" aria-label="Leaderboard">
+            <thead>
+              <tr>
+                <th style="width:60px;">#</th>
+                <th>Foydalanuvchi</th>
+                <th style="width:90px;">Ball</th>
+              </tr>
+            </thead>
+            <tbody id="lbBody">
+              <tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </div>
+
+        <div class="sidePane" id="sidePaneComments" role="tabpanel">
+          <div class="glass" style="padding:14px;">
+          <div class="panelHead">
+            <div>
+              <div class="nameLine">Izohlar</div>
+              <div class="small">Barcha izohlar (paging) • like + reply</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="pill" id="commentCount">20</span>
+            </div>
+          </div>
+
+          <div class="commentBox">
+            <input id="commentInput" maxlength="140" placeholder="Izoh yozing… (140 ta belgi)"/>
+            <button class="btn btnPrimary" id="commentSend" type="button">Yuborish</button>
+          </div>
+
+          <div class="hr"></div>
+          <ul class="commentList" id="commentList"></ul>
+
+          <div style="height:10px;"></div>
+          <button class="btn" id="cmLoadMoreInline" type="button">Yana yuklash</button>
+        </div>
         </div>
       </div>
-    </footer>
+    </aside>
   </div>
 
-  <!-- MODAL (optional, for data-link cards) -->
-  <div id="page-modal">
-    <div class="modal-inner">
-      <button class="close-btn" id="modal-close"><i class="fa-solid fa-xmark"></i></button>
-      <iframe class="modal-frame" id="modal-frame" src=""></iframe>
+  <!-- Leaderboard Modal -->
+  <div class="modalOverlay modalApp" id="lbModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Reyting">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Reyting — barcha o‘rinlar</div>
+          <div class="small" id="lbModalHint">Point bo‘yicha saralangan</div>
+        </div>
+        <button class="iconBtn" id="lbModalClose" type="button" aria-label="Yopish">✕</button>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <table class="table" aria-label="Leaderboard all">
+          <thead>
+            <tr>
+              <th style="width:60px;">#</th>
+              <th>Foydalanuvchi</th>
+              <th style="width:90px;">Ball</th>
+            </tr>
+          </thead>
+          <tbody id="lbAllBody">
+            <tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>
+          </tbody>
+        </table>
+        <div style="height:10px;"></div>
+        <button class="btn" id="lbLoadMore" type="button">Yana yuklash</button>
+      </div>
     </div>
   </div>
 
-  <script src="assets/index1-ui.js"></script>
-  <script type="module">
-import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "./assets/js/auth.js";
+  <!-- Notifications Modal -->
+  <div class="modalOverlay modalApp" id="notifModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Bildirishnomalar">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Bildirishnomalar</div>
+          <div class="small" id="notifHint">Yangi xabarlar shu yerda chiqadi</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="chipBtn" id="notifMarkAll" type="button">✅ Hammasini o‘qildi</button>
+          <button class="iconBtn" id="notifClose" type="button" aria-label="Yopish">✕</button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <ul class="notifList" id="notifList"></ul>
+        <div style="height:10px;"></div>
+        <button class="btn" id="notifLoadMore" type="button">Yana yuklash</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avatar Picker Modal -->
+  <div class="modalOverlay modalApp" id="avatarModal" aria-hidden="true">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Avatar tanlash">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle">Avatar tanlang</div>
+          <div class="small">avatar/1.png, 2.png, 3.png... papkadan avtomatik topiladi</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="chipBtn" id="avatarRefresh" type="button">🔄 Qayta tekshir</button>
+          <button class="iconBtn" id="avatarClose" type="button" aria-label="Yopish">✕</button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div class="modalBody">
+        <div class="avatarGrid" id="avatarGrid"></div>
+        <div class="small muted" id="avatarHint" style="margin-top:10px;">Yuklanmoqda…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding overlay -->
+  <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
+    <div class="container" style="display:flex; align-items:center; justify-content:center; min-height: 100%;">
+      <div class="glass section" style="max-width: 520px; width: 100%;">
+        <div class="sectionTitle">
+          <h2>Profilni to‘ldiring</h2>
+          <div class="hint">Birinchi kirishda</div>
+        </div>
+        <p class="p">Ism, familiya, tug‘ilgan sana va yangi parolni kiriting.</p>
+        <div class="hr"></div>
+
+        <div class="row">
+          <input class="input" id="obFirst" placeholder="Ism"/>
+          <input class="input" id="obLast" placeholder="Familiya"/>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="row">
+          <input class="input" id="obBirth" type="date" placeholder="Tug‘ilgan sana (YYYY-MM-DD)"/>
+          <input class="input" id="obPass1" type="password" placeholder="Yangi parol"/>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="row">
+          <input class="input" id="obPass2" type="password" placeholder="Yangi parolni takrorlang"/>
+          <div></div>
+        </div>
+
+        <div style="height:12px;"></div>
+        <button class="btn btnPrimary" id="obSave" style="width:100%;">Saqlash va davom etish</button>
+        <div class="small" style="margin-top:10px;">⚠️ Parolni eslab qoling. Keyingi kirishda shu parol ishlaydi.</div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+    import { initSeasons } from "./assets/js/seasons.js";
+    initSeasons("seasonCanvas");
+  </script>
+
+<script type="module">
+    import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "./assets/js/auth.js";
     import { api } from "./assets/js/api.js";
 
     const $ = (id)=>document.getElementById(id);
@@ -307,20 +1164,21 @@ import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "
 
     // Feature cards (TEST Builder faqat admin ko‘rsin)
     let FEATURES = [
-      { title:"Online Challenge", label:"Challenge", icon:"fa-bolt", tag:"Jonli", metaLeft:"Kundalik", desc:"Kunlik/haftalik jonli masalalar", img:"assets/images/online_challenge.svg", href:"challenge.html" },
-      { title:"EXAM", label:"Exam", icon:"fa-graduation-cap", tag:"Imtihon", metaLeft:"Vaqt + Ball", desc:"Imtihon rejimi: vaqt, ball, natija", img:"assets/images/exam.svg", href:"exam.html" },
-      { title:"PLAY", label:"Play", icon:"fa-gamepad", tag:"O‘yin", metaLeft:"Mantiq", desc:"O‘yin tarzida mantiqiy mashqlar", img:"assets/images/play.svg", href:"play.html" },
-      { title:"TEST", label:"Test", icon:"fa-clipboard-question", tag:"JSON", metaLeft:"Sinov", desc:"Oddiy test + Challenge (kod bilan)", img:"assets/images/exam.svg", href:"test.html" },
+      { title:"Online Challenge", desc:"Kunlik/haftalik jonli masalalar", img:"assets/images/online_challenge.svg", href:"challenge.html" },
+      { title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija", img:"assets/images/exam.svg", href:"exam.html" },
+      { title:"PLAY", desc:"O‘yin tarzida mantiqiy mashqlar", img:"assets/images/play.svg", href:"play.html" },
+      { title:"TEST", desc:"Oddiy test (JSON) + Challenge (kod bilan)", img:"assets/images/exam.svg", href:"test.html" },
     ];
 
         function renderSections(){
       const root = $("sections");
-      root.innerHTML = FEATURES.map(f=>`
-        <div class="card" tabindex="0" data-link="${f.href}" data-title="${escapeHtml(f.title)}">
+      // Index1-card style renderer
+      root.innerHTML = FEATURES.map((f, idx)=>`
+        <div class="card" tabindex="0" data-href="${f.href}">
           <div class="card-img-wrap">
-            <img src="${f.img}" alt="${escapeHtml(f.title)}" loading="lazy">
+            <img src="${f.img}" alt="${f.title}" loading="lazy">
             <div class="card-label">
-              <i class="fa-solid ${f.icon||"fa-cube"}"></i> ${escapeHtml(f.label||f.title)}
+              <i class="fa-solid fa-bolt"></i> ${escapeHtml(f.title)}
             </div>
           </div>
           <div class="card-body">
@@ -329,33 +1187,43 @@ import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "
             <div class="card-meta-row">
               <div class="card-meta-left">
                 <span class="dot"></span>
-                <span>${escapeHtml(f.metaLeft||"Boshlash")}</span>
+                <span>Ochish</span>
               </div>
-              <span class="card-tag-mini">${escapeHtml(f.tag||"LeaderMath")}</span>
+              <span class="card-tag-mini">${escapeHtml(f.tag || "LeaderMath")}</span>
             </div>
             <div class="card-footer">
-              <button class="btn" type="button">
-                <i class="fa-solid fa-eye"></i>Ko'rish
+              <button class="pbtn" type="button">
+                <i class="fa-solid fa-play"></i> Boshlash
               </button>
             </div>
           </div>
         </div>
       `).join("");
 
-      function go(card){
-        const href = card.getAttribute("data-link");
-        if(href) location.href = href;
-      }
-
       root.addEventListener("click", (e)=>{
         const card = e.target.closest(".card");
-        if(card) go(card);
+        if(!card) return;
+        const href = card.getAttribute("data-href");
+        if(href) location.href = href;
       }, { passive:true });
 
       root.addEventListener("keydown", (e)=>{
         if(e.key !== "Enter") return;
         const card = e.target.closest(".card");
-        if(card) go(card);
+        if(card){
+          const href = card.getAttribute("data-href");
+          if(href) location.href = href;
+        }
+      });
+    }, { passive:true });
+
+      root.addEventListener("keydown", (e)=>{
+        if(e.key !== "Enter") return;
+        const card = e.target.closest(".featureCard");
+        if(card){
+          const href = card.getAttribute("data-href");
+          if(href) location.href = href;
+        }
       });
     }
 
@@ -997,4 +1865,295 @@ import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "
     boot();
 
   </script>
-</body></html>
+
+  <script>
+
+    // SCROLL FUNCTIONALITY
+    const scrollProgress = document.getElementById('scrollProgress');
+    const scrollToTopBtn = document.getElementById('scrollToTop');
+
+    // Scroll progress tracking
+    window.addEventListener('scroll', () => {
+      const totalHeight = document.body.scrollHeight - window.innerHeight;
+      const progress = (window.pageYOffset / totalHeight) * 100;
+      scrollProgress.style.width = progress + '%';
+      
+      // Show/hide scroll to top button
+      if (window.pageYOffset > 300) {
+        scrollToTopBtn.classList.add('show');
+      } else {
+        scrollToTopBtn.classList.remove('show');
+      }
+    });
+
+    // Scroll to top functionality
+    scrollToTopBtn.addEventListener('click', () => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
+
+    // 3D SCENE SETUP
+    let scene, camera, renderer, controls;
+    let particles = [];
+    let isRotating = true;
+    let particleEffect = true;
+
+    function initThreeJS() {
+      scene = new THREE.Scene();
+      
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 15;
+      
+      renderer = new THREE.WebGLRenderer({ 
+        canvas: document.getElementById('three-canvas'),
+        antialias: true,
+        alpha: true 
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      
+      // Make canvas non-interactive
+      renderer.domElement.style.pointerEvents = 'none';
+      
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI;
+      controls.minDistance = 5;
+      controls.maxDistance = 50;
+      controls.enablePan = false;
+      controls.enableZoom = false;
+      
+      // LIGHTS
+      const ambientLight = new THREE.AmbientLight(0x0ea5e9, 0.3);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0x38bdf8, 0.8);
+      directionalLight.position.set(10, 10, 5);
+      scene.add(directionalLight);
+      
+      const pointLight = new THREE.PointLight(0x0ea5e9, 0.5, 100);
+      pointLight.position.set(-10, -10, 10);
+      scene.add(pointLight);
+      
+      // CREATE GEOMETRIES
+      createParticles();
+      createFloatingShapes();
+      
+      // RESIZE HANDLER
+      window.addEventListener('resize', onWindowResize);
+    }
+    
+    function createParticles() {
+      const particleCount = 1500;
+      const particlesGeometry = new THREE.BufferGeometry();
+      const posArray = new Float32Array(particleCount * 3);
+      
+      for(let i = 0; i < particleCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 100;
+      }
+      
+      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+      
+      const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.08,
+        color: 0x0ea5e9,
+        transparent: true,
+        opacity: 0.5
+      });
+      
+      const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+      particles.push(particlesMesh);
+    }
+    
+    function createFloatingShapes() {
+      // TORUS
+      const torusGeometry = new THREE.TorusGeometry(3, 1, 16, 100);
+      const torusMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0ea5e9,
+        transparent: true,
+        opacity: 0.2,
+        wireframe: true 
+      });
+      const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+      torus.position.x = -12;
+      torus.position.y = 8;
+      scene.add(torus);
+      
+      // ICOSAHEDRON
+      const icosahedronGeometry = new THREE.IcosahedronGeometry(2);
+      const icosahedronMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.3,
+        wireframe: true 
+      });
+      const icosahedron = new THREE.Mesh(icosahedronGeometry, icosahedronMaterial);
+      icosahedron.position.x = 12;
+      icosahedron.position.y = -8;
+      scene.add(icosahedron);
+      
+      // SPHERE
+      const sphereGeometry = new THREE.SphereGeometry(2.5, 32, 32);
+      const sphereMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0369a1,
+        transparent: true,
+        opacity: 0.15,
+        wireframe: true 
+      });
+      const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.x = -10;
+      sphere.position.y = -12;
+      scene.add(sphere);
+      
+      // TETRAHEDRON
+      const tetraGeometry = new THREE.TetrahedronGeometry(1.8);
+      const tetraMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0.25,
+        wireframe: true 
+      });
+      const tetrahedron = new THREE.Mesh(tetraGeometry, tetraMaterial);
+      tetrahedron.position.x = 8;
+      tetrahedron.position.y = 12;
+      scene.add(tetrahedron);
+    }
+    
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      if(isRotating) {
+        scene.children.forEach(child => {
+          if(child instanceof THREE.Mesh && child.geometry.type !== 'PlaneGeometry') {
+            child.rotation.x += 0.003;
+            child.rotation.y += 0.003;
+          }
+        });
+      }
+      
+      particles.forEach(particle => {
+        if(particleEffect) {
+          particle.rotation.x += 0.0005;
+          particle.rotation.y += 0.0005;
+        }
+      });
+      
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    
+    // INITIALIZE 3D
+    initThreeJS();
+    animate();
+    
+    // EFFECT CONTROLS
+    document.getElementById('effect-rotate').addEventListener('click', () => {
+      isRotating = !isRotating;
+      const btn = document.getElementById('effect-rotate');
+      btn.innerHTML = isRotating ? 
+        '<i class="fa-solid fa-pause"></i> To\'xtatish' : 
+        '<i class="fa-solid fa-play"></i> Davom ettirish';
+    });
+    
+    document.getElementById('effect-zoom').addEventListener('click', () => {
+      camera.position.z = camera.position.z === 15 ? 8 : 15;
+    });
+    
+    document.getElementById('effect-particles').addEventListener('click', () => {
+      particleEffect = !particleEffect;
+      const btn = document.getElementById('effect-particles');
+      btn.innerHTML = particleEffect ? 
+        '<i class="fa-solid fa-sparkles"></i> Zarralar (ON)' : 
+        '<i class="fa-solid fa-ban"></i> Zarralar (OFF)';
+    });
+    
+    document.getElementById('effect-reset').addEventListener('click', () => {
+      camera.position.set(0, 0, 15);
+      controls.reset();
+      isRotating = true;
+      particleEffect = true;
+      document.getElementById('effect-rotate').innerHTML = '<i class="fa-solid fa-pause"></i> To\'xtatish';
+      document.getElementById('effect-particles').innerHTML = '<i class="fa-solid fa-sparkles"></i> Zarralar (ON)';
+    });
+    
+    // MODAL FUNCTIONALITY
+    const modal = document.getElementById('page-modal');
+    const frame = document.getElementById('modal-frame');
+    const closeBtn = document.getElementById('modal-close');
+    
+    document.querySelectorAll('[data-link]').forEach(card => {
+      card.addEventListener('click', () => {
+        const url = card.dataset.link;
+        const title = card.dataset.title;
+        
+        if(!url) return;
+        
+        // Add 3D transition effect
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          card.style.transform = '';
+        }, 200);
+        
+        frame.src = url;
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      });
+    });
+    
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('open');
+      frame.src = '';
+      document.body.style.overflow = '';
+    });
+    
+    modal.addEventListener('click', e => {
+      if(e.target === modal) {
+        modal.classList.remove('open');
+        frame.src = '';
+        document.body.style.overflow = '';
+      }
+    });
+    
+    // CARD HOVER EFFECTS
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        if (window.innerWidth > 768) {
+          const rect = card.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          
+          const rotateY = (x - centerX) / 20;
+          const rotateX = (centerY - y) / 20;
+          
+          card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-10px)`;
+        }
+      });
+      
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateY(0)';
+      });
+    });
+
+    // Add some content to ensure scrolling works
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('3D Portal loaded successfully!');
+      console.log('Scroll enabled: Yes');
+      console.log('3D Effects: Active');
+    });
+  </script>
+
+</body>
+</html>
