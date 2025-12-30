@@ -1079,10 +1079,26 @@
 
       // --- iPhone-style draggable AssistiveTouch behavior ---
       const POS_KEY = "lm_touchFab_pos_v1";
-      let drag = { active:false, moved:false, sx:0, sy:0, ox:0, oy:0 };
+      let drag = { active:false, dragging:false, sx:0, sy:0, ox:0, oy:0, t0:0, pid:null };
       let suppressNextClick = false;
 
       function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+      function clampToViewport(){
+        const r = fab.getBoundingClientRect();
+        const w = r.width || fab.offsetWidth || 80;
+        const h = r.height || fab.offsetHeight || 80;
+        const maxX = window.innerWidth - w - 8;
+        const maxY = window.innerHeight - h - 8;
+        let x = r.left, y = r.top;
+        if (Number.isNaN(x) || Number.isNaN(y)) return;
+        x = clamp(x, 8, maxX);
+        y = clamp(y, 8, maxY);
+        fab.style.left = Math.round(x) + "px";
+        fab.style.top  = Math.round(y) + "px";
+        fab.style.right = "auto";
+        fab.style.bottom = "auto";
+      }
+
       function applySavedPos(){
         try{
           const raw = localStorage.getItem(POS_KEY);
@@ -1093,6 +1109,8 @@
           fab.style.top = p.y + "px";
           fab.style.right = "auto";
           fab.style.bottom = "auto";
+          // In case the saved position is from desktop, keep it visible on mobile too
+          requestAnimationFrame(()=> clampToViewport());
         }catch(_){ }
       }
       function savePos(x,y){
@@ -1131,47 +1149,60 @@
         setMenu(!isOpen);
       });
 
-      // Drag (pointer)
+      // Drag (pointer): only start dragging after a real move threshold
       main?.addEventListener("pointerdown", (e)=>{
-        // Allow drag everywhere, keep click if not moved
         drag.active = true;
-        drag.moved = false;
+        drag.dragging = false;
         drag.sx = e.clientX; drag.sy = e.clientY;
+        drag.t0 = (performance?.now?.() || Date.now());
+        drag.pid = e.pointerId;
         const r = fab.getBoundingClientRect();
         drag.ox = r.left; drag.oy = r.top;
-        fab.setPointerCapture?.(e.pointerId);
       });
+
       main?.addEventListener("pointermove", (e)=>{
         if(!drag.active) return;
         const dx = e.clientX - drag.sx;
         const dy = e.clientY - drag.sy;
-        if(Math.abs(dx) + Math.abs(dy) > 6){
-          drag.moved = true;
-          // close menu while dragging
+        const dist = Math.abs(dx) + Math.abs(dy);
+
+        // Start drag only if user actually moved enough (prevents click from being swallowed)
+        if(!drag.dragging && dist < 14) return;
+        if(!drag.dragging){
+          drag.dragging = true;
+          suppressNextClick = true;
           setMenu(false);
-          // switch to absolute positioning
+          fab.setPointerCapture?.(drag.pid);
           fab.style.right = "auto";
           fab.style.bottom = "auto";
-          const w = fab.offsetWidth || 80;
-          const h = fab.offsetHeight || 80;
-          const x = clamp(drag.ox + dx, 8, window.innerWidth - w - 8);
-          const y = clamp(drag.oy + dy, 8, window.innerHeight - h - 8);
-          fab.style.left = x + "px";
-          fab.style.top = y + "px";
         }
+
+        const w = fab.offsetWidth || 80;
+        const h = fab.offsetHeight || 80;
+        const x = clamp(drag.ox + dx, 8, window.innerWidth - w - 8);
+        const y = clamp(drag.oy + dy, 8, window.innerHeight - h - 8);
+        fab.style.left = x + "px";
+        fab.style.top  = y + "px";
       });
+
       function endDrag(){
         if(!drag.active) return;
         drag.active = false;
-        if(drag.moved){
-          suppressNextClick = true;
+        if(drag.dragging){
           const r = fab.getBoundingClientRect();
           savePos(Math.round(r.left), Math.round(r.top));
-          setTimeout(()=>{ suppressNextClick = false; }, 250);
+          setTimeout(()=>{ suppressNextClick = false; }, 180);
         }
+        drag.dragging = false;
+        drag.pid = null;
       }
       main?.addEventListener("pointerup", endDrag);
       main?.addEventListener("pointercancel", endDrag);
+
+      // Keep it visible on viewport changes
+      window.addEventListener("resize", ()=>{
+        try{ clampToViewport(); }catch(_){ }
+      }, {passive:true});
 
       // Open actions
       $("openRating")?.addEventListener("click", ()=>{ setMenu(false); openModal(ratingModal, "ratingClose"); });
