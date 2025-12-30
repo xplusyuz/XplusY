@@ -26,7 +26,13 @@
   <div class="app">
     <header>
       <div class="header-card">
-        <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
+        <div class="brandBox" aria-label="LeaderMath">
+          <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
+          <div class="brandText">
+            <div class="brandName">LeaderMath<span class="dot">.uz</span></div>
+            <div class="brandTag" id="dtMini">...</div>
+          </div>
+        </div>
         <!-- Desktop subtitle / time (mobile'da yashiriladi) -->
         <div class="header-text">
           <div class="header-title">LeaderMath.UZ — App</div>
@@ -280,6 +286,9 @@
       const d = new Date();
       const s = `${days[d.getDay()]}, ${d.getDate()}-${months[d.getMonth()]} ${d.getFullYear()} • ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       $("dt").textContent = s;
+      const mini = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const dtMini = $("dtMini");
+      if(dtMini) dtMini.textContent = mini;
     }
     setDate(); setInterval(setDate, 15000);
 
@@ -299,15 +308,18 @@
     // Simple modal helpers
     function openModal(el){
       if(!el) return;
+      // bridge.css modalApp animatsiyasi .open orqali ishlaydi
+      el.classList.add("open");
       el.style.display = "flex";
       el.setAttribute("aria-hidden","false");
-      document.body.style.overflow = "hidden";
+      document.body.classList.add("noScroll");
     }
     function closeModal(el){
       if(!el) return;
+      el.classList.remove("open");
       el.style.display = "none";
       el.setAttribute("aria-hidden","true");
-      document.body.style.overflow = "";
+      document.body.classList.remove("noScroll");
     }
 
     function calcAgePrecise(iso){
@@ -434,7 +446,26 @@
         im.src = avatarUrl(i) + `?v=${Date.now()}`;
       });
 
-      // 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
+      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
+      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
+      try{
+        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
+        if(mf.ok){
+          const data = await mf.json();
+          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
+          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
+          if(clean.length){
+            for(const i of clean){
+              const r = await loadOne(i);
+              if(r.ok){ okCount++; grid.appendChild(r.node); }
+            }
+            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
+            return;
+          }
+        }
+      }catch(e){ /* ignore */ }
+
+      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
       for(let i=1;i<=200;i++){
         const r = await loadOne(i);
         if(r.ok){
