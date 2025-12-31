@@ -330,7 +330,7 @@ p{color:var(--muted);font-size:14px;margin-bottom:12px}
   border-radius: 999px;
 }
 .q-number.viewed-once::after,.q-number.viewed-twice::after,.q-number.viewed-thrice::after{
-  position:absolute;top:4px;right:4px;
+  position:absolute;top:4px;left:4px;right:auto;
   width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;
   font-size:10px;box-shadow:0 10px 18px rgba(2,6,23,.20);
 }
@@ -762,6 +762,30 @@ img{-webkit-user-drag:none;user-drag:none}
 }
 /* make current question badge stand out slightly */
 .vertical-dot.active .dot-badge{ transform:scale(1.06); }
+
+
+/* --- v6: image standardization --- */
+#questionImage{
+  max-height: 320px;
+  width: 100%;
+  object-fit: contain;
+  border-radius: 18px;
+}
+#questionImageContainer{
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 20px;
+  padding: 10px;
+}
+#questionText img, .question-text img{
+  max-width: 100% !important;
+  height: auto !important;
+  display:block;
+  margin: 10px auto;
+  border-radius: 18px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(255,255,255,.55);
+}
 
 </style>
 </head>
@@ -2433,28 +2457,37 @@ img{-webkit-user-drag:none;user-drag:none}
             updateVerticalNavDots() {
                 const dots = dom.elements.verticalNavDots.querySelectorAll('.vertical-dot');
                 dots.forEach((dot, index) => {
-                    const originalIndex = (dot.dataset.originalIndex !== undefined && dot.dataset.originalIndex !== null) ? parseInt(dot.dataset.originalIndex, 10) : index;
-                    
+                    const originalIndex = (dot.dataset.originalIndex !== undefined && dot.dataset.originalIndex !== null)
+                        ? parseInt(dot.dataset.originalIndex, 10)
+                        : index;
+
                     dot.classList.remove('active','answered','viewed-once','viewed-twice','viewed-thrice','locked','has-badge');
-                    
+
                     if (index === appState.currentQuestionIndex) {
                         dot.classList.add('active');
                     }
-                    
-                    if (appState.userAnswers[originalIndex] !== null && appState.userAnswers[originalIndex] !== undefined && appState.userAnswers[originalIndex] !== '') {
+
+                    // Answered state (variant/open)
+                    const ans = appState.userAnswers[originalIndex];
+                    if (ans !== null && ans !== undefined && ans !== '') {
                         dot.classList.add('answered');
                     }
-                    
+
+                    // Views / lock state
                     const views = appState.questionViews[originalIndex] || 0;
                     const badge = dot.querySelector('.dot-badge');
+
+                    // Always show a badge (dim if never viewed)
+                    dot.classList.add('has-badge');
+
                     if (views >= CONFIG.maxViews) {
-                        dot.classList.add('viewed-twice','locked','has-badge');
-                        if (badge) badge.textContent = '🔒';
+                        dot.classList.add('viewed-twice','locked');
+                        if (badge) { badge.textContent = '🔒'; badge.style.opacity = '1'; }
                     } else if (views === 1) {
-                        dot.classList.add('viewed-once','has-badge');
-                        if (badge) badge.textContent = '👁️';
+                        dot.classList.add('viewed-once');
+                        if (badge) { badge.textContent = '👁️'; badge.style.opacity = '1'; }
                     } else {
-                        if (badge) badge.textContent = '';
+                        if (badge) { badge.textContent = '👁️'; badge.style.opacity = '.35'; }
                     }
                 });
             },
@@ -2479,8 +2512,12 @@ img{-webkit-user-drag:none;user-drag:none}
                 appState.isQuestionLockedDisplayed = false;
                 
                 const currentViews = appState.questionViews[originalIndex] || 0;
-                if (currentViews < CONFIG.maxViews) {
-                    appState.questionViews[originalIndex] = currentViews + 1;
+
+// v6: prevent double-counting the same question if renderQuestion() is called again without changing question
+if (appState._lastViewedOriginalIndex !== originalIndex) {
+    appState._lastViewedOriginalIndex = originalIndex;
+    if (currentViews < CONFIG.maxViews) {
+        appState.questionViews[originalIndex] = currentViews + 1;
                     userActionLogger.log('question_viewed', {
                         questionIndex: originalIndex,
                         currentViewCount: appState.questionViews[originalIndex]
