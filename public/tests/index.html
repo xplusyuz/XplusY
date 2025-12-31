@@ -1243,7 +1243,12 @@ img{-webkit-user-drag:none;user-drag:none}
             checkOpenAnswers: true,
             strictOpenAnswerCheck: true,
             normalizeAnswers: true,
-            allowMultipleFormats: true
+            allowMultipleFormats: true,
+            
+            // Qulf sozlamalari
+            userSpecificLocks: true, // Har bir foydalanuvchi uchun alohida qulf
+            lockStoragePrefix: 'question_views', // localStorage kalit prefiksi
+            syncLocksToFirebase: true // Firebase ga sinxronlashtirish
         };
         
         // ==================== QAT'IY 3-MARTA KO'RISH QULF KONFIGURATSIYASI ====================
@@ -1252,7 +1257,7 @@ img{-webkit-user-drag:none;user-drag:none}
             strictLock: true,               // Qat'iy qulf - hech qanday yo'l bilan ko'rinmasin
             preventWorkarounds: true,       // Barcha yo'l-yo'riqlarni bloklash
             saveViewCountImmediately: true, // Ko'rish sonini darhol saqlash
-            disableNavigationToLocked: true // Qulflangan savolga navigatsiyani bloklash
+            disableNavigationToLocked: true // Qulflangan savolga navigatsiyani bloklash,
         };
         
         const FIREBASE_CONFIG = {
@@ -1320,23 +1325,24 @@ img{-webkit-user-drag:none;user-drag:none}
             recordView(questionId) {
                 if (!questionId && questionId !== 0) return 0;
                 
-                const key = `question_views_${appState.currentTestCode}_${questionId}`;
+                // Foydalanuvchi IDsi bilan birgalikda kalit yaratish
+                const studentId = appState.currentStudent?.id || 'anonymous';
+                const key = `question_views_${appState.currentTestCode}_${questionId}_${studentId}`;
                 let currentViews = this.getViewCount(questionId);
                 
                 if (currentViews < LOCK_CONFIG.maxViews) {
                     currentViews++;
                     
-                    // Darhol localStorage ga saqlash
+                    // localStorage ga saqlash
                     localStorage.setItem(key, currentViews.toString());
                     
-                    // Agar sinxron saqlash kerak bo'lsa
+                    // Firebase ga saqlash
                     if (appState.firebaseAvailable && appState.db) {
                         this.saveViewToFirebase(questionId, currentViews);
                     }
                     
-                    console.log(`Savol ${questionId + 1}: ${currentViews} marta ko'rilgan`);
+                    console.log(`${studentId} uchun savol ${questionId + 1}: ${currentViews} marta ko'rilgan`);
                     
-                    // Agar maksimal ko'rishlar soniga yetgan bo'lsa
                     if (currentViews >= LOCK_CONFIG.maxViews) {
                         this.triggerCompleteLock(questionId);
                     }
@@ -1371,7 +1377,8 @@ img{-webkit-user-drag:none;user-drag:none}
             getViewCount(questionId) {
                 if (!questionId && questionId !== 0) return 0;
                 
-                const key = `question_views_${appState.currentTestCode}_${questionId}`;
+                const studentId = appState.currentStudent?.id || 'anonymous';
+                const key = `question_views_${appState.currentTestCode}_${questionId}_${studentId}`;
                 const stored = localStorage.getItem(key);
                 const count = parseInt(stored) || 0;
                 
@@ -1386,7 +1393,8 @@ img{-webkit-user-drag:none;user-drag:none}
             
             // To'liq qulfni faollashtirish
             triggerCompleteLock(questionId) {
-                console.log(`🚨 Savol ${questionId + 1} TO'LIQ QULFLANDI! (3-marta ko'rilgan)`);
+                const studentId = appState.currentStudent?.id || 'anonymous';
+                console.log(`🚨 ${studentId} uchun savol ${questionId + 1} TO'LIQ QULFLANDI! (3-marta ko'rilgan)`);
                 
                 // Barcha usullarni bloklash
                 this.blockAllAccessMethods(questionId);
@@ -1434,10 +1442,11 @@ img{-webkit-user-drag:none;user-drag:none}
             
             // Savol kontentini tozalash
             clearQuestionContent(questionId) {
+                const studentId = appState.currentStudent?.id || 'anonymous';
                 const keysToClear = [
-                    `question_${appState.currentTestCode}_${questionId}_text`,
-                    `question_${appState.currentTestCode}_${questionId}_options`,
-                    `question_${appState.currentTestCode}_${questionId}_answer`
+                    `question_${appState.currentTestCode}_${questionId}_${studentId}_text`,
+                    `question_${appState.currentTestCode}_${questionId}_${studentId}_options`,
+                    `question_${appState.currentTestCode}_${questionId}_${studentId}_answer`
                 ];
                 
                 keysToClear.forEach(key => {
@@ -1552,10 +1561,13 @@ img{-webkit-user-drag:none;user-drag:none}
                     }
                 }
                 
+                const studentId = appState.currentStudent?.id || 'anonymous';
+                
                 return {
                     total: total,
                     locked: lockedCount,
-                    available: total - lockedCount
+                    available: total - lockedCount,
+                    studentId: studentId
                 };
             },
             
@@ -1568,7 +1580,7 @@ img{-webkit-user-drag:none;user-drag:none}
                     appState.questionViews[index] = viewCount;
                 });
                 
-                console.log("Savol ko'rishlar yuklandi:", appState.questionViews);
+                console.log(`${appState.currentStudent?.fullName || 'Anonymous'} uchun savol ko'rishlar yuklandi:`, appState.questionViews);
             },
             
             // Ko'rish soni uchun ogohlantirish matnini olish
@@ -1597,6 +1609,20 @@ img{-webkit-user-drag:none;user-drag:none}
                     default:
                         return '';
                 }
+            },
+            
+            // Foydalanuvchi uchun barcha qulflarni tozalash
+            clearUserLocks(studentId = null) {
+                const targetId = studentId || appState.currentStudent?.id || 'anonymous';
+                const keys = Object.keys(localStorage);
+                const lockKeys = keys.filter(key => 
+                    key.includes(`question_views_${appState.currentTestCode}`) && 
+                    key.endsWith(`_${targetId}`)
+                );
+                
+                lockKeys.forEach(key => localStorage.removeItem(key));
+                console.log(`${targetId} uchun barcha qulf ma'lumotlari tozalandi`);
+                return lockKeys.length;
             }
         };
         
@@ -1777,6 +1803,32 @@ img{-webkit-user-drag:none;user-drag:none}
                 }
                 
                 return false;
+            },
+            
+            // Foydalanuvchi va test uchun unique kalit yaratish
+            createUserQuestionKey(testCode, questionId, studentId) {
+                return `question_views_${testCode}_${questionId}_${studentId}`;
+            },
+            
+            // Barcha foydalanuvchilarning qulf holatini ko'rish
+            getAllUserLocks(testCode) {
+                const keys = Object.keys(localStorage);
+                const lockKeys = keys.filter(key => key.includes(`question_views_${testCode}`));
+                const locks = {};
+                
+                lockKeys.forEach(key => {
+                    const parts = key.split('_');
+                    const questionId = parts[3];
+                    const studentId = parts.slice(4).join('_'); // studentId bo'lishi mumkin
+                    
+                    if (!locks[questionId]) {
+                        locks[questionId] = {};
+                    }
+                    
+                    locks[questionId][studentId] = parseInt(localStorage.getItem(key)) || 0;
+                });
+                
+                return locks;
             }
         };
         
@@ -2805,6 +2857,13 @@ img{-webkit-user-drag:none;user-drag:none}
                     viewManager.initializeQuestionViews();
                     viewManager.checkAllQuestionsOnStart();
                     
+                    // DEBUG: Foydalanuvchi uchun qulf holatini ko'rsatish
+                    const stats = viewManager.getLockStats();
+                    console.log(`📊 ${appState.currentStudent.fullName} uchun qulf statistikasi:`);
+                    console.log(`- Jami savollar: ${stats.total}`);
+                    console.log(`- Qulflanganlar: ${stats.locked}`);
+                    console.log(`- Ochiq savollar: ${stats.available}`);
+                    
                     dom.elements.headerStudentName.textContent = appState.currentStudent.fullName;
                     dom.elements.headerStudentClass.textContent = appState.currentClass;
                     dom.elements.violationCount.textContent = '0';
@@ -3041,7 +3100,8 @@ img{-webkit-user-drag:none;user-drag:none}
             },
             
             showLockedQuestionStrict(randomQuestion, originalIndex) {
-                console.log(`🔒 STRICT LOCK: Savol ${appState.currentQuestionIndex + 1} (${originalIndex + 1}) - 3-marta ko'rilgan`);
+                const studentId = appState.currentStudent?.id || 'anonymous';
+                console.log(`🔒 STRICT LOCK: ${studentId} uchun savol ${appState.currentQuestionIndex + 1} (${originalIndex + 1}) - 3-marta ko'rilgan`);
                 
                 // 1. Barcha kontentni tozalash
                 const questionContent = document.querySelector('.question-main-content');
@@ -4027,10 +4087,11 @@ img{-webkit-user-drag:none;user-drag:none}
                 this.setupEventListeners();
                 
                 console.log("✅ 3-marta ko'rish qulf tizimi faollashtirildi");
-                console.log(`📊 Har bir savol faqat ${LOCK_CONFIG.maxViews} marta ko'rilishi mumkin`);
+                console.log(`📊 Har bir foydalanuvchi har bir savolni faqat ${LOCK_CONFIG.maxViews} marta ko'ra oladi`);
                 console.log("👁️ 1-ko'rish: Ko'z ikonkasi");
                 console.log("⚠️ 2-ko'rish: Ogohlantirish");
                 console.log("🔒 3-ko'rish: Qulf");
+                console.log("👤 Har bir foydalanuvchi uchun alohida qulf hisobi");
             },
             
             setupEventListeners() {
@@ -4086,12 +4147,48 @@ img{-webkit-user-drag:none;user-drag:none}
         window.enableMandatoryFullScreen = fullscreenManager.enable.bind(fullscreenManager);
         
         // Qo'shimcha funksiyalar
-        window.resetQuestionLocks = function() {
-            const keys = Object.keys(localStorage);
-            const lockKeys = keys.filter(key => key.includes('question_views_'));
-            lockKeys.forEach(key => localStorage.removeItem(key));
-            alert("Barcha qulf ma'lumotlari tozalandi");
-            console.log("Barcha qulf ma'lumotlari tozalandi");
+        window.resetQuestionLocks = function(forAllUsers = false) {
+            if (forAllUsers) {
+                // Barcha foydalanuvchilar uchun
+                const keys = Object.keys(localStorage);
+                const lockKeys = keys.filter(key => key.includes('question_views_'));
+                lockKeys.forEach(key => localStorage.removeItem(key));
+                console.log("Barcha foydalanuvchilar uchun qulf ma'lumotlari tozalandi");
+                alert("Barcha foydalanuvchilar uchun qulf ma'lumotlari tozalandi");
+            } else {
+                // Faqat joriy foydalanuvchi uchun
+                const cleared = viewManager.clearUserLocks();
+                alert(`Sizning hisobingizdan ${cleared} ta qulf ma'lumotlari tozalandi`);
+            }
+        };
+        
+        window.showAllUserLocks = function() {
+            const locks = utils.getAllUserLocks(appState.currentTestCode);
+            let message = "📊 Barcha foydalanuvchilar qulf holati:\n\n";
+            
+            Object.keys(locks).forEach(questionId => {
+                message += `Savol ${parseInt(questionId) + 1}:\n`;
+                Object.keys(locks[questionId]).forEach(studentId => {
+                    const views = locks[questionId][studentId];
+                    const isLocked = views >= LOCK_CONFIG.maxViews;
+                    message += `  👤 ${studentId}: ${views} marta ${isLocked ? '🔒' : ''}\n`;
+                });
+                message += '\n';
+            });
+            
+            console.log(message);
+            alert(message);
+        };
+
+        window.showCurrentUserLocks = function() {
+            const stats = viewManager.getLockStats();
+            alert(
+                `👤 ${appState.currentStudent?.fullName || 'Anonymous'} uchun qulf statistikasi:\n\n` +
+                `Jami savollar: ${stats.total}\n` +
+                `Qulflanganlar (3-marta): ${stats.locked}\n` +
+                `Ochiq savollar: ${stats.available}\n` +
+                `Qulf darajasi: ${stats.total > 0 ? Math.round((stats.locked / stats.total) * 100) : 0}%`
+            );
         };
         
         window.showLockStats = function() {
