@@ -1166,7 +1166,7 @@ export const handler = async (event) => {
           }
         });
 
-        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
+        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total, detail: res.detail } });
       }catch(e){
         const msg = e.message || "Submit error";
         return json(400, { error: msg });

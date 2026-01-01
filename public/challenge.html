@@ -16,6 +16,21 @@
 <title>Online Challenge — LeaderMath.UZ</title>
   
   
+
+  <style>
+    .codeRow{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+    @media (max-width: 560px){ .codeRow{grid-template-columns:1fr;} }
+    .miniRow{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
+    .testList{display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;}
+    @media (max-width: 860px){ .testList{grid-template-columns:1fr;} }
+    .testCard{position:relative; overflow:hidden; cursor:pointer;}
+    .testCard:hover{transform: translateY(-1px);}
+    .testCard .meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+    .testCard .meta .chip{padding:6px 10px; border-radius:999px; font-size:12px; font-weight:900;
+      background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
+    }
+  </style>
+
 </head>
 <body>
 <div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
@@ -37,40 +52,95 @@
       <a class="btn" href="app.html">← Orqaga</a>
     </div>
 
+    
     <div class="glass section">
       <div class="sectionTitle">
-        <h2>Online Challenge</h2>
-        <div class="hint">Demo sahifa</div>
+        <h2>Challengega kirish</h2>
+        <div class="hint" id="chStatus">—</div>
       </div>
-      <p class="p">Bu bo‘lim keyingi bosqichda to‘liq funksiyalar bilan to‘ldiriladi. Hozircha dizayn va navigatsiya tayyor.</p>
+
+      <div class="codeRow" style="margin-top:10px;">
+        <div>
+          <div class="nameLine">Challenge ID</div>
+          <input class="input" id="chId" placeholder="challenge1"/>
+        </div>
+        <div>
+          <div class="nameLine">Kirish kodi</div>
+          <input class="input" id="chCode" placeholder="••••"/>
+        </div>
+      </div>
+
+      <div class="miniRow" style="margin-top:10px;">
+        <button class="btn" id="btnEnter">🚀 Boshlash</button>
+        <button class="btn" id="btnList">📋 Ro‘yxatni yangilash</button>
+        <a class="btn" href="app.html">🏠 Bosh sahifa</a>
+      </div>
+
       <div class="hr"></div>
-      <div class="cards" style="grid-template-columns: repeat(2, minmax(0,1fr));">
-        <div class="featureCard" style="cursor:default;">
-          <div class="poster"><img alt="Online Challenge" src="assets/images/online_challenge.svg"></div>
-          <div class="fOverlay"></div>
-          <div class="fMeta">
-            <div class="fText">
-              <h3>Tez kunda</h3>
-              <p>Funksiyalar qo‘shiladi</p>
-            </div>
-            <div class="playBtn" style="opacity:1;">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-            </div>
-          </div>
-        </div>
-        <div class="glass" style="padding:14px;border-radius:26px;">
-          <div class="nameLine">Reja</div>
-          <ul class="small" style="margin:8px 0 0 18px;">
-            <li>Test/Challenge logikasi</li>
-            <li>Natija saqlash (Firestore)</li>
-            <li>Top-50 reyting integratsiyasi</li>
-          </ul>
-        </div>
-      </div>
+      <div class="testList" id="chList"></div>
+      <div class="small" style="margin-top:10px;opacity:.9">Eslatma: Challenge faqat 1 marta topshiriladi.</div>
     </div>
   </div>
 
   <script type="module">
+    import { api } from "./assets/js/api.js";
+    import { me } from "./assets/js/auth.js";
+
+    const $ = (id)=>document.getElementById(id);
+    const toast = (msg)=>{ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 2400); };
+
+    try{ await me(); }catch(e){ location.href="./"; }
+
+    async function listChallenges(){
+      $("chStatus").textContent = "Yuklanmoqda…";
+      try{
+        const r = await api("tests/list", { query:{ mode:"challenge", limit: 50 }});
+        const items = r.items || [];
+        const el = $("chList");
+        el.innerHTML = "";
+        if(items.length===0){
+          el.innerHTML = `<div class="glass" style="padding:14px;border-radius:26px;">Challenge yo‘q</div>`;
+          $("chStatus").textContent = "";
+          return;
+        }
+        items.forEach(c=>{
+          const card = document.createElement("div");
+          card.className = "glass featureCard testCard";
+          card.style.padding = "14px";
+          card.style.borderRadius = "26px";
+          const st = c.status === 'active' ? '🔥 Faol' : (c.status==='not_started' ? '⏳ Kutilmoqda' : '🛑 Yakunlangan');
+          card.innerHTML = `
+            <div class="nameLine" style="font-size:16px;">${c.title || c.id}</div>
+            <div class="small" style="margin-top:6px;">ID: <b>${c.id}</b> · ${st}</div>
+            <div class="meta">
+              <span class="chip">${c.grade || "—"}</span>
+              <span class="chip">${c.examType || "—"}</span>
+              <span class="chip">📌 ${c.questionCount||0} savol</span>
+            </div>
+          `;
+          card.onclick = ()=>{ $("chId").value = c.id; toast("Tanlandi: "+c.id); };
+          el.appendChild(card);
+        });
+        $("chStatus").textContent = `Topildi: ${items.length} ta challenge`;
+      }catch(e){
+        $("chStatus").textContent = e.message || "Challenge ro‘yxati xato";
+      }
+    }
+
+    function enterChallenge(){
+      const id = $("chId").value.trim();
+      const code = $("chCode").value.trim();
+      if(!id || !code){ toast("ID va kod kiriting"); return; }
+      location.href = `test.html?mode=challenge&id=${encodeURIComponent(id)}&code=${encodeURIComponent(code)}`;
+    }
+
+    $("btnList").onclick = listChallenges;
+    $("btnEnter").onclick = enterChallenge;
+
+    await listChallenges();
+  </script>
+
+<script type="module">
     import { initSeasons } from "./assets/js/seasons.js";
     initSeasons("seasonCanvas");
   </script>
