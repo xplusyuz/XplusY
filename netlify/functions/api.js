@@ -1098,7 +1098,36 @@ export const handler = async (event) => {
       }
     }
 
-    if(path === "/tests/get" && method === "GET"){
+    
+    if(path === "/tests/resolve" && method === "GET"){
+      try{
+        const code = String(event.queryStringParameters?.code || "").trim();
+        if(!code) return json(400, { error:"code kerak" });
+        // 4-digit expected, but allow any short string on server-side if needed
+        const snap = await db.collection("tests")
+          .where("mode","==","challenge")
+          .where("accessCode","==", code)
+          .limit(1).get();
+
+        if(snap.empty) return json(404, { error:"Challenge topilmadi" });
+        const doc = snap.docs[0];
+        const t = { id: doc.id, ...(doc.data()||{}) };
+
+        const w = withinWindow(Date.now(), t.startAt, t.endAt);
+        if(!w.ok){
+          const msg = (w.reason === "not_started")
+            ? "Challenge hali boshlanmagan"
+            : (w.reason === "ended" ? "Challenge yakunlangan" : "Challenge mavjud emas");
+          return json(403, { error: msg, startAt: w.startAt, endAt: w.endAt });
+        }
+
+        return json(200, { test: sanitizeTestForClient(t) });
+      }catch(e){
+        return json(500, { error:"Tests resolve error", message: e.message });
+      }
+    }
+
+if(path === "/tests/get" && method === "GET"){
       try{
         const id = String(event.queryStringParameters?.id || "").trim();
         if(!id) return json(400, { error:"id kerak" });
@@ -1166,7 +1195,7 @@ export const handler = async (event) => {
           }
         });
 
-        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total, detail: res.detail } });
+        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
       }catch(e){
         const msg = e.message || "Submit error";
         return json(400, { error: msg });
