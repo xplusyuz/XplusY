@@ -1060,42 +1060,6 @@ export const handler = async (event) => {
     // Submissions: tests/{id}/submissions/{loginId}
     // =====================
 
-    // Resolve a test by code (doc id OR field `code` OR field `accessCode`)
-    // GET /tests/resolve?code=XXXX
-    if(path === "/tests/resolve" && method === "GET"){
-      try{
-        const code = String(event.queryStringParameters?.code || "").trim();
-        if(!code) return json(400, { error:"code kerak" });
-
-        // 1) direct docId
-        let snap = await db.collection("tests").doc(code).get();
-        if(snap.exists){
-          const t = snap.data() || {};
-          return json(200, { id: snap.id, code: t.code || snap.id, title: t.title||"", mode: t.mode||"open", grade: t.grade||"", examType: t.examType||"" });
-        }
-
-        // 2) by field: code
-        let q = await db.collection("tests").where("code","==", code).limit(1).get();
-        if(!q.empty){
-          const d = q.docs[0];
-          const t = d.data() || {};
-          return json(200, { id: d.id, code: t.code || d.id, title: t.title||"", mode: t.mode||"open", grade: t.grade||"", examType: t.examType||"" });
-        }
-
-        // 3) by field: accessCode (handy when link uses accessCode)
-        q = await db.collection("tests").where("accessCode","==", code).limit(1).get();
-        if(!q.empty){
-          const d = q.docs[0];
-          const t = d.data() || {};
-          return json(200, { id: d.id, code: t.code || d.id, title: t.title||"", mode: t.mode||"open", grade: t.grade||"", examType: t.examType||"" });
-        }
-
-        return json(404, { error:"Test topilmadi" });
-      }catch(e){
-        return json(500, { error:"Tests resolve error", message: e.message });
-      }
-    }
-
     if(path === "/tests/list" && method === "GET"){
       try{
         const mode = String(event.queryStringParameters?.mode || "").trim(); // open|challenge|all
