@@ -1,865 +1,103 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8"/>
-  
-  
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
-<meta name="theme-color" content="#0ea5e9"/>
-<link rel="icon" sizes="192x192" href="logo.png"/>
-<link rel="apple-touch-icon" href="logo.png"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
-<link rel="stylesheet" href="assets/css/style.css"/>
-<link rel="stylesheet" href="assets/css/bridge.css"/>
-<title>Test — LeaderMath.UZ</title>
-  
-  
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0ea5e9"/>
+  <link rel="icon" sizes="192x192" href="logo.png"/>
+  <link rel="apple-touch-icon" href="logo.png"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link rel="stylesheet" href="assets/css/style.css"/>
+  <link rel="stylesheet" href="assets/css/ui.css"/>
+  <link rel="stylesheet" href="assets/css/app.css"/>
+  <link rel="stylesheet" href="assets/css/bridge.css"/>
+  <title>LeaderMath.UZ — Test</title>
   <style>
-    /* Image-only question tweaks */
-    .qImageWrap{display:flex; justify-content:center; margin:10px 0 12px;}
-    .qImage{max-width:100%; max-height:48vh; border-radius:18px; border:1px solid rgba(255,255,255,.18);
-      box-shadow: 0 18px 50px rgba(0,0,0,.25);
-      background: rgba(255,255,255,.06);
-    }
-    .filters{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
-    @media (max-width: 560px){ .filters{grid-template-columns:1fr;} }
-    .miniRow{display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;}
-    .tagPill{display:inline-flex; align-items:center; gap:8px; padding:7px 10px; border-radius:999px;
-      border:1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.08);
-      font-weight:800; font-size:12px; color: rgba(255,255,255,.92);
-    }
-    .testList{display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;}
-    @media (max-width: 860px){ .testList{grid-template-columns:1fr;} }
-    .testCard{position:relative; overflow:hidden; cursor:pointer;}
-    .testCard:hover{transform: translateY(-1px);}
-    .testCard .meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
-    .testCard .meta .chip{padding:6px 10px; border-radius:999px; font-size:12px; font-weight:900;
-      background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14);
-    }
-    .codeRow{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
-    @media (max-width: 560px){ .codeRow{grid-template-columns:1fr;} }
-
-    /* Fullscreen runner overlay (fix: runner pastda osilib qolmasin) */
-    #runner.modal{
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      background: rgba(6,10,16,.55);
-      backdrop-filter: blur(14px) saturate(140%);
-    }
-    #runner.modal.show{ display:flex; }
-    #runner .modalBox{
-      width: min(1100px, 96vw);
-      height: min(92vh, 920px);
-      max-height: 92vh;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto auto 1fr;
-    }
-    #runner .runnerGrid{ height:100%; min-height:0; }
-    #runner .runnerGrid > div{ min-height:0; }
-    #runner .runnerGrid > div:first-child{ overflow:auto; }
-    #runner .runnerGrid > div:last-child{ overflow:auto; }
-    @media (max-width: 920px){
-      #runner .runnerGrid{ grid-template-columns: 1fr !important; }
-    }
-  
-    /* ===== Runner (FULLSCREEN, beautiful) ===== */
-    #runner.runnerModal{
-      padding: 0 !important;
-      align-items: stretch !important;
-      justify-content: stretch !important;
-      background: rgba(6,10,16,.70) !important;
-      backdrop-filter: blur(18px) saturate(150%) !important;
-    }
-    #runner .runnerShell{
-      width: 100vw;
-      height: 100vh;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      background: radial-gradient(1200px 600px at 10% 0%, rgba(46,139,87,.20), transparent 60%),
-                  radial-gradient(900px 500px at 90% 10%, rgba(59,130,246,.18), transparent 55%),
-                  rgba(255,255,255,.08);
-      border: 1px solid rgba(255,255,255,.14);
-      box-shadow: 0 30px 90px rgba(0,0,0,.35);
-      overflow: hidden;
-    }
-    #runner .runnerTop{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding: 12px 14px;
-      background: rgba(255,255,255,.10);
-      border-bottom: 1px solid rgba(255,255,255,.14);
-      backdrop-filter: blur(14px);
-    }
-    #runner .runnerTitle .title{ font-weight: 1000; font-size: 16px; letter-spacing:.2px; }
-    #runner .runnerActions{ display:flex; align-items:center; gap:10px; }
-    #runner .iconBtn{
-      border: 1px solid rgba(255,255,255,.18);
-      background: rgba(255,255,255,.10);
-      color: #fff;
-      width: 42px; height: 42px;
-      border-radius: 14px;
-      cursor: pointer;
-      font-weight: 1000;
-      display:grid; place-items:center;
-      transition: transform .12s ease, background .12s ease, border-color .12s ease;
-    }
-    #runner .iconBtn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.26); }
-    #runner .iconBtn:active{ transform: scale(.98); }
-    #runner .iconBtn.danger{ background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
-    #runner .runnerMain{
-      display:grid;
-      grid-template-columns: 1fr 320px;
-      gap: 14px;
-      padding: 14px;
-      min-height: 0;
-    }
-    #runner .runnerLeft{
-      min-height:0;
-      display:grid;
-      grid-template-rows: auto 1fr auto;
-      gap: 12px;
-    }
-    #runner .runnerMetaRow{
-      display:flex; align-items:center; gap:10px;
-      padding: 10px 12px;
-      border-radius: 18px;
-      background: rgba(255,255,255,.10);
-      border: 1px solid rgba(255,255,255,.14);
-      backdrop-filter: blur(12px);
-      color:#fff;
-    }
-    #runner .runnerSpacer{ flex:1; }
-    #runner .qStage{
-      min-height:0;
-      border-radius: 22px;
-      background: rgba(255,255,255,.08);
-      border: 1px solid rgba(255,255,255,.14);
-      overflow: hidden;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding: 10px;
-    }
-    #runner .qStage img.qImage{
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
-      object-fit: contain;
-      border-radius: 18px;
-      cursor: zoom-in;
-      box-shadow: 0 18px 55px rgba(0,0,0,.28);
-      background: rgba(255,255,255,.06);
-    }
-    #runner .answerBox{
-      border-radius: 22px;
-      background: rgba(255,255,255,.10);
-      border: 1px solid rgba(255,255,255,.14);
-      backdrop-filter: blur(12px);
-      padding: 12px;
-      color:#fff;
-    }
-    #runner .mcqList{ display:flex; flex-direction:column; gap:10px; }
-    #runner .mcqOpt{
-      display:flex; gap:10px; align-items:center;
-      border-radius: 18px;
-      padding: 12px 12px;
-      border: 1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.08);
-      cursor:pointer;
-      transition: transform .10s ease, background .10s ease, border-color .10s ease;
-    }
-    #runner .mcqOpt:hover{ transform: translateY(-1px); background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
-    #runner .mcqOpt.on{ background: rgba(46,139,87,.22); border-color: rgba(46,139,87,.40); }
-    #runner .mcqLetter{
-      width: 36px; height: 36px; border-radius: 14px;
-      display:grid; place-items:center;
-      font-weight:1000;
-      background: rgba(255,255,255,.10);
-      border:1px solid rgba(255,255,255,.14);
-    }
-    #runner .mcqText{ font-weight: 800; color:#fff; }
-    #runner #openWrap .nameLine{ color:#fff; }
-    #runner #openWrap .input{ background: rgba(255,255,255,.90); }
-    #runner .runnerRight{
-      min-height:0;
-      display:grid;
-      grid-template-rows: auto 1fr auto;
-      border-radius: 22px;
-      background: rgba(255,255,255,.10);
-      border: 1px solid rgba(255,255,255,.14);
-      backdrop-filter: blur(12px);
-      overflow:hidden;
-    }
-    #runner .navHead{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding: 12px;
-      border-bottom: 1px solid rgba(255,255,255,.14);
-      color:#fff;
-    }
-    #runner .dotsGrid{
-      padding: 12px;
-      display:grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-      overflow:auto;
-    }
-    #runner .dotBtn{
-      height: 44px;
-      border-radius: 16px;
-      border: 1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.08);
-      color:#fff;
-      font-weight:1000;
-      cursor:pointer;
-      display:grid; place-items:center;
-      transition: transform .10s ease, background .10s ease, border-color .10s ease;
-    }
-    #runner .dotBtn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
-    #runner .dotBtn.on{ background: rgba(59,130,246,.24); border-color: rgba(59,130,246,.40); }
-    #runner .dotBtn.done{ background: rgba(16,185,129,.24); border-color: rgba(16,185,129,.45); }
-    #runner .navFoot{
-      padding: 12px;
-      border-top: 1px solid rgba(255,255,255,.14);
-      display:flex;
-      flex-direction:column;
-      gap: 10px;
-    }
-    #runner .navBtns{ display:flex; gap:10px; }
-    #runner .navFoot .btn{ width:100%; }
-
-    /* Mobile: nav panel becomes bottom sheet */
-    @media (max-width: 920px){
-      #runner .runnerMain{ grid-template-columns: 1fr; padding: 10px; }
-      #runner .runnerRight{
-        position: fixed;
-        left: 10px; right: 10px; bottom: 10px;
-        height: 60vh;
-        transform: translateY(calc(60vh + 20px));
-        transition: transform .18s ease;
-        z-index: 3;
-      }
-      #runner.showNav .runnerRight{ transform: translateY(0); }
-      #runner .dotsGrid{ grid-template-columns: repeat(6, 1fr); }
-      #runner .runnerShell{ padding-bottom: env(safe-area-inset-bottom); }
-    }
-
-    /* Zoom modal */
-    .imgZoom{ background: rgba(6,10,16,.85) !important; padding:0 !important; }
-    .imgZoomBox{
-      width:100vw; height:100vh; position:relative;
-      display:flex; align-items:center; justify-content:center;
-    }
-    .imgZoomBox img{
-      max-width: 100vw; max-height: 100vh;
-      width:auto; height:auto;
-      object-fit: contain;
-      background: transparent;
-    }
-    .imgZoomBox #btnZoomClose{
-      position:absolute; top: 14px; right: 14px;
-    }
-
-</style>
+    .testWrap{ max-width:980px; margin:0 auto; padding:16px; }
+    .testTop{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .pillMini{ display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10); }
+    .qCard{ padding:16px; border-radius:24px; }
+    .qHead{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .qIdx{ font-weight:800; }
+    .qImg{ width:100%; max-height:420px; object-fit:contain; border-radius:18px; border:1px solid rgba(255,255,255,.10); background:rgba(0,0,0,.08); }
+    .optList{ display:grid; gap:10px; margin-top:12px; }
+    .opt{ display:flex; gap:10px; align-items:flex-start; padding:12px 12px; border-radius:18px; border:1px solid rgba(255,255,255,.10); background:rgba(255,255,255,.06); cursor:pointer; }
+    .opt input{ margin-top:4px; }
+    .navRow{ display:flex; gap:10px; justify-content:space-between; flex-wrap:wrap; margin-top:14px; }
+    .navRow .btn{ min-width:140px; }
+    .resultBox{ padding:16px; border-radius:24px; border:1px solid rgba(255,255,255,.12); background:rgba(16,185,129,.10); }
+    .errBox{ padding:14px; border-radius:20px; border:1px solid rgba(251,113,133,.20); background:rgba(251,113,133,.10); }
+  </style>
 </head>
+<body data-page="test">
+  <div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
+  <button class="scroll-to-top" id="scrollToTop" aria-label="Yuqoriga"><i class="fa-solid fa-arrow-up"></i></button>
 
-<body>
-<div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
-<button class="scroll-to-top" id="scrollToTop" aria-label="Yuqoriga"><i class="fa-solid fa-arrow-up"></i></button>
-<canvas id="three-canvas"></canvas>
+  <div class="app">
+    <header>
+      <div class="header-card">
+        <div class="brandBox" aria-label="LeaderMath">
+          <img src="logo.png" alt="LeaderMath.UZ" class="logo-img">
+          <div class="brandText">
+            <div class="brandName">LeaderMath<span class="dot">.uz</span></div>
+            <div class="brandTag" id="dtMini">Test</div>
+          </div>
+        </div>
 
-  <canvas class="seasonCanvas" id="seasonCanvas"></canvas>
-  <div class="toast" id="toast"></div>
+        <div class="header-text">
+          <div class="header-title" id="pageTitle">Test</div>
+          <div class="header-sub" id="pageSub">Kod orqali ochiladi (URL: <b>?code=...</b>)</div>
+        </div>
 
-  <div class="container">
-    <div class="glass topbar">
-      <div class="brand">
-        <div class="logo" aria-hidden="true"><span>π</span></div>
-        <div class="titleWrap">
-          <div class="title">Test</div>
-          <div class="subtitle" id="subtitle">Oddiy test (JSON) va Challenge (API+Firestore)</div>
+        <div class="header-actions">
+          <button class="icon-btn" id="btnBack" aria-label="Orqaga"><i class="fa-solid fa-arrow-left"></i></button>
+          <button class="icon-btn" id="btnLogout" aria-label="Chiqish"><i class="fa-solid fa-right-from-bracket"></i></button>
         </div>
       </div>
-      <div class="miniRow" style="gap:10px;">
-        <div class="tagPill" id="mePill">…</div>
-        <a class="btn" href="app.html">← Orqaga</a>
-      </div>
-    </div>
+    </header>
 
-    <!-- Challenge FIRST (talab: tepada chiqsin) -->
-    
-    <div class="glass section">
-      <div class="sectionTitle">
-        <h2>Challenge (jonli)</h2>
-        <div class="hint">Faqat 4 xonali kod · Boshlash va tugash vaqti bilan</div>
+    <main class="testWrap" style="display:flex;flex-direction:column;gap:14px;">
+      <div class="glass qCard" id="loadingCard">
+        <div class="small muted">Yuklanmoqda…</div>
       </div>
 
-      <div class="codeRow" style="grid-template-columns: 1fr auto; align-items:end;">
-        <div>
-          <div class="nameLine">4 xonali kod</div>
-          <input class="input" id="chCode" inputmode="numeric" maxlength="4" placeholder="1234"/>
-          <div class="small" style="margin-top:8px;opacity:.9" id="chInfo"></div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:10px; align-items:stretch; min-width:180px;">
-          <button class="btn" id="btnEnter">🚀 Boshlash</button>
-          <a class="btn" href="app.html">🏠 Bosh sahifa</a>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-      <div id="chCountdown" class="glass" style="display:none; padding:14px; border-radius:26px;">
-        <div class="nameLine">Challenge boshlanishigacha</div>
-        <div class="bigTimer" id="chTimerText" style="font-size:28px; font-weight:800; letter-spacing:1px; margin-top:8px;">00:00:00</div>
-        <div class="small" id="chTimerHint" style="margin-top:6px; opacity:.9"></div>
-      </div>
-
-      <div class="small" id="chStatus" style="margin-top:10px;opacity:.9"></div>
-    </div>
-
-<div class="glass section">
-      <div class="sectionTitle">
-        <h2>Oddiy testlar (ochiq)</h2>
-        <div class="hint">JSON’dan · ball/balansga ta’sir qilmaydi</div>
-      </div>
-
-      <div class="filters">
-        <div>
-          <div class="nameLine">Sinf (filter)</div>
-          <select class="input" id="openGrade"></select>
-        </div>
-        <div>
-          <div class="nameLine">Tur (filter)</div>
-          <select class="input" id="openExamType"></select>
+      <div class="glass qCard" id="infoCard" style="display:none;">
+        <div class="testTop">
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:20px; font-weight:900;" id="testTitle">—</div>
+            <div class="small muted" id="testMeta">—</div>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <span class="pillMini">👤 <b id="uName">—</b> <span class="muted">·</span> <span id="uId">—</span></span>
+            <span class="pillMini">⏱️ <b id="timer">00:00</b></span>
+            <span class="pillMini">📌 <b id="progress">0/0</b></span>
+          </div>
         </div>
       </div>
 
-      <div class="hr"></div>
-      <div class="testList" id="openList"></div>
-      <div class="small" id="openStatus" style="margin-top:10px;opacity:.9"></div>
-    </div>
+      <div class="glass qCard" id="qCard" style="display:none;"></div>
+
+      <div class="glass qCard" id="resultCard" style="display:none;"></div>
+      <div class="glass qCard" id="errorCard" style="display:none;"></div>
+
+      <div style="height:30px"></div>
+    </main>
+
+    <footer>
+      <div class="footer-card">
+        <div class="footer-left">
+          <div class="footer-name">LeaderMath.UZ</div>
+          <div class="small-note">Test sahifasi: Firebase (tests collection) → topilmasa local-tests</div>
+        </div>
+        <div class="footer-right">
+          <a class="footer-link" href="app.html"><i class="fa-solid fa-house"></i> App</a>
+        </div>
+      </div>
+    </footer>
   </div>
 
-  <!-- Runner modal (simple, image based) -->
-  <div class="modal runnerModal" id="runner" style="display:none;">
-    <div class="runnerShell">
-      <div class="runnerTop">
-        <div class="runnerTitle">
-          <div class="title" id="runTitle">Test</div>
-          <div class="small" id="runMeta">—</div>
-        </div>
-        <div class="runnerActions">
-          <button class="iconBtn" id="btnToggleNav" title="Savollar paneli">📋</button>
-          <div class="badge" id="timer" style="font-weight:1000;">00:00</div>
-          <button class="iconBtn danger" id="btnClose" title="Chiqish">✖</button>
-        </div>
-      </div>
-
-      <div class="runnerMain">
-        <div class="runnerLeft">
-          <div class="runnerMetaRow">
-            <div class="badge" id="qIndex">#1</div>
-            <div class="badge" id="qPts">1 ball</div>
-            <div class="runnerSpacer"></div>
-            <div class="small" id="stat">—</div>
-          </div>
-
-          <div class="qStage">
-            <img class="qImage" id="qImg" alt="savol"/>
-          </div>
-
-          <div class="answerBox">
-            <div id="mcq" class="mcqList"></div>
-
-            <div id="openWrap" style="display:none;">
-              <div class="nameLine">Javob</div>
-              <input class="input" id="openAns" placeholder="Javobni kiriting…"/>
-              <div class="small">(Bo‘sh joylar e’tiborga olinmaydi)</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="runnerRight" id="navPanel">
-          <div class="navHead">
-            <div class="nameLine">Savollar</div>
-            <button class="iconBtn" id="btnHideNav" title="Yopish">✖</button>
-          </div>
-          <div id="dots" class="dotsGrid"></div>
-
-          <div class="navFoot">
-            <div class="navBtns">
-              <button class="btn" id="btnPrev">⬅</button>
-              <button class="btn" id="btnNext">➡</button>
-            </div>
-            <button class="btn" id="btnFinish">✅ Yakunlash</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Image zoom (optional) -->
-  <div class="modal imgZoom" id="imgZoom" style="display:none;">
-    <div class="imgZoomBox">
-      <img id="imgZoomSrc" alt="zoom"/>
-      <button class="iconBtn danger" id="btnZoomClose" title="Yopish">✖</button>
-    </div>
-  </div>
-</div>
-
-  <script type="module">
-    import { initSeasons } from "./assets/js/seasons.js";
-    initSeasons("seasonCanvas");
-  </script>
-
-  <script type="module">
-    import { api } from "./assets/js/api.js";
-    import { me } from "./assets/js/auth.js";
-
-    const $ = (id)=>document.getElementById(id);
-    const toast = (msg)=>{ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 2400); };
-
-    // ===== auth/me =====
-    let ME = null;
-    try{
-      const r = await me();
-      ME = r.user || r;
-      const name = (ME.firstName || ME.name || ME.loginId || "").trim();
-      $("mePill").textContent = `ID: ${ME.loginId} · ${name||"User"} · Ball: ${ME.points??0} · Balans: ${ME.balance??0}`;
-    }catch(e){
-      location.href = "./";
-    }
-
-    // ===== utils =====
-
-    // ===== Auto-run challenge if URL has mode=challenge&id=...&code=.... =====
-    async function autoRunChallengeFromQuery(){
-      const sp = new URLSearchParams(location.search);
-      const mode = sp.get("mode") || "";
-      if(mode !== "challenge") return false;
-      const id = String(sp.get("id") || "").trim();
-      const code = String(sp.get("code") || "").trim();
-      if(!id || !code) return false;
-
-      // Hide lists, show only runner container
-      try{
-        const sections = document.querySelectorAll(".glass.section");
-        sections.forEach(sec=>{
-          const h2 = sec.querySelector("h2");
-          if(h2 && (h2.textContent||"").toLowerCase().includes("challenge")) sec.style.display="none";
-          if(h2 && (h2.textContent||"").toLowerCase().includes("oddiy testlar")) sec.style.display="none";
-        });
-      }catch(_){}
-
-      // Load challenge test
-      try{
-        const r = await api("tests/get", { query:{ id, code }});
-        const test = r.test;
-        if(!test) throw new Error("Test topilmadi");
-        test._mode = "challenge";
-        test._id = test.id || id;
-        test._folder = test.folder || test.code || test.id || id;
-        runStart(test);
-        return true;
-      }catch(e){
-        const data = e?.data || {};
-        const msg = e.message || "Challenge xato";
-        // If not started -> show countdown in challenge box and keep user here
-        if(data.startAt && msg.toLowerCase().includes("boshlanmagan")){
-          // show countdown box at top using existing elements (create if missing)
-          const cd = document.getElementById("chCountdown");
-          if(cd){
-            document.getElementById("chCode").value = code.replace(/\D/g,"").slice(0,4);
-            document.getElementById("chStatus").textContent = msg;
-            showCountdown(data.startAt, data.endAt);
-          }else{
-            toast(msg);
-          }
-        }else{
-          toast(msg);
-        }
-        return true;
-      }
-    }
-
-    const OPEN_INDEX = "open-tests/index.json";
-    const norm = (s)=>String(s??"").trim().toLowerCase().replace(/\s+/g,"");
-    const fmtTime = (sec)=>{
-      sec=Math.max(0,Math.floor(sec));
-      const m=Math.floor(sec/60), s=sec%60;
-      return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
-    };
-    const shuffle = (arr)=>{
-      const a=[...arr];
-      for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-      return a;
-    };
-
-    // =====================
-    // OPEN TESTS (JSON index)
-    // =====================
-    let openIndex=null;
-    let openTests=[];
-
-    async function loadOpenIndex(){
-      $("openStatus").textContent = "Yuklanmoqda…";
-      try{
-        const r = await fetch(OPEN_INDEX, {cache:"no-store"});
-        if(!r.ok) throw new Error();
-        openIndex = await r.json();
-        openTests = Array.isArray(openIndex.tests) ? openIndex.tests : [];
-        buildOpenFilters();
-        renderOpenList();
-
-        // If coming from app.html single-page list, auto-open selected test once
-        try{
-          const pick = localStorage.getItem("lm_openTestFile") || "";
-          if(pick){
-            const found = openTests.find(t => t.file === pick || t.id === pick) || null;
-            if(found){
-              localStorage.removeItem("lm_openTestFile");
-              // Start after a tiny delay so UI is ready
-              setTimeout(()=>startOpen(found), 120);
-            }
-          }
-        }catch(_){/* ignore */}
-        $("openStatus").textContent = `Topildi: ${openTests.length} ta test`;
-      }catch(_){
-        $("openStatus").textContent = "open-tests/index.json topilmadi";
-      }
-    }
-
-    function buildOpenFilters(){
-      const grades = ["Hammasi", ...new Set(openTests.map(t=>t.grade||"" ).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const types  = ["Hammasi", ...new Set(openTests.map(t=>t.examType||"" ).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-
-      $("openGrade").innerHTML = grades.map(g=>`<option value="${g==="Hammasi"?"":g}">${g}</option>`).join("");
-      $("openExamType").innerHTML = types.map(x=>`<option value="${x==="Hammasi"?"":x}">${x}</option>`).join("");
-      $("openGrade").onchange = renderOpenList;
-      $("openExamType").onchange = renderOpenList;
-    }
-
-    function renderOpenList(){
-      const g = $("openGrade").value;
-      const t = $("openExamType").value;
-      const list = openTests.filter(x => (!g || x.grade===g) && (!t || x.examType===t));
-
-      const el = $("openList");
-      el.innerHTML = "";
-      if(list.length===0){
-        el.innerHTML = `<div class="glass" style="padding:14px;border-radius:26px;">Test topilmadi</div>`;
-        return;
-      }
-      list.forEach(item=>{
-        const card = document.createElement("div");
-        card.className = "glass featureCard testCard";
-        card.style.padding = "14px";
-        card.style.borderRadius = "26px";
-        card.innerHTML = `
-          <div class="nameLine" style="font-size:16px;">${item.title || item.id}</div>
-          <div class="small" style="margin-top:6px;">${item.description||"Oddiy test"}</div>
-          <div class="meta">
-            <span class="chip">${item.grade || "—"}</span>
-            <span class="chip">${item.examType || "—"}</span>
-            <span class="chip">⏱ ${Math.round((item.durationSec||900)/60)} min</span>
-          </div>
-        `;
-        card.onclick = ()=> startOpen(item);
-        el.appendChild(card);
-      });
-    }
-
-    async function startOpen(item){
-      try{
-        const r = await fetch(item.file, {cache:"no-store"});
-        if(!r.ok) throw new Error();
-        const test = await r.json();
-        test._mode = "open";
-        test._id = item.id;
-        test._folder = item.folder || item.id;
-        runStart(test);
-      }catch(_){
-        toast("Test JSON yuklanmadi");
-      }
-    }
-
-    
-    // =====================
-    // CHALLENGE (by 4-digit code)
-    // =====================
-    let chCountdownInterval = null;
-
-    function fmt2(n){ return String(Math.max(0, Math.floor(n))).padStart(2,"0"); }
-    function formatHMS(ms){
-      const s = Math.max(0, Math.floor(ms/1000));
-      const h = Math.floor(s/3600);
-      const m = Math.floor((s%3600)/60);
-      const ss = s%60;
-      return `${fmt2(h)}:${fmt2(m)}:${fmt2(ss)}`;
-    }
-    function showCountdown(startAt, endAt){
-      const box = $("chCountdown");
-      box.style.display = "block";
-      const hint = $("chTimerHint");
-      const sa = new Date(Number(startAt||0));
-      const ea = new Date(Number(endAt||0));
-      hint.textContent = `Boshlanish: ${sa.toLocaleString()} · Tugash: ${ea.toLocaleString()}`;
-      if(chCountdownInterval) clearInterval(chCountdownInterval);
-      chCountdownInterval = setInterval(async ()=>{
-        const left = Number(startAt||0) - Date.now();
-        $("chTimerText").textContent = formatHMS(left);
-        if(left <= 0){
-          clearInterval(chCountdownInterval);
-          chCountdownInterval = null;
-          // Auto retry after start
-          await startChallengeByCode(true);
-        }
-      }, 250);
-    }
-
-    async function startChallengeByCode(isAuto=false){
-      const code = String($("chCode").value || "").trim();
-      if(!/^[0-9]{4}$/.test(code)){
-        toast("4 xonali kod kiriting");
-        return;
-      }
-      $("chStatus").textContent = isAuto ? "Boshlanish tekshirilmoqda…" : "Tekshirilmoqda…";
-      $("chInfo").textContent = "";
-      $("chCountdown").style.display = "none";
-
-      try{
-        // Resolve by code -> returns { id, startAt, endAt, test? }
-        const r = await api("tests/resolve", { query:{ code }});
-        const t = r.test || null;
-        if(!t || !t.id){
-          $("chStatus").textContent = "Test topilmadi";
-          return;
-        }
-        // Go runner
-        const u = new URL("test.html", location.href);
-        u.searchParams.set("mode","challenge");
-        u.searchParams.set("id", t.id);
-        u.searchParams.set("code", code);
-        location.href = u.toString();
-      }catch(e){
-        // If not started yet, server returns startAt/endAt
-        const data = e?.data || {};
-        const msg = e.message || "Kirish xato";
-        $("chStatus").textContent = msg;
-        if((data.startAt || data.endAt) && (msg.toLowerCase().includes("boshlanmagan") || msg.toLowerCase().includes("kutilmoqda") || msg.toLowerCase().includes("hali"))){
-          $("chInfo").textContent = "Vaqti kelganda avtomatik boshlanadi.";
-          showCountdown(data.startAt, data.endAt);
-        }
-      }
-    }
-
-    $("btnEnter").onclick = ()=>startChallengeByCode(false);
-
-    // If user came from challenge.html with ?code=1234, auto start
-    try{
-      const sp = new URLSearchParams(location.search);
-      const codeParam = sp.get("code") || "";
-      if(codeParam){
-        $("chCode").value = codeParam;
-        // Keep user on this page but auto-check
-        setTimeout(()=>startChallengeByCode(true), 50);
-      }
-    }catch(_){}
-
-
-    // =====================
-    // RUNNER (image-only)
-    // =====================
-    const RUN = { test:null, qs:[], ans:[], i:0, left:0, t:null, started:0 };
-
-    function runStart(test){
-      const qs = Array.isArray(test.questions) ? test.questions : [];
-      const base = test.shuffleQuestions ? shuffle(qs) : [...qs];
-      const cooked = base.map((q, idx)=>{
-        const qq = {...q};
-        qq.type = qq.type || 'mcq';
-        qq.points = Number(qq.points||1)||1;
-        qq.img = qq.img || qq.image || `${idx+1}.png`;
-        if(test.shuffleOptions && Array.isArray(qq.options)) qq.options = shuffle(qq.options);
-        return qq;
-      });
-
-      RUN.test = test;
-      RUN.qs = cooked;
-      RUN.ans = new Array(cooked.length).fill("");
-      RUN.i = 0;
-      RUN.left = Number(test.durationSec||900)||900;
-      RUN.started = Date.now();
-
-      $("runTitle").textContent = test.title || (test._mode==="challenge" ? "Challenge" : "Test");
-      $("runMeta").textContent = test._mode==="challenge" ? `Challenge · ID: ${test._id}` : `Oddiy test · JSON`;
-      // Fullscreen overlay + scroll lock
-      $("runner").classList.add("show");
-      $("runner").style.display = "flex";
-      document.body.style.overflow = "hidden";
-      buildDots();
-      renderQ();
-      tick();
-      clearInterval(RUN.t);
-      RUN.t = setInterval(tick, 1000);
-    }
-
-    function runClose(){
-      clearInterval(RUN.t);
-      RUN.t = null;
-      $("runner").classList.remove("show");
-      $("runner").classList.remove("showNav");
-      $("runner").style.display = "none";
-      $("imgZoom").style.display = "none";
-      document.body.style.overflow = "";
-    }
-
-    function tick(){
-      $("timer").textContent = fmtTime(RUN.left);
-      RUN.left -= 1;
-      if(RUN.left < 0){ finish(); }
-    }
-
-    function buildDots(){
-      const el = $("dots");
-      el.innerHTML = "";
-      RUN.qs.forEach((_,i)=>{
-        const b=document.createElement('button');
-        b.className='btn';
-        b.style.padding='10px 0';
-        b.textContent = i+1;
-        b.onclick = ()=>{ RUN.i=i; renderQ(); };
-        el.appendChild(b);
-      });
-      updateStat();
-    }
-
-    function updateStat(){
-      const answered = RUN.ans.filter(x=>String(x||"").trim().length>0).length;
-      $("stat").textContent = `✅ ${answered}/${RUN.qs.length} · ⏱ ${fmtTime(Math.max(0, Number(RUN.test.durationSec||900)-RUN.left))}`;
-    }
-
-    function renderQ(){
-      const q = RUN.qs[RUN.i];
-      $("qIndex").textContent = `#${RUN.i+1}`;
-      $("qPts").textContent = `${q.points} ball`;
-
-      // image src
-      const folder = RUN.test._folder || RUN.test.folder || RUN.test.code || RUN.test._id || "";
-      const imgName = q.img || `${RUN.i+1}.png`;
-      $("qImg").src = `tests/${folder}/${imgName}`;
-
-      $("mcq").innerHTML = "";
-      $("openWrap").style.display = "none";
-
-      if((q.type||'mcq') === 'open'){
-        $("openWrap").style.display = "block";
-        $("openAns").value = RUN.ans[RUN.i] || "";
-        $("openAns").oninput = ()=>{ RUN.ans[RUN.i] = $("openAns").value; updateStat(); };
-      }else{
-        const cur = RUN.ans[RUN.i] || "";
-        const opts = Array.isArray(q.options) ? q.options : [];
-        const letters = ["A","B","C","D","E","F"];
-        opts.forEach((opt, idx)=>{
-          const row = document.createElement('div');
-          row.className = 'mcqOpt' + (cur===opt ? ' on' : '');
-          row.innerHTML = `<div class="mcqLetter">${letters[idx]||""}</div><div class="mcqText">${opt}</div>`;
-          row.onclick = ()=>{ RUN.ans[RUN.i] = opt; renderQ(); updateStat(); };
-          $("mcq").appendChild(row);
-        });
-      }
-      updateStat();
-    }
-
-    function calcLocalOpenScore(){
-      // only for OPEN JSON (we have correct/answers in json)
-      const qs = RUN.qs;
-      let score=0, correct=0, wrong=0;
-      for(let i=0;i<qs.length;i++){
-        const q=qs[i];
-        const a=RUN.ans[i];
-        const pts=Number(q.points||1)||1;
-        let ok=false;
-        if((q.type||'mcq')==='open'){
-          const list = Array.isArray(q.answers)?q.answers:[];
-          const na = norm(a);
-          ok = list.some(x=>norm(x)===na);
-        }else{
-          ok = String(a)===String(q.correct||"");
-        }
-        if(ok){ score+=pts; correct++; } else wrong++;
-      }
-      return {score, correct, wrong, total: qs.length};
-    }
-
-    async function finish(){
-      clearInterval(RUN.t);
-      RUN.t = null;
-
-      // open test: local result (no points)
-      if(RUN.test._mode === 'open'){
-        const r = calcLocalOpenScore();
-        toast(`Natija: ${r.score} ball · ✅${r.correct} · ❌${r.wrong}`);
-        setTimeout(runClose, 800);
-        return;
-      }
-
-      // challenge: submit to server for scoring + points
-      try{
-        const timeSpentSec = Math.max(0, Math.floor((Date.now()-RUN.started)/1000));
-        const res = await api("tests/submit", { method:"POST", body:{ id: RUN.test._id, answers: RUN.ans, timeSpentSec }});
-        const r = res.result;
-        toast(`Challenge natija: ${r.score} ball · ✅${r.correct} · ❌${r.wrong}`);
-      }catch(e){
-        toast(e.message || "Submission xato");
-      }
-      setTimeout(runClose, 900);
-    }
-
-    // buttons
-    
-    // nav toggle (mobile bottom sheet)
-    const toggleNav = (on)=>{ 
-      const r = $("runner");
-      if(on===true) r.classList.add("showNav");
-      else if(on===false) r.classList.remove("showNav");
-      else r.classList.toggle("showNav");
-    };
-    $("btnToggleNav") && ($("btnToggleNav").onclick = ()=>toggleNav());
-    $("btnHideNav") && ($("btnHideNav").onclick = ()=>toggleNav(false));
-
-    // image zoom
-    const openZoom = ()=>{
-      $("imgZoomSrc").src = $("qImg").src;
-      $("imgZoom").style.display = "flex";
-      document.body.style.overflow = "hidden";
-    };
-    const closeZoom = ()=>{
-      $("imgZoom").style.display = "none";
-      // keep runner lock
-    };
-    $("qImg").onclick = openZoom;
-    $("btnZoomClose").onclick = closeZoom;
-    $("imgZoom").onclick = (e)=>{ if(e.target.id==="imgZoom") closeZoom(); };
-
-$("btnClose").onclick = ()=>{ if(confirm("Testdan chiqasizmi?")) runClose(); };
-    $("btnPrev").onclick = ()=>{ if(RUN.i>0){ RUN.i--; renderQ(); } };
-    $("btnNext").onclick = ()=>{ if(RUN.i<RUN.qs.length-1){ RUN.i++; renderQ(); } };
-    $("btnFinish").onclick = ()=>{ if(confirm("Testni yakunlaysizmi?")) finish(); };
-
-    // init
-    const __AUTO_CHALLENGE = await autoRunChallengeFromQuery();
-    if(!__AUTO_CHALLENGE){
-      await loadOpenIndex();
-      // Challenge: foydalanuvchi kod kiritadi
-    }
-  </script>
+  <div class="toast" id="toast">...</div>
   <script src="assets/js/core.js"></script>
+  <script type="module" src="assets/js/testpage.js"></script>
 </body>
 </html>
