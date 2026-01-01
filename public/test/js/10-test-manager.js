@@ -120,7 +120,11 @@
                         };
                     }
                     
-                    const seed = utils.generateSeed(appState.currentStudent?.id, appState.currentTestCode);
+                    // Har bir urinishda yangi random bo'lishi uchun session salt qo'shamiz
+                    const baseSeed = utils.generateSeed(appState.currentStudent?.id, appState.currentTestCode);
+                    const sessionSalt = (appState.randomSessionSalt ?? Math.floor(Math.random() * 1e9));
+                    appState.randomSessionSalt = sessionSalt;
+                    const seed = baseSeed + sessionSalt;
                     
                     const questionsCopy = appState.testData.questions.map((q, idx) => ({...q, originalIndex: idx}));
                     const shuffledQuestions = utils.seededShuffle(questionsCopy, seed);
@@ -136,7 +140,7 @@
                         
                         if (question.type === 'variant' && question.options && 
                             Array.isArray(question.options) && CONFIG.enableRandomOptions) {
-                            const optionsSeed = utils.generateSeed(`${appState.currentStudent?.id}_${appState.currentTestCode}_${originalIndex}`);
+                            const optionsSeed = utils.generateSeed(`${appState.currentStudent?.id}_${appState.currentTestCode}_${originalIndex}`) + sessionSalt;
                             shuffledOptions[originalIndex] = utils.seededShuffle(question.options, optionsSeed);
                         } else if (question.type === 'variant' && question.options) {
                             shuffledOptions[originalIndex] = [...question.options];
@@ -189,6 +193,9 @@
                     userActionLogger.log('test_started');
                     
                     document.body.classList.add('test-active');
+
+                    // Har startda yangi random tartib (savollar + javoblar) bo'lishi uchun
+                    appState.randomSessionSalt = Math.floor(Math.random() * 1e9);
                     
                     if (CONFIG.enableRandomOrder) {
                         const randomOrder = this.createRandomOrder();

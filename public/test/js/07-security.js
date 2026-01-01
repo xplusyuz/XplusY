@@ -17,6 +17,17 @@
                     dom.elements.violationHistoryPanel.style.display = 'none';
                 });
             },
+
+            // Oyna/tab almashtirishni ishonchli sanash (double-trigger'larni oldini olish)
+            _lastWindowSwitchAt: 0,
+            _countWindowSwitch(description) {
+                if (!appState.testStarted || appState.isSleepMode) return;
+                const now = Date.now();
+                // blur + visibilitychange bir vaqtda kelganda 1 marta sanasin
+                if (now - this._lastWindowSwitchAt < 900) return;
+                this._lastWindowSwitchAt = now;
+                this.addViolation('windowSwitch', description);
+            },
             
             addViolation(type, description) {
                 if (type === 'fullScreenExit') return;
@@ -107,14 +118,24 @@
                 
                 fullscreenManager.setupListeners();
                 
-                window.addEventListener('blur', this.handleWindowBlur.bind(this));
-                window.addEventListener('focus', this.handleWindowFocus.bind(this));
-                document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
-                document.addEventListener('contextmenu', this.handleContextMenu.bind(this));
-                document.addEventListener('keydown', this.handleKeyDown.bind(this));
-                document.addEventListener('copy', this.handleCopyPaste.bind(this));
-                document.addEventListener('cut', this.handleCopyPaste.bind(this));
-                document.addEventListener('paste', this.handleCopyPaste.bind(this));
+                // Bind'larni saqlab qo'yamiz — disable() da to'g'ri remove bo'lishi uchun
+                this._bound = this._bound || {
+                    blur: this.handleWindowBlur.bind(this),
+                    focus: this.handleWindowFocus.bind(this),
+                    vis: this.handleVisibilityChange.bind(this),
+                    ctx: this.handleContextMenu.bind(this),
+                    key: this.handleKeyDown.bind(this),
+                    copy: this.handleCopyPaste.bind(this)
+                };
+
+                window.addEventListener('blur', this._bound.blur);
+                window.addEventListener('focus', this._bound.focus);
+                document.addEventListener('visibilitychange', this._bound.vis);
+                document.addEventListener('contextmenu', this._bound.ctx);
+                document.addEventListener('keydown', this._bound.key);
+                document.addEventListener('copy', this._bound.copy);
+                document.addEventListener('cut', this._bound.copy);
+                document.addEventListener('paste', this._bound.copy);
                 
                 appState.securityEnabled = true;
                 
@@ -129,14 +150,16 @@
                 
                 fullscreenManager.removeListeners();
                 
-                window.removeEventListener('blur', this.handleWindowBlur);
-                window.removeEventListener('focus', this.handleWindowFocus);
-                document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-                document.removeEventListener('contextmenu', this.handleContextMenu);
-                document.removeEventListener('keydown', this.handleKeyDown);
-                document.removeEventListener('copy', this.handleCopyPaste);
-                document.removeEventListener('cut', this.handleCopyPaste);
-                document.removeEventListener('paste', this.handleCopyPaste);
+                if (this._bound) {
+                    window.removeEventListener('blur', this._bound.blur);
+                    window.removeEventListener('focus', this._bound.focus);
+                    document.removeEventListener('visibilitychange', this._bound.vis);
+                    document.removeEventListener('contextmenu', this._bound.ctx);
+                    document.removeEventListener('keydown', this._bound.key);
+                    document.removeEventListener('copy', this._bound.copy);
+                    document.removeEventListener('cut', this._bound.copy);
+                    document.removeEventListener('paste', this._bound.copy);
+                }
                 
                 if (appState.isFullScreen) {
                     fullscreenManager.exit();
@@ -151,13 +174,10 @@
                 if (!appState.testStarted || appState.isSleepMode) return;
                 
                 appState.lastBlurTime = Date.now();
-                
-                setTimeout(() => {
-                    if (appState.testStarted && !document.hasFocus() && !appState.isSleepMode) {
-                        this.addViolation('windowSwitch', "Boshqa oynaga o'tildi");
-                        userActionLogger.log('window_switched');
-                    }
-                }, 1000);
+
+                // Oldin 1s kutib, focus qaytsa sanamas edi. Endi blur bo'lishi bilan sanaymiz.
+                this._countWindowSwitch("Boshqa oynaga o'tildi");
+                userActionLogger.log('window_switched');
             },
             
             handleWindowFocus() {
@@ -174,7 +194,7 @@
             
             handleVisibilityChange() {
                 if (appState.testStarted && document.hidden) {
-                    this.addViolation('windowSwitch', "Boshqa tabga o'tildi");
+                    this._countWindowSwitch("Boshqa tabga o'tildi");
                     userActionLogger.log('tab_switched');
                 }
             },
