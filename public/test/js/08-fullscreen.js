@@ -51,6 +51,10 @@
                 if (appState.testStarted && !isCurrentlyFullScreen && appState.isFullScreen) {
                     console.log("Full screendan chiqildi, lekin test davom etadi");
                     userActionLogger.log('fullscreen_exited');
+                    if (window.securityManager && securityManager._countWindowSwitch) {
+                        securityManager._countWindowSwitch("Full screen dan chiqildi");
+                    }
+
                     
                     utils.showMessage("⚠️ Iltimos, testni to'liq ekranda davom ettiring. (F11 tugmasi)", "warning");
                     dom.elements.monitorText.textContent = "⚠️ Full screen tavsiya etiladi! F11 tugmasini bosing";
@@ -73,26 +77,31 @@
             },
             
             setupListeners() {
-                document.addEventListener('fullscreenchange', this.handleFullScreenChange.bind(this));
-                document.addEventListener('webkitfullscreenchange', this.handleFullScreenChange.bind(this));
-                document.addEventListener('mozfullscreenchange', this.handleFullScreenChange.bind(this));
-                document.addEventListener('MSFullscreenChange', this.handleFullScreenChange.bind(this));
-                
-                document.addEventListener('keydown', (e) => {
+                this._boundChange = this._boundChange || this.handleFullScreenChange.bind(this);
+                document.addEventListener('fullscreenchange', this._boundChange);
+                document.addEventListener('webkitfullscreenchange', this._boundChange);
+                document.addEventListener('mozfullscreenchange', this._boundChange);
+                document.addEventListener('MSFullscreenChange', this._boundChange);
+
+                this._boundKeydown = this._boundKeydown || ((e) => {
                     if (appState.testStarted && e.key === 'F11') {
                         e.preventDefault();
-                        setTimeout(() => {
-                            this.handleFullScreenChange();
-                        }, 100);
+                        setTimeout(() => this.handleFullScreenChange(), 100);
                     }
                 });
+                document.addEventListener('keydown', this._boundKeydown);
             },
-            
+
             removeListeners() {
-                document.removeEventListener('fullscreenchange', this.handleFullScreenChange);
-                document.removeEventListener('webkitfullscreenchange', this.handleFullScreenChange);
-                document.removeEventListener('mozfullscreenchange', this.handleFullScreenChange);
-                document.removeEventListener('MSFullscreenChange', this.handleFullScreenChange);
+                if (this._boundChange) {
+                    document.removeEventListener('fullscreenchange', this._boundChange);
+                    document.removeEventListener('webkitfullscreenchange', this._boundChange);
+                    document.removeEventListener('mozfullscreenchange', this._boundChange);
+                    document.removeEventListener('MSFullscreenChange', this._boundChange);
+                }
+                if (this._boundKeydown) {
+                    document.removeEventListener('keydown', this._boundKeydown);
+                }
             },
             
             exit() {

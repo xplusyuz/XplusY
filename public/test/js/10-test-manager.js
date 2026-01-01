@@ -732,15 +732,38 @@
                 const minutes = Math.floor(appState.timeSpent / 60);
                 const seconds = appState.timeSpent % 60;
                 dom.elements.timeUsed.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                
-                const showDetailsBtn = document.createElement('button');
-                showDetailsBtn.className = 'btn btn-secondary';
-                showDetailsBtn.style.marginTop = '10px';
-                showDetailsBtn.innerHTML = '📊 Tafsilotli natijalarni ko\'rish';
-                showDetailsBtn.onclick = () => this.showDetailedResults();
-                
-                const resultsContainer = dom.elements.resultsCard.querySelector('.results-container');
-                resultsContainer.appendChild(showDetailsBtn);
+
+                // Sectionlar bo'yicha ball (UI'da savol tahlilisiz)
+                const breakdownEl = document.getElementById('sectionScoreBreakdown');
+                if (breakdownEl) {
+                    const scores = results.sectionScores || {};
+                    const entries = Object.entries(scores);
+                    if (entries.length === 0) {
+                        breakdownEl.innerHTML = '';
+                    } else {
+                        // Katta bo'limlar birinchi chiqishi uchun possible bo'yicha sort
+                        entries.sort((a,b) => (b[1].possible||0) - (a[1].possible||0));
+                        breakdownEl.innerHTML = `
+                            <div class="section-breakdown-title">📌 Bo'limlar bo'yicha ball</div>
+                            <div class="section-breakdown-grid">
+                                ${entries.map(([name,s]) => {
+                                    const earned = (s.earned||0);
+                                    const possible = (s.possible||0);
+                                    const correct = (s.correct||0);
+                                    const total = (s.total||0);
+                                    const pct = possible ? Math.round((earned/possible)*100) : 0;
+                                    return `
+                                        <div class="section-breakdown-card">
+                                            <div class="section-breakdown-name">${name}</div>
+                                            <div class="section-breakdown-score">${earned} / ${possible} <small>(${pct}%)</small></div>
+                                            <div class="section-breakdown-meta">✅ ${correct}/${total} ta</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>`;
+                    }
+                }
+
                 
                 dom.showScreen('results');
             },
@@ -843,44 +866,57 @@
             calculateResults() {
                 let correctCount = 0;
                 let totalScore = 0;
-                
+
+                const sectionScores = {}; // {section: {earned, possible, correct, total}}
+
                 appState.testData.questions.forEach((question, originalIndex) => {
                     const userAnswer = appState.userAnswers[originalIndex];
-                    
+                    const section = question.section || 'Umumiy';
+                    const points = question.points || 1;
+
+                    if (!sectionScores[section]) {
+                        sectionScores[section] = { earned: 0, possible: 0, correct: 0, total: 0 };
+                    }
+                    sectionScores[section].possible += points;
+                    sectionScores[section].total += 1;
+
+                    let isCorrect = false;
+
                     if (question.type === 'variant') {
                         if (question.correctIndex !== undefined && userAnswer !== null) {
                             const randomOptions = appState.shuffledOptionsMap[originalIndex] || question.options;
-                            if (randomOptions && randomOptions[userAnswer]) {
+                            if (randomOptions && randomOptions[userAnswer] !== undefined) {
                                 const userAnswerText = randomOptions[userAnswer];
                                 const correctAnswerText = question.options[question.correctIndex];
-                                
                                 if (userAnswerText === correctAnswerText) {
-                                    correctCount++;
-                                    totalScore += (question.points || 1);
+                                    isCorrect = true;
                                 }
                             }
                         }
                     } else if (question.type === 'open') {
                         if (userAnswer && userAnswer.trim() !== '') {
-                            const isCorrect = this.checkOpenAnswer(userAnswer, question.correctAnswer);
-                            
-                            if (isCorrect) {
-                                correctCount++;
-                                totalScore += (question.points || 1);
-                            }
+                            isCorrect = this.checkOpenAnswer(userAnswer, question.correctAnswer);
                         }
                     }
+
+                    if (isCorrect) {
+                        correctCount++;
+                        totalScore += points;
+                        sectionScores[section].earned += points;
+                        sectionScores[section].correct += 1;
+                    }
                 });
-                
+
                 const penalty = (appState.violations.windowSwitch + appState.violations.minorViolations) * CONFIG.penaltyPerViolation;
                 const finalScore = Math.max(0, totalScore - penalty);
-                
+
                 return {
                     correctCount,
                     wrongCount: appState.testData.questions.length - correctCount,
                     totalScore,
                     finalScore,
-                    penalty
+                    penalty,
+                    sectionScores
                 };
             }
         };

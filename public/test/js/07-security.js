@@ -18,21 +18,26 @@
                 });
             },
 
-            // Oyna/tab almashtirishni ishonchli sanash (double-trigger'larni oldini olish)
-            _lastWindowSwitchAt: 0,
+            // Oyna/tab almashtirishni ishonchli sanash (blur + visibilitychange double-triggerlarini oldini olamiz)
+            _isAway: false,
+            _lastLeaveAt: 0,
             _countWindowSwitch(description) {
                 if (!appState.testStarted || appState.isSleepMode) return;
                 const now = Date.now();
-                // blur + visibilitychange bir vaqtda kelganda 1 marta sanasin
-                if (now - this._lastWindowSwitchAt < 900) return;
-                this._lastWindowSwitchAt = now;
+                if (this._isAway) return;
+                if (now - this._lastLeaveAt < 200) return;
+                this._isAway = true;
+                this._lastLeaveAt = now;
                 this.addViolation('windowSwitch', description);
+            },
+            _markBackIfReady() {
+                if (!document.hidden && document.hasFocus()) {
+                    this._isAway = false;
+                }
             },
             
             addViolation(type, description) {
-                if (type === 'fullScreenExit') return;
-                
-                const timestamp = new Date().toLocaleTimeString();
+                                const timestamp = new Date().toLocaleTimeString();
                 
                 appState.violations[type]++;
                 
@@ -182,6 +187,7 @@
             
             handleWindowFocus() {
                 if (!appState.testStarted) return;
+                this._markBackIfReady();
                 
                 const timeSinceBlur = Date.now() - appState.lastBlurTime;
                 if (timeSinceBlur > 2000) {
@@ -193,9 +199,12 @@
             },
             
             handleVisibilityChange() {
-                if (appState.testStarted && document.hidden) {
+                if (!appState.testStarted) return;
+                if (document.hidden) {
                     this._countWindowSwitch("Boshqa tabga o'tildi");
                     userActionLogger.log('tab_switched');
+                } else {
+                    this._markBackIfReady();
                 }
             },
             

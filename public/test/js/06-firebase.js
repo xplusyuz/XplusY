@@ -143,7 +143,9 @@
                     userAnswers: appState.userAnswers,
                     userActions: CONFIG.logUserActions ? appState.userActions : [],
                     completedAt: new Date().toISOString(),
-                    detailedResults: results.detailedResults || []
+                    detailedResults: results.detailedResults || [],
+                    sectionScores: results.sectionScores || {},
+                    penalty: results.penalty || 0
                 };
                 
                 try {
