@@ -18,7 +18,7 @@
 
 <style id="hubStyles">
 /* ===== Content Hub (minimal, existing design bilan mos) ===== */
-#contentSection .hubActionsRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+#contentSection .hubActionsRow{display:flex;gap:10px;align-items:center;flex-wrap:nowrap;}
 #contentSection .hubSearch{flex:1;min-width:240px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:rgba(255,255,255,.55);border:1px solid rgba(15,23,42,.10);}
 #contentSection .hubSearch i{opacity:.7}
 #contentSection .hubSearch .input{border:none;background:transparent;outline:none;width:100%;padding:0;margin:0;}
@@ -50,6 +50,12 @@
 #contentSection .badge{font-size:11px;padding:5px 10px;border-radius:999px;border:1px solid rgba(46,139,87,.22);background:rgba(46,139,87,.12);color:rgba(25,90,55,1)}
 #contentSection .badge.soon{border-color: rgba(245,158,11,.26);background: rgba(245,158,11,.14);color: rgba(130,80,10,1)}
 @media (max-width: 900px){#contentSection .hubCard{grid-column:span 12} #contentSection .hubChip{min-width:170px}}
+@media (max-width: 520px){
+  #contentSection .hubActionsRow{gap:8px;}
+  #contentSection .hubSearch{min-width:0;padding:9px 10px;border-radius:14px;}
+  #contentSection #contentClear{min-width:0;padding:10px 12px;border-radius:14px;}
+  #contentSection .hubInfo{display:none;}
+}
 </style>
 
 </head>
@@ -804,11 +810,11 @@
     let testFilter = { grade:"", type:"", q:"" };
     async function loadOpenTests(){
       try{
-        const r = await fetch("open-tests/index.json", {cache:"no-store"});
-        if(!r.ok) throw new Error();
-        const j = await r.json();
-        openTests = Array.isArray(j?.tests) ? j.tests : [];
-      }catch(_){ openTests = []; }
+	      const r = await fetch("open-tests/index.json", {cache:"no-store"});
+	      if(!r.ok){ openTests = []; buildTestChips(); renderTests(); return; }
+	      const j = await r.json();
+	      openTests = Array.isArray(j?.tests) ? j.tests : [];
+	    }catch(_){ openTests = []; }
       buildTestChips();
       renderTests();
     }
@@ -1737,19 +1743,21 @@
   const norm = (s)=> (s??"").toString().trim().toLowerCase().replace(/\s+/g," ");
   const esc = (s)=> (s??"").toString().replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;" }[m]));
 
+	  const state = { data:null, activeType:null, activeTag:"all", query:"" };
+
   const bigRow = document.getElementById("hubBigRow");
   const tagRow = document.getElementById("hubTagRow");
   const grid = document.getElementById("hubGrid");
   const empty = document.getElementById("hubEmpty");
   const info = document.getElementById("contentInfo");
   const q = document.getElementById("contentQ");
-
-  // prevent unwanted autofill (e.g., LM-000001)
-  q.value = "";
-  state.query = "";
-  q.addEventListener("focus", ()=>{ if(/^LM-\d+$/i.test((q.value||"").trim())){ q.value=""; state.query=""; renderCards(); } });
   const clearBtn = document.getElementById("contentClear");
-  if(!bigRow || !tagRow || !grid || !q) return;
+	  if(!bigRow || !tagRow || !grid || !q) return;
+
+	  // prevent unwanted autofill (e.g., LM-000001)
+	  q.value = "";
+	  state.query = "";
+	  q.addEventListener("focus", ()=>{ if(/^LM-\d+$/i.test((q.value||"").trim())){ q.value=""; state.query=""; renderCards(); } });
 
   // Horizontal scroll enhance (mouse drag + wheel->x)
   function enhance(row){
@@ -1766,7 +1774,7 @@
   }
   enhance(bigRow); enhance(tagRow);
 
-  const state = { data:null, activeType:null, activeTag:"all", query:"" };
+	  // state defined above (avoid TDZ)
 
   const pickTags = (items)=>{
     const set = new Set();
