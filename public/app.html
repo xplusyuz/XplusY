@@ -25,7 +25,8 @@
 #contentSection .hubInfo{font-size:12px;opacity:.7;white-space:nowrap;}
 
 /* Clear button: ixcham ikonli */
-#contentSection #contentClear{flex:0 0 auto;min-width:44px;height:44px;padding:0 12px;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;gap:8px;}
+#contentSection #contentClear{flex:0 0 40px !important;width:40px !important;max-width:40px !important;min-width:40px !important;height:40px !important;padding:0 !important;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;}
+#contentSection #contentClear i{font-size:14px;}
 #contentSection #contentClear .label{display:none;font-weight:600;font-size:12px;}
 #contentSection #contentClear i{font-size:14px;}
 #contentSection #contentClear{white-space:nowrap;}
@@ -145,9 +146,9 @@
         <div class="hubActionsRow" style="margin-top:10px;">
           <div class="hubSearch">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input class="input" id="contentQ" type="search"
+            <input class="input" id="contentQ" type="search" readonly
                    placeholder="Test, simulyator yoki mavzu qidiring…"
-                   autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                   autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false"
                    inputmode="search" />
           </div>
           <button class="btn" id="contentClear" type="button" aria-label="Tozalash" title="Tozalash">
@@ -1778,7 +1779,25 @@
 	  window.addEventListener("pageshow", hardClear);
 	  // 3) readonly trick to stop browser autofill injections
 	  q.readOnly = true;
-	  setTimeout(()=>{ q.readOnly = false; }, 80);
+	  // keep readonly a bit longer; some browsers inject autofill late
+	  setTimeout(()=>{ q.readOnly = false; }, 250);
+
+	  // extra hard-clears in first 2 seconds (very stubborn autofill)
+	  const killIfInjected = ()=>{
+	    const v = (q.value||"").trim();
+	    if(/^LM-\d+$/i.test(v)) { hardClear(); }
+	  };
+	  setTimeout(killIfInjected, 120);
+	  setTimeout(killIfInjected, 400);
+	  setTimeout(killIfInjected, 900);
+	  setTimeout(killIfInjected, 1600);
+
+	  // also block it during typing if it matches the injected pattern
+	  q.addEventListener("input", ()=>{
+	    const v = (q.value||"").trim();
+	    if(/^LM-\d+$/i.test(v)) { hardClear(); if(typeof renderCards === "function") renderCards(); }
+	  });
+
 	  // 4) if something still got injected, remove it on focus
 	  q.addEventListener("focus", ()=>{
 	    if(/^LM-\d+$/i.test((q.value||"").trim())){
