@@ -18,7 +18,7 @@
 
 <style id="hubStyles">
 /* ===== Content Hub (minimal, existing design bilan mos) ===== */
-#contentSection .hubSearchRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+#contentSection .hubActionsRow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
 #contentSection .hubSearch{flex:1;min-width:240px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:rgba(255,255,255,.55);border:1px solid rgba(15,23,42,.10);}
 #contentSection .hubSearch i{opacity:.7}
 #contentSection .hubSearch .input{border:none;background:transparent;outline:none;width:100%;padding:0;margin:0;}
@@ -35,8 +35,11 @@
 #contentSection .hubChip .txt small{display:block;font-size:11px;opacity:.8;margin-top:2px}
 #contentSection .hubChip .cnt{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(15,23,42,.10);color:inherit}
 #contentSection .hubChip.active .cnt{background:rgba(255,255,255,.18)}
-#contentSection .hubRowSmall .tagChip{flex:0 0 auto;padding:8px 12px;border-radius:999px;border:1px solid rgba(15,23,42,.10);background:rgba(255,255,255,.55);cursor:pointer;font-size:12px;white-space:nowrap;}
+#contentSection .hubRowSmall .tagChip{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid rgba(15,23,42,.10);background:rgba(255,255,255,.55);cursor:pointer;font-size:12px;white-space:nowrap;}
 #contentSection .hubRowSmall .tagChip.active{background:rgba(46,139,87,.14);border-color:rgba(46,139,87,.25)}
+#contentSection .hubRowSmall .tagChip .cntCircle{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;border:1px solid rgba(15,23,42,.14);background:rgba(255,255,255,.45);}
+#contentSection .hubRowSmall .tagChip.active .cntCircle{border-color:rgba(46,139,87,.35);background:rgba(46,139,87,.10);}
+
 #contentSection .hubGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;}
 #contentSection .hubCard{grid-column:span 6;border-radius:18px;border:1px solid rgba(15,23,42,.10);background:rgba(255,255,255,.62);box-shadow:0 10px 26px rgba(15,23,42,.08);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:120px;}
 #contentSection .hubCard h3{margin:0;font-size:14px;line-height:1.25}
@@ -119,19 +122,21 @@
             <h2>Kontent</h2>
             <div class="hint">Bo‘lim → tag → qidiruv</div>
           </div>
-          <button class="btn" id="contentClear" type="button" style="min-width:140px;">Tozalash</button>
-        </div>
-
-        <div class="hubSearchRow" style="margin-top:10px;">
-          <div class="hubSearch">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input class="input" id="contentQ" placeholder="Test, simulyator yoki mavzu qidiring…" autocomplete="off"/>
           </div>
-          <div class="hubInfo" id="contentInfo">Yuklanmoqda…</div>
-        </div>
+
+        
 
         <div class="hubRow" id="hubBigRow" aria-label="Katta chiplar"></div>
         <div class="hubRow hubRowSmall" id="hubTagRow" aria-label="Taglar"></div>
+        <div class="hubActionsRow" style="margin-top:10px;">
+          <div class="hubSearch">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="input" id="contentQ" type="search" name="content_search" placeholder="Test, simulyator yoki mavzu qidiring…" autocomplete="new-password" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button class="btn" id="contentClear" type="button" style="min-width:140px;">Tozalash</button>
+          <div class="hubInfo" id="contentInfo">Yuklanmoqda…</div>
+        </div>
+
 
         <div class="hubGrid" id="hubGrid" style="margin-top:12px;"></div>
         <div class="small muted" id="hubEmpty" style="display:none;margin-top:10px;">Hech narsa topilmadi. Tag yoki qidiruvni o‘zgartirib ko‘ring.</div>
@@ -1738,6 +1743,11 @@
   const empty = document.getElementById("hubEmpty");
   const info = document.getElementById("contentInfo");
   const q = document.getElementById("contentQ");
+
+  // prevent unwanted autofill (e.g., LM-000001)
+  q.value = "";
+  state.query = "";
+  q.addEventListener("focus", ()=>{ if(/^LM-\d+$/i.test((q.value||"").trim())){ q.value=""; state.query=""; renderCards(); } });
   const clearBtn = document.getElementById("contentClear");
   if(!bigRow || !tagRow || !grid || !q) return;
 
@@ -1824,7 +1834,7 @@
       const label = (t==="all") ? "Hammasi" : t;
       const cnt=countByTag(t);
       return `<div class="tagChip ${t===state.activeTag?"active":""}" data-id="${t}">
-        ${esc(label)} <span style="opacity:.65;margin-left:6px;">${cnt}</span>
+        <span class="lbl">${esc(label)}</span><span class="cntCircle">${cnt}</span>
       </div>`;
     }).join("");
     [...tagRow.querySelectorAll(".tagChip")].forEach(ch=>{
