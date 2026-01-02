@@ -14,6 +14,73 @@
 <link rel="stylesheet" href="assets/css/app.css"/>
 <link rel="stylesheet" href="assets/css/bridge.css"/>
 <title>LeaderMath.UZ — App</title>
+<style>
+  /* --- Content (big chip + tag + search) --- */
+  .ctRow{
+    display:flex; gap:10px;
+    overflow-x:auto; overflow-y:hidden;
+    padding-bottom:4px;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;
+    scrollbar-width:none;
+    user-select:none;
+    cursor:grab;
+    scroll-snap-type:x proximity;
+  }
+  .ctRow::-webkit-scrollbar{display:none}
+  .ctRow:active{cursor:grabbing}
+  .ctRow > *{scroll-snap-align:start}
+
+  .ctChip{
+    flex:0 0 auto;
+    display:inline-flex; align-items:center; gap:8px;
+    padding:10px 12px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.10);
+    color: rgba(255,255,255,.92);
+    cursor:pointer;
+    white-space:nowrap;
+    transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+  .ctChip:active{transform:scale(.98)}
+  .ctChip.active{
+    background: rgba(46,139,87,.22);
+    border-color: rgba(46,139,87,.35);
+  }
+  .ctChip.small{padding:8px 10px; font-size: 12px; opacity:.95}
+  .ctChip.small.active{
+    background: rgba(14,165,233,.18);
+    border-color: rgba(14,165,233,.35);
+  }
+  .ctDot{width:8px;height:8px;border-radius:50%; background: rgba(46,139,87,.9); display:inline-block}
+  .ctCount{
+    margin-left:2px;
+    padding:2px 8px;
+    border-radius:999px;
+    background: rgba(2,6,23,.35);
+    color: rgba(255,255,255,.92);
+    font-size:12px;
+  }
+  .ctSearchRow{
+    position:relative;
+    display:flex; align-items:center; gap:10px;
+    background: rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.16);
+    border-radius: 16px;
+    padding: 10px 12px;
+  }
+  .ctSearchRow i{opacity:.85}
+  .ctSearchRow input{
+    width:100%;
+    border:none;
+    outline:none;
+    background:transparent;
+    color: rgba(255,255,255,.95);
+  }
+  .ctSearchRow input::placeholder{color: rgba(255,255,255,.65)}
+  .ctEmpty{display:none; padding:12px 2px; opacity:.9}
+</style>
 </head>
 <body data-page="app">
   <div class="scroll-progress"><div class="scroll-progress-bar" id="scrollProgress"></div></div>
@@ -33,13 +100,12 @@
             <div class="brandTag" id="dtMini">...</div>
           </div>
         </div>
-        <!-- Desktop subtitle / time (mobile'da yashiriladi) -->
+
         <div class="header-text">
           <div class="header-title">LeaderMath.UZ — App</div>
           <div class="header-sub" id="dt">...</div>
         </div>
 
-        <!-- Mobile layout: logo chapda, profil o'rtada (to'liq), ikonlar o'ngda -->
         <div class="user-chip" id="profileMini" title="Profil / Avatar">
           <img id="userAvatar" src="logo.png" alt="avatar" style="width:36px;height:36px;border-radius:999px;border:2px solid rgba(56,189,248,.65)"/>
           <div class="user-meta">
@@ -49,7 +115,7 @@
         </div>
 
         <div class="header-actions" aria-label="Header actions">
-          <button class="icon-btn" id="btnBell" aria-label="Bildirishnoma"><i class="fa-solid fa-bell"></i></button>
+          <button class="icon-btn" id="btnBell" aria-label="Bildirishnoma" title="Tez kunda"><i class="fa-solid fa-bell"></i></button>
           <button class="icon-btn" id="btnLogout" aria-label="Chiqish"><i class="fa-solid fa-right-from-bracket"></i></button>
         </div>
       </div>
@@ -78,268 +144,74 @@
         </div>
       </section>
 
-      <!-- 2) Challenge container (code + start) -->
-      <section class="glass section" id="challengeSection">
+      <!-- 2) NEW CONTENT (old content removed) -->
+      <section class="glass section" id="contentSection">
         <div class="sectionTitle">
-          <h2>Challenge</h2>
-          <div class="hint">Kod bilan kirish</div>
+          <h2>Kontent</h2>
+          <div class="hint">Katta chip → tag → qidiruv</div>
         </div>
 
-        <div class="challengeRow">
-          <input class="input" id="challengeCode" placeholder="Challenge kodi (masalan: CH-2025-01)" autocomplete="off" />
-          <button class="btn btnPrimary" id="challengeStart" type="button">Boshlash</button>
-        </div>
-        <div class="small muted" id="challengeHint" style="margin-top:10px;">Kod kiriting va “Boshlash” ni bosing.</div>
-      </section>
-
-      <!-- 3) Tests container (chips + search) -->
-      <section class="glass section" id="testsSection">
-        <div class="sectionTitle">
-          <h2>Testlar</h2>
-          <div class="hint">Chip + qidiruv bilan</div>
-        </div>
-
-        <div class="chipsRow" id="testGradeChips"></div>
-        <div class="chipsRow" id="testTypeChips" style="margin-top:10px;"></div>
-        <div class="searchRow" style="margin-top:10px;">
+        <div class="ctSearchRow">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input class="input" id="testSearch" placeholder="Test qidirish…" autocomplete="off" />
+          <input id="ctQ" placeholder="Qidiruv: ko'phad, kvadrat, latex..." autocomplete="off" />
+          <button class="btn" id="ctClear" type="button" style="padding:10px 12px;">Tozalash</button>
         </div>
-        <div class="small muted" id="testsStatus" style="margin-top:10px;">Yuklanmoqda…</div>
-        <div class="cardsGrid" id="testsList" style="margin-top:12px;"></div>
+
+        <div style="height:10px"></div>
+        <div class="ctRow" id="ctBigRow" aria-label="Katta chiplar"></div>
+        <div style="height:10px"></div>
+        <div class="ctRow" id="ctTagRow" aria-label="Tag chiplar"></div>
+
+        <div class="small muted" id="ctInfo" style="margin-top:10px;">Yuklanmoqda…</div>
+        <div class="cardsGrid" id="ctGrid" style="margin-top:12px;"></div>
+        <div class="small muted ctEmpty" id="ctEmpty">Hech narsa topilmadi. Tag/qidiruvni o‘zgartirib ko‘ring.</div>
       </section>
 
-      <!-- 4) Simulators container (same style) -->
-      <section class="glass section" id="simSection">
-        <div class="sectionTitle">
-          <h2>Simulyatorlar</h2>
-          <div class="hint">Qidiruv + chiplar</div>
-        </div>
+      <!-- Onboard overlay kept (profile completion) -->
+      <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
+        <div class="container" style="display:flex; align-items:center; justify-content:center; min-height: 100%;">
+          <div class="glass section" style="max-width: 520px; width: 100%;">
+            <div class="sectionTitle">
+              <h2>Profilni to‘ldiring</h2>
+              <div class="hint">Birinchi kirishda</div>
+            </div>
+            <p class="p">Ism, familiya, tug‘ilgan sana va yangi parolni kiriting.</p>
+            <div class="hr"></div>
 
-        <div class="chipsRow" id="simChips"></div>
-        <div class="searchRow" style="margin-top:10px;">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input class="input" id="simSearch" placeholder="Simulyator qidirish…" autocomplete="off" />
-        </div>
-        <div class="cardsGrid" id="simList" style="margin-top:12px;"></div>
-      </section>
+            <div class="row">
+              <input class="input" id="obFirst" placeholder="Ism"/>
+              <input class="input" id="obLast" placeholder="Familiya"/>
+            </div>
+            <div style="height:10px;"></div>
+            <div class="row">
+              <input class="input" id="obBirth" type="date" placeholder="Tug‘ilgan sana (YYYY-MM-DD)"/>
+              <input class="input" id="obPass1" type="password" placeholder="Yangi parol"/>
+            </div>
+            <div style="height:10px;"></div>
+            <div class="row">
+              <input class="input" id="obPass2" type="password" placeholder="Yangi parolni takrorlang"/>
+              <div></div>
+            </div>
 
-      <!-- Reyting/Izohlar endi suzuvchi "touch" tugma orqali premium modalda ochiladi -->
-
-
-  <!-- Floating Touch Button (expand: 🏆 Reyting / 💬 Izoh) -->
-  <div class="touchFab" id="touchFab" aria-label="Tezkor panel">
-    <button class="touchMain" id="touchMain" type="button" aria-expanded="false" aria-controls="touchMenu" title="Panel">☰</button>
-    <div class="touchMenu" id="touchMenu" aria-hidden="true">
-      <button class="touchAction" id="openRating" type="button"><span class="emo">🏆</span><span>Reyting</span></button>
-      <button class="touchAction" id="openComments" type="button">
-        <span class="emo">💬</span><span>Izoh</span>
-        <span class="touchBadge" id="cmBadge" style="display:none">1</span>
-      </button>
-    </div>
-  </div>
-
-
-  <!-- Reyting Modal (Top-20 + podium + qidiruv) -->
-  <div class="modalOverlay modalApp" id="ratingModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Reyting">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Reyting</div>
-          <div class="small">Top-20 (point bo‘yicha) • podium • qidiruv</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="chipBtn" id="btnLbAll" type="button">📋 Barchasi</button>
-          <button class="iconBtn" id="ratingClose" type="button" aria-label="Yopish">✕</button>
+            <div style="height:12px;"></div>
+            <button class="btn btnPrimary" id="obSave" style="width:100%;">Saqlash va davom etish</button>
+            <div class="small" style="margin-top:10px;">⚠️ Parolni eslab qoling. Keyingi kirishda shu parol ishlaydi.</div>
+          </div>
         </div>
       </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <div class="lbTools" style="margin-top:0;">
-          <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…" />
-          <button class="chipBtn" id="lbOnlyMe" type="button" aria-pressed="false">⭐ Meni</button>
-        </div>
-        <div class="lbPodium" id="lbPodium" aria-label="Top-3 podium"></div>
-        <table class="table" aria-label="Leaderboard">
-          <thead>
-            <tr>
-              <th style="width:60px;">#</th>
-              <th>Foydalanuvchi</th>
-              <th style="width:90px;">Ball</th>
-            </tr>
-          </thead>
-          <tbody id="lbBody">
-            <tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
-  <!-- Comment Modal -->
-  <div class="modalOverlay modalApp" id="commentModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Izohlar">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Izohlar</div>
-          <div class="small">Barcha izohlar • like + reply</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span class="pill" id="commentCount">0</span>
-          <button class="iconBtn" id="commentClose" type="button" aria-label="Yopish">✕</button>
-        </div>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <div class="commentBox" style="margin-top:0;">
-          <input id="commentInput" maxlength="140" placeholder="Izoh yozing… (140 ta belgi)"/>
-          <button class="btn btnPrimary" id="commentSend">Yuborish</button>
-        </div>
-        <div class="hr"></div>
-        <ul class="commentList" id="commentList"></ul>
-        <div style="height:10px;"></div>
-        <button class="btn" id="cmLoadMoreInline" type="button">Yana yuklash</button>
-      </div>
-    </div>
-  </div>
+      <script type="module">
+        import { initSeasons } from "./assets/js/seasons.js";
+        initSeasons("seasonCanvas");
+      </script>
 
-
-  <!-- Leaderboard Modal -->
-  <div class="modalOverlay modalApp" id="lbModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Reyting">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Reyting — barcha o‘rinlar</div>
-          <div class="small" id="lbModalHint">Point bo‘yicha saralangan</div>
-        </div>
-        <button class="iconBtn" id="lbModalClose" type="button" aria-label="Yopish">✕</button>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <table class="table" aria-label="Leaderboard all">
-          <thead>
-            <tr>
-              <th style="width:60px;">#</th>
-              <th>Foydalanuvchi</th>
-              <th style="width:90px;">Ball</th>
-            </tr>
-          </thead>
-          <tbody id="lbAllBody">
-            <tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>
-          </tbody>
-        </table>
-        <div style="height:10px;"></div>
-        <button class="btn" id="lbLoadMore" type="button">Yana yuklash</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Notifications Modal -->
-  <div class="modalOverlay modalApp" id="notifModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Bildirishnomalar">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Bildirishnomalar</div>
-          <div class="small" id="notifHint">Yangi xabarlar shu yerda chiqadi</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="chipBtn" id="notifMarkAll" type="button">✅ Hammasini o‘qildi</button>
-          <button class="iconBtn" id="notifClose" type="button" aria-label="Yopish">✕</button>
-        </div>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <ul class="notifList" id="notifList"></ul>
-        <div style="height:10px;"></div>
-        <button class="btn" id="notifLoadMore" type="button">Yana yuklash</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Avatar Picker Modal -->
-  <div class="modalOverlay modalApp" id="avatarModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Avatar tanlash">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Avatar tanlang</div>
-          <div class="small">avatar/1.png, 2.png, 3.png... papkadan avtomatik topiladi</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="chipBtn" id="avatarRefresh" type="button">🔄 Qayta tekshir</button>
-          <button class="iconBtn" id="avatarClose" type="button" aria-label="Yopish">✕</button>
-        </div>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody">
-        <div class="avatarGrid" id="avatarGrid"></div>
-        <div class="small muted" id="avatarHint" style="margin-top:10px;">Yuklanmoqda…</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Embedded viewer (single-page feel) -->
-  <div class="modalOverlay modalApp" id="embedModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Oyna">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle" id="embedTitle">Oyna</div>
-          <div class="small muted" id="embedSub">LeaderMath.UZ</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="iconBtn" id="embedClose" type="button" aria-label="Yopish">✕</button>
-        </div>
-      </div>
-      <div class="hr"></div>
-      <div class="modalBody" style="padding:0;">
-        <iframe id="embedFrame" title="Embed" style="width:100%; height:70vh; border:0; border-radius: 0 0 var(--r) var(--r); background:transparent;"></iframe>
-      </div>
-    </div>
-  </div>
-
-  <!-- Onboarding overlay (original flow preserved) -->
-  <div id="onboardOverlay" style="display:none; position:fixed; inset:0; background: rgba(2,6,23,.55); backdrop-filter: blur(10px); z-index: 9998;">
-    <div class="container" style="display:flex; align-items:center; justify-content:center; min-height: 100%;">
-      <div class="glass section" style="max-width: 520px; width: 100%;">
-        <div class="sectionTitle">
-          <h2>Profilni to‘ldiring</h2>
-          <div class="hint">Birinchi kirishda</div>
-        </div>
-        <p class="p">Ism, familiya, tug‘ilgan sana va yangi parolni kiriting.</p>
-        <div class="hr"></div>
-
-        <div class="row">
-          <input class="input" id="obFirst" placeholder="Ism"/>
-          <input class="input" id="obLast" placeholder="Familiya"/>
-        </div>
-        <div style="height:10px;"></div>
-        <div class="row">
-          <input class="input" id="obBirth" type="date" placeholder="Tug‘ilgan sana (YYYY-MM-DD)"/>
-          <input class="input" id="obPass1" type="password" placeholder="Yangi parol"/>
-        </div>
-        <div style="height:10px;"></div>
-        <div class="row">
-          <input class="input" id="obPass2" type="password" placeholder="Yangi parolni takrorlang"/>
-          <div></div>
-        </div>
-
-        <div style="height:12px;"></div>
-        <button class="btn btnPrimary" id="obSave" style="width:100%;">Saqlash va davom etish</button>
-        <div class="small" style="margin-top:10px;">⚠️ Parolni eslab qoling. Keyingi kirishda shu parol ishlaydi.</div>
-      </div>
-    </div>
-  </div>
-
-  <script type="module">
-    import { initSeasons } from "./assets/js/seasons.js";
-    initSeasons("seasonCanvas");
-  </script>
     </main>
 
     <footer>
       <div class="footer-card">
         <div class="footer-left">
           <div class="footer-name">LeaderMath.UZ</div>
-          <div class="small-note">1-loyiha funksiyasi + 2-loyiha dizayni (1:1)</div>
+          <div class="small-note">Banner saqlandi • Kontent JSON’dan</div>
         </div>
         <div class="footer-right">
           <a class="footer-link" href="index.html"><i class="fa-solid fa-house"></i> Home</a>
@@ -351,13 +223,18 @@
   <div class="toast" id="toast">...</div>
 
   <script src="assets/js/core.js"></script>
-<script type="module">
-    import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "./assets/js/auth.js";
-    import { api } from "./assets/js/api.js";
+
+  <script type="module">
+    import { me, logout, updateProfile, changePassword, getToken } from "./assets/js/auth.js";
 
     const $ = (id)=>document.getElementById(id);
 
-    // UZ date formatter
+    // Guard
+    try{
+      if(!getToken || !getToken()) location.href = "./index.html";
+    }catch{ location.href = "./index.html"; }
+
+    // Date
     const months = ["yanvar","fevral","mart","aprel","may","iyun","iyul","avgust","sentabr","oktabr","noyabr","dekabr"];
     const days = ["yakshanba","dushanba","seshanba","chorshanba","payshanba","juma","shanba"];
     function setDate(){
@@ -379,28 +256,8 @@
       window.__t = setTimeout(()=>toastEl.classList.remove("show"), 1800);
     }
 
-    function escapeHtml(s){
-      return String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;" }[m]));
-    }
-
-    // Simple modal helpers
-    function openModal(el){
-      if(!el) return;
-      // bridge.css modalApp animatsiyasi .open orqali ishlaydi
-      el.classList.add("open");
-      el.style.display = "flex";
-      el.setAttribute("aria-hidden","false");
-      document.body.classList.add("noScroll");
-    }
-    function closeModal(el){
-      if(!el) return;
-      el.classList.remove("open");
-      el.style.display = "none";
-      el.setAttribute("aria-hidden","true");
-      document.body.classList.remove("noScroll");
-    }
-
-    function calcAgePrecise(iso){
+    // Profile
+    function calcAge(iso){
       if(!iso) return "—";
       const b = new Date(iso);
       if(Number.isNaN(b.getTime())) return "—";
@@ -410,240 +267,101 @@
       let d=n.getDate()-b.getDate();
       if(d<0){ m--; d += new Date(n.getFullYear(), n.getMonth(), 0).getDate(); }
       if(m<0){ y--; m+=12; }
-      return `${y} yosh ${m} oy ${d} kun`;
+      return `${y}y ${m}oy`;
     }
-
-    // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
-    function avatarUrl(id){
-      if(!id) return "";
-      return `avatar/${id}.png`;
-    }
-    function setUserAvatar(id){
+    function setAvatarFromUser(u){
       const img = $("userAvatar");
+      const id = u?.avatarId || u?.avatar || u?.profile?.avatarId;
       if(!img) return;
-      const src = avatarUrl(id);
-      if(!src){
-        img.removeAttribute("src");
-        img.dataset.avatarId = "";
-        return;
-      }
-      img.src = src;
-      img.dataset.avatarId = String(id);
-      img.onerror = ()=>{
-        img.removeAttribute("src");
-        img.dataset.avatarId = "";
-      };
+      if(id){ img.src = `avatar/${id}.png`; }
+      else { img.src = "logo.png"; }
     }
 
-    function _seedToAvatarId(seed){
-      if(seed==null) return 1;
-      const s = String(seed);
-      const digits = (s.match(/\d+/g)||[]).join("");
-      const n = digits ? Number(digits.slice(-6)) : 0;
-      // 1..60 range (we try others on error anyway)
-      return (Math.abs(n)%60)+1;
-    }
+    async function ensureProfile(user){
+      // agar ism/familiya yo‘q bo‘lsa onboard ko‘rsatamiz
+      const needs = !(user?.firstName && user?.lastName && user?.birthdate);
+      if(!needs) return;
+      const overlay = $("onboardOverlay");
+      if(!overlay) return;
+      overlay.style.display = "block";
 
-    // Auto-load avatar from /avatar/1.png,2.png...; if missing => blank
-    function setUserAvatarAuto(preferredId, seed){
-      const img = $("userAvatar");
-      if(!img) return;
-
-      const candidates = [];
-      const add = (v)=>{
-        const id = Number(v);
-        if(!id || !Number.isFinite(id)) return;
-        if(!candidates.includes(id)) candidates.push(id);
-      };
-
-      add(preferredId);
-      add(_seedToAvatarId(seed));
-      // fallback pool (keeps it fast; onerror will hop)
-      for(let i=1;i<=20;i++) add(i);
-
-      let k = 0;
-      const tryNext = ()=>{
-        if(k >= candidates.length){
-          img.removeAttribute("src");
-          img.dataset.avatarId = "";
-          return;
-        }
-        const id = candidates[k++];
-        img.dataset.avatarId = String(id);
-        img.src = avatarUrl(id) + `?v=${Date.now()}`;
-      };
-
-      img.onerror = ()=> tryNext();
-      tryNext();
-    }
-
-    async function probeAvatar(id){
-      return new Promise((resolve)=>{
-        const im = new Image();
-        const t = setTimeout(()=>resolve(false), 900);
-        im.onload = ()=>{ clearTimeout(t); resolve(true); };
-        im.onerror = ()=>{ clearTimeout(t); resolve(false); };
-        im.src = avatarUrl(id) + `?v=${Date.now()}`;
-      });
-    }
-
-    // Avatar grid: 404 ni deyarli nolga tushiramiz.
-    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
-    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
-    async function loadAvatarGrid(){
-      const grid = $("avatarGrid");
-      const hint = $("avatarHint");
-      if(!grid) return;
-      grid.innerHTML = "";
-      hint.textContent = "Avatarlar yuklanmoqda…";
-
-      const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
-      let okCount = 0;
-
-      const loadOne = (i)=> new Promise((resolve)=>{
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `avaBtn ${i===cur?"active":""}`;
-        btn.setAttribute("data-ava", String(i));
-
-        const im = document.createElement("img");
-        im.alt = `Avatar ${i}`;
-        im.decoding = "async";
-        im.loading = "lazy";
-
-        const cap = document.createElement("div");
-        cap.className = "small";
-        cap.textContent = `#${i}`;
-
-        btn.appendChild(im);
-        btn.appendChild(cap);
-
-        const t = setTimeout(()=>resolve({ok:false}), 1200);
-        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
-        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
-        im.src = avatarUrl(i) + `?v=${Date.now()}`;
-      });
-
-      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
-      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
-      try{
-        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
-        if(mf.ok){
-          const data = await mf.json();
-          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
-          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
-          if(clean.length){
-            for(const i of clean){
-              const r = await loadOne(i);
-              if(r.ok){ okCount++; grid.appendChild(r.node); }
-            }
-            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
-            return;
-          }
-        }
-      }catch(e){ /* ignore */ }
-
-      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
-      for(let i=1;i<=200;i++){
-        const r = await loadOne(i);
-        if(r.ok){
-          okCount++;
-          grid.appendChild(r.node);
-          hint.textContent = `${okCount} ta avatar topildi`;
-        }else{
-          if(okCount>0) break;
-          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
-          if(i>=6) break;
-        }
-      }
-
-      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
-      else hint.textContent = `${okCount} ta avatar topildi`;
-    }
-
-    function setupAvatarPicker(){
-      const modal = $("avatarModal");
-      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
-      const openTargets = [$("userAvatar")].filter(Boolean);
-      const closeBtn = $("avatarClose");
-      const refresh = $("avatarRefresh");
-      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
-        e?.preventDefault?.();
-        e?.stopPropagation?.();
-        openModal(modal);
-        await loadAvatarGrid();
-      }, true));
-      closeBtn?.addEventListener("click", ()=>closeModal(modal));
-      modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
-      refresh?.addEventListener("click", loadAvatarGrid);
-      $("avatarGrid")?.addEventListener("click", async (e)=>{
-        const b = e.target.closest("[data-ava]");
-        if(!b) return;
-        const id = Number(b.getAttribute("data-ava"));
+      $("obSave").onclick = async ()=>{
+        const fn = $("obFirst").value.trim();
+        const ln = $("obLast").value.trim();
+        const bd = $("obBirth").value;
+        const p1 = $("obPass1").value;
+        const p2 = $("obPass2").value;
+        if(!fn || !ln || !bd) return toast("Ism, familiya, tug‘ilgan sana kerak");
+        if(!p1 || p1.length<4) return toast("Parol kamida 4 belgi");
+        if(p1!==p2) return toast("Parol mos emas");
         try{
-          b.disabled = true;
-          // 1) Try server-side save (Netlify/Firebase endpoint)
-          const r = await setAvatar(id);
-          const savedId = r?.user?.avatarId || id;
-          localStorage.setItem("lm_avatarId", String(savedId));
-          setUserAvatar(savedId);
-          toast("Avatar saqlandi");
-          closeModal(modal);
-        }catch(err){
-          // 2) Fallback: local save (if API endpoint is not available)
-          localStorage.setItem("lm_avatarId", String(id));
-          setUserAvatar(id);
-          toast("Avatar tanlandi");
-          closeModal(modal);
+          $("obSave").disabled = true;
+          await updateProfile(fn, ln, bd);
+          await changePassword(p1);
+          overlay.style.display = "none";
+          toast("✅ Saqlandi");
+          await loadMe();
+        }catch(e){
+          toast(e?.message || "Xatolik");
         }finally{
-          b.disabled = false;
+          $("obSave").disabled = false;
         }
-      });
+      };
     }
 
-    // ===============================
-    // Single-page home (Stories + Challenge + Tests + Simulators)
-    // ===============================
+    async function loadMe(){
+      try{
+        const r = await me();
+        const u = r?.user || r;
+        $("userName").textContent = [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "—";
+        $("userId").textContent = u?.loginId || u?.id || "—";
+        $("userPoints").textContent = u?.points ?? 0;
+        $("userBalance").textContent = u?.balance ?? 0;
+        $("userAge").textContent = calcAge(u?.birthdate);
+        setAvatarFromUser(u);
+        ensureProfile(u);
+      }catch(e){
+        toast("Sessiya tugagan. Qayta kiring.");
+        location.href = "./index.html";
+      }
+    }
+
+    $("btnLogout")?.addEventListener("click", async ()=>{
+      await logout();
+      location.href = "./index.html";
+    });
+    $("btnBell")?.addEventListener("click", ()=>toast("🔔 Tez kunda"));
+
+    // --- Banner stories ---
     const BANNER_DIR = "banner";
-    const BANNER_MANIFEST = `${BANNER_DIR}/manifest.json`;
+    const BANNER_MANIFEST = "banner/manifest.json";
     let storyItems = [];
     let storyIdx = 0;
     let storyTimer = null;
 
-    async function probeSequentialImages(prefix, max=24, stopAfter=4){
-      const out=[];
-      let miss=0;
+    function preloadImage(url){
+      return new Promise((resolve)=>{
+        const img = new Image();
+        img.onload = ()=>resolve(true);
+        img.onerror = ()=>resolve(false);
+        img.src = url;
+      });
+    }
+
+    async function probeSequentialImages(dir, max=24, stopAfter=4){
+      const out = [];
+      let misses = 0;
       for(let i=1;i<=max;i++){
-        const url = `${prefix}/${i}.png?v=${Date.now()}`;
-        const ok = await new Promise(res=>{
-          const im = new Image();
-          im.onload = ()=>res(true);
-          im.onerror = ()=>res(false);
-          im.src = url;
-        });
-        if(ok){ out.push({id:i, url: `${prefix}/${i}.png`}); miss=0; }
-        else{ miss++; if(miss>=stopAfter) break; }
+        const url = `${dir}/${i}.png`;
+        const ok = await preloadImage(url);
+        if(ok){ out.push({id:i, url}); misses = 0; }
+        else { misses++; if(misses>=stopAfter) break; }
       }
       return out;
     }
 
-    async function loadStories(){
-      storyItems = [];
-      // 1) manifest.json (optional)
-      try{
-        const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
-        if(r.ok){
-          const j = await r.json();
-          const ids = Array.isArray(j?.ids) ? j.ids : [];
-          storyItems = ids.map(id=>({id, url:`${BANNER_DIR}/${id}.png`}));
-        }
-      }catch(_){ /* ignore */ }
-      // 2) fallback probe
-      if(!storyItems.length){
-        storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
-      }
-      renderStoryBar();
-      renderStoryViewer(0, true);
+    function clearStoryTimer(){
+      if(storyTimer){ clearInterval(storyTimer); storyTimer=null; }
     }
 
     function renderStoryBar(){
@@ -666,26 +384,24 @@
       };
     }
 
-    function clearStoryTimer(){
-      if(storyTimer){ clearInterval(storyTimer); storyTimer=null; }
-    }
-
     function renderStoryViewer(idx, autoplay=false){
       const viewer = $("storyViewer");
       const img = $("storyImg");
-      const dots = $("storyDots");
+      const dots = $("storyProgressDots");
+      const empty = $("storyEmpty");
       if(!viewer || !img || !dots) return;
 
       storyIdx = Math.max(0, Math.min(idx, Math.max(0, storyItems.length-1)));
 
       if(!storyItems.length){
         img.removeAttribute("src");
-        viewer.classList.add("isEmpty");
         dots.innerHTML = "";
+        if(empty) empty.style.display = "block";
         clearStoryTimer();
         return;
       }
-      viewer.classList.remove("isEmpty");
+
+      if(empty) empty.style.display = "none";
       img.src = storyItems[storyIdx].url;
       dots.innerHTML = storyItems.map((_,i)=>`<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`).join("");
 
@@ -704,966 +420,244 @@
     }
 
     function setupStoryControls(){
-      $("storyPrev")?.addEventListener("click", ()=>{
+      $("storyPrev")?.addEventListener("click", (e)=>{
+        e.stopPropagation();
         if(!storyItems.length) return;
         renderStoryViewer((storyIdx-1+storyItems.length)%storyItems.length, true);
       });
-      $("storyNext")?.addEventListener("click", ()=>{
+      $("storyNext")?.addEventListener("click", (e)=>{
+        e.stopPropagation();
         if(!storyItems.length) return;
         renderStoryViewer((storyIdx+1)%storyItems.length, true);
       });
-      // Tap viewer -> next
       $("storyViewer")?.addEventListener("click", ()=>{
         if(!storyItems.length) return;
         renderStoryViewer((storyIdx+1)%storyItems.length, true);
       }, {passive:true});
     }
 
-    // ---- Challenge (code + start) ----
-    function setupChallenge(){
-      const input = $("challengeCode");
-      const btn = $("challengeStart");
-      btn?.addEventListener("click", ()=>{
-        const code = (input?.value||"").trim();
-        if(!code){ toast("Challenge kodi kiriting"); input?.focus(); return; }
-        sessionStorage.setItem("lm_challenge_code", code);
-        // Single-page: open embedded test.html (challenge kod bilan)
-        openEmbed(`test.html#challenge`, `Challenge: ${code}`);
-        // Also prefill for test.html if it wants
-        localStorage.setItem("lm_lastChallengeCode", code);
+    async function loadStories(){
+      storyItems = [];
+      // 1) manifest.json (optional)
+      try{
+        const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
+        if(r.ok){
+          const j = await r.json();
+          const ids = Array.isArray(j?.ids) ? j.ids : [];
+          storyItems = ids.map(id=>({id, url:`${BANNER_DIR}/${id}.png`}));
+        }
+      }catch(_){ }
+      // 2) fallback probe
+      if(!storyItems.length){
+        storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
+      }
+      renderStoryBar();
+      renderStoryViewer(0, true);
+    }
+
+    // --- Content from content.json ---
+    const ct = {
+      activeType: null,
+      activeTag: "all",
+      q: "",
+      data: null
+    };
+
+    function norm(s){
+      return (s??"").toString().trim().toLowerCase().replace(/\s+/g," ");
+    }
+    function esc(s){
+      return String(s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m]));
+    }
+
+    function enhanceRow(row){
+      if(!row) return;
+      // wheel -> horizontal
+      row.addEventListener("wheel", (e)=>{
+        if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
+          row.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, {passive:false});
+      // drag
+      let isDown=false, startX=0, startLeft=0;
+      row.addEventListener("mousedown", (e)=>{
+        isDown=true;
+        startX = e.pageX;
+        startLeft = row.scrollLeft;
+      });
+      window.addEventListener("mouseup", ()=>isDown=false);
+      window.addEventListener("mousemove", (e)=>{
+        if(!isDown) return;
+        const dx = e.pageX - startX;
+        row.scrollLeft = startLeft - dx;
       });
     }
 
-    // ---- Tests (Open tests index) ----
-    let openTests = [];
-    let testFilter = { grade:"", type:"", q:"" };
-    async function loadOpenTests(){
-      try{
-        const r = await fetch("open-tests/index.json", {cache:"no-store"});
-        if(!r.ok) throw new Error();
-        const j = await r.json();
-        openTests = Array.isArray(j?.tests) ? j.tests : [];
-      }catch(_){ openTests = []; }
-      buildTestChips();
-      renderTests();
+    function ctItemsByType(){
+      const items = ct.data?.items || [];
+      return items.filter(it => norm(it.type) === ct.activeType);
     }
 
-    function buildTestChips(){
-      const wrap = $("testChips");
-      if(!wrap) return;
-      const grades = [...new Set(openTests.map(t=>t.grade).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const types  = [...new Set(openTests.map(t=>t.examType).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const chips = [
-        {k:"grade", v:"", label:"Barchasi"},
-        ...grades.map(g=>({k:"grade", v:g, label:g})),
-        ...types.map(t=>({k:"type", v:t, label:t.toUpperCase?.()||t}))
-      ];
-      wrap.innerHTML = chips.map(c=>`<button class="chip" type="button" data-k="${c.k}" data-v="${c.v}">${escapeHtml(c.label)}</button>`).join("");
-      const paint = ()=>{
-        wrap.querySelectorAll(".chip").forEach(b=>{
-          const k=b.getAttribute("data-k");
-          const v=b.getAttribute("data-v");
-          const on = (k==="grade" && v===testFilter.grade) || (k==="type" && v===testFilter.type) || (k==="grade" && v==="" && !testFilter.grade && !testFilter.type);
-          b.classList.toggle("active", !!on);
+    function ctPickTags(items){
+      const set = new Set();
+      items.forEach(it => (it.tags||[]).forEach(t => set.add(norm(t))));
+      return [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    }
+
+    function ctCountType(typeId){
+      const items = ct.data?.items || [];
+      return items.filter(it => norm(it.type)===typeId).length;
+    }
+
+    function ctCountTag(tag){
+      const items = ctItemsByType();
+      if(tag==="all") return items.length;
+      return items.filter(it => (it.tags||[]).map(norm).includes(tag)).length;
+    }
+
+    function ctSetActive(container, id){
+      [...container.querySelectorAll(".ctChip")].forEach(c=>c.classList.toggle("active", c.dataset.id===id));
+    }
+
+    function ctRenderBig(){
+      const row = $("ctBigRow");
+      const big = (ct.data?.bigChips || []).map(c=>({ ...c, id: norm(c.id) }));
+      if(!ct.activeType && big.length) ct.activeType = big[0].id; // BARCHASI YO‘Q
+
+      row.innerHTML = big.map(c=>`
+        <div class="ctChip ${c.id===ct.activeType?"active":""}" data-id="${c.id}">
+          <span class="ctDot"></span>
+          <span>${esc(c.icon||"")} ${esc(c.title||"")}</span>
+          <span class="ctCount">${ctCountType(c.id)}</span>
+        </div>
+      `).join("");
+
+      row.querySelectorAll(".ctChip").forEach(ch=>{
+        ch.addEventListener("click", ()=>{
+          ct.activeType = ch.dataset.id;
+          ct.activeTag = "all";
+          ctSetActive(row, ct.activeType);
+          ctRenderTags();
+          ctRenderCards();
         });
-      };
-      paint();
-      wrap.onclick = (e)=>{
-        const b = e.target.closest(".chip");
-        if(!b) return;
-        const k=b.getAttribute("data-k");
-        const v=b.getAttribute("data-v");
-        if(k==="grade"){ testFilter.grade=v; if(v) testFilter.type=""; }
-        if(k==="type"){ testFilter.type=v; if(v) testFilter.grade=""; }
-        paint();
-        renderTests();
-      };
+      });
+
+      enhanceRow(row);
     }
 
-    function renderTests(){
-      const grid = $("testsGrid");
-      if(!grid) return;
-      const q = (testFilter.q||"").toLowerCase();
-      let items = [...openTests];
-      if(testFilter.grade) items = items.filter(t=>t.grade===testFilter.grade);
-      if(testFilter.type) items = items.filter(t=>String(t.examType||"").toLowerCase()===String(testFilter.type||"").toLowerCase());
-      if(q) items = items.filter(t=>String(t.title||t.id||"").toLowerCase().includes(q) || String(t.id||"").toLowerCase().includes(q));
+    function ctRenderTags(){
+      const row = $("ctTagRow");
+      const tags = ctPickTags(ctItemsByType());
+      const list = ["all", ...tags];
+      row.innerHTML = list.map(t=>`
+        <div class="ctChip small ${t===ct.activeTag?"active":""}" data-id="${t}">
+          <span>${esc(t==="all"?"Hammasi":t)}</span>
+          <span class="ctCount">${ctCountTag(t)}</span>
+        </div>
+      `).join("");
 
+      row.querySelectorAll(".ctChip").forEach(ch=>{
+        ch.addEventListener("click", ()=>{
+          ct.activeTag = ch.dataset.id;
+          ctSetActive(row, ct.activeTag);
+          ctRenderCards();
+        });
+      });
+
+      enhanceRow(row);
+    }
+
+    function ctFiltered(){
+      const q = norm(ct.q);
+      return ctItemsByType()
+        .filter(it=>{
+          if(ct.activeTag!=="all"){
+            const tags = (it.tags||[]).map(norm);
+            if(!tags.includes(ct.activeTag)) return false;
+          }
+          if(q){
+            const hay = [it.title, it.desc, it.type, (it.tags||[]).join(" ")].map(norm).join(" | ");
+            if(!hay.includes(q)) return false;
+          }
+          return true;
+        })
+        .sort((a,b)=>(b.order||0)-(a.order||0));
+    }
+
+    function ctRenderCards(){
+      const grid = $("ctGrid");
+      const info = $("ctInfo");
+      const empty = $("ctEmpty");
+      const items = ctFiltered();
+
+      info.textContent = `Natija: ${items.length} ta`;
       if(!items.length){
-        grid.innerHTML = `<div class="glass" style="padding:14px;border-radius:26px;">Hozircha test topilmadi (open-tests/index.json yoki testlar yo‘q).</div>`;
+        grid.innerHTML = "";
+        empty.style.display = "block";
         return;
       }
-      grid.innerHTML = items.map(t=>`
-        <div class="miniCard" data-open="${escapeHtml(t.file||"")}" data-id="${escapeHtml(t.id||"")}">
-          <div class="bg"></div>
-          <div class="inner">
-            <span class="tag">🧪 ${escapeHtml(t.grade||"Test")}</span>
-            <div class="title">${escapeHtml(t.title||t.id||"Test")}</div>
-            <div class="meta">${escapeHtml((t.examType||"").toUpperCase()||"OPEN")} • ${escapeHtml(t.id||"")}</div>
-          </div>
-        </div>
-      `).join("");
+      empty.style.display = "none";
 
-      grid.onclick = (e)=>{
-        const card = e.target.closest("[data-open]");
-        if(!card) return;
-        const file = card.getAttribute("data-open");
-        if(!file){ toast("Test fayli topilmadi"); return; }
-        localStorage.setItem("lm_openTestFile", file);
-        openEmbed("test.html#open", "Test");
-      };
-    }
-
-    function setupTestSearch(){
-      const inp = $("testSearch");
-      inp?.addEventListener("input", ()=>{
-        testFilter.q = inp.value || "";
-        renderTests();
-      });
-    }
-
-    // ---- Simulators (simple list, same style) ----
-    const SIMS = [
-      { id:"play", title:"PLAY", desc:"O‘yin tarzida mantiqiy mashqlar", tag:"🎮 Simulyator", href:"play.html" },
-      { id:"exam", title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija", tag:"📝 Imtihon", href:"exam.html" },
-      { id:"challenge", title:"Online Challenge", desc:"Jonli masalalar va challenge", tag:"⚡ Challenge", href:"challenge.html" },
-    ];
-    let simQ="";
-    function renderSims(){
-      const grid = $("simsGrid");
-      if(!grid) return;
-      const q=(simQ||"").toLowerCase();
-      const items = SIMS.filter(x=>!q || (x.title+" "+x.desc).toLowerCase().includes(q));
-      grid.innerHTML = items.map(s=>`
-        <div class="miniCard" data-href="${escapeHtml(s.href)}">
-          <div class="bg"></div>
-          <div class="inner">
-            <span class="tag">${escapeHtml(s.tag)}</span>
-            <div class="title">${escapeHtml(s.title)}</div>
-            <div class="meta">${escapeHtml(s.desc)}</div>
-          </div>
-        </div>
-      `).join("");
-      grid.onclick = (e)=>{
-        const card = e.target.closest("[data-href]");
-        if(!card) return;
-        openEmbed(card.getAttribute("data-href"), "Simulyator");
-      };
-    }
-    function setupSimSearch(){
-      const inp = $("simSearch");
-      inp?.addEventListener("input", ()=>{ simQ = inp.value||""; renderSims(); });
-    }
-
-    // ---- Embedded viewer modal ----
-    function openEmbed(url, title){
-      const modal = $("embedModal");
-      const frame = $("embedFrame");
-      const ttl = $("embedTitle");
-      if(!modal || !frame) { location.href = url; return; }
-      ttl.textContent = title || "";
-      frame.src = url;
-      modal.style.display = "flex";
-      document.body.style.overflow = "hidden";
-    }
-    function closeEmbed(){
-      const modal = $("embedModal");
-      const frame = $("embedFrame");
-      if(!modal) return;
-      modal.style.display = "none";
-      if(frame) frame.src = "about:blank";
-      document.body.style.overflow = "";
-    }
-
-    async function runOnboarding(){
-      return new Promise((resolve)=>{
-        const overlay=$("onboardOverlay");
-        const bSave=$("obSave");
-        overlay.style.display="flex";
-        bSave.onclick = async ()=>{
-          bSave.disabled=true;
-          try{
-            const first=$("obFirst").value.trim();
-            const last=$("obLast").value.trim();
-            const birth=$("obBirth").value.trim();
-            const p1=$("obPass1").value, p2=$("obPass2").value;
-            if(first.length<2) throw new Error("Ism kamida 2 ta harf bo‘lsin");
-            if(last.length<2) throw new Error("Familiya kamida 2 ta harf bo‘lsin");
-            if(!birth) throw new Error("Tug‘ilgan sanani kiriting");
-            if(p1.length<6) throw new Error("Yangi parol kamida 6 belgidan iborat bo‘lsin");
-            if(p1!==p2) throw new Error("Parollar mos emas");
-            await changePassword(p1);
-            await updateProfile(first,last,birth);
-            overlay.style.display="none";
-            resolve(true);
-          }catch(e){ toast(e.message||"Xatolik"); }
-          finally{ bSave.disabled=false; }
-        };
-      });
-    }
-
-    // Leaderboard (interactive)
-    let lbAll = [];
-    let lbMeOnly = false;
-    let lbQuery = "";
-    let myLoginId = null;
-
-    function medal(i){
-      return i===0 ? "🥇" : i===1 ? "🥈" : i===2 ? "🥉" : "";
-    }
-
-    function renderLeaderboard(){
-      const body = $("lbBody");
-      const podium = $("lbPodium");
-      const q = (lbQuery||"").toLowerCase();
-
-      let items = lbAll.slice();
-      if(lbMeOnly && myLoginId){
-        items = items.filter(u=>String(u.loginId||"")===String(myLoginId));
-      }
-      if(q){
-        items = items.filter(u=>
-          String(u.loginId||"").toLowerCase().includes(q) ||
-          String(u.name||"").toLowerCase().includes(q)
-        );
-      }
-
-      const top = items.slice(0,3);
-      const topPts = Number(top?.[0]?.points || 0) || 1;
-
-      // Podium (Top-3)
-      podium.innerHTML = top.map((u,i)=>{
-        const pts = Number(u.points||0);
-        const pct = Math.max(8, Math.round((pts/topPts)*100));
-        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+      grid.innerHTML = items.map(it=>{
+        const status = norm(it.status)||"available";
+        const disabled = status==="soon";
+        const badge = it.badge || (disabled?"SOON":"");
         return `
-          <button class="podCard ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}" title="${escapeHtml(u.name||u.loginId||"")}">
-            <div class="podTop">
-              <div class="podMedal">${medal(i)}</div>
-              <div class="podRank">#${i+1}</div>
+          <div class="card" style="min-height: 124px;">
+            <div class="cardTop">
+              <div>
+                <div class="cardTitle">${esc(it.title||"")}</div>
+                <div class="cardDesc">${esc(it.desc||"")}</div>
+              </div>
+              ${badge?`<div class="pill" style="margin-left:auto;">${esc(badge)}</div>`:""}
             </div>
-            <div class="podName">${escapeHtml(u.name || u.loginId || "—")}</div>
-            <div class="podId">${escapeHtml(u.loginId || "")}</div>
-            <div class="podBar"><span style="width:${pct}%"></span></div>
-            <div class="podPts">${pts} ball</div>
-          </button>
+            <div class="cardTags" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+              ${(it.tags||[]).slice(0,6).map(t=>`<span class="pill" style="opacity:.92">${esc(t)}</span>`).join("")}
+              <a class="btn ${disabled?"":"btnPrimary"}" href="${esc(it.href||"#")}" style="margin-left:auto; padding:10px 12px; ${disabled?"pointer-events:none; opacity:.7;":""}">
+                ${disabled?"Tez kunda":"Ochish"}
+              </a>
+            </div>
+          </div>
         `;
-      }).join("") || `<div class="small">Hozircha reyting yo‘q</div>`;
-
-      // Table (Top-20 of filtered)
-      const show = items.slice(0,20);
-      body.innerHTML = show.map((u,i)=>{
-        const pts = Number(u.points||0);
-        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
-        const pct = Math.max(6, Math.round((pts/topPts)*100));
-        return `
-          <tr class="lbRow ${me?"me":""}" data-pick="${escapeHtml(u.loginId||"")}">
-            <td><span class="rankBadge">${i+1}</span></td>
-            <td>
-              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
-              <div class="small">${escapeHtml(u.loginId || "")}</div>
-              <div class="miniBar"><span style="width:${pct}%"></span></div>
-            </td>
-            <td><b>${pts}</b></td>
-          </tr>
-        `;
-      }).join("") || `<tr><td colspan="3" class="small">Mos natija topilmadi</td></tr>`;
+      }).join("");
     }
 
-    async function loadLeaderboard(){
-      const body = $("lbBody");
-      body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+    async function ctInit(){
       try{
-        const data = await api("leaderboard", { query: { limit: 120 } });
-        lbAll = (data?.items || []);
-        renderLeaderboard();
-      }catch(_){
-        body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
-      }
-    }
+        const r = await fetch("./content.json", {cache:"no-store"});
+        if(!r.ok) throw new Error("content.json topilmadi");
+        ct.data = await r.json();
+        ctRenderBig();
+        ctRenderTags();
+        ctRenderCards();
 
-    // ===== Leaderboard modal (all with paging) =====
-    let lbCursor = null;
-    let lbRankBase = 0;
-    async function loadLeaderboardMore(reset=false){
-      const body = $("lbAllBody");
-      const btn = $("lbLoadMore");
-      try{
-        btn.disabled = true;
-        if(reset){
-          lbCursor = null;
-          lbRankBase = 0;
-          body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
-        }
-        const data = await api("leaderboard", { query: { limit: 60, cursor: lbCursor } });
-        const items = data?.items || [];
-        if(reset) body.innerHTML = "";
-        body.insertAdjacentHTML("beforeend", items.map((u,i)=>`
-          <tr>
-            <td><span class="rankBadge">${lbRankBase + i + 1}</span></td>
-            <td>
-              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
-              <div class="small">${escapeHtml(u.loginId || "")}</div>
-            </td>
-            <td><b>${Number(u.points||0)}</b></td>
-          </tr>
-        `).join(""));
-        lbRankBase += items.length;
-        lbCursor = data?.nextCursor || null;
-        btn.style.display = lbCursor ? "inline-flex" : "none";
-        if(!items.length && reset){
-          body.innerHTML = `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
-          btn.style.display = "none";
-        }
-      }catch(_){
-        if(reset) body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
-      }finally{
-        btn.disabled = false;
-      }
-    }
+        const q = $("ctQ");
+        let t=null;
+        q.addEventListener("input", ()=>{
+          clearTimeout(t);
+          t=setTimeout(()=>{ ct.q=q.value; ctRenderCards(); }, 120);
+        });
 
-    // Comments
-    function fmtTime(ts){
-      const d = ts ? new Date(ts) : new Date();
-      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    }
-    let likedSet = new Set();
+        $("ctClear").addEventListener("click", ()=>{
+          ct.activeTag = "all";
+          ct.q = "";
+          q.value = "";
+          ctRenderTags();
+          ctRenderCards();
+        });
 
-    function renderReplies(replies){
-      const items = (replies||[]).map(r=>`
-        <li class="replyItem">
-          <div class="top">
-            <div class="nameLine">${escapeHtml(r.name || r.loginId || "—")}</div>
-            <div class="small">${escapeHtml(fmtTime(r.createdAt))}</div>
-          </div>
-          <div class="replyText">${escapeHtml(r.text || "")}</div>
-        </li>
-      `).join("");
-      return items || `<li class="small">Hozircha javob yo‘q</li>`;
-    }
-
-    function renderCommentItem(c){
-      const liked = likedSet.has(String(c.id));
-      const isOwner = myLoginId && String(c.loginId||"") === String(myLoginId);
-      const edited = c.edited === true;
-      return `
-        <li class="commentItem" data-id="${escapeHtml(c.id)}">
-          <div class="top">
-            <div class="nameLine">${escapeHtml(c.name || c.loginId || "—")}</div>
-            <div class="small">${escapeHtml(fmtTime(c.createdAt))}</div>
-          </div>
-          <div class="commentText" data-role="text">${escapeHtml(c.text || "")}</div>
-          ${edited ? `<div class="small editedTag">tahrirlangan</div>` : ``}
-
-          ${isOwner ? `
-            <div class="ownerActions">
-              <button class="miniBtn" data-act="edit" type="button" title="Tahrirlash">✎</button>
-              <button class="miniBtn danger" data-act="delete" type="button" title="O‘chirish">🗑</button>
-            </div>
-          ` : ``}
-
-          <div class="commentActions compact">
-            <button class="actBtn ${liked?"liked":""}" data-act="like" type="button" aria-label="Like">
-              <span class="ic">❤</span>
-              <span class="lbl">Like</span>
-              <span class="cnt" data-k="likeCount">${Number(c.likeCount||0)}</span>
-            </button>
-            <button class="actBtn" data-act="toggleReplies" type="button" aria-label="Javoblar">
-              <span class="ic">↩</span>
-              <span class="lbl">Reply</span>
-              <span class="cnt" data-k="replyCount">${Number(c.replyCount||0)}</span>
-            </button>
-          </div>
-
-          <div class="repliesWrap" data-open="0">
-            <ul class="replyList" data-loaded="0"></ul>
-            <div class="replyBox">
-              <input class="replyInput" maxlength="160" placeholder="Javob yozing… (160)" />
-              <button class="btn btnPrimary replySend" data-act="sendReply" type="button">Yuborish</button>
-            </div>
-          </div>
-        </li>
-      `;
-    }
-
-    async function loadLiked(){
-      likedSet = new Set();
-      try{
-        const token = await getToken();
-        const data = await api("comments/liked", { token });
-        for(const id of (data?.ids || [])) likedSet.add(String(id));
-      }catch(_){ /* ignore */ }
-    }
-
-    // ===== Comments (always show all, paging in the panel) =====
-    let cmCursor = null;
-    let latestCommentMs = 0;
-    const COMMENTS_SEEN_KEY = "lm_comments_seen_ms";
-
-    function toMillis(v){
-      if(v==null) return 0;
-      if(typeof v === "number") return v;
-      const t = Date.parse(v);
-      return Number.isFinite(t) ? t : 0;
-    }
-
-    function updateCommentBadge(){
-      const b = $("cmBadge");
-      if(!b) return;
-      const seen = Number(localStorage.getItem(COMMENTS_SEEN_KEY) || 0);
-      const hasNew = seen > 0 && latestCommentMs > seen;
-      b.textContent = hasNew ? "NEW" : "";
-      b.style.display = hasNew ? "inline-flex" : "none";
-    }
-
-    function markCommentsSeen(){
-      if(latestCommentMs > 0){
-        localStorage.setItem(COMMENTS_SEEN_KEY, String(latestCommentMs));
-      }else{
-        localStorage.setItem(COMMENTS_SEEN_KEY, String(Date.now()));
-      }
-      updateCommentBadge();
-    }
-    async function loadComments(reset=false){
-      const list = $("commentList");
-      const btn = $("cmLoadMoreInline");
-      const count = $("commentCount");
-      try{
-        btn.disabled = true;
-        if(reset){
-          cmCursor = null;
-          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
-        }
-        await loadLiked();
-        const data = await api("comments", { query: { limit: 30, cursor: cmCursor } });
-        const items = data?.items || [];
-        // Track newest comment time to show a tiny "NEW" badge on the touch button
-        for(const it of items){
-          const ms = toMillis(it.createdAt || it.time || it.ts);
-          if(ms > latestCommentMs) latestCommentMs = ms;
-        }
-        if(reset) list.innerHTML = "";
-        list.insertAdjacentHTML("beforeend", items.map(renderCommentItem).join(""));
-        cmCursor = data?.nextCursor || null;
-        btn.style.display = cmCursor ? "inline-flex" : "none";
-        // total (if server returns it), else show loaded count
-        const total = Number(data?.total || 0);
-        const loaded = list.querySelectorAll(".commentItem").length;
-        count.textContent = total ? String(total) : String(loaded);
-        if(!items.length && reset){
-          list.innerHTML = `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
-          btn.style.display = "none";
-          count.textContent = "0";
-        }
-
-        updateCommentBadge();
-      }catch(_){
-        if(reset) list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
-      }finally{
-        btn.disabled = false;
-      }
-    }
-
-    async function loadReplies(commentId, li){
-      const wrap = li.querySelector(".repliesWrap");
-      const ul = li.querySelector(".replyList");
-      if(!wrap || !ul) return;
-      try{
-        const data = await api("comments/replies", { method:"POST", body:{ commentId, limit: 30 } });
-        ul.innerHTML = renderReplies(data?.items || []);
-        ul.setAttribute("data-loaded","1");
-      }catch(_){
-        ul.innerHTML = `<li class="small">Javoblarni yuklab bo‘lmadi</li>`;
-      }
-    }
-
-    function setRepliesOpen(li, open){
-      const wrap = li.querySelector(".repliesWrap");
-      if(!wrap) return;
-      wrap.setAttribute("data-open", open?"1":"0");
-    }
-
-    // Delegated actions on comment lists (preview + modal)
-    async function handleCommentActions(e){
-      const btn = e.target.closest("button[data-act]");
-      if(!btn) return;
-      const li = e.target.closest(".commentItem");
-      if(!li) return;
-      const id = li.getAttribute("data-id");
-      const act = btn.getAttribute("data-act");
-
-      if(act === "like"){
-        try{
-          const token = await getToken();
-          const out = await api("comments/like", { method:"POST", token, body:{ commentId: id } });
-          const liked = !!out.liked;
-          if(liked) likedSet.add(String(id)); else likedSet.delete(String(id));
-          btn.classList.toggle("liked", liked);
-          const cnt = li.querySelector('[data-k="likeCount"]');
-          if(cnt) cnt.textContent = String(out.likeCount ?? 0);
-        }catch(_){ toast("Like uchun kirish kerak"); }
-        return;
-      }
-
-      if(act === "toggleReplies"){
-        const wrap = li.querySelector(".repliesWrap");
-        const isOpen = wrap?.getAttribute("data-open") === "1";
-        setRepliesOpen(li, !isOpen);
-        const ul = li.querySelector(".replyList");
-        if(!isOpen && ul && ul.getAttribute("data-loaded") !== "1"){
-          await loadReplies(id, li);
-        }
-        return;
-      }
-
-      if(act === "sendReply"){
-        const input = li.querySelector(".replyInput");
-        const text = (input?.value || "").trim();
-        if(!text) return toast("Javob bo‘sh");
-        try{
-          const token = await getToken();
-          btn.disabled = true;
-          await api("comments/reply", { method:"POST", token, body:{ commentId: id, text } });
-          if(input) input.value = "";
-          toast("Javob yuborildi ✅");
-          // update reply count UI
-          const rc = li.querySelector('[data-k="replyCount"]');
-          if(rc) rc.textContent = String(Number(rc.textContent||0) + 1);
-          await loadReplies(id, li);
-          setRepliesOpen(li, true);
-        }catch(_){ toast("Reply uchun kirish kerak"); }
-        finally{ btn.disabled = false; }
-        return;
-      }
-
-      if(act === "edit"){
-        const textEl = li.querySelector('[data-role="text"]');
-        const cur = textEl ? (textEl.textContent || "") : "";
-        // swap to editor
-        li.classList.add("editing");
-        if(textEl){
-          textEl.innerHTML = `
-            <textarea class="editArea" maxlength="140">${escapeHtml(cur)}</textarea>
-            <div class="editBar">
-              <button class="btn btnPrimary btnSm" data-act="saveEdit" type="button">Saqlash</button>
-              <button class="btn btnSm" data-act="cancelEdit" type="button">Bekor</button>
-            </div>
-          `;
-        }
-        return;
-      }
-
-      if(act === "cancelEdit"){
-        // easiest: reload comments to restore template
-        await loadComments(true);
-        return;
-      }
-
-      if(act === "saveEdit"){
-        const area = li.querySelector(".editArea");
-        const text = (area?.value || "").trim();
-        if(!text) return toast("Izoh bo‘sh");
-        try{
-          const token = await getToken();
-          btn.disabled = true;
-          await api("comments/update", { method:"POST", token, body:{ commentId: id, text } });
-          toast("Tahrirlandi ✅");
-          await loadComments(true);
-        }catch(_){ toast("Tahrirlash uchun ruxsat yo‘q"); }
-        finally{ btn.disabled = false; }
-        return;
-      }
-
-      if(act === "delete"){
-        if(!confirm("Izoh o‘chirilsinmi?")) return;
-        try{
-          const token = await getToken();
-          btn.disabled = true;
-          await api("comments/delete", { method:"POST", token, body:{ commentId: id } });
-          toast("O‘chirildi ✅");
-          await loadComments(true);
-        }catch(_){ toast("O‘chirish uchun ruxsat yo‘q"); }
-        finally{ btn.disabled = false; }
-        return;
-      }
-    }
-
-    $("commentList").addEventListener("click", handleCommentActions, { passive:false });
-    async function sendComment(){
-      const input = $("commentInput");
-      const text = (input.value||"").trim();
-      if(!text) return toast("Izoh bo‘sh");
-      input.value = "";
-      try{
-        const token = await getToken();
-        await api("comments", { method:"POST", token, body: { text } });
-        toast("Yuborildi ✅");
-        await loadComments(true);
       }catch(e){
-        toast("Xato: yuborilmadi");
+        $("ctInfo").textContent = "Xatolik: kontent yuklanmadi";
+        toast(e?.message || "Xatolik");
       }
     }
 
-    // Modal wiring (leaderboard only)
-    const lbModal = $("lbModal");
-    $("btnLbAll").onclick = async ()=>{ openModal(lbModal); await loadLeaderboardMore(true); };
-    $("lbModalClose").onclick = ()=>closeModal(lbModal);
-    $("lbLoadMore").onclick = ()=>loadLeaderboardMore(false);
-
-    // close on backdrop click
-    lbModal.addEventListener("click", (e)=>{ if(e.target === lbModal) closeModal(lbModal); });
-
-    // ===== Notifications =====
-    const notifModal = $("notifModal");
-    let notifCursor = null;
-    async function refreshUnread(){
-      try{
-        const token = await getToken();
-        const d = await api("notifications/unread-count", { token });
-        const n = Number(d?.unreadCount||0);
-        const b = $("notifBadge");
-        const bell = $("btnBell");
-        if(b){
-          b.textContent = String(n);
-          b.style.display = n>0 ? "inline-flex" : "none";
-        }
-        if(bell) bell.classList.toggle("hasUnread", n>0);
-      }catch(_){
-        const b = $("notifBadge");
-        if(b) b.style.display = "none";
-        const bell = $("btnBell");
-        if(bell) bell.classList.remove("hasUnread");
-      }
-    }
-
-    function renderNotifItem(n){
-      const read = !!n.read;
-      return `
-        <li class="notifItem ${read?"read":"unread"}" data-id="${escapeHtml(n.id)}">
-          <div class="top">
-            <div class="nameLine">${escapeHtml(n.title||"Xabar")}</div>
-            <div class="small">${escapeHtml(fmtTime(n.createdAt))}</div>
-          </div>
-          <div class="notifBody">${escapeHtml(n.body||"")}</div>
-          <div class="notifActions">
-            <button class="miniBtn ghost" data-act="delNotif" type="button" aria-label="O‘chirish">🗑</button>
-            ${read?"":"<button class=\"miniBtn\" data-act=\"readNotif\" type=\"button\">O‘qildi</button>"}
-          </div>
-        </li>
-      `;
-    }
-
-    async function loadNotifs(reset=false){
-      const list = $("notifList");
-      const btn = $("notifLoadMore");
-      try{
-        btn.disabled = true;
-        if(reset){
-          notifCursor = null;
-          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
-        }
-        const token = await getToken();
-        const data = await api("notifications", { token, query:{ limit: 20, cursor: notifCursor } });
-        const items = data?.items || [];
-        if(reset) list.innerHTML = "";
-        list.insertAdjacentHTML("beforeend", items.map(renderNotifItem).join(""));
-        notifCursor = data?.nextCursor || null;
-        btn.style.display = notifCursor ? "inline-flex" : "none";
-        const unreadCount = Number(data?.unreadCount||0);
-        const b = $("notifBadge");
-        if(b){
-          b.textContent = String(unreadCount);
-          b.style.display = unreadCount>0 ? "inline-flex" : "none";
-        }
-        if(!items.length && reset){
-          list.innerHTML = `<li class="small">Hozircha bildirishnoma yo‘q 🙂</li>`;
-          btn.style.display = "none";
-        }
-      }catch(_){
-        if(reset) $("notifList").innerHTML = `<li class="small">Yuklab bo‘lmadi</li>`;
-      }finally{ btn.disabled = false; }
-    }
-
-    async function markNotifRead(id){
-      const token = await getToken();
-      await api("notifications/read", { method:"POST", token, body:{ id } });
-    }
-    async function deleteNotif(id){
-      const token = await getToken();
-      await api("notifications/delete", { method:"POST", token, body:{ id } });
-    }
-    async function markAllRead(){
-      const token = await getToken();
-      await api("notifications/read", { method:"POST", token, body:{ all:true } });
-    }
-
-    $("btnBell")?.addEventListener("click", async ()=>{ openModal(notifModal); await loadNotifs(true); });
-    $("notifClose")?.addEventListener("click", ()=>closeModal(notifModal));
-    $("notifLoadMore")?.addEventListener("click", ()=>loadNotifs(false));
-    $("notifMarkAll")?.addEventListener("click", async ()=>{ try{ await markAllRead(); await loadNotifs(true); await refreshUnread(); }catch(_){ toast("Xato"); } });
-    notifModal.addEventListener("click", (e)=>{ if(e.target===notifModal) closeModal(notifModal); });
-    $("notifList")?.addEventListener("click", async (e)=>{
-      const li = e.target.closest(".notifItem");
-      const id = li?.getAttribute("data-id");
-      if(!id) return;
-
-      const del = e.target.closest("button[data-act='delNotif']");
-      if(del){
-        try{ del.disabled = true; await deleteNotif(id); li.remove(); await refreshUnread(); }
-        catch(_){ toast("Xato"); }
-        finally{ del.disabled = false; }
-        return;
-      }
-
-      const b = e.target.closest("button[data-act='readNotif']");
-      if(!b) return;
-      try{ b.disabled = true; await markNotifRead(id); li.classList.add("read"); li.classList.remove("unread"); await refreshUnread(); }
-      catch(_){ toast("Xato"); }
-      finally{ b.disabled=false; }
-    });
-
-    $("btnLogout").onclick = ()=>{ logout(); location.href="./"; };
-    $("commentSend").onclick = sendComment;
-    $("commentInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendComment(); });
-    $("cmLoadMoreInline").onclick = ()=>loadComments(false);
-
-    // Leaderboard interactivity
-    $("lbSearch")?.addEventListener("input", (e)=>{
-      lbQuery = e.target.value || "";
-      renderLeaderboard();
-    });
-    $("lbOnlyMe")?.addEventListener("click", (e)=>{
-      lbMeOnly = !lbMeOnly;
-      e.currentTarget.setAttribute("aria-pressed", String(lbMeOnly));
-      e.currentTarget.classList.toggle("active", lbMeOnly);
-      renderLeaderboard();
-    });
-    // Click to spotlight a user in the table/podium
-    function pickUser(loginId){
-      if(!loginId) return;
-      lbQuery = String(loginId);
-      const inp = $("lbSearch");
-      if(inp) inp.value = lbQuery;
-      renderLeaderboard();
-    }
-    $("lbPodium")?.addEventListener("click", (e)=>{
-      const b = e.target.closest("[data-pick]");
-      if(b) pickUser(b.getAttribute("data-pick"));
-    });
-    $("lbBody")?.addEventListener("click", (e)=>{
-      const r = e.target.closest("[data-pick]");
-      if(r) pickUser(r.getAttribute("data-pick"));
-    });
-
-    async function boot(){
-      setupTouchFab();
-      setupAvatarPicker();
-
-      try{
-        const r = await me();
-        const u = r.user;
-
-        // Agar server avatarId bermasa, localStorage'dagi tanlovni ishlatamiz
-        const localAva = Number(localStorage.getItem("lm_avatarId")||0) || 0;
-        setUserAvatarAuto(u.avatarId || localAva, u.loginId || u.numericId || u.id || "");
-        $("userId").textContent = u.loginId;
-        $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
-        $("userPoints").textContent = String(u.points ?? 0);
-        $("userBalance").textContent = String(u.balance ?? 0);
-        $("userAge").textContent = calcAgePrecise(u.birthdate);
-
-        myLoginId = u.loginId;
-        await refreshUnread();
-
-        // Single-page sections
-        setupStoryControls();
-        setupChallenge();
-        setupTestSearch();
-        setupSimSearch();
-        await loadStories();
-        await loadOpenTests();
-        renderSims();
-
-        // Embedded viewer modal
-        $("embedClose")?.addEventListener("click", closeEmbed);
-        $("embedModal")?.addEventListener("click", (e)=>{ if(e.target===$("embedModal")) closeEmbed(); });
-
-        loadLeaderboard();
-        loadComments(true);
-
-        if(!u.profileComplete){
-          await runOnboarding();
-          const r2 = await me();
-          $("userName").textContent = r2.user.name || r2.user.loginId;
-          $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
-          setUserAvatar(r2.user.avatarId);
-        }
-      }catch(e){
-        toast(e.message||"Kirish yo‘q");
-        setTimeout(()=>location.href="./", 600);
-      }
-    }
-    
-    function setupTouchFab(){
-      const main = $("touchMain");
-      const menu = $("touchMenu");
-      const fab = $("touchFab");
-
-      // --- iPhone-style draggable AssistiveTouch behavior ---
-      const POS_KEY = "lm_touchFab_pos_v1";
-      let drag = { active:false, dragging:false, sx:0, sy:0, ox:0, oy:0, t0:0, pid:null };
-      let suppressNextClick = false;
-
-      function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
-      function clampToViewport(){
-        const r = fab.getBoundingClientRect();
-        const w = r.width || fab.offsetWidth || 80;
-        const h = r.height || fab.offsetHeight || 80;
-        const maxX = window.innerWidth - w - 8;
-        const maxY = window.innerHeight - h - 8;
-        let x = r.left, y = r.top;
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
-        x = clamp(x, 8, maxX);
-        y = clamp(y, 8, maxY);
-        fab.style.left = Math.round(x) + "px";
-        fab.style.top  = Math.round(y) + "px";
-        fab.style.right = "auto";
-        fab.style.bottom = "auto";
-      }
-
-      function applySavedPos(){
-        try{
-          const raw = localStorage.getItem(POS_KEY);
-          if(!raw) return;
-          const p = JSON.parse(raw);
-          if(!p || typeof p.x!=='number' || typeof p.y!=='number') return;
-          fab.style.left = p.x + "px";
-          fab.style.top = p.y + "px";
-          fab.style.right = "auto";
-          fab.style.bottom = "auto";
-          // In case the saved position is from desktop, keep it visible on mobile too
-          requestAnimationFrame(()=> clampToViewport());
-        }catch(_){ }
-      }
-      function savePos(x,y){
-        try{ localStorage.setItem(POS_KEY, JSON.stringify({x,y})); }catch(_){ }
-      }
-      applySavedPos();
-
-      const ratingModal = $("ratingModal");
-      const commentModal = $("commentModal");
-
-      function setMenu(open){
-        main.setAttribute("aria-expanded", String(open));
-        menu.setAttribute("aria-hidden", String(!open));
-        fab.classList.toggle("open", open);
-      }
-
-      function openModal(overlayEl, focusId){
-        if(!overlayEl) return;
-        overlayEl.setAttribute("aria-hidden","false");
-        overlayEl.classList.add("open");
-        document.body.classList.add("noScroll");
-        if(focusId) setTimeout(()=>$(focusId)?.focus(), 50);
-      }
-      function closeModal(overlayEl){
-        if(!overlayEl) return;
-        overlayEl.setAttribute("aria-hidden","true");
-        overlayEl.classList.remove("open");
-        document.body.classList.remove("noScroll");
-      }
-
-      // Toggle menu
-      main?.addEventListener("click", (e)=>{
-        if(suppressNextClick){ suppressNextClick = false; return; }
-        e.stopPropagation();
-        const isOpen = fab.classList.contains("open");
-        setMenu(!isOpen);
-      });
-
-      // Drag (pointer): only start dragging after a real move threshold
-      main?.addEventListener("pointerdown", (e)=>{
-        drag.active = true;
-        drag.dragging = false;
-        drag.sx = e.clientX; drag.sy = e.clientY;
-        drag.t0 = (performance?.now?.() || Date.now());
-        drag.pid = e.pointerId;
-        const r = fab.getBoundingClientRect();
-        drag.ox = r.left; drag.oy = r.top;
-      });
-
-      main?.addEventListener("pointermove", (e)=>{
-        if(!drag.active) return;
-        const dx = e.clientX - drag.sx;
-        const dy = e.clientY - drag.sy;
-        const dist = Math.abs(dx) + Math.abs(dy);
-
-        // Start drag only if user actually moved enough (prevents click from being swallowed)
-        if(!drag.dragging && dist < 14) return;
-        if(!drag.dragging){
-          drag.dragging = true;
-          suppressNextClick = true;
-          setMenu(false);
-          fab.setPointerCapture?.(drag.pid);
-          fab.style.right = "auto";
-          fab.style.bottom = "auto";
-        }
-
-        const w = fab.offsetWidth || 80;
-        const h = fab.offsetHeight || 80;
-        const x = clamp(drag.ox + dx, 8, window.innerWidth - w - 8);
-        const y = clamp(drag.oy + dy, 8, window.innerHeight - h - 8);
-        fab.style.left = x + "px";
-        fab.style.top  = y + "px";
-      });
-
-      function endDrag(){
-        if(!drag.active) return;
-        drag.active = false;
-        if(drag.dragging){
-          const r = fab.getBoundingClientRect();
-          savePos(Math.round(r.left), Math.round(r.top));
-          setTimeout(()=>{ suppressNextClick = false; }, 180);
-        }
-        drag.dragging = false;
-        drag.pid = null;
-      }
-      main?.addEventListener("pointerup", endDrag);
-      main?.addEventListener("pointercancel", endDrag);
-
-      // Keep it visible on viewport changes
-      window.addEventListener("resize", ()=>{
-        try{ clampToViewport(); }catch(_){ }
-      }, {passive:true});
-
-      // Open actions
-      $("openRating")?.addEventListener("click", ()=>{ setMenu(false); openModal(ratingModal, "ratingClose"); });
-      $("openComments")?.addEventListener("click", ()=>{ 
-        setMenu(false); 
-        openModal(commentModal, "commentClose");
-        // user has seen latest comments
-        try{ markCommentsSeen(); }catch(_){ }
-      });
-
-      // Close buttons
-      $("ratingClose")?.addEventListener("click", ()=>closeModal(ratingModal));
-      $("commentClose")?.addEventListener("click", ()=>closeModal(commentModal));
-
-      // Click outside to close
-      document.addEventListener("click", ()=> setMenu(false));
-      ratingModal?.addEventListener("click", (e)=>{ if(e.target===ratingModal) closeModal(ratingModal); });
-      commentModal?.addEventListener("click", (e)=>{ if(e.target===commentModal) closeModal(commentModal); });
-
-      // Esc
-      document.addEventListener("keydown", (e)=>{
-        if(e.key!=="Escape") return;
-        setMenu(false);
-        if(ratingModal?.classList.contains("open")) closeModal(ratingModal);
-        if(commentModal?.classList.contains("open")) closeModal(commentModal);
-      });
-    }
-
-    boot();
+    // boot
+    await loadMe();
+    setupStoryControls();
+    await loadStories();
+    await ctInit();
 
   </script>
 </body>
