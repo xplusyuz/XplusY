@@ -754,119 +754,147 @@
     // Single-page home (Stories + Challenge + Tests + Simulators)
     // ===============================
     const BANNER_DIR = "banner";
-    const BANNER_MANIFEST = `${BANNER_DIR}/manifest.json`;
-    let storyItems = [];
-    let storyIdx = 0;
-    let storyTimer = null;
+const BANNER_MANIFEST = `${BANNER_DIR}/manifest.json`;
+let storyItems = [];
+let storyIdx = 0;
+let storyTimer = null;
 
-    async function probeSequentialImages(prefix, max=24, stopAfter=4){
-      const out=[];
-      let miss=0;
-      for(let i=1;i<=max;i++){
-        const url = `${prefix}/${i}.png?v=${Date.now()}`;
-        const ok = await new Promise(res=>{
-          const im = new Image();
-          im.onload = ()=>res(true);
-          im.onerror = ()=>res(false);
-          im.src = url;
-        });
-        if(ok){ out.push({id:i, url: `${prefix}/${i}.png`}); miss=0; }
-        else{ miss++; if(miss>=stopAfter) break; }
-      }
-      return out;
+const STORY_EXTS = ["webp", "png", "jpg", "jpeg"];
+
+function probeImageUrl(url){
+  return new Promise(res=>{
+    const im = new Image();
+    im.onload = ()=>res(true);
+    im.onerror = ()=>res(false);
+    im.src = `${url}?v=${Date.now()}`;
+  });
+}
+
+// fallback: 1.webp → 1.png → 1.jpg
+async function probeSequentialImages(prefix, max=24, stopAfter=4){
+  const out=[];
+  let miss=0;
+
+  for(let i=1;i<=max;i++){
+    let found=null;
+
+    for(const ext of STORY_EXTS){
+      const url = `${prefix}/${i}.${ext}`;
+      if(await probeImageUrl(url)){ found=url; break; }
     }
 
-    async function loadStories(){
-      storyItems = [];
-      // 1) manifest.json (optional)
-      try{
-        const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
-        if(r.ok){
-          const j = await r.json();
-          const ids = Array.isArray(j?.ids) ? j.ids : [];
-          storyItems = ids.map(id=>({id, url:`${BANNER_DIR}/${id}.png`}));
-        }
-      }catch(_){ /* ignore */ }
-      // 2) fallback probe
-      if(!storyItems.length){
-        storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
-      }
-      renderStoryBar();
-      renderStoryViewer(0, true);
+    if(found){
+      out.push({ id:i, url:found });
+      miss=0;
+    }else{
+      miss++;
+      if(miss>=stopAfter) break;
     }
+  }
+  return out;
+}
 
-    function renderStoryBar(){
-      const bar = $("storyBar");
-      if(!bar) return;
-      if(!storyItems.length){
-        bar.innerHTML = `<div class="small" style="padding:6px 2px;">banner/ papkada 1.png, 2.png... bo‘lsa, shu yerda stories chiqadi.</div>`;
-        return;
-      }
-      bar.innerHTML = storyItems.map((s,i)=>`
-        <button class="storyBubble" type="button" data-idx="${i}" aria-label="Banner ${i+1}">
-          <div class="storyRing"><img class="storyAvatar" alt="Banner ${i+1}" src="${s.url}"></div>
-          <div class="storyLabel">${i+1}</div>
-        </button>
-      `).join("");
-      bar.onclick = (e)=>{
-        const b = e.target.closest("[data-idx]");
-        if(!b) return;
-        renderStoryViewer(Number(b.getAttribute("data-idx"))||0, true);
-      };
-    }
+async function loadStories(){
+  storyItems = [];
 
-    function clearStoryTimer(){
-      if(storyTimer){ clearInterval(storyTimer); storyTimer=null; }
-    }
+  // 1) manifest.json (ext bilan)
+  try{
+    const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
+    if(r.ok){
+      const j = await r.json();
+      const items = Array.isArray(j?.items) ? j.items : [];
 
-    function renderStoryViewer(idx, autoplay=false){
-      const viewer = $("storyViewer");
-      const img = $("storyImg");
-      const dots = $("storyDots");
-      if(!viewer || !img || !dots) return;
-
-      storyIdx = Math.max(0, Math.min(idx, Math.max(0, storyItems.length-1)));
-
-      if(!storyItems.length){
-        img.removeAttribute("src");
-        viewer.classList.add("isEmpty");
-        dots.innerHTML = "";
-        clearStoryTimer();
-        return;
-      }
-      viewer.classList.remove("isEmpty");
-      img.src = storyItems[storyIdx].url;
-      dots.innerHTML = storyItems.map((_,i)=>`<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`).join("");
-
-      clearStoryTimer();
-      if(autoplay){
-        let t=0;
-        storyTimer = setInterval(()=>{
-          t++;
-          if(t>=6){
-            t=0;
-            const next = (storyIdx+1) % storyItems.length;
-            renderStoryViewer(next, true);
-          }
-        }, 800);
-      }
-    }
-
-    function setupStoryControls(){
-      $("storyPrev")?.addEventListener("click", ()=>{
-        if(!storyItems.length) return;
-        renderStoryViewer((storyIdx-1+storyItems.length)%storyItems.length, true);
+      storyItems = items.map(it=>{
+        const ext = it.ext || "webp";
+        return {
+          id: it.id,
+          url: `${BANNER_DIR}/${it.id}.${ext}`
+        };
       });
-      $("storyNext")?.addEventListener("click", ()=>{
-        if(!storyItems.length) return;
-        renderStoryViewer((storyIdx+1)%storyItems.length, true);
-      });
-      // Tap viewer -> next
-      $("storyViewer")?.addEventListener("click", ()=>{
-        if(!storyItems.length) return;
-        renderStoryViewer((storyIdx+1)%storyItems.length, true);
-      }, {passive:true});
     }
+  }catch(_){}
+
+  // 2) fallback probe
+  if(!storyItems.length){
+    storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
+  }
+
+  renderStoryBar();
+  renderStoryViewer(0, true);
+}
+
+function renderStoryBar(){
+  const bar = $("storyBar");
+  if(!bar) return;
+
+  if(!storyItems.length){
+    bar.innerHTML = `<div class="small" style="padding:6px 2px;">
+      banner/1.webp (yoki png/jpg) bo‘lsa, shu yerda stories chiqadi.
+    </div>`;
+    return;
+  }
+
+  bar.innerHTML = storyItems.map((s,i)=>`
+    <button class="storyBubble" type="button" data-idx="${i}">
+      <div class="storyRing">
+        <img class="storyAvatar" src="${s.url}" alt="Banner ${i+1}">
+      </div>
+      <div class="storyLabel">${i+1}</div>
+    </button>
+  `).join("");
+
+  bar.onclick = e=>{
+    const b = e.target.closest("[data-idx]");
+    if(!b) return;
+    renderStoryViewer(+b.dataset.idx, true);
+  };
+}
+
+function clearStoryTimer(){
+  if(storyTimer){ clearInterval(storyTimer); storyTimer=null; }
+}
+
+function renderStoryViewer(idx, autoplay=false){
+  const viewer = $("storyViewer");
+  const img = $("storyImg");
+  const dots = $("storyDots");
+  if(!viewer||!img||!dots) return;
+
+  storyIdx = Math.max(0, Math.min(idx, storyItems.length-1));
+
+  if(!storyItems.length){
+    img.removeAttribute("src");
+    viewer.classList.add("isEmpty");
+    dots.innerHTML="";
+    clearStoryTimer();
+    return;
+  }
+
+  viewer.classList.remove("isEmpty");
+  img.src = storyItems[storyIdx].url;
+
+  dots.innerHTML = storyItems.map((_,i)=>
+    `<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`
+  ).join("");
+
+  clearStoryTimer();
+  if(autoplay){
+    let t=0;
+    storyTimer=setInterval(()=>{
+      if(++t>=6){
+        t=0;
+        renderStoryViewer((storyIdx+1)%storyItems.length,true);
+      }
+    },800);
+  }
+}
+
+function setupStoryControls(){
+  $("storyPrev")?.addEventListener("click",()=>renderStoryViewer((storyIdx-1+storyItems.length)%storyItems.length,true));
+  $("storyNext")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true));
+  $("storyViewer")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true),{passive:true});
+}
+
 
     // ---- Challenge (code + start) ----
     function setupChallenge(){
