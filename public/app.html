@@ -268,36 +268,10 @@
 </section>
 
       <!-- 3) Tests container (chips + search) -->
-      <section class="glass section" id="testsSection">
-        <div class="sectionTitle">
-          <h2>Testlar</h2>
-          <div class="hint">Chip + qidiruv bilan</div>
-        </div>
-
-        <div class="chipsRow" id="testGradeChips"></div>
-        <div class="chipsRow" id="testTypeChips" style="margin-top:10px;"></div>
-        <div class="searchRow" style="margin-top:10px;">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input class="input" id="testSearch" placeholder="Test qidirish…" autocomplete="off" />
-        </div>
-        <div class="small muted" id="testsStatus" style="margin-top:10px;">Yuklanmoqda…</div>
-        <div class="cardsGrid" id="testsList" style="margin-top:12px;"></div>
-      </section>
+      
 
       <!-- 4) Simulators container (same style) -->
-      <section class="glass section" id="simSection">
-        <div class="sectionTitle">
-          <h2>Simulyatorlar</h2>
-          <div class="hint">Qidiruv + chiplar</div>
-        </div>
-
-        <div class="chipsRow" id="simChips"></div>
-        <div class="searchRow" style="margin-top:10px;">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input class="input" id="simSearch" placeholder="Simulyator qidirish…" autocomplete="off" />
-        </div>
-        <div class="cardsGrid" id="simList" style="margin-top:12px;"></div>
-      </section>
+      
 
       <!-- Reyting/Izohlar endi suzuvchi "touch" tugma orqali premium modalda ochiladi -->
 
@@ -909,128 +883,9 @@
       });
     }
 
-    // ---- Tests (Open tests index) ----
-    let openTests = [];
-    let testFilter = { grade:"", type:"", q:"" };
-    async function loadOpenTests(){
-      try{
-        const r = await fetch("open-tests/index.json", {cache:"no-store"});
-        if(!r.ok) throw new Error();
-        const j = await r.json();
-        openTests = Array.isArray(j?.tests) ? j.tests : [];
-      }catch(_){ openTests = []; }
-      buildTestChips();
-      renderTests();
-    }
-
-    function buildTestChips(){
-      const wrap = $("testChips");
-      if(!wrap) return;
-      const grades = [...new Set(openTests.map(t=>t.grade).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const types  = [...new Set(openTests.map(t=>t.examType).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-      const chips = [
-        {k:"grade", v:"", label:"Barchasi"},
-        ...grades.map(g=>({k:"grade", v:g, label:g})),
-        ...types.map(t=>({k:"type", v:t, label:t.toUpperCase?.()||t}))
-      ];
-      wrap.innerHTML = chips.map(c=>`<button class="chip" type="button" data-k="${c.k}" data-v="${c.v}">${escapeHtml(c.label)}</button>`).join("");
-      const paint = ()=>{
-        wrap.querySelectorAll(".chip").forEach(b=>{
-          const k=b.getAttribute("data-k");
-          const v=b.getAttribute("data-v");
-          const on = (k==="grade" && v===testFilter.grade) || (k==="type" && v===testFilter.type) || (k==="grade" && v==="" && !testFilter.grade && !testFilter.type);
-          b.classList.toggle("active", !!on);
-        });
-      };
-      paint();
-      wrap.onclick = (e)=>{
-        const b = e.target.closest(".chip");
-        if(!b) return;
-        const k=b.getAttribute("data-k");
-        const v=b.getAttribute("data-v");
-        if(k==="grade"){ testFilter.grade=v; if(v) testFilter.type=""; }
-        if(k==="type"){ testFilter.type=v; if(v) testFilter.grade=""; }
-        paint();
-        renderTests();
-      };
-    }
-
-    function renderTests(){
-      const grid = $("testsGrid");
-      if(!grid) return;
-      const q = (testFilter.q||"").toLowerCase();
-      let items = [...openTests];
-      if(testFilter.grade) items = items.filter(t=>t.grade===testFilter.grade);
-      if(testFilter.type) items = items.filter(t=>String(t.examType||"").toLowerCase()===String(testFilter.type||"").toLowerCase());
-      if(q) items = items.filter(t=>String(t.title||t.id||"").toLowerCase().includes(q) || String(t.id||"").toLowerCase().includes(q));
-
-      if(!items.length){
-        grid.innerHTML = `<div class="glass" style="padding:14px;border-radius:26px;">Hozircha test topilmadi (open-tests/index.json yoki testlar yo‘q).</div>`;
-        return;
-      }
-      grid.innerHTML = items.map(t=>`
-        <div class="miniCard" data-open="${escapeHtml(t.file||"")}" data-id="${escapeHtml(t.id||"")}">
-          <div class="bg"></div>
-          <div class="inner">
-            <span class="tag">🧪 ${escapeHtml(t.grade||"Test")}</span>
-            <div class="title">${escapeHtml(t.title||t.id||"Test")}</div>
-            <div class="meta">${escapeHtml((t.examType||"").toUpperCase()||"OPEN")} • ${escapeHtml(t.id||"")}</div>
-          </div>
-        </div>
-      `).join("");
-
-      grid.onclick = (e)=>{
-        const card = e.target.closest("[data-open]");
-        if(!card) return;
-        const file = card.getAttribute("data-open");
-        if(!file){ toast("Test fayli topilmadi"); return; }
-        localStorage.setItem("lm_openTestFile", file);
-        openEmbed("test.html#open", "Test");
-      };
-    }
-
-    function setupTestSearch(){
-      const inp = $("testSearch");
-      inp?.addEventListener("input", ()=>{
-        testFilter.q = inp.value || "";
-        renderTests();
-      });
-    }
-
-    // ---- Simulators (simple list, same style) ----
-    const SIMS = [
-      { id:"play", title:"PLAY", desc:"O‘yin tarzida mantiqiy mashqlar", tag:"🎮 Simulyator", href:"play.html" },
-      { id:"exam", title:"EXAM", desc:"Imtihon rejimi: vaqt, ball, natija", tag:"📝 Imtihon", href:"exam.html" },
-      { id:"challenge", title:"Online Challenge", desc:"Jonli masalalar va challenge", tag:"⚡ Challenge", href:"challenge.html" },
-    ];
-    let simQ="";
-    function renderSims(){
-      const grid = $("simsGrid");
-      if(!grid) return;
-      const q=(simQ||"").toLowerCase();
-      const items = SIMS.filter(x=>!q || (x.title+" "+x.desc).toLowerCase().includes(q));
-      grid.innerHTML = items.map(s=>`
-        <div class="miniCard" data-href="${escapeHtml(s.href)}">
-          <div class="bg"></div>
-          <div class="inner">
-            <span class="tag">${escapeHtml(s.tag)}</span>
-            <div class="title">${escapeHtml(s.title)}</div>
-            <div class="meta">${escapeHtml(s.desc)}</div>
-          </div>
-        </div>
-      `).join("");
-      grid.onclick = (e)=>{
-        const card = e.target.closest("[data-href]");
-        if(!card) return;
-        openEmbed(card.getAttribute("data-href"), "Simulyator");
-      };
-    }
-    function setupSimSearch(){
-      const inp = $("simSearch");
-      inp?.addEventListener("input", ()=>{ simQ = inp.value||""; renderSims(); });
-    }
-
-    // ---- Embedded viewer modal ----
+    
+    // ---- Tests & Simulators removed (unused on home) ----
+// ---- Embedded viewer modal ----
     function openEmbed(url, title){
       const modal = $("embedModal");
       const frame = $("embedFrame");
@@ -1656,7 +1511,7 @@
         setupTestSearch();
         setupSimSearch();
         await loadStories();
-        await loadOpenTests();
+        /* tests removed */
         renderSims();
 
         // Embedded viewer modal
