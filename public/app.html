@@ -164,6 +164,9 @@
 @media (max-width: 820px){
   .contentCard{grid-column: span 12}
 }
+
+/* Only one big banner viewer (hide small story bar) */
+#storyBar{display:none !important;}
 </style>
 </head>
 <body data-page="app">
@@ -761,6 +764,21 @@ let storyTimer = null;
 
 const STORY_EXTS = ["webp", "png", "jpg", "jpeg"];
 
+const MOBILE_BP = 720; // px: mobile breakpoint for 9:16 banners
+
+function isMobileViewport(){
+  return window.matchMedia(`(max-width:${MOBILE_BP}px)`).matches;
+}
+
+function pickStoryUrl(item){
+  // item can be {desktop, mobile} or legacy {url}
+  if(item && (item.mobile || item.desktop)){
+    const file = isMobileViewport() ? (item.mobile || item.desktop) : (item.desktop || item.mobile);
+    return `${BANNER_DIR}/${file}`;
+  }
+  return item?.url || "";
+}
+
 function probeImageUrl(url){
   return new Promise(res=>{
     const im = new Image();
@@ -797,32 +815,45 @@ async function probeSequentialImages(prefix, max=24, stopAfter=4){
 async function loadStories(){
   storyItems = [];
 
-  // 1) manifest.json (ext bilan)
+  // 1) manifest.json (desktop+mobile supported)
   try{
     const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
     if(r.ok){
       const j = await r.json();
-      const items = Array.isArray(j?.items) ? j.items : [];
 
-      storyItems = items.map(it=>{
-        const ext = it.ext || "webp";
-        return {
-          id: it.id,
-          url: `${BANNER_DIR}/${it.id}.${ext}`
-        };
-      });
+      // New format: { items: [ {id, desktop, mobile}, ... ] }
+      if(Array.isArray(j?.items) && j.items.length){
+        storyItems = j.items.map((it, idx)=>{
+          // accept: desktop/mobile (preferred), or ext/url (legacy)
+          if(it?.desktop || it?.mobile){
+            return { id: it.id ?? (idx+1), desktop: it.desktop, mobile: it.mobile };
+          }
+          if(it?.url){
+            return { id: it.id ?? (idx+1), url: it.url };
+          }
+          const ext = it?.ext || "webp";
+          const id = it?.id ?? (idx+1);
+          return { id, url: `${BANNER_DIR}/${id}.${ext}` };
+        });
+      }
+      // Older format: { ids: [1,2,3] }
+      else if(Array.isArray(j?.ids) && j.ids.length){
+        storyItems = j.ids.map((id)=>({ id, url: `${BANNER_DIR}/${id}.webp` }));
+      }
     }
-  }catch(_){}
+  }catch(_){ /* ignore */ }
 
-  // 2) fallback probe
+  // 2) fallback probe (1.webp, 1.png, 1.jpg...)
   if(!storyItems.length){
     storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
   }
 
-  renderStoryBar();
+  // Small story bar hidden by CSS; keep viewer only
+  // renderStoryBar();
   renderStoryViewer(0, true);
 }
 
+// keep renderStoryBar (optional), but it is hidden by CSS
 function renderStoryBar(){
   const bar = $("storyBar");
   if(!bar) return;
@@ -871,7 +902,7 @@ function renderStoryViewer(idx, autoplay=false){
   }
 
   viewer.classList.remove("isEmpty");
-  img.src = storyItems[storyIdx].url;
+  img.src = pickStoryUrl(storyItems[storyIdx]);
 
   dots.innerHTML = storyItems.map((_,i)=>
     `<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`
@@ -894,6 +925,14 @@ function setupStoryControls(){
   $("storyNext")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true));
   $("storyViewer")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true),{passive:true});
 }
+
+// If viewport changes (resize/rotate), switch between mobile/desktop banner versions
+window.addEventListener("resize", ()=>{
+  if(!storyItems.length) return;
+  const img = $("storyImg");
+  if(img) img.src = pickStoryUrl(storyItems[storyIdx]);
+}, {passive:true});
+
 
 
     // ---- Challenge (code + start) ----
