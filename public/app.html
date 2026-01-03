@@ -53,6 +53,20 @@
   font-weight:800;
 }
 .challengeBtn:disabled{opacity:.6;cursor:not-allowed}
+
+/* Mobile polish for challenge cards */
+@media (max-width: 720px){
+  .challengeList{gap:12px}
+  .challengeCard{flex-direction:column;align-items:stretch;gap:10px;padding:12px}
+  .challengeIcon{width:48px;height:48px}
+  .challengeLeft{gap:10px;align-items:flex-start}
+  .challengeMeta .ttl{font-size:15px;line-height:1.2;white-space:normal}
+  .challengeMeta .sub{font-size:12px}
+  .challengeBadges{flex-wrap:wrap}
+  .challengeRight{width:100%;justify-content:space-between;gap:10px}
+  .timerLine{font-size:12px;opacity:.92}
+  .challengeBtn{width:100%;padding:12px 14px;border-radius:14px}
+}
 .timerLine{font-size:12px;opacity:.75;white-space:nowrap}
 
 /* --- Content filters --- */
@@ -170,9 +184,9 @@
 
 
 /* === Responsive Banner Aspect (desktop 16:9 = 1920×1080, mobile 9:16 = 1080×1920) === */
-:root{ --story-ar: 16 / 9; --story-maxh: 520px; }
+:root{ --story-ar: 16 / 9; --story-maxh: min(68vh, 720px); }
 @media (max-width: 720px){
-  :root{ --story-ar: 9 / 16; --story-maxh: 78vh; }
+  :root{ --story-ar: 9 / 16; --story-maxh: 84vh; }
 }
 
 /* keep only big viewer */
@@ -183,15 +197,36 @@
   aspect-ratio: var(--story-ar);
   max-height: var(--story-maxh);
   padding: 0 !important;
-  background: transparent !important;
+  position: relative;
+  background: rgba(255,255,255,0.18) !important;
   overflow: hidden;
   border-radius: 18px;
 }
+#storyViewer::before{
+  content:"";
+  position:absolute;
+  inset:-24px;
+  background-image: var(--story-bg, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px) saturate(1.1);
+  transform: scale(1.08);
+  opacity: .55;
+}
 #storyViewer img#storyImg{
-  width:100%;
-  height:100%;
+  position: relative;
+  z-index: 1;
+  width:100% !important;
+  height:100% !important;
   object-fit: cover;
+  object-position: center;
   display:block;
+}
+
+@media (max-width: 720px){
+  /* Mobile: show the entire 9:16 banner without cropping */
+  #storyViewer img#storyImg{ object-fit: contain; }
+  #storyViewer::before{ opacity: .75; filter: blur(20px) saturate(1.05); }
 }
 </style>
 </head>
@@ -928,7 +963,10 @@ function renderStoryViewer(idx, autoplay=false){
   }
 
   viewer.classList.remove("isEmpty");
-  img.src = pickStoryUrl(storyItems[storyIdx]);
+  const u = pickStoryUrl(storyItems[storyIdx]);
+  img.src = u;
+  // Use the same image as a blurred background to avoid white letterboxing
+  viewer.style.setProperty('--story-bg', `url("${u}")`);
 
   dots.innerHTML = storyItems.map((_,i)=>
     `<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`
