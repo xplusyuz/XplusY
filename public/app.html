@@ -632,144 +632,192 @@
     }
 
     // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
-   /* =========================
-   LeaderMath Avatar System
-   - Random (seedli)
-   - Gender asosida
-   - WebP → PNG fallback
-========================= */
-
-const AVATAR_DIR = "avatar";
-const AVATAR_MANIFEST = `${AVATAR_DIR}/manifest.json`;
-const LS_AVATAR = "lm_avatar_id";
-
-let AVATARS = { boys: [], girls: [], default: 1 };
-
-const $img = ()=>document.getElementById("userAvatar");
-
-/* --- utils --- */
-function hashSeed(str){
-  let h = 0;
-  for(let i=0;i<str.length;i++) h = Math.imul(31, h) + str.charCodeAt(i);
-  return Math.abs(h);
-}
-function pick(arr, seed){
-  if(!arr.length) return 0;
-  return arr[seed % arr.length];
-}
-
-/* --- load manifest --- */
-async function loadAvatarManifest(){
-  try{
-    const r = await fetch(AVATAR_MANIFEST, { cache:"no-store" });
-    if(r.ok){
-      const j = await r.json();
-      AVATARS.boys = j.boys || [];
-      AVATARS.girls = j.girls || [];
-      AVATARS.default = j.default || 1;
+    function avatarUrl(id){
+      if(!id) return "";
+      return `avatar/${id}.png`;
     }
-  }catch(e){}
-}
+    function setUserAvatar(id){
+      const img = $("userAvatar");
+      if(!img) return;
+      const src = avatarUrl(id);
+      if(!src){
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+        return;
+      }
+      img.src = src;
+      img.dataset.avatarId = String(id);
+      img.onerror = ()=>{
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+      };
+    }
 
-/* --- set avatar with webp/png fallback --- */
-function applyAvatar(id){
-  const img = $img();
-  if(!img) return;
+    function _seedToAvatarId(seed){
+      if(seed==null) return 1;
+      const s = String(seed);
+      const digits = (s.match(/\d+/g)||[]).join("");
+      const n = digits ? Number(digits.slice(-6)) : 0;
+      // 1..60 range (we try others on error anyway)
+      return (Math.abs(n)%60)+1;
+    }
 
-  img.onerror = ()=>{
-    img.onerror = null;
-    img.src = `${AVATAR_DIR}/${id}.png`;
-  };
-  img.src = `${AVATAR_DIR}/${id}.webp`;
-  img.dataset.avatarId = id;
-}
+    // Auto-load avatar from /avatar/1.png,2.png...; if missing => blank
+    function setUserAvatarAuto(preferredId, seed){
+      const img = $("userAvatar");
+      if(!img) return;
 
-/* --- auto pick avatar --- */
-function autoPickAvatar({ gender, seed, preferred }){
-  if(preferred) return preferred;
+      const candidates = [];
+      const add = (v)=>{
+        const id = Number(v);
+        if(!id || !Number.isFinite(id)) return;
+        if(!candidates.includes(id)) candidates.push(id);
+      };
 
-  const saved = Number(localStorage.getItem(LS_AVATAR));
-  if(saved) return saved;
+      add(preferredId);
+      add(_seedToAvatarId(seed));
+      // fallback pool (keeps it fast; onerror will hop)
+      for(let i=1;i<=20;i++) add(i);
 
-  const pool =
-    gender === "girl" ? AVATARS.girls :
-    gender === "boy"  ? AVATARS.boys  :
-    [...AVATARS.boys, ...AVATARS.girls];
+      let k = 0;
+      const tryNext = ()=>{
+        if(k >= candidates.length){
+          img.removeAttribute("src");
+          img.dataset.avatarId = "";
+          return;
+        }
+        const id = candidates[k++];
+        img.dataset.avatarId = String(id);
+        img.src = avatarUrl(id) + `?v=${Date.now()}`;
+      };
 
-  const h = hashSeed(String(seed || Date.now()));
-  return pick(pool, h) || AVATARS.default;
-}
+      img.onerror = ()=> tryNext();
+      tryNext();
+    }
 
-/* --- init avatar system --- */
-async function initAvatar({ gender, seed, avatarId }){
-  await loadAvatarManifest();
+    async function probeAvatar(id){
+      return new Promise((resolve)=>{
+        const im = new Image();
+        const t = setTimeout(()=>resolve(false), 900);
+        im.onload = ()=>{ clearTimeout(t); resolve(true); };
+        im.onerror = ()=>{ clearTimeout(t); resolve(false); };
+        im.src = avatarUrl(id) + `?v=${Date.now()}`;
+      });
+    }
 
-  const id = autoPickAvatar({
-    gender,
-    seed,
-    preferred: avatarId
-  });
+    // Avatar grid: 404 ni deyarli nolga tushiramiz.
+    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
+    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
+    async function loadAvatarGrid(){
+      const grid = $("avatarGrid");
+      const hint = $("avatarHint");
+      if(!grid) return;
+      grid.innerHTML = "";
+      hint.textContent = "Avatarlar yuklanmoqda…";
 
-  localStorage.setItem(LS_AVATAR, id);
-  applyAvatar(id);
-}
+      const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
+      let okCount = 0;
 
-/* --- avatar picker grid --- */
-async function loadAvatarGrid(){
-  const grid = $("avatarGrid");
-  const hint = $("avatarHint");
-  grid.innerHTML = "";
-  hint.textContent = "Yuklanmoqda…";
+      const loadOne = (i)=> new Promise((resolve)=>{
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `avaBtn ${i===cur?"active":""}`;
+        btn.setAttribute("data-ava", String(i));
 
-  const ids = [...AVATARS.boys, ...AVATARS.girls];
-  const cur = Number($img()?.dataset.avatarId);
+        const im = document.createElement("img");
+        im.alt = `Avatar ${i}`;
+        im.decoding = "async";
+        im.loading = "lazy";
 
-  ids.forEach(id=>{
-    const b = document.createElement("button");
-    b.className = "avaBtn" + (id===cur?" active":"");
-    b.dataset.ava = id;
+        const cap = document.createElement("div");
+        cap.className = "small";
+        cap.textContent = `#${i}`;
 
-    const im = document.createElement("img");
-    im.src = `${AVATAR_DIR}/${id}.png`;
-    im.loading = "lazy";
+        btn.appendChild(im);
+        btn.appendChild(cap);
 
-    const cap = document.createElement("div");
-    cap.className = "small";
-    cap.textContent = `#${id}`;
+        const t = setTimeout(()=>resolve({ok:false}), 1200);
+        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
+        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
+        im.src = avatarUrl(i) + `?v=${Date.now()}`;
+      });
 
-    b.append(im, cap);
-    grid.appendChild(b);
-  });
+      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
+      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
+      try{
+        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
+        if(mf.ok){
+          const data = await mf.json();
+          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
+          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
+          if(clean.length){
+            for(const i of clean){
+              const r = await loadOne(i);
+              if(r.ok){ okCount++; grid.appendChild(r.node); }
+            }
+            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
+            return;
+          }
+        }
+      }catch(e){ /* ignore */ }
 
-  hint.textContent = `${ids.length} ta avatar`;
-}
+      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
+      for(let i=1;i<=200;i++){
+        const r = await loadOne(i);
+        if(r.ok){
+          okCount++;
+          grid.appendChild(r.node);
+          hint.textContent = `${okCount} ta avatar topildi`;
+        }else{
+          if(okCount>0) break;
+          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
+          if(i>=6) break;
+        }
+      }
 
-/* --- picker events --- */
-function setupAvatarPicker(){
-  const modal = $("avatarModal");
+      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
+      else hint.textContent = `${okCount} ta avatar topildi`;
+    }
 
-  $img()?.addEventListener("click", async (e)=>{
-    e.stopPropagation();
-    openModal(modal);
-    await loadAvatarGrid();
-  }, true);
-
-  $("avatarGrid")?.addEventListener("click", e=>{
-    const b = e.target.closest("[data-ava]");
-    if(!b) return;
-
-    const id = Number(b.dataset.ava);
-    localStorage.setItem(LS_AVATAR, id);
-    applyAvatar(id);
-    toast("Avatar tanlandi");
-    closeModal(modal);
-  });
-
-  const __avaClose = $("avatarClose");
-  if(__avaClose) __avaClose.onclick = ()=>closeModal(modal);
-  const __avaRefresh = $("avatarRefresh");
-  if(__avaRefresh) __avaRefresh.onclick = loadAvatarGrid;
-}
+    function setupAvatarPicker(){
+      const modal = $("avatarModal");
+      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
+      const openTargets = [$("userAvatar")].filter(Boolean);
+      const closeBtn = $("avatarClose");
+      const refresh = $("avatarRefresh");
+      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        openModal(modal);
+        await loadAvatarGrid();
+      }, true));
+      closeBtn?.addEventListener("click", ()=>closeModal(modal));
+      modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
+      refresh?.addEventListener("click", loadAvatarGrid);
+      $("avatarGrid")?.addEventListener("click", async (e)=>{
+        const b = e.target.closest("[data-ava]");
+        if(!b) return;
+        const id = Number(b.getAttribute("data-ava"));
+        try{
+          b.disabled = true;
+          // 1) Try server-side save (Netlify/Firebase endpoint)
+          const r = await setAvatar(id);
+          const savedId = r?.user?.avatarId || id;
+          localStorage.setItem("lm_avatarId", String(savedId));
+          setUserAvatar(savedId);
+          toast("Avatar saqlandi");
+          closeModal(modal);
+        }catch(err){
+          // 2) Fallback: local save (if API endpoint is not available)
+          localStorage.setItem("lm_avatarId", String(id));
+          setUserAvatar(id);
+          toast("Avatar tanlandi");
+          closeModal(modal);
+        }finally{
+          b.disabled = false;
+        }
+      });
+    }
 
     // ===============================
     // Single-page home (Stories + Challenge + Tests + Simulators)
