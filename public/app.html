@@ -621,181 +621,196 @@
 
     // ===============================
     // Medalyon (9999 gacha) tizimi
-    //  - medals/1.webp ... medals/9999.webp
+    //  - medals/1.webp ... medals/9999.webp (ixtiyoriy: .png fallback)
     //  - Bosqich threshold: T(L) = BASE * (L-1)*L/2
     //    misol: 1→0, 2→100, 3→300, 4→600 ...
+    //  - manifest.json kerak emas
     // ===============================
-    const MEDAL_DIR = "medals";
-    const LEVEL_MAX = 9999;
-    const BASE_STEP = 100; // 100 ball = bazaviy qadam
+    var MEDAL_DIR = "medals";
+    var LEVEL_MAX = 9999;
+    var BASE_STEP = 100; // 100 ball = bazaviy qadam
+
+    function clamp(n, a, b){ n = Number(n)||0; return Math.max(a, Math.min(b, n)); }
 
     function thresholdForLevel(L){
-      const x = Math.max(1, Math.min(LEVEL_MAX, Number(L)||1));
-      return Math.round(BASE_STEP * (x-1) * x / 2);
+      L = clamp(L, 1, LEVEL_MAX);
+      return Math.round(BASE_STEP * (L-1) * L / 2);
     }
 
     function levelFromPoints(points){
-      const p = Math.max(0, Number(points)||0);
-      const L = Math.floor((1 + Math.sqrt(1 + 8*(p/BASE_STEP))) / 2);
-      return Math.max(1, Math.min(LEVEL_MAX, L));
+      var p = Math.max(0, Number(points)||0);
+      // L = floor((1 + sqrt(1 + 8*(p/BASE_STEP))) / 2)
+      var L = Math.floor((1 + Math.sqrt(1 + 8*(p/BASE_STEP))) / 2);
+      return clamp(L, 1, LEVEL_MAX);
     }
 
     function medalUrl(level){
-  const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
-  return `${MEDAL_DIR}/${L}.webp`;
-}
+      var L = clamp(level, 1, LEVEL_MAX);
+      return MEDAL_DIR + "/" + L + ".webp";
+    }
 
-// Robust medal loader:
-// - try level.webp -> level.png
-// - if missing, step down (level-1, level-2, ...) until 1
-// This prevents showing logo when you haven't prepared higher medals yet.
-function setMedalImg(imgEl, level){
-  if(!imgEl) return;
-  let L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
-  const bust = `?v=${Date.now()}`;
-  let tries = 0;
-  const MAX_TRIES = 12; // 6 levels * 2 formats (webp+png) by default
+    // Robust medal loader (low 404):
+    // 1) Try current level (webp/png)
+    // 2) If missing, try last known working medal level from localStorage (webp/png)
+    // 3) Then try 1 (webp/png)
+    // 4) Finally logo.png
+    function setMedalImg(imgEl, level){
+      if(!imgEl) return;
 
-  const tryOne = ()=>{
-    const ext = (tries % 2 === 0) ? "webp" : "png";
-    const url = `${MEDAL_DIR}/${L}.${ext}${bust}`;
-    imgEl.onerror = null;
-    imgEl.src = url;
+      var L = clamp(level, 1, LEVEL_MAX);
+      var bust = "?v=" + Date.now();
 
-    imgEl.onerror = ()=>{
-      tries++;
-      if(tries >= MAX_TRIES || L <= 1 && ext === "png"){
+      var KEY = "lm_last_medal_ok_level";
+      var lastOk = 1;
+      try{
+        lastOk = clamp(parseInt(localStorage.getItem(KEY), 10) || 1, 1, LEVEL_MAX);
+      }catch(_){ lastOk = 1; }
+
+      // Build attempt list (max 6 tries)
+      var tries = [
+        {l:L, ext:"webp"}, {l:L, ext:"png"},
+        {l:lastOk, ext:"webp"}, {l:lastOk, ext:"png"},
+        {l:1, ext:"webp"}, {l:1, ext:"png"}
+      ];
+
+      var i = 0;
+
+      function doneToLogo(){
         imgEl.onerror = null;
+        imgEl.onload = null;
         imgEl.src = "logo.png";
-        return;
       }
-      // After trying both formats for this level, step down one level
-      if(tries % 2 === 0) L = Math.max(1, L-1);
-      tryOne();
-    };
-  };
 
-  tryOne();
-}
+      function tryNext(){
+        if(i >= tries.length){ doneToLogo(); return; }
+
+        var t = tries[i++];
+        var url = MEDAL_DIR + "/" + t.l + "." + t.ext + bust;
+
+        imgEl.onload = function(){
+          imgEl.onload = null;
+          imgEl.onerror = null;
+          // save last ok medal level
+          try{ localStorage.setItem(KEY, String(t.l)); }catch(_){}
+        };
+
+        imgEl.onerror = function(){
+          imgEl.onerror = null;
+          imgEl.onload = null;
+          tryNext();
+        };
+
+        imgEl.src = url;
+      }
+
+      tryNext();
+    }
 
     function renderLevelBars(progress01){
-      const wrap = $("levelBars");
+      var wrap = $("levelBars");
       if(!wrap) return;
-      const p = Math.max(0, Math.min(1, Number(progress01)||0));
-      const N = 12;
-      const bars = [];
-      for(let i=1;i<=N;i++){
-        const wave = 0.45 + 0.55*Math.sin((i/N)*Math.PI);
-        const fill = Math.max(0, Math.min(1, (p*N - (i-1))));
-        const h = Math.round(10 + 34*wave);
-        bars.push(`
-          <div style="
-            width:8px; height:${h}px; border-radius:10px;
-            background: rgba(15,23,42,.10);
-            border:1px solid rgba(20,40,60,.10);
-            overflow:hidden;
-          ">
-            <div style="
-              width:100%;
-              height:${Math.round(h*fill)}px;
-              margin-top:${Math.round(h*(1-fill))}px;
-              background: linear-gradient(180deg, rgba(46,139,87,.85), rgba(59,130,246,.65));
-              border-radius:10px;
-            "></div>
-          </div>
-        `);
+      var p = Math.max(0, Math.min(1, Number(progress01)||0));
+      var N = 12;
+      var bars = [];
+      for(var i=1;i<=N;i++){
+        var wave = 0.45 + 0.55*Math.sin((i/N)*Math.PI);
+        var fill = Math.max(0, Math.min(1, (p*N - (i-1))));
+        var h = Math.round(10 + 34*wave);
+        bars.push(
+          '<div style="width:8px;height:'+h+'px;border-radius:10px;background:rgba(15,23,42,.10);border:1px solid rgba(20,40,60,.10);overflow:hidden;">' +
+            '<div style="width:100%;height:'+Math.round(h*fill)+'px;margin-top:'+Math.round(h*(1-fill))+'px;background:linear-gradient(180deg, rgba(46,139,87,.85), rgba(59,130,246,.65));border-radius:10px;"></div>' +
+          '</div>'
+        );
       }
       wrap.innerHTML = bars.join("");
     }
 
     function openLevelUp(level){
-      const modal = $("levelUpModal");
+      var modal = $("levelUpModal");
       if(!modal) return;
-      const img = $("levelUpImg");
-      const ttl = $("levelUpTitle");
-      const sub = $("levelUpSub");
-      const hint = $("levelUpHint");
 
-      const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
-      if(img){
-        setMedalImg(img, L);
-      }
-`;
-        img.onerror = ()=>{
-        img.onerror = null;
-       img.src = MEDAL_DIR + '/' + L + '.png?v=' + Date.now();
-        img.onerror = ()=>{ img.src = "logo.png"; };
-      };
-      }
-      if(ttl) ttl.textContent = `Daraja: ${L} • Yangi medalyon!`;
-      if(sub) sub.textContent = `Siz ${L}-bosqichga o‘tdingiz`;
+      var img = $("levelUpImg");
+      var ttl = $("levelUpTitle");
+      var sub = $("levelUpSub");
+      var hint = $("levelUpHint");
+
+      var L = clamp(level, 1, LEVEL_MAX);
+
+      if(img) setMedalImg(img, L);
+      if(ttl) ttl.textContent = "Daraja: " + L + " • Yangi medalyon!";
+      if(sub) sub.textContent = "Siz " + L + "-bosqichga o‘tdingiz";
+
       if(hint){
-        const next = (L<LEVEL_MAX) ? thresholdForLevel(L+1) : thresholdForLevel(LEVEL_MAX);
-        hint.textContent = (L<LEVEL_MAX)
-          ? `Keyingi bosqich uchun: ${next} ball`
-          : `Siz maksimal darajadasiz!`;
+        if(L < LEVEL_MAX){
+          var next = thresholdForLevel(L+1);
+          hint.textContent = "Keyingi bosqich uchun: " + next + " ball";
+        }else{
+          hint.textContent = "Siz maksimal darajadasiz!";
+        }
       }
 
       openModal(modal);
     }
 
     function setupLevelUpModal(){
-      const modal = $("levelUpModal");
-      $("levelUpClose")?.addEventListener("click", ()=>closeModal(modal));
-      $("levelU
-const headImg = $("userAvatar");
-if(headImg){
-  setMedalImg(headImg, L);
-  headImg.alt = "medalyon";
-  headImg.dataset.level = String(L);
-}
+      var modal = $("levelUpModal");
+      var closeBtn = $("levelUpClose");
+      var okBtn = $("levelUpOk");
+      if(closeBtn) closeBtn.addEventListener("click", function(){ closeModal(modal); });
+      if(okBtn) okBtn.addEventListener("click", function(){ closeModal(modal); });
+      if(modal){
+        modal.addEventListener("click", function(e){
+          if(e.target === modal) closeModal(modal);
+        });
+      }
+    }
 
-// Big medal section
-const big = $("medalLarge");
-if(big){
-  setMedalImg(big, L);
-}
+    function updateMedalUI(points){
+      var p = Math.max(0, Number(points)||0);
+      var L = levelFromPoints(p);
 
-   }
-
-      // Big medal section
-      const big = $("medalLarge");
-      if(big){
-        big.src = medalUrl(L) + `?v=${Date.now()}`;
-        big.onerror = ()=>{
-        big.onerror = null;
-        big.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
-        big.onerror = ()=>{ big.src = "logo.png"; };
-      };
+      // Header avatar: medal kabi ko‘rsatish
+      var headImg = $("userAvatar");
+      if(headImg){
+        setMedalImg(headImg, L);
+        headImg.alt = "medalyon";
+        headImg.dataset.level = String(L);
       }
 
-      const curStart = thresholdForLevel(L);
-      const nextStart = (L<LEVEL_MAX) ? thresholdForLevel(L+1) : thresholdForLevel(LEVEL_MAX);
-      const span = Math.max(1, nextStart - curStart);
-      const pct = (L>=LEVEL_MAX) ? 1 : Math.max(0, Math.min(1, (p - curStart)/span));
+      // Big medal section
+      var big = $("medalLarge");
+      if(big){
+        setMedalImg(big, L);
+      }
 
-      $("levelText") && ($("levelText").textContent = `Daraja: ${L} / ${LEVEL_MAX}`);
-      $("levelRange") && ($("levelRange").textContent = (L<LEVEL_MAX) ? `${curStart} → ${nextStart}` : `${nextStart} (MAX)`);
-      $("levelProgress") && ($("levelProgress").style.width = `${Math.round(pct*100)}%`);
-      $("levelPct") && ($("levelPct").textContent = `${Math.round(pct*100)}%`);
-      $("nextHint") && ($("nextHint").textContent = (L<LEVEL_MAX) ? `Keyingi medalyongacha: ${Math.max(0, nextStart - p)} ball` : `Siz maksimal darajaga yetdingiz!`);
+      var curStart = thresholdForLevel(L);
+      var nextStart = (L < LEVEL_MAX) ? thresholdForLevel(L+1) : thresholdForLevel(LEVEL_MAX);
+      var span = Math.max(1, nextStart - curStart);
+      var pct = (L >= LEVEL_MAX) ? 1 : Math.max(0, Math.min(1, (p - curStart)/span));
+
+      if($("levelText")) $("levelText").textContent = "Daraja: " + L + " / " + LEVEL_MAX;
+      if($("levelRange")) $("levelRange").textContent = (L < LEVEL_MAX) ? (curStart + " → " + nextStart) : (nextStart + " (MAX)");
+      if($("levelProgress")) $("levelProgress").style.width = Math.round(pct*100) + "%";
+      if($("levelPct")) $("levelPct").textContent = Math.round(pct*100) + "%";
+      if($("nextHint")) $("nextHint").textContent = (L < LEVEL_MAX) ? ("Keyingi medalyongacha: " + Math.max(0, nextStart - p) + " ball") : "Siz maksimal darajaga yetdingiz!";
 
       renderLevelBars(pct);
 
-      // Level-up detect
-      const KEY = "lm_medal_level";
-      const prev = Number(localStorage.getItem(KEY) || 0) || 0;
+      // Level-up detect (local only)
+      var KEY = "lm_medal_level";
+      var prev = 0;
+      try{ prev = Number(localStorage.getItem(KEY) || 0) || 0; }catch(_){ prev = 0; }
+
       if(L > prev){
-        localStorage.setItem(KEY, String(L));
+        try{ localStorage.setItem(KEY, String(L)); }catch(_){}
         if(prev > 0) openLevelUp(L);
       }else if(prev === 0){
-        localStorage.setItem(KEY, String(L));
+        try{ localStorage.setItem(KEY, String(L)); }catch(_){}
       }
     }
 
 
-
-    // ===============================
+// ===============================
     // Single-page home (Stories + Challenge + Tests + Simulators)
     // ===============================
     const BANNER_DIR = "banner";
