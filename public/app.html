@@ -562,215 +562,192 @@
       return `${y} yosh ${m} oy ${d} kun`;
     }
 
-    // ===== Avatar system (gender + stable random + WebP->PNG fallback) =====
-const AVATAR_DIR = "avatar";
-const AVATAR_MANIFEST = `${AVATAR_DIR}/manifest.json`;
-const LS_AVATAR_ID = "lm_avatarId";
-const LS_GENDER = "lm_gender"; // "boy" | "girl" (optional)
-let _avaMeta = { boys: [], girls: [], ids: [], default: 1 };
-let _avaLoaded = false;
-
-function _toInt(v){ const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : 0; }
-function _uniq(arr){ return [...new Set(arr)]; }
-
-function _hash32(str){
-  let h = 2166136261;
-  str = String(str ?? "");
-  for(let i=0;i<str.length;i++){
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-function _pickStable(arr, seed){
-  if(!arr || !arr.length) return 0;
-  const h = _hash32(seed);
-  return arr[h % arr.length];
-}
-function _normGender(g){
-  g = String(g||"").toLowerCase();
-  if(g.includes("qiz") || g==="girl" || g==="female") return "girl";
-  if(g.includes("o'g") || g.includes("ogil") || g==="boy" || g==="male") return "boy";
-  if(g==="g") return "girl";
-  if(g==="b") return "boy";
-  return "";
-}
-
-async function loadAvatarManifest(){
-  if(_avaLoaded) return _avaMeta;
-  _avaLoaded = true;
-  try{
-    const r = await fetch(AVATAR_MANIFEST, {cache:"no-store"});
-    if(r.ok){
-      const j = await r.json();
-      // Supported:
-      // 1) {boys:[1..], girls:[..], default:1}
-      // 2) {ids:[1..]}
-      // 3) [1,2,3]
-      const boys = Array.isArray(j?.boys) ? j.boys.map(_toInt).filter(n=>n>0) : [];
-      const girls = Array.isArray(j?.girls) ? j.girls.map(_toInt).filter(n=>n>0) : [];
-      const ids = Array.isArray(j?.ids) ? j.ids.map(_toInt).filter(n=>n>0)
-                : (Array.isArray(j) ? j.map(_toInt).filter(n=>n>0) : []);
-      _avaMeta.boys = boys;
-      _avaMeta.girls = girls;
-      _avaMeta.ids = ids.length ? ids : _uniq([...(boys||[]), ...(girls||[])]);
-      _avaMeta.default = _toInt(j?.default) || (_avaMeta.ids[0] || 1);
-      return _avaMeta;
+    // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
+    function avatarUrl(id){
+      if(!id) return "";
+      return `avatar/${id}.png`;
     }
-  }catch(_){}
-
-  // Fallback: assume 1..10 exists (your current pack)
-  _avaMeta.ids = [1,2,3,4,5,6,7,8,9,10];
-  _avaMeta.boys = [1,2,3,4,5];
-  _avaMeta.girls = [6,7,8,9,10];
-  _avaMeta.default = 1;
-  return _avaMeta;
-}
-
-function avatarUrl(id, ext){
-  if(!id) return "";
-  return `${AVATAR_DIR}/${id}.${ext}`;
-}
-
-// Backward-compatible: setUserAvatar(id) called elsewhere
-function setUserAvatar(id){
-  setUserAvatarSmart(id);
-}
-
-function setUserAvatarSmart(id){
-  const img = $("userAvatar");
-  if(!img) return;
-  const cleanId = _toInt(id);
-  if(!cleanId){
-    img.removeAttribute("src");
-    img.dataset.avatarId = "";
-    return;
-  }
-  img.dataset.avatarId = String(cleanId);
-
-  // webp -> png fallback
-  img.onerror = ()=>{
-    img.onerror = ()=>{
-      img.removeAttribute("src");
-      img.dataset.avatarId = "";
-    };
-    img.src = avatarUrl(cleanId, "png");
-  };
-  img.src = avatarUrl(cleanId, "webp");
-}
-
-function pickAutoAvatarId({gender, seed, preferredId}={}){
-  const pref = _toInt(preferredId);
-  if(pref) return pref;
-
-  const saved = _toInt(localStorage.getItem(LS_AVATAR_ID));
-  if(saved) return saved;
-
-  const g = _normGender(gender || localStorage.getItem(LS_GENDER));
-  const pool = g==="girl" ? (_avaMeta.girls||[]) : g==="boy" ? (_avaMeta.boys||[]) : (_avaMeta.ids||[]);
-  const picked = _pickStable(pool?.length ? pool : (_avaMeta.ids||[]), seed || "seed");
-  return picked || _avaMeta.default || 1;
-}
-
-async function initAvatarSystem({gender, seed, preferredId}={}){
-  await loadAvatarManifest();
-  const g = _normGender(gender);
-  if(g) localStorage.setItem(LS_GENDER, g);
-  const id = pickAutoAvatarId({gender:g, seed, preferredId});
-  localStorage.setItem(LS_AVATAR_ID, String(id));
-  setUserAvatarSmart(id);
-  return id;
-}
-
-async function loadAvatarGrid(){
-  await loadAvatarManifest();
-  const grid = $("avatarGrid");
-  const hint = $("avatarHint");
-  if(!grid) return;
-  grid.innerHTML = "";
-  if(hint) hint.textContent = "Avatarlar yuklanmoqda…";
-
-  const cur = _toInt($("userAvatar")?.dataset?.avatarId || 0);
-  const ids = _uniq(_avaMeta.ids?.length ? _avaMeta.ids : [...(_avaMeta.boys||[]), ...(_avaMeta.girls||[])])
-    .filter(n=>n>0).slice(0,200);
-
-  let okCount = 0;
-  ids.forEach((i)=>{
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `avaBtn ${i===cur?"active":""}`;
-    btn.setAttribute("data-ava", String(i));
-
-    const im = document.createElement("img");
-    im.alt = `Avatar ${i}`;
-    im.decoding = "async";
-    im.loading = "lazy";
-    im.onerror = ()=>{ im.onerror=null; im.src = avatarUrl(i,"png"); };
-    im.src = avatarUrl(i,"webp");
-
-    const cap = document.createElement("div");
-    cap.className = "small";
-    cap.textContent = `#${i}`;
-
-    btn.appendChild(im);
-    btn.appendChild(cap);
-    grid.appendChild(btn);
-    okCount++;
-  });
-
-  if(hint) hint.textContent = okCount ? `${okCount} ta avatar` : "Avatar topilmadi";
-}
-
-function setupAvatarPicker(){
-  const modal = $("avatarModal");
-  const openTargets = [$("userAvatar")].filter(Boolean);
-  const closeBtn = $("avatarClose");
-  const refresh = $("avatarRefresh");
-
-  openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    openModal(modal);
-    await loadAvatarGrid();
-  }, true));
-
-  closeBtn?.addEventListener("click", ()=>closeModal(modal));
-  modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
-  refresh?.addEventListener("click", loadAvatarGrid);
-
-  $("avatarGrid")?.addEventListener("click", async (e)=>{
-    const b = e.target.closest("[data-ava]");
-    if(!b) return;
-    const id = _toInt(b.getAttribute("data-ava"));
-    if(!id) return;
-
-    try{
-      b.disabled = true;
-
-      // If server endpoint exists, try saving (optional)
-      if(typeof setAvatar === "function"){
-        const r = await setAvatar(id);
-        const savedId = _toInt(r?.user?.avatarId) || id;
-        localStorage.setItem(LS_AVATAR_ID, String(savedId));
-        setUserAvatarSmart(savedId);
-        toast("Avatar saqlandi");
-      }else{
-        localStorage.setItem(LS_AVATAR_ID, String(id));
-        setUserAvatarSmart(id);
-        toast("Avatar tanlandi");
+    function setUserAvatar(id){
+      const img = $("userAvatar");
+      if(!img) return;
+      const src = avatarUrl(id);
+      if(!src){
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+        return;
       }
-      closeModal(modal);
-    }catch(_){
-      // Local fallback always works
-      localStorage.setItem(LS_AVATAR_ID, String(id));
-      setUserAvatarSmart(id);
-      toast("Avatar tanlandi");
-      closeModal(modal);
-    }finally{
-      b.disabled = false;
+      img.src = src;
+      img.dataset.avatarId = String(id);
+      img.onerror = ()=>{
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+      };
     }
-  });
-}      });
+
+    function _seedToAvatarId(seed){
+      if(seed==null) return 1;
+      const s = String(seed);
+      const digits = (s.match(/\d+/g)||[]).join("");
+      const n = digits ? Number(digits.slice(-6)) : 0;
+      // 1..60 range (we try others on error anyway)
+      return (Math.abs(n)%60)+1;
+    }
+
+    // Auto-load avatar from /avatar/1.png,2.png...; if missing => blank
+    function setUserAvatarAuto(preferredId, seed){
+      const img = $("userAvatar");
+      if(!img) return;
+
+      const candidates = [];
+      const add = (v)=>{
+        const id = Number(v);
+        if(!id || !Number.isFinite(id)) return;
+        if(!candidates.includes(id)) candidates.push(id);
+      };
+
+      add(preferredId);
+      add(_seedToAvatarId(seed));
+      // fallback pool (keeps it fast; onerror will hop)
+      for(let i=1;i<=20;i++) add(i);
+
+      let k = 0;
+      const tryNext = ()=>{
+        if(k >= candidates.length){
+          img.removeAttribute("src");
+          img.dataset.avatarId = "";
+          return;
+        }
+        const id = candidates[k++];
+        img.dataset.avatarId = String(id);
+        img.src = avatarUrl(id) + `?v=${Date.now()}`;
+      };
+
+      img.onerror = ()=> tryNext();
+      tryNext();
+    }
+
+    async function probeAvatar(id){
+      return new Promise((resolve)=>{
+        const im = new Image();
+        const t = setTimeout(()=>resolve(false), 900);
+        im.onload = ()=>{ clearTimeout(t); resolve(true); };
+        im.onerror = ()=>{ clearTimeout(t); resolve(false); };
+        im.src = avatarUrl(id) + `?v=${Date.now()}`;
+      });
+    }
+
+    // Avatar grid: 404 ni deyarli nolga tushiramiz.
+    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
+    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
+    async function loadAvatarGrid(){
+      const grid = $("avatarGrid");
+      const hint = $("avatarHint");
+      if(!grid) return;
+      grid.innerHTML = "";
+      hint.textContent = "Avatarlar yuklanmoqda…";
+
+      const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
+      let okCount = 0;
+
+      const loadOne = (i)=> new Promise((resolve)=>{
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `avaBtn ${i===cur?"active":""}`;
+        btn.setAttribute("data-ava", String(i));
+
+        const im = document.createElement("img");
+        im.alt = `Avatar ${i}`;
+        im.decoding = "async";
+        im.loading = "lazy";
+
+        const cap = document.createElement("div");
+        cap.className = "small";
+        cap.textContent = `#${i}`;
+
+        btn.appendChild(im);
+        btn.appendChild(cap);
+
+        const t = setTimeout(()=>resolve({ok:false}), 1200);
+        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
+        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
+        im.src = avatarUrl(i) + `?v=${Date.now()}`;
+      });
+
+      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
+      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
+      try{
+        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
+        if(mf.ok){
+          const data = await mf.json();
+          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
+          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
+          if(clean.length){
+            for(const i of clean){
+              const r = await loadOne(i);
+              if(r.ok){ okCount++; grid.appendChild(r.node); }
+            }
+            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
+            return;
+          }
+        }
+      }catch(e){ /* ignore */ }
+
+      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
+      for(let i=1;i<=200;i++){
+        const r = await loadOne(i);
+        if(r.ok){
+          okCount++;
+          grid.appendChild(r.node);
+          hint.textContent = `${okCount} ta avatar topildi`;
+        }else{
+          if(okCount>0) break;
+          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
+          if(i>=6) break;
+        }
+      }
+
+      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
+      else hint.textContent = `${okCount} ta avatar topildi`;
+    }
+
+    function setupAvatarPicker(){
+      const modal = $("avatarModal");
+      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
+      const openTargets = [$("userAvatar")].filter(Boolean);
+      const closeBtn = $("avatarClose");
+      const refresh = $("avatarRefresh");
+      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        openModal(modal);
+        await loadAvatarGrid();
+      }, true));
+      closeBtn?.addEventListener("click", ()=>closeModal(modal));
+      modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
+      refresh?.addEventListener("click", loadAvatarGrid);
+      $("avatarGrid")?.addEventListener("click", async (e)=>{
+        const b = e.target.closest("[data-ava]");
+        if(!b) return;
+        const id = Number(b.getAttribute("data-ava"));
+        try{
+          b.disabled = true;
+          // 1) Try server-side save (Netlify/Firebase endpoint)
+          const r = await setAvatar(id);
+          const savedId = r?.user?.avatarId || id;
+          localStorage.setItem("lm_avatarId", String(savedId));
+          setUserAvatar(savedId);
+          toast("Avatar saqlandi");
+          closeModal(modal);
+        }catch(err){
+          // 2) Fallback: local save (if API endpoint is not available)
+          localStorage.setItem("lm_avatarId", String(id));
+          setUserAvatar(id);
+          toast("Avatar tanlandi");
+          closeModal(modal);
+        }finally{
+          b.disabled = false;
+        }
+      });
     }
 
     // ===============================
@@ -1546,8 +1523,8 @@ function setupStoryControls(){
 
         // Agar server avatarId bermasa, localStorage'dagi tanlovni ishlatamiz
         const localAva = Number(localStorage.getItem("lm_avatarId")||0) || 0;
-        await initAvatarSystem({ gender: u.gender, seed: (u.numericId||u.loginId||u.id||""), preferredId: (u.avatarId || localAva) });
-$("userId").textContent = u.loginId;
+        setUserAvatarAuto(u.avatarId || localAva, u.loginId || u.numericId || u.id || "");
+        $("userId").textContent = u.loginId;
         $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
         $("userPoints").textContent = String(u.points ?? 0);
         $("userBalance").textContent = String(u.balance ?? 0);
@@ -1577,7 +1554,7 @@ $("userId").textContent = u.loginId;
           const r2 = await me();
           $("userName").textContent = r2.user.name || r2.user.loginId;
           $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
-          await initAvatarSystem({ gender: r2.user.gender, seed: (r2.user.numericId||r2.user.loginId||r2.user.id||""), preferredId: r2.user.avatarId });
+          setUserAvatar(r2.user.avatarId);
         }
       }catch(e){
         toast(e.message||"Kirish yo‘q");
@@ -2001,6 +1978,201 @@ $("userId").textContent = u.loginId;
       renderBig(); renderTags(); renderCards();
     })
     .catch(()=>{ info.textContent='Kontent yuklanmadi'; });
+})();
+</script>
+<!-- === Avatar System Override (drop-in) === -->
+<script>
+/*
+  LeaderMath Avatar System (DROP-IN PATCH)
+  - Does NOT change any other site logic/layout.
+  - Overrides common avatar functions if they exist:
+    avatarUrl, setUserAvatarSmart, setUserAvatarAuto, loadAvatarGrid, setupAvatarPicker
+  - Features:
+    🔄 Seed-stable random avatar
+    👦👧 Gender-based pool (from user.gender or localStorage lm_gender)
+    🖼 WebP → PNG fallback
+    ✅ manifest.json support to avoid 404
+*/
+
+(function(){
+  const AVATAR_DIR = "avatar"; // change to "avatars" if your folder is avatars/
+  const AVATAR_MANIFEST = `${AVATAR_DIR}/manifest.json`;
+  const LS_AVATAR_ID = "lm_avatar_id";
+  const LS_GENDER = "lm_gender"; // "boy" | "girl"
+
+  let AVATAR_META = { boys:[1,2,3,4,5], girls:[6,7,8,9,10], default:1 };
+
+  // Safe helpers
+  const $ = (id)=>document.getElementById(id);
+  const toInt = (v)=>{ const n=Number(v); return Number.isFinite(n)?Math.trunc(n):0; };
+
+  function hash32(str){
+    str = String(str ?? "");
+    let h = 2166136261;
+    for(let i=0;i<str.length;i++){
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+  function pickStable(arr, seed){
+    if(!arr || !arr.length) return 0;
+    const h = hash32(seed);
+    return arr[h % arr.length];
+  }
+
+  async function loadAvatarManifest(){
+    try{
+      const r = await fetch(AVATAR_MANIFEST, { cache:"no-store" });
+      if(!r.ok) return;
+      const j = await r.json();
+      if(Array.isArray(j?.boys)) AVATAR_META.boys = j.boys.map(toInt).filter(n=>n>0);
+      if(Array.isArray(j?.girls)) AVATAR_META.girls = j.girls.map(toInt).filter(n=>n>0);
+      const d = toInt(j?.default);
+      if(d>0) AVATAR_META.default = d;
+    }catch(_){}
+  }
+
+  function avatarUrl(id, ext){
+    return `${AVATAR_DIR}/${id}.${ext}`;
+  }
+
+  // WebP -> PNG fallback chain
+  function setUserAvatarSmart(id){
+    const img = $("userAvatar");
+    if(!img) return;
+    const clean = toInt(id);
+    if(!clean){ img.removeAttribute("src"); img.dataset.avatarId=""; return; }
+    img.dataset.avatarId = String(clean);
+
+    const toPng = ()=>{
+      img.onerror = ()=>{
+        // final fail: clear
+        img.removeAttribute("src");
+        img.dataset.avatarId = "";
+      };
+      img.src = avatarUrl(clean, "png");
+    };
+    img.onerror = toPng;
+    img.src = avatarUrl(clean, "webp");
+  }
+
+  // Determine gender pool from passed arg or current user object
+  function inferGender(passed){
+    const g0 = (passed || (window.__lmUser && window.__lmUser.gender) || localStorage.getItem(LS_GENDER) || "").toLowerCase();
+    if(g0.includes("qiz") || g0.includes("girl") || g0.includes("female")) return "girl";
+    if(g0.includes("o'g") || g0.includes("ogil") || g0.includes("boy") || g0.includes("male")) return "boy";
+    return "";
+  }
+
+  function pickAutoAvatarId({ preferredId, seed, gender } = {}){
+    const pref = toInt(preferredId);
+    if(pref) return pref;
+
+    const saved = toInt(localStorage.getItem(LS_AVATAR_ID));
+    if(saved) return saved;
+
+    const g = inferGender(gender);
+    const pool = g==="girl" ? AVATAR_META.girls : g==="boy" ? AVATAR_META.boys : [...AVATAR_META.boys, ...AVATAR_META.girls];
+    const picked = pickStable(pool, seed || "seed");
+    return picked || AVATAR_META.default || 1;
+  }
+
+  // Compatibility: many older builds call setUserAvatarAuto(preferredId, seed)
+  async function setUserAvatarAuto(preferredId, seed, gender){
+    // seed: numericId/email/login
+    await loadAvatarManifest();
+    const id = pickAutoAvatarId({ preferredId, seed, gender });
+    localStorage.setItem(LS_AVATAR_ID, String(id));
+    if(gender){
+      const g = inferGender(gender);
+      if(g) localStorage.setItem(LS_GENDER, g);
+    }
+    setUserAvatarSmart(id);
+    return id;
+  }
+
+  // Optional: build avatar grid using manifest ids (no 404)
+  async function loadAvatarGrid(){
+    await loadAvatarManifest();
+    const grid = $("avatarGrid");
+    const hint = $("avatarHint");
+    if(!grid) return;
+    grid.innerHTML = "";
+    const ids = [...new Set([...(AVATAR_META.boys||[]), ...(AVATAR_META.girls||[])])].filter(n=>n>0);
+    const cur = toInt($("userAvatar")?.dataset?.avatarId || 0);
+
+    ids.forEach((id)=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "avaBtn" + (id===cur ? " active":"");
+      btn.dataset.ava = String(id);
+
+      const im = document.createElement("img");
+      im.alt = `Avatar ${id}`;
+      im.loading = "lazy";
+      im.decoding = "async";
+      im.onerror = ()=>{ im.onerror=null; im.src = avatarUrl(id,"png"); };
+      im.src = avatarUrl(id,"webp");
+
+      const cap = document.createElement("div");
+      cap.className = "small";
+      cap.textContent = `#${id}`;
+
+      btn.appendChild(im);
+      btn.appendChild(cap);
+      grid.appendChild(btn);
+    });
+
+    if(hint) hint.textContent = `${ids.length} ta avatar`;
+  }
+
+  function setupAvatarPicker(){
+    const modal = $("avatarModal");
+    if(!modal) return;
+
+    // open on avatar click (keep existing behavior)
+    $("userAvatar")?.addEventListener("click", async (e)=>{
+      e.preventDefault?.();
+      e.stopPropagation?.();
+      if(typeof window.openModal === "function") window.openModal(modal);
+      else modal.classList?.add("open");
+      await loadAvatarGrid();
+    }, true);
+
+    $("avatarClose")?.addEventListener("click", ()=>{
+      if(typeof window.closeModal === "function") window.closeModal(modal);
+      else modal.classList?.remove("open");
+    });
+
+    modal.addEventListener("click", (e)=>{
+      if(e.target===modal){
+        if(typeof window.closeModal === "function") window.closeModal(modal);
+        else modal.classList?.remove("open");
+      }
+    });
+
+    $("avatarRefresh")?.addEventListener("click", loadAvatarGrid);
+
+    $("avatarGrid")?.addEventListener("click", (e)=>{
+      const b = e.target.closest("[data-ava]");
+      if(!b) return;
+      const id = toInt(b.dataset.ava);
+      localStorage.setItem(LS_AVATAR_ID, String(id));
+      setUserAvatarSmart(id);
+      if(typeof window.toast === "function") window.toast("Avatar tanlandi");
+      if(typeof window.closeModal === "function") window.closeModal(modal);
+      else modal.classList?.remove("open");
+    });
+  }
+
+  // Expose/override globals (drop-in)
+  window.avatarUrl = avatarUrl;
+  window.setUserAvatarSmart = setUserAvatarSmart;
+  window.setUserAvatarAuto = setUserAvatarAuto;
+  window.loadAvatarGrid = loadAvatarGrid;
+  window.setupAvatarPicker = setupAvatarPicker;
+
 })();
 </script>
 </body>
