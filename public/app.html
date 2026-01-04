@@ -276,7 +276,7 @@
 <section class="glass section" id="medalSection">
 <div class="sectionTitle">
 <h2>Daraja &amp; Medalyon</h2>
-<div class="hint">Ball → bosqich (100 ta) • medals/1.png…100.png</div>
+<div class="hint">Ball → bosqich (9999 gacha) • medals/1.webp…9999.webp</div>
 </div>
 <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
 <img alt="Medalyon" id="medalLarge" src="logo.png" style="width:74px;height:74px;border-radius:20px;border:1px solid rgba(20,40,60,.12);background:rgba(255,255,255,.55);object-fit:contain;flex:0 0 auto;"/>
@@ -620,13 +620,13 @@
     }
 
     // ===============================
-    // Medalyon (100 bosqich) tizimi
-    //  - medals/1.png ... medals/100.png
+    // Medalyon (9999 gacha) tizimi
+    //  - medals/1.webp ... medals/9999.webp
     //  - Bosqich threshold: T(L) = BASE * (L-1)*L/2
     //    misol: 1→0, 2→100, 3→300, 4→600 ...
     // ===============================
     const MEDAL_DIR = "medals";
-    const LEVEL_MAX = 100;
+    const LEVEL_MAX = 9999;
     const BASE_STEP = 100; // 100 ball = bazaviy qadam
 
     function thresholdForLevel(L){
@@ -642,7 +642,7 @@
 
     function medalUrl(level){
       const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
-      return `${MEDAL_DIR}/${L}.png`;
+      return `${MEDAL_DIR}/${L}.webp`;
     }
 
     function renderLevelBars(progress01){
@@ -686,7 +686,11 @@
       const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
       if(img){
         img.src = medalUrl(L) + `?v=${Date.now()}`;
+        img.onerror = ()=>{
+        img.onerror = null;
+        img.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
         img.onerror = ()=>{ img.src = "logo.png"; };
+      };
       }
       if(ttl) ttl.textContent = `Daraja: ${L} • Yangi medalyon!`;
       if(sub) sub.textContent = `Siz ${L}-bosqichga o‘tdingiz`;
@@ -717,14 +721,22 @@
         headImg.src = medalUrl(L) + `?v=${Date.now()}`;
         headImg.alt = "medalyon";
         headImg.dataset.level = String(L);
+        headImg.onerror = ()=>{
+        headImg.onerror = null;
+        headImg.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
         headImg.onerror = ()=>{ headImg.src = "logo.png"; };
+      };
       }
 
       // Big medal section
       const big = $("medalLarge");
       if(big){
         big.src = medalUrl(L) + `?v=${Date.now()}`;
+        big.onerror = ()=>{
+        big.onerror = null;
+        big.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
         big.onerror = ()=>{ big.src = "logo.png"; };
+      };
       }
 
       const curStart = thresholdForLevel(L);
@@ -757,12 +769,11 @@
     // Single-page home (Stories + Challenge + Tests + Simulators)
     // ===============================
     const BANNER_DIR = "banner";
-const BANNER_MANIFEST = `${BANNER_DIR}/manifest.json`;
 let storyItems = [];
 let storyIdx = 0;
 let storyTimer = null;
 
-const STORY_EXTS = ["webp", "png", "jpg", "jpeg"];
+const STORY_EXTS = ["webp"];
 
 const MOBILE_BP = 720; // px: mobile breakpoint for 9:16 banners
 
@@ -838,91 +849,22 @@ async function probeSequentialBanners(prefix, max=24, stopAfter=4){
 }
 
 async function loadStories(){
-  storyItems = [];
+  // Manifest ishlatilmaydi. Bannerlar papkadan ketma-ket topiladi:
+  // 1-d.webp / 1-m.webp (yoki 1.webp), keyin 2-..., 3-...
+  storyItems = await probeSequentialBanners(BANNER_DIR, 60, 2);
 
-  // Manifest is the single source of truth.
-  // No probing, no extra extensions — only what manifest.json lists.
-  let mfText = null;
-  try{
-    const r = await fetch(BANNER_MANIFEST, { cache:"no-store" });
-    if(!r.ok){
-      // manifest not found -> show empty state (no 404 spam)
-      storyItems = [];
-      renderStoryViewer(0, false);
-      const empty = $("storyEmpty");
-      const viewer = $("storyViewer");
-      if(empty) empty.style.display = "block";
-      if(viewer) viewer.classList.add("isEmpty");
-      return;
-    }
-    mfText = await r.text();
-  }catch(_){
-    storyItems = [];
-    renderStoryViewer(0, false);
-    const empty = $("storyEmpty");
-    if(empty){
-      empty.style.display = "block";
-      empty.querySelector(".big")?.replaceChildren(document.createTextNode("Banner manifest yuklanmadi"));
-      empty.querySelector(".small")?.replaceChildren(document.createTextNode("banner/manifest.json mavjudligini tekshiring"));
-    }
-    return;
-  }
-
-  // Strict JSON parse: if manifest has a syntax error, we stop (no probing).
-  let j = null;
-  try{
-    j = JSON.parse(mfText);
-  }catch(_){
-    storyItems = [];
-    renderStoryViewer(0, false);
-    const empty = $("storyEmpty");
-    const viewer = $("storyViewer");
-    if(viewer) viewer.classList.add("isEmpty");
-    if(empty){
-      empty.style.display = "block";
-      const big = empty.querySelector(".big");
-      const small = empty.querySelector(".small");
-      if(big) big.textContent = "manifest.json xato (JSON)";
-      if(small) small.textContent = "Vergul(,) yoki qavslarni tekshiring. Masalan oxirgi elementdan keyin vergul bo‘lmasin.";
-    }
-    return;
-  }
-
-  // Expected format:
-  // { "items":[ { "id":1, "desktop":"1-d.webp", "mobile":"1-m.webp" }, ... ] }
-  // or legacy: { "ids":[1,2,3] }
-  if(Array.isArray(j?.items)){
-    storyItems = j.items
-      .map((it, idx)=>({
-        id: it?.id ?? (idx+1),
-        desktop: it?.desktop || null,
-        mobile: it?.mobile || null,
-        url: it?.url || null
-      }))
-      .filter(it => it.desktop || it.mobile || it.url);
-  }else if(Array.isArray(j?.ids)){
-    storyItems = j.ids.map((id)=>({ id, url: `${BANNER_DIR}/${id}.webp` }));
-  }else{
-    storyItems = [];
-  }
-
-  // Render
   const empty = $("storyEmpty");
+  const viewer = $("storyViewer");
+
   if(!storyItems.length){
     renderStoryViewer(0, false);
-    const viewer = $("storyViewer");
     if(viewer) viewer.classList.add("isEmpty");
-    if(empty){
-      empty.style.display = "block";
-      const big = empty.querySelector(".big");
-      const small = empty.querySelector(".small");
-      if(big) big.textContent = "Banner yo‘q";
-      if(small) small.textContent = "manifest.json ichida items ro‘yxatini to‘ldiring";
-    }
+    if(empty) empty.style.display = "block";
     return;
   }
 
   if(empty) empty.style.display = "none";
+  if(viewer) viewer.classList.remove("isEmpty");
   renderStoryViewer(0, true);
 }
 
