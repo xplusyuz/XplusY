@@ -788,22 +788,47 @@ function probeImageUrl(url){
   });
 }
 
-// fallback: 1.webp → 1.png → 1.jpg
-async function probeSequentialImages(prefix, max=24, stopAfter=4){
+// fallback probe:
+// - desktop: 1-d.webp / 1-d.png ...
+// - mobile : 1-m.webp / 1-m.png ...
+// - legacy : 1.webp / 1.png ...
+// NOTE: We keep file names (not full URLs) so pickStoryUrl() can switch by viewport.
+async function probeSequentialBanners(prefix, max=24, stopAfter=4){
   const out=[];
   let miss=0;
 
   for(let i=1;i<=max;i++){
-    let found=null;
+    let deskFile = null;
+    let mobFile  = null;
+    let baseFile = null;
 
+    // Desktop variant (-d)
     for(const ext of STORY_EXTS){
-      const url = `${prefix}/${i}.${ext}`;
-      if(await probeImageUrl(url)){ found=url; break; }
+      const f = `${i}-d.${ext}`;
+      if(await probeImageUrl(`${prefix}/${f}`)){ deskFile = f; break; }
+    }
+    // Mobile variant (-m)
+    for(const ext of STORY_EXTS){
+      const f = `${i}-m.${ext}`;
+      if(await probeImageUrl(`${prefix}/${f}`)){ mobFile = f; break; }
     }
 
-    if(found){
-      out.push({ id:i, url:found });
-      miss=0;
+    // Legacy/base (no suffix) — only if needed as fallback
+    // (avoids extra 404 noise when you already use -d / -m files)
+    if(!deskFile || !mobFile){
+      for(const ext of STORY_EXTS){
+        const f = `${i}.${ext}`;
+        if(await probeImageUrl(`${prefix}/${f}`)){ baseFile = f; break; }
+      }
+    }
+
+    const hasAny = !!(deskFile || mobFile || baseFile);
+    if(hasAny){
+      // If one side missing, fall back to the base or the other variant.
+      const d = deskFile || baseFile || mobFile;
+      const m = mobFile  || baseFile || deskFile;
+      out.push({ id:i, desktop: d, mobile: m });
+      miss = 0;
     }else{
       miss++;
       if(miss>=stopAfter) break;
@@ -845,7 +870,7 @@ async function loadStories(){
 
   // 2) fallback probe (1.webp, 1.png, 1.jpg...)
   if(!storyItems.length){
-    storyItems = await probeSequentialImages(BANNER_DIR, 24, 4);
+    storyItems = await probeSequentialBanners(BANNER_DIR, 24, 4);
   }
 
   // Small story bar hidden by CSS; keep viewer only
@@ -868,7 +893,7 @@ function renderStoryBar(){
   bar.innerHTML = storyItems.map((s,i)=>`
     <button class="storyBubble" type="button" data-idx="${i}">
       <div class="storyRing">
-        <img class="storyAvatar" src="${s.url}" alt="Banner ${i+1}">
+        <img class="storyAvatar" src="${pickStoryUrl(s)}" alt="Banner ${i+1}">
       </div>
       <div class="storyLabel">${i+1}</div>
     </button>
