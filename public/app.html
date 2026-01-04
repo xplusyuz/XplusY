@@ -641,9 +641,42 @@
     }
 
     function medalUrl(level){
-      const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
-      return `${MEDAL_DIR}/${L}.webp`;
-    }
+  const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
+  return `${MEDAL_DIR}/${L}.webp`;
+}
+
+// Robust medal loader:
+// - try level.webp -> level.png
+// - if missing, step down (level-1, level-2, ...) until 1
+// This prevents showing logo when you haven't prepared higher medals yet.
+function setMedalImg(imgEl, level){
+  if(!imgEl) return;
+  let L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
+  const bust = `?v=${Date.now()}`;
+  let tries = 0;
+  const MAX_TRIES = 12; // 6 levels * 2 formats (webp+png) by default
+
+  const tryOne = ()=>{
+    const ext = (tries % 2 === 0) ? "webp" : "png";
+    const url = `${MEDAL_DIR}/${L}.${ext}${bust}`;
+    imgEl.onerror = null;
+    imgEl.src = url;
+
+    imgEl.onerror = ()=>{
+      tries++;
+      if(tries >= MAX_TRIES || L <= 1 && ext === "png"){
+        imgEl.onerror = null;
+        imgEl.src = "logo.png";
+        return;
+      }
+      // After trying both formats for this level, step down one level
+      if(tries % 2 === 0) L = Math.max(1, L-1);
+      tryOne();
+    };
+  };
+
+  tryOne();
+}
 
     function renderLevelBars(progress01){
       const wrap = $("levelBars");
@@ -685,7 +718,9 @@
 
       const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
       if(img){
-        img.src = medalUrl(L) + `?v=${Date.now()}`;
+        setMedalImg(img, L);
+      }
+`;
         img.onerror = ()=>{
         img.onerror = null;
         img.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
@@ -707,26 +742,21 @@
     function setupLevelUpModal(){
       const modal = $("levelUpModal");
       $("levelUpClose")?.addEventListener("click", ()=>closeModal(modal));
-      $("levelUpOk")?.addEventListener("click", ()=>closeModal(modal));
-      modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
-    }
+      $("levelU
+const headImg = $("userAvatar");
+if(headImg){
+  setMedalImg(headImg, L);
+  headImg.alt = "medalyon";
+  headImg.dataset.level = String(L);
+}
 
-    function updateMedalUI(points){
-      const p = Math.max(0, Number(points)||0);
-      const L = levelFromPoints(p);
+// Big medal section
+const big = $("medalLarge");
+if(big){
+  setMedalImg(big, L);
+}
 
-      // Header medal (reuse #userAvatar img)
-      const headImg = $("userAvatar");
-      if(headImg){
-        headImg.src = medalUrl(L) + `?v=${Date.now()}`;
-        headImg.alt = "medalyon";
-        headImg.dataset.level = String(L);
-        headImg.onerror = ()=>{
-        headImg.onerror = null;
-        headImg.src = `${MEDAL_DIR}/${L}.png?v=${Date.now()}`;
-        headImg.onerror = ()=>{ headImg.src = "logo.png"; };
-      };
-      }
+   }
 
       // Big medal section
       const big = $("medalLarge");
