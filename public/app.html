@@ -840,41 +840,89 @@ async function probeSequentialBanners(prefix, max=24, stopAfter=4){
 async function loadStories(){
   storyItems = [];
 
-  // 1) manifest.json (desktop+mobile supported)
+  // Manifest is the single source of truth.
+  // No probing, no extra extensions — only what manifest.json lists.
+  let mfText = null;
   try{
-    const r = await fetch(BANNER_MANIFEST, {cache:"no-store"});
-    if(r.ok){
-      const j = await r.json();
-
-      // New format: { items: [ {id, desktop, mobile}, ... ] }
-      if(Array.isArray(j?.items) && j.items.length){
-        storyItems = j.items.map((it, idx)=>{
-          // accept: desktop/mobile (preferred), or ext/url (legacy)
-          if(it?.desktop || it?.mobile){
-            return { id: it.id ?? (idx+1), desktop: it.desktop, mobile: it.mobile };
-          }
-          if(it?.url){
-            return { id: it.id ?? (idx+1), url: it.url };
-          }
-          const ext = it?.ext || "webp";
-          const id = it?.id ?? (idx+1);
-          return { id, url: `${BANNER_DIR}/${id}.${ext}` };
-        });
-      }
-      // Older format: { ids: [1,2,3] }
-      else if(Array.isArray(j?.ids) && j.ids.length){
-        storyItems = j.ids.map((id)=>({ id, url: `${BANNER_DIR}/${id}.webp` }));
-      }
+    const r = await fetch(BANNER_MANIFEST, { cache:"no-store" });
+    if(!r.ok){
+      // manifest not found -> show empty state (no 404 spam)
+      storyItems = [];
+      renderStoryViewer(0, false);
+      const empty = $("storyEmpty");
+      const viewer = $("storyViewer");
+      if(empty) empty.style.display = "block";
+      if(viewer) viewer.classList.add("isEmpty");
+      return;
     }
-  }catch(_){ /* ignore */ }
-
-  // 2) fallback probe (1.webp, 1.png, 1.jpg...)
-  if(!storyItems.length){
-    storyItems = await probeSequentialBanners(BANNER_DIR, 24, 4);
+    mfText = await r.text();
+  }catch(_){
+    storyItems = [];
+    renderStoryViewer(0, false);
+    const empty = $("storyEmpty");
+    if(empty){
+      empty.style.display = "block";
+      empty.querySelector(".big")?.replaceChildren(document.createTextNode("Banner manifest yuklanmadi"));
+      empty.querySelector(".small")?.replaceChildren(document.createTextNode("banner/manifest.json mavjudligini tekshiring"));
+    }
+    return;
   }
 
-  // Small story bar hidden by CSS; keep viewer only
-  // renderStoryBar();
+  // Strict JSON parse: if manifest has a syntax error, we stop (no probing).
+  let j = null;
+  try{
+    j = JSON.parse(mfText);
+  }catch(_){
+    storyItems = [];
+    renderStoryViewer(0, false);
+    const empty = $("storyEmpty");
+    const viewer = $("storyViewer");
+    if(viewer) viewer.classList.add("isEmpty");
+    if(empty){
+      empty.style.display = "block";
+      const big = empty.querySelector(".big");
+      const small = empty.querySelector(".small");
+      if(big) big.textContent = "manifest.json xato (JSON)";
+      if(small) small.textContent = "Vergul(,) yoki qavslarni tekshiring. Masalan oxirgi elementdan keyin vergul bo‘lmasin.";
+    }
+    return;
+  }
+
+  // Expected format:
+  // { "items":[ { "id":1, "desktop":"1-d.webp", "mobile":"1-m.webp" }, ... ] }
+  // or legacy: { "ids":[1,2,3] }
+  if(Array.isArray(j?.items)){
+    storyItems = j.items
+      .map((it, idx)=>({
+        id: it?.id ?? (idx+1),
+        desktop: it?.desktop || null,
+        mobile: it?.mobile || null,
+        url: it?.url || null
+      }))
+      .filter(it => it.desktop || it.mobile || it.url);
+  }else if(Array.isArray(j?.ids)){
+    storyItems = j.ids.map((id)=>({ id, url: `${BANNER_DIR}/${id}.webp` }));
+  }else{
+    storyItems = [];
+  }
+
+  // Render
+  const empty = $("storyEmpty");
+  if(!storyItems.length){
+    renderStoryViewer(0, false);
+    const viewer = $("storyViewer");
+    if(viewer) viewer.classList.add("isEmpty");
+    if(empty){
+      empty.style.display = "block";
+      const big = empty.querySelector(".big");
+      const small = empty.querySelector(".small");
+      if(big) big.textContent = "Banner yo‘q";
+      if(small) small.textContent = "manifest.json ichida items ro‘yxatini to‘ldiring";
+    }
+    return;
+  }
+
+  if(empty) empty.style.display = "none";
   renderStoryViewer(0, true);
 }
 
