@@ -260,7 +260,7 @@
         </div>
 
         <!-- Mobile layout: logo chapda, profil o'rtada (to'liq), ikonlar o'ngda -->
-        <div class="user-chip" id="profileMini" title="Profil / Avatar">
+        <div class="user-chip" id="profileMini" title="Profil / Medalyon">
           <img id="userAvatar" src="logo.png" alt="avatar" style="width:36px;height:36px;border-radius:999px;border:2px solid rgba(56,189,248,.65)"/>
           <div class="user-meta">
             <div class="name"><span id="userName">—</span> · <span id="userId">—</span></div>
@@ -276,6 +276,39 @@
     </header>
 
     <main style="display:flex;flex-direction:column;gap:18px;">
+
+      <!-- ★ Medalyon / Level progress (100 bosqich) -->
+      <section class="glass section" id="medalSection">
+        <div class="sectionTitle">
+          <h2>Daraja & Medalyon</h2>
+          <div class="hint">Ball → bosqich (100 ta) • medals/1.png…100.png</div>
+        </div>
+
+        <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+          <img id="medalLarge" src="logo.png" alt="Medalyon" style="width:74px;height:74px;border-radius:20px;border:1px solid rgba(20,40,60,.12);background:rgba(255,255,255,.55);object-fit:contain;flex:0 0 auto;"/>
+          <div style="flex:1 1 220px; min-width:200px;">
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+              <div style="font-weight:950;font-size:16px;" id="levelText">Daraja: 1</div>
+              <div class="small" style="opacity:.75;" id="levelRange">0 → 100</div>
+            </div>
+
+            <!-- Game-like histogram -->
+            <div class="lvlBars" id="levelBars" aria-label="Progress gistogramma" style="display:flex;gap:6px;align-items:flex-end;margin-top:10px;height:44px;"></div>
+
+            <!-- Progress line -->
+            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+              <div style="flex:1;height:10px;border-radius:999px;background:rgba(15,23,42,.08);overflow:hidden;border:1px solid rgba(20,40,60,.10);">
+                <div id="levelProgress" style="height:100%;width:0%;background:linear-gradient(90deg, rgba(46,139,87,.85), rgba(59,130,246,.70));"></div>
+              </div>
+              <div class="small" id="levelPct">0%</div>
+            </div>
+
+            <div class="small muted" style="margin-top:8px;" id="nextHint">Keyingi medalyongacha: — ball</div>
+          </div>
+        </div>
+      </section>
+
+
 
       <!-- 1) Stories-style Banner Carousel (banner/1.png,2.png...) -->
       <section class="glass section" id="bannerSection">
@@ -474,29 +507,29 @@
     </div>
   </div>
 
-  <!-- Avatar Picker Modal -->
-  <div class="modalOverlay modalApp" id="avatarModal" aria-hidden="true">
-    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Avatar tanlash">
+
+  <!-- Level Up Modal (Medalyon) -->
+  <div class="modalOverlay modalApp" id="levelUpModal" aria-hidden="true" style="display:none;">
+    <div class="modal glass" role="dialog" aria-modal="true" aria-label="Yangi bosqich">
       <div class="modalHead">
         <div>
-          <div class="modalTitle">Avatar tanlang</div>
-          <div class="small">avatar/1.png, 2.png, 3.png... papkadan avtomatik topiladi</div>
+          <div class="modalTitle">Tabriklaymiz! 🎉</div>
+          <div class="small" id="levelUpSub">Yangi medalyon ochildi</div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button class="chipBtn" id="avatarRefresh" type="button">🔄 Qayta tekshir</button>
-          <button class="iconBtn" id="avatarClose" type="button" aria-label="Yopish">✕</button>
-        </div>
+        <button class="iconBtn" id="levelUpClose" type="button" aria-label="Yopish">✕</button>
       </div>
       <div class="hr"></div>
-      <div class="modalBody">
-        <div class="avatarGrid" id="avatarGrid"></div>
-        <div class="small muted" id="avatarHint" style="margin-top:10px;">Yuklanmoqda…</div>
+      <div class="modalBody" style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
+        <img id="levelUpImg" src="logo.png" alt="Medalyon" style="width:120px;height:120px;border-radius:24px;border:1px solid rgba(20,40,60,.12);background:rgba(255,255,255,.55);object-fit:contain;"/>
+        <div style="font-weight:900;font-size:16px;" id="levelUpTitle">Daraja: 1</div>
+        <div class="small muted" id="levelUpHint">Keyingi bosqichga yaqinlashishda davom eting!</div>
+        <button class="btn btnPrimary" id="levelUpOk" type="button" style="width:min(320px,100%);">Zo'r! Davom etaman</button>
       </div>
     </div>
   </div>
 
   <!-- Embedded viewer (single-page feel) -->
-  <div class="modalOverlay modalApp" id="embedModal" aria-hidden="true">
+<div class="modalOverlay modalApp" id="embedModal" aria-hidden="true">
     <div class="modal glass" role="dialog" aria-modal="true" aria-label="Oyna">
       <div class="modalHead">
         <div>
@@ -570,7 +603,7 @@
 
   <script src="assets/js/core.js"></script>
 <script type="module">
-    import { me, logout, updateProfile, changePassword, setAvatar, getToken } from "./assets/js/auth.js";
+    import { me, logout, updateProfile, changePassword, getToken } from "./assets/js/auth.js";
     import { api } from "./assets/js/api.js";
 
     const $ = (id)=>document.getElementById(id);
@@ -631,191 +664,139 @@
       return `${y} yosh ${m} oy ${d} kun`;
     }
 
-    // Avatar helpers (auto-detect avatar/1.png,2.png...) by probing images
-    function avatarUrl(id){
-      if(!id) return "";
-      return `avatar/${id}.png`;
+    // ===============================
+    // Medalyon (100 bosqich) tizimi
+    //  - medals/1.png ... medals/100.png
+    //  - Bosqich threshold: T(L) = BASE * (L-1)*L/2
+    //    misol: 1→0, 2→100, 3→300, 4→600 ...
+    // ===============================
+    const MEDAL_DIR = "medals";
+    const LEVEL_MAX = 100;
+    const BASE_STEP = 100; // 100 ball = bazaviy qadam
+
+    function thresholdForLevel(L){
+      const x = Math.max(1, Math.min(LEVEL_MAX, Number(L)||1));
+      return Math.round(BASE_STEP * (x-1) * x / 2);
     }
-    function setUserAvatar(id){
-      const img = $("userAvatar");
-      if(!img) return;
-      const src = avatarUrl(id);
-      if(!src){
-        img.removeAttribute("src");
-        img.dataset.avatarId = "";
-        return;
+
+    function levelFromPoints(points){
+      const p = Math.max(0, Number(points)||0);
+      const L = Math.floor((1 + Math.sqrt(1 + 8*(p/BASE_STEP))) / 2);
+      return Math.max(1, Math.min(LEVEL_MAX, L));
+    }
+
+    function medalUrl(level){
+      const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
+      return `${MEDAL_DIR}/${L}.png`;
+    }
+
+    function renderLevelBars(progress01){
+      const wrap = $("levelBars");
+      if(!wrap) return;
+      const p = Math.max(0, Math.min(1, Number(progress01)||0));
+      const N = 12;
+      const bars = [];
+      for(let i=1;i<=N;i++){
+        const wave = 0.45 + 0.55*Math.sin((i/N)*Math.PI);
+        const fill = Math.max(0, Math.min(1, (p*N - (i-1))));
+        const h = Math.round(10 + 34*wave);
+        bars.push(`
+          <div style="
+            width:8px; height:${h}px; border-radius:10px;
+            background: rgba(15,23,42,.10);
+            border:1px solid rgba(20,40,60,.10);
+            overflow:hidden;
+          ">
+            <div style="
+              width:100%;
+              height:${Math.round(h*fill)}px;
+              margin-top:${Math.round(h*(1-fill))}px;
+              background: linear-gradient(180deg, rgba(46,139,87,.85), rgba(59,130,246,.65));
+              border-radius:10px;
+            "></div>
+          </div>
+        `);
       }
-      img.src = src;
-      img.dataset.avatarId = String(id);
-      img.onerror = ()=>{
-        img.removeAttribute("src");
-        img.dataset.avatarId = "";
-      };
+      wrap.innerHTML = bars.join("");
     }
 
-    function _seedToAvatarId(seed){
-      if(seed==null) return 1;
-      const s = String(seed);
-      const digits = (s.match(/\d+/g)||[]).join("");
-      const n = digits ? Number(digits.slice(-6)) : 0;
-      // 1..60 range (we try others on error anyway)
-      return (Math.abs(n)%60)+1;
-    }
+    function openLevelUp(level){
+      const modal = $("levelUpModal");
+      if(!modal) return;
+      const img = $("levelUpImg");
+      const ttl = $("levelUpTitle");
+      const sub = $("levelUpSub");
+      const hint = $("levelUpHint");
 
-    // Auto-load avatar from /avatar/1.png,2.png...; if missing => blank
-    function setUserAvatarAuto(preferredId, seed){
-      const img = $("userAvatar");
-      if(!img) return;
-
-      const candidates = [];
-      const add = (v)=>{
-        const id = Number(v);
-        if(!id || !Number.isFinite(id)) return;
-        if(!candidates.includes(id)) candidates.push(id);
-      };
-
-      add(preferredId);
-      add(_seedToAvatarId(seed));
-      // fallback pool (keeps it fast; onerror will hop)
-      for(let i=1;i<=20;i++) add(i);
-
-      let k = 0;
-      const tryNext = ()=>{
-        if(k >= candidates.length){
-          img.removeAttribute("src");
-          img.dataset.avatarId = "";
-          return;
-        }
-        const id = candidates[k++];
-        img.dataset.avatarId = String(id);
-        img.src = avatarUrl(id) + `?v=${Date.now()}`;
-      };
-
-      img.onerror = ()=> tryNext();
-      tryNext();
-    }
-
-    async function probeAvatar(id){
-      return new Promise((resolve)=>{
-        const im = new Image();
-        const t = setTimeout(()=>resolve(false), 900);
-        im.onload = ()=>{ clearTimeout(t); resolve(true); };
-        im.onerror = ()=>{ clearTimeout(t); resolve(false); };
-        im.src = avatarUrl(id) + `?v=${Date.now()}`;
-      });
-    }
-
-    // Avatar grid: 404 ni deyarli nolga tushiramiz.
-    // Usul: 1..N ketma-ket bo'ladi degan faraz (sizdagi kabi). Birinchi "yo'q" (404) chiqqanda to'xtaymiz.
-    // Bu probe + qayta yuklashni yo'q qiladi va console'ni tozalaydi.
-    async function loadAvatarGrid(){
-      const grid = $("avatarGrid");
-      const hint = $("avatarHint");
-      if(!grid) return;
-      grid.innerHTML = "";
-      hint.textContent = "Avatarlar yuklanmoqda…";
-
-      const cur = Number($("userAvatar")?.dataset?.avatarId || 0);
-      let okCount = 0;
-
-      const loadOne = (i)=> new Promise((resolve)=>{
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `avaBtn ${i===cur?"active":""}`;
-        btn.setAttribute("data-ava", String(i));
-
-        const im = document.createElement("img");
-        im.alt = `Avatar ${i}`;
-        im.decoding = "async";
-        im.loading = "lazy";
-
-        const cap = document.createElement("div");
-        cap.className = "small";
-        cap.textContent = `#${i}`;
-
-        btn.appendChild(im);
-        btn.appendChild(cap);
-
-        const t = setTimeout(()=>resolve({ok:false}), 1200);
-        im.onload = ()=>{ clearTimeout(t); resolve({ok:true, node:btn}); };
-        im.onerror = ()=>{ clearTimeout(t); resolve({ok:false}); };
-        im.src = avatarUrl(i) + `?v=${Date.now()}`;
-      });
-
-      // 1) Agar avatar/manifest.json bo'lsa (tavsiya), shundan ro'yxatni olamiz.
-      // Bu 404 larni butunlay yo'q qiladi va modal darhol to'ldi.
-      try{
-        const mf = await fetch("avatar/manifest.json", { cache:"no-store" });
-        if(mf.ok){
-          const data = await mf.json();
-          const ids = Array.isArray(data?.ids) ? data.ids : (Array.isArray(data) ? data : []);
-          const clean = ids.map(Number).filter(n=>Number.isFinite(n) && n>0).slice(0, 200);
-          if(clean.length){
-            for(const i of clean){
-              const r = await loadOne(i);
-              if(r.ok){ okCount++; grid.appendChild(r.node); }
-            }
-            hint.textContent = okCount ? `${okCount} ta avatar topildi` : "Avatar topilmadi";
-            return;
-          }
-        }
-      }catch(e){ /* ignore */ }
-
-      // 2) Manifest bo'lmasa: 1..200 gacha urinib ko'ramiz, lekin birinchi "yo'q" chiqqanda (okCount>0 bo'lsa) to'xtaymiz.
-      for(let i=1;i<=200;i++){
-        const r = await loadOne(i);
-        if(r.ok){
-          okCount++;
-          grid.appendChild(r.node);
-          hint.textContent = `${okCount} ta avatar topildi`;
-        }else{
-          if(okCount>0) break;
-          // Agar 1-chi avatar ham yo'q bo'lsa: keyingilarni ham biroz tekshirib ko'ramiz (kam holat)
-          if(i>=6) break;
-        }
+      const L = Math.max(1, Math.min(LEVEL_MAX, Number(level)||1));
+      if(img){
+        img.src = medalUrl(L) + `?v=${Date.now()}`;
+        img.onerror = ()=>{ img.src = "logo.png"; };
+      }
+      if(ttl) ttl.textContent = `Daraja: ${L} • Yangi medalyon!`;
+      if(sub) sub.textContent = `Siz ${L}-bosqichga o‘tdingiz`;
+      if(hint){
+        const next = (L<LEVEL_MAX) ? thresholdForLevel(L+1) : thresholdForLevel(LEVEL_MAX);
+        hint.textContent = (L<LEVEL_MAX)
+          ? `Keyingi bosqich uchun: ${next} ball`
+          : `Siz maksimal darajadasiz!`;
       }
 
-      if(okCount===0) hint.textContent = "avatar/ papkada 1.png, 2.png… topilmadi";
-      else hint.textContent = `${okCount} ta avatar topildi`;
+      openModal(modal);
     }
 
-    function setupAvatarPicker(){
-      const modal = $("avatarModal");
-      // Avatar picker faqat avatar ustiga bosilganda ochilsin (profil chip click'i bilan aralashmasin)
-      const openTargets = [$("userAvatar")].filter(Boolean);
-      const closeBtn = $("avatarClose");
-      const refresh = $("avatarRefresh");
-      openTargets.forEach(el=>el.addEventListener("click", async (e)=>{
-        e?.preventDefault?.();
-        e?.stopPropagation?.();
-        openModal(modal);
-        await loadAvatarGrid();
-      }, true));
-      closeBtn?.addEventListener("click", ()=>closeModal(modal));
+    function setupLevelUpModal(){
+      const modal = $("levelUpModal");
+      $("levelUpClose")?.addEventListener("click", ()=>closeModal(modal));
+      $("levelUpOk")?.addEventListener("click", ()=>closeModal(modal));
       modal?.addEventListener("click", (e)=>{ if(e.target===modal) closeModal(modal); });
-      refresh?.addEventListener("click", loadAvatarGrid);
-      $("avatarGrid")?.addEventListener("click", async (e)=>{
-        const b = e.target.closest("[data-ava]");
-        if(!b) return;
-        const id = Number(b.getAttribute("data-ava"));
-        try{
-          b.disabled = true;
-          // 1) Try server-side save (Netlify/Firebase endpoint)
-          const r = await setAvatar(id);
-          const savedId = r?.user?.avatarId || id;
-          localStorage.setItem("lm_avatarId", String(savedId));
-          setUserAvatar(savedId);
-          toast("Avatar saqlandi");
-          closeModal(modal);
-        }catch(err){
-          // 2) Fallback: local save (if API endpoint is not available)
-          localStorage.setItem("lm_avatarId", String(id));
-          setUserAvatar(id);
-          toast("Avatar tanlandi");
-          closeModal(modal);
-        }finally{
-          b.disabled = false;
-        }
+    }
+
+    function updateMedalUI(points){
+      const p = Math.max(0, Number(points)||0);
+      const L = levelFromPoints(p);
+
+      // Header medal (reuse #userAvatar img)
+      const headImg = $("userAvatar");
+      if(headImg){
+        headImg.src = medalUrl(L) + `?v=${Date.now()}`;
+        headImg.alt = "medalyon";
+        headImg.dataset.level = String(L);
+        headImg.onerror = ()=>{ headImg.src = "logo.png"; };
+      }
+
+      // Big medal section
+      const big = $("medalLarge");
+      if(big){
+        big.src = medalUrl(L) + `?v=${Date.now()}`;
+        big.onerror = ()=>{ big.src = "logo.png"; };
+      }
+
+      const curStart = thresholdForLevel(L);
+      const nextStart = (L<LEVEL_MAX) ? thresholdForLevel(L+1) : thresholdForLevel(LEVEL_MAX);
+      const span = Math.max(1, nextStart - curStart);
+      const pct = (L>=LEVEL_MAX) ? 1 : Math.max(0, Math.min(1, (p - curStart)/span));
+
+      $("levelText") && ($("levelText").textContent = `Daraja: ${L} / ${LEVEL_MAX}`);
+      $("levelRange") && ($("levelRange").textContent = (L<LEVEL_MAX) ? `${curStart} → ${nextStart}` : `${nextStart} (MAX)`);
+      $("levelProgress") && ($("levelProgress").style.width = `${Math.round(pct*100)}%`);
+      $("levelPct") && ($("levelPct").textContent = `${Math.round(pct*100)}%`);
+      $("nextHint") && ($("nextHint").textContent = (L<LEVEL_MAX) ? `Keyingi medalyongacha: ${Math.max(0, nextStart - p)} ball` : `Siz maksimal darajaga yetdingiz!`);
+
+      renderLevelBars(pct);
+
+      // Level-up detect
+      const KEY = "lm_medal_level";
+      const prev = Number(localStorage.getItem(KEY) || 0) || 0;
+      if(L > prev){
+        localStorage.setItem(KEY, String(L));
+        if(prev > 0) openLevelUp(L);
+      }else if(prev === 0){
+        localStorage.setItem(KEY, String(L));
+      }
+    }
+
+
       });
     }
 
@@ -1623,18 +1604,15 @@ window.addEventListener("resize", ()=>{
 
     async function boot(){
       setupTouchFab();
-      setupAvatarPicker();
+      setupLevelUpModal();
 
       try{
         const r = await me();
         const u = r.user;
-
-        // Agar server avatarId bermasa, localStorage'dagi tanlovni ishlatamiz
-        const localAva = Number(localStorage.getItem("lm_avatarId")||0) || 0;
-        setUserAvatarAuto(u.avatarId || localAva, u.loginId || u.numericId || u.id || "");
         $("userId").textContent = u.loginId;
         $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
         $("userPoints").textContent = String(u.points ?? 0);
+        updateMedalUI(u.points ?? 0);
         $("userBalance").textContent = String(u.balance ?? 0);
         $("userAge").textContent = calcAgePrecise(u.birthdate);
 
@@ -1662,7 +1640,7 @@ window.addEventListener("resize", ()=>{
           const r2 = await me();
           $("userName").textContent = r2.user.name || r2.user.loginId;
           $("userAge").textContent = calcAgePrecise(r2.user.birthdate);
-          setUserAvatar(r2.user.avatarId);
+          updateMedalUI(r2.user.points ?? 0);
         }
       }catch(e){
         toast(e.message||"Kirish yo‘q");
