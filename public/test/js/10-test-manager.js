@@ -331,252 +331,214 @@
                 if (!appState.shuffledQuestions || !appState.shuffledQuestions[appState.currentQuestionIndex]) {
                     return;
                 }
-                
+
                 const randomQuestion = appState.shuffledQuestions[appState.currentQuestionIndex];
-                const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined ? 
+                const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined ?
                                     appState.shuffledToOriginalMap[appState.currentQuestionIndex] : appState.currentQuestionIndex;
-                
-                // Asosiy kontentni yaratish
-                const contentContainer = document.createElement('div');
-                contentContainer.className = 'question-content-container';
-                
+
                 // Savol raqami
                 dom.elements.currentQ.textContent = appState.currentQuestionIndex + 1;
-                
+
                 // Ko'rish ko'rsatkichini yangilash
                 dom.elements.viewIndicator.classList.remove('viewed-first', 'viewed-second', 'viewed-third');
                 dom.elements.viewIcon.textContent = '👁️';
-                
+
                 // Section va ballar
                 dom.elements.sectionNameDisplay.textContent = randomQuestion.section || "Umumiy";
                 dom.elements.currentSectionName.textContent = randomQuestion.section || "Umumiy";
                 const points = randomQuestion.points || 1;
                 dom.elements.currentQuestionPoints.textContent = `${points} ball`;
-                
+
                 // Ogohlantirish xabarini yashirish
                 dom.elements.viewWarning.classList.add('hidden');
-                
-                // Rasm yuklash
-                this.loadQuestionImage(randomQuestion, originalIndex, contentContainer);
-                
-                // Savol matni
-                const questionTextDiv = document.createElement('div');
-                questionTextDiv.id = 'questionText';
-                questionTextDiv.innerHTML = randomQuestion.text || '';
-                contentContainer.appendChild(questionTextDiv);
-                
-                // Variantlar yoki ochiq javob
+
+                // Rasm yuklash (mavjud DOM elementlarida)
+                this.loadQuestionImage(randomQuestion, originalIndex);
+
+                // Savol matni (mavjud elementga)
+                dom.elements.questionText.innerHTML = randomQuestion.text || '';
+
+                // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {
-                    this.renderOptions(randomQuestion, originalIndex, contentContainer);
+                    dom.elements.optionsContainer.classList.remove('hidden');
+                    dom.elements.openAnswerContainer.classList.add('hidden');
+                    this.renderOptions(randomQuestion, originalIndex);
                 } else if (randomQuestion.type === 'open') {
-                    this.renderOpenAnswer(originalIndex, contentContainer);
+                    dom.elements.optionsContainer.classList.add('hidden');
+                    dom.elements.openAnswerContainer.classList.remove('hidden');
+                    this.renderOpenAnswer(originalIndex);
+                } else {
+                    // fallback
+                    dom.elements.optionsContainer.classList.add('hidden');
+                    dom.elements.openAnswerContainer.classList.add('hidden');
                 }
-                
-                const questionContent = document.querySelector('.question-main-content');
-                questionContent.innerHTML = '';
-                questionContent.appendChild(contentContainer);
-                
+
                 // MathJax render qilish
                 if (window.MathJax && MathJax.typesetPromise) {
                     setTimeout(() => {
-                        MathJax.typesetPromise([questionTextDiv]);
-                    }, 100);
+                        MathJax.typesetPromise([dom.elements.questionText, dom.elements.optionsContainer, dom.elements.answerPreviewContent]);
+                    }, 60);
                 }
-                
-                // Navigation tugmalarini ko'rsatish
+
+                // Navigation tugmalarini ko'rsatish (DOM o'chmaydi, doim ko'rinadi)
                 dom.elements.prevBtn.style.display = 'flex';
                 dom.elements.nextBtn.style.display = 'flex';
                 dom.elements.finishBtn.style.display = 'flex';
-                
+
                 // User action log
                 userActionLogger.log('question_viewed', {
                     questionIndex: appState.currentQuestionIndex
                 });
-                
+
                 // Navigatsiya tugmalarini yangilash
                 this.updateNavigationButtons();
                 this.updateVerticalNavDots();
+            }
             },
             
-            loadQuestionImage(randomQuestion, originalIndex, container) {
+            loadQuestionImage(randomQuestion, originalIndex) {
                 const imgNum = originalIndex + 1;
                 const imgPath = `images/${appState.currentTestCode}/${imgNum}.png`;
-                
-                const imageContainer = document.createElement('div');
-                imageContainer.className = 'image-container';
-                imageContainer.id = 'questionImageContainer';
-                
-                const img = document.createElement('img');
-                img.className = 'question-image';
-                img.id = 'questionImage';
-                img.alt = 'Savol rasmi';
-                
-                const placeholder = document.createElement('div');
-                placeholder.className = 'image-placeholder';
-                placeholder.id = 'imageNotFound';
+
+                const container = dom.elements.questionImageContainer;
+                const img = dom.elements.questionImage;
+                const placeholder = dom.elements.imageNotFound;
+
+                // default state
+                container.classList.remove('hidden');
+                img.classList.add('hidden');
+                placeholder.classList.remove('hidden');
                 placeholder.textContent = 'Rasm yuklanmoqda...';
-                
-                imageContainer.appendChild(img);
-                imageContainer.appendChild(placeholder);
-                
-                if (container) {
-                    container.appendChild(imageContainer);
-                } else {
-                    dom.elements.questionImageContainer.parentNode.insertBefore(imageContainer, dom.elements.questionImageContainer.nextSibling);
-                    dom.elements.questionImageContainer.remove();
-                }
-                
+
+                // set src and handle events
                 img.onload = () => {
-                    console.log(`Rasm yuklandi: ${imgPath}`);
+                    img.classList.remove('hidden');
                     placeholder.classList.add('hidden');
+                    container.classList.remove('hidden');
                 };
-                
+
                 img.onerror = () => {
-                    console.log(`Rasm yuklanmadi: ${imgPath}`);
-                    
-                    const alternativePaths = [
-                        `images/${appState.currentTestCode}/${imgNum}.jpg`,
-                        `images/${appState.currentTestCode}/${imgNum}.jpeg`,
-                        `images/${appState.currentTestCode}/${imgNum}.gif`,
-                        `images/${appState.currentTestCode}/${imgNum}.PNG`,
-                        `images/${appState.currentTestCode}/${imgNum}.JPG`,
-                        `images/${appState.currentTestCode}/q${imgNum}.png`,
-                        `images/${appState.currentTestCode}/question_${imgNum}.png`
-                    ];
-                    
-                    this.tryAlternativeImagePaths(img, placeholder, alternativePaths, 0);
-                };
-                
-                img.src = imgPath;
-            },
-            
-            tryAlternativeImagePaths(imgElement, placeholder, paths, index) {
-                if (index >= paths.length) {
+                    // rasm yo'q bo'lsa, placeholder ko'rsatamiz
+                    img.classList.add('hidden');
+                    placeholder.classList.remove('hidden');
                     placeholder.textContent = 'Rasm mavjud emas';
-                    return;
-                }
-                
-                imgElement.onload = () => {
-                    console.log(`Alternativ rasm yuklandi: ${paths[index]}`);
-                    placeholder.classList.add('hidden');
+                    container.classList.remove('hidden');
                 };
-                
-                imgElement.onerror = () => {
-                    console.log(`Alternativ rasm yuklanmadi: ${paths[index]}`);
-                    this.tryAlternativeImagePaths(imgElement, placeholder, paths, index + 1);
-                };
-                
-                imgElement.src = paths[index];
-            },
+
+                // cache-bust to avoid stale image after switching tests
+                img.src = imgPath + `?v=${Date.now()}`;
+            }
             
-            renderOptions(randomQuestion, originalIndex, container) {
-                const optionsContainer = document.createElement('div');
-                optionsContainer.className = 'options-grid';
-                optionsContainer.id = 'optionsContainer';
-                
+            renderOptions(randomQuestion, originalIndex) {
+                const optionsContainer = dom.elements.optionsContainer;
+                optionsContainer.innerHTML = '';
+                optionsContainer.classList.remove('hidden');
+
                 const options = appState.shuffledOptionsMap[originalIndex] || randomQuestion.options || [];
-                
+
                 options.forEach((option, index) => {
                     const optionDiv = document.createElement('div');
                     optionDiv.className = 'option';
-                    
+                    optionDiv.setAttribute('role', 'radio');
+                    optionDiv.setAttribute('tabindex', '0');
+                    optionDiv.setAttribute('aria-checked', 'false');
+
                     const input = document.createElement('input');
                     input.type = 'radio';
                     input.name = 'questionOption';
                     input.value = index;
                     input.id = `option_${index}`;
-                    
-                    if (appState.userAnswers[originalIndex] === index) {
-                        input.checked = true;
-                        optionDiv.classList.add('selected');
-                    }
-                    
-                    input.addEventListener('change', () => {
-                        document.querySelectorAll('.option').forEach(opt => {
-                            opt.classList.remove('selected');
-                        });
-                        
-                        optionDiv.classList.add('selected');
-                        appState.userAnswers[originalIndex] = index;
-                        
-                        userActionLogger.log('answer_selected', {
-                            questionIndex: originalIndex,
-                            answerIndex: index,
-                            answerText: option.substring(0, 50)
-                        });
-                        
-                        this.updateVerticalNavDots();
-                    });
-                    
+
                     const label = document.createElement('label');
                     label.htmlFor = `option_${index}`;
                     label.innerHTML = option;
-                    
+
+                    const applySelection = () => {
+                        // clear selection UI
+                        optionsContainer.querySelectorAll('.option').forEach(opt => {
+                            opt.classList.remove('selected');
+                            opt.setAttribute('aria-checked', 'false');
+                        });
+
+                        optionDiv.classList.add('selected');
+                        optionDiv.setAttribute('aria-checked', 'true');
+                        input.checked = true;
+
+                        appState.userAnswers[originalIndex] = index;
+
+                        userActionLogger.log('answer_selected', {
+                            questionIndex: originalIndex,
+                            answerIndex: index,
+                            answerText: (typeof option === 'string' ? option : '').toString().substring(0, 50)
+                        });
+
+                        this.updateVerticalNavDots();
+                    };
+
+                    // Click anywhere on the card
+                    optionDiv.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        applySelection();
+                    });
+
+                    // Keyboard accessibility
+                    optionDiv.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            applySelection();
+                        }
+                    });
+
+                    // Keep change handler for direct input click (fallback)
+                    input.addEventListener('change', applySelection);
+
+                    // Restore previous selection
+                    if (appState.userAnswers[originalIndex] === index) {
+                        optionDiv.classList.add('selected');
+                        optionDiv.setAttribute('aria-checked', 'true');
+                        input.checked = true;
+                    }
+
                     optionDiv.appendChild(input);
                     optionDiv.appendChild(label);
                     optionsContainer.appendChild(optionDiv);
                 });
-                
-                if (container) {
-                    container.appendChild(optionsContainer);
-                }
-            },
+            }
             
-            renderOpenAnswer(originalIndex, container) {
-                const openAnswerContainer = document.createElement('div');
-                openAnswerContainer.id = 'openAnswerContainer';
-                
-                // Javob ko'rinishi
-                const answerPreview = document.createElement('div');
-                answerPreview.id = 'answerPreview';
-                answerPreview.className = 'answer-preview empty';
-                
-                const answerPreviewContent = document.createElement('div');
-                answerPreviewContent.id = 'answerPreviewContent';
-                answerPreviewContent.className = 'answerPreviewContent';
-                
-                answerPreview.appendChild(answerPreviewContent);
-                openAnswerContainer.appendChild(answerPreview);
-                
-                // Matematik editor ochish tugmasi
-                const openMathEditorBtn = document.createElement('button');
-                openMathEditorBtn.id = 'openMathEditorBtn';
-                openMathEditorBtn.className = 'math-answer-btn';
-                openMathEditorBtn.innerHTML = '<i class="fas fa-calculator"></i> Matematik javob yozish';
+            renderOpenAnswer(originalIndex) {
+                const openAnswerContainer = dom.elements.openAnswerContainer;
+                openAnswerContainer.classList.remove('hidden');
+
+                const answerPreview = dom.elements.answerPreview;
+                const answerPreviewContent = dom.elements.answerPreviewContent;
+                const clearAnswerBtn = dom.elements.clearAnswerBtn;
+                const openMathEditorBtn = dom.elements.openMathEditorBtn;
+
+                // ensure handlers are wired (existing elements)
                 openMathEditorBtn.onclick = modalManager.openMathModal.bind(modalManager);
-                
-                openAnswerContainer.appendChild(openMathEditorBtn);
-                
-                // Javobni o'chirish tugmasi
-                const clearAnswerBtn = document.createElement('button');
-                clearAnswerBtn.id = 'clearAnswerBtn';
-                clearAnswerBtn.className = 'btn btn-secondary';
-                clearAnswerBtn.style.display = 'none';
-                clearAnswerBtn.innerHTML = '<i class="fas fa-trash"></i> Javobni o\'chirish';
                 clearAnswerBtn.onclick = modalManager.clearAnswer.bind(modalManager);
-                
-                openAnswerContainer.appendChild(clearAnswerBtn);
-                
-                if (container) {
-                    container.appendChild(openAnswerContainer);
-                }
-                
+
                 // Javobni yangilash
                 const currentAnswer = appState.userAnswers[originalIndex] || '';
                 if (currentAnswer) {
                     answerPreview.classList.remove('empty');
                     answerPreviewContent.innerHTML = utils.renderLatex(currentAnswer);
-                    
+
                     clearAnswerBtn.style.display = 'block';
                     openMathEditorBtn.textContent = '✏️ Javobni tahrirlash';
+                } else {
+                    answerPreview.classList.add('empty');
+                    answerPreviewContent.innerHTML = '';
+                    clearAnswerBtn.style.display = 'none';
+                    openMathEditorBtn.innerHTML = '<i class="fas fa-calculator"></i> Matematik javob yozish';
                 }
-                
+
                 if (window.MathJax && MathJax.typesetPromise) {
                     setTimeout(() => {
                         MathJax.typesetPromise([answerPreviewContent]);
-                    }, 100);
+                    }, 60);
                 }
-            },
+            }
             
             updateNavigationButtons() {
                 const totalQuestions = appState.shuffledQuestions.length;
