@@ -402,7 +402,6 @@
                 // Navigatsiya tugmalarini yangilash
                 this.updateNavigationButtons();
                 this.updateVerticalNavDots();
-            }
             },
             
             loadQuestionImage(randomQuestion, originalIndex) {
@@ -436,7 +435,7 @@
 
                 // cache-bust to avoid stale image after switching tests
                 img.src = imgPath + `?v=${Date.now()}`;
-            }
+            },
             
             renderOptions(randomQuestion, originalIndex) {
                 const optionsContainer = dom.elements.optionsContainer;
@@ -512,7 +511,7 @@
                     optionDiv.appendChild(label);
                     optionsContainer.appendChild(optionDiv);
                 });
-            }
+            },
             
             renderOpenAnswer(originalIndex) {
                 const openAnswerContainer = dom.elements.openAnswerContainer;
@@ -547,8 +546,8 @@
                         MathJax.typesetPromise([answerPreviewContent]);
                     }, 60);
                 }
-            }
-            
+            },
+
             updateNavigationButtons() {
                 const totalQuestions = appState.shuffledQuestions.length;
                 
@@ -896,3 +895,7 @@
                 };
             }
         };
+
+// expose for other modules
+window.testManager = testManager;
+
