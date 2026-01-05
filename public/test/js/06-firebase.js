@@ -1,5 +1,57 @@
 // ==================== FIREBASE MANAGER ====================
         const firebaseManager = {
+            // Test turini aniqlash (orqaga moslik uchun default: challenge)
+            getTestMode() {
+                const td = appState.testData || {};
+                const mode = (td.mode || td.type || '').toString().toLowerCase();
+                if (mode === 'open' || mode === 'oddiy' || mode === 'simple') return 'open';
+                if (mode === 'challenge' || mode === 'chelenge' || mode === 'closed') return 'challenge';
+                if (td.isChallenge === true || td.challenge === true) return 'challenge';
+                // Eski testlaringiz buzilmasligi uchun default challenge qoldirdik
+                return 'challenge';
+            },
+
+            // Foydalanuvchining umumiy pointsini yangilash (users/{studentId}.points)
+            async addUserPoints(delta, extra = {}) {
+                if (!CONFIG.useFirebase || !appState.firebaseAvailable || !appState.db) return false;
+                if (!appState.currentStudent?.id) return false;
+                const studentId = String(appState.currentStudent.id);
+                const pointsDelta = Math.max(0, Math.floor(Number(delta || 0)));
+                if (!Number.isFinite(pointsDelta) || pointsDelta <= 0) return true;
+
+                const userRef = appState.db.collection('users').doc(studentId);
+                try {
+                    await appState.db.runTransaction(async (tx) => {
+                        const snap = await tx.get(userRef);
+                        const oldPoints = snap.exists ? (snap.data().points || 0) : 0;
+                        const newPoints = (Number(oldPoints) || 0) + pointsDelta;
+                        if (!snap.exists) {
+                            tx.set(userRef, {
+                                points: newPoints,
+                                // Minimal profil (agar platformada allaqachon bo'lsa, merge qiladi)
+                                fullName: appState.currentStudent?.fullName || '',
+                                lastPointsDelta: pointsDelta,
+                                lastTestCode: appState.currentTestCode || '',
+                                lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                ...extra
+                            }, { merge: true });
+                        } else {
+                            tx.set(userRef, {
+                                points: newPoints,
+                                lastPointsDelta: pointsDelta,
+                                lastTestCode: appState.currentTestCode || '',
+                                lastUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                ...extra
+                            }, { merge: true });
+                        }
+                    });
+                    return true;
+                } catch (e) {
+                    console.error('Points yangilashda xato:', e);
+                    return false;
+                }
+            },
+
             async initialize() {
                 try {
                     if (!CONFIG.useFirebase) {
@@ -149,13 +201,21 @@
                 };
                 
                 try {
-                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                    // 1) Har qanday testda points qo'shamiz (resurs tejamkor: bitta users doc)
+                    await this.addUserPoints(Math.round(results.finalScore || 0), {
+                        studentClass: appState.currentClass || '',
+                    });
+
+                    // 2) Faqat CHALLENGE testlarda natijani (reyting uchun) Firestore'ga yozamiz
+                    const mode = this.getTestMode();
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db && mode === 'challenge') {
                         const resultRef = appState.db.collection('test_results').doc();
                         await resultRef.set(testResult);
-                        
+
+                        // User actions ham faqat challenge'larda (write kamayadi)
                         if (CONFIG.logUserActions && appState.userActions.length > 0) {
                             const batch = appState.db.batch();
-                            appState.userActions.forEach((action, index) => {
+                            appState.userActions.forEach((action) => {
                                 const actionRef = appState.db.collection('user_actions').doc();
                                 batch.set(actionRef, {
                                     ...action,
