@@ -4,17 +4,6 @@
                 if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) {
                     return null;
                 }
-
-                // Oddiy (open) testlarda Firestore'dan urinish tekshirmaymiz (result umuman yozilmaydi).
-                // Bu eski challenge oqimini buzmaydi, resursni ham tejaydi.
-                try {
-                    const mode = (firebaseManager?.getTestMode && firebaseManager.getTestMode()) || 'challenge';
-                    if (mode === 'open') {
-                        const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
-                        const storedAttempt = localStorage.getItem(localStorageKey);
-                        return storedAttempt ? JSON.parse(storedAttempt) : null;
-                    }
-                } catch (_) {}
                 
                 try {
                     const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
