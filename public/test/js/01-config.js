@@ -25,12 +25,13 @@
             allowMultipleFormats: true,
         };
         
-        const FIREBASE_CONFIG = {
-            apiKey: "AIzaSyDJ46oKqDf52JQRaIqe8SJ5vYSfTpSYZKo",
-            authDomain: "mathcenter-1c98d.firebaseapp.com",
-            projectId: "mathcenter-1c98d",
-            storageBucket: "mathcenter-1c98d.firebasestorage.app",
-            messagingSenderId: "1016417719928",
-            appId: "1:1016417719928:web:700b028da1312477c87f8d",
-            measurementId: "G-JEECME5HMJ"
-        };
+        const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.firebasestorage.app",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
