@@ -15,7 +15,9 @@
                 
                 if (data.type === 'mathFormulaInserted') {
                     const latex = data.latex;
-                    const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] || appState.currentQuestionIndex;
+                    const originalIndex = (appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined)
+                        ? appState.shuffledToOriginalMap[appState.currentQuestionIndex]
+                        : appState.currentQuestionIndex;
                     const previousAnswer = appState.userAnswers[originalIndex];
                     
                     appState.userAnswers[originalIndex] = latex;

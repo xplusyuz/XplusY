@@ -8,7 +8,9 @@
                 modal.classList.add('active');
                 document.body.style.overflow = 'hidden';
                 
-                const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] || appState.currentQuestionIndex;
+                const originalIndex = (appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined)
+                    ? appState.shuffledToOriginalMap[appState.currentQuestionIndex]
+                    : appState.currentQuestionIndex;
                 const currentAnswer = appState.userAnswers[originalIndex];
                 
                 const frame = appState.mathEditorFrame;
@@ -69,7 +71,9 @@
                     
                     if (event.data.type === 'mathFormulaResponse') {
                         const latex = event.data.latex;
-                        const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] || appState.currentQuestionIndex;
+                        const originalIndex = (appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined)
+                            ? appState.shuffledToOriginalMap[appState.currentQuestionIndex]
+                            : appState.currentQuestionIndex;
                         const previousAnswer = appState.userAnswers[originalIndex];
                         
                         appState.userAnswers[originalIndex] = latex;
@@ -135,7 +139,9 @@
             },
             
             clearAnswer() {
-                const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] || appState.currentQuestionIndex;
+                const originalIndex = (appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined)
+                    ? appState.shuffledToOriginalMap[appState.currentQuestionIndex]
+                    : appState.currentQuestionIndex;
                 const previousAnswer = appState.userAnswers[originalIndex];
                 
                 if (!previousAnswer || previousAnswer.trim() === '') {

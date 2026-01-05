@@ -290,7 +290,9 @@
                 dom.elements.verticalNavDots.innerHTML = '';
                 
                 appState.shuffledQuestions.forEach((_, randomIndex) => {
-                    const originalIndex = appState.shuffledToOriginalMap[randomIndex] || randomIndex;
+                    const originalIndex = (appState.shuffledToOriginalMap[randomIndex] !== undefined)
+                        ? appState.shuffledToOriginalMap[randomIndex]
+                        : randomIndex;
                     
                     const dot = document.createElement('div');
                     dot.className = 'vertical-dot';
@@ -322,7 +324,8 @@
             updateVerticalNavDots() {
                 const dots = dom.elements.verticalNavDots.querySelectorAll('.vertical-dot');
                 dots.forEach((dot, index) => {
-                    const originalIndex = parseInt(dot.dataset.originalIndex) || index;
+                    const parsed = parseInt(dot.dataset.originalIndex);
+                    const originalIndex = Number.isNaN(parsed) ? index : parsed;
                     
                     dot.classList.remove('active', 'answered');
                     

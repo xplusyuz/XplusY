@@ -1,5 +1,33 @@
 // ==================== FIREBASE MANAGER ====================
         const firebaseManager = {
+            // Users/{loginId}.points ga ball qo'shish (transaction: Rules bilan ham ishlaydi)
+            async addUserPoints(delta) {
+                try {
+                    if (!CONFIG.useFirebase || !appState.firebaseAvailable || !appState.db) return false;
+                    if (!appState.currentStudent) return false;
+
+                    const userId = appState.currentStudent.id || appState.currentStudent.loginId;
+                    if (!userId) return false;
+
+                    const userRef = appState.db.collection('users').doc(String(userId));
+
+                    // points odatda butun son; Rules ham ko'pincha int talab qiladi.
+                    const add = Math.round(Number(delta) || 0);
+                    if (!add) return true;
+
+                    await appState.db.runTransaction(async (tx) => {
+                        const snap = await tx.get(userRef);
+                        const oldPoints = (snap.exists && typeof snap.data().points === 'number') ? snap.data().points : 0;
+                        const newPoints = Math.round(Number(oldPoints) || 0) + add;
+                        tx.set(userRef, { points: newPoints }, { merge: true });
+                    });
+                    return true;
+                } catch (e) {
+                    console.warn('Points yozishda xato:', e);
+                    return false;
+                }
+            },
+
             async initialize() {
                 try {
                     if (!CONFIG.useFirebase) {
@@ -156,6 +184,16 @@
                 
                 try {
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        // 1) Har qanday testda points qo'shiladi (oddiy + challenge)
+                        await this.addUserPoints(results.finalScore);
+
+                        // 2) Oddiy testda result umuman yozilmaydi (resurs tejash)
+                        if (!isChallenge) {
+                            const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
+                            localStorage.setItem(localStorageKey, JSON.stringify(testResult));
+                            return true;
+                        }
+
                         // Challengeda 1 marta ishlash: serverdan ham tekshiramiz (localStorage o'chirilsa ham)
                         if (isChallenge && CONFIG.singleAttempt) {
                             const attemptsRef = appState.db.collection('test_results')
