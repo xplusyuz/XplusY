@@ -1,7 +1,16 @@
 // ==================== TEST MANAGER ====================
         const testManager = {
+            // Test turi: faqat challengeda 1 marta ishlash cheklovi qo'llanadi
+            isChallengeMode() {
+                const raw = (appState.testData && (appState.testData.mode || appState.testData.type))
+                    ? (appState.testData.mode || appState.testData.type)
+                    : null;
+                return ((raw || 'challenge') + '').toLowerCase() === 'challenge';
+            },
+
             async checkPreviousAttempt() {
-                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) {
+                // Single-attempt cheklovi faqat challengelar uchun
+                if (!CONFIG.singleAttempt || !this.isChallengeMode() || !appState.currentStudent || !appState.currentTestCode) {
                     return null;
                 }
                 
@@ -684,6 +693,11 @@
                 const saveSuccess = await firebaseManager.saveTestResult(results);
                 if (saveSuccess) {
                     console.log('Natija muvaffaqiyatli saqlandi');
+                } else {
+                    // Challengeda ikkinchi marta yuborishni to'xtatamiz
+                    if (CONFIG.singleAttempt && this.isChallengeMode()) {
+                        utils.showMessage("❌ Siz bu challengeni oldin ishlagansiz. Natija qayta yuborilmadi.", 'error');
+                    }
                 }
                 
                 dom.elements.finalScore.textContent = results.finalScore.toFixed(1);

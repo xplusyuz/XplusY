@@ -49,7 +49,8 @@
 
                 dom.elements.studentName.textContent = appState.currentStudent.fullName;
 
-                if (CONFIG.singleAttempt) {
+                // Single-attempt cheklovi faqat challengelar uchun
+                if (CONFIG.singleAttempt && testManager.isChallengeMode()) {
                     appState.previousAttempt = await testManager.checkPreviousAttempt();
 
                     if (appState.previousAttempt) {
@@ -96,6 +97,19 @@
                         dom.elements.studentName.style.color = "";
                         document.getElementById('selectedStudentInfo').style.borderLeftColor = "var(--brand)";
                     }
+                } else {
+                    // Oddiy testlar uchun cheklov yo'q
+                    dom.elements.alreadyAttemptedWarning.classList.add('hidden');
+                    dom.elements.viewPreviousAttemptBtn.classList.add('hidden');
+
+                    dom.elements.startTestBtn.disabled = false;
+                    dom.elements.startTestBtn.textContent = "🚀 Testni Boshlash";
+                    dom.elements.startTestBtn.style.background = "";
+                    dom.elements.startTestBtn.style.cursor = "pointer";
+                    dom.elements.startTestBtn.onclick = testManager.startTest.bind(testManager);
+
+                    dom.elements.studentName.style.color = "";
+                    document.getElementById('selectedStudentInfo').style.borderLeftColor = "var(--brand)";
                 }
 
                 dom.showScreen('intro');

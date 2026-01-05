@@ -126,6 +126,12 @@
                 if (!appState.currentStudent || !appState.currentTestCode) {
                     return false;
                 }
+
+                // Test turi: default challenge (orqaga moslik)
+                const modeRaw = (appState.testData && (appState.testData.mode || appState.testData.type))
+                    ? (appState.testData.mode || appState.testData.type)
+                    : null;
+                const isChallenge = ((modeRaw || 'challenge') + '').toLowerCase() === 'challenge';
                 
                 const testResult = {
                     studentId: appState.currentStudent.id,
@@ -150,6 +156,19 @@
                 
                 try {
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        // Challengeda 1 marta ishlash: serverdan ham tekshiramiz (localStorage o'chirilsa ham)
+                        if (isChallenge && CONFIG.singleAttempt) {
+                            const attemptsRef = appState.db.collection('test_results')
+                                .where('studentId', '==', appState.currentStudent.id)
+                                .where('testCode', '==', appState.currentTestCode)
+                                .limit(1);
+                            const snapshot = await attemptsRef.get();
+                            if (!snapshot.empty) {
+                                // Oldin topshirilgan
+                                return false;
+                            }
+                        }
+
                         const resultRef = appState.db.collection('test_results').doc();
                         await resultRef.set(testResult);
                         
