@@ -30,7 +30,24 @@
           return { id: user.loginId || user.id || user.uid || 'unknown', loginId: user.loginId || user.id || user.uid || 'unknown', fullName, _lm:user };
         }
       };
-    </script>
+    function showLoginOverlay(){
+  const existing = document.getElementById("lmLoginOverlay");
+  if(existing) return;
+  const div = document.createElement("div");
+  div.id = "lmLoginOverlay";
+  div.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;";
+  div.innerHTML = `
+    <div style="max-width:520px;width:100%;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 16px 14px;color:#fff;">
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">Login kerak</div>
+      <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">O‘yindagi ballarni yozish uchun avval LeaderMath tizimida login qiling. Bosh sahifadan kirib, so‘ng qaytib keling.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <a href="index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
+        <a href="login.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+</script>
 
     
     <!-- Auth tizimi -->
@@ -1744,7 +1761,7 @@
 
             // ============ NATIJALAR SAQLASH (Firestore: users/{id}.points + users/{id}.game001) ============
 try {
-    const user = authUtils.getUser();
+    const user = getCurrentUser();
     if (user) {
         // 1) Record (XP) — game001 (max) sifatida saqlanadi
         const xpRecord = Number(gameState.xpCount || 0);
@@ -1766,7 +1783,7 @@ try {
         // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
         // Bu backend yozuv bo‘lmasa ham, local ko‘rinish uchun.
         try {
-            const currentUser = authUtils.getUser() || user;
+            const currentUser = getCurrentUser() || user;
             const currentPoints = Number(currentUser.points || 0);
             const newPoints = currentPoints + pointsDelta;
             await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) });
@@ -1832,7 +1849,7 @@ document.getElementById("game-over").style.display = 'block';
 
         function displayLeaderboard(leaderboard) {
             const content = document.getElementById('leaderboard-content');
-            const currentUser = authUtils.getUser();
+            const currentUser = getCurrentUser();
             
             if (!leaderboard || leaderboard.length === 0) {
                 content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Hali reyting mavjud emas</div>';
@@ -1884,6 +1901,11 @@ document.getElementById("game-over").style.display = 'block';
                     
                     startGame();
                 }
+            } catch (error) {
+                console.error('Session xatosi:', error);
+                // Login sahifasiga yo'naltirish
+                window.location.href = '../login.html';
+            }
         }
 
         function startGame() {
@@ -1998,6 +2020,30 @@ document.getElementById("game-over").style.display = 'block';
         });
     </script>
 <script type="module">
+import { getToken, registerAuto, me } from "./auth.js";
+
+async function ensureAutoUser(){
+  try{
+    const t = getToken();
+    if(t){
+      return await me();
+    }
+    // token yo'q: auto-register (agar backend qo'llasa)
+    await registerAuto();
+    return await me();
+  }catch(e){
+    return null;
+  }
+}
+
+const __BOOT_USER = await ensureAutoUser();
+window.__LM_USER = __BOOT_USER; // null bo'lishi mumkin
+
+function getCurrentUser(){
+  return window.__LM_USER;
+}
+
+
 
   // ==================== AUTO USER (LeaderMath) ====================
   // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
