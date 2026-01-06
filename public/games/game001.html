@@ -4,11 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Tenglamalar — Viet Usuli</title>
+
+    <!-- LeaderMath auto-user (lm_token) -->
+    <script>
+      window.leaderMathAuth = {
+        tokenKey: 'lm_token',
+        apiBase: '/.netlify/functions/api',
+        getToken() { try { return localStorage.getItem(this.tokenKey) || ''; } catch(e){ return ''; } },
+        async me() {
+          const token = this.getToken();
+          if (!token) return null;
+          const u = new URL(this.apiBase, location.origin);
+          u.searchParams.set('path','auth/me');
+          const res = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + token } });
+          if (!res.ok) {
+            if (res.status===401 || res.status===403) { try{ localStorage.removeItem(this.tokenKey);}catch(e){} }
+            return null;
+          }
+          const data = await res.json().catch(()=>null);
+          return data?.user || data?.data?.user || null;
+        },
+        toStudent(user){
+          if(!user) return null;
+          const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
+          return { id: user.loginId || user.id || user.uid || 'unknown', loginId: user.loginId || user.id || user.uid || 'unknown', fullName, _lm:user };
+        }
+      };
+    </script>
+
     
     <!-- Auth tizimi -->
-    <script src="../auth-utils.js"></script>
-    
-    <!-- MathJax for LaTeX -->
+<!-- MathJax for LaTeX -->
     <script>
         window.MathJax = {
             tex: {
@@ -1844,7 +1870,7 @@ document.getElementById("game-over").style.display = 'block';
                 console.log('O\'yin ishga tushmoqda...');
                 
                 // Sessionni tekshirish
-                const user = await authUtils.requireSession();
+                const user = await // requireSession handled by authUtils.ensureUser();
                 console.log('Foydalanuvchi:', user);
                 
                 if (user) {
@@ -1977,6 +2003,32 @@ document.getElementById("game-over").style.display = 'block';
         });
     </script>
 <script type="module">
+
+  // ==================== AUTO USER (LeaderMath) ====================
+  // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
+  // Token bo‘lmasa login.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
+  async function getAutoUserOrWarn() {
+    const user = await window.leaderMathAuth.me();
+    if (!user) {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
+      box.innerHTML = `
+        <div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
+          <div style="font-weight:800;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
+          <div style="opacity:.85;line-height:1.4;margin-bottom:12px;">
+            Bu o‘yin LeaderMath sessiyasi orqali avtomatik ishlaydi. Avval bosh sahifada login qiling, keyin qaytib kiring.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
+            <a href="../login.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:700;">Login</a>
+          </div>
+        </div>`;
+      document.body.appendChild(box);
+      throw new Error('No lm_token/session');
+    }
+    return window.leaderMathAuth.toStudent(user);
+  }
+
   // ===== Firestore (game001 record + points) =====
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import { getFirestore, doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -1994,6 +2046,9 @@ document.getElementById("game-over").style.display = 'block';
   };
 
   const app = initializeApp(firebaseConfig);
+
+  // Auto-session user cache
+  await window.authUtils.ensureUser();
   const db = getFirestore(app);
 
   /**
