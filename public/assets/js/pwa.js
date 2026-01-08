@@ -42,7 +42,11 @@
   async function registerSW() {
     if (!("serviceWorker" in navigator)) return;
     try {
-      await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      setupSwUpdateUI(reg);
+      // Periodic update checks (safe)
+      setInterval(() => { try { reg.update(); } catch(e){} }, 60 * 60 * 1000);
+      return reg;
     } catch (err) {
       // silent
     }
@@ -241,4 +245,64 @@
     // update again after a moment (some browsers set display-mode late)
     setTimeout(updateButtons, 600);
   });
+
+
+  // --- service worker update toast (non-intrusive) ---
+  function setupSwUpdateUI(reg) {
+    if (!reg) return;
+
+    // If there's already a waiting worker, show immediately
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdateToast(reg);
+
+    reg.addEventListener("updatefound", () => {
+      const nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener("statechange", () => {
+        if (nw.state === "installed" && navigator.serviceWorker.controller) {
+          showUpdateToast(reg);
+        }
+      });
+    });
+
+    // Reload once the new SW takes control
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Avoid infinite reload loops
+      if (window.__lm_sw_reloading) return;
+      window.__lm_sw_reloading = true;
+      window.location.reload();
+    });
+  }
+
+  function showUpdateToast(reg) {
+    // Create once
+    let toast = document.getElementById("pwaUpdateToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "pwaUpdateToast";
+      toast.className = "pwaUpdateToast";
+      toast.innerHTML = `
+        <div class="tCard">
+          <div class="tTitle">Yangilanish tayyor</div>
+          <div class="tText">Yangi versiya mavjud. Yangilasangiz, sahifa qayta yuklanadi.</div>
+          <div class="tBtns">
+            <button type="button" class="tBtn" data-pwa-update-later>Keyinroq</button>
+            <button type="button" class="tBtn primary" data-pwa-update-now>Yangilash</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(toast);
+
+      toast.addEventListener("click", (e) => {
+        const later = e.target.closest("[data-pwa-update-later]");
+        const now = e.target.closest("[data-pwa-update-now]");
+        if (later) {
+          toast.remove();
+        }
+        if (now) {
+          try { reg.waiting && reg.waiting.postMessage({ type: "SKIP_WAITING" }); } catch(e){}
+        }
+      });
+    }
+  }
+
 })();

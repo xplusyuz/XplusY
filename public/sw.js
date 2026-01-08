@@ -1,5 +1,5 @@
 /* LeaderMath.UZ Service Worker */
-const VERSION = "lm-pwa-v1.0.0";
+const VERSION = "lm-pwa-v1.0.1-202601081256";
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -7,6 +7,7 @@ const PRECACHE_URLS = [
   "./",
   "./index.html",
   "./app.html",
+  "./offline.html",
   "./manifest.webmanifest",
   "./favicon.ico",
   "./logo.png",
@@ -31,6 +32,14 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
+});
+
+
+// Allow page to trigger immediate activation (update flow)
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 // Activate: clean old caches
@@ -72,7 +81,7 @@ self.addEventListener("fetch", (event) => {
           caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
           return res;
         })
-        .catch(() => caches.match(req).then((m) => m || caches.match("./index.html")))
+        .catch(() => caches.match(req).then((m) => m || caches.match("./index.html")).then((m) => m || caches.match("./offline.html")))
     );
     return;
   }
