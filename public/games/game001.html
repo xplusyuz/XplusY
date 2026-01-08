@@ -5,51 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Tenglamalar — Viet Usuli</title>
 
-    <!-- LeaderMath auto-user (lm_token) -->
-    <script>
-      window.leaderMathAuth = {
-        tokenKey: 'lm_token',
-        apiBase: '/.netlify/functions/api',
-        getToken() { try { return localStorage.getItem(this.tokenKey) || ''; } catch(e){ return ''; } },
-        async me() {
-          const token = this.getToken();
-          if (!token) return null;
-          const u = new URL(this.apiBase, location.origin);
-          u.searchParams.set('path','auth/me');
-          const res = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + token } });
-          if (!res.ok) {
-            if (res.status===401 || res.status===403) { try{ localStorage.removeItem(this.tokenKey);}catch(e){} }
-            return null;
-          }
-          const data = await res.json().catch(()=>null);
-          return data?.user || data?.data?.user || null;
-        },
-        toStudent(user){
-          if(!user) return null;
-          const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
-          return { id: user.loginId || user.id || user.uid || 'unknown', loginId: user.loginId || user.id || user.uid || 'unknown', fullName, _lm:user };
-        }
-      };
-    function showLoginOverlay(){
-  const existing = document.getElementById("lmLoginOverlay");
-  if(existing) return;
-  const div = document.createElement("div");
-  div.id = "lmLoginOverlay";
-  div.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;";
-  div.innerHTML = `
-    <div style="max-width:520px;width:100%;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 16px 14px;color:#fff;">
-      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">Login kerak</div>
-      <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">O‘yindagi ballarni yozish uchun avval LeaderMath tizimida login qiling. Bosh sahifadan kirib, so‘ng qaytib keling.</div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <a href="index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
-        <a href="login.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
-      </div>
-    </div>`;
-  document.body.appendChild(div);
-}
-</script>
-
-    
     <!-- Auth tizimi -->
 <!-- MathJax for LaTeX -->
     <script>
@@ -1763,7 +1718,7 @@
 try {
     const user = getCurrentUser();
     if (user) {
-        // 1) Record (XP) — game001 (max) sifatida saqlanadi
+// 1) Record (XP) — game001 (max) sifatida saqlanadi
         const xpRecord = Number(gameState.xpCount || 0);
 
         // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
@@ -1887,7 +1842,7 @@ document.getElementById("game-over").style.display = 'block';
                 console.log('O\'yin ishga tushmoqda...');
                 
                 // Sessionni tekshirish
-                const user = await // requireSession handled by authUtils.ensureUser();
+                const user = await (window.authUtils?.ensureUser ? window.authUtils.ensureUser() : Promise.resolve(null));
                 console.log('Foydalanuvchi:', user);
                 
                 if (user) {
@@ -1900,11 +1855,18 @@ document.getElementById("game-over").style.display = 'block';
                     document.getElementById('game-screen').style.display = 'block';
                     
                     startGame();
+                } else {
+                    // Mehmon rejim (sessiya bo'lmasa ham o'yin ishlaydi, ball yozilmaydi)
+                    document.getElementById('user-name').textContent = 'Mehmon';
+                    document.getElementById('loading-screen').style.display = 'none';
+                    document.getElementById('game-screen').style.display = 'block';
+                    startGame();
                 }
-            } catch (error) {
+} catch (error) {
                 console.error('Session xatosi:', error);
                 // Login sahifasiga yo'naltirish
-                window.location.href = '../login.html';
+                // login.html olib tashlandi: avtomatik sessiya
+                window.location.href = '../index.html';
             }
         }
 
@@ -1930,7 +1892,8 @@ document.getElementById("game-over").style.display = 'block';
             document.getElementById('logout-btn').addEventListener('click', async () => {
                 if (confirm('O\'yindan chiqishni xohlaysizmi?')) {
                     await authUtils.logout();
-                    window.location.href = '../login.html';
+                    // login.html olib tashlandi: avtomatik sessiya
+                window.location.href = '../index.html';
                 }
             });
             
@@ -2020,109 +1983,115 @@ document.getElementById("game-over").style.display = 'block';
         });
     </script>
 <script type="module">
-import { getToken, registerAuto, me } from "./auth.js";
+import { getToken, registerAuto, me, logout as lmLogout } from "./auth.js";
 
-async function ensureAutoUser(){
+/**
+ * LeaderMath auto-user:
+ * - lm_token bo'lsa: auth/me
+ * - bo'lmasa: auth/register (auto) -> auth/me
+ * Natija: { loginId, fullName, _lm } yoki null
+ */
+function toStudent(user){
+  if(!user) return null;
+  const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || user.id || user.uid || 'Foydalanuvchi').trim();
+  const loginId = user.loginId || user.id || user.uid || 'unknown';
+  return { id: loginId, loginId, fullName, _lm:user };
+}
+
+function pickUser(payload){
+  // backendlar turlicha qaytarishi mumkin
+  return payload?.user || payload?.data?.user || payload || null;
+}
+
+async function ensureUser(){
   try{
+    let u = null;
+
+    // 1) token bo'lsa me()
     const t = getToken();
     if(t){
-      return await me();
+      try{
+        const r = await me();
+        u = pickUser(r);
+      }catch(e){ u = null; }
     }
-    // token yo'q: auto-register (agar backend qo'llasa)
-    await registerAuto();
-    return await me();
+
+    // 2) token bo'lmasa yoki me() ishlamasa: auto-register
+    if(!u){
+      try{
+        await registerAuto();
+        const r2 = await me();
+        u = pickUser(r2);
+      }catch(e){ u = null; }
+    }
+
+    const s = toStudent(u);
+    window.__LM_USER = s;
+    return s;
   }catch(e){
+    window.__LM_USER = null;
     return null;
   }
 }
 
-const __BOOT_USER = await ensureAutoUser();
-window.__LM_USER = __BOOT_USER; // null bo'lishi mumkin
-
-function getCurrentUser(){
-  return window.__LM_USER;
+async function logout(){
+  try{ await lmLogout(); }catch(e){}
+  window.__LM_USER = null;
 }
 
+window.authUtils = { ensureUser, logout };
+window.__LM_BOOT = ensureUser(); // DOMContentLoaded'dan oldin tayyor bo'ladi
 
+// ===== Firestore (game001 record + points) =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getFirestore, doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  // ==================== AUTO USER (LeaderMath) ====================
-  // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
-  // Token bo‘lmasa login.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
-  async function getAutoUserOrWarn() {
-    const user = await window.leaderMathAuth.me();
-    if (!user) {
-      const box = document.createElement('div');
-      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
-      box.innerHTML = `
-        <div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
-          <div style="font-weight:800;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
-          <div style="opacity:.85;line-height:1.4;margin-bottom:12px;">
-            Bu o‘yin LeaderMath sessiyasi orqali avtomatik ishlaydi. Avval bosh sahifada login qiling, keyin qaytib kiring.
-          </div>
-          <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
-            <a href="../login.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:700;">Login</a>
-          </div>
-        </div>`;
-      document.body.appendChild(box);
-      throw new Error('No lm_token/session');
-    }
-    return window.leaderMathAuth.toStudent(user);
-  }
+const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf4nJr7Eyy9--B7x6j9E",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  messagingSenderId: "992512966017",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  measurementId: "G-459PLJ7P7L"
+};
 
-  // ===== Firestore (game001 record + points) =====
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getFirestore, doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-  // Siz bergan Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.firebasestorage.app",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-    measurementId: "G-459PLJ7P7L"
-  };
+/**
+ * users/{loginId} ga:
+ * - points: +pointsDelta (int)
+ * - game001: max(old, xpRecord) (record rejim)
+ *
+ * Eslatma: agar user null bo'lsa, bu funksiya xato qaytaradi (mehmon rejimida chaqirmang).
+ */
+window.game001CommitXP = async function(user, xpRecord, pointsDelta) {
+  const userId = user?.loginId || user?.id || user?.uid;
+  if (!userId) throw new Error("userId topilmadi (loginId/id/uid yo'q)");
+  const userRef = doc(db, "users", String(userId));
 
-  const app = initializeApp(firebaseConfig);
+  const res = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists()) throw new Error("users/" + userId + " topilmadi");
+    const data = snap.data() || {};
+    const curPoints = Number(data.points || 0);
+    const curRec = Number(data.game001 || 0);
 
-  // Auto-session user cache
-  await window.authUtils.ensureUser();
-  const db = getFirestore(app);
+    const newPoints = curPoints + Number(pointsDelta || 0);
+    const newRec = Math.max(curRec, Number(xpRecord || 0));
 
-  /**
-   * users/{id} ga:
-   * - points: +pointsDelta (int)
-   * - game001: max(old, xpRecord) (record rejimi)
-   */
-  window.game001CommitXP = async function(user, xpRecord, pointsDelta) {
-    const userId = user?.loginId || user?.id || user?.uid;
-    if (!userId) throw new Error("userId topilmadi (loginId/id/uid yo'q)");
-    const userRef = doc(db, "users", String(userId));
-
-    const res = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(userRef);
-      if (!snap.exists()) throw new Error("users/" + userId + " topilmadi");
-      const data = snap.data() || {};
-      const curPoints = Number(data.points || 0);
-      const curRec = Number(data.game001 || 0);
-
-      const newPoints = curPoints + Number(pointsDelta || 0);
-      const newRec = Math.max(curRec, Number(xpRecord || 0));
-
-      tx.update(userRef, {
-        points: Math.round(newPoints),   // butun son
-        game001: Math.round(newRec),     // record
-        updatedAt: serverTimestamp()
-      });
-
-      return { userId, curPoints, newPoints, curRec, newRec };
+    tx.update(userRef, {
+      points: Math.round(newPoints),
+      game001: Math.round(newRec),
+      updatedAt: serverTimestamp()
     });
 
-    return res;
-  };
+    return { userId, curPoints, newPoints, curRec, newRec };
+  });
+
+  return res;
+};
 </script>
 </body>
 </html>
