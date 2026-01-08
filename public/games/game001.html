@@ -42,7 +42,7 @@
       <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">O‘yindagi ballarni yozish uchun avval LeaderMath tizimida login qiling. Bosh sahifadan kirib, so‘ng qaytib keling.</div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <a href="index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
-        <a href="login.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
+        <a href="../index.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
       </div>
     </div>`;
   document.body.appendChild(div);
@@ -1922,7 +1922,7 @@ document.getElementById("game-over").style.display = 'block';
             
 
             // Home button (bosh sahifa)
-            const goHome = () => { window.location.href = '../app.html'; };
+            const goHome = () => { window.location.href = '../index.html'; };
             document.getElementById('home-btn')?.addEventListener('click', goHome);
             document.getElementById('home-btn-2')?.addEventListener('click', goHome);
 
@@ -2019,79 +2019,65 @@ document.getElementById("game-over").style.display = 'block';
             clearTimeout(autoNextTimeout);
         });
     </script>
-
 <script type="module">
-  // ==================== LeaderMath Session (NO GUEST) ====================
-  // Bu o‘yin faqat LeaderMath.UZ saytida login bo‘lgan foydalanuvchi bilan ishlaydi.
-  // Sessiya tokeni: localStorage["lm_token"]
-  const leaderMathAuth = {
-    tokenKey: 'lm_token',
-    apiBase: '/.netlify/functions/api',
-    getToken() { try { return localStorage.getItem(this.tokenKey) || ''; } catch(_) { return ''; } },
-    clearToken(){ try{ localStorage.removeItem(this.tokenKey); }catch(_){} },
-    async me(){
-      const token = this.getToken();
-      if(!token) return null;
-      const u = new URL(this.apiBase, location.origin);
-      u.searchParams.set('path','auth/me');
-      const res = await fetch(u.toString(), { method:'GET', headers:{ Authorization:'Bearer '+token } });
-      if(!res.ok){
-        if(res.status===401 || res.status===403) this.clearToken();
-        return null;
-      }
-      const data = await res.json().catch(()=>null);
-      return data?.user || data?.data?.user || null;
-    },
-    toStudent(user){
-      if(!user) return null;
-      const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
-      return { id: user.loginId || user.id || user.uid || 'unknown', loginId: user.loginId || user.id || user.uid || 'unknown', fullName, _lm:user };
+import { getToken, me, clearToken } from "./auth.js";
+
+async function ensureAutoUser(){
+  try{
+    const t = getToken();
+    if(!t) return null;           // ❌ mehmon yo'q: token bo‘lmasa user yo‘q
+    const u = await me();
+    if(!u){
+      // token yaroqsiz bo‘lsa tozalab qo‘yamiz
+      try{ clearToken(); }catch{}
+      return null;
     }
-  };
+    return u;
+  }catch(e){
+    try{ clearToken(); }catch{}
+    return null;
+  }
+}
 
-  function blockNoSession(){
-    window.__LM_USER = null;
-    window.__LM_BLOCKED = true;
-    const box = document.createElement('div');
-    box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:999999;padding:20px;';
-    box.innerHTML = `
-      <div style="max-width:560px;width:100%;background:#0b1220;color:#eaf2ff;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:18px 18px 14px;box-shadow:0 25px 80px rgba(0,0,0,.55);font-family:system-ui,Segoe UI,Arial">
-        <div style="font-weight:900;font-size:18px;margin-bottom:6px;">🔒 Kirish talab qilinadi</div>
-        <div style="opacity:.9;line-height:1.45;margin-bottom:14px;">
-          Bu o‘yin faqat LeaderMath.UZ saytiga <b>login</b> qilgan foydalanuvchilar uchun. <br/>
-          Iltimos, avval bosh sahifadan ID + Parol bilan kiring, keyin bu o‘yinga qayting.
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;">
-          <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:14px;background:#0ea5e9;color:#00131c;font-weight:900;">🏠 Kirish sahifasi</a>
-          <a href="../app.html" style="text-decoration:none;padding:10px 14px;border-radius:14px;background:rgba(255,255,255,.10);color:#eaf2ff;border:1px solid rgba(255,255,255,.14);font-weight:800;">📱 App</a>
-        </div>
-      </div>`;
-    document.body.appendChild(box);
+const __BOOT_USER = await ensureAutoUser();
+window.__LM_USER = __BOOT_USER; // null bo'lishi mumkin
 
-    // UI'ni bloklash (mehmon o‘ynay olmaydi)
-    document.documentElement.style.overflow = 'hidden';
+function getCurrentUser(){
+  return window.__LM_USER;
+}
+
+
+
+  // ==================== AUTO USER (LeaderMath) ====================
+  // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
+  // Token bo‘lmasa login.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
+  async function getAutoUserOrWarn() {
+    const user = await window.leaderMathAuth.me();
+    if (!user) {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
+      box.innerHTML = `
+        <div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
+          <div style="font-weight:800;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
+          <div style="opacity:.85;line-height:1.4;margin-bottom:12px;">
+            Bu o‘yin LeaderMath sessiyasi orqali avtomatik ishlaydi. Avval bosh sahifada login qiling, keyin qaytib kiring.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
+            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:700;">Login</a>
+          </div>
+        </div>`;
+      document.body.appendChild(box);
+      throw new Error('No lm_token/session');
+    }
+    return window.leaderMathAuth.toStudent(user);
   }
 
-  // Boot: faqat token bo‘lsa davom etadi
-  const lmUser = await leaderMathAuth.me();
-  if(!lmUser){
-    blockNoSession();
-    // Bu yerda davom etmaymiz (firebase yozish va o‘yin starti bloklansin)
-    throw new Error('No LeaderMath session (lm_token missing/invalid)');
-  }
-
-  const student = leaderMathAuth.toStudent(lmUser);
-  window.__LM_USER = student;
-  window.__LM_BLOCKED = false;
-
-  function getCurrentUser(){ return window.__LM_USER; }
-  window.getCurrentUser = getCurrentUser;
-
-  // ==================== Firestore (game001 record + points) ====================
+  // ===== Firestore (game001 record + points) =====
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
   import { getFirestore, doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-  // Firebase config
+  // Siz bergan Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
     authDomain: "xplusy-760fa.firebaseapp.com",
@@ -2104,54 +2090,17 @@ document.getElementById("game-over").style.display = 'block';
   };
 
   const app = initializeApp(firebaseConfig);
+
+  // Auto-session user cache
+  await window.authUtils.ensureUser();
   const db = getFirestore(app);
 
   /**
-   * users/{loginId} ga:
+   * users/{id} ga:
    * - points: +pointsDelta (int)
    * - game001: max(old, xpRecord) (record rejimi)
-   * Eslatma: mehmon yo‘q; user bo‘lmasa bu funksiya ishlamaydi.
    */
   window.game001CommitXP = async function(user, xpRecord, pointsDelta) {
-    const userId = user?.loginId || user?.id || user?.uid;
-    if (!userId) throw new Error("userId topilmadi (loginId/id/uid yo'q)");
-    const userRef = doc(db, "users", String(userId));
-
-    const res = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(userRef);
-      const data = snap.exists() ? (snap.data() || {}) : {};
-
-      const curPoints = Number(data.points || 0);
-      const curRec = Number(data.game001 || 0);
-
-      const addP = Number(pointsDelta || 0);
-      const rec = Number(xpRecord || 0);
-
-      const newPoints = Math.round(curPoints + addP);
-      const newRec = Math.round(Math.max(curRec, rec));
-
-      if(!snap.exists()){
-        // Agar users doc yo‘q bo‘lsa, yaratib qo‘yishga urinib ko‘ramiz (rules ruxsat bersa).
-        tx.set(userRef, {
-          points: newPoints,
-          game001: newRec,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      }else{
-        tx.update(userRef, {
-          points: newPoints,
-          game001: newRec,
-          updatedAt: serverTimestamp()
-        });
-      }
-
-      return { userId, curPoints, newPoints, curRec, newRec };
-    });
-
-    return res;
-  };
- = async function(user, xpRecord, pointsDelta) {
     const userId = user?.loginId || user?.id || user?.uid;
     if (!userId) throw new Error("userId topilmadi (loginId/id/uid yo'q)");
     const userRef = doc(db, "users", String(userId));
