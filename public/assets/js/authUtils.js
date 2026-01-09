@@ -166,42 +166,41 @@
     /**
      * Logout (tokenni tozalaydi) va appHome'ga qaytaradi.
      */
-    
 
     /**
-     * Game submit helper:
-     * - record: games/{gameId}/records (attempt)
-     * - points: users/{loginId}.points += pointsDelta
+     * O'yin natijasini serverga yuborish (record + points increment).
+     * Backend endpoint: POST /games/submit
      */
     async submitGame(gameId, xp, pointsDelta, meta) {
-      const gid = String(gameId || '').trim() || 'game001';
-      const payload = { gameId: gid, xp: Number(xp||0), pointsDelta: Number(pointsDelta||0), meta: meta || {} };
+      const body = {
+        gameId: String(gameId || 'game001'),
+        xp: Math.max(0, Math.floor(Number(xp||0)||0)),
+        pointsDelta: Math.max(0, Math.floor(Number(pointsDelta||0)||0)),
+        meta: meta && typeof meta === 'object' ? meta : null
+      };
       const res = await this.fetchApi('/games/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(body)
       });
-      const data = await (async()=>{ try{ return await res.json(); }catch(_){ return null; } })();
-      if (!res.ok || !data?.ok) {
-        const msg = data?.error || ('GAME_SUBMIT_FAILED_' + res.status);
-        const err = new Error(msg);
-        err.status = res.status;
-        err.payload = data;
-        throw err;
+      const data = await (async()=>{ try { return await res.json(); } catch { return null; } })();
+      if(!res.ok) {
+        const msg = data?.error || ('Submit failed: ' + res.status);
+        throw new Error(msg);
       }
       return data;
     },
 
     /**
-     * Game001 shortcut:
-     * meta: { levelReached, questions, correct, durationSec, ... }
+     * Game001 uchun: xp/100 ni Math.round qilib pointsDelta qiladi va yuboradi.
      */
     async submitGame001(xp, meta) {
-      const xpNum = Math.max(0, Math.floor(Number(xp||0) || 0));
-      const pointsDelta = Math.max(0, Math.round(xpNum / 100)); // 560->6, 720->7
-      return await this.submitGame('game001', xpNum, pointsDelta, meta || {});
+      const xpInt = Math.max(0, Math.floor(Number(xp||0)||0));
+      const pointsDelta = Math.round(xpInt / 100);
+      return this.submitGame('game001', xpInt, pointsDelta, meta);
     },
-logout(redirectTo) {
+
+    logout(redirectTo) {
       this.clearToken();
       const target = redirectTo || this._cfg.appHome || '/app.html';
       const u = new URL(target, location.origin);

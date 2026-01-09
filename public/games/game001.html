@@ -1073,21 +1073,7 @@
         </div>
     </div>
 
-    
-<script src="/assets/js/authUtils.js"></script>
-<script>
-  // App’da kirilgan foydalanuvchini avto aniqlash (mehmon YO‘Q)
-  (async () => {
-    try{
-      const user = await authUtils.requireUser({ appHome: '/app.html', returnTo: location.pathname + location.search + location.hash });
-      window.__LM_USER = user;
-    }catch(e){
-      console.error('Auth required:', e);
-    }
-  })();
-</script>
-
-<script>
+    <script>
         // ================ KONFIGURATSIYA ================
         const MAX_LEVEL = 100;
         const LEVEL_CONFIG = {};
@@ -1773,37 +1759,51 @@
             document.getElementById("final-correct").textContent = gameState.correctCount;
             document.getElementById("final-xp").textContent = gameState.xpCount;
 
-            // ============ NATIJALAR SAQLASH (1) record -> games/game001/records (2) points += round(xp/100) ============
+            // ============ NATIJALAR SAQLASH (Firestore: users/{id}.points + users/{id}.game001) ============
 try {
-  const user = getCurrentUser();
-  if (!user) throw new Error("AUTH_REQUIRED");
-  const xpRecord = Number(gameState.xpCount || 0);
-  const meta = {
-    levelReached: gameState.highestLevelReached || 0,
-    questions: gameState.questionCount || 0,
-    correct: gameState.correctCount || 0,
-    durationSec: (startTime ? Math.max(0, Math.floor((Date.now() - startTime.getTime()) / 1000)) : 0),
-    ua: navigator.userAgent,
-  };
+    const user = getCurrentUser();
+    if (user) {
+        // 1) Record (XP) — game001 (max) sifatida saqlanadi
+        const xpRecord = Number(gameState.xpCount || 0);
 
-  // Server: writes attempt record + increments points (round(xp/100)) in one transaction
-  if (window.authUtils && authUtils.submitGame001) {
-    const r = await authUtils.submitGame001(xpRecord, meta);
-    // Optional: UI’da tez ko‘rinishi uchun lokal ham yangilab qo‘yamiz
-    try {
-      const delta = Number(r.pointsDelta || 0);
-      if (delta) {
-        // agar sizda header/usercard real-time bo‘lmasa, shu joyda ko‘rinadi
-        user.points = Number(user.points || 0) + delta;
-        window.__LM_USER = user;
-      }
-    } catch(_) {}
-    console.log("game001 saved:", r);
-  } else {
-    console.warn("authUtils.submitGame001 topilmadi — saqlash o‘tkazib yuborildi");
-  }
+        // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
+        // 5.6 => 6, 7.2 => 7
+        const pointsDelta = Math.round(xpRecord / 100);
+
+        console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
+
+        // 1) Record rejimi + 2) points increment (xp/100, Math.round) — server orqali
+        // Avval authUtils bo'lsa shuni ishlatamiz (tavsiya)
+        try{
+            if (window.authUtils && typeof window.authUtils.submitGame001 === 'function') {
+                const meta = { mode: 'record+points', page: location.pathname };
+                const submitRes = await window.authUtils.submitGame001(xpRecord, meta);
+                console.log('Game submit:', submitRes);
+            } else if (window.game001CommitXP) {
+                // Orqaga moslik: eski Firebase commit
+                const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
+                console.log('Firestore commit:', commitRes);
+            } else {
+                console.warn('Submit funksiyasi topilmadi (authUtils.submitGame001 yoki game001CommitXP).');
+            }
+        }catch(e){
+            console.warn('Submit xatosi:', e);
+        }
+
+        // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
+        // Bu backend yozuv bo‘lmasa ham, local ko‘rinish uchun.
+        try {
+            const currentUser = getCurrentUser() || user;
+            const currentPoints = Number(currentUser.points || 0);
+            const newPoints = currentPoints + pointsDelta;
+            await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) });
+        } catch (e) {
+            // auth-utils update bo‘lmasa ham o‘yin ishlayveradi
+            console.warn('Local userData update skip:', e?.message || e);
+        }
+    }
 } catch (error) {
-  console.error("Yakuniy natijalarni saqlashda xatolik:", error);
+    console.error('Yakuniy natijalarni saqlashda xatolik:', error);
 }
 
 document.getElementById("game-over").style.display = 'block';
@@ -2072,5 +2072,6 @@ document.getElementById("game-over").style.display = 'block';
         });
     </script>
 
+  <script src="/assets/js/authUtils.js"></script>
 </body>
 </html>
