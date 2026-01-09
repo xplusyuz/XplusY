@@ -31,24 +31,22 @@
         }
       };
     function showLoginOverlay(){
-      const existing = document.getElementById("lmLoginOverlay");
-      if(existing) return;
-      const div = document.createElement("div");
-      div.id = "lmLoginOverlay";
-      div.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:16px;";
-      div.innerHTML = `
-        <div style="max-width:560px;width:100%;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 16px 14px;color:#fff;">
-          <div style="font-weight:900;font-size:16px;margin-bottom:6px;">Kirish kerak</div>
-          <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">
-            Bu o‘yin faqat LeaderMath tizimiga kirgan foydalanuvchilar uchun. App ichida kirib, so‘ng yana o‘yinga kiring.
-          </div>
-          <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
-            <a href="../app.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:900;">↩️ App’ga qaytish</a>
-            <a href="../index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Kirish sahifasi</a>
-          </div>
-        </div>`;
-      document.body.appendChild(div);
-    }
+  const existing = document.getElementById("lmLoginOverlay");
+  if(existing) return;
+  const div = document.createElement("div");
+  div.id = "lmLoginOverlay";
+  div.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;";
+  div.innerHTML = `
+    <div style="max-width:520px;width:100%;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 16px 14px;color:#fff;">
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">Login kerak</div>
+      <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">O‘yindagi ballarni yozish uchun avval LeaderMath tizimida login qiling. Bosh sahifadan kirib, so‘ng qaytib keling.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <a href="index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
+        <a href="app.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
 </script>
 
     
@@ -1889,10 +1887,8 @@ document.getElementById("game-over").style.display = 'block';
                 console.log('O\'yin ishga tushmoqda...');
                 
                 // Sessionni tekshirish
-                const user = await getAutoUserOrWarn();
-                // cache raw user for later Firestore writes
-                window.__LM_USER = user? (user._lm || window.__LM_USER) : window.__LM_USER;
-console.log('Foydalanuvchi:', user);
+                const user = await // requireSession handled by authUtils.ensureUser();
+                console.log('Foydalanuvchi:', user);
                 
                 if (user) {
                     // Foydalanuvchi ma'lumotlarini ko'rsatish
@@ -1907,8 +1903,8 @@ console.log('Foydalanuvchi:', user);
                 }
             } catch (error) {
                 console.error('Session xatosi:', error);
-                showLoginOverlay();
-                // keep loading screen; no redirect loop
+                // Login sahifasiga yo'naltirish
+                window.location.href = '../app.html';
             }
         }
 
@@ -1926,15 +1922,15 @@ console.log('Foydalanuvchi:', user);
             
 
             // Home button (bosh sahifa)
-            const goHome = () => { window.location.href = '../app.html'; };
+            const goHome = () => { window.location.href = '../index.html'; };
             document.getElementById('home-btn')?.addEventListener('click', goHome);
             document.getElementById('home-btn-2')?.addEventListener('click', goHome);
 
             // Logout button
             document.getElementById('logout-btn').addEventListener('click', async () => {
                 if (confirm('O\'yindan chiqishni xohlaysizmi?')) {
-                    try{ localStorage.removeItem('lm_token'); }catch(e){}
-                    window.location.href = '../index.html';
+                    await authUtils.logout();
+                    window.location.href = '../app.html';
                 }
             });
             
@@ -2024,34 +2020,96 @@ console.log('Foydalanuvchi:', user);
         });
     </script>
 <script type="module">
-import { getToken, me } from "./auth.js";
+import { getToken, setToken, me } from "./auth.js";
 
-// Require an existing login session (no guest mode)
-let __LM_USER = null;
-try{
-  const t = getToken();
-  if(!t){ throw new Error("No token"); }
-  const r = await me();
-  __LM_USER = r?.user || null;
-}catch(e){
-  __LM_USER = null;
+/**
+ * Token manbalari:
+ * 1) localStorage lm_token (sayt loginidan keyin bo‘ladi)
+ * 2) URL query (?token=... yoki ?t=... yoki ?lm_token=...)
+ * 3) Agar iframe bo‘lsa: parent orqali postMessage (ixtiyoriy)
+ */
+async function resolveToken(){
+  try{
+    let t = (getToken && getToken()) || "";
+    if(t) return t;
+
+    // URL params
+    const u = new URL(location.href);
+    t = u.searchParams.get("token") || u.searchParams.get("t") || u.searchParams.get("lm_token") || "";
+    if(t){
+      try{ setToken(t); }catch{}
+      return t;
+    }
+
+    // iframe ichida bo‘lsa, parentdan so‘rash (agar app qo‘llasa)
+    if(window.parent && window.parent !== window){
+      const reqId = "req_" + Math.random().toString(36).slice(2);
+      const token = await new Promise((resolve) => {
+        const timer = setTimeout(() => { cleanup(); resolve(""); }, 1200);
+        function onMsg(ev){
+          const d = ev.data || {};
+          if(d && d.type === "LM_TOKEN_RESPONSE" && d.reqId === reqId){
+            cleanup();
+            resolve(String(d.token || ""));
+          }
+        }
+        function cleanup(){
+          clearTimeout(timer);
+          window.removeEventListener("message", onMsg);
+        }
+        window.addEventListener("message", onMsg);
+        try{ window.parent.postMessage({ type:"LM_TOKEN_REQUEST", reqId }, "*"); }catch{ cleanup(); resolve(""); }
+      });
+      if(token){
+        try{ setToken(token); }catch{}
+        return token;
+      }
+    }
+  }catch{}
+  return "";
 }
-window.__LM_USER = __LM_USER;
-function getCurrentUser(){ return window.__LM_USER; }
+
+async function ensureUser(){
+  try{
+    const t = await resolveToken();
+    if(!t) return null;
+    return await me(); // auth/me (Bearer token) orqali
+  }catch(e){
+    return null;
+  }
+}
+
+const __BOOT_USER = await ensureUser();
+window.__LM_USER = __BOOT_USER;
+
+function getCurrentUser(){
+  return window.__LM_USER;
+}
+}
+
+
 
   // ==================== AUTO USER (LeaderMath) ====================
   // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
-  // Token bo‘lmasa login.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
+  // Token bo‘lmasa app.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
   async function getAutoUserOrWarn() {
-    // prefer already-booted user from auth.js (Bearer header handled there)
-    let user = getCurrentUser();
+    const user = await window.leaderMathAuth.me();
     if (!user) {
-      // fallback: try leaderMathAuth.me() if present
-      try{ user = await window.leaderMathAuth.me(); }catch(e){ user = null; }
-    }
-    if (!user) {
-      showLoginOverlay();
-      throw new Error("No session");
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
+      box.innerHTML = `
+        <div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
+          <div style="font-weight:800;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
+          <div style="opacity:.85;line-height:1.4;margin-bottom:12px;">
+            Bu o‘yin LeaderMath sessiyasi orqali avtomatik ishlaydi. Avval bosh sahifada login qiling, keyin qaytib kiring.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
+            <a href="../app.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:700;">Login</a>
+          </div>
+        </div>`;
+      document.body.appendChild(box);
+      throw new Error('No lm_token/session');
     }
     return window.leaderMathAuth.toStudent(user);
   }
@@ -2073,7 +2131,9 @@ function getCurrentUser(){ return window.__LM_USER; }
   };
 
   const app = initializeApp(firebaseConfig);
-  // Auto-session user cache (handled above)
+
+  // Auto-session user cache
+  await window.authUtils.ensureUser();
   const db = getFirestore(app);
 
   /**
