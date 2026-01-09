@@ -166,7 +166,42 @@
     /**
      * Logout (tokenni tozalaydi) va appHome'ga qaytaradi.
      */
-    logout(redirectTo) {
+    
+
+    /**
+     * Game submit helper:
+     * - record: games/{gameId}/records (attempt)
+     * - points: users/{loginId}.points += pointsDelta
+     */
+    async submitGame(gameId, xp, pointsDelta, meta) {
+      const gid = String(gameId || '').trim() || 'game001';
+      const payload = { gameId: gid, xp: Number(xp||0), pointsDelta: Number(pointsDelta||0), meta: meta || {} };
+      const res = await this.fetchApi('/games/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await (async()=>{ try{ return await res.json(); }catch(_){ return null; } })();
+      if (!res.ok || !data?.ok) {
+        const msg = data?.error || ('GAME_SUBMIT_FAILED_' + res.status);
+        const err = new Error(msg);
+        err.status = res.status;
+        err.payload = data;
+        throw err;
+      }
+      return data;
+    },
+
+    /**
+     * Game001 shortcut:
+     * meta: { levelReached, questions, correct, durationSec, ... }
+     */
+    async submitGame001(xp, meta) {
+      const xpNum = Math.max(0, Math.floor(Number(xp||0) || 0));
+      const pointsDelta = Math.max(0, Math.round(xpNum / 100)); // 560->6, 720->7
+      return await this.submitGame('game001', xpNum, pointsDelta, meta || {});
+    },
+logout(redirectTo) {
       this.clearToken();
       const target = redirectTo || this._cfg.appHome || '/app.html';
       const u = new URL(target, location.origin);

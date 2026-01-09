@@ -1221,7 +1221,58 @@ export const handler = async (event) => {
       }
     }
 
-    return json(404, { error:"Endpoint topilmadi", path, method });
+    
+    // ==================== GAMES: SUBMIT (record + points delta) ====================
+    if(path === "/games/submit" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const body = parseBody(event);
+        const gameId = String(body.gameId || "").trim() || "game001";
+        const xp = Math.max(0, Math.floor(Number(body.xp || 0) || 0));
+        const pointsDelta = Math.max(0, Math.floor(Number(body.pointsDelta || 0) || 0));
+        const meta = (body.meta && typeof body.meta === "object") ? body.meta : {};
+        const ts = Date.now();
+
+        if(!gameId) return json(400, { error:"gameId kerak" });
+
+        const gameRef = db.collection("games").doc(gameId);
+        const recRef = gameRef.collection("records").doc(); // auto-id
+        const userRef = db.collection("users").doc(auth.loginId);
+
+        await db.runTransaction(async (tx)=>{
+          // read user for bestXp calc
+          const uSnap = await tx.get(userRef);
+          const u = uSnap.exists ? (uSnap.data()||{}) : {};
+          const prevBest = Number(u?.games?.[gameId]?.bestXp || 0);
+          const bestXp = Math.max(prevBest, xp);
+
+          // 1) record write (each attempt)
+          tx.set(recRef, {
+            loginId: auth.loginId,
+            xp,
+            pointsDelta,
+            meta,
+            createdAt: ts
+          });
+
+          // 2) points update (client rounding; server still clamps)
+          if(pointsDelta > 0){
+            tx.set(userRef, { points: admin.firestore.FieldValue.increment(pointsDelta) }, { merge:true });
+          }
+
+          // 3) store per-user game stats
+          tx.set(userRef, { games: { [gameId]: { bestXp, lastXp: xp, lastPlayedAt: ts } } }, { merge:true });
+        });
+
+        return json(200, { ok:true, gameId, xp, pointsDelta });
+      }catch(e){
+        return json(400, { error: e.message || "Submit game error" });
+      }
+    }
+
+
+return json(404, { error:"Endpoint topilmadi", path, method });
   }catch(e){
     return json(500, { error: e.message || "Server error" });
   }
