@@ -1881,30 +1881,72 @@ document.getElementById("game-over").style.display = 'block';
             content.innerHTML = html;
         }
 
-        // ================ MAIN INITIALIZATION ================
+        
+        // ================ AUTH (reuse app auth.js) ================
+        async function ensureLoggedUserOrBlock(){
+            const { getToken, me } = await import("../assets/js/auth.js");
+            const token = getToken();
+            if(!token){
+                showNeedLoginOverlay();
+                throw new Error("NO_TOKEN");
+            }
+            const user = await me().catch(()=>null);
+            if(!user){
+                showNeedLoginOverlay();
+                throw new Error("NO_USER");
+            }
+            return user;
+        }
+
+        function showNeedLoginOverlay(){
+            if(document.getElementById("lmNeedLoginBox")) return;
+            const box = document.createElement('div');
+            box.id = "lmNeedLoginBox";
+            box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
+            box.innerHTML = `
+              <div style="max-width:560px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
+                <div style="font-weight:900;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
+                <div style="opacity:.86;line-height:1.5;margin-bottom:14px;">
+                  Bu o‘yin faqat LeaderMath’da login bo‘lgan foydalanuvchilar uchun. Iltimos App sahifasida login qiling.
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+                  <a href="../app.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:800;">⬅️ App’ga qaytish</a>
+                  <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:800;">🏠 Start</a>
+                </div>
+              </div>`;
+            document.body.appendChild(box);
+        }
+
+// ================ MAIN INITIALIZATION ================
         async function initializeGame() {
             try {
                 console.log('O\'yin ishga tushmoqda...');
-                
-                // Sessionni tekshirish
-                const user = await // requireSession handled by authUtils.ensureUser();
+
+                const userRaw = await ensureLoggedUserOrBlock();
+                // game UI uchun ixcham user modeli
+                const user = {
+                    loginId: userRaw.loginId || userRaw.id || userRaw.uid || '',
+                    fullName: (userRaw.name || `${userRaw.firstName||''} ${userRaw.lastName||''}`.trim() || userRaw.loginId || 'Foydalanuvchi').trim(),
+                    email: userRaw.email || '',
+                    _lm: userRaw
+                };
+                window.__LM_USER = user; // boshqa joylarda ishlatish uchun
+
                 console.log('Foydalanuvchi:', user);
-                
-                if (user) {
-                    // Foydalanuvchi ma'lumotlarini ko'rsatish
-                    const displayName = user.fullName || user.email || 'Foydalanuvchi';
-                    document.getElementById('user-name').textContent = displayName;
-                    
-                    // O'yinni boshlash
-                    document.getElementById('loading-screen').style.display = 'none';
-                    document.getElementById('game-screen').style.display = 'block';
-                    
-                    startGame();
-                }
+
+                // Foydalanuvchi ma'lumotlarini ko'rsatish
+                const displayName = user.fullName || user.email || 'Foydalanuvchi';
+                document.getElementById('user-name').textContent = displayName;
+
+                // O'yinni boshlash
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('game-screen').style.display = 'block';
+
+                startGame();
             } catch (error) {
                 console.error('Session xatosi:', error);
-                // Login sahifasiga yo'naltirish
-                window.location.href = '../app.html';
+                // redirect yo'q (loop bo'lmasin). Overlay ko'rsatiladi.
+                document.getElementById('loading-screen').style.display = 'none';
             }
         }
 
@@ -2019,154 +2061,6 @@ document.getElementById("game-over").style.display = 'block';
             clearTimeout(autoNextTimeout);
         });
     </script>
-<script type="module">
-import { getToken, setToken, me } from "./auth.js";
 
-/**
- * Token manbalari:
- * 1) localStorage lm_token (sayt loginidan keyin bo‘ladi)
- * 2) URL query (?token=... yoki ?t=... yoki ?lm_token=...)
- * 3) Agar iframe bo‘lsa: parent orqali postMessage (ixtiyoriy)
- */
-async function resolveToken(){
-  try{
-    let t = (getToken && getToken()) || "";
-    if(t) return t;
-
-    // URL params
-    const u = new URL(location.href);
-    t = u.searchParams.get("token") || u.searchParams.get("t") || u.searchParams.get("lm_token") || "";
-    if(t){
-      try{ setToken(t); }catch{}
-      return t;
-    }
-
-    // iframe ichida bo‘lsa, parentdan so‘rash (agar app qo‘llasa)
-    if(window.parent && window.parent !== window){
-      const reqId = "req_" + Math.random().toString(36).slice(2);
-      const token = await new Promise((resolve) => {
-        const timer = setTimeout(() => { cleanup(); resolve(""); }, 1200);
-        function onMsg(ev){
-          const d = ev.data || {};
-          if(d && d.type === "LM_TOKEN_RESPONSE" && d.reqId === reqId){
-            cleanup();
-            resolve(String(d.token || ""));
-          }
-        }
-        function cleanup(){
-          clearTimeout(timer);
-          window.removeEventListener("message", onMsg);
-        }
-        window.addEventListener("message", onMsg);
-        try{ window.parent.postMessage({ type:"LM_TOKEN_REQUEST", reqId }, "*"); }catch{ cleanup(); resolve(""); }
-      });
-      if(token){
-        try{ setToken(token); }catch{}
-        return token;
-      }
-    }
-  }catch{}
-  return "";
-}
-
-async function ensureUser(){
-  try{
-    const t = await resolveToken();
-    if(!t) return null;
-    return await me(); // auth/me (Bearer token) orqali
-  }catch(e){
-    return null;
-  }
-}
-
-const __BOOT_USER = await ensureUser();
-window.__LM_USER = __BOOT_USER;
-
-function getCurrentUser(){
-  return window.__LM_USER;
-}
-}
-
-
-
-  // ==================== AUTO USER (LeaderMath) ====================
-  // Test tizimidagidek: agar lm_token bo‘lsa user avtomatik olinadi.
-  // Token bo‘lmasa app.html ga avtomatik yubormaymiz; ekranda ogohlantiramiz.
-  async function getAutoUserOrWarn() {
-    const user = await window.leaderMathAuth.me();
-    if (!user) {
-      const box = document.createElement('div');
-      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
-      box.innerHTML = `
-        <div style="max-width:520px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
-          <div style="font-weight:800;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
-          <div style="opacity:.85;line-height:1.4;margin-bottom:12px;">
-            Bu o‘yin LeaderMath sessiyasi orqali avtomatik ishlaydi. Avval bosh sahifada login qiling, keyin qaytib kiring.
-          </div>
-          <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
-            <a href="../app.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:700;">Login</a>
-          </div>
-        </div>`;
-      document.body.appendChild(box);
-      throw new Error('No lm_token/session');
-    }
-    return window.leaderMathAuth.toStudent(user);
-  }
-
-  // ===== Firestore (game001 record + points) =====
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { getFirestore, doc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-  // Siz bergan Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-    authDomain: "xplusy-760fa.firebaseapp.com",
-    databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
-    projectId: "xplusy-760fa",
-    storageBucket: "xplusy-760fa.firebasestorage.app",
-    messagingSenderId: "992512966017",
-    appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-    measurementId: "G-459PLJ7P7L"
-  };
-
-  const app = initializeApp(firebaseConfig);
-
-  // Auto-session user cache
-  await window.authUtils.ensureUser();
-  const db = getFirestore(app);
-
-  /**
-   * users/{id} ga:
-   * - points: +pointsDelta (int)
-   * - game001: max(old, xpRecord) (record rejimi)
-   */
-  window.game001CommitXP = async function(user, xpRecord, pointsDelta) {
-    const userId = user?.loginId || user?.id || user?.uid;
-    if (!userId) throw new Error("userId topilmadi (loginId/id/uid yo'q)");
-    const userRef = doc(db, "users", String(userId));
-
-    const res = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(userRef);
-      if (!snap.exists()) throw new Error("users/" + userId + " topilmadi");
-      const data = snap.data() || {};
-      const curPoints = Number(data.points || 0);
-      const curRec = Number(data.game001 || 0);
-
-      const newPoints = curPoints + Number(pointsDelta || 0);
-      const newRec = Math.max(curRec, Number(xpRecord || 0));
-
-      tx.update(userRef, {
-        points: Math.round(newPoints),   // butun son
-        game001: Math.round(newRec),     // record
-        updatedAt: serverTimestamp()
-      });
-
-      return { userId, curPoints, newPoints, curRec, newRec };
-    });
-
-    return res;
-  };
-</script>
 </body>
 </html>
