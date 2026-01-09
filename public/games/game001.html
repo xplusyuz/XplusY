@@ -1772,22 +1772,12 @@ try {
 
         console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
 
-        // 1) Record rejimi + 2) points increment (xp/100, Math.round) — server orqali
-        // Avval authUtils bo'lsa shuni ishlatamiz (tavsiya)
-        try{
-            if (window.authUtils && typeof window.authUtils.submitGame001 === 'function') {
-                const meta = { mode: 'record+points', page: location.pathname };
-                const submitRes = await window.authUtils.submitGame001(xpRecord, meta);
-                console.log('Game submit:', submitRes);
-            } else if (window.game001CommitXP) {
-                // Orqaga moslik: eski Firebase commit
-                const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
-                console.log('Firestore commit:', commitRes);
-            } else {
-                console.warn('Submit funksiyasi topilmadi (authUtils.submitGame001 yoki game001CommitXP).');
-            }
-        }catch(e){
-            console.warn('Submit xatosi:', e);
+        // Firestore transaction orqali yozamiz (resurs tejaladi, xavfsiz)
+        if (window.game001CommitXP) {
+            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
+            console.log('Firestore commit:', commitRes);
+        } else {
+            console.warn('game001CommitXP mavjud emas (Firebase script yuklanmagan bo‘lishi mumkin).');
         }
 
         // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
@@ -1933,19 +1923,33 @@ document.getElementById("game-over").style.display = 'block';
                 console.log('O\'yin ishga tushmoqda...');
 
                 const userRaw = await ensureLoggedUserOrBlock();
-                // game UI uchun ixcham user modeli
-                const user = {
-                    loginId: userRaw.loginId || userRaw.id || userRaw.uid || '',
-                    fullName: (userRaw.name || `${userRaw.firstName||''} ${userRaw.lastName||''}`.trim() || userRaw.loginId || 'Foydalanuvchi').trim(),
-                    email: userRaw.email || '',
-                    _lm: userRaw
-                };
+
+// auth/me ba'zan {user:{...}} yoki {data:{user:{...}}} ko'rinishida qaytadi
+const u0 = (userRaw && (userRaw.user || (userRaw.data && userRaw.data.user))) ? (userRaw.user || userRaw.data.user) : userRaw;
+
+// Ismni maksimal robust olish
+const fullName =
+  (u0.fullName || u0.displayName || u0.name || u0.fio || u0.FIO ||
+   (u0.profile && (u0.profile.fullName || u0.profile.name || u0.profile.fio)) ||
+   (u0.firstName || u0.first_name || '') + ' ' + (u0.lastName || u0.last_name || '')).trim();
+
+// ID fallback
+const loginId = (u0.loginId || u0.uid || u0.id || u0.numericId || u0.numericID || u0.userId || '').toString();
+
+// game UI uchun ixcham user modeli
+const user = {
+  loginId,
+  fullName: (fullName || loginId || u0.email || 'Foydalanuvchi').trim(),
+  email: u0.email || '',
+  numericId: u0.numericId ?? u0.numericID ?? null,
+  _lm: u0
+};
                 window.__LM_USER = user; // boshqa joylarda ishlatish uchun
 
                 console.log('Foydalanuvchi:', user);
 
                 // Foydalanuvchi ma'lumotlarini ko'rsatish
-                const displayName = user.fullName || user.email || 'Foydalanuvchi';
+                const displayName = user.fullName || user.email || (user.loginId ? ('ID: '+user.loginId) : 'Foydalanuvchi');
                 document.getElementById('user-name').textContent = displayName;
 
                 // O'yinni boshlash
@@ -2072,6 +2076,5 @@ document.getElementById("game-over").style.display = 'block';
         });
     </script>
 
-  <script src="/assets/js/authUtils.js"></script>
 </body>
 </html>
