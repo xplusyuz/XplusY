@@ -1726,7 +1726,7 @@ try {
 
         // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
         // 5.6 => 6, 7.2 => 7
-        const pointsDelta = Math.round(xpRecord / 100);
+        const pointsDelta = Math.round(xpRecord / 10);
 
         console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
 
@@ -1788,20 +1788,36 @@ document.getElementById("game-over").style.display = 'block';
 
         // ================ RATING FUNCTIONS ================
         async function loadLeaderboard() {
+            const content = document.getElementById('leaderboard-content');
             try {
-                const content = document.getElementById('leaderboard-content');
-                content.innerHTML = '<div style="text-align:center;padding:18px;color:var(--gray);">Yuklanmoqda...</div>';
+                content.innerHTML = '<div style="text-align:center; padding:20px; color: var(--gray);">⏳ Reyting yuklanmoqda...</div>';
 
-                // BestXP bo‘yicha reyting (serverdan)
-                const limit = 20;
-                const gameId = 'game001';
-                const url = authUtils.apiUrl('games/leaderboard') + `&gameId=${encodeURIComponent(gameId)}&limit=${limit}`;
-                const res = await fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + authUtils.getToken() } });
-                const data = await res.json().catch(()=>null);
+                // API base'ni authUtils'dan olamiz (u sizda /.netlify/functions/_ bo'lishi ham mumkin)
+                const baseUrl = (window.authUtils && typeof authUtils.apiUrl === 'function')
+                  ? authUtils.apiUrl('games/leaderboard')
+                  : '/.netlify/functions/api?path=games/leaderboard';
 
-                if (!res.ok || !data || data.ok !== true) {
-                    throw new Error((data && (data.error || data.message)) || 'Reyting yuklanmadi');
+                const url = baseUrl + '&gameId=game001&limit=20';
+
+                const headers = { 'Content-Type': 'application/json' };
+                const token = (window.authUtils && typeof authUtils.getToken === 'function') ? authUtils.getToken() : null;
+                if (token) headers['Authorization'] = 'Bearer ' + token;
+
+                const resp = await fetch(url, { method: 'GET', headers });
+                const data = await resp.json().catch(() => ({}));
+
+                if (!resp.ok || data.error) {
+                    throw new Error(data.message || data.error || ('HTTP ' + resp.status));
                 }
+
+                // backend { ok:true, leaderboard:[...] } qaytaradi
+                const rows = data.leaderboard || data.rows || [];
+                displayLeaderboard(rows);
+            } catch (error) {
+                console.error('Reyting yuklash xatosi:', error);
+                content.innerHTML = '<div style="text-align:center; padding:20px; color: var(--gray);">Reyting yuklanmadi: ' + (error.message || error) + '</div>';
+            }
+        }
 
                 displayLeaderboard(data.leaderboard || []);
             } catch (error) {
