@@ -1791,7 +1791,6 @@ async function loadLeaderboard() {
   const content = document.getElementById('leaderboard-content');
   if (!content) return;
 
-  // Loading state
   content.innerHTML = `
     <div style="text-align:center; padding:20px; color: var(--gray);">
       ⏳ Reyting yuklanmoqda...
@@ -1799,22 +1798,38 @@ async function loadLeaderboard() {
   `;
 
   try {
-    // API base'ni authUtils'dan olamiz (u sizda /.netlify/functions/_ bo'lishi ham mumkin)
-    const url = (window.authUtils && typeof authUtils.apiUrl === 'function')
-      ? authUtils.apiUrl('games/leaderboard', { gameId: 'game001', limit: 30 })
-      : '/.netlify/functions/api?path=games/leaderboard&gameId=game001&limit=30';
+    const base = (window.authUtils && typeof authUtils.apiUrl === 'function')
+      ? authUtils.apiUrl('games/leaderboard')
+      : '/.netlify/functions/api?path=games/leaderboard';
 
-    const res = await fetch(url, { credentials: 'include' });
+    const u = new URL(base, location.origin);
+    u.searchParams.set('gameId', 'game001');
+    u.searchParams.set('limit', '30');
+
+    const token = (window.authUtils && typeof authUtils.getToken === 'function') ? authUtils.getToken() : '';
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+
+    const res = await fetch(u.toString(), { method: 'GET', headers });
+
+    if (res.status === 401 || res.status === 403) {
+      content.innerHTML = `
+        <div style="text-align:center; padding:20px; color:#ff6b6b;">
+          Reyting yuklanmadi: Avval kirish qiling (HTTP ${res.status})
+        </div>
+      `;
+      return;
+    }
+
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
 
-    const leaderboard = (data && (data.leaderboard || data.data || data.items)) || [];
-    displayLeaderboard(leaderboard);
+    const data = await res.json();
+    const rows = Array.isArray(data?.rows) ? data.rows : (Array.isArray(data?.leaderboard) ? data.leaderboard : (Array.isArray(data) ? data : []));
+    displayLeaderboard(rows);
   } catch (err) {
     console.error('Reyting yuklash xatosi:', err);
     content.innerHTML = `
       <div style="text-align:center; padding:20px; color: #ff6b6b;">
-        Reyting yuklanmadi: ${String(err && err.message ? err.message : err)}
+        Reyting yuklanmadi: ${escapeHtml(String(err && err.message ? err.message : err))}
       </div>
     `;
   }
