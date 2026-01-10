@@ -242,6 +242,47 @@
   #storyViewer img#storyImg{ object-fit: contain; }
   #storyViewer::before{ opacity: .75; filter: blur(20px) saturate(1.05); }
 }
+
+/* --- Video Hero (banner o‘rnida) --- */
+.videoHero{
+  position:relative;
+  width:100%;
+  border-radius:18px;
+  overflow:hidden;
+  background:#000;
+  border:1px solid rgba(20,40,60,.10);
+  box-shadow: 0 10px 30px rgba(0,0,0,.18);
+}
+.heroVideo{
+  width:100%;
+  height:auto;
+  display:block;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+@media (max-width: 720px){
+  .heroVideo{ aspect-ratio: 9 / 16; }
+}
+.videoControls{
+  position:absolute;
+  right:12px;
+  bottom:12px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.vBtn{
+  width:44px;height:44px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.20);
+  background: rgba(0,0,0,.55);
+  color:#fff;
+  font-size:18px;
+  cursor:pointer;
+  backdrop-filter: blur(8px);
+}
+.vBtn:hover{ background: rgba(0,0,0,.78); }
+
 </style>
 </head>
 <body data-page="app">
@@ -302,25 +343,34 @@
 </div>
 </div>
 </section>
-<!-- 1) Stories-style Banner Carousel (banner/1.png,2.png...) -->
+<!-- 1) Video Banner (public/hero.mp4) -->
 <section class="glass section" id="bannerSection">
-<div class="sectionTitle">
-<h2>Yangiliklar</h2>
-<div class="hint">Bizning yangiliklardan xabardor bo'ling!</div>
-</div>
-<div aria-label="Banner stories" class="storyBar" id="storyBar"></div>
-<div aria-label="Banner ko‘ruvchi" class="storyViewer" id="storyViewer" style="margin-top:12px;">
-<div aria-hidden="true" class="storyProgress" id="storyProgressDots"></div>
-<button aria-label="Oldingi" class="storyNav prev" id="storyPrev" type="button">‹</button>
-<img alt="Banner" class="storyImg" id="storyImg"/>
-<button aria-label="Keyingi" class="storyNav next" id="storyNext" type="button">›</button>
-<div class="storyEmpty" id="storyEmpty" style="display:none;">
-<div class="big">Hozircha yangilik yo‘q</div>
-<div class="small muted">bizni kuzatib boring!</div>
-</div>
-</div>
+  <div class="sectionTitle">
+    <h2>Yangiliklar</h2>
+    <div class="hint">Videoni tomosha qiling — pauza va ovoz boshqaruvi bor.</div>
+  </div>
+
+  <div class="videoHero" aria-label="Video banner">
+    <video
+      id="heroVideo"
+      class="heroVideo"
+      src="public/hero.mp4"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="metadata"
+    ></video>
+
+    <div class="videoControls" aria-label="Video boshqaruvlari">
+      <button class="vBtn" id="playPauseBtn" type="button" aria-label="Pause / Play" title="Pause / Play">⏸</button>
+      <button class="vBtn" id="muteBtn" type="button" aria-label="Mute / Unmute" title="Mute / Unmute">🔇</button>
+    </div>
+  </div>
 </section>
+
 <!-- 2) Challenge container (code + start) -->
+ (code + start) -->
 <section class="glass section" id="challengeSection">
 <div class="sectionTitle">
 <h2>Challenge</h2>
@@ -823,192 +873,48 @@
 
 
 // ===============================
-    // Single-page home (Stories + Challenge + Tests + Simulators)
+    // Single-page home (Video Hero + Challenge + Tests + Simulators)
     // ===============================
-    const BANNER_DIR = "banner";
-let storyItems = [];
-let storyIdx = 0;
-let storyTimer = null;
 
-const STORY_EXTS = ["webp"];
+    function setupHeroVideo(){
+      const v = $("heroVideo");
+      const playBtn = $("playPauseBtn");
+      const muteBtn = $("muteBtn");
+      if(!v) return;
 
-const MOBILE_BP = 720; // px: mobile breakpoint for 9:16 banners
+      // Autoplay policy: start muted (default)
+      v.muted = true;
 
-function isMobileViewport(){
-  return window.matchMedia(`(max-width:${MOBILE_BP}px)`).matches;
-}
+      // Try to play (some browsers may block until user gesture — that's OK)
+      const tryPlay = ()=>{ try{ v.play(); }catch(_){ } };
+      tryPlay();
 
-function pickStoryUrl(item){
-  // item can be {desktop, mobile} or legacy {url}
-  if(item && (item.mobile || item.desktop)){
-    const file = isMobileViewport() ? (item.mobile || item.desktop) : (item.desktop || item.mobile);
-    return `${BANNER_DIR}/${file}`;
-  }
-  return item?.url || "";
-}
+      // Play/Pause toggle
+      playBtn?.addEventListener("click", ()=>{
+        if(v.paused){
+          tryPlay();
+          if(playBtn) playBtn.textContent = "⏸";
+        }else{
+          v.pause();
+          if(playBtn) playBtn.textContent = "▶️";
+        }
+      });
 
-function probeImageUrl(url){
-  return new Promise(res=>{
-    const im = new Image();
-    im.onload = ()=>res(true);
-    im.onerror = ()=>res(false);
-    im.src = `${url}?v=${Date.now()}`;
-  });
-}
+      // Mute/Unmute toggle
+      muteBtn?.addEventListener("click", ()=>{
+        v.muted = !v.muted;
+        if(muteBtn) muteBtn.textContent = v.muted ? "🔇" : "🔊";
+      });
 
-// fallback probe:
-// - desktop: 1-d.webp / 1-d.png ...
-// - mobile : 1-m.webp / 1-m.png ...
-// - legacy : 1.webp / 1.png ...
-// NOTE: We keep file names (not full URLs) so pickStoryUrl() can switch by viewport.
-async function probeSequentialBanners(prefix, max=24, stopAfter=4){
-  const out=[];
-  let miss=0;
+      // If video ends unexpectedly (shouldn't with loop), keep it running
+      v.addEventListener("ended", tryPlay);
 
-  for(let i=1;i<=max;i++){
-    let deskFile = null;
-    let mobFile  = null;
-    let baseFile = null;
-
-    // Desktop variant (-d)
-    for(const ext of STORY_EXTS){
-      const f = `${i}-d.${ext}`;
-      if(await probeImageUrl(`${prefix}/${f}`)){ deskFile = f; break; }
+      // Optional: tap video to toggle play/pause (mobile friendly)
+      v.addEventListener("click", ()=>{
+        if(v.paused){ tryPlay(); if(playBtn) playBtn.textContent="⏸"; }
+        else { v.pause(); if(playBtn) playBtn.textContent="▶️"; }
+      }, {passive:true});
     }
-    // Mobile variant (-m)
-    for(const ext of STORY_EXTS){
-      const f = `${i}-m.${ext}`;
-      if(await probeImageUrl(`${prefix}/${f}`)){ mobFile = f; break; }
-    }
-
-    // Legacy/base (no suffix) — only if needed as fallback
-    // (avoids extra 404 noise when you already use -d / -m files)
-    if(!deskFile || !mobFile){
-      for(const ext of STORY_EXTS){
-        const f = `${i}.${ext}`;
-        if(await probeImageUrl(`${prefix}/${f}`)){ baseFile = f; break; }
-      }
-    }
-
-    const hasAny = !!(deskFile || mobFile || baseFile);
-    if(hasAny){
-      // If one side missing, fall back to the base or the other variant.
-      const d = deskFile || baseFile || mobFile;
-      const m = mobFile  || baseFile || deskFile;
-      out.push({ id:i, desktop: d, mobile: m });
-      miss = 0;
-    }else{
-      miss++;
-      if(miss>=stopAfter) break;
-    }
-  }
-  return out;
-}
-
-async function loadStories(){
-  // Manifest ishlatilmaydi. Bannerlar papkadan ketma-ket topiladi:
-  // 1-d.webp / 1-m.webp (yoki 1.webp), keyin 2-..., 3-...
-  storyItems = await probeSequentialBanners(BANNER_DIR, 60, 2);
-
-  const empty = $("storyEmpty");
-  const viewer = $("storyViewer");
-
-  if(!storyItems.length){
-    renderStoryViewer(0, false);
-    if(viewer) viewer.classList.add("isEmpty");
-    if(empty) empty.style.display = "block";
-    return;
-  }
-
-  if(empty) empty.style.display = "none";
-  if(viewer) viewer.classList.remove("isEmpty");
-  renderStoryViewer(0, true);
-}
-
-// keep renderStoryBar (optional), but it is hidden by CSS
-function renderStoryBar(){
-  const bar = $("storyBar");
-  if(!bar) return;
-
-  if(!storyItems.length){
-    bar.innerHTML = `<div class="small" style="padding:6px 2px;">
-      banner/1.webp (yoki png/jpg) bo‘lsa, shu yerda stories chiqadi.
-    </div>`;
-    return;
-  }
-
-  bar.innerHTML = storyItems.map((s,i)=>`
-    <button class="storyBubble" type="button" data-idx="${i}">
-      <div class="storyRing">
-        <img class="storyAvatar" src="${pickStoryUrl(s)}" alt="Banner ${i+1}">
-      </div>
-      <div class="storyLabel">${i+1}</div>
-    </button>
-  `).join("");
-
-  bar.onclick = e=>{
-    const b = e.target.closest("[data-idx]");
-    if(!b) return;
-    renderStoryViewer(+b.dataset.idx, true);
-  };
-}
-
-function clearStoryTimer(){
-  if(storyTimer){ clearInterval(storyTimer); storyTimer=null; }
-}
-
-function renderStoryViewer(idx, autoplay=false){
-  const viewer = $("storyViewer");
-  const img = $("storyImg");
-  const dots = $("storyProgressDots");
-  if(!viewer||!img||!dots) return;
-
-  storyIdx = Math.max(0, Math.min(idx, storyItems.length-1));
-
-  if(!storyItems.length){
-    img.removeAttribute("src");
-    viewer.classList.add("isEmpty");
-    dots.innerHTML="";
-    clearStoryTimer();
-    return;
-  }
-
-  viewer.classList.remove("isEmpty");
-  const u = pickStoryUrl(storyItems[storyIdx]);
-  img.src = u;
-  // Use the same image as a blurred background to avoid white letterboxing
-  viewer.style.setProperty('--story-bg', `url("${u}")`);
-
-  dots.innerHTML = storyItems.map((_,i)=>
-    `<span class="storyProgressDot ${i===storyIdx?"active":""}"></span>`
-  ).join("");
-
-  clearStoryTimer();
-  if(autoplay){
-    let t=0;
-    storyTimer=setInterval(()=>{
-      if(++t>=6){
-        t=0;
-        renderStoryViewer((storyIdx+1)%storyItems.length,true);
-      }
-    },800);
-  }
-}
-
-function setupStoryControls(){
-  $("storyPrev")?.addEventListener("click",()=>renderStoryViewer((storyIdx-1+storyItems.length)%storyItems.length,true));
-  $("storyNext")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true));
-  $("storyViewer")?.addEventListener("click",()=>renderStoryViewer((storyIdx+1)%storyItems.length,true),{passive:true});
-}
-
-// If viewport changes (resize/rotate), switch between mobile/desktop banner versions
-window.addEventListener("resize", ()=>{
-  if(!storyItems.length) return;
-  const img = $("storyImg");
-  if(img) img.src = pickStoryUrl(storyItems[storyIdx]);
-}, {passive:true});
-
-
 
     // ---- Challenge (code + start) ----
     function setupChallenge(){
@@ -1645,12 +1551,11 @@ window.addEventListener("resize", ()=>{
         await refreshUnread();
 
         // Single-page sections
-        setupStoryControls();
+        setupHeroVideo();
         setupChallenge();
         if (typeof setupTestSearch === "function") setupTestSearch();
         if (typeof setupSimSearch === "function") setupSimSearch();
-        await loadStories();
-        /* tests removed */
+/* tests removed */
         if (typeof renderSims === "function") renderSims();
 
         // Embedded viewer modal
