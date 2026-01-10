@@ -1787,83 +1787,92 @@ document.getElementById("game-over").style.display = 'block';
         }
 
         // ================ RATING FUNCTIONS ================
-        async function loadLeaderboard() {
-            const content = document.getElementById('leaderboard-content');
-            try {
-                content.innerHTML = '<div style="text-align:center; padding:20px; color: var(--gray);">⏳ Reyting yuklanmoqda...</div>';
+async function loadLeaderboard() {
+  const content = document.getElementById('leaderboard-content');
+  if (!content) return;
 
-                // API base'ni authUtils'dan olamiz (u sizda /.netlify/functions/_ bo'lishi ham mumkin)
-                const baseUrl = (window.authUtils && typeof authUtils.apiUrl === 'function')
-                  ? authUtils.apiUrl('games/leaderboard')
-                  : '/.netlify/functions/api?path=games/leaderboard';
+  // Loading state
+  content.innerHTML = `
+    <div style="text-align:center; padding:20px; color: var(--gray);">
+      ⏳ Reyting yuklanmoqda...
+    </div>
+  `;
 
-                const url = baseUrl + '&gameId=game001&limit=20';
+  try {
+    // API base'ni authUtils'dan olamiz (u sizda /.netlify/functions/_ bo'lishi ham mumkin)
+    const url = (window.authUtils && typeof authUtils.apiUrl === 'function')
+      ? authUtils.apiUrl('games/leaderboard', { gameId: 'game001', limit: 30 })
+      : '/.netlify/functions/api?path=games/leaderboard&gameId=game001&limit=30';
 
-                const headers = { 'Content-Type': 'application/json' };
-                const token = (window.authUtils && typeof authUtils.getToken === 'function') ? authUtils.getToken() : null;
-                if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
 
-                const resp = await fetch(url, { method: 'GET', headers });
-                const data = await resp.json().catch(() => ({}));
+    const leaderboard = (data && (data.leaderboard || data.data || data.items)) || [];
+    displayLeaderboard(leaderboard);
+  } catch (err) {
+    console.error('Reyting yuklash xatosi:', err);
+    content.innerHTML = `
+      <div style="text-align:center; padding:20px; color: #ff6b6b;">
+        Reyting yuklanmadi: ${String(err && err.message ? err.message : err)}
+      </div>
+    `;
+  }
+}
 
-                if (!resp.ok || data.error) {
-                    throw new Error(data.message || data.error || ('HTTP ' + resp.status));
-                }
+function displayLeaderboard(leaderboard) {
+  const content = document.getElementById('leaderboard-content');
+  if (!content) return;
 
-                // backend { ok:true, leaderboard:[...] } qaytaradi
-                const rows = data.leaderboard || data.rows || [];
-                displayLeaderboard(rows);
-            } catch (error) {
-                console.error('Reyting yuklash xatosi:', error);
-                content.innerHTML = '<div style="text-align:center; padding:20px; color: var(--gray);">Reyting yuklanmadi: ' + (error.message || error) + '</div>';
-            }
-        }
+  if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
+    content.innerHTML = '<div style="text-align:center; padding:20px; color: var(--gray);">Hali reyting mavjud emas</div>';
+    return;
+  }
 
-                displayLeaderboard(data.leaderboard || []);
-            } catch (error) {
-                console.error('Reyting yuklash xatosi:', error);
-                const content = document.getElementById('leaderboard-content');
-                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Reyting yuklanmadi: ' + (error.message || error) + '</div>';
-            }
-        }
+  // Normalize + sort bestXp DESC
+  const normalized = leaderboard.map((u) => ({
+    id: u.id || u.loginId || u.uid || '',
+    fullName: u.fullName || u.name || ((u.firstName || '') + ' ' + (u.lastName || '')).trim(),
+    bestXp: Number(u.bestXp ?? u.bestXP ?? u.score ?? 0),
+  })).sort((a,b)=>b.bestXp - a.bestXp);
 
-        function displayLeaderboard(leaderboard) {
-            const content = document.getElementById('leaderboard-content');
-            const currentUser = (window.__LM_USER_VIEW)||getCurrentUser();
-            
-            if (!leaderboard || leaderboard.length === 0) {
-                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Hali reyting mavjud emas</div>';
-                return;
-            }
-            
-            let html = '';
-            leaderboard.forEach((user, index) => {
-                const isCurrent = currentUser && user.loginId === currentUser.id;
-                const rankClass = `rank-${index + 1}`;
-                const itemClass = isCurrent ? 'leaderboard-item current-user-item' : 'leaderboard-item';
-                const avatarLetter = ((user.name || user.fullName) || 'U').charAt(0).toUpperCase();
-                
-                html += `
-                    <div class="${itemClass}">
-                        <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
-                        <div class="leaderboard-avatar">${avatarLetter}</div>
-                        <div class="leaderboard-user-info">
-                            <div class="leaderboard-user-name">${(user.name || user.fullName) || 'Foydalanuvchi'}</div>
-                            <div class="leaderboard-user-stats">
-                                <div class="leaderboard-stat">XP: <strong>${user.bestXp || 0}</strong></div>
-                                <div class="leaderboard-stat">Umumiy: <strong>${user.points || 0}</strong></div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            content.innerHTML = html;
-        }
+  const currentUser = window.__LM_USER_VIEW || window.__LM_USER || (window.authUtils && authUtils.currentUser) || null;
 
-        
-        // ================ AUTH (authUtils) ================
-function getCurrentUser(){ return window.__LM_USER || null; }
+  let html = '<div class="leaderboard-list">';
+  normalized.forEach((user, index) => {
+    const isCurrent = currentUser && (user.id && (user.id === currentUser.id || user.id === currentUser.loginId));
+    const rankClass = `rank-${index + 1}`;
+    const itemClass = isCurrent ? 'leaderboard-item current-user-item' : 'leaderboard-item';
+    const avatarLetter = (user.fullName || 'U').charAt(0).toUpperCase();
+
+    html += `
+      <div class="${itemClass}">
+        <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
+        <div class="leaderboard-avatar">${avatarLetter}</div>
+        <div class="leaderboard-user-info">
+          <div class="leaderboard-user-name">${user.fullName || 'Foydalanuvchi'}</div>
+          <div class="leaderboard-user-score">Best XP: <b>${user.bestXp}</b></div>
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+
+  content.innerHTML = html;
+}
+
+// Trophy button hook (safe)
+(function bindLeaderboardBtn(){
+  const btn = document.getElementById('btn-leaderboard') || document.querySelector('[data-open-leaderboard]');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const modal = document.getElementById('leaderboard-modal');
+    if (modal) modal.style.display = 'block';
+    await loadLeaderboard();
+  });
+})();
+
+
 async function ensureLoggedUserOrBlock(){
   const user = await (window.authUtils?.me ? authUtils.me() : Promise.resolve(null)).catch(()=>null);
   if(!user){ showNeedLoginOverlay(); throw new Error("NO_USER"); }
