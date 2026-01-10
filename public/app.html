@@ -320,8 +320,11 @@
 <!-- ★ Medalyon / Level progress (100 bosqich) -->
 <section class="glass section" id="medalSection">
 <div class="sectionTitle">
+<div>
 <h2>Sizning darajangiz</h2>
 <div class="hint">Ball → bosqich • medals</div>
+</div>
+<button class="btn btnSm" id="openRating" type="button" title="Reytingni ko\'rish">🏆 Reyting</button>
 </div>
 <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
 <img alt="Medalyon" id="medalLarge" src="logo.png" style="width:74px;height:74px;border-radius:20px;border:1px solid rgba(20,40,60,.12);background:rgba(255,255,255,.55);object-fit:contain;flex:0 0 auto;"/>
@@ -354,7 +357,7 @@
     <video
       id="heroVideo"
       class="heroVideo"
-      src="public/hero.mp4"
+      src="videos/banner.mp4"
       autoplay
       muted
       loop
@@ -404,16 +407,6 @@
 <!-- 4) Simulators container (same style) -->
 <!-- Reyting/Izohlar endi suzuvchi "touch" tugma orqali premium modalda ochiladi -->
 <!-- Floating Touch Button (expand: 🏆 Reyting / 💬 Izoh) -->
-<div aria-label="Tezkor panel" class="touchFab" id="touchFab">
-<button aria-controls="touchMenu" aria-expanded="false" class="touchMain" id="touchMain" title="Panel" type="button">☰</button>
-<div aria-hidden="true" class="touchMenu" id="touchMenu">
-<button class="touchAction" id="openRating" type="button"><span class="emo">🏆</span><span>Reyting</span></button>
-<button class="touchAction" id="openComments" type="button">
-<span class="emo">💬</span><span>Izoh</span>
-<span class="touchBadge" id="cmBadge" style="display:none">1</span>
-</button>
-</div>
-</div>
 <!-- Reyting Modal (Top-20 + podium + qidiruv) -->
 <div aria-hidden="true" class="modalOverlay modalApp" id="ratingModal">
 <div aria-label="Reyting" aria-modal="true" class="modal glass" role="dialog">
@@ -1579,59 +1572,10 @@
     }
     
     function setupTouchFab(){
-      const main = $("touchMain");
-      const menu = $("touchMenu");
-      const fab = $("touchFab");
-
-      // --- iPhone-style draggable AssistiveTouch behavior ---
-      const POS_KEY = "lm_touchFab_pos_v1";
-      let drag = { active:false, dragging:false, sx:0, sy:0, ox:0, oy:0, t0:0, pid:null };
-      let suppressNextClick = false;
-
-      function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
-      function clampToViewport(){
-        const r = fab.getBoundingClientRect();
-        const w = r.width || fab.offsetWidth || 80;
-        const h = r.height || fab.offsetHeight || 80;
-        const maxX = window.innerWidth - w - 8;
-        const maxY = window.innerHeight - h - 8;
-        let x = r.left, y = r.top;
-        if (Number.isNaN(x) || Number.isNaN(y)) return;
-        x = clamp(x, 8, maxX);
-        y = clamp(y, 8, maxY);
-        fab.style.left = Math.round(x) + "px";
-        fab.style.top  = Math.round(y) + "px";
-        fab.style.right = "auto";
-        fab.style.bottom = "auto";
-      }
-
-      function applySavedPos(){
-        try{
-          const raw = localStorage.getItem(POS_KEY);
-          if(!raw) return;
-          const p = JSON.parse(raw);
-          if(!p || typeof p.x!=='number' || typeof p.y!=='number') return;
-          fab.style.left = p.x + "px";
-          fab.style.top = p.y + "px";
-          fab.style.right = "auto";
-          fab.style.bottom = "auto";
-          // In case the saved position is from desktop, keep it visible on mobile too
-          requestAnimationFrame(()=> clampToViewport());
-        }catch(_){ }
-      }
-      function savePos(x,y){
-        try{ localStorage.setItem(POS_KEY, JSON.stringify({x,y})); }catch(_){ }
-      }
-      applySavedPos();
-
+      
+      // --- Reyting & Izohlar (bottom dock) ---
       const ratingModal = $("ratingModal");
       const commentModal = $("commentModal");
-
-      function setMenu(open){
-        main.setAttribute("aria-expanded", String(open));
-        menu.setAttribute("aria-hidden", String(!open));
-        fab.classList.toggle("open", open);
-      }
 
       function openModal(overlayEl, focusId){
         if(!overlayEl) return;
@@ -1647,91 +1591,28 @@
         document.body.classList.remove("noScroll");
       }
 
-      // Toggle menu
-      main?.addEventListener("click", (e)=>{
-        if(suppressNextClick){ suppressNextClick = false; return; }
-        e.stopPropagation();
-        const isOpen = fab.classList.contains("open");
-        setMenu(!isOpen);
-      });
+      // Open buttons
+      $("openRating")?.addEventListener("click", ()=> openModal(ratingModal, "ratingClose"));
+      $("openRatingInline")?.addEventListener("click", ()=> openModal(ratingModal, "ratingClose"));
 
-      // Drag (pointer): only start dragging after a real move threshold
-      main?.addEventListener("pointerdown", (e)=>{
-        drag.active = true;
-        drag.dragging = false;
-        drag.sx = e.clientX; drag.sy = e.clientY;
-        drag.t0 = (performance?.now?.() || Date.now());
-        drag.pid = e.pointerId;
-        const r = fab.getBoundingClientRect();
-        drag.ox = r.left; drag.oy = r.top;
-      });
-
-      main?.addEventListener("pointermove", (e)=>{
-        if(!drag.active) return;
-        const dx = e.clientX - drag.sx;
-        const dy = e.clientY - drag.sy;
-        const dist = Math.abs(dx) + Math.abs(dy);
-
-        // Start drag only if user actually moved enough (prevents click from being swallowed)
-        if(!drag.dragging && dist < 14) return;
-        if(!drag.dragging){
-          drag.dragging = true;
-          suppressNextClick = true;
-          setMenu(false);
-          fab.setPointerCapture?.(drag.pid);
-          fab.style.right = "auto";
-          fab.style.bottom = "auto";
-        }
-
-        const w = fab.offsetWidth || 80;
-        const h = fab.offsetHeight || 80;
-        const x = clamp(drag.ox + dx, 8, window.innerWidth - w - 8);
-        const y = clamp(drag.oy + dy, 8, window.innerHeight - h - 8);
-        fab.style.left = x + "px";
-        fab.style.top  = y + "px";
-      });
-
-      function endDrag(){
-        if(!drag.active) return;
-        drag.active = false;
-        if(drag.dragging){
-          const r = fab.getBoundingClientRect();
-          savePos(Math.round(r.left), Math.round(r.top));
-          setTimeout(()=>{ suppressNextClick = false; }, 180);
-        }
-        drag.dragging = false;
-        drag.pid = null;
-      }
-      main?.addEventListener("pointerup", endDrag);
-      main?.addEventListener("pointercancel", endDrag);
-
-      // Keep it visible on viewport changes
-      window.addEventListener("resize", ()=>{
-        try{ clampToViewport(); }catch(_){ }
-      }, {passive:true});
-
-      // Open actions
-      $("openRating")?.addEventListener("click", ()=>{ setMenu(false); openModal(ratingModal, "ratingClose"); });
-      $("openComments")?.addEventListener("click", ()=>{ 
-        setMenu(false); 
+      const openCommentsAny = ()=>{
         openModal(commentModal, "commentClose");
-        // user has seen latest comments
         try{ markCommentsSeen(); }catch(_){ }
-      });
+      };
+      $("openCommentsDock")?.addEventListener("click", openCommentsAny);
+      $("openComments")?.addEventListener("click", openCommentsAny);
 
       // Close buttons
       $("ratingClose")?.addEventListener("click", ()=>closeModal(ratingModal));
       $("commentClose")?.addEventListener("click", ()=>closeModal(commentModal));
 
       // Click outside to close
-      document.addEventListener("click", ()=> setMenu(false));
       ratingModal?.addEventListener("click", (e)=>{ if(e.target===ratingModal) closeModal(ratingModal); });
       commentModal?.addEventListener("click", (e)=>{ if(e.target===commentModal) closeModal(commentModal); });
 
       // Esc
       document.addEventListener("keydown", (e)=>{
         if(e.key!=="Escape") return;
-        setMenu(false);
         if(ratingModal?.classList.contains("open")) closeModal(ratingModal);
         if(commentModal?.classList.contains("open")) closeModal(commentModal);
       });
@@ -1996,5 +1877,14 @@
     .catch(()=>{ info.textContent='Kontent yuklanmadi'; });
 })();
 </script>
+
+<!-- Bottom Izohlar Dock (doim ko‘rinadi) -->
+<div class="commentsDock" id="commentsDock" aria-label="Izohlar paneli">
+  <button class="dockBtn" id="openCommentsDock" type="button">
+    <span class="emo">💬</span><span>Izohlar</span>
+    <span class="dockBadge" id="cmBadge" style="display:none">1</span>
+  </button>
+</div>
+
 </body>
 </html>
