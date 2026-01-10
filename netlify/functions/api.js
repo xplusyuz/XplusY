@@ -1272,6 +1272,39 @@ export const handler = async (event) => {
     }
 
 
+
+    // ==================== GAMES: LEADERBOARD (bestXp by users/{loginId}.games.{gameId}.bestXp) ====================
+    if(path === "/games/leaderboard" && method === "GET"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const qs = event.queryStringParameters || {};
+        const gameId = String(qs.gameId || "game001").trim() || "game001";
+        const limit = Math.min(100, Math.max(1, Math.floor(Number(qs.limit || 20) || 20)));
+
+        const field = `games.${gameId}.bestXp`;
+        const snap = await db.collection("users").orderBy(field, "desc").limit(limit).get();
+
+        const leaderboard = snap.docs.map(d=>{
+          const u = d.data() || {};
+          const g = (u.games && u.games[gameId]) ? u.games[gameId] : {};
+          const bestXp = Number(g.bestXp || 0) || 0;
+          const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
+          return {
+            loginId: d.id,
+            name: (name || d.id),
+            bestXp,
+            points: Number(u.points || 0) || 0
+          };
+        }).filter(x=>x.bestXp > 0);
+
+        return json(200, { ok:true, gameId, leaderboard });
+      }catch(e){
+        return json(400, { error: e.message || "Leaderboard error" });
+      }
+    }
+
+
 return json(404, { error:"Endpoint topilmadi", path, method });
   }catch(e){
     return json(500, { error: e.message || "Server error" });

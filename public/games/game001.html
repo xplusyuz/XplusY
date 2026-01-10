@@ -1721,35 +1721,33 @@
 try {
     const user = getCurrentUser();
     if (user) {
-        // 1) Record (XP) — yakuniy XP ni game001 record sifatida yuboramiz
+        // 1) Record (XP) — game001 (max) sifatida saqlanadi
         const xpRecord = Number(gameState.xpCount || 0);
 
-        // 2) Har bir urinish (run) yakunida: points += round(XP/100)
-        // 560 -> 6, 720 -> 7
+        // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
+        // 5.6 => 6, 7.2 => 7
         const pointsDelta = Math.round(xpRecord / 100);
 
         console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
 
-        // Backend: games/{gameId}/records ga yozadi + users/{uid}.points ni increment qiladi
+        // Firestore transaction orqali yozamiz (resurs tejaladi, xavfsiz)
         if (window.game001CommitXP) {
-            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta, {
-                highestLevel: gameState.highestLevelReached,
-                questions: gameState.questionCount,
-                correct: gameState.correctCount
-            });
+            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
             console.log('Firestore commit:', commitRes);
         } else {
-            console.warn('game001CommitXP mavjud emas (authUtils.js yuklanmagan bo‘lishi mumkin).');
+            console.warn('game001CommitXP mavjud emas (Firebase script yuklanmagan bo‘lishi mumkin).');
         }
 
-        // Lokal user obyektini UI uchun yangilab qo‘yamiz (double-write qilmaymiz)
+        // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
+        // Bu backend yozuv bo‘lmasa ham, local ko‘rinish uchun.
         try {
-            if (window.__LM_USER_VIEW) {
-                window.__LM_USER_VIEW.points = Number(window.__LM_USER_VIEW.points || 0) + pointsDelta;
-                window.__LM_USER_VIEW.game001 = Math.max(Number(window.__LM_USER_VIEW.game001 || 0), xpRecord);
-            }
+            const currentUser = getCurrentUser() || user;
+            const currentPoints = Number(currentUser.points || 0);
+            const newPoints = currentPoints + pointsDelta;
+            if (authUtils.updateUserData) { await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) }); }
         } catch (e) {
-            console.warn('Local user view update skip:', e?.message || e);
+            // auth-utils update bo‘lmasa ham o‘yin ishlayveradi
+            console.warn('Local userData update skip:', e?.message || e);
         }
     }
 } catch (error) {
@@ -1791,19 +1789,25 @@ document.getElementById("game-over").style.display = 'block';
         // ================ RATING FUNCTIONS ================
         async function loadLeaderboard() {
             try {
-                console.log('Reyting yuklanmoqda...');
-                const result = (authUtils.getLeaderboard ? await authUtils.getLeaderboard(10) : {success:true, leaderboard:[]});
-                console.log('Reyting natijasi:', result);
-                
-                if (result.success) {
-                    displayLeaderboard(result.leaderboard || []);
-                } else {
-                    throw new Error(result.error || 'Noma\'lum xato');
+                const content = document.getElementById('leaderboard-content');
+                content.innerHTML = '<div style="text-align:center;padding:18px;color:var(--gray);">Yuklanmoqda...</div>';
+
+                // BestXP bo‘yicha reyting (serverdan)
+                const limit = 20;
+                const gameId = 'game001';
+                const url = authUtils.apiUrl('games/leaderboard') + `&gameId=${encodeURIComponent(gameId)}&limit=${limit}`;
+                const res = await fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + authUtils.getToken() } });
+                const data = await res.json().catch(()=>null);
+
+                if (!res.ok || !data || data.ok !== true) {
+                    throw new Error((data && (data.error || data.message)) || 'Reyting yuklanmadi');
                 }
+
+                displayLeaderboard(data.leaderboard || []);
             } catch (error) {
                 console.error('Reyting yuklash xatosi:', error);
                 const content = document.getElementById('leaderboard-content');
-                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Reyting yuklanmadi: ' + error.message + '</div>';
+                content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Reyting yuklanmadi: ' + (error.message || error) + '</div>';
             }
         }
 
@@ -1818,19 +1822,19 @@ document.getElementById("game-over").style.display = 'block';
             
             let html = '';
             leaderboard.forEach((user, index) => {
-                const isCurrent = currentUser && user.id === currentUser.id;
+                const isCurrent = currentUser && user.loginId === currentUser.id;
                 const rankClass = `rank-${index + 1}`;
                 const itemClass = isCurrent ? 'leaderboard-item current-user-item' : 'leaderboard-item';
-                const avatarLetter = (user.fullName || 'U').charAt(0).toUpperCase();
+                const avatarLetter = ((user.name || user.fullName) || 'U').charAt(0).toUpperCase();
                 
                 html += `
                     <div class="${itemClass}">
                         <div class="leaderboard-rank ${rankClass}">${index + 1}</div>
                         <div class="leaderboard-avatar">${avatarLetter}</div>
                         <div class="leaderboard-user-info">
-                            <div class="leaderboard-user-name">${user.fullName || 'Foydalanuvchi'}</div>
+                            <div class="leaderboard-user-name">${(user.name || user.fullName) || 'Foydalanuvchi'}</div>
                             <div class="leaderboard-user-stats">
-                                <div class="leaderboard-stat">XP: <strong>${user.bestScore || 0}</strong></div>
+                                <div class="leaderboard-stat">XP: <strong>${user.bestXp || 0}</strong></div>
                                 <div class="leaderboard-stat">Umumiy: <strong>${user.points || 0}</strong></div>
                             </div>
                         </div>
@@ -1847,36 +1851,7 @@ function getCurrentUser(){ return window.__LM_USER || null; }
 async function ensureLoggedUserOrBlock(){
   const user = await (window.authUtils?.me ? authUtils.me() : Promise.resolve(null)).catch(()=>null);
   if(!user){ showNeedLoginOverlay(); throw new Error("NO_USER"); }
-  
-
-// ================ GAME001 COMMIT (API -> Firestore) ================
-window.game001CommitXP = window.game001CommitXP || (async function(user, xpRecord, pointsDelta, meta = {}) {
-  const payload = {
-    gameId: "game001",
-    xp: Number(xpRecord || 0),
-    pointsDelta: Number(pointsDelta || 0),
-    meta: meta || {}
-  };
-
-  if (window.authUtils?.fetchApi) {
-    const res = await authUtils.fetchApi("/games/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data?.success === false) {
-      throw new Error(data?.error || ("HTTP " + res.status));
-    }
-    return data;
-  }
-
-  console.warn("authUtils.fetchApi topilmadi, commit qilinmadi.");
-  return { success: false, error: "NO_API" };
-});
-
-return user;
+  return user;
 }
 
 function showNeedLoginOverlay(){
