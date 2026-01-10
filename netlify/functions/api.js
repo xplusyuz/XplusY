@@ -388,7 +388,44 @@ export const handler = async (event) => {
     }
 
 
-    // ===== Leaderboard (public) =====
+    
+    // ==================== GAMES: LEADERBOARD (bestXp) ====================
+    // GET /games/leaderboard?gameId=game001&limit=20
+    if(path === "/games/leaderboard" && method === "GET"){
+      try{
+        const qs = event.queryStringParameters || {};
+        const gameId = String(qs.gameId || "").trim();
+        const limit = Math.min(100, Math.max(1, parseInt(qs.limit || "20", 10)));
+        if(!gameId) return json(400, { error:"gameId required" });
+
+        // order by users.games.<gameId>.bestXp desc
+        const field = `games.${gameId}.bestXp`;
+        const snap = await db.collection("users")
+          .where(field, ">", 0)
+          .orderBy(field, "desc")
+          .limit(limit)
+          .get();
+
+        const leaderboard = snap.docs.map(d=>{
+          const u = d.data() || {};
+          const bestXp = Number(u?.games?.[gameId]?.bestXp || 0);
+          return {
+            loginId: u.loginId || d.id,
+            name: u.name || (u.firstName ? `${u.firstName} ${u.lastName||""}`.trim() : ""),
+            firstName: u.firstName || "",
+            lastName: u.lastName || "",
+            avatarId: u.avatarId || 0,
+            bestXp
+          };
+        });
+
+        return json(200, { ok:true, gameId, leaderboard });
+      }catch(e){
+        return json(500, { error:"Leaderboard error", message: e.message });
+      }
+    }
+
+// ===== Leaderboard (public) =====
     if(path === "/leaderboard" && method === "GET"){
       try{
         const limit = Math.max(1, Math.min(200, Number(event.queryStringParameters?.limit || 20)));
@@ -1222,47 +1259,58 @@ export const handler = async (event) => {
     }
 
     
-    // ==================== GAMES: SUBMIT (record + points delta) ====================
+    // ==================== GAMES: SUBMIT (user.games.<gameId> + points increment) ====================
+    // Yoziladi: users/{loginId}.games.<gameId> { bestXp, lastXp, lastPlayedAt, plays }
+    // Qo‘shimcha: users/{loginId}.points += round(xp/10) (yoki client bergan pointsDelta)
+    // Eslatma: ALOHIDA `games` COLLECTION YOZILMAYDI.
     if(path === "/games/submit" && method === "POST"){
       const auth = requireToken(event);
       if(!auth.ok) return auth.error;
       try{
-        const body = parseBody(event);
-        const gameId = String(body.gameId || "").trim() || "game001";
+        const body = parseJson(event);
+        const gameId = String(body.gameId || "").trim();
+        if(!gameId) return json(400, { error:"gameId required" });
+
         const xp = Math.max(0, Math.floor(Number(body.xp || 0) || 0));
-        const pointsDelta = Math.max(0, Math.floor(Number(body.pointsDelta || 0) || 0));
+        // client yuborsa o‘shani ishlatamiz, bo‘lmasa server hisoblaydi
+        let pointsDelta = (body.pointsDelta === undefined || body.pointsDelta === null)
+          ? Math.round(xp / 10)
+          : Math.floor(Number(body.pointsDelta) || 0);
+
+        // xavfsizlik clamp
+        if(pointsDelta < 0) pointsDelta = 0;
+        if(pointsDelta > 100000) pointsDelta = 100000;
+
         const meta = (body.meta && typeof body.meta === "object") ? body.meta : {};
-        const ts = Date.now();
+        const ts = admin.firestore.FieldValue.serverTimestamp();
 
-        if(!gameId) return json(400, { error:"gameId kerak" });
-
-        const gameRef = db.collection("games").doc(gameId);
-        const recRef = gameRef.collection("records").doc(); // auto-id
         const userRef = db.collection("users").doc(auth.loginId);
 
         await db.runTransaction(async (tx)=>{
-          // read user for bestXp calc
           const uSnap = await tx.get(userRef);
           const u = uSnap.exists ? (uSnap.data()||{}) : {};
           const prevBest = Number(u?.games?.[gameId]?.bestXp || 0);
           const bestXp = Math.max(prevBest, xp);
+          const prevPlays = Number(u?.games?.[gameId]?.plays || 0);
 
-          // 1) record write (each attempt)
-          tx.set(recRef, {
-            loginId: auth.loginId,
-            xp,
-            pointsDelta,
-            meta,
-            createdAt: ts
-          });
-
-          // 2) points update (client rounding; server still clamps)
+          // points increment
           if(pointsDelta > 0){
             tx.set(userRef, { points: admin.firestore.FieldValue.increment(pointsDelta) }, { merge:true });
           }
 
-          // 3) store per-user game stats
-          tx.set(userRef, { games: { [gameId]: { bestXp, lastXp: xp, lastPlayedAt: ts } } }, { merge:true });
+          // per-user game stats (nested)
+          tx.set(userRef, {
+            games: {
+              [gameId]: {
+                bestXp,
+                lastXp: xp,
+                lastPlayedAt: ts,
+                plays: prevPlays + 1,
+                // optional metadata snapshot
+                lastMeta: meta
+              }
+            }
+          }, { merge:true });
         });
 
         return json(200, { ok:true, gameId, xp, pointsDelta });
@@ -1271,36 +1319,13 @@ export const handler = async (event) => {
       }
     }
 
+          // 3) store per-user game stats
+          tx.set(userRef, { games: { [gameId]: { bestXp, lastXp: xp, lastPlayedAt: ts } } }, { merge:true });
+        });
 
-
-    // ==================== GAMES: LEADERBOARD (bestXp by users/{loginId}.games.{gameId}.bestXp) ====================
-    if(path === "/games/leaderboard" && method === "GET"){
-      const auth = requireToken(event);
-      if(!auth.ok) return auth.error;
-      try{
-        const qs = event.queryStringParameters || {};
-        const gameId = String(qs.gameId || "game001").trim() || "game001";
-        const limit = Math.min(100, Math.max(1, Math.floor(Number(qs.limit || 20) || 20)));
-
-        const field = `games.${gameId}.bestXp`;
-        const snap = await db.collection("users").orderBy(field, "desc").limit(limit).get();
-
-        const leaderboard = snap.docs.map(d=>{
-          const u = d.data() || {};
-          const g = (u.games && u.games[gameId]) ? u.games[gameId] : {};
-          const bestXp = Number(g.bestXp || 0) || 0;
-          const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
-          return {
-            loginId: d.id,
-            name: (name || d.id),
-            bestXp,
-            points: Number(u.points || 0) || 0
-          };
-        }).filter(x=>x.bestXp > 0);
-
-        return json(200, { ok:true, gameId, leaderboard });
+        return json(200, { ok:true, gameId, xp, pointsDelta });
       }catch(e){
-        return json(400, { error: e.message || "Leaderboard error" });
+        return json(400, { error: e.message || "Submit game error" });
       }
     }
 
