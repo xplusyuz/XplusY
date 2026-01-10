@@ -5,52 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Kvadrat Tenglamalar — Viet Usuli</title>
 
-    <!-- LeaderMath auto-user (lm_token) -->
-    <script>
-      window.leaderMathAuth = {
-        tokenKey: 'lm_token',
-        apiBase: '/.netlify/functions/api',
-        getToken() { try { return localStorage.getItem(this.tokenKey) || ''; } catch(e){ return ''; } },
-        async me() {
-          const token = this.getToken();
-          if (!token) return null;
-          const u = new URL(this.apiBase, location.origin);
-          u.searchParams.set('path','auth/me');
-          const res = await fetch(u.toString(), { headers: { Authorization: 'Bearer ' + token } });
-          if (!res.ok) {
-            if (res.status===401 || res.status===403) { try{ localStorage.removeItem(this.tokenKey);}catch(e){} }
-            return null;
-          }
-          const data = await res.json().catch(()=>null);
-          return data?.user || data?.data?.user || null;
-        },
-        toStudent(user){
-          if(!user) return null;
-          const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
-          return { id: user.loginId || user.id || user.uid || 'unknown', loginId: user.loginId || user.id || user.uid || 'unknown', fullName, _lm:user };
-        }
-      };
-    function showLoginOverlay(){
-  const existing = document.getElementById("lmLoginOverlay");
-  if(existing) return;
-  const div = document.createElement("div");
-  div.id = "lmLoginOverlay";
-  div.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;";
-  div.innerHTML = `
-    <div style="max-width:520px;width:100%;background:rgba(20,20,20,.92);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px 16px 14px;color:#fff;">
-      <div style="font-weight:800;font-size:16px;margin-bottom:6px;">Login kerak</div>
-      <div style="opacity:.9;font-size:13px;line-height:1.45;margin-bottom:12px;">O‘yindagi ballarni yozish uchun avval LeaderMath tizimida login qiling. Bosh sahifadan kirib, so‘ng qaytib keling.</div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <a href="index.html" style="text-decoration:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);padding:10px 12px;border-radius:12px;color:#fff;font-weight:700;">🏠 Bosh sahifa</a>
-        <a href="app.html" style="text-decoration:none;background:rgba(46,139,87,.95);border:1px solid rgba(46,139,87,.8);padding:10px 12px;border-radius:12px;color:#fff;font-weight:800;">Login</a>
-      </div>
-    </div>`;
-  document.body.appendChild(div);
-}
-</script>
-
     
-    <!-- Auth tizimi -->
+    <!-- LeaderMath authUtils (lm_token) -->
+    <script src="/assets/js/authUtils.js"></script>
+<!-- Auth tizimi -->
 <!-- MathJax for LaTeX -->
     <script>
         window.MathJax = {
@@ -1786,7 +1744,7 @@ try {
             const currentUser = getCurrentUser() || user;
             const currentPoints = Number(currentUser.points || 0);
             const newPoints = currentPoints + pointsDelta;
-            await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) });
+            if (authUtils.updateUserData) { await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) }); }
         } catch (e) {
             // auth-utils update bo‘lmasa ham o‘yin ishlayveradi
             console.warn('Local userData update skip:', e?.message || e);
@@ -1832,7 +1790,7 @@ document.getElementById("game-over").style.display = 'block';
         async function loadLeaderboard() {
             try {
                 console.log('Reyting yuklanmoqda...');
-                const result = await authUtils.getLeaderboard(10);
+                const result = (authUtils.getLeaderboard ? await authUtils.getLeaderboard(10) : {success:true, leaderboard:[]});
                 console.log('Reyting natijasi:', result);
                 
                 if (result.success) {
@@ -1849,7 +1807,7 @@ document.getElementById("game-over").style.display = 'block';
 
         function displayLeaderboard(leaderboard) {
             const content = document.getElementById('leaderboard-content');
-            const currentUser = getCurrentUser();
+            const currentUser = (window.__LM_USER_VIEW)||getCurrentUser();
             
             if (!leaderboard || leaderboard.length === 0) {
                 content.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--gray);">Hali reyting mavjud emas</div>';
@@ -1882,40 +1840,32 @@ document.getElementById("game-over").style.display = 'block';
         }
 
         
-        // ================ AUTH (reuse app auth.js) ================
-        async function ensureLoggedUserOrBlock(){
-            const { getToken, me } = await import("../assets/js/auth.js");
-            const token = getToken();
-            if(!token){
-                showNeedLoginOverlay();
-                throw new Error("NO_TOKEN");
-            }
-            const user = await me().catch(()=>null);
-            if(!user){
-                showNeedLoginOverlay();
-                throw new Error("NO_USER");
-            }
-            return user;
-        }
+        // ================ AUTH (authUtils) ================
+function getCurrentUser(){ return window.__LM_USER || null; }
+async function ensureLoggedUserOrBlock(){
+  const user = await (window.authUtils?.me ? authUtils.me() : Promise.resolve(null)).catch(()=>null);
+  if(!user){ showNeedLoginOverlay(); throw new Error("NO_USER"); }
+  return user;
+}
 
-        function showNeedLoginOverlay(){
-            if(document.getElementById("lmNeedLoginBox")) return;
-            const box = document.createElement('div');
-            box.id = "lmNeedLoginBox";
-            box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;';
-            box.innerHTML = `
-              <div style="max-width:560px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
-                <div style="font-weight:900;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
-                <div style="opacity:.86;line-height:1.5;margin-bottom:14px;">
-                  Bu o‘yin faqat LeaderMath’da login bo‘lgan foydalanuvchilar uchun. Iltimos App sahifasida login qiling.
-                </div>
-                <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
-                  <a href="../app.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:800;">⬅️ App’ga qaytish</a>
-                  <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:800;">🏠 Start</a>
-                </div>
-              </div>`;
-            document.body.appendChild(box);
-        }
+function showNeedLoginOverlay(){
+  if(document.getElementById("lmNeedLoginBox")) return;
+  const box = document.createElement("div");
+  box.id = "lmNeedLoginBox";
+  box.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:99999;padding:20px;";
+  box.innerHTML = `
+    <div style="max-width:560px;width:100%;background:#fff;border-radius:18px;padding:18px 18px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:system-ui,Segoe UI,Arial">
+      <div style="font-weight:900;font-size:18px;margin-bottom:6px;">Kirish kerak</div>
+      <div style="opacity:.86;line-height:1.5;margin-bottom:14px;">
+        Bu o‘yin faqat LeaderMath’da login bo‘lgan foydalanuvchilar uchun. Iltimos App sahifasida login qiling.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+        <a href="../app.html?login=1" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#2E8B57;color:#fff;font-weight:800;">⬅️ App’ga qaytish</a>
+        <a href="../index.html" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#111;color:#fff;font-weight:800;">🏠 Start</a>
+      </div>
+    </div>`;
+  document.body.appendChild(box);
+}
 
 // ================ MAIN INITIALIZATION ================
         async function initializeGame() {
@@ -1923,33 +1873,20 @@ document.getElementById("game-over").style.display = 'block';
                 console.log('O\'yin ishga tushmoqda...');
 
                 const userRaw = await ensureLoggedUserOrBlock();
-
-// auth/me ba'zan {user:{...}} yoki {data:{user:{...}}} ko'rinishida qaytadi
-const u0 = (userRaw && (userRaw.user || (userRaw.data && userRaw.data.user))) ? (userRaw.user || userRaw.data.user) : userRaw;
-
-// Ismni maksimal robust olish
-const fullName =
-  (u0.fullName || u0.displayName || u0.name || u0.fio || u0.FIO ||
-   (u0.profile && (u0.profile.fullName || u0.profile.name || u0.profile.fio)) ||
-   (u0.firstName || u0.first_name || '') + ' ' + (u0.lastName || u0.last_name || '')).trim();
-
-// ID fallback
-const loginId = (u0.loginId || u0.uid || u0.id || u0.numericId || u0.numericID || u0.userId || '').toString();
-
-// game UI uchun ixcham user modeli
-const user = {
-  loginId,
-  fullName: (fullName || loginId || u0.email || 'Foydalanuvchi').trim(),
-  email: u0.email || '',
-  numericId: u0.numericId ?? u0.numericID ?? null,
-  _lm: u0
-};
-                window.__LM_USER = user; // boshqa joylarda ishlatish uchun
+                // game UI uchun ixcham user modeli
+                const user = {
+                    loginId: userRaw.loginId || userRaw.id || userRaw.uid || '',
+                    fullName: (userRaw.name || `${userRaw.firstName||''} ${userRaw.lastName||''}`.trim() || userRaw.loginId || 'Foydalanuvchi').trim(),
+                    email: userRaw.email || '',
+                    _lm: userRaw
+                };
+                window.__LM_USER = userRaw; // haqiqiy LM user
+window.__LM_USER_VIEW = user; // UI uchun ixcham
 
                 console.log('Foydalanuvchi:', user);
 
                 // Foydalanuvchi ma'lumotlarini ko'rsatish
-                const displayName = user.fullName || user.email || (user.loginId ? ('ID: '+user.loginId) : 'Foydalanuvchi');
+                const displayName = user.fullName || user.email || 'Foydalanuvchi';
                 document.getElementById('user-name').textContent = displayName;
 
                 // O'yinni boshlash
@@ -1978,15 +1915,14 @@ const user = {
             
 
             // Home button (bosh sahifa)
-            const goHome = () => { window.location.href = '../index.html'; };
+            const goHome = () => { window.location.href = '../app.html'; };
             document.getElementById('home-btn')?.addEventListener('click', goHome);
             document.getElementById('home-btn-2')?.addEventListener('click', goHome);
 
             // Logout button
             document.getElementById('logout-btn').addEventListener('click', async () => {
                 if (confirm('O\'yindan chiqishni xohlaysizmi?')) {
-                    await authUtils.logout();
-                    window.location.href = '../app.html';
+                    authUtils.logout('../app.html');
                 }
             });
             

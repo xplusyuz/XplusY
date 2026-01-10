@@ -1,154 +1,181 @@
 /**
- * authUtils v3 — user profilni Firestore'dan qaytaradi (users/me)
- * - Token -> loginId (requireToken) -> users/{loginId} doc
- * - Fallback: auth/me
+ * authUtils — LeaderMath kirish tizimiga mos (lm_token + Netlify API)
+ *
+ * Asosiy g'oya:
+ *  - Saytga kirish qilinsa localStorage'da `lm_token` bo'ladi.
+ *  - `/.netlify/functions/api?path=auth/me` ga Bearer token yuborib user olinadi.
+ *  - Token bo'lmasa yoki yaroqsiz bo'lsa: mehmon YO'Q (user = null).
+ *
+ * Global: window.authUtils
  */
 (function (global) {
   'use strict';
 
-  const CFG = {
+  const DEFAULTS = {
     tokenKey: 'lm_token',
     apiBase: '/.netlify/functions/api',
+    mePath: 'auth/me',
+    // Token yo'q yoki yaroqsiz bo'lsa qaytish sahifasi (login modali odatda shu yerda)
     appHome: '/app.html',
-    // avval shu endpoint
-    mePrimary: 'users/me',
-    // fallback
-    meFallback: 'auth/me',
-    authModule: '/assets/js/auth.js',
-    apiModule: '/assets/js/api.js',
   };
 
-  function safeGet(key){ try{return localStorage.getItem(key)||'';}catch{return'';} }
-  function safeSet(key,v){ try{localStorage.setItem(key,v);}catch{} }
-  function safeRemove(key){ try{localStorage.removeItem(key);}catch{} }
-
-  const cleanPath = (p)=>String(p||'').replace(/^\//,'');
-  const apiUrl = (p)=> {
-    const u = new URL(CFG.apiBase, location.origin);
-    u.searchParams.set('path', cleanPath(p));
-    return u.toString();
-  };
-
-  async function tryImport(url){ try{return await import(url);}catch{return null;} }
-
-  const state = { auth:null, api:null, loaded:false, p:null };
-
-  async function ensureMods(){
-    if(state.loaded) return state;
-    if(state.p) return state.p;
-    state.p=(async()=>{
-      state.auth = await tryImport(CFG.authModule);
-      state.api  = await tryImport(CFG.apiModule);
-      state.loaded=true;
-      return state;
-    })();
-    return state.p;
+  function safeGet(key) {
+    try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
+  }
+  function safeSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (_) {}
+  }
+  function safeRemove(key) {
+    try { localStorage.removeItem(key); } catch (_) {}
   }
 
-  async function safeJson(res){ try{return await res.json();}catch{return null;} }
+  function buildApiUrl(apiBase, path) {
+    const u = new URL(apiBase, location.origin);
+    u.searchParams.set('path', path);
+    return u.toString();
+  }
+
+  async function safeJson(res) {
+    try { return await res.json(); } catch (_) { return null; }
+  }
 
   const authUtils = {
-    configure(partial){ if(partial&&typeof partial==='object') Object.assign(CFG, partial); return CFG; },
+    // sozlamalarni kerak bo'lsa override qilish mumkin: authUtils.configure({tokenKey:'...'})
+    _cfg: { ...DEFAULTS },
 
-    async _ready(){ return ensureMods(); },
-
-    getToken(){
-      const m = state.auth;
-      if(m && typeof m.getToken==='function'){ try{return m.getToken()||'';}catch{} }
-      return safeGet(CFG.tokenKey);
-    },
-    setToken(t){
-      const m = state.auth;
-      if(m && typeof m.setToken==='function'){ try{m.setToken(t);}catch{} }
-      safeSet(CFG.tokenKey, String(t||''));
-    },
-    clearToken(){
-      const m = state.auth;
-      if(m && typeof m.clearToken==='function'){ try{m.clearToken();}catch{} }
-      safeRemove(CFG.tokenKey);
+    configure(partial) {
+      if (partial && typeof partial === 'object') {
+        this._cfg = { ...this._cfg, ...partial };
+      }
+      return this._cfg;
     },
 
-    async _apiCall(path, opts){
-      await ensureMods();
+    getToken() {
+      return safeGet(this._cfg.tokenKey);
+    },
+
+    setToken(token) {
+      safeSet(this._cfg.tokenKey, String(token || ''));
+    },
+
+    clearToken() {
+      safeRemove(this._cfg.tokenKey);
+    },
+
+    apiUrl(path) {
+      return buildApiUrl(this._cfg.apiBase, path);
+    },
+
+    /**
+     * LeaderMath user info (auth/me)
+     * @returns {Promise<object|null>} user
+     */
+    async me() {
       const token = this.getToken();
-      const p = cleanPath(path);
+      if (!token) return null;
 
-      if(state.api && typeof state.api.api==='function'){
-        const method = (opts&&opts.method)||'GET';
-        const bodyStr = opts && opts.body;
-        let body=null;
-        if(bodyStr && typeof bodyStr==='string'){
-          try{ body = JSON.parse(bodyStr);}catch{ body = bodyStr; }
-        } else if(bodyStr) body = bodyStr;
-        return state.api.api(p, { method, token, body });
-      }
-
-      const res = await fetch(apiUrl(p), {
-        method:(opts&&opts.method)||'GET',
-        headers: Object.assign(
-          {'Authorization': token?('Bearer '+token):''},
-          (opts&&opts.headers)||{}
-        ),
-        body: (opts&&opts.body)||undefined
+      const url = this.apiUrl(this._cfg.mePath);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + token }
       });
-      if(!res.ok && (res.status===401||res.status===403)) this.clearToken();
-      const data = await safeJson(res);
-      if(!res.ok) throw new Error(data?.error||('API '+res.status));
-      return data;
-    },
 
-    async me(){
-      await ensureMods();
-      const token=this.getToken();
-      if(!token) return null;
-
-      // 1) users/me (Firestore users doc)
-      try{
-        const data = await this._apiCall(CFG.mePrimary, { method:'GET' });
-        return data?.user || data?.data?.user || data || null;
-      }catch(e){
-        // 2) fallback auth/me
-        try{
-          const data = await this._apiCall(CFG.meFallback, { method:'GET' });
-          return data?.user || data?.data?.user || data || null;
-        }catch(_){
-          return null;
-        }
-      }
-    },
-
-    async requireUser(opts){
-      const o = Object.assign({ redirect:true, appHome:CFG.appHome, returnTo:'' }, opts||{});
-      const user = await this.me();
-      if(user) return user;
-
-      if(o.returnTo){ try{ sessionStorage.setItem('lm_return_to', o.returnTo);}catch{} }
-      if(o.redirect){
-        const u = new URL(o.appHome||CFG.appHome||'/app.html', location.origin);
-        u.searchParams.set('login','1');
-        if(o.returnTo) u.searchParams.set('returnTo', o.returnTo);
-        location.replace(u.toString());
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) this.clearToken();
         return null;
       }
-      const err=new Error('AUTH_REQUIRED'); err.code='AUTH_REQUIRED'; throw err;
+
+      const data = await safeJson(res);
+      return data?.user || data?.data?.user || null;
     },
 
-    toDisplayName(u){
-      if(!u) return 'Foydalanuvchi';
-      return (u.name || u.fullName || (u.firstName? (u.firstName+' '+(u.lastName||'')).trim(): '') || u.loginId || u.email || 'Foydalanuvchi').trim();
-    },
+    /**
+     * Auth header bilan API chaqirish.
+     */
+    async fetchApi(path, options) {
+      const token = this.getToken();
+      const url = this.apiUrl(path);
 
-    async submitGame001(xp, meta){
-      const xpInt = Math.max(0, Math.floor(Number(xp||0)||0));
-      const pointsDelta = Math.round(xpInt/100);
-      return this._apiCall('/games/submit', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ gameId:'game001', xp: xpInt, pointsDelta, meta: meta||null })
+      const headers = new Headers((options && options.headers) || {});
+      if (token) headers.set('Authorization', 'Bearer ' + token);
+
+      const res = await fetch(url, {
+        ...(options || {}),
+        headers
       });
+
+      // Token yaroqsiz bo'lsa tozalaymiz
+      if (!res.ok && (res.status === 401 || res.status === 403)) {
+        this.clearToken();
+      }
+      return res;
+    },
+
+    /**
+     * Login shart: user topilmasa o'yin/bo'limni bloklash uchun.
+     * - redirect=false bo'lsa: exception tashlaydi
+     * - redirect=true bo'lsa: appHome ga qaytaradi
+     */
+    async requireUser(opts) {
+      const cfg = this._cfg;
+      const o = {
+        redirect: true,
+        appHome: cfg.appHome,
+        // qaytish URL ni saqlab qo'yish (app login bo'lgach qaytishi uchun)
+        returnTo: '',
+        ... (opts || {})
+      };
+
+      const user = await this.me();
+      if (user) return user;
+
+      // returnTo ni saqlab qo'yamiz (app tarafda o'qib, login'dan keyin qaytarish mumkin)
+      if (o.returnTo) {
+        try { sessionStorage.setItem('lm_return_to', o.returnTo); } catch (_) {}
+      }
+
+      if (o.redirect) {
+        // appHome ga "?login=1" bilan borish — app shu paramni ko'rib login modalni ochishi mumkin
+        const u = new URL(o.appHome || cfg.appHome || '/app.html', location.origin);
+        u.searchParams.set('login', '1');
+        if (o.returnTo) u.searchParams.set('returnTo', o.returnTo);
+        location.replace(u.toString());
+        // navigatsiya ketadi, lekin tiplar uchun:
+        return null;
+      }
+
+      const err = new Error('AUTH_REQUIRED');
+      err.code = 'AUTH_REQUIRED';
+      throw err;
+    },
+
+    /**
+     * Game/test ichida ishlatish uchun soddalashtirilgan student obyekt.
+     */
+    toStudent(user) {
+      if (!user) return null;
+      const fullName = (user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
+      return {
+        id: user.loginId || user.id || user.uid || 'unknown',
+        fullName,
+        numericId: user.numericId ?? user.numericID ?? user.studentId ?? null,
+        _lm: user
+      };
+    },
+
+    /**
+     * Logout (tokenni tozalaydi) va appHome'ga qaytaradi.
+     */
+    logout(redirectTo) {
+      this.clearToken();
+      const target = redirectTo || this._cfg.appHome || '/app.html';
+      const u = new URL(target, location.origin);
+      u.searchParams.set('login', '1');
+      location.href = u.toString();
     }
   };
 
-  ensureMods();
+  // globalga chiqaramiz
   global.authUtils = authUtils;
-})(window);
+
+})(typeof window !== 'undefined' ? window : this);
