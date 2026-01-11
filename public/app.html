@@ -526,26 +526,40 @@
         <div class="small">Medallar • yosh filter • qidiruv</div>
       </div>
       <div class="ratingHeadRight">
-        <select id="ageFilter" class="ageSelect" title="Yosh bo‘yicha filter">
-          <option value="all">Barcha yoshlar</option>
-          <option value="7-10">7–10 yosh</option>
-          <option value="11-14">11–14 yosh</option>
-          <option value="15-18">15–18 yosh</option>
-          <option value="18+">18+</option>
-        </select>
-        <button aria-label="Yopish" class="iconBtn" id="ratingClose" type="button">✕</button>
+<button aria-label="Yopish" class="iconBtn" id="ratingClose" type="button">✕</button>
       </div>
     </div>
     <div class="hr"></div>
 
     <div class="modalBody">
       <div class="lbTools ratingTools" style="margin-top:0;">
-        <button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
-        <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…"/>
-        <button class="chipBtn" id="btnLbAll" type="button">📋 Barchasi</button>
-      </div>
+  <button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
 
-      <div class="ratingGrid" id="ratingPodium" aria-label="Top 3"></div>
+  <button class="chipBtn iconChip" id="btnSearchToggle" type="button" aria-expanded="false" title="Qidirish">
+    🔎
+  </button>
+
+  <div class="searchWrap" id="searchWrap" hidden>
+    <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…"/>
+    <button class="chipBtn miniX" id="btnSearchClose" type="button" title="Yopish">✕</button>
+  </div>
+
+  <div class="ageChips" id="ageChips" aria-label="Yosh filter">
+    <button class="chip ageChip" data-age="11">11</button>
+    <button class="chip ageChip" data-age="12">12</button>
+    <button class="chip ageChip" data-age="13">13</button>
+    <button class="chip ageChip" data-age="14">14</button>
+    <button class="chip ageChip" data-age="15">15</button>
+    <button class="chip ageChip" data-age="16">16</button>
+    <button class="chip ageChip" data-age="17">17</button>
+    <button class="chip ageChip" data-age="18+">18+</button>
+    <button class="chip ageChip active" data-age="all">Hammasi</button>
+  </div>
+
+  <button class="chipBtn" id="btnLbAll" type="button">📋 Tozalash</button>
+</div>
+
+<div class="ratingGrid" id="ratingPodium" aria-label="Top 3"></div> id="ratingPodium" aria-label="Top 3"></div>
 
       <ul class="ratingList" id="ratingList" aria-label="Reyting ro'yxati"></ul>
 
@@ -2228,6 +2242,76 @@
 
   // Expose for existing code to call after it loads leaderboard
   window.renderRatingWow = render;
+})();
+</script>
+
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+
+  // Store selected age filter (default: 11)
+  window.__ageChip = window.__ageChip || "all";
+
+  function hookAgeChips(){
+    var wrap = $("ageChips");
+    if(!wrap) return;
+    wrap.addEventListener("click", function(e){
+      var btn = e.target.closest(".ageChip");
+      if(!btn) return;
+      wrap.querySelectorAll(".ageChip").forEach(function(x){ x.classList.remove("active"); });
+      btn.classList.add("active");
+      var v = btn.getAttribute("data-age") || "all"; window.__ageChip = v; var hf=$("ageFilter"); if(hf) hf.value = (v==="11"||v==="12"||v==="13"||v==="14"||v==="15"||v==="16"||v==="17") ? (v+"-"+v) : v;("data-age") || "all";
+      if(window.renderRatingWow) window.renderRatingWow();
+    });
+  }
+
+  function hookSearchToggle(){
+    var t = $("btnSearchToggle"), w = $("searchWrap"), c = $("btnSearchClose"), s = $("lbSearch");
+    if(!t || !w) return;
+    function open(){
+      w.hidden = false;
+      t.setAttribute("aria-expanded","true");
+      setTimeout(function(){ try{ s && s.focus(); }catch(_){} }, 10);
+    }
+    function close(){
+      w.hidden = true;
+      t.setAttribute("aria-expanded","false");
+      if(s) s.value="";
+      if(window.renderRatingWow) window.renderRatingWow();
+    }
+    t.addEventListener("click", function(){ w.hidden ? open() : close(); });
+    if(c) c.addEventListener("click", close);
+  }
+
+  // Monkey-patch renderRatingWow age bucket logic to use __ageChip when ageFilter select doesn't exist
+  var oldRender = window.renderRatingWow;
+  window.renderRatingWow = function(){
+    // temporary inject a fake ageFilter value expected by oldRender by setting a hidden field if needed
+    // oldRender reads document.getElementById('ageFilter')?.value; we don't have it, so we just rely on __ageChip in its inAgeBucket via global.
+    // We'll wrap by defining window.__ageBucket for our renderer to use (it checks select first).
+    window.__ageBucket = window.__ageChip || "all";
+    if(typeof oldRender === "function") oldRender();
+  };
+
+  
+  // Compatibility: create hidden ageFilter element so existing renderer reads it
+  function ensureHiddenAgeFilter(){
+    if($("ageFilter")) return;
+    var el = document.createElement("input");
+    el.type = "hidden";
+    el.id = "ageFilter";
+    el.value = window.__ageChip || "all";
+    document.body.appendChild(el);
+  }
+
+
+document.addEventListener("DOMContentLoaded", function(){
+    ensureHiddenAgeFilter(); hookAgeChips();
+    hookSearchToggle();
+    // Default active chip set already; re-render once.
+    setTimeout(function(){ if(window.renderRatingWow) window.renderRatingWow(); }, 150);
+  });
 })();
 </script>
 
