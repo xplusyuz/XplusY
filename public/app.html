@@ -158,7 +158,8 @@
   filter: blur(2px);
 }
 .rtRow{ display:flex; align-items:center; gap:12px; }
-.rtAv{
+.rtAv{object-fit:contain;
+
   width:44px;height:44px;border-radius:50%;
   border:1px solid rgba(46,139,87,.16);
   box-shadow: 0 10px 20px rgba(46,139,87,.14);
@@ -2066,6 +2067,7 @@ function renderLeaderboard(){
       name: String(pick(u, ["name","fullName","displayName"], "—")),
       avatar: String(pick(u, ["avatar","photoURL","photo","avatarUrl","avatarURL"], "icon.png")),
       points: Number(pick(u, ["points","xp","totalXP","totalPoints"], 0)) || 0,
+      level: (typeof levelFromPoints==="function") ? levelFromPoints(Number(pick(u, ["points","xp","totalXP","totalPoints"], 0))||0) : 1,
       age: getAge(u),
       raw: u
     }));
@@ -2139,7 +2141,7 @@ function renderLeaderboard(){
         me.innerHTML = `
           <div class="rtMeGlow"></div>
           <div class="rtRow">
-            <img class="rtAv" src="${esc(meRow.avatar)}" alt="avatar">
+            <img class="rtAv rtMedalImg" data-level="${meRow.level}" src="logo.png" alt="medal">
             <div style="min-width:0">
               <div class="rtName">${esc(meRow.name)}</div>
               <div class="rtMeta">${esc(meRow.medal)} • LM-${esc(meRow.numericId||"—")} • ${meRow.age!=null ? esc(meRow.age+" yosh") : "—"}</div>
@@ -2162,7 +2164,7 @@ function renderLeaderboard(){
       card.innerHTML = `
         <div class="rtBadge">#${r.rank}</div>
         <div class="rtRow">
-          <img class="rtAv" src="${esc(r.avatar)}" alt="avatar">
+          <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
           <div class="rtInfo">
             <div class="rtName">${esc(r.name)}</div>
             <div class="rtMeta"><span class="rtMedal">${esc(r.medal)}</span> LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
@@ -2184,7 +2186,7 @@ function renderLeaderboard(){
       it.className = "rtItem";
       it.innerHTML = `
         <div class="rtIdx">${r.rank}</div>
-        <img class="rtAv" src="${esc(r.avatar)}" alt="avatar">
+        <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
         <div class="rtInfo">
           <div class="rtName">${esc(r.name)}</div>
           <div class="rtMeta">${esc(r.medal)} • LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
@@ -2196,6 +2198,15 @@ function renderLeaderboard(){
       `;
       list.appendChild(it);
     });
+
+    // hydrate medal images
+    try{
+      document.querySelectorAll(".rtMedalImg").forEach(img=>{
+        const L = parseInt(img.getAttribute("data-level")||"1",10) || 1;
+        if(typeof setMedalImg === "function") setMedalImg(img, L);
+      });
+    }catch(_){}
+
   }
 
   async function loadAndRender(){
@@ -2203,7 +2214,7 @@ function renderLeaderboard(){
       render("Reyting yuklanmoqda…");
       const all = await loadAllLeaderboard();
 
-      const q = ($("rtSearch")?.value || "").trim().toLowerCase();
+      const q = (null?.value || "").trim().toLowerCase();
       const sel = getSelAge();
       const onlyMe = onlyMeOn();
 
@@ -2246,7 +2257,7 @@ function renderLeaderboard(){
       overlay.addEventListener("click", (e)=>{ if(e.target===overlay) closeRating(); });
     }
 
-    const sb = $("rtSearchBtn"), row = $("rtSearchRow"), sc = $("rtSearchClose"), inp = $("rtSearch");
+    const sb = null, row = null, sc = null, inp = null;
     if(sb && row){
       const open = ()=>{ row.hidden=false; sb.setAttribute("aria-expanded","true"); setTimeout(()=>{ try{ inp && inp.focus(); }catch(_){} }, 10); };
       const close = ()=>{ row.hidden=true; sb.setAttribute("aria-expanded","false"); if(inp) inp.value=""; loadAndRender(); };
@@ -2275,7 +2286,7 @@ function renderLeaderboard(){
       });
     }
 
-    const reset = $("rtReset");
+    const reset = null;
     if(reset){
       reset.addEventListener("click", ()=>{
         // reset age
@@ -2289,9 +2300,9 @@ function renderLeaderboard(){
         const me = $("rtOnlyMe");
         if(me) me.setAttribute("aria-pressed","false");
         // reset search
-        const row = $("rtSearchRow");
-        const inp = $("rtSearch");
-        const sb = $("rtSearchBtn");
+        const row = null;
+        const inp = null;
+        const sb = null;
         if(inp) inp.value="";
         if(row){ row.hidden=true; }
         if(sb) sb.setAttribute("aria-expanded","false");
