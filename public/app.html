@@ -158,8 +158,7 @@
   filter: blur(2px);
 }
 .rtRow{ display:flex; align-items:center; gap:12px; }
-.rtAv{object-fit:contain;
-
+.rtAv{
   width:44px;height:44px;border-radius:50%;
   border:1px solid rgba(46,139,87,.16);
   box-shadow: 0 10px 20px rgba(46,139,87,.14);
@@ -1944,120 +1943,304 @@ function renderLeaderboard(){
 
 
 
-<!-- ===== RATING (MOBILE-FIRST) ===== -->
+<!-- ===== RATING (POINTS • MEDAL • AGE) ===== -->
 <div id="ratingModal" class="rtOverlay" aria-hidden="true">
   <div class="rtSheet" role="dialog" aria-modal="true" aria-label="Reyting">
     <div class="rtGrab" aria-hidden="true"></div>
 
     <div class="rtHeader">
-      <div>
+      <div class="rtTitleWrap">
         <div class="rtTitle">Reyting</div>
-        <div class="rtSub">Tengdoshlar orasida natijangizni tahlil qiling</div>
+        <div class="rtSub">Tengdoshlar orasida natijangizni tahlil qiling (points bo‘yicha).</div>
       </div>
-      <div class="rtHdrBtns">
-        <button id="rtSearchBtn" class="rtIcon" type="button" title="Qidirish">🔎</button>
-        <button id="rtClose" class="rtIcon" type="button" title="Yopish">✕</button>
-      </div>
+      <button id="ratingClose" class="rtIconBtn" type="button" aria-label="Yopish">✕</button>
     </div>
 
-    <div id="rtSearchRow" class="rtSearchRow" hidden>
-      <input id="rtSearch" class="rtSearch" placeholder="Ism yoki LM-ID bo‘yicha qidirish…">
-      <button id="rtSearchClose" class="rtIcon rtSmall" type="button" title="Yopish">✕</button>
-    </div>
+    <div class="rtControls">
+      <button id="rtMeBtn" class="rtMeBtn" type="button" aria-pressed="false">⭐ Meni</button>
 
-    <div class="rtToolbar">
-      <button id="rtOnlyMe" class="rtPill" type="button" aria-pressed="false">⭐ Meni</button>
-
-      <div id="rtAgeChips" class="rtAges" aria-label="Yosh filter">
-        <button class="rtAge active" data-age="all">Hammasi</button>
-        <button class="rtAge" data-age="11">11</button>
-        <button class="rtAge" data-age="12">12</button>
-        <button class="rtAge" data-age="13">13</button>
-        <button class="rtAge" data-age="14">14</button>
-        <button class="rtAge" data-age="15">15</button>
-        <button class="rtAge" data-age="16">16</button>
-        <button class="rtAge" data-age="17">17</button>
-        <button class="rtAge" data-age="18+">18+</button>
+      <div class="rtChips" id="rtAgeChips" aria-label="Yosh bo‘yicha filter">
+        <button class="rtChip active" data-age="" type="button">Hammasi</button>
+        <button class="rtChip" data-age="11" type="button">11</button>
+        <button class="rtChip" data-age="12" type="button">12</button>
+        <button class="rtChip" data-age="13" type="button">13</button>
+        <button class="rtChip" data-age="14" type="button">14</button>
+        <button class="rtChip" data-age="15" type="button">15</button>
+        <button class="rtChip" data-age="16" type="button">16</button>
+        <button class="rtChip" data-age="17" type="button">17</button>
+        <button class="rtChip" data-age="18+" type="button">18+</button>
       </div>
-
-      <button id="rtReset" class="rtPill" type="button">🧼 Tozalash</button>
     </div>
 
     <div class="rtBody">
-      <div id="rtState" class="rtState">
-        <div class="rtSpin"></div>
-        <div>Reyting yuklanmoqda…</div>
-      </div>
+      <div id="rtState" class="rtState">Yuklanmoqda…</div>
 
-      <div id="rtMeCard" class="rtMeCard" hidden></div>
+      <section class="rtSection" aria-label="Top 3">
+        <div class="rtSectionTitle">🏆 Top 3</div>
+        <div id="rtTop3" class="rtTop3"></div>
+      </section>
 
-      <div class="rtSectionTitle">🏆 Top 3</div>
-      <div id="rtPodium" class="rtPodium" aria-label="Top 3"></div>
+      <section class="rtSection" aria-label="Barchasi">
+        <div class="rtSectionTitle">📋 Barchasi</div>
+        <div id="rtList" class="rtList"></div>
+      </section>
 
-      <div class="rtSectionTitle">📋 Barchasi</div>
-      <div id="rtList" class="rtList" aria-label="Reyting ro‘yxati"></div>
-
-      <div style="height:10px"></div>
+      <div class="rtBottomPad"></div>
     </div>
   </div>
 </div>
 
+<style>
+  /* rating overlay */
+  .rtOverlay{
+    position:fixed; inset:0; z-index:9999;
+    display:none;
+    background: rgba(10,30,30,.20);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding:12px;
+  }
+  .rtOverlay.open{ display:flex; align-items:flex-end; justify-content:center; }
+  .rtSheet{
+    width:min(720px,100%);
+    max-height:min(86vh, 820px);
+    background: rgba(255,255,255,.70);
+    border:1px solid rgba(255,255,255,.55);
+    border-radius:22px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.22);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  .rtGrab{
+    width:56px; height:6px; border-radius:999px;
+    margin:10px auto 6px;
+    background: rgba(0,0,0,.12);
+  }
+  .rtHeader{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    padding:12px 14px 10px;
+    gap:10px;
+  }
+  .rtTitle{ font-weight:900; font-size:18px; letter-spacing:.2px; }
+  .rtSub{ font-size:12px; opacity:.75; margin-top:2px; }
+  .rtIconBtn{
+    width:36px; height:36px; border-radius:14px;
+    border:1px solid rgba(255,255,255,.65);
+    background: rgba(255,255,255,.65);
+    box-shadow: 0 10px 22px rgba(0,0,0,.10);
+    cursor:pointer;
+  }
+
+  .rtControls{
+    padding:0 14px 12px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .rtMeBtn{
+    align-self:flex-start;
+    padding:10px 12px;
+    border-radius:14px;
+    border:1px solid rgba(46,139,87,.22);
+    background: rgba(46,139,87,.12);
+    font-weight:800;
+    box-shadow: 0 10px 22px rgba(46,139,87,.12);
+    cursor:pointer;
+  }
+  .rtMeBtn[aria-pressed="true"]{
+    background: rgba(46,139,87,.18);
+    border-color: rgba(46,139,87,.35);
+  }
+
+  .rtChips{
+    display:flex; gap:8px;
+    overflow-x:auto; overflow-y:hidden;
+    padding-bottom:2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .rtChips::-webkit-scrollbar{ display:none; }
+  .rtChip{
+    flex:0 0 auto;
+    padding:9px 12px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.70);
+    background: rgba(255,255,255,.62);
+    box-shadow: 0 10px 22px rgba(0,0,0,.08);
+    font-weight:800;
+    font-size:12px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .rtChip.active{
+    background: rgba(46,139,87,.16);
+    border-color: rgba(46,139,87,.28);
+  }
+
+  .rtBody{ padding:0 14px 14px; overflow:auto; }
+  .rtState{ font-size:12px; opacity:.75; padding:4px 2px 10px; }
+
+  .rtSection{ margin-top:10px; }
+  .rtSectionTitle{
+    font-weight:900;
+    font-size:13px;
+    opacity:.85;
+    margin:8px 2px;
+    display:flex; align-items:center; gap:8px;
+  }
+
+  .rtTop3{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:10px;
+  }
+  .rtTopCard{
+    border-radius:18px;
+    background: rgba(255,255,255,.62);
+    border:1px solid rgba(255,255,255,.70);
+    box-shadow: 0 14px 34px rgba(0,0,0,.10);
+    padding:12px;
+    display:grid;
+    grid-template-columns: 56px 1fr auto;
+    gap:12px;
+    align-items:center;
+  }
+  .rtMedal{
+    width:56px; height:56px;
+    border-radius:16px;
+    background: rgba(255,255,255,.7);
+    border:1px solid rgba(255,255,255,.75);
+    display:grid; place-items:center;
+    overflow:hidden;
+  }
+  .rtMedal img{ width:100%; height:100%; object-fit:contain; }
+  .rtName{ font-weight:900; font-size:14px; line-height:1.1; }
+  .rtMeta{ font-size:11px; opacity:.75; margin-top:2px; }
+  .rtScore{ text-align:right; font-weight:900; }
+  .rtScore .v{ font-size:14px; }
+  .rtScore .k{ font-size:11px; opacity:.7; margin-top:2px; }
+
+  .rtList{ display:flex; flex-direction:column; gap:10px; }
+  .rtRow{
+    border-radius:18px;
+    background: rgba(255,255,255,.62);
+    border:1px solid rgba(255,255,255,.72);
+    box-shadow: 0 14px 34px rgba(0,0,0,.10);
+    padding:10px 12px;
+    display:grid;
+    grid-template-columns: 32px 44px 1fr auto;
+    gap:10px;
+    align-items:center;
+  }
+  .rtRank{ font-weight:900; opacity:.70; text-align:center; }
+  .rtRow .rtMedal{ width:44px; height:44px; border-radius:14px; }
+  .rtRow .rtName{ font-size:13px; }
+  .rtRow .rtScore .v{ font-size:13px; }
+
+  .rtRow.me{
+    background: linear-gradient(135deg, rgba(46,139,87,.18), rgba(255,255,255,.62));
+    border-color: rgba(46,139,87,.28);
+    box-shadow: 0 18px 44px rgba(46,139,87,.18);
+    position:relative;
+  }
+  .rtRow.me::after{
+    content:"Siz";
+    position:absolute;
+    top:10px; right:10px;
+    font-size:10px;
+    font-weight:900;
+    padding:4px 8px;
+    border-radius:999px;
+    background: rgba(46,139,87,.18);
+    border:1px solid rgba(46,139,87,.28);
+  }
+  .rtBottomPad{ height:10px; }
+</style>
+
 <script>
-/* ===== Rating System: from scratch ===== */
-(function(){
+(() => {
   const $ = (id)=>document.getElementById(id);
-  const esc = (s)=>String(s??"").replace(/[&<>"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
-  function openRating(){
-    const m = $("ratingModal");
-    if(!m) return;
-    m.classList.add("open");
-    m.setAttribute("aria-hidden","false");
-    document.documentElement.classList.add("noScroll");
-    loadAndRender();
+  // ---- helpers ----
+  function esc(s){
+    return String(s??"").replace(/[&<>"']/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
   }
-  function closeRating(){
-    const m = $("ratingModal");
-    if(!m) return;
-    m.classList.remove("open");
-    m.setAttribute("aria-hidden","true");
-    document.documentElement.classList.remove("noScroll");
-  }
-
-  function medalByRank(i){
-    if(i===0) return "🥇";
-    if(i===1) return "🥈";
-    if(i===2) return "🥉";
-    return "🏅";
-  }
-  function calcAge(b){
-    if(!b) return null;
-    try{
-      const d = (typeof b==="number") ? new Date(b) : new Date(String(b));
-      if(!isFinite(d.getTime())) return null;
-      const now = new Date();
-      let a = now.getFullYear() - d.getFullYear();
-      const m = now.getMonth() - d.getMonth();
-      if(m<0 || (m===0 && now.getDate()<d.getDate())) a--;
-      return (a>=0 && a<=120) ? a : null;
-    }catch(_){ return null; }
-  }
-  function pick(u, keys, fallback=null){
+  function pick(o, keys, fallback=null){
+    if(!o) return fallback;
     for(const k of keys){
-      if(u && u[k]!=null && u[k]!== "") return u[k];
+      if(o[k]!=null && o[k]!=="" ) return o[k];
     }
     return fallback;
   }
-
+  function calcAge(b){
+    if(!b) return null;
+    let d=null;
+    if(b instanceof Date) d=b;
+    else if(typeof b==="number"){ d = new Date(b); }
+    else if(typeof b==="string"){
+      const s=b.trim();
+      if(/^\d{4}-\d{2}-\d{2}/.test(s)) d=new Date(s);
+      else if(/^\d{2}\.\d{2}\.\d{4}$/.test(s)){
+        const [dd,mm,yy]=s.split(".");
+        d=new Date(+yy, +mm-1, +dd);
+      }else{
+        const t=Date.parse(s); if(!Number.isNaN(t)) d=new Date(t);
+      }
+    }
+    if(!d || Number.isNaN(d.getTime())) return null;
+    const now=new Date();
+    let age = now.getFullYear()-d.getFullYear();
+    const m=now.getMonth()-d.getMonth();
+    if(m<0 || (m===0 && now.getDate()<d.getDate())) age--;
+    return age>=0 && age<120 ? age : null;
+  }
   function getAge(u){
     const direct = pick(u, ["age","userAge"]);
     if(direct!=null){
-      const n = parseInt(direct,10);
+      const n=parseInt(direct,10);
       if(Number.isFinite(n)) return n;
     }
-    const b = pick(u, ["birth","birthdate","birthDate","bday","dob"]);
-    const a = calcAge(b);
-    return a;
+    const b=pick(u, ["birth","birthdate","birthDate","bday","dob"]);
+    return calcAge(b);
+  }
+  function getPoints(u){
+    return Number(pick(u, ["points","xp","totalXP","totalPoints"], 0)) || 0;
+  }
+  function getLevel(points){
+    try{
+      if(typeof levelFromPoints==="function") return levelFromPoints(points);
+    }catch(_){}
+    return 1;
+  }
+  function setMedal(img, level){
+    try{
+      if(typeof setMedalImg==="function") { setMedalImg(img, level); return; }
+    }catch(_){}
+    // fallback
+    img.src = "logo.png";
+  }
+
+  // ---- state ----
+  const S = {
+    usersRaw: [],
+    users: [],
+    activeAge: "", // "" | "11".."17" | "18+"
+    onlyMe: false,
+    meUid: null,
+    meNumericId: null,
+    loading: false,
+    loadedOnce: false,
+  };
+
+  function getMe(){
+    // try multiple globals used in the app
+    const u = window.currentUser || window.USER || window.user || null;
+    if(u){
+      S.meUid = u.uid || S.meUid;
+      S.meNumericId = String(u.numericId || u.loginId || u.id || S.meNumericId || "");
+      return;
+    }
+    // fallback: from DOM maybe header shows LM-xxxxxx
+    const headerId = document.querySelector("[data-numericid]");
+    if(headerId) S.meNumericId = String(headerId.getAttribute("data-numericid")||"");
   }
 
   function normalize(items){
@@ -2065,250 +2248,193 @@ function renderLeaderboard(){
       uid: pick(u, ["uid","userUid"], ""),
       numericId: String(pick(u, ["loginId","numericId","id","userId"], "")),
       name: String(pick(u, ["name","fullName","displayName"], "—")),
-      avatar: String(pick(u, ["avatar","photoURL","photo","avatarUrl","avatarURL"], "icon.png")),
-      points: Number(pick(u, ["points","xp","totalXP","totalPoints"], 0)) || 0,
-      level: (typeof levelFromPoints==="function") ? levelFromPoints(Number(pick(u, ["points","xp","totalXP","totalPoints"], 0))||0) : 1,
+      points: getPoints(u),
       age: getAge(u),
-      raw: u
     }));
-    arr.sort((a,b)=>b.points-a.points);
-    // attach rank + medal
-    arr.forEach((x,i)=>{ x.rank=i+1; x.medal=medalByRank(i); });
-    return arr;
+    // remove invalid / empty
+    return arr.filter(x => (x.uid || x.numericId) && Number.isFinite(x.points));
   }
 
-  function agePass(age, sel){
-    if(sel==="all") return true;
-    if(age==null) return false;
-    if(sel==="18+") return age>=18;
-    const n = parseInt(sel,10);
-    return Number.isFinite(n) ? age===n : true;
+  function applyComputed(arr){
+    // compute level+medal later in render
+    // sort by points desc, stable
+    const sorted = [...arr].sort((a,b)=> (b.points-a.points) || (String(a.name).localeCompare(String(b.name))));
+    return sorted.map((r, idx)=>({ ...r, rank: idx+1, level: getLevel(r.points) }));
   }
 
-  function getSelAge(){
-    const wrap = $("rtAgeChips");
-    const act = wrap ? wrap.querySelector(".rtAge.active") : null;
-    return act ? act.getAttribute("data-age") : "all";
+  function passAge(r){
+    if(!S.activeAge) return true;
+    if(S.activeAge==="18+") return (r.age!=null && r.age>=18);
+    const n=parseInt(S.activeAge,10);
+    return (r.age!=null && r.age===n);
   }
 
-  function onlyMeOn(){
-    const b = $("rtOnlyMe");
-    return b && b.getAttribute("aria-pressed")==="true";
+  function currentFiltered(){
+    let base = S.users;
+    if(S.activeAge) base = base.filter(passAge);
+    return base;
   }
 
-  function matchMe(u){
-    const myLoginId = window.currentUserNumericId || window.myLoginId || "";
-    const myUid = window.currentUserUid || window.myUid || "";
-    if(myLoginId && String(u.numericId)===String(myLoginId)) return true;
-    if(myUid && String(u.uid)===String(myUid)) return true;
-    return false;
-  }
-
-  async function loadAllLeaderboard(){
-    // cache
-    if(Array.isArray(window.__rtCache) && window.__rtCache.length) return window.__rtCache;
-
-    // Use existing api() helper from assets/js/api.js
-    if(typeof window.api !== "function"){
-      throw new Error("api() not found");
+  function findMe(list){
+    if(!list || !list.length) return null;
+    if(S.meUid){
+      const f = list.find(x=>x.uid && x.uid===S.meUid);
+      if(f) return f;
     }
-    // Pull a bigger limit so rating isn't empty
-    const data = await window.api("leaderboard", { query: { limit: 500 } });
-    const items = data?.items || [];
-    window.__rtCache = normalize(items);
-    return window.__rtCache;
+    if(S.meNumericId){
+      const f = list.find(x=>x.numericId && x.numericId===S.meNumericId);
+      if(f) return f;
+    }
+    return null;
   }
 
-  function render(state, rows, meRow){
-    rows = Array.isArray(rows) ? rows : [];
+  function render(){
     const st = $("rtState");
-    const pod = $("rtPodium");
-    const list = $("rtList");
-    const me = $("rtMeCard");
+    const top3 = $("rtTop3");
+    const listEl = $("rtList");
+    if(!st || !top3 || !listEl) return;
 
-    if(st){
-      st.style.display = state ? "flex":"none";
-      if(state){
-        st.innerHTML = `<div class="rtSpin"></div><div>${esc(state)}</div>`;
-      }
-    }
-    if(!pod || !list) return;
+    const filtered = currentFiltered();
+    const meRow = findMe(filtered);
+    const showOnlyMe = S.onlyMe && meRow;
 
-    // Me card
-    if(me){
-      if(meRow){
-        me.hidden = false;
-        me.innerHTML = `
-          <div class="rtMeGlow"></div>
-          <div class="rtRow">
-            <img class="rtAv rtMedalImg" data-level="${meRow.level}" src="logo.png" alt="medal">
-            <div style="min-width:0">
-              <div class="rtName">${esc(meRow.name)}</div>
-              <div class="rtMeta">${esc(meRow.medal)} • LM-${esc(meRow.numericId||"—")} • ${meRow.age!=null ? esc(meRow.age+" yosh") : "—"}</div>
-            </div>
-            <div class="rtRankTag">#${meRow.rank}</div>
-          </div>
-          <div class="rtXPbig">${meRow.points} XP</div>
-        `;
-      }else{
-        me.hidden = true;
-        me.innerHTML = "";
-      }
-    }
+    st.textContent = S.loading ? "Yuklanmoqda…" : (filtered.length ? "" : "Hozircha reyting uchun ma’lumot topilmadi.");
 
-    // Podium
-    pod.innerHTML = "";
-    rows.slice(0,3).forEach((r)=>{
+    // top3
+    top3.innerHTML = "";
+    const t = filtered.slice(0,3);
+    t.forEach((r, i)=>{
       const card = document.createElement("div");
-      card.className = "rtPodCard";
+      card.className = "rtTopCard" + ((meRow && r.rank===meRow.rank) ? " me" : "");
       card.innerHTML = `
-        <div class="rtBadge">#${r.rank}</div>
-        <div class="rtRow">
-          <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
-          <div class="rtInfo">
-            <div class="rtName">${esc(r.name)}</div>
-            <div class="rtMeta"><span class="rtMedal">${esc(r.medal)}</span> LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
-          </div>
-        </div>
-        <div class="rtPodXP">${r.points} XP</div>
-      `;
-      pod.appendChild(card);
-    });
-
-    // List
-    list.innerHTML = "";
-    if(!rows.length){
-      list.innerHTML = `<div class="rtState" style="margin-top:0"><div>Natija topilmadi</div></div>`;
-      return;
-    }
-    rows.forEach((r)=>{
-      const it = document.createElement("div");
-      it.className = "rtItem";
-      it.innerHTML = `
-        <div class="rtIdx">${r.rank}</div>
-        <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
-        <div class="rtInfo">
+        <div class="rtMedal"><img data-level="${r.level}" alt="medal"></div>
+        <div>
           <div class="rtName">${esc(r.name)}</div>
-          <div class="rtMeta">${esc(r.medal)} • LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
+          <div class="rtMeta">#${r.rank} • ${esc(r.numericId||"")} ${r.age!=null ? "• "+esc(r.age)+" yosh" : ""}</div>
         </div>
-        <div class="rtRight">
-          <div class="rtXP">${r.points}</div>
-          <div class="rtAgeTxt">${r.age!=null ? esc(r.age+" yosh") : ""}</div>
-        </div>
+        <div class="rtScore"><div class="v">${r.points}</div><div class="k">points</div></div>
       `;
-      list.appendChild(it);
+      top3.appendChild(card);
     });
 
-    // hydrate medal images
-    try{
-      document.querySelectorAll(".rtMedalImg").forEach(img=>{
-        const L = parseInt(img.getAttribute("data-level")||"1",10) || 1;
-        if(typeof setMedalImg === "function") setMedalImg(img, L);
-      });
-    }catch(_){}
+    // list
+    listEl.innerHTML = "";
+    const rows = showOnlyMe ? [meRow] : filtered;
+    rows.forEach((r)=>{
+      const row = document.createElement("div");
+      const isMe = (meRow && r.rank===meRow.rank);
+      row.className = "rtRow" + (isMe ? " me" : "");
+      row.innerHTML = `
+        <div class="rtRank">${r.rank}</div>
+        <div class="rtMedal"><img data-level="${r.level}" alt="medal"></div>
+        <div>
+          <div class="rtName">${esc(r.name)}</div>
+          <div class="rtMeta">${esc(r.numericId||"")} ${r.age!=null ? "• "+esc(r.age)+" yosh" : ""}</div>
+        </div>
+        <div class="rtScore"><div class="v">${r.points}</div><div class="k">points</div></div>
+      `;
+      listEl.appendChild(row);
+    });
 
+    // hydrate medals
+    document.querySelectorAll("#ratingModal img[data-level]").forEach(img=>{
+      const L = parseInt(img.getAttribute("data-level")||"1",10)||1;
+      setMedal(img, L);
+    });
+
+    // if onlyMe and we have meRow, ensure scroll to it
+    if(showOnlyMe){
+      setTimeout(()=>{
+        const el = listEl.querySelector(".rtRow.me");
+        if(el) el.scrollIntoView({block:"center", behavior:"smooth"});
+      }, 50);
+    }
   }
 
-  async function loadAndRender(){
+  async function loadData(){
+    if(S.loading) return;
+    S.loading = true;
+    render();
     try{
-      render("Reyting yuklanmoqda…");
-      const all = await loadAllLeaderboard();
-
-      const q = (null?.value || "").trim().toLowerCase();
-      const sel = getSelAge();
-      const onlyMe = onlyMeOn();
-
-      let rows = all.slice();
-
-      if(q){
-        rows = rows.filter(r => r.name.toLowerCase().includes(q) || (r.numericId||"").toLowerCase().includes(q));
+      getMe();
+      // Use existing api() if present
+      let res = null;
+      if(typeof api === "function"){
+        res = await api("leaderboard", { limit: 500 });
+      }else if(window.fetchLeaderboard){
+        res = await window.fetchLeaderboard();
       }
-      if(onlyMe){
-        rows = rows.filter(matchMe);
-      }
-      rows = rows.filter(r => agePass(r.age, sel));
-
-      // find my row in unfiltered all (for analysis among peers)
-      let meRow = null;
-      if(window.currentUserNumericId || window.currentUserUid){
-        meRow = all.find(matchMe) || null;
-      }
-
-      render(null, rows, meRow);
-    }catch(err){
-      console.error(err);
-      render("Reytingni yuklab bo‘lmadi");
-      const pod = $("rtPodium"); const list = $("rtList");
-      if(pod) pod.innerHTML = "";
-      if(list) list.innerHTML = `<div class="rtState"><div>❌ Xatolik: reyting maʼlumoti kelmadi</div></div>`;
+      const items = (res && (res.items || res.users || res.rows || res.data)) ? (res.items||res.users||res.rows||res.data) : res;
+      const norm = normalize(items || []);
+      S.usersRaw = norm;
+      S.users = applyComputed(norm);
+      S.loadedOnce = true;
+    }catch(e){
+      // keep safe
+      console.warn("Rating load failed:", e);
+      S.usersRaw = [];
+      S.users = [];
+    }finally{
+      S.loading = false;
+      render();
     }
+  }
+
+  function setAgeChip(value){
+    S.activeAge = value;
+    // update chip active
+    document.querySelectorAll("#rtAgeChips .rtChip").forEach(b=>{
+      b.classList.toggle("active", (b.getAttribute("data-age")||"")===String(value||""));
+    });
+    // when filter changes, turn off onlyMe (but keep if user wants?)
+    // We'll keep onlyMe state as-is.
+    render();
+  }
+
+  function toggleOnlyMe(){
+    S.onlyMe = !S.onlyMe;
+    const b = $("rtMeBtn");
+    if(b) b.setAttribute("aria-pressed", S.onlyMe ? "true":"false");
+    // If turning on and data not loaded yet, load first
+    if(!S.loadedOnce) loadData();
+    render();
   }
 
   function wire(){
-    // open button in page
-    const openBtn = $("openRating");
-    if(openBtn) openBtn.addEventListener("click", openRating);
+    const modal = $("ratingModal");
+    if(!modal) return;
 
-    const closeBtn = $("rtClose");
-    if(closeBtn) closeBtn.addEventListener("click", closeRating);
+    // Close button uses existing closeModal() from app if available
+    $("ratingClose")?.addEventListener("click", ()=>{
+      try{
+        if(typeof closeModal==="function") closeModal(modal);
+        else modal.classList.remove("open");
+      }catch(_){ modal.classList.remove("open"); }
+    });
 
-    const overlay = $("ratingModal");
-    if(overlay){
-      overlay.addEventListener("click", (e)=>{ if(e.target===overlay) closeRating(); });
-    }
+    $("rtMeBtn")?.addEventListener("click", toggleOnlyMe);
 
-    const sb = null, row = null, sc = null, inp = null;
-    if(sb && row){
-      const open = ()=>{ row.hidden=false; sb.setAttribute("aria-expanded","true"); setTimeout(()=>{ try{ inp && inp.focus(); }catch(_){} }, 10); };
-      const close = ()=>{ row.hidden=true; sb.setAttribute("aria-expanded","false"); if(inp) inp.value=""; loadAndRender(); };
-      sb.addEventListener("click", ()=>{ row.hidden ? open() : close(); });
-      if(sc) sc.addEventListener("click", close);
-      if(inp) inp.addEventListener("input", ()=>{ loadAndRender(); });
-    }
+    $("rtAgeChips")?.addEventListener("click", (e)=>{
+      const btn = e.target?.closest(".rtChip");
+      if(!btn) return;
+      setAgeChip(btn.getAttribute("data-age")||"");
+    });
 
-    const ages = $("rtAgeChips");
-    if(ages){
-      ages.addEventListener("click", (e)=>{
-        const b = e.target.closest(".rtAge");
-        if(!b) return;
-        ages.querySelectorAll(".rtAge").forEach(x=>x.classList.remove("active"));
-        b.classList.add("active");
-        loadAndRender();
-      });
-    }
+    // When opening from buttons, load data once
+    const openAndLoad = ()=>{
+      if(!S.loadedOnce) loadData();
+      else render();
+    };
+    document.addEventListener("click", (e)=>{
+      const t = e.target?.closest("#openRating,#openRatingInline");
+      if(t) openAndLoad();
+    });
 
-    const me = $("rtOnlyMe");
-    if(me){
-      me.addEventListener("click", ()=>{
-        const on = me.getAttribute("aria-pressed")==="true";
-        me.setAttribute("aria-pressed", on ? "false":"true");
-        loadAndRender();
-      });
-    }
-
-    const reset = null;
-    if(reset){
-      reset.addEventListener("click", ()=>{
-        // reset age
-        const ages = $("rtAgeChips");
-        if(ages){
-          ages.querySelectorAll(".rtAge").forEach(x=>x.classList.remove("active"));
-          const all = ages.querySelector('.rtAge[data-age="all"]');
-          if(all) all.classList.add("active");
-        }
-        // reset me
-        const me = $("rtOnlyMe");
-        if(me) me.setAttribute("aria-pressed","false");
-        // reset search
-        const row = null;
-        const inp = null;
-        const sb = null;
-        if(inp) inp.value="";
-        if(row){ row.hidden=true; }
-        if(sb) sb.setAttribute("aria-expanded","false");
-        loadAndRender();
-      });
-    }
+    // Also if modal becomes open via class toggle, try load
+    const obs = new MutationObserver(()=>{
+      if(modal.classList.contains("open")) openAndLoad();
+    });
+    obs.observe(modal, { attributes:true, attributeFilter:["class"] });
   }
 
   document.addEventListener("DOMContentLoaded", wire);
