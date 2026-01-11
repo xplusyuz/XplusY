@@ -519,38 +519,40 @@
 <!-- Floating Touch Button (expand: 🏆 Reyting / 💬 Izoh) -->
 <!-- Reyting Modal (Top-20 + podium + qidiruv) -->
 <div aria-hidden="true" class="modalOverlay modalApp" id="ratingModal">
-<div aria-label="Reyting" aria-modal="true" class="modal glass" role="dialog">
-<div class="modalHead">
-<div>
-<div class="modalTitle">Reyting</div>
-<div class="small">Top-20 • podium • qidiruv</div>
-</div>
-<div style="display:flex; align-items:center; gap:10px;">
-<button class="chipBtn" id="btnLbAll" type="button">📋 Barchasi</button>
-<button aria-label="Yopish" class="iconBtn" id="ratingClose" type="button">✕</button>
-</div>
-</div>
-<div class="hr"></div>
-<div class="modalBody">
-<div class="lbTools" style="margin-top:0;">
-<input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…"/>
-<button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
-</div>
-<div aria-label="Top-3 podium" class="lbPodium" id="lbPodium"></div>
-<table aria-label="Leaderboard" class="table">
-<thead>
-<tr>
-<th style="width:60px;">#</th>
-<th>Foydalanuvchi</th>
-<th style="width:90px;">Ball</th>
-</tr>
-</thead>
-<tbody id="lbBody">
-<tr><td class="small" colspan="3">Yuklanmoqda…</td></tr>
-</tbody>
-</table>
-</div>
-</div>
+  <div aria-label="Reyting" aria-modal="true" class="modal glass ratingWow" role="dialog">
+    <div class="modalHead">
+      <div>
+        <div class="modalTitle">Reyting</div>
+        <div class="small">Medallar • yosh filter • qidiruv</div>
+      </div>
+      <div class="ratingHeadRight">
+        <select id="ageFilter" class="ageSelect" title="Yosh bo‘yicha filter">
+          <option value="all">Barcha yoshlar</option>
+          <option value="7-10">7–10 yosh</option>
+          <option value="11-14">11–14 yosh</option>
+          <option value="15-18">15–18 yosh</option>
+          <option value="18+">18+</option>
+        </select>
+        <button aria-label="Yopish" class="iconBtn" id="ratingClose" type="button">✕</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="modalBody">
+      <div class="lbTools ratingTools" style="margin-top:0;">
+        <button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
+        <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…"/>
+        <button class="chipBtn" id="btnLbAll" type="button">📋 Barchasi</button>
+      </div>
+
+      <div class="ratingGrid" id="ratingPodium" aria-label="Top 3"></div>
+
+      <ul class="ratingList" id="ratingList" aria-label="Reyting ro'yxati"></ul>
+
+      <div style="height:10px;"></div>
+      <button class="btn" id="ratingLoadMore" type="button">Yana yuklash</button>
+    </div>
+  </div>
 </div>
 <!-- Comment Modal -->
 <div aria-hidden="true" class="modalOverlay modalApp" id="commentModal">
@@ -2070,6 +2072,162 @@
       });
     }
   });
+})();
+</script>
+
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function parseAge(ageStr){
+    var n = parseInt(String(ageStr||"").replace(/[^0-9]/g,''),10);
+    return isFinite(n)? n : null;
+  }
+  function inAgeBucket(age, bucket){
+    if(bucket==="all") return true;
+    if(age==null) return false;
+    if(bucket==="18+") return age>=18;
+    var m = bucket.match(/(\d+)\-(\d+)/);
+    if(!m) return true;
+    var a = parseInt(m[1],10), b = parseInt(m[2],10);
+    return age>=a && age<=b;
+  }
+
+  // Try to read global leaderboard array if the page already builds it.
+  // Expected fields: {name, numericId, points/xp, age, avatar, medalSrc}
+  function getLeaderboard(){
+    // Common globals in this project
+    return window.leaderboardData || window.lbData || window.ratingData || null;
+  }
+
+  function medalFor(user){
+    // Prefer precomputed medal image if available
+    return user.medal || user.medalSrc || user.medalUrl || user.avatar || "icon.png";
+  }
+
+  function avatarFor(user){
+    return user.avatar || user.photoURL || user.photo || "icon.png";
+  }
+
+  function render(){
+    var listEl = $("ratingList");
+    var podiumEl = $("ratingPodium");
+    if(!listEl || !podiumEl) return;
+
+    var q = ($("lbSearch") ? $("lbSearch").value.trim().toLowerCase() : "");
+    var bucket = ($("ageFilter") ? $("ageFilter").value : "all");
+    var onlyMe = ($("lbOnlyMe") && $("lbOnlyMe").getAttribute("aria-pressed")==="true");
+
+    var meId = (window.currentUserNumericId||"").toString();
+    var meUid = (window.currentUserUid||"").toString();
+
+    var data = getLeaderboard() || [];
+    // normalize & sort by points/xp
+    var rows = data.map(function(u){
+      var xp = Number(u.xp ?? u.points ?? u.totalXP ?? u.totalPoints ?? 0) || 0;
+      var age = parseAge(u.age ?? u.userAge);
+      var id = (u.numericId ?? u.id ?? u.userId ?? "").toString();
+      var name = (u.name ?? u.displayName ?? u.fullName ?? "—").toString();
+      return {raw:u, xp:xp, age:age, id:id, name:name};
+    }).sort(function(a,b){ return b.xp - a.xp; });
+
+    rows = rows.filter(function(r){
+      if(onlyMe){
+        var uid = (r.raw.uid||"").toString();
+        if(meId && r.id===meId) return true;
+        if(meUid && uid===meUid) return true;
+        return false;
+      }
+      if(q){
+        if(r.name.toLowerCase().indexOf(q)>=0) return true;
+        if(r.id.toLowerCase().indexOf(q)>=0) return true;
+        return false;
+      }
+      return true;
+    }).filter(function(r){ return inAgeBucket(r.age, bucket); });
+
+    // Podium top 3
+    podiumEl.innerHTML = "";
+    rows.slice(0,3).forEach(function(r, i){
+      var u = r.raw;
+      var card = document.createElement("div");
+      card.className = "podiumCard";
+      card.innerHTML = `
+        <div class="pRank">#${i+1}</div>
+        <div class="pRow">
+          <img class="pAvatar" src="${avatarFor(u)}" alt="avatar">
+          <div>
+            <div class="pName">${r.name}</div>
+            <div class="pMeta">LM-${r.id || "—"} • ${r.age!=null? (r.age+" yosh") : "—"}</div>
+          </div>
+        </div>
+        <div class="pXP">${r.xp} XP</div>
+      `;
+      podiumEl.appendChild(card);
+    });
+
+    // List
+    listEl.innerHTML = "";
+    rows.forEach(function(r, idx){
+      var u = r.raw;
+      var li = document.createElement("li");
+      li.className = "ratingItem";
+      li.innerHTML = `
+        <div class="rRank">${idx+1}</div>
+        <img class="rAvatar" src="${avatarFor(u)}" alt="avatar">
+        <div class="rInfo">
+          <div class="rName">${r.name}</div>
+          <div class="rMeta">LM-${r.id || "—"} • ${r.age!=null? (r.age+" yosh") : "—"}</div>
+        </div>
+        <div class="rRight">
+          <div class="rXP">${r.xp}</div>
+          <div class="rAge">${r.age!=null? (r.age+" yosh") : ""}</div>
+        </div>
+      `;
+      listEl.appendChild(li);
+    });
+  }
+
+  function wire(){
+    ["lbSearch","ageFilter"].forEach(function(id){
+      var el = $(id);
+      if(el) el.addEventListener("input", render);
+      if(el && el.tagName==="SELECT") el.addEventListener("change", render);
+    });
+
+    var onlyMe = $("lbOnlyMe");
+    if(onlyMe){
+      onlyMe.addEventListener("click", function(){
+        var pressed = onlyMe.getAttribute("aria-pressed")==="true";
+        onlyMe.setAttribute("aria-pressed", pressed? "false":"true");
+        render();
+      });
+    }
+    var allBtn = $("btnLbAll");
+    if(allBtn){
+      allBtn.addEventListener("click", function(){
+        var s = $("lbSearch"); if(s) s.value="";
+        var f = $("ageFilter"); if(f) f.value="all";
+        if(onlyMe) onlyMe.setAttribute("aria-pressed","false");
+        render();
+      });
+    }
+
+    // When modal opens, render
+    var openRating = $("openRating");
+    if(openRating){
+      openRating.addEventListener("click", function(){ setTimeout(render, 50); });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    wire();
+    // Try initial render if modal is already open
+    setTimeout(render, 120);
+  });
+
+  // Expose for existing code to call after it loads leaderboard
+  window.renderRatingWow = render;
 })();
 </script>
 
