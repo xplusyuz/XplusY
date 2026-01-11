@@ -459,6 +459,11 @@
                   <label>Href</label>
                   <input class="field mono" id="f_href" placeholder="challenge.html yoki #" disabled />
                 </div>
+                <div>
+                  <label>Icon (png path)</label>
+                  <input class="field mono" id="f_icon" placeholder="icons/challenge-001.png" disabled />
+                </div>
+
               </div>
 
               <div class="row">
@@ -557,7 +562,7 @@
 
   function normalizeItem(item){
     // Minimal schema:
-    // {id,title,status,startAt,endAt,cta,href}
+    // {id,title,status,startAt,endAt,cta,href,icon}
     const out = {
       id: String(item.id || "").trim(),
       title: String(item.title || "").trim(),
@@ -566,6 +571,7 @@
       endAt: String(item.endAt || "").trim(),
       cta: String(item.cta || "").trim(),
       href: String(item.href || "").trim(),
+      icon: String(item.icon || "").trim(),
     };
     return out;
   }
@@ -617,6 +623,7 @@
     if(!item.title) problems.push("Title bo‘sh");
     if(!item.cta) problems.push("CTA bo‘sh");
     if(!item.href) problems.push("Href bo‘sh");
+    if(item.icon && !/\.(png|webp|jpg|jpeg)$/i.test(item.icon)) problems.push("icon formati (png/webp/jpg)");
 
     // unique id
     const dup = state.list.findIndex((x,i)=> i!==idx && x.id === item.id);
@@ -650,7 +657,7 @@
   }
 
   function setFormEnabled(on){
-    ["f_id","f_title","f_status","f_start","f_end","f_cta","f_href"].forEach(id => $(id).disabled = !on);
+    ["f_id","f_title","f_status","f_start","f_end","f_cta","f_href","f_icon"].forEach(id => $(id).disabled = !on);
     $("saveBtn").disabled = !on;
     $("delBtn").disabled  = !on;
     $("dupBtn").disabled  = !on;
@@ -667,7 +674,7 @@
     if(i < 0 || i >= state.list.length){
       $("selTxt").textContent = "Hech narsa tanlanmagan";
       setFormEnabled(false);
-      ["f_id","f_title","f_start","f_end","f_cta","f_href"].forEach(id => $(id).value = "");
+      ["f_id","f_title","f_start","f_end","f_cta","f_href","f_icon"].forEach(id => $(id).value = "");
       $("f_status").value = "draft";
       $("validateTxt").textContent = "Tanlang — forma ochiladi.";
       renderPreview();
@@ -684,6 +691,7 @@
     $("f_end").value   = toLocalInputValue(it.endAt);
     $("f_cta").value   = it.cta || "";
     $("f_href").value  = it.href || "";
+    $("f_icon").value  = it.icon || "";
 
     const probs = validateItem(it, i);
     if(probs.length){
@@ -731,6 +739,9 @@
           <svg class="icon" viewBox="0 0 24 24" fill="none">
             <path d="M8 6h2v2H8V6Zm6 0h2v2h-2V6ZM8 11h2v2H8v-2Zm6 0h2v2h-2v-2ZM8 16h2v2H8v-2Zm6 0h2v2h-2v-2Z" fill="currentColor"/>
           </svg>
+        </div>
+        <div style="width:34px;height:34px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);display:grid;place-items:center;flex:0 0 auto">
+          ${it.icon ? `<img src="${escapeAttr(it.icon)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>` : `<span style="opacity:.55;font-weight:950">LM</span>`}
         </div>
         <div class="meta">
           <div class="ititle">${escapeHtml(it.title || "(title yo‘q)")}</div>
@@ -808,7 +819,12 @@
       node.className = "pcard";
       node.innerHTML = `
         <div class="pTop">
-          <div class="pTitle">${escapeHtml(it.title || "(title yo‘q)")}</div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:34px;height:34px;border-radius:14px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);overflow:hidden;flex:0 0 auto;display:grid;place-items:center">
+              ${it.icon ? `<img src="${escapeAttr(it.icon)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"/>` : `<span style="opacity:.6;font-weight:950">LM</span>`}
+            </div>
+            <div class="pTitle">${escapeHtml(it.title || "(title yo‘q)")}</div>
+          </div>
           <span class="badge ${bcls}">${auto}</span>
         </div>
         <div class="pMeta">
@@ -865,7 +881,8 @@
       startAt: fromLocalInputValue(toLocal(start)),
       endAt: fromLocalInputValue(toLocal(end)),
       cta: "Boshlash",
-      href: "challenge.html"
+      href: "challenge.html",
+      icon: `icons/${id}.png`
     });
 
     state.list.unshift(it);
@@ -914,6 +931,7 @@
     it.endAt = fromLocalInputValue($("f_end").value);
     it.cta = String($("f_cta").value || "").trim();
     it.href = String($("f_href").value || "").trim();
+    it.icon = String($("f_icon").value || "").trim();
 
     const probs = validateItem(it, i);
     if(probs.length){
@@ -1012,6 +1030,15 @@
   function bindForm(){
     const onAny = () => {
       const res = applyFormToState();
+      // Auto icon: icon bo‘sh bo‘lsa, IDga moslab avtomatik qo‘yamiz (icons/<id>.png)
+      if(state.sel >= 0){
+        const it = state.list[state.sel];
+        const desired = it.id ? `icons/${it.id}.png` : "";
+        if(desired && (!it.icon || it.icon.trim()==="")){
+          it.icon = desired;
+          $("f_icon").value = desired;
+        }
+      }
       setDirty(true);
       renderList();
       renderPreview();
@@ -1021,7 +1048,7 @@
         // don't spam toast on each keypress
       }
     };
-    ["f_id","f_title","f_status","f_start","f_end","f_cta","f_href"].forEach(id => {
+    ["f_id","f_title","f_status","f_start","f_end","f_cta","f_href","f_icon"].forEach(id => {
       $(id).addEventListener("input", onAny);
       $(id).addEventListener("change", onAny);
     });
@@ -1094,7 +1121,8 @@
         "startAt": "2026-01-03T08:00:00+05:00",
         "endAt": "2026-01-03T23:59:00+05:00",
         "cta": "Boshlash",
-        "href": "challenge.html"
+        "href": "challenge.html",
+        "icon": "icons/challenge-001.png"
       },
       {
         "id": "challenge-002",
@@ -1103,7 +1131,8 @@
         "startAt": "2026-01-05T08:00:00+05:00",
         "endAt": "2026-01-11T23:59:00+05:00",
         "cta": "Tez kunda",
-        "href": "#"
+        "href": "#",
+        "icon": "icons/challenge-002.png"
       }
     ].map(normalizeItem);
 
