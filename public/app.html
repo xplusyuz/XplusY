@@ -1104,7 +1104,40 @@
       return i===0 ? "🥇" : i===1 ? "🥈" : i===2 ? "🥉" : "";
     }
 
-    function renderLeaderboard(){
+    
+
+function calcAgeFromBirth(b){
+      if(!b) return null;
+      try{
+        // accept "YYYY-MM-DD" or timestamp or Date-like
+        const d = (typeof b === "number") ? new Date(b) : new Date(String(b));
+        if(!isFinite(d.getTime())) return null;
+        const now = new Date();
+        let a = now.getFullYear() - d.getFullYear();
+        const m = now.getMonth() - d.getMonth();
+        if(m < 0 || (m===0 && now.getDate() < d.getDate())) a--;
+        return (a>=0 && a<=120) ? a : null;
+      }catch(_){ return null; }
+    }
+
+    function exportLbToRating(items){
+      try{
+        const arr = (items||[]).map((u, idx)=>({
+          name: u.name || u.fullName || u.displayName || u.loginId || "—",
+          numericId: u.loginId || u.numericId || u.id || u.userId || "",
+          points: Number(u.points||u.xp||u.totalXP||0)||0,
+          xp: Number(u.points||u.xp||u.totalXP||0)||0,
+          age: (u.age!=null? parseInt(u.age,10): null) ?? calcAgeFromBirth(u.birth || u.birthdate || u.birthDate),
+          avatar: u.avatar || u.photoURL || u.photo || u.avatarUrl || "icon.png",
+          medal: medal(idx),
+          uid: u.uid || u.userUid || ""
+        }));
+        window.leaderboardData = arr;
+        if(window.renderRatingMobile) window.renderRatingMobile();
+      }catch(_){}
+    }
+
+function renderLeaderboard(){
       const body = $("lbBody");
       const podium = $("lbPodium");
       if(!body || !podium) return;
@@ -1169,6 +1202,7 @@
       try{
         const data = await api("leaderboard", { query: { limit: 120 } });
         lbAll = (data?.items || []);
+        exportLbToRating(lbAll);
         renderLeaderboard();
       }catch(_){
         body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
