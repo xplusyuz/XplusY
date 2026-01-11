@@ -518,53 +518,48 @@
 <!-- Reyting/Izohlar endi suzuvchi "touch" tugma orqali premium modalda ochiladi -->
 <!-- Floating Touch Button (expand: 🏆 Reyting / 💬 Izoh) -->
 <!-- Reyting Modal (Top-20 + podium + qidiruv) -->
-<div aria-hidden="true" class="modalOverlay modalApp" id="ratingModal">
-  <div aria-label="Reyting" aria-modal="true" class="modal glass ratingWow" role="dialog">
-    <div class="modalHead">
-      <div>
-        <div class="modalTitle">Reyting</div>
-        <div class="small">Medallar • yosh filter • qidiruv</div>
+<div aria-hidden="true" class="rmOverlay" id="ratingModal">
+  <div class="rmSheet" role="dialog" aria-modal="true" aria-label="Reyting">
+    <div class="rmGrab" aria-hidden="true"></div>
+
+    <div class="rmTop">
+      <div class="rmTitleWrap">
+        <div class="rmTitle">Reyting</div>
+        <div class="rmSub">Top • yosh • qidiruv</div>
       </div>
-      <div class="ratingHeadRight">
-<button aria-label="Yopish" class="iconBtn" id="ratingClose" type="button">✕</button>
+
+      <div class="rmActions">
+        <button class="rmIcon" id="btnSearchToggle" type="button" aria-expanded="false" title="Qidirish">🔎</button>
+        <button class="rmIcon" id="ratingClose" type="button" title="Yopish">✕</button>
       </div>
     </div>
-    <div class="hr"></div>
 
-    <div class="modalBody">
-      <div class="lbTools ratingTools" style="margin-top:0;">
-  <button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
+    <div class="rmSearch" id="searchWrap" hidden>
+      <input id="lbSearch" class="rmSearchInput" placeholder="ID yoki ism bo‘yicha qidirish…"/>
+      <button class="rmIcon rmX" id="btnSearchClose" type="button" title="Yopish">✕</button>
+    </div>
 
-  <button class="chipBtn iconChip" id="btnSearchToggle" type="button" aria-expanded="false" title="Qidirish">
-    🔎
-  </button>
+    <div class="rmChipsRow">
+      <button class="rmChip" id="lbOnlyMe" type="button" aria-pressed="false">⭐ Meni</button>
+      <div class="rmAgeChips" id="ageChips" aria-label="Yosh filter">
+        <button class="rmAge active" data-age="all">Hammasi</button>
+        <button class="rmAge" data-age="11">11</button>
+        <button class="rmAge" data-age="12">12</button>
+        <button class="rmAge" data-age="13">13</button>
+        <button class="rmAge" data-age="14">14</button>
+        <button class="rmAge" data-age="15">15</button>
+        <button class="rmAge" data-age="16">16</button>
+        <button class="rmAge" data-age="17">17</button>
+        <button class="rmAge" data-age="18+">18+</button>
+      </div>
+      <button class="rmChip" id="btnLbAll" type="button">🧼 Tozalash</button>
+    </div>
 
-  <div class="searchWrap" id="searchWrap" hidden>
-    <input class="lbSearch" id="lbSearch" placeholder="Qidirish (ID yoki ism)…"/>
-    <button class="chipBtn miniX" id="btnSearchClose" type="button" title="Yopish">✕</button>
-  </div>
-
-  <div class="ageChips" id="ageChips" aria-label="Yosh filter">
-    <button class="chip ageChip" data-age="11">11</button>
-    <button class="chip ageChip" data-age="12">12</button>
-    <button class="chip ageChip" data-age="13">13</button>
-    <button class="chip ageChip" data-age="14">14</button>
-    <button class="chip ageChip" data-age="15">15</button>
-    <button class="chip ageChip" data-age="16">16</button>
-    <button class="chip ageChip" data-age="17">17</button>
-    <button class="chip ageChip" data-age="18+">18+</button>
-    <button class="chip ageChip active" data-age="all">Hammasi</button>
-  </div>
-
-  <button class="chipBtn" id="btnLbAll" type="button">📋 Tozalash</button>
-</div>
-
-<div class="ratingGrid" id="ratingPodium" aria-label="Top 3"></div>
-
-      <ul class="ratingList" id="ratingList" aria-label="Reyting ro'yxati"></ul>
-
-      <div style="height:10px;"></div>
-      <button class="btn" id="ratingLoadMore" type="button">Yana yuklash</button>
+    <div class="rmBody">
+      <div class="rmPodium" id="ratingPodium" aria-label="Top 3"></div>
+      <div class="rmList" id="ratingList" aria-label="Reyting ro'yxati"></div>
+      <button class="rmMore" id="ratingLoadMore" type="button">Yana yuklash</button>
+      <div style="height:10px"></div>
     </div>
   </div>
 </div>
@@ -1748,570 +1743,238 @@
     boot();
 
   </script>
-<script>
-/* ===== Challenge from challenge.json (list + timer) ===== */
-(function(){
-  const box = document.getElementById('challengeList');
-  if(!box) return;
 
-  const parseT = (v)=>{
-    if(v===null || v===undefined || v==='') return NaN;
 
-    // Firestore Timestamp-like objects
-    if(typeof v==='object'){
-      if(typeof v.toDate==='function'){
-        const t = v.toDate().getTime();
-        return isNaN(t) ? NaN : t;
-      }
-      if(typeof v.seconds==='number'){
-        const t = v.seconds * 1000;
-        return isNaN(t) ? NaN : t;
-      }
-    }
 
-    if(typeof v==='number') return v;
 
-    const s = String(v).trim();
-
-    // Support 'YYYY-MM-DD HH:mm' (assume Asia/Tashkent +05:00)
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
-    if(m){
-      const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}+05:00`;
-      const t = new Date(iso).getTime();
-      return isNaN(t) ? NaN : t;
-    }
-
-    const t = new Date(s).getTime();
-    return isNaN(t) ? NaN : t;
-  };
-  const pad2 = n => String(n).padStart(2,'0');
-  const fmt = (ms)=>{
-    ms = Math.max(0, ms|0);
-    const s = Math.floor(ms/1000);
-    const d = Math.floor(s/86400);
-    const h = Math.floor((s%86400)/3600);
-    const m = Math.floor((s%3600)/60);
-    const ss = s%60;
-    if(d>0) return `${d} kun ${pad2(h)}:${pad2(m)}:${pad2(ss)}`;
-    return `${pad2(h)}:${pad2(m)}:${pad2(ss)}`;
-  };
-
-  function classify(c, now){
-    const s = parseT(c.startAt);
-    const e = parseT(c.endAt);
-    if(!isNaN(s) && !isNaN(e)){
-      if(now>=s && now<=e) return 'live';
-      if(now<s) return 'upcoming';
-      return 'ended';
-    }
-    // fallback: status field
-    const st = (c.status||'').toLowerCase();
-    if(st==='live') return 'live';
-    if(st==='upcoming') return 'upcoming';
-    return 'ended';
-  }
-
-  function render(list){
-    const now = Date.now();
-    const scored = list.map(c=>{
-      const cls = classify(c, now);
-      const s = parseT(c.startAt);
-      const e = parseT(c.endAt);
-      const w = cls==='live'?0:cls==='upcoming'?1:2;
-      return {c, cls, s, e, w};
-    }).sort((a,b)=>{
-      if(a.w!==b.w) return a.w-b.w;
-      const ta = a.cls==='ended' ? -a.e : a.s;
-      const tb = b.cls==='ended' ? -b.e : b.s;
-      return (ta||0) - (tb||0);
-    });
-
-    if(!scored.length){
-      box.innerHTML = '<div class="muted">Challenge yo‘q</div>';
-      return;
-    }
-
-    box.innerHTML = scored.map(({c,cls,s,e})=>{
-      const badgeClass = cls==='live'?'badgeLive':cls==='upcoming'?'badgeUp':'badgeEnd';
-      const badgeText  = cls==='live'?'LIVE':cls==='upcoming'?'KUTILMOQDA':'TUGAGAN';
-      const btnText = (cls==='live') ? (c.cta || 'Boshlash') : (cls==='upcoming' ? 'Tez kunda' : 'Yakunlandi');
-      const href = c.href || '#';
-      const icon = c.icon || 'icon.png';
-      const disabled = (cls!=='live') ? 'disabled' : '';
-      const timerAttr = cls==='live' ? `data-end="${e}"` : (cls==='upcoming'?`data-start="${s}"`:'');
-      const timerLabel = cls==='live' ? 'Tugashiga' : (cls==='upcoming' ? 'Boshlanishiga' : '');
-      const timerHtml = timerAttr ? `<div class="timerLine">${timerLabel}: <b ${timerAttr}></b></div>` : `<div class="timerLine"></div>`;
-      return `
-        <div class="challengeCard">
-          <div class="left">
-            <div class="challengeLogo"><img class="challengeLogoImg" src="${icon}" alt=""></div>
-            <div class="challengeMeta">
-              <div class="kicker">CHALLENGE</div>
-              <div class="ttl">${(c.title||'').replace(/</g,'&lt;')}</div>
-              <div class="badges">
-                <span class="badgePill ${badgeClass}">${badgeText}</span>
-                <span class="badgePill">${(c.id||'').replace(/</g,'&lt;')}</span>
-              </div>
-            </div>
-          </div>
-          <div class="challengeRight">
-            ${timerHtml}
-            <button class="challengeBtn" ${disabled} onclick="location.href='${href}'">${btnText} →</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    setInterval(()=>{
-      const now = Date.now();
-      document.querySelectorAll('[data-end]').forEach(el=>{
-        const e = +el.getAttribute('data-end');
-        el.textContent = fmt(e-now);
-      });
-      document.querySelectorAll('[data-start]').forEach(el=>{
-        const s = +el.getAttribute('data-start');
-        el.textContent = fmt(s-now);
-      });
-    }, 1000);
-  }
-
-  fetch('./challenge.json', {cache:'no-store'})
-    .then(r=> r.ok ? r.json() : [])
-    .then(data=> render(Array.isArray(data)?data:[]))
-    .catch(()=> box.innerHTML='<div class="muted">challenge.json topilmadi</div>');
-})();
-
-/* ===== Content from content.json (big chips + tags + search) ===== */
-(function(){
-  const bigRow = document.getElementById('bigChipsRow');
-  const tagRow = document.getElementById('tagChipsRow');
-  const grid   = document.getElementById('grid');
-  const empty  = document.getElementById('empty');
-  const info   = document.getElementById('resultInfo');
-  const qInp   = document.getElementById('q');
-  const clear  = document.getElementById('clearBtn');
-  const sToggle= document.getElementById('searchToggle');
-  const sWrap  = document.getElementById('searchWrap');
-  if(!bigRow || !tagRow || !grid || !qInp) return;
-
-  const state = { data:null, type:null, tag:'all', q:'' };
-
-  const norm = s => (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
-  const esc = s => (s||'').toString().replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
-
-  // Anti-autofill hardening
-  qInp.setAttribute('readonly','readonly');
-  setTimeout(()=> qInp.removeAttribute('readonly'), 250);
-
-  // Search opens only when 🔎 pressed
-  const showSearch = ()=>{
-    if(!sWrap) return;
-    sWrap.classList.remove('isHidden');
-    try{ qInp.focus({preventScroll:true}); }catch(e){ qInp.focus(); }
-  };
-  const hideSearch = ()=>{
-    if(!sWrap) return;
-    if((qInp.value||'').trim()) return; // keep open if there is text
-    sWrap.classList.add('isHidden');
-  };
-  if(sToggle){
-    sToggle.addEventListener('click', ()=>{
-      if(!sWrap) return;
-      if(sWrap.classList.contains('isHidden')) showSearch();
-      else hideSearch();
-    });
-  }
-  qInp.addEventListener('blur', ()=> setTimeout(hideSearch, 120));
-  const killAuto = ()=>{
-    const v = (qInp.value||'').trim();
-    if(/^LM-\d+/i.test(v) || /^LM\d+/i.test(v)) qInp.value='';
-  };
-  window.addEventListener('pageshow', ()=> setTimeout(killAuto, 50));
-  qInp.addEventListener('focus', ()=> setTimeout(killAuto, 20));
-  setTimeout(killAuto, 50); setTimeout(killAuto, 300); setTimeout(killAuto, 1200);
-
-  const countByType = (id)=> (state.data?.items||[]).filter(it=> norm(it.type)===id).length;
-  const tagsInType = ()=>{
-    const set = new Set();
-    (state.data?.items||[]).filter(it=> norm(it.type)===state.type).forEach(it=>{
-      (it.tags||[]).forEach(t=> set.add(norm(t)));
-    });
-    return [...set].filter(Boolean).sort((a,b)=>a.localeCompare(b));
-  };
-  const countByTag = (t)=>{
-    const items = (state.data?.items||[]).filter(it=> norm(it.type)===state.type);
-    if(t==='all') return items.length;
-    return items.filter(it=> (it.tags||[]).map(norm).includes(t)).length;
-  };
-
-  function setActive(container, id){
-    [...container.children].forEach(el=> el.classList.toggle('active', el.dataset.id===id));
-  }
-
-  function renderBig(){
-    const chips = (state.data?.bigChips||[]).map(c=> ({...c, id:norm(c.id)}));
-    if(!state.type && chips.length) state.type = chips[0].id;
-
-    bigRow.innerHTML = chips.map(c=>{
-      const cnt = countByType(c.id);
-      const iconSrc = c.iconImg || c.iconPath || 'icon.png';
-      return `<div class="bigChip ${c.id===state.type?'active':''}" data-id="${c.id}">
-        <div class="ico"><img src="${esc(iconSrc)}" alt="" loading="lazy"/></div>
-        <div class="tWrap"><b>${esc(c.title||c.id)}</b><small>${cnt} ta</small></div>
-        <div class="count">${cnt}</div>
-      </div>`;
-    }).join('');
-
-    bigRow.querySelectorAll('.bigChip').forEach(el=>{
-      el.addEventListener('click', ()=>{
-        state.type = el.dataset.id;
-        state.tag = 'all';
-        setActive(bigRow, state.type);
-        renderTags();
-        renderCards();
-      });
-    });
-  }
-
-  function renderTags(){
-    const tags = ['all', ...tagsInType()];
-    tagRow.innerHTML = tags.map(t=>{
-      const label = t==='all' ? 'Hammasi' : t;
-      const cnt = countByTag(t);
-      return `<div class="tagChip ${t===state.tag?'active':''}" data-id="${t}">
-        <span>${esc(label)}</span><span class="tCount">${cnt}</span>
-      </div>`;
-    }).join('');
-
-    tagRow.querySelectorAll('.tagChip').forEach(el=>{
-      el.addEventListener('click', ()=>{
-        state.tag = el.dataset.id;
-        setActive(tagRow, state.tag);
-        renderCards();
-      });
-    });
-  }
-
-  function getFiltered(){
-    const q = norm(state.q);
-    return (state.data?.items||[])
-      .filter(it=> norm(it.type)===state.type)
-      .filter(it=>{
-        if(state.tag!=='all'){
-          const tags = (it.tags||[]).map(norm);
-          if(!tags.includes(state.tag)) return false;
-        }
-        if(q){
-          const hay = [it.title,it.desc,it.type,(it.tags||[]).join(' ')].map(norm).join(' | ');
-          if(!hay.includes(q)) return false;
-        }
-        return true;
-      })
-      .sort((a,b)=>(b.order||0)-(a.order||0));
-  }
-
-  function renderCards(){
-    const list = getFiltered();
-    info.textContent = `Natija: ${list.length} ta`;
-    if(!list.length){
-      grid.innerHTML='';
-      empty.style.display='block';
-      return;
-    }
-    empty.style.display='none';
-    grid.innerHTML = list.map(it=>{
-      const tags = (it.tags||[]).slice(0,6).map(t=>`<span class="cardTag">${esc(t)}</span>`).join('');
-      const href = it.href || '#';
-      const btn = `<a class="openBtn" href="${esc(href)}">Ochish →</a>`;
-      return `<div class="contentCard">
-        <h3>${esc(it.title||'')}</h3>
-        <p>${esc(it.desc||'')}</p>
-        <div class="cardTags">${tags}</div>
-        ${btn}
-      </div>`;
-    }).join('');
-  }
-
-  let t=null;
-  qInp.addEventListener('input', ()=>{
-    clearTimeout(t);
-    t=setTimeout(()=>{ state.q=qInp.value; renderCards(); }, 120);
-  });
-
-  clear.addEventListener('click', ()=>{
-    qInp.value=''; state.q=''; state.tag='all';
-    renderTags();
-    renderCards();
-  });
-
-  fetch('./content.json', {cache:'no-store'})
-    .then(r=> r.ok ? r.json() : null)
-    .then(data=>{
-      state.data = data || {bigChips:[], items:[]};
-      renderBig(); renderTags(); renderCards();
-    })
-    .catch(()=>{ info.textContent='Kontent yuklanmadi'; });
-})();
-</script>
-
-<!-- Izohlar tugmasi (doim ko‘rinadi) -->
-<div class="commentsDock" id="commentsDock" aria-label="Izohlar">
-  <button class="dockBtn" id="openCommentsDock" type="button" aria-label="Izohlar" title="Izohlar">
-    <span class="emo">💬</span>
-    <span class="dockBadge" id="cmBadge" style="display:none">1</span>
-  </button>
-</div>
 
 
 <script>
 (function(){
-  // HOTFIX: prevent crash if rating modal or filters are missing
-  function $(id){ return document.getElementById(id); }
+  const $ = (id)=>document.getElementById(id);
 
-  document.addEventListener("DOMContentLoaded", function(){
-    var openRating = $("openRating");
-    var ratingModal = $("ratingModal");
-    var ratingClose = $("ratingClose");
-
-    if(openRating && ratingModal){
-      openRating.addEventListener("click", function(){
-        ratingModal.removeAttribute("aria-hidden");
-        ratingModal.classList.add("open");
-      });
-    }
-
-    if(ratingClose && ratingModal){
-      ratingClose.addEventListener("click", function(){
-        ratingModal.setAttribute("aria-hidden","true");
-        ratingModal.classList.remove("open");
-      });
-    }
-  });
-})();
-</script>
-
-
-<script>
-(function(){
-  function $(id){ return document.getElementById(id); }
-  function parseAge(ageStr){
-    var n = parseInt(String(ageStr||"").replace(/[^0-9]/g,''),10);
-    return isFinite(n)? n : null;
+  // Open/close (keep existing openRating button)
+  function openModal(){
+    const m = $("ratingModal");
+    if(!m) return;
+    m.classList.add("open");
+    m.removeAttribute("aria-hidden");
+    document.documentElement.classList.add("noScroll");
+    setTimeout(()=>{ if(window.renderRatingMobile) window.renderRatingMobile(); }, 60);
   }
-  function inAgeBucket(age, bucket){
-    if(bucket==="all") return true;
+  function closeModal(){
+    const m = $("ratingModal");
+    if(!m) return;
+    m.classList.remove("open");
+    m.setAttribute("aria-hidden","true");
+    document.documentElement.classList.remove("noScroll");
+  }
+
+  // Data source
+  function getData(){
+    return window.leaderboardData || window.lbData || window.ratingData || [];
+  }
+  function num(x){ const n = Number(x); return isFinite(n)? n:0; }
+  function parseAge(v){
+    const n = parseInt(String(v||"").replace(/[^0-9]/g,""),10);
+    return isFinite(n)? n:null;
+  }
+  function avatar(u){
+    return u.avatar || u.photoURL || u.photo || "icon.png";
+  }
+  function name(u){
+    return (u.name || u.displayName || u.fullName || "—").toString();
+  }
+  function nid(u){
+    return (u.numericId ?? u.id ?? u.userId ?? "").toString();
+  }
+  function xp(u){
+    return num(u.xp ?? u.points ?? u.totalXP ?? u.totalPoints ?? 0);
+  }
+  function ageBucketPass(age, sel){
+    if(sel==="all") return true;
     if(age==null) return false;
-    if(bucket==="18+") return age>=18;
-    var m = bucket.match(/(\d+)\-(\d+)/);
-    if(!m) return true;
-    var a = parseInt(m[1],10), b = parseInt(m[2],10);
-    return age>=a && age<=b;
+    if(sel==="18+") return age>=18;
+    const n = parseInt(sel,10);
+    if(isFinite(n)) return age===n;
+    return true;
   }
 
-  // Try to read global leaderboard array if the page already builds it.
-  // Expected fields: {name, numericId, points/xp, age, avatar, medalSrc}
-  function getLeaderboard(){
-    // Common globals in this project
-    return window.leaderboardData || window.lbData || window.ratingData || null;
+  function currentAgeSel(){
+    const wrap = $("ageChips");
+    const active = wrap ? wrap.querySelector(".rmAge.active") : null;
+    return active ? active.getAttribute("data-age") : "all";
+  }
+  function setAgeSel(v){
+    const wrap = $("ageChips");
+    if(!wrap) return;
+    wrap.querySelectorAll(".rmAge").forEach(b=>b.classList.remove("active"));
+    const btn = wrap.querySelector(`.rmAge[data-age="${v}"]`) || wrap.querySelector('.rmAge[data-age="all"]');
+    if(btn) btn.classList.add("active");
   }
 
-  function medalFor(user){
-    // Prefer precomputed medal image if available
-    return user.medal || user.medalSrc || user.medalUrl || user.avatar || "icon.png";
+  function onlyMeOn(){
+    const b = $("lbOnlyMe");
+    return b && b.getAttribute("aria-pressed")==="true";
   }
 
-  function avatarFor(user){
-    return user.avatar || user.photoURL || user.photo || "icon.png";
+  function matchMe(u){
+    const meId = (window.currentUserNumericId||"").toString();
+    const meUid = (window.currentUserUid||"").toString();
+    const uid = (u.uid||"").toString();
+    if(meId && nid(u)===meId) return true;
+    if(meUid && uid===meUid) return true;
+    return false;
   }
 
   function render(){
-    var listEl = $("ratingList");
-    var podiumEl = $("ratingPodium");
-    if(!listEl || !podiumEl) return;
+    const pod = $("ratingPodium");
+    const list = $("ratingList");
+    if(!pod || !list) return;
 
-    var q = ($("lbSearch") ? $("lbSearch").value.trim().toLowerCase() : "");
-    var bucket = ($("ageFilter") ? $("ageFilter").value : "all");
-    var onlyMe = ($("lbOnlyMe") && $("lbOnlyMe").getAttribute("aria-pressed")==="true");
+    const qEl = $("lbSearch");
+    const q = qEl ? qEl.value.trim().toLowerCase() : "";
+    const sel = currentAgeSel();
+    const onlyMe = onlyMeOn();
 
-    var meId = (window.currentUserNumericId||"").toString();
-    var meUid = (window.currentUserUid||"").toString();
+    let rows = getData().map(u=>{
+      const a = parseAge(u.age ?? u.userAge);
+      return {u, xp: xp(u), age: a, n: name(u), id: nid(u)};
+    }).sort((a,b)=>b.xp-a.xp);
 
-    var data = getLeaderboard() || [];
-    // normalize & sort by points/xp
-    var rows = data.map(function(u){
-      var xp = Number(u.xp ?? u.points ?? u.totalXP ?? u.totalPoints ?? 0) || 0;
-      var age = parseAge(u.age ?? u.userAge);
-      var id = (u.numericId ?? u.id ?? u.userId ?? "").toString();
-      var name = (u.name ?? u.displayName ?? u.fullName ?? "—").toString();
-      return {raw:u, xp:xp, age:age, id:id, name:name};
-    }).sort(function(a,b){ return b.xp - a.xp; });
-
-    rows = rows.filter(function(r){
-      if(onlyMe){
-        var uid = (r.raw.uid||"").toString();
-        if(meId && r.id===meId) return true;
-        if(meUid && uid===meUid) return true;
-        return false;
-      }
+    rows = rows.filter(r=>{
+      if(onlyMe && !matchMe(r.u)) return false;
       if(q){
-        if(r.name.toLowerCase().indexOf(q)>=0) return true;
-        if(r.id.toLowerCase().indexOf(q)>=0) return true;
+        if(r.n.toLowerCase().includes(q)) return true;
+        if(r.id.toLowerCase().includes(q)) return true;
         return false;
       }
       return true;
-    }).filter(function(r){ return inAgeBucket(r.age, bucket); });
+    }).filter(r=>ageBucketPass(r.age, sel));
 
-    // Podium top 3
-    podiumEl.innerHTML = "";
-    rows.slice(0,3).forEach(function(r, i){
-      var u = r.raw;
-      var card = document.createElement("div");
-      card.className = "podiumCard";
+    // Podium
+    pod.innerHTML = "";
+    rows.slice(0,3).forEach((r,i)=>{
+      const card = document.createElement("div");
+      card.className = "rmPodCard";
       card.innerHTML = `
-        <div class="pRank">#${i+1}</div>
-        <div class="pRow">
-          <img class="pAvatar" src="${avatarFor(u)}" alt="avatar">
-          <div>
-            <div class="pName">${r.name}</div>
-            <div class="pMeta">LM-${r.id || "—"} • ${r.age!=null? (r.age+" yosh") : "—"}</div>
+        <div class="rmPodRank">#${i+1}</div>
+        <div class="rmRow">
+          <img class="rmAv" src="${avatar(r.u)}" alt="avatar">
+          <div class="rmInfo">
+            <div class="rmName">${escapeHtml(r.n)}</div>
+            <div class="rmMeta">LM-${escapeHtml(r.id||"—")} • ${r.age!=null? (r.age+" yosh"):"—"}</div>
           </div>
         </div>
-        <div class="pXP">${r.xp} XP</div>
+        <div class="rmXP">${r.xp} XP</div>
       `;
-      podiumEl.appendChild(card);
+      pod.appendChild(card);
     });
 
     // List
-    listEl.innerHTML = "";
-    rows.forEach(function(r, idx){
-      var u = r.raw;
-      var li = document.createElement("li");
-      li.className = "ratingItem";
-      li.innerHTML = `
-        <div class="rRank">${idx+1}</div>
-        <img class="rAvatar" src="${avatarFor(u)}" alt="avatar">
-        <div class="rInfo">
-          <div class="rName">${r.name}</div>
-          <div class="rMeta">LM-${r.id || "—"} • ${r.age!=null? (r.age+" yosh") : "—"}</div>
+    list.innerHTML = "";
+    rows.forEach((r, idx)=>{
+      const it = document.createElement("div");
+      it.className = "rmItem";
+      it.innerHTML = `
+        <div class="rmIdx">${idx+1}</div>
+        <img class="rmAv" src="${avatar(r.u)}" alt="avatar">
+        <div class="rmInfo">
+          <div class="rmName">${escapeHtml(r.n)}</div>
+          <div class="rmMeta">LM-${escapeHtml(r.id||"—")} • ${r.age!=null? (r.age+" yosh"):"—"}</div>
         </div>
-        <div class="rRight">
-          <div class="rXP">${r.xp}</div>
-          <div class="rAge">${r.age!=null? (r.age+" yosh") : ""}</div>
+        <div class="rmRight">
+          <div class="rmXP">${r.xp}</div>
+          <div class="rmAgeTxt">${r.age!=null? (r.age+" yosh"):""}</div>
         </div>
       `;
-      listEl.appendChild(li);
+      list.appendChild(it);
     });
+  }
+
+  function escapeHtml(s){
+    return String(s||"").replace(/[&<>"']/g, (c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
   }
 
   function wire(){
-    ["lbSearch","ageFilter"].forEach(function(id){
-      var el = $(id);
-      if(el) el.addEventListener("input", render);
-      if(el && el.tagName==="SELECT") el.addEventListener("change", render);
-    });
+    const openBtn = $("openRating");
+    if(openBtn) openBtn.addEventListener("click", openModal);
 
-    var onlyMe = $("lbOnlyMe");
-    if(onlyMe){
-      onlyMe.addEventListener("click", function(){
-        var pressed = onlyMe.getAttribute("aria-pressed")==="true";
-        onlyMe.setAttribute("aria-pressed", pressed? "false":"true");
-        render();
-      });
-    }
-    var allBtn = $("btnLbAll");
-    if(allBtn){
-      allBtn.addEventListener("click", function(){
-        var s = $("lbSearch"); if(s) s.value="";
-        var f = $("ageFilter"); if(f) f.value="all";
-        if(onlyMe) onlyMe.setAttribute("aria-pressed","false");
-        render();
+    const closeBtn = $("ratingClose");
+    if(closeBtn) closeBtn.addEventListener("click", closeModal);
+
+    const overlay = $("ratingModal");
+    if(overlay){
+      overlay.addEventListener("click", (e)=>{
+        if(e.target === overlay) closeModal();
       });
     }
 
-    // When modal opens, render
-    var openRating = $("openRating");
-    if(openRating){
-      openRating.addEventListener("click", function(){ setTimeout(render, 50); });
+    // Search toggle
+    const t = $("btnSearchToggle"), w = $("searchWrap"), c = $("btnSearchClose"), s = $("lbSearch");
+    if(t && w){
+      const open = ()=>{
+        w.hidden = false;
+        t.setAttribute("aria-expanded","true");
+        setTimeout(()=>{ try{ s && s.focus(); }catch(_){} }, 10);
+      };
+      const close = ()=>{
+        w.hidden = true;
+        t.setAttribute("aria-expanded","false");
+        if(s) s.value = "";
+        render();
+      };
+      t.addEventListener("click", ()=>{ w.hidden ? open() : close(); });
+      if(c) c.addEventListener("click", close);
+      if(s) s.addEventListener("input", render);
+    }
+
+    // Age chips
+    const wrap = $("ageChips");
+    if(wrap){
+      wrap.addEventListener("click", (e)=>{
+        const btn = e.target.closest(".rmAge");
+        if(!btn) return;
+        wrap.querySelectorAll(".rmAge").forEach(x=>x.classList.remove("active"));
+        btn.classList.add("active");
+        render();
+      });
+    }
+
+    // Only me + reset
+    const meBtn = $("lbOnlyMe");
+    if(meBtn){
+      meBtn.addEventListener("click", ()=>{
+        const on = meBtn.getAttribute("aria-pressed")==="true";
+        meBtn.setAttribute("aria-pressed", on ? "false":"true");
+        render();
+      });
+    }
+
+    const reset = $("btnLbAll");
+    if(reset){
+      reset.addEventListener("click", ()=>{
+        setAgeSel("all");
+        const meBtn = $("lbOnlyMe");
+        if(meBtn) meBtn.setAttribute("aria-pressed","false");
+        const s = $("lbSearch");
+        if(s) s.value = "";
+        render();
+      });
+    }
+
+    const more = $("ratingLoadMore");
+    if(more){
+      // Placeholder: you can later implement pagination; for now just re-render.
+      more.addEventListener("click", render);
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function(){
+  document.addEventListener("DOMContentLoaded", ()=>{
     wire();
-    // Try initial render if modal is already open
-    setTimeout(render, 120);
-  });
-
-  // Expose for existing code to call after it loads leaderboard
-  window.renderRatingWow = render;
-})();
-</script>
-
-
-<script>
-(function(){
-  function $(id){ return document.getElementById(id); }
-
-  // Store selected age filter (default: 11)
-  window.__ageChip = "all";
-
-  function hookAgeChips(){
-    var wrap = $("ageChips");
-    if(!wrap) return;
-    wrap.addEventListener("click", function(e){
-      var btn = e.target.closest(".ageChip");
-      if(!btn) return;
-      wrap.querySelectorAll(".ageChip").forEach(function(x){ x.classList.remove("active"); });
-      btn.classList.add("active");
-      var v = btn.getAttribute("data-age") || "all"; window.__ageChip = v; var hf=$("ageFilter"); if(hf) hf.value = (/^\d+$/.test(v)) ? (v+"-"+v) : v;("data-age") || "all";
-      if(window.renderRatingWow) window.renderRatingWow();
-    });
-  }
-
-  function hookSearchToggle(){
-    var t = $("btnSearchToggle"), w = $("searchWrap"), c = $("btnSearchClose"), s = $("lbSearch");
-    if(!t || !w) return;
-    function open(){
-      w.hidden = false;
-      t.setAttribute("aria-expanded","true");
-      setTimeout(function(){ try{ s && s.focus(); }catch(_){} }, 10);
-    }
-    function close(){
-      w.hidden = true;
-      t.setAttribute("aria-expanded","false");
-      if(s) s.value="";
-      if(window.renderRatingWow) window.renderRatingWow();
-    }
-    t.addEventListener("click", function(){ w.hidden ? open() : close(); });
-    if(c) c.addEventListener("click", close);
-  }
-
-  // Monkey-patch renderRatingWow age bucket logic to use __ageChip when ageFilter select doesn't exist
-  var oldRender = window.renderRatingWow;
-  window.renderRatingWow = function(){
-    // temporary inject a fake ageFilter value expected by oldRender by setting a hidden field if needed
-    // oldRender reads document.getElementById('ageFilter')?.value; we don't have it, so we just rely on __ageChip in its inAgeBucket via global.
-    // We'll wrap by defining window.__ageBucket for our renderer to use (it checks select first).
-    window.__ageBucket = window.__ageChip || "all";
-    if(typeof oldRender === "function") oldRender();
-  };
-
-  
-  // Compatibility: create hidden ageFilter element so existing renderer reads it
-  function ensureHiddenAgeFilter(){
-    if($("ageFilter")) return;
-    var el = document.createElement("input");
-    el.type = "hidden";
-    el.id = "ageFilter";
-    el.value = "all";
-    document.body.appendChild(el);
-  }
-
-
-document.addEventListener("DOMContentLoaded", function(){
-    ensureHiddenAgeFilter(); hookAgeChips();
-    hookSearchToggle();
-    // Default active chip set already; re-render once.
-    setTimeout(function(){ if(window.renderRatingWow) window.renderRatingWow(); }, 150);
+    window.renderRatingMobile = render;
+    // If data loads later, they can call window.renderRatingMobile()
+    setTimeout(render, 200);
   });
 })();
 </script>
