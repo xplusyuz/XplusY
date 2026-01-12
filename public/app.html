@@ -397,6 +397,35 @@
 </div>
 </div>
 </div>
+<!-- Leaderboard Modal -->
+<div aria-hidden="true" class="modalOverlay modalApp" id="lbModal">
+<div aria-label="Reyting" aria-modal="true" class="modal glass" role="dialog">
+<div class="modalHead">
+<div>
+<div class="modalTitle">Reyting — barcha o‘rinlar</div>
+<div class="small" id="lbModalHint">Ball bo‘yicha saralangan</div>
+</div>
+<button aria-label="Yopish" class="iconBtn" id="lbModalClose" type="button">✕</button>
+</div>
+<div class="hr"></div>
+<div class="modalBody">
+<table aria-label="Leaderboard all" class="table">
+<thead>
+<tr>
+<th style="width:60px;">#</th>
+<th>Foydalanuvchi</th>
+<th style="width:90px;">Ball</th>
+</tr>
+</thead>
+<tbody id="lbAllBody">
+<tr><td class="small" colspan="3">Yuklanmoqda…</td></tr>
+</tbody>
+</table>
+<div style="height:10px;"></div>
+<button class="btn" id="lbLoadMore" type="button">Yana yuklash</button>
+</div>
+</div>
+</div>
 <!-- Notifications Modal -->
 <div aria-hidden="true" class="modalOverlay modalApp" id="notifModal">
 <div aria-label="Bildirishnomalar" aria-modal="true" class="modal glass" role="dialog">
@@ -495,7 +524,6 @@
 <div class="footer-left">
 <div class="footer-name">LeaderMath.UZ</div>
 <div class="small-note">Matematikadan super interaktiv sayt!</div>
-<div class="small-note" id="buildTag" style="opacity:.7">Build: —</div>
 </div>
 <div class="footer-right">
 <a class="footer-link" href="index.html"><i class="fa-solid fa-house"></i> Home</a>
@@ -517,10 +545,6 @@
     import { me, logout, updateProfile, changePassword, getToken } from "./assets/js/auth.js";
     import { api } from "./assets/js/api.js";
 window.api = api;
-
-    const BUILD = "2026-01-12-REV2";
-    console.log("LeaderMath build:", BUILD);
-    try{ const bt = document.getElementById("buildTag"); if(bt) bt.textContent = "Build: " + BUILD; }catch(_){}
 
     const $ = (id)=>document.getElementById(id);
 
@@ -831,204 +855,6 @@ window.api = api;
     }
 
     
-
-    // ---- Challenge list (from challenge.json) ----
-    async function loadChallengeList(){
-      const box = $("challengeList");
-      if(!box) return;
-      try{
-        const res = await fetch("challenge.json", {cache:"no-store"});
-        const data = await res.json();
-        // Top: manual code + start (keeps your flow)
-        box.innerHTML = `
-          <div class="challengeCard" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input class="input" id="challengeCode" placeholder="Challenge kodi..." style="flex:1;min-width:180px;"/>
-            <button class="btn btnPrimary" id="challengeStart" type="button">Boshlash</button>
-          </div>
-          <div class="muted" style="margin-top:6px;">Yoki pastdagi challenge’lardan birini tanlang:</div>
-          <div class="challengeGrid" id="challengeGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px;"></div>
-        `;
-
-        // Wire manual start
-        setupChallenge();
-        await loadChallengeList();
-        await initContent();
-
-        const grid = $("challengeGrid");
-        if(!Array.isArray(data) || !grid){ return; }
-
-        const now = Date.now();
-        const fmt = (iso)=>{
-          try{
-            const d = new Date(iso);
-            if(!isFinite(d.getTime())) return "";
-            return d.toLocaleString("uz-UZ", {month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit"});
-          }catch(_){ return ""; }
-        };
-
-        grid.innerHTML = data.map(ch=>{
-          const start = Date.parse(ch.startAt||"");
-          const end = Date.parse(ch.endAt||"");
-          const live = (isFinite(start)&&isFinite(end)) ? (now>=start && now<=end) : (ch.status==="live");
-          const upcoming = (isFinite(start)) ? (now<start) : (ch.status==="upcoming");
-          const badge = live ? "LIVE" : upcoming ? "TEZ KUNDA" : (ch.status||"");
-          const disabled = (!live && (ch.href==="#" || !ch.href));
-          return `
-            <div class="challengeCard" style="display:flex;gap:12px;align-items:center;">
-              <img src="${escapeHtml(ch.icon||"")}" alt="" style="width:44px;height:44px;border-radius:14px;object-fit:cover;border:1px solid rgba(20,40,60,.12);background:rgba(255,255,255,.5);">
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                  <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(ch.title||ch.id||"Challenge")}</div>
-                  <span class="pill" style="font-size:11px;opacity:.85;">${escapeHtml(badge)}</span>
-                </div>
-                <div class="small muted" style="margin-top:2px;opacity:.75;">${fmt(ch.startAt)} → ${fmt(ch.endAt)}</div>
-              </div>
-              <button class="btn ${live? "btnPrimary":""}" data-href="${escapeHtml(ch.href||"#")}" data-code="${escapeHtml(ch.id||"")}" ${disabled?"disabled":""} type="button" style="white-space:nowrap;">
-                ${escapeHtml(ch.cta|| (live?"Boshlash":"Ko‘rish"))}
-              </button>
-            </div>
-          `;
-        }).join("");
-
-        grid.addEventListener("click", (e)=>{
-          const b = e.target.closest("button[data-href]");
-          if(!b) return;
-          const href = b.getAttribute("data-href") || "#";
-          const code = b.getAttribute("data-code") || "";
-          if(href==="#" ) return;
-          openEmbed(href, "Challenge: " + code);
-        });
-
-      }catch(e){
-        box.innerHTML = `<div class="muted">❌ Challenge yuklashda xatolik: ${escapeHtml(e.message||"")}</div>`;
-      }
-    }
-
-    // ---- Content (from content.json) ----
-    async function initContent(){
-      const bigRow = $("bigChipsRow");
-      const tagRow = $("tagChipsRow");
-      const grid = $("grid");
-      const empty = $("empty");
-      const qInp = $("q");
-      const resultInfo = $("resultInfo");
-      const clearBtn = $("clearBtn");
-      const searchToggle = $("searchToggle");
-      const searchWrap = $("searchWrap");
-      if(!bigRow || !tagRow || !grid || !qInp || !resultInfo) return;
-
-      let data;
-      try{
-        const res = await fetch("content.json", {cache:"no-store"});
-        data = await res.json();
-      }catch(e){
-        grid.innerHTML = `<div class="muted">❌ Kontent yuklanmadi: ${escapeHtml(e.message||"")}</div>`;
-        return;
-      }
-
-      const bigChips = Array.isArray(data.bigChips) ? data.bigChips : [];
-      const itemsAll = Array.isArray(data.items) ? data.items : [];
-
-      let activeBig = bigChips[0]?.id || "all";
-      let activeTag = "all";
-      let query = "";
-
-      const norm = (s)=>String(s||"").toLowerCase();
-
-      function getTagsFor(type){
-        const set = new Set();
-        itemsAll.filter(it => type==="all" ? true : it.type===type)
-               .forEach(it => (it.tags||[]).forEach(t=>set.add(String(t))));
-        return Array.from(set).sort((a,b)=>a.localeCompare(b));
-      }
-
-      function renderBig(){
-        bigRow.innerHTML = bigChips.map(ch=>`
-          <button class="chipBtn ${ch.id===activeBig?"active":""}" data-big="${escapeHtml(ch.id)}" type="button">
-            <span class="chipIcon">${escapeHtml(ch.icon||"")}</span>
-            <span>${escapeHtml(ch.title||ch.id)}</span>
-          </button>
-        `).join("");
-      }
-
-      function renderTags(){
-        const tags = getTagsFor(activeBig);
-        tagRow.innerHTML = `
-          <button class="chipBtn ${activeTag==="all"?"active":""}" data-tag="all" type="button">Hammasi</button>
-          ${tags.map(t=>`<button class="chipBtn ${t===activeTag?"active":""}" data-tag="${escapeHtml(t)}" type="button">${escapeHtml(t)}</button>`).join("")}
-        `;
-      }
-
-      function renderGrid(){
-        const filtered = itemsAll
-          .filter(it => activeBig==="all" ? true : it.type===activeBig)
-          .filter(it => activeTag==="all" ? true : (it.tags||[]).includes(activeTag))
-          .filter(it => {
-            if(!query) return true;
-            const hay = norm(it.title)+" "+norm(it.desc)+" "+(it.tags||[]).map(norm).join(" ");
-            return hay.includes(query);
-          })
-          .sort((a,b)=> (b.order||0) - (a.order||0));
-
-        resultInfo.textContent = "Natija: " + filtered.length;
-        if(empty) empty.style.display = filtered.length ? "none" : "block";
-
-        grid.innerHTML = filtered.map(it=>`
-          <div class="card glass" style="padding:14px;display:flex;flex-direction:column;gap:10px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <div style="font-weight:900;line-height:1.1;">${escapeHtml(it.title||it.id)}</div>
-              <span class="pill" style="font-size:11px;opacity:.85;">${escapeHtml(it.badge||it.type||"")}</span>
-            </div>
-            <div class="small muted" style="opacity:.78;">${escapeHtml(it.desc||"")}</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              ${(it.tags||[]).slice(0,4).map(t=>`<span class="pill" style="font-size:11px;">${escapeHtml(t)}</span>`).join("")}
-            </div>
-            <div style="margin-top:auto;display:flex;justify-content:flex-end;">
-              <button class="btn btnPrimary" data-open="${escapeHtml(it.href||"#")}" type="button">Ochish</button>
-            </div>
-          </div>
-        `).join("");
-      }
-
-      bigRow.addEventListener("click", (e)=>{
-        const b = e.target.closest("[data-big]");
-        if(!b) return;
-        activeBig = b.getAttribute("data-big") || "all";
-        activeTag = "all";
-        renderBig(); renderTags(); renderGrid();
-      });
-
-      tagRow.addEventListener("click", (e)=>{
-        const b = e.target.closest("[data-tag]");
-        if(!b) return;
-        activeTag = b.getAttribute("data-tag") || "all";
-        renderTags(); renderGrid();
-      });
-
-      qInp.addEventListener("input", ()=>{ query = norm(qInp.value); renderGrid(); });
-      clearBtn?.addEventListener("click", ()=>{
-        qInp.value = ""; query = "";
-        activeTag = "all";
-        renderTags(); renderGrid();
-      });
-
-      searchToggle?.addEventListener("click", ()=>{
-        searchWrap?.classList.toggle("isHidden");
-        if(!searchWrap?.classList.contains("isHidden")) setTimeout(()=>qInp.focus(), 20);
-      });
-
-      grid.addEventListener("click", (e)=>{
-        const b = e.target.closest("[data-open]");
-        if(!b) return;
-        const href = b.getAttribute("data-open") || "#";
-        if(href==="#") return;
-        openEmbed(href, "Kontent");
-      });
-
-      renderBig(); renderTags(); renderGrid();
-    }
-
-
     // ---- Tests & Simulators removed (unused on home) ----
 // ---- Embedded viewer modal ----
     function openEmbed(url, title){
@@ -1077,6 +903,600 @@ window.api = api;
       });
     }
 
+    // Leaderboard (interactive)
+    let lbAll = [];
+    let lbMeOnly = false;
+    let lbQuery = "";
+    let myLoginId = null;
+
+    function medal(i){
+      return i===0 ? "🥇" : i===1 ? "🥈" : i===2 ? "🥉" : "";
+    }
+
+    
+
+function calcAgeFromBirth(b){
+      if(!b) return null;
+      try{
+        // accept "YYYY-MM-DD" or timestamp or Date-like
+        const d = (typeof b === "number") ? new Date(b) : new Date(String(b));
+        if(!isFinite(d.getTime())) return null;
+        const now = new Date();
+        let a = now.getFullYear() - d.getFullYear();
+        const m = now.getMonth() - d.getMonth();
+        if(m < 0 || (m===0 && now.getDate() < d.getDate())) a--;
+        return (a>=0 && a<=120) ? a : null;
+      }catch(_){ return null; }
+    }
+
+    function exportLbToRating(items){
+      try{
+        const arr = (items||[]).map((u, idx)=>({
+          name: u.name || u.fullName || u.displayName || u.loginId || "—",
+          numericId: u.loginId || u.numericId || u.id || u.userId || "",
+          points: Number(u.points||u.xp||u.totalXP||0)||0,
+          xp: Number(u.points||u.xp||u.totalXP||0)||0,
+          age: (u.age!=null? parseInt(u.age,10): null) ?? calcAgeFromBirth(u.birth || u.birthdate || u.birthDate),
+          avatar: u.avatar || u.photoURL || u.photo || u.avatarUrl || "icon.png",
+          medal: medal(idx),
+          uid: u.uid || u.userUid || ""
+        }));
+        window.leaderboardData = arr;
+        if(window.renderRatingMobile) window.renderRatingMobile();
+      }catch(_){}
+    }
+
+function renderLeaderboard(){
+      const body = $("lbBody");
+      const podium = $("lbPodium");
+      if(!body || !podium) return;
+
+      // Keep query in a local variable to avoid ReferenceError (q)
+      const q = (lbQuery||"").toLowerCase();
+
+      let items = lbAll.slice();
+      if(lbMeOnly && myLoginId){
+        items = items.filter(u=>String(u.loginId||"")===String(myLoginId));
+      }
+      if(q){
+        items = items.filter(u=>
+          String(u.loginId||"").toLowerCase().includes(q) ||
+          String(u.name||"").toLowerCase().includes(q)
+        );
+      }
+
+      const top = items.slice(0,3);
+      const topPts = Number(top?.[0]?.points || 0) || 1;
+
+      // Podium (Top-3)
+      podium.innerHTML = top.map((u,i)=>{
+        const pts = Number(u.points||0);
+        const pct = Math.max(8, Math.round((pts/topPts)*100));
+        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+        return `
+          <button class="podCard ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}" title="${escapeHtml(u.name||u.loginId||"")}">
+            <div class="podTop">
+              <div class="podMedal">${medal(i)}</div>
+              <div class="podRank">#${i+1}</div>
+            </div>
+            <div class="podName">${escapeHtml(u.name || u.loginId || "—")}</div>
+            <div class="podId">${escapeHtml(u.loginId || "")}</div>
+            <div class="podBar"><span style="width:${pct}%"></span></div>
+            <div class="podPts">${pts} ball</div>
+          </button>
+        `;
+      }).join("") || `<div class="small">Hozircha reyting yo‘q</div>`;
+
+      // Table (Top-20 of filtered)
+      const show = items.slice(0,20);
+      body.innerHTML = show.map((u,i)=>{
+        const pts = Number(u.points||0);
+        const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+        const pct = Math.max(6, Math.round((pts/topPts)*100));
+        return `
+          <tr class="lbRow ${me?"me":""}" data-pick="${escapeHtml(u.loginId||"")}">
+            <td><span class="rankBadge">${i+1}</span></td>
+            <td>
+              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
+              <div class="small">${escapeHtml(u.loginId || "")}</div>
+              <div class="miniBar"><span style="width:${pct}%"></span></div>
+            </td>
+            <td><b>${pts}</b></td>
+          </tr>
+        `;
+      }).join("") || `<tr><td colspan="3" class="small">Mos natija topilmadi</td></tr>`;
+    }
+
+    async function loadLeaderboard(){
+      const body = $("lbBody");
+      if(!body) return;
+      body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+      try{
+        const data = await api("leaderboard", { query: { limit: 120 } });
+        lbAll = (data?.items || []);
+        exportLbToRating(lbAll);
+        renderLeaderboard();
+      }catch(_){
+        body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+      }
+    }
+
+    // ===== Leaderboard modal (all with paging) =====
+    let lbCursor = null;
+    let lbRankBase = 0;
+    async function loadLeaderboardMore(reset=false){
+      const body = $("lbAllBody");
+      const btn = $("lbLoadMore");
+      try{
+        btn.disabled = true;
+        if(reset){
+          lbCursor = null;
+          lbRankBase = 0;
+          body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+        }
+        const data = await api("leaderboard", { query: { limit: 60, cursor: lbCursor } });
+        const items = data?.items || [];
+        if(reset) body.innerHTML = "";
+        body.insertAdjacentHTML("beforeend", items.map((u,i)=>`
+          <tr>
+            <td><span class="rankBadge">${lbRankBase + i + 1}</span></td>
+            <td>
+              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
+              <div class="small">${escapeHtml(u.loginId || "")}</div>
+            </td>
+            <td><b>${Number(u.points||0)}</b></td>
+          </tr>
+        `).join(""));
+        lbRankBase += items.length;
+        lbCursor = data?.nextCursor || null;
+        btn.style.display = lbCursor ? "inline-flex" : "none";
+        if(!items.length && reset){
+          body.innerHTML = `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
+          btn.style.display = "none";
+        }
+      }catch(_){
+        if(reset) body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+      }finally{
+        btn.disabled = false;
+      }
+    }
+
+    // Comments
+    function fmtTime(ts){
+      const d = ts ? new Date(ts) : new Date();
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+    let likedSet = new Set();
+
+    function renderReplies(replies){
+      const items = (replies||[]).map(r=>`
+        <li class="replyItem">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(r.name || r.loginId || "—")}</div>
+            <div class="small">${escapeHtml(fmtTime(r.createdAt))}</div>
+          </div>
+          <div class="replyText">${escapeHtml(r.text || "")}</div>
+        </li>
+      `).join("");
+      return items || `<li class="small">Hozircha javob yo‘q</li>`;
+    }
+
+    function renderCommentItem(c){
+      const liked = likedSet.has(String(c.id));
+      const isOwner = myLoginId && String(c.loginId||"") === String(myLoginId);
+      const edited = c.edited === true;
+      return `
+        <li class="commentItem" data-id="${escapeHtml(c.id)}">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(c.name || c.loginId || "—")}</div>
+            <div class="small">${escapeHtml(fmtTime(c.createdAt))}</div>
+          </div>
+          <div class="commentText" data-role="text">${escapeHtml(c.text || "")}</div>
+          ${edited ? `<div class="small editedTag">tahrirlangan</div>` : ``}
+
+          ${isOwner ? `
+            <div class="ownerActions">
+              <button class="miniBtn" data-act="edit" type="button" title="Tahrirlash">✎</button>
+              <button class="miniBtn danger" data-act="delete" type="button" title="O‘chirish">🗑</button>
+            </div>
+          ` : ``}
+
+          <div class="commentActions compact">
+            <button class="actBtn ${liked?"liked":""}" data-act="like" type="button" aria-label="Like">
+              <span class="ic">❤</span>
+              <span class="lbl">Like</span>
+              <span class="cnt" data-k="likeCount">${Number(c.likeCount||0)}</span>
+            </button>
+            <button class="actBtn" data-act="toggleReplies" type="button" aria-label="Javoblar">
+              <span class="ic">↩</span>
+              <span class="lbl">Reply</span>
+              <span class="cnt" data-k="replyCount">${Number(c.replyCount||0)}</span>
+            </button>
+          </div>
+
+          <div class="repliesWrap" data-open="0">
+            <ul class="replyList" data-loaded="0"></ul>
+            <div class="replyBox">
+              <input class="replyInput" maxlength="160" placeholder="Javob yozing… (160)" />
+              <button class="btn btnPrimary replySend" data-act="sendReply" type="button">Yuborish</button>
+            </div>
+          </div>
+        </li>
+      `;
+    }
+
+    async function loadLiked(){
+      likedSet = new Set();
+      try{
+        const token = await getToken();
+        const data = await api("comments/liked", { token });
+        for(const id of (data?.ids || [])) likedSet.add(String(id));
+      }catch(_){ /* ignore */ }
+    }
+
+    // ===== Comments (always show all, paging in the panel) =====
+    let cmCursor = null;
+    let latestCommentMs = 0;
+    const COMMENTS_SEEN_KEY = "lm_comments_seen_ms";
+
+    function toMillis(v){
+      if(v==null) return 0;
+      if(typeof v === "number") return v;
+      const t = Date.parse(v);
+      return Number.isFinite(t) ? t : 0;
+    }
+
+    function updateCommentBadge(){
+      const b = $("cmBadge");
+      if(!b) return;
+      const seen = Number(localStorage.getItem(COMMENTS_SEEN_KEY) || 0);
+      const hasNew = seen > 0 && latestCommentMs > seen;
+      b.textContent = hasNew ? "NEW" : "";
+      b.style.display = hasNew ? "inline-flex" : "none";
+    }
+
+    function markCommentsSeen(){
+      if(latestCommentMs > 0){
+        localStorage.setItem(COMMENTS_SEEN_KEY, String(latestCommentMs));
+      }else{
+        localStorage.setItem(COMMENTS_SEEN_KEY, String(Date.now()));
+      }
+      updateCommentBadge();
+    }
+    async function loadComments(reset=false){
+      const list = $("commentList");
+      const btn = $("cmLoadMoreInline");
+      const count = $("commentCount");
+      try{
+        btn.disabled = true;
+        if(reset){
+          cmCursor = null;
+          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
+        }
+        await loadLiked();
+        const data = await api("comments", { query: { limit: 30, cursor: cmCursor } });
+        const items = data?.items || [];
+        // Track newest comment time to show a tiny "NEW" badge on the touch button
+        for(const it of items){
+          const ms = toMillis(it.createdAt || it.time || it.ts);
+          if(ms > latestCommentMs) latestCommentMs = ms;
+        }
+        if(reset) list.innerHTML = "";
+        list.insertAdjacentHTML("beforeend", items.map(renderCommentItem).join(""));
+        cmCursor = data?.nextCursor || null;
+        btn.style.display = cmCursor ? "inline-flex" : "none";
+        // total (if server returns it), else show loaded count
+        const total = Number(data?.total || 0);
+        const loaded = list.querySelectorAll(".commentItem").length;
+        count.textContent = total ? String(total) : String(loaded);
+        if(!items.length && reset){
+          list.innerHTML = `<li class="small">Hozircha izoh yo‘q. Birinchi bo‘ling 🙂</li>`;
+          btn.style.display = "none";
+          count.textContent = "0";
+        }
+
+        updateCommentBadge();
+      }catch(_){
+        if(reset) list.innerHTML = `<li class="small">Izohlarni yuklab bo‘lmadi</li>`;
+      }finally{
+        btn.disabled = false;
+      }
+    }
+
+    async function loadReplies(commentId, li){
+      const wrap = li.querySelector(".repliesWrap");
+      const ul = li.querySelector(".replyList");
+      if(!wrap || !ul) return;
+      try{
+        const data = await api("comments/replies", { method:"POST", body:{ commentId, limit: 30 } });
+        ul.innerHTML = renderReplies(data?.items || []);
+        ul.setAttribute("data-loaded","1");
+      }catch(_){
+        ul.innerHTML = `<li class="small">Javoblarni yuklab bo‘lmadi</li>`;
+      }
+    }
+
+    function setRepliesOpen(li, open){
+      const wrap = li.querySelector(".repliesWrap");
+      if(!wrap) return;
+      wrap.setAttribute("data-open", open?"1":"0");
+    }
+
+    // Delegated actions on comment lists (preview + modal)
+    async function handleCommentActions(e){
+      const btn = e.target.closest("button[data-act]");
+      if(!btn) return;
+      const li = e.target.closest(".commentItem");
+      if(!li) return;
+      const id = li.getAttribute("data-id");
+      const act = btn.getAttribute("data-act");
+
+      if(act === "like"){
+        try{
+          const token = await getToken();
+          const out = await api("comments/like", { method:"POST", token, body:{ commentId: id } });
+          const liked = !!out.liked;
+          if(liked) likedSet.add(String(id)); else likedSet.delete(String(id));
+          btn.classList.toggle("liked", liked);
+          const cnt = li.querySelector('[data-k="likeCount"]');
+          if(cnt) cnt.textContent = String(out.likeCount ?? 0);
+        }catch(_){ toast("Like uchun kirish kerak"); }
+        return;
+      }
+
+      if(act === "toggleReplies"){
+        const wrap = li.querySelector(".repliesWrap");
+        const isOpen = wrap?.getAttribute("data-open") === "1";
+        setRepliesOpen(li, !isOpen);
+        const ul = li.querySelector(".replyList");
+        if(!isOpen && ul && ul.getAttribute("data-loaded") !== "1"){
+          await loadReplies(id, li);
+        }
+        return;
+      }
+
+      if(act === "sendReply"){
+        const input = li.querySelector(".replyInput");
+        const text = (input?.value || "").trim();
+        if(!text) return toast("Javob bo‘sh");
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/reply", { method:"POST", token, body:{ commentId: id, text } });
+          if(input) input.value = "";
+          toast("Javob yuborildi ✅");
+          // update reply count UI
+          const rc = li.querySelector('[data-k="replyCount"]');
+          if(rc) rc.textContent = String(Number(rc.textContent||0) + 1);
+          await loadReplies(id, li);
+          setRepliesOpen(li, true);
+        }catch(_){ toast("Reply uchun kirish kerak"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
+
+      if(act === "edit"){
+        const textEl = li.querySelector('[data-role="text"]');
+        const cur = textEl ? (textEl.textContent || "") : "";
+        // swap to editor
+        li.classList.add("editing");
+        if(textEl){
+          textEl.innerHTML = `
+            <textarea class="editArea" maxlength="140">${escapeHtml(cur)}</textarea>
+            <div class="editBar">
+              <button class="btn btnPrimary btnSm" data-act="saveEdit" type="button">Saqlash</button>
+              <button class="btn btnSm" data-act="cancelEdit" type="button">Bekor</button>
+            </div>
+          `;
+        }
+        return;
+      }
+
+      if(act === "cancelEdit"){
+        // easiest: reload comments to restore template
+        await loadComments(true);
+        return;
+      }
+
+      if(act === "saveEdit"){
+        const area = li.querySelector(".editArea");
+        const text = (area?.value || "").trim();
+        if(!text) return toast("Izoh bo‘sh");
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/update", { method:"POST", token, body:{ commentId: id, text } });
+          toast("Tahrirlandi ✅");
+          await loadComments(true);
+        }catch(_){ toast("Tahrirlash uchun ruxsat yo‘q"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
+
+      if(act === "delete"){
+        if(!confirm("Izoh o‘chirilsinmi?")) return;
+        try{
+          const token = await getToken();
+          btn.disabled = true;
+          await api("comments/delete", { method:"POST", token, body:{ commentId: id } });
+          toast("O‘chirildi ✅");
+          await loadComments(true);
+        }catch(_){ toast("O‘chirish uchun ruxsat yo‘q"); }
+        finally{ btn.disabled = false; }
+        return;
+      }
+    }
+
+    $("commentList").addEventListener("click", handleCommentActions, { passive:false });
+    async function sendComment(){
+      const input = $("commentInput");
+      const text = (input.value||"").trim();
+      if(!text) return toast("Izoh bo‘sh");
+      input.value = "";
+      try{
+        const token = await getToken();
+        await api("comments", { method:"POST", token, body: { text } });
+        toast("Yuborildi ✅");
+        await loadComments(true);
+      }catch(e){
+        toast("Xato: yuborilmadi");
+      }
+    }
+
+    // Modal wiring (leaderboard only)
+    const lbModal = $("lbModal");
+    const btnLbAll = $("btnLbAll");
+    const lbClose = $("lbModalClose");
+    const lbMore = $("lbLoadMore");
+    if(btnLbAll && lbModal){ btnLbAll.onclick = async ()=>{ openModal(lbModal); await loadLeaderboardMore(true); }; }
+    if(lbClose && lbModal){ lbClose.onclick = ()=>closeModal(lbModal); }
+    if(lbMore){ lbMore.onclick = ()=>loadLeaderboardMore(false); }
+
+    // close on backdrop click
+    if(lbModal){ lbModal.addEventListener("click", (e)=>{ if(e.target === lbModal) closeModal(lbModal); }); }
+
+    // ===== Notifications =====
+    const notifModal = $("notifModal");
+    let notifCursor = null;
+    async function refreshUnread(){
+      try{
+        const token = await getToken();
+        const d = await api("notifications/unread-count", { token });
+        const n = Number(d?.unreadCount||0);
+        const b = $("notifBadge");
+        const bell = $("btnBell");
+        if(b){
+          b.textContent = String(n);
+          b.style.display = n>0 ? "inline-flex" : "none";
+        }
+        if(bell) bell.classList.toggle("hasUnread", n>0);
+      }catch(_){
+        const b = $("notifBadge");
+        if(b) b.style.display = "none";
+        const bell = $("btnBell");
+        if(bell) bell.classList.remove("hasUnread");
+      }
+    }
+
+    function renderNotifItem(n){
+      const read = !!n.read;
+      return `
+        <li class="notifItem ${read?"read":"unread"}" data-id="${escapeHtml(n.id)}">
+          <div class="top">
+            <div class="nameLine">${escapeHtml(n.title||"Xabar")}</div>
+            <div class="small">${escapeHtml(fmtTime(n.createdAt))}</div>
+          </div>
+          <div class="notifBody">${escapeHtml(n.body||"")}</div>
+          <div class="notifActions">
+            <button class="miniBtn ghost" data-act="delNotif" type="button" aria-label="O‘chirish">🗑</button>
+            ${read?"":"<button class=\"miniBtn\" data-act=\"readNotif\" type=\"button\">O‘qildi</button>"}
+          </div>
+        </li>
+      `;
+    }
+
+    async function loadNotifs(reset=false){
+      const list = $("notifList");
+      const btn = $("notifLoadMore");
+      try{
+        btn.disabled = true;
+        if(reset){
+          notifCursor = null;
+          list.innerHTML = `<li class="small">Yuklanmoqda…</li>`;
+        }
+        const token = await getToken();
+        const data = await api("notifications", { token, query:{ limit: 20, cursor: notifCursor } });
+        const items = data?.items || [];
+        if(reset) list.innerHTML = "";
+        list.insertAdjacentHTML("beforeend", items.map(renderNotifItem).join(""));
+        notifCursor = data?.nextCursor || null;
+        btn.style.display = notifCursor ? "inline-flex" : "none";
+        const unreadCount = Number(data?.unreadCount||0);
+        const b = $("notifBadge");
+        if(b){
+          b.textContent = String(unreadCount);
+          b.style.display = unreadCount>0 ? "inline-flex" : "none";
+        }
+        if(!items.length && reset){
+          list.innerHTML = `<li class="small">Hozircha bildirishnoma yo‘q 🙂</li>`;
+          btn.style.display = "none";
+        }
+      }catch(_){
+        if(reset) $("notifList").innerHTML = `<li class="small">Yuklab bo‘lmadi</li>`;
+      }finally{ btn.disabled = false; }
+    }
+
+    async function markNotifRead(id){
+      const token = await getToken();
+      await api("notifications/read", { method:"POST", token, body:{ id } });
+    }
+    async function deleteNotif(id){
+      const token = await getToken();
+      await api("notifications/delete", { method:"POST", token, body:{ id } });
+    }
+    async function markAllRead(){
+      const token = await getToken();
+      await api("notifications/read", { method:"POST", token, body:{ all:true } });
+    }
+
+    $("btnBell")?.addEventListener("click", async ()=>{ openModal(notifModal); await loadNotifs(true); });
+    $("notifClose")?.addEventListener("click", ()=>closeModal(notifModal));
+    $("notifLoadMore")?.addEventListener("click", ()=>loadNotifs(false));
+    $("notifMarkAll")?.addEventListener("click", async ()=>{ try{ await markAllRead(); await loadNotifs(true); await refreshUnread(); }catch(_){ toast("Xato"); } });
+    notifModal.addEventListener("click", (e)=>{ if(e.target===notifModal) closeModal(notifModal); });
+    $("notifList")?.addEventListener("click", async (e)=>{
+      const li = e.target.closest(".notifItem");
+      const id = li?.getAttribute("data-id");
+      if(!id) return;
+
+      const del = e.target.closest("button[data-act='delNotif']");
+      if(del){
+        try{ del.disabled = true; await deleteNotif(id); li.remove(); await refreshUnread(); }
+        catch(_){ toast("Xato"); }
+        finally{ del.disabled = false; }
+        return;
+      }
+
+      const b = e.target.closest("button[data-act='readNotif']");
+      if(!b) return;
+      try{ b.disabled = true; await markNotifRead(id); li.classList.add("read"); li.classList.remove("unread"); await refreshUnread(); }
+      catch(_){ toast("Xato"); }
+      finally{ b.disabled=false; }
+    });
+
+    $("btnLogout").onclick = ()=>{ logout(); location.href="./"; };
+    $("commentSend").onclick = sendComment;
+    $("commentInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendComment(); });
+    $("cmLoadMoreInline").onclick = ()=>loadComments(false);
+
+    // Leaderboard interactivity
+    $("lbSearch")?.addEventListener("input", (e)=>{
+      lbQuery = e.target.value || "";
+      renderLeaderboard();
+    });
+    $("lbOnlyMe")?.addEventListener("click", (e)=>{
+      lbMeOnly = !lbMeOnly;
+      e.currentTarget.setAttribute("aria-pressed", String(lbMeOnly));
+      e.currentTarget.classList.toggle("active", lbMeOnly);
+      renderLeaderboard();
+    });
+    // Click to spotlight a user in the table/podium
+    function pickUser(loginId){
+      if(!loginId) return;
+      lbQuery = String(loginId);
+      const inp = $("lbSearch");
+      if(inp) inp.value = lbQuery;
+      renderLeaderboard();
+    }
+    $("lbPodium")?.addEventListener("click", (e)=>{
+      const b = e.target.closest("[data-pick]");
+      if(b) pickUser(b.getAttribute("data-pick"));
+    });
+    $("lbBody")?.addEventListener("click", (e)=>{
+      const r = e.target.closest("[data-pick]");
+      if(r) pickUser(r.getAttribute("data-pick"));
+    });
+
     async function boot(){
       setupTouchFab();
       setupLevelUpModal();
@@ -1105,8 +1525,9 @@ window.api = api;
         // Embedded viewer modal
         $("embedClose")?.addEventListener("click", closeEmbed);
         $("embedModal")?.addEventListener("click", (e)=>{ if(e.target===$("embedModal")) closeEmbed(); });
-        // Reyting init: assets/js/rating.js
-loadComments(true);
+
+        loadLeaderboard();
+        loadComments(true);
 
         if(!u.profileComplete){
           await runOnboarding();
@@ -1231,7 +1652,291 @@ loadComments(true);
   </div>
 </div>
 
-<script src="assets/js/rating.js" defer></script>
+<script>
+/* ===== Rating System: from scratch ===== */
+(function(){
+  const $ = (id)=>document.getElementById(id);
+  const esc = (s)=>String(s??"").replace(/[&<>"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+  function openRating(){
+    const m = $("ratingModal");
+    if(!m) return;
+    m.classList.add("open");
+    m.setAttribute("aria-hidden","false");
+    document.documentElement.classList.add("noScroll");
+    loadAndRender();
+  }
+  function closeRating(){
+    const m = $("ratingModal");
+    if(!m) return;
+    m.classList.remove("open");
+    m.setAttribute("aria-hidden","true");
+    document.documentElement.classList.remove("noScroll");
+  }
+
+  function medalByRank(i){
+    if(i===0) return "🥇";
+    if(i===1) return "🥈";
+    if(i===2) return "🥉";
+    return "🏅";
+  }
+  function calcAge(b){
+    if(!b) return null;
+    try{
+      const d = (typeof b==="number") ? new Date(b) : new Date(String(b));
+      if(!isFinite(d.getTime())) return null;
+      const now = new Date();
+      let a = now.getFullYear() - d.getFullYear();
+      const m = now.getMonth() - d.getMonth();
+      if(m<0 || (m===0 && now.getDate()<d.getDate())) a--;
+      return (a>=0 && a<=120) ? a : null;
+    }catch(_){ return null; }
+  }
+  function pick(u, keys, fallback=null){
+    for(const k of keys){
+      if(u && u[k]!=null && u[k]!== "") return u[k];
+    }
+    return fallback;
+  }
+
+  function getAge(u){
+    const direct = pick(u, ["age","userAge"]);
+    if(direct!=null){
+      const n = parseInt(direct,10);
+      if(Number.isFinite(n)) return n;
+    }
+    const b = pick(u, ["birth","birthdate","birthDate","bday","dob"]);
+    const a = calcAge(b);
+    return a;
+  }
+
+  function normalize(items){
+    const arr = (items||[]).map((u)=>({
+      uid: pick(u, ["uid","userUid"], ""),
+      numericId: String(pick(u, ["loginId","numericId","id","userId"], "")),
+      name: String(pick(u, ["name","fullName","displayName"], "—")),
+      avatar: String(pick(u, ["avatar","photoURL","photo","avatarUrl","avatarURL"], "icon.png")),
+      points: Number(pick(u, ["points","xp","totalXP","totalPoints"], 0)) || 0,
+      level: (typeof levelFromPoints==="function") ? levelFromPoints(Number(pick(u, ["points","xp","totalXP","totalPoints"], 0))||0) : 1,
+      age: getAge(u),
+      raw: u
+    }));
+    arr.sort((a,b)=>b.points-a.points);
+    // attach rank + medal
+    arr.forEach((x,i)=>{ x.rank=i+1; x.medal=medalByRank(i); });
+    return arr;
+  }
+
+  function agePass(age, sel){
+    if(sel==="all") return true;
+    if(age==null) return false;
+    if(sel==="18+") return age>=18;
+    const n = parseInt(sel,10);
+    return Number.isFinite(n) ? age===n : true;
+  }
+
+  function getSelAge(){
+    const wrap = $("rtAgeChips");
+    const act = wrap ? wrap.querySelector(".rtChip.active") : null;
+    return act ? act.getAttribute("data-age") : "all";
+  }
+
+  function onlyMeOn(){
+    const b = $("rtOnlyMe");
+    return b && b.getAttribute("aria-pressed")==="true";
+  }
+
+  function matchMe(u){
+    const myLoginId = window.currentUserNumericId || window.myLoginId || "";
+    const myUid = window.currentUserUid || window.myUid || "";
+    if(myLoginId && String(u.numericId)===String(myLoginId)) return true;
+    if(myUid && String(u.uid)===String(myUid)) return true;
+    return false;
+  }
+
+  async function loadAllLeaderboard(){
+    // cache
+    if(Array.isArray(window.__rtCache) && window.__rtCache.length) return window.__rtCache;
+
+    // Use existing api() helper from assets/js/api.js
+    if(typeof window.api !== "function"){
+      throw new Error("api() not found");
+    }
+    // Pull a bigger limit so rating isn't empty
+    const data = await window.api("leaderboard", { query: { limit: 500 } });
+    const items = data?.items || [];
+    window.__rtCache = normalize(items);
+    return window.__rtCache;
+  }
+
+  function render(state, rows, meRow){
+    rows = Array.isArray(rows) ? rows : [];
+    const st = $("rtState");
+    const pod = $("rtPodium");
+    const list = $("rtList");
+    const me = $("rtMeCard");
+
+    if(st){
+      st.style.display = state ? "flex":"none";
+      if(state){
+        st.innerHTML = `<div class="rtSpin"></div><div>${esc(state)}</div>`;
+      }
+    }
+    if(!pod || !list) return;
+
+    // Me card
+    if(me){
+      if(meRow){
+        me.hidden = false;
+        me.innerHTML = `
+          <div class="rtMeGlow"></div>
+          <div class="rtRow">
+            <img class="rtAv rtMedalImg" data-level="${meRow.level}" src="logo.png" alt="medal">
+            <div style="min-width:0">
+              <div class="rtName">${esc(meRow.name)}</div>
+              <div class="rtMeta">${esc(meRow.medal)} • LM-${esc(meRow.numericId||"—")} • ${meRow.age!=null ? esc(meRow.age+" yosh") : "—"}</div>
+            </div>
+            <div class="rtRankTag">#${meRow.rank}</div>
+          </div>
+          <div class="rtXPbig">${meRow.points} XP</div>
+        `;
+      }else{
+        me.hidden = true;
+        me.innerHTML = "";
+      }
+    }
+
+    // Podium
+    pod.innerHTML = "";
+    rows.slice(0,3).forEach((r)=>{
+      const card = document.createElement("div");
+      card.className = "rtPodCard";
+      card.innerHTML = `
+        <div class="rtBadge">#${r.rank}</div>
+        <div class="rtRow">
+          <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
+          <div class="rtInfo">
+            <div class="rtName">${esc(r.name)}</div>
+            <div class="rtMeta"><span class="rtMedal">${esc(r.medal)}</span> LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
+          </div>
+        </div>
+        <div class="rtPodXP">${r.points} XP</div>
+      `;
+      pod.appendChild(card);
+    });
+
+    // List
+    list.innerHTML = "";
+    if(!rows.length){
+      list.innerHTML = `<div class="rtState" style="margin-top:0"><div>Natija topilmadi</div></div>`;
+      return;
+    }
+    rows.forEach((r)=>{
+      const it = document.createElement("div");
+      const isMe = matchMe(r);
+      it.className = "rtItem" + (isMe ? " rtMeRow" : "");
+      if(isMe) it.setAttribute("data-me","1");
+      it.innerHTML = `
+        <div class="rtIdx">${r.rank}</div>
+        <img class="rtAv rtMedalImg" data-level="${r.level}" src="logo.png" alt="medal">
+        <div class="rtInfo">
+          <div class="rtName">${esc(r.name)}</div>
+          <div class="rtMeta">${esc(r.medal)} • LM-${esc(r.numericId||"—")} • ${r.age!=null ? esc(r.age+" yosh") : "—"}</div>
+        </div>
+        <div class="rtRight">
+          <div class="rtXP">${r.points}</div>
+          <div class="rtAgeTxt">${r.age!=null ? esc(r.age+" yosh") : ""}</div>
+        </div>
+      `;
+      list.appendChild(it);
+    });
+
+    // pulse my row (for quick finding)
+    try{
+      const meEl = list.querySelector('[data-me="1"]');
+      if(meEl && !onlyMeOn()){
+        meEl.classList.remove("rtPulse");
+        void meEl.offsetWidth;
+        meEl.classList.add("rtPulse");
+      }
+    }catch(_){ }
+
+    // hydrate medal images
+    try{
+      document.querySelectorAll(".rtMedalImg").forEach(img=>{
+        const L = parseInt(img.getAttribute("data-level")||"1",10) || 1;
+        if(typeof setMedalImg === "function") setMedalImg(img, L);
+      });
+    }catch(_){}
+
+  }
+
+  async function loadAndRender(){
+    try{
+      render("Reyting yuklanmoqda…");
+      const all = await loadAllLeaderboard();
+      const sel = getSelAge();
+      const onlyMe = onlyMeOn();
+
+      let rows = all.slice();
+      if(onlyMe){
+        rows = rows.filter(matchMe);
+      }
+      rows = rows.filter(r => agePass(r.age, sel));
+
+      // find my row in unfiltered all (for analysis among peers)
+      let meRow = null;
+      if(window.currentUserNumericId || window.currentUserUid){
+        meRow = all.find(matchMe) || null;
+      }
+
+      render(null, rows, meRow);
+    }catch(err){
+      console.error(err);
+      render("Reytingni yuklab bo‘lmadi");
+      const pod = $("rtPodium"); const list = $("rtList");
+      if(pod) pod.innerHTML = "";
+      if(list) list.innerHTML = `<div class="rtState"><div>❌ Xatolik: reyting maʼlumoti kelmadi</div></div>`;
+    }
+  }
+
+  function wire(){
+    // open button in page
+    const openBtn = $("openRating");
+    if(openBtn) openBtn.addEventListener("click", openRating);
+
+    const closeBtn = $("rtClose");
+    if(closeBtn) closeBtn.addEventListener("click", closeRating);
+
+    const overlay = $("ratingModal");
+    if(overlay){
+      overlay.addEventListener("click", (e)=>{ if(e.target===overlay) closeRating(); });
+    }
+
+    const ages = $("rtAgeChips");
+    if(ages){
+      ages.addEventListener("click", (e)=>{
+        const b = e.target.closest(".rtChip");
+        if(!b) return;
+        ages.querySelectorAll(".rtChip").forEach(x=>x.classList.remove("active"));
+        b.classList.add("active");
+        loadAndRender();
+      });
+    }
+
+    const me = $("rtOnlyMe");
+    if(me){
+      me.addEventListener("click", ()=>{
+        const on = me.getAttribute("aria-pressed")==="true";
+        me.setAttribute("aria-pressed", on ? "false":"true");
+        loadAndRender();
+      });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", wire);
+})();
+</script>
 
 </body>
 </html>
