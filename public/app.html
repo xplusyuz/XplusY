@@ -537,18 +537,9 @@
 <button aria-pressed="false" class="chipBtn" id="lbOnlyMe" type="button">⭐ Meni</button>
 </div>
 <div aria-label="Top-3 podium" class="lbPodium" id="lbPodium"></div>
-<table aria-label="Leaderboard" class="table">
-<thead>
-<tr>
-<th style="width:60px;">#</th>
-<th>Foydalanuvchi</th>
-<th style="width:90px;">Ball</th>
-</tr>
-</thead>
-<tbody id="lbBody">
-<tr><td class="small" colspan="3">Yuklanmoqda…</td></tr>
-</tbody>
-</table>
+<div class="lbList" id="lbBody" aria-label="Leaderboard">
+  <div class="lbEmpty small">Yuklanmoqda…</div>
+</div>
 </div>
 </div>
 </div>
@@ -590,18 +581,9 @@
 </div>
 <div class="hr"></div>
 <div class="modalBody">
-<table aria-label="Leaderboard all" class="table">
-<thead>
-<tr>
-<th style="width:60px;">#</th>
-<th>Foydalanuvchi</th>
-<th style="width:90px;">Ball</th>
-</tr>
-</thead>
-<tbody id="lbAllBody">
-<tr><td class="small" colspan="3">Yuklanmoqda…</td></tr>
-</tbody>
-</table>
+<div class="lbList lbAll" id="lbAllBody" aria-label="Leaderboard all">
+  <div class="lbEmpty small">Yuklanmoqda…</div>
+</div>
 <div style="height:10px;"></div>
 <button class="btn" id="lbLoadMore" type="button">Yana yuklash</button>
 </div>
@@ -1112,16 +1094,20 @@
       const top = items.slice(0,3);
       const topPts = Number(top?.[0]?.points || 0) || 1;
 
-      // Podium (Top-3)
+      // Podium (Top-3) — medal avatar + compact stats
       podium.innerHTML = top.map((u,i)=>{
         const pts = Number(u.points||0);
         const pct = Math.max(8, Math.round((pts/topPts)*100));
         const me = myLoginId && String(u.loginId||"")===String(myLoginId);
+        const lvl = levelFromPoints(pts);
         return `
           <button class="podCard ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}" title="${escapeHtml(u.name||u.loginId||"")}">
             <div class="podTop">
-              <div class="podMedal">${medal(i)}</div>
-              <div class="podRank">#${i+1}</div>
+              <div class="podLeft">
+                <div class="podMedal">${medal(i)}</div>
+                <div class="podRank">#${i+1}</div>
+              </div>
+              <img class="podAvatar" data-lvl="${lvl}" alt="medal" src="logo.png"/>
             </div>
             <div class="podName">${escapeHtml(u.name || u.loginId || "—")}</div>
             <div class="podId">${escapeHtml(u.loginId || "")}</div>
@@ -1131,35 +1117,64 @@
         `;
       }).join("") || `<div class="small">Hozircha reyting yo‘q</div>`;
 
-      // Table (Top-20 of filtered)
+      // List (Top-20 of filtered)
       const show = items.slice(0,20);
       body.innerHTML = show.map((u,i)=>{
         const pts = Number(u.points||0);
         const me = myLoginId && String(u.loginId||"")===String(myLoginId);
         const pct = Math.max(6, Math.round((pts/topPts)*100));
+        const lvl = levelFromPoints(pts);
         return `
-          <tr class="lbRow ${me?"me":""}" data-pick="${escapeHtml(u.loginId||"")}">
-            <td><span class="rankBadge">${i+1}</span></td>
-            <td>
-              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
-              <div class="small">${escapeHtml(u.loginId || "")}</div>
+          <button class="lbItem ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}">
+            <div class="lbRank">
+              <span class="rankBadge">${i+1}</span>
+            </div>
+
+            <div class="lbAvatarWrap">
+              <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.png"/>
+              <span class="lbLvl">Lv ${lvl}</span>
+            </div>
+
+            <div class="lbMain">
+              <div class="lbNameLine">
+                <span class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</span>
+                ${me ? `<span class="meTag">MEN</span>` : ``}
+              </div>
+              <div class="lbSub">
+                <span class="small">${escapeHtml(u.loginId || "")}</span>
+                <span class="dot">•</span>
+                <span class="lbPts"><b>${pts}</b> ball</span>
+              </div>
               <div class="miniBar"><span style="width:${pct}%"></span></div>
-            </td>
-            <td><b>${pts}</b></td>
-          </tr>
+            </div>
+
+            <div class="lbChevron">›</div>
+          </button>
         `;
-      }).join("") || `<tr><td colspan="3" class="small">Mos natija topilmadi</td></tr>`;
+      }).join("") || `<div class="lbEmpty small">Mos natija topilmadi</div>`;
+
+      // hydrate medal images
+      try{
+        podium.querySelectorAll("img.podAvatar").forEach(img=>{
+          const lvl = Number(img.dataset.lvl||1)||1;
+          setMedalImg(img, lvl);
+        });
+        body.querySelectorAll("img.lbAvatar").forEach(img=>{
+          const lvl = Number(img.dataset.lvl||1)||1;
+          setMedalImg(img, lvl);
+        });
+      }catch(_){}
     }
 
     async function loadLeaderboard(){
       const body = $("lbBody");
-      body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+      body.innerHTML = `<div class="lbEmpty small">Yuklanmoqda…</div>`;
       try{
         const data = await api("leaderboard", { query: { limit: 120 } });
         lbAll = (data?.items || []);
         renderLeaderboard();
       }catch(_){
-        body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+        body.innerHTML = `<div class="lbEmpty small">Reytingni yuklab bo‘lmadi</div>`;
       }
     }
 
@@ -1174,30 +1189,39 @@
         if(reset){
           lbCursor = null;
           lbRankBase = 0;
-          body.innerHTML = `<tr><td colspan="3" class="small">Yuklanmoqda…</td></tr>`;
+          body.innerHTML = `<div class="lbEmpty small">Yuklanmoqda…</div>`;
         }
         const data = await api("leaderboard", { query: { limit: 60, cursor: lbCursor } });
         const items = data?.items || [];
         if(reset) body.innerHTML = "";
-        body.insertAdjacentHTML("beforeend", items.map((u,i)=>`
-          <tr>
-            <td><span class="rankBadge">${lbRankBase + i + 1}</span></td>
-            <td>
-              <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
-              <div class="small">${escapeHtml(u.loginId || "")}</div>
-            </td>
-            <td><b>${Number(u.points||0)}</b></td>
-          </tr>
-        `).join(""));
+        body.insertAdjacentHTML("beforeend", items.map((u,i)=>{
+          const pts = Number(u.points||0);
+          const lvl = levelFromPoints(pts);
+          return `
+            <button class="lbItem lbItemSmall" type="button" data-pick="${escapeHtml(u.loginId||"")}">
+              <div class="lbRank"><span class="rankBadge">${lbRankBase + i + 1}</span></div>
+              <div class="lbAvatarWrap">
+                <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.png"/>
+                <span class="lbLvl">Lv ${lvl}</span>
+              </div>
+              <div class="lbMain">
+                <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
+                <div class="small">${escapeHtml(u.loginId || "")}</div>
+              </div>
+              <div class="lbRight"><b>${pts}</b></div>
+            </button>
+          `;
+        }).join(""));
         lbRankBase += items.length;
         lbCursor = data?.nextCursor || null;
+        try{ body.querySelectorAll("img.lbAvatar").forEach(img=>setMedalImg(img, Number(img.dataset.lvl||1)||1)); }catch(_){ }
         btn.style.display = lbCursor ? "inline-flex" : "none";
         if(!items.length && reset){
-          body.innerHTML = `<tr><td colspan="3" class="small">Hozircha reyting yo‘q</td></tr>`;
+          body.innerHTML = `<div class="lbEmpty small">Hozircha reyting yo‘q</div>`;
           btn.style.display = "none";
         }
       }catch(_){
-        if(reset) body.innerHTML = `<tr><td colspan="3" class="small">Reytingni yuklab bo‘lmadi</td></tr>`;
+        if(reset) body.innerHTML = `<div class="lbEmpty small">Reytingni yuklab bo‘lmadi</div>`;
       }finally{
         btn.disabled = false;
       }
