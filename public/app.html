@@ -766,6 +766,25 @@
       return `${y} yosh ${m} oy ${d} kun`;
     }
 
+    function ageYears(birth){
+      if(!birth) return null;
+      // Accept ISO string or Firestore Timestamp-like objects
+      try{
+        if(typeof birth === "object"){
+          if(typeof birth.toDate === "function") birth = birth.toDate();
+          else if("seconds" in birth) birth = new Date(Number(birth.seconds)*1000);
+          else if("_seconds" in birth) birth = new Date(Number(birth._seconds)*1000);
+        }
+        const d = (birth instanceof Date) ? birth : new Date(birth);
+        if(Number.isNaN(d.getTime())) return null;
+        const n = new Date();
+        let y = n.getFullYear() - d.getFullYear();
+        const mo = n.getMonth() - d.getMonth();
+        if(mo < 0 || (mo === 0 && n.getDate() < d.getDate())) y--;
+        return y >= 0 && y < 120 ? y : null;
+      }catch(_){ return null; }
+    }
+
     // ===============================
     // Medalyon (9999 gacha) tizimi
     //  - medals/1.webp ... medals/9999.webp (ixtiyoriy: .png fallback)
@@ -1124,6 +1143,8 @@
         const me = myLoginId && String(u.loginId||"")===String(myLoginId);
         const pct = Math.max(6, Math.round((pts/topPts)*100));
         const lvl = levelFromPoints(pts);
+        const age = ageYears(u.birthdate);
+        const ageTxt = age==null ? \"—\" : String(age);
         return `
           <button class="lbItem ${me?"me":""}" type="button" data-pick="${escapeHtml(u.loginId||"")}">
             <div class="lbRank">
@@ -1132,7 +1153,7 @@
 
             <div class="lbAvatarWrap">
               <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.png"/>
-              <span class="lbLvl" title="Level ${lvl}" aria-label="Level ${lvl}">${lvl}</span>
+              <span class="lbLvl" title="Yosh" aria-label="Yosh">${ageTxt}</span>
             </div>
 
             <div class="lbMain">
@@ -1197,12 +1218,14 @@
         body.insertAdjacentHTML("beforeend", items.map((u,i)=>{
           const pts = Number(u.points||0);
           const lvl = levelFromPoints(pts);
+          const age = ageYears(u.birthdate);
+          const ageTxt = age==null ? \"—\" : String(age);
           return `
             <button class="lbItem lbItemSmall" type="button" data-pick="${escapeHtml(u.loginId||"")}">
               <div class="lbRank"><span class="rankBadge">${lbRankBase + i + 1}</span></div>
               <div class="lbAvatarWrap">
                 <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.png"/>
-                <span class="lbLvl" title="Level ${lvl}" aria-label="Level ${lvl}">${lvl}</span>
+                <span class="lbLvl" title="Yosh" aria-label="Yosh">${ageTxt}</span>
               </div>
               <div class="lbMain">
                 <div class="nameLine">${escapeHtml(u.name || u.loginId || "—")}</div>
