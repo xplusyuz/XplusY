@@ -1021,6 +1021,11 @@
       <div id="latexPreview">Bu yerda formula ko'rinadi...</div>
     </div>
     
+    <div class="latex-controls">
+      <button class="btn-xs" id="latexTest" type="button">🔎 Test</button>
+      <button class="btn-xs btnPrimary" id="latexInsert" type="button">✅ Insert</button>
+    </div>
+    
     <div class="latex-keyboard">
       <!-- Asosiy matematik amallar -->
       <button class="latex-key" data-latex="\frac{ }{ }">a/b</button>
@@ -1090,18 +1095,30 @@
   // Initialize LaTeX keyboard
   function initLatexKeyboard() {
     const keyboard = document.getElementById('latexKeyboard');
-    
+
+    // Existing LaTeX toggle buttons (with data-target) support
+    document.querySelectorAll('.latex-toggle-btn[data-target]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const tid = btn.getAttribute('data-target');
+        const target = document.getElementById(tid);
+        if (target) showLatexKeyboard(target, tid);
+      });
+    });
+
     // Keyboard button clicks
     document.querySelectorAll('.latex-key[data-latex]').forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
         const latex = button.getAttribute('data-latex');
         insertLatexToTarget(latex);
       });
     });
-    
+
     // Action buttons
     document.querySelectorAll('.latex-key[data-action]').forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
         const action = button.getAttribute('data-action');
         if (action === 'wrap') wrapWithDollars();
         else if (action === 'backspace') handleBackspace();
@@ -1109,69 +1126,64 @@
         else if (action === 'space') insertLatexToTarget(' ');
       });
     });
-    
+
     // Example buttons
     document.querySelectorAll('.example-btn').forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
         const latex = button.getAttribute('data-latex');
-        if (currentLatexTarget) {
-          insertLatexToTarget(latex);
-        }
+        if (latex) insertLatexToTarget(latex);
       });
     });
-    
+
     // Control buttons
-    document.getElementById('latexKeyboardClose').addEventListener('click', hideLatexKeyboard);
-    document.getElementById('latexInsert').addEventListener('click', () => {
-      if (currentLatexTarget) {
-        currentLatexTarget.focus();
-        hideLatexKeyboard();
-      }
+    const closeBtn = document.getElementById('latexKeyboardClose');
+    if (closeBtn) closeBtn.addEventListener('click', hideLatexKeyboard);
+
+    const insertBtn = document.getElementById('latexInsert');
+    if (insertBtn) insertBtn.addEventListener('click', () => {
+      if (currentLatexTarget) currentLatexTarget.focus();
+      hideLatexKeyboard();
     });
-    document.getElementById('latexTest').addEventListener('click', updateLatexPreview);
-    
+
+    const testBtn = document.getElementById('latexTest');
+    if (testBtn) testBtn.addEventListener('click', updateLatexPreview);
+
     // Close keyboard when clicking outside
     document.addEventListener('click', (e) => {
-      if (latexKeyboardVisible && 
-          !keyboard.contains(e.target) && 
-          !e.target.classList.contains('latex-toggle-btn') &&
-          !e.target.closest('.latex-toggle-btn')) {
-        hideLatexKeyboard();
-      }
+      if (!latexKeyboardVisible) return;
+      if (keyboard.contains(e.target)) return;
+      if (e.target.classList.contains('latex-toggle-btn')) return;
+      if (e.target.closest && e.target.closest('.latex-toggle-btn')) return;
+      hideLatexKeyboard();
     });
-    
+
     // Escape key to close
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && latexKeyboardVisible) {
-        hideLatexKeyboard();
-      }
+      if (e.key === 'Escape' && latexKeyboardVisible) hideLatexKeyboard();
     });
-    
-    // Initialize all latex-enabled inputs
+
+    // Optional: auto-add a toggle button only when a field doesn't already have one
     document.querySelectorAll('.latex-enabled').forEach(input => {
-      // Add toggle button if not exists
-      if (!input.nextElementSibling || !input.nextElementSibling.classList.contains('latex-toggle-btn')) {
-        const toggleBtn = document.createElement('button');
-        toggleBtn.className = 'latex-toggle-btn';
-        toggleBtn.textContent = '∑ LaTeX';
-        toggleBtn.type = 'button';
-        toggleBtn.addEventListener('click', () => {
-          showLatexKeyboard(input, input.id || input.name || 'Field');
-        });
-        
-        // Position the button
-        const container = input.parentElement;
-        if (!container.classList.contains('field-with-latex')) {
-          container.classList.add('field-with-latex');
-          container.style.position = 'relative';
-        }
-        
-        // Remove existing button if any
-        const existingBtn = container.querySelector('.latex-toggle-btn');
-        if (existingBtn) existingBtn.remove();
-        
-        container.appendChild(toggleBtn);
-      }
+      const container = input.closest('.field-with-latex') || input.parentElement;
+      if (!container) return;
+
+      // If any toggle exists in this container, respect it (avoid duplicates / removing user's buttons)
+      if (container.querySelector('.latex-toggle-btn')) return;
+
+      container.classList.add('field-with-latex');
+      container.style.position = container.style.position || 'relative';
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'latex-toggle-btn';
+      toggleBtn.textContent = '∑ LaTeX';
+      toggleBtn.type = 'button';
+      toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        showLatexKeyboard(input, input.id || input.name || 'Field');
+      });
+
+      container.appendChild(toggleBtn);
     });
   }
   
