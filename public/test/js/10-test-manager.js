@@ -8,20 +8,186 @@
                 return ((raw || 'challenge') + '').toLowerCase() === 'challenge';
             },
 
+            // 1-marta ishlashni qat'iy qilish uchun: urinishni START paytida lock qilamiz.
+            // Natija saqlanmasa ham (test bekor bo'lsa ham) qayta kirishga ruxsat bermaydi.
+            _lockDocId() {
+                const sid = appState.currentStudent?.id;
+                const code = appState.currentTestCode;
+                if (!sid || !code) return null;
+                return `${code}_${sid}`;
+            },
+            _lockLocalKey() {
+                const sid = appState.currentStudent?.id;
+                const code = appState.currentTestCode;
+                if (!sid || !code) return null;
+                return `test_lock_${code}_${sid}`;
+            },
+
+            async getAttemptLock() {
+                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) return null;
+                try {
+                    const k = this._lockLocalKey();
+                    if (k) {
+                        const raw = localStorage.getItem(k);
+                        if (raw) return JSON.parse(raw);
+                    }
+
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (!docId) return null;
+                        const ref = appState.db.collection('test_attempt_locks').doc(docId);
+                        const snap = await ref.get();
+                        if (snap.exists) {
+                            const lock = { id: snap.id, ...snap.data() };
+                            if (k) localStorage.setItem(k, JSON.stringify(lock));
+                            return lock;
+                        }
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn('Attempt lock tekshirishda xato:', e);
+                    return null;
+                }
+            },
+
+            async createAttemptLock() {
+                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) return { ok: true };
+                // Eski versiyalarda natija localStorage'da bo'lsa ham qayta startni to'xtatamiz
+                const attemptKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
+                const storedAttempt = localStorage.getItem(attemptKey);
+                if (storedAttempt) {
+                    try {
+                        return { ok: false, lock: JSON.parse(storedAttempt) };
+                    } catch {
+                        return { ok: false, lock: { testCode: appState.currentTestCode, studentId: appState.currentStudent.id, completedAt: new Date().toISOString() } };
+                    }
+                }
+
+                const k = this._lockLocalKey();
+                const existing = await this.getAttemptLock();
+                if (existing) return { ok: false, lock: existing };
+
+                const lockPayload = {
+                    studentId: appState.currentStudent.id,
+                    studentName: appState.currentStudent.fullName,
+                    studentClass: appState.currentClass || '',
+                    testCode: appState.currentTestCode,
+                    testTitle: appState.testData?.title || 'Test',
+                    status: 'started',
+                    startedAt: new Date().toISOString(),
+                    // UI orqaga mosligi uchun: "completedAt" bor bo'lsa, intro ekrani shu dateni ko'rsatadi
+                    completedAt: new Date().toISOString()
+                };
+
+                try {
+                    // Avval localStorage (offline holat) 
+                    if (k) localStorage.setItem(k, JSON.stringify(lockPayload));
+
+                    // Firestore bo'lsa — serverda ham bir marta lock
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (docId) {
+                            const ref = appState.db.collection('test_attempt_locks').doc(docId);
+                            await appState.db.runTransaction(async (tx) => {
+                                const snap = await tx.get(ref);
+                                if (snap.exists) {
+                                    throw new Error('LOCK_EXISTS');
+                                }
+                                tx.set(ref, lockPayload, { merge: false });
+                            });
+                        }
+                    }
+                    return { ok: true, lock: lockPayload };
+                } catch (e) {
+                    // Transaction ichida lock bor bo'lsa
+                    if ((e && e.message === 'LOCK_EXISTS') || (String(e).includes('LOCK_EXISTS'))) {
+                        const lock = await this.getAttemptLock();
+                        return { ok: false, lock };
+                    }
+                    console.warn('Attempt lock yaratishda xato:', e);
+                    // Baribir local lock bor bo'lgani uchun qayta startni to'sib qoladi
+                    return { ok: true, lock: lockPayload };
+                }
+            },
+
+            markAttemptCancelled(reason) {
+                if (!CONFIG.singleAttempt) return;
+                try {
+                    const k = this._lockLocalKey();
+                    if (k) {
+                        const raw = localStorage.getItem(k);
+                        const lock = raw ? (JSON.parse(raw) || {}) : {};
+                        lock.status = 'cancelled';
+                        lock.cancelReason = reason || 'cancelled';
+                        lock.cancelledAt = new Date().toISOString();
+                        // completedAt ni ham yangilab qo'yamiz (intro ko'rsatishi uchun)
+                        lock.completedAt = lock.cancelledAt;
+                        localStorage.setItem(k, JSON.stringify(lock));
+                    }
+
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (docId) {
+                            appState.db.collection('test_attempt_locks').doc(docId).set({
+                                status: 'cancelled',
+                                cancelReason: reason || 'cancelled',
+                                cancelledAt: new Date().toISOString(),
+                                completedAt: new Date().toISOString()
+                            }, { merge: true }).catch(()=>{});
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Attempt cancel update xato:', e);
+                }
+            },
+
+            markAttemptCompleted(finalScore) {
+                if (!CONFIG.singleAttempt) return;
+                try {
+                    const k = this._lockLocalKey();
+                    if (k) {
+                        const raw = localStorage.getItem(k);
+                        const lock = raw ? (JSON.parse(raw) || {}) : {};
+                        lock.status = 'completed';
+                        lock.completedAt = new Date().toISOString();
+                        if (typeof finalScore === 'number') lock.score = finalScore;
+                        localStorage.setItem(k, JSON.stringify(lock));
+                    }
+
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (docId) {
+                            appState.db.collection('test_attempt_locks').doc(docId).set({
+                                status: 'completed',
+                                completedAt: new Date().toISOString(),
+                                score: (typeof finalScore === 'number') ? finalScore : undefined
+                            }, { merge: true }).catch(()=>{});
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Attempt completed update xato:', e);
+                }
+            },
+
+
             async checkPreviousAttempt() {
-                // Single-attempt cheklovi faqat challengelar uchun
-                if (!CONFIG.singleAttempt || !this.isChallengeMode() || !appState.currentStudent || !appState.currentTestCode) {
+                // Single-attempt: startda lock qo'yilgan bo'lsa ham qayta kirishni bloklaymiz
+                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) {
                     return null;
                 }
                 
                 try {
                     const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
                     const storedAttempt = localStorage.getItem(localStorageKey);
-                    
+
                     if (storedAttempt) {
                         return JSON.parse(storedAttempt);
                     }
-                    
+
+                    // Natija bo'lmasa ham, lock bo'lsa qayta kirishni bloklaymiz
+                    const lock = await this.getAttemptLock();
+                    if (lock) return lock;
+
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
                         const attemptsRef = appState.db.collection('test_results')
                             .where('studentId', '==', appState.currentStudent.id)
@@ -90,9 +256,9 @@
                                     text-align: left;
                                 ">
                                     <h3 style="color: #b45309; margin-bottom: 10px;">📊 Oldingi Natijangiz:</h3>
-                                    <p><strong>Ball:</strong> ${appState.previousAttempt.score.toFixed(1)} / ${appState.previousAttempt.totalScore}</p>
-                                    <p><strong>To'g'ri javoblar:</strong> ${appState.previousAttempt.correctAnswers}</p>
-                                    <p><strong>Vaqt:</strong> ${Math.floor(appState.previousAttempt.timeSpent / 60)}:${(appState.previousAttempt.timeSpent % 60).toString().padStart(2, '0')}</p>
+                                    <p><strong>Ball:</strong> ${(typeof appState.previousAttempt.score === "number") ? appState.previousAttempt.score.toFixed(1) : "—"} / ${(typeof appState.previousAttempt.totalScore === "number") ? appState.previousAttempt.totalScore : "—"}</p>
+                                    <p><strong>To'g'ri javoblar:</strong> ${(typeof appState.previousAttempt.correctAnswers === "number") ? appState.previousAttempt.correctAnswers : "—"}</p>
+                                    <p><strong>Vaqt:</strong> ${(typeof appState.previousAttempt.timeSpent === "number") ? Math.floor(appState.previousAttempt.timeSpent / 60) : "—"}:${(typeof appState.previousAttempt.timeSpent === "number") ? (appState.previousAttempt.timeSpent % 60).toString().padStart(2, "0") : "—"}</p>
                                 </div>
                                 <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
                                     Har bir o'quvchi testni faqat bir marta ishlash huquqiga ega.
@@ -183,9 +349,16 @@
             
             async startTest() {
                 try {
-                    if (CONFIG.singleAttempt && appState.previousAttempt) {
-                        alert("❌ Siz bu testni oldin ishlagansiz!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.\n\nOldingi natijangizni ko'rish uchun 'Oldingi Natijani Ko'rish' tugmasini bosing.");
-                        return;
+                    // Single-attempt: test START bo'lishi bilan lock qo'yamiz.
+                    if (CONFIG.singleAttempt) {
+                        const res = await this.createAttemptLock();
+                        if (!res.ok) {
+                            appState.previousAttempt = res.lock || appState.previousAttempt;
+                            alert("❌ Siz bu testni oldin boshlab yuborgansiz (yoki ishlagansiz)!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.");
+                            return;
+                        }
+                        // Lock muvaffaqiyatli qo'yildi
+                        if (res.lock) appState.previousAttempt = res.lock;
                     }
                     
                     if (!appState.testData || !appState.testData.questions) {
@@ -601,6 +774,7 @@
                     violationDetails += `⚠️ Mayda qoidabuzarliklar: ${appState.violations.minorViolations} marta\n`;
                 }
                 
+                this.markAttemptCancelled(reason);
                 alert(`TEST BEKOR QILINDI!\n\nSabab: ${reason}\n\nQoidabuzarliklar:\n${violationDetails}`);
                 window.location.reload();
             },
@@ -688,6 +862,9 @@
                 document.body.classList.remove('test-active');
                 
                 const results = this.calculateResults();
+
+                // Test tugagan bo'lsa ham (saqlash xatosi bo'lsa ham) lock saqlanib qoladi
+                this.markAttemptCompleted(results.finalScore);
                 
                 appState.detailedResults = this.getDetailedResults();
                 results.detailedResults = appState.detailedResults;

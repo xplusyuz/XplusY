@@ -50,7 +50,7 @@
                 dom.elements.studentName.textContent = appState.currentStudent.fullName;
 
                 // Single-attempt cheklovi faqat challengelar uchun
-                if (CONFIG.singleAttempt && testManager.isChallengeMode()) {
+                if (CONFIG.singleAttempt) {
                     appState.previousAttempt = await testManager.checkPreviousAttempt();
 
                     if (appState.previousAttempt) {
