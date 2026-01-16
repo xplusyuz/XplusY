@@ -177,6 +177,11 @@
             // Event handlers
             handleWindowBlur() {
                 if (!appState.testStarted || appState.isSleepMode) return;
+
+                // Math Editor (ochiq javob) modal/iframe ochiq bo'lsa,
+                // ba'zi brauzerlarda focus/blur noto'g'ri ishlashi mumkin.
+                // Bu holatni qoidabuzarlik sifatida sanamaymiz.
+                if (appState.isModalOpen) return;
                 
                 appState.lastBlurTime = Date.now();
 
@@ -200,6 +205,8 @@
             
             handleVisibilityChange() {
                 if (!appState.testStarted) return;
+                // Math Editor modal ochiq bo'lsa tab/visibility o'zgarishini sanamaymiz
+                if (appState.isModalOpen) return;
                 if (document.hidden) {
                     this._countWindowSwitch("Boshqa tabga o'tildi");
                     userActionLogger.log('tab_switched');
