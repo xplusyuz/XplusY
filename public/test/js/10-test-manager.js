@@ -40,7 +40,7 @@
             },
 
             async getAttemptLock() {
-                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) return null;
+                if (!CONFIG.singleAttempt || !this.isChallengeMode() || !appState.currentStudent || !appState.currentTestCode) return null;
                 try {
                     const k = this._lockLocalKey();
                     if (k) {
@@ -67,67 +67,120 @@
             },
 
             async createAttemptLock() {
-                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) return { ok: true };
-                // Eski versiyalarda natija localStorage'da bo'lsa ham qayta startni to'xtatamiz
-                const attemptKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
-                const storedAttempt = localStorage.getItem(attemptKey);
-                if (storedAttempt) {
-                    try {
-                        return { ok: false, lock: JSON.parse(storedAttempt) };
-                    } catch {
-                        return { ok: false, lock: { testCode: appState.currentTestCode, studentId: appState.currentStudent.id, completedAt: new Date().toISOString() } };
-                    }
+                // ✅ Faqat CHALLENGE testlarda yagona urinish (attempt) yaratiladi.
+                // OPEN mode testlarda cheklov yo'q (istalgancha yechiladi).
+                if (!CONFIG.singleAttempt || !this.isChallengeMode() || !appState.currentStudent || !appState.currentTestCode) {
+                    return { ok: true, action: 'skip' };
                 }
 
-                const k = this._lockLocalKey();
-                const existing = await this.getAttemptLock();
-                if (existing) return { ok: false, lock: existing };
+                const sid = appState.currentStudent.id;
+                const code = appState.currentTestCode;
+                const docId = this._lockDocId();
+                const attemptIdKey = `attemptId_${code}_${sid}`;
+                let localAttemptId = localStorage.getItem(attemptIdKey);
 
-                const lockPayload = {
-                    studentId: appState.currentStudent.id,
-                    studentName: appState.currentStudent.fullName,
-                    studentClass: appState.currentClass || '',
-                    testCode: appState.currentTestCode,
-                    testTitle: appState.testData?.title || 'Test',
-                    status: 'started',
-                    startedAt: new Date().toISOString(),
-                    // UI orqaga mosligi uchun: "completedAt" bor bo'lsa, intro ekrani shu dateni ko'rsatadi
-                    completedAt: new Date().toISOString()
+                const genAttemptId = () => {
+                    try {
+                        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+                    } catch (e) {}
+                    return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
                 };
 
-                try {
-                    // Avval localStorage (offline holat) 
-                    if (k) localStorage.setItem(k, JSON.stringify(lockPayload));
+                if (!docId) return { ok: true, action: 'skip' };
 
-                    // Firestore bo'lsa — serverda ham bir marta lock
+                try {
+                    // Firestore bo'lmasa ham local attemptId bilan shu brauzerda resume qilish mumkin
+                    if (!localAttemptId) {
+                        localAttemptId = genAttemptId();
+                        localStorage.setItem(attemptIdKey, localAttemptId);
+                    }
+
+                    // Firestore mavjud bo'lsa — yagona lock/attempt shu yerda boshqariladi
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
-                        const docId = this._lockDocId();
-                        if (docId) {
-                            const ref = appState.db.collection('test_attempt_locks').doc(docId);
-                            await appState.db.runTransaction(async (tx) => {
-                                const snap = await tx.get(ref);
-                                if (snap.exists) {
-                                    throw new Error('LOCK_EXISTS');
+                        const ref = appState.db.collection('test_attempt_locks').doc(docId);
+
+                        const txRes = await appState.db.runTransaction(async (tx) => {
+                            const snap = await tx.get(ref);
+
+                            // 1) Lock yo'q -> yaratamiz
+                            if (!snap.exists) {
+                                const durationSec = Math.round(((appState.testData?.durationMinutes || 30) * 60));
+                                const payload = {
+                                    studentId: sid,
+                                    studentName: appState.currentStudent.fullName,
+                                    studentClass: appState.currentClass || '',
+                                    testCode: code,
+                                    testTitle: appState.testData?.title || 'Test',
+                                    mode: (appState.testData?.mode || appState.testData?.type || 'challenge'),
+                                    status: 'started',
+                                    attemptId: localAttemptId,
+                                    durationSec,
+                                    startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                                };
+                                tx.set(ref, payload, { merge: false });
+                                return { ok: true, action: 'created', attemptId: localAttemptId };
+                            }
+
+                            // 2) Lock bor -> holat tekshirish
+                            const data = snap.data() || {};
+                            if (data.status === 'completed') return { ok: false, reason: 'completed', lock: { id: snap.id, ...data } };
+                            if (data.status === 'cancelled') return { ok: false, reason: 'cancelled', lock: { id: snap.id, ...data } };
+
+                            // status started
+                            const serverAttemptId = data.attemptId;
+
+                            // Bu brauzerda attemptId yo'q bo'lsa — serverdagini yozib qo'yamiz (resume)
+                            if (!localAttemptId) {
+                                localStorage.setItem(attemptIdKey, serverAttemptId);
+                                localAttemptId = serverAttemptId;
+                            }
+
+                            // Mos bo'lsa -> resume
+                            if (String(localAttemptId) === String(serverAttemptId)) {
+                                tx.set(ref, { updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                                return { ok: true, action: 'resumed', attemptId: serverAttemptId };
+                            }
+
+                            // Boshqa browser/qurilmada boshlangan -> blok
+                            return { ok: false, reason: 'started_elsewhere', lock: { id: snap.id, ...data } };
+                        });
+
+                        // Cache lock (UI uchun)
+                        try {
+                            const k = this._lockLocalKey();
+                            if (k && txRes && txRes.lock) localStorage.setItem(k, JSON.stringify(txRes.lock));
+                        } catch (e) {}
+
+                        // startedAt ni olish uchun lockni qayta o'qiymiz (timer sinxron bo'lishi uchun)
+                        if (txRes && txRes.ok) {
+                            try {
+                                const snap = await ref.get({ source: 'server' }).catch(() => ref.get());
+                                if (snap && snap.exists) {
+                                    const lock = { id: snap.id, ...snap.data() };
+                                    appState.activeAttemptLock = lock;
+                                    const st = lock.startedAt && lock.startedAt.toDate ? lock.startedAt.toDate().getTime() : null;
+                                    if (st) appState.attemptStartMs = st;
+                                    appState.attemptDurationSec = Number(lock.durationSec || 0) || Math.round(((appState.testData?.durationMinutes || 30) * 60));
                                 }
-                                tx.set(ref, lockPayload, { merge: false });
-                            });
+                            } catch (e) {}
                         }
+
+                        return txRes;
                     }
-                    return { ok: true, lock: lockPayload };
+
+                    // Firestore yo'q -> faqat shu brauzerda resume (cheklov global bo'lmaydi)
+                    return { ok: true, action: 'local_only', attemptId: localAttemptId };
                 } catch (e) {
-                    // Transaction ichida lock bor bo'lsa
-                    if ((e && e.message === 'LOCK_EXISTS') || (String(e).includes('LOCK_EXISTS'))) {
-                        const lock = await this.getAttemptLock();
-                        return { ok: false, lock };
-                    }
-                    console.warn('Attempt lock yaratishda xato:', e);
-                    // Baribir local lock bor bo'lgani uchun qayta startni to'sib qoladi
-                    return { ok: true, lock: lockPayload };
+                    console.warn('Attempt lock yaratish/resume xato:', e);
+                    // Yomon holatda ham testni to'xtatib qo'ymaymiz
+                    return { ok: true, action: 'fallback' };
                 }
             },
 
             markAttemptCancelled(reason) {
-                if (!CONFIG.singleAttempt) return;
+                if (!CONFIG.singleAttempt || !this.isChallengeMode()) return;
                 try {
                     const k = this._lockLocalKey();
                     if (k) {
@@ -158,7 +211,7 @@
             },
 
             markAttemptCompleted(finalScore) {
-                if (!CONFIG.singleAttempt) return;
+                if (!CONFIG.singleAttempt || !this.isChallengeMode()) return;
                 try {
                     const k = this._lockLocalKey();
                     if (k) {
@@ -187,8 +240,8 @@
 
 
             async checkPreviousAttempt() {
-                // Single-attempt: startda lock qo'yilgan bo'lsa ham qayta kirishni bloklaymiz
-                if (!CONFIG.singleAttempt || !appState.currentStudent || !appState.currentTestCode) {
+                // ✅ Faqat CHALLENGE va singleAttempt bo'lganda bloklash ishlaydi.
+                if (!CONFIG.singleAttempt || !this.isChallengeMode() || !appState.currentStudent || !appState.currentTestCode) {
                     return null;
                 }
                 
@@ -200,9 +253,9 @@
                         return JSON.parse(storedAttempt);
                     }
 
-                    // Natija bo'lmasa ham, lock bo'lsa qayta kirishni bloklaymiz
+                    // Agar lock COMPLETED/CANCELLED bo'lsa bloklaymiz; STARTED bo'lsa (yakunlanmagan) resume bo'ladi
                     const lock = await this.getAttemptLock();
-                    if (lock) return lock;
+                    if (lock && (lock.status === 'completed' || lock.status === 'cancelled')) return lock;
 
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
                         const attemptsRef = appState.db.collection('test_results')
@@ -365,16 +418,16 @@
             
             async startTest() {
                 try {
-                    // Single-attempt: test START bo'lishi bilan lock qo'yamiz.
-                    if (CONFIG.singleAttempt) {
+                    // Single-attempt: faqat CHALLENGE test START bo'lishi bilan yagona attempt lock qo'yamiz.
+                    if (CONFIG.singleAttempt && this.isChallengeMode()) {
                         const res = await this.createAttemptLock();
                         if (!res.ok) {
                             appState.previousAttempt = res.lock || appState.previousAttempt;
                             alert("❌ Siz bu testni oldin boshlab yuborgansiz (yoki ishlagansiz)!\n\nHar bir o'quvchi testni faqat bir marta ishlash huquqiga ega.");
                             return;
                         }
-                        // Lock muvaffaqiyatli qo'yildi
-                        if (res.lock) appState.previousAttempt = res.lock;
+                        // Lock/resume muvaffaqiyatli (challenge). previousAttempt faqat yakunlangan holatda kerak.
+                        if (res.lock && (res.lock.status === 'completed' || res.lock.status === 'cancelled')) appState.previousAttempt = res.lock;
                     }
                     
                     if (!appState.testData || !appState.testData.questions) {
@@ -410,7 +463,15 @@
                     }
                     
                     appState.userAnswers = new Array(appState.testData.questions.length).fill(null);
-                    appState.timeRemaining = (appState.testData.durationMinutes || 30) * 60;
+                    // Timer: CHALLENGE (singleAttempt) bo'lsa server startedAt orqali qayta tiklanadi
+                    const baseDurationSec = Math.round((appState.testData.durationMinutes || 30) * 60);
+                    const durationSec = (CONFIG.singleAttempt && this.isChallengeMode() && appState.attemptDurationSec) ? Math.round(appState.attemptDurationSec) : baseDurationSec;
+                    if (CONFIG.singleAttempt && this.isChallengeMode() && appState.attemptStartMs) {
+                        const elapsedSec = Math.max(0, Math.floor((Date.now() - appState.attemptStartMs) / 1000));
+                        appState.timeRemaining = Math.max(0, durationSec - elapsedSec);
+                    } else {
+                        appState.timeRemaining = durationSec;
+                    }
                     appState.timeSpent = 0;
                     appState.violations = { fullScreenExit: 0, windowSwitch: 0, minorViolations: 0 };
                     appState.violationHistory = [];
