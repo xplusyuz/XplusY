@@ -1,5 +1,21 @@
 // ==================== TEST MANAGER ====================
         const testManager = {
+            // Mobile fix: make sure fixed test header doesn't cover question content
+            _headerOffsetBound: null,
+
+            updateHeaderOffset() {
+                try {
+                    const headerEl = dom.elements.testHeader || document.getElementById('testHeader');
+                    if (!headerEl || headerEl.classList.contains('hidden')) return;
+
+                    const rect = headerEl.getBoundingClientRect();
+                    // rect.bottom is the amount of screen space taken from the top by the fixed header
+                    const offset = Math.ceil(rect.bottom + 12); // + small breathing room
+                    document.documentElement.style.setProperty('--testHeaderOffset', `${offset}px`);
+                } catch (e) {
+                    // no-op
+                }
+            },
             // Test turi: faqat challengeda 1 marta ishlash cheklovi qo'llanadi
             isChallengeMode() {
                 const raw = (appState.testData && (appState.testData.mode || appState.testData.type))
@@ -410,6 +426,12 @@
                     }
                     
                     dom.elements.testHeader.classList.remove('hidden');
+                    this.updateHeaderOffset();
+                    if (!this._headerOffsetBound) {
+                        this._headerOffsetBound = () => this.updateHeaderOffset();
+                        window.addEventListener('resize', this._headerOffsetBound);
+                        window.addEventListener('orientationchange', this._headerOffsetBound);
+                    }
                     this.startTimer();
                     
                     this.buildVerticalNavDots();
@@ -765,6 +787,13 @@
                 securityManager.disable();
                 dom.elements.testHeader.classList.add('hidden');
                 document.body.classList.remove('test-active');
+                document.documentElement.style.setProperty('--testHeaderOffset', '0px');
+                if (this._headerOffsetBound) {
+                    window.removeEventListener('resize', this._headerOffsetBound);
+                    window.removeEventListener('orientationchange', this._headerOffsetBound);
+                    this._headerOffsetBound = null;
+                }
+                document.documentElement.style.removeProperty('--testHeaderOffset');
                 
                 let violationDetails = '';
                 if (appState.violations.windowSwitch > 0) {
@@ -859,7 +888,15 @@
                 }
                 
                 securityManager.disable();
+                // Test yakunlandi: headerni yopamiz va layout offsetlarini tozalaymiz
+                dom.elements.testHeader.classList.add('hidden');
                 document.body.classList.remove('test-active');
+                if (this._headerOffsetBound) {
+                    window.removeEventListener('resize', this._headerOffsetBound);
+                    window.removeEventListener('orientationchange', this._headerOffsetBound);
+                    this._headerOffsetBound = null;
+                }
+                document.documentElement.style.removeProperty('--testHeaderOffset');
                 
                 const results = this.calculateResults();
 
