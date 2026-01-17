@@ -1,8 +1,9 @@
-/* LeaderMath.UZ Service Worker */
-const VERSION = "lm-pwa-v1.0.1-202601081256";
+/* LeaderMath.UZ Service Worker (Optimal) */
+const VERSION = "lm-pwa-v1.0.2-20260117"; // har deployda yangila!
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
+// JSON'lar hech qachon precache qilinmaydi!
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -20,12 +21,26 @@ const PRECACHE_URLS = [
   "./assets/js/api.js",
   "./assets/js/auth.js",
   "./assets/js/seasons.js",
-  "./assets/js/pwa.js",
-  "./content.json",
-  "./challenge.json"
+  "./assets/js/pwa.js"
 ];
 
-// Install: pre-cache core shell
+const NEVER_CACHE_PATHS = new Set([
+  "/content.json",
+  "/challenge.json"
+]);
+
+function isHTML(req){
+  return req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
+}
+function isSameOrigin(url){
+  try { return new URL(url).origin === self.location.origin; } catch { return false; }
+}
+function isNeverCache(req){
+  const u = new URL(req.url);
+  return NEVER_CACHE_PATHS.has(u.pathname);
+}
+
+// Install: app shell precache
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE)
@@ -34,63 +49,68 @@ self.addEventListener("install", (event) => {
   );
 });
 
-
-// Allow page to trigger immediate activation (update flow)
+// Allow page to trigger immediate activation
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 // Activate: clean old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((key) => {
-          if (key !== STATIC_CACHE && key !== RUNTIME_CACHE) return caches.delete(key);
-        })
-      )
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => {
+        if (k !== STATIC_CACHE && k !== RUNTIME_CACHE) return caches.delete(k);
+      })))
+      .then(() => self.clients.claim())
   );
 });
 
-function isHTML(req){
-  return req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
-}
-function isSameOrigin(url){
-  try { return new URL(url).origin === self.location.origin; } catch { return false; }
-}
-
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  const url = req.url;
 
-  // Only handle GET
+  // Only GET, same-origin
   if (req.method !== "GET") return;
+  if (!isSameOrigin(req.url)) return;
 
-  // Skip cross-origin (CDNs etc.)
-  if (!isSameOrigin(url)) return;
+  // 1) JSON: NETWORK-ONLY (NO CACHE). Offline bo'lsa: oxirgi runtime nusxa fallback.
+  if (isNeverCache(req)) {
+    event.respondWith(
+      fetch(req, { cache: "no-store" })
+        .then((res) => {
+          // ixtiyoriy: offline fallback uchun runtime'ga oxirgi nusxani yozib qo'yamiz
+          const copy = res.clone();
+          event.waitUntil(
+            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(()=>{})
+          );
+          return res;
+        })
+        .catch(() => caches.match(req)) // offline'da oxirgi bor olingan nusxa
+    );
+    return;
+  }
 
-  // HTML: network-first (fresh), fallback to cache
+  // 2) HTML: NETWORK-FIRST (fresh), fallback cache/offline
   if (isHTML(req)) {
     event.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
           return res;
         })
-        .catch(() => caches.match(req).then((m) => m || caches.match("./index.html")).then((m) => m || caches.match("./offline.html")))
+        .catch(() =>
+          caches.match(req)
+            .then((m) => m || caches.match("./index.html"))
+            .then((m) => m || caches.match("./offline.html"))
+        )
     );
     return;
   }
 
-  // Static assets: cache-first, update in background
+  // 3) Static assets: CACHE-FIRST + background update (tezlik uchun)
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) {
-        // update quietly
         event.waitUntil(
           fetch(req).then((res) => {
             const copy = res.clone();
@@ -101,7 +121,7 @@ self.addEventListener("fetch", (event) => {
       }
       return fetch(req).then((res) => {
         const copy = res.clone();
-        caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+        event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
         return res;
       });
     })
