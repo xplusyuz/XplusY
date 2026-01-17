@@ -110,14 +110,45 @@ async function loadTestsList() {
   const sel = $('#testSelect');
   sel.innerHTML = '<option value="">— test tanlang —</option>';
 
-  // testlar kolleksiyasidan code/title olish
-  const snap = await db.collection('testlar').limit(200).get();
-  const arr = [];
-  snap.forEach((doc) => {
-    const d = doc.data() || {};
-    arr.push({ code: doc.id, title: d.title || d.name || doc.id });
-  });
-  arr.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  // 1) Avval "testlar" kolleksiyasidan (agar mavjud bo'lsa)
+  let arr = [];
+  try {
+    const snap = await db.collection('testlar').limit(200).get();
+    snap.forEach((doc) => {
+      const d = doc.data() || {};
+      arr.push({ code: doc.id, title: d.title || d.name || doc.id });
+    });
+  } catch { /* ignore */ }
+
+  // 2) Agar "testlar" bo'sh bo'lsa, test_results/test_attempt_locks ichidan test kodlarini topamiz
+  if (!arr.length) {
+    const codes = new Map();
+    try {
+      const rSnap = await db.collection('test_results').limit(500).get();
+      rSnap.forEach((doc) => {
+        const d = doc.data() || {};
+        const code = d.testCode || d.testId || d.test || d.code || '';
+        if (code) codes.set(String(code), true);
+      });
+    } catch { /* ignore */ }
+    try {
+      const lSnap = await db.collection('test_attempt_locks').limit(500).get();
+      lSnap.forEach((doc) => {
+        const d = doc.data() || {};
+        const code = d.testCode || d.testId || d.test || d.code || '';
+        if (code) codes.set(String(code), true);
+      });
+    } catch { /* ignore */ }
+
+    const list = [...codes.keys()].sort((a, b) => a.localeCompare(b));
+    arr = list.map((c) => ({ code: c, title: c }));
+  }
+
+  // 3) Hali ham topilmasa — bitta "ALL" varianti
+  if (!arr.length) {
+    arr = [{ code: 'ALL', title: 'Barcha natijalar' }];
+  }
+
   adminState.tests = arr;
   for (const t of arr) {
     const opt = document.createElement('option');
@@ -137,15 +168,60 @@ async function loadTestsList() {
   }
 }
 
+// ---------- Normalizatsiya: eski/har xil sxemalardan score va test kodini chiqarish ----------
+function deriveTestCode(d) {
+  return d?.testCode || d?.testId || d?.test || d?.code || '';
+}
+
+function deriveScore(d) {
+  // 1) Agar aniq score bo'lsa
+  if (d && (typeof d.score === 'number' || typeof d.score === 'string')) {
+    const s = Number(d.score);
+    if (Number.isFinite(s)) return s;
+  }
+  // 2) pointsEarned yig'indisi
+  if (Array.isArray(d?.detailedResults)) {
+    const sum = d.detailedResults.reduce((acc, x) => acc + num(x?.pointsEarned), 0);
+    if (sum) return sum;
+  }
+  // 3) correctAnswers
+  if (d && (typeof d.correctAnswers === 'number' || typeof d.correctAnswers === 'string')) {
+    const c = Number(d.correctAnswers);
+    if (Number.isFinite(c)) return c;
+  }
+  // 4) totalPoints
+  if (d && (typeof d.totalPoints === 'number' || typeof d.totalPoints === 'string')) {
+    const t = Number(d.totalPoints);
+    if (Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+
 // ---------- Queries (no composite index) ----------
 async function fetchLocks(testCode) {
   const db = adminState.db;
-  const snap = await db.collection('test_attempt_locks')
-    .where('testCode', '==', testCode)
-    .limit(500)
-    .get();
-  const rows = [];
-  snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+  let rows = [];
+  // Ko'p loyihalarda locklarda testCode bo'ladi. Bo'lmasa fallback: hammasini olib, JS filter.
+  try {
+    if (testCode && testCode !== 'ALL') {
+      const snap = await db.collection('test_attempt_locks')
+        .where('testCode', '==', testCode)
+        .limit(500)
+        .get();
+      snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+    }
+  } catch { /* ignore */ }
+
+  if (!rows.length) {
+    const snap = await db.collection('test_attempt_locks').limit(500).get();
+    snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+    if (testCode && testCode !== 'ALL') {
+      rows = rows.filter((r) => {
+        const code = r.testCode || r.testId || r.test || r.code || '';
+        return String(code) === String(testCode);
+      });
+    }
+  }
   // newest first by startedAt
   rows.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
   adminState.locks = rows;
@@ -153,13 +229,42 @@ async function fetchLocks(testCode) {
 
 async function fetchResults(testCode) {
   const db = adminState.db;
-  const snap = await db.collection('test_results')
-    .where('testCode', '==', testCode)
-    .limit(500)
-    .get();
-  const rows = [];
-  snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
-  // score desc
+  let rows = [];
+  // Aksar sxemada testCode bo'ladi. Sizdagi test_results’da bo'lmasligi mumkin.
+  try {
+    if (testCode && testCode !== 'ALL') {
+      const snap = await db.collection('test_results')
+        .where('testCode', '==', testCode)
+        .limit(500)
+        .get();
+      snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+    }
+  } catch { /* ignore */ }
+
+  if (!rows.length) {
+    const snap = await db.collection('test_results').limit(500).get();
+    snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+    if (testCode && testCode !== 'ALL') {
+      rows = rows.filter((r) => {
+        const code = r.testCode || r.testId || r.test || r.code || '';
+        return String(code) === String(testCode);
+      });
+    }
+  }
+
+  // score desc (score bo'lmasa — hisoblab chiqaramiz)
+  rows.forEach((r) => {
+    if (r.score === undefined || r.score === null) {
+      // 1) total pointsEarned ni yig'amiz
+      const dr = Array.isArray(r.detailedResults) ? r.detailedResults : [];
+      const sumEarned = dr.reduce((s, x) => s + num(x.pointsEarned ?? x.earned ?? 0), 0);
+      if (sumEarned) r.score = sumEarned;
+      else if (r.totalPointsEarned) r.score = num(r.totalPointsEarned);
+      else if (r.correctAnswers !== undefined) r.score = num(r.correctAnswers);
+      else if (r.points !== undefined) r.score = num(r.points);
+      else r.score = 0;
+    }
+  });
   rows.sort((a, b) => num(b.score) - num(a.score));
   adminState.results = rows;
 }
