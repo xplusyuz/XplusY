@@ -59,16 +59,27 @@ const firebaseManager = {
     return this._initPromise;
   },
 
-  // TestManager shu metodni chaqiradi: const ok = await firebaseManager.saveTestResult(results)
+  // TestManager shu metodni chaqiradi: const status = await firebaseManager.saveTestResult(results)
+  // status:
+  // {
+  //   ok: boolean,
+  //   mode: 'open'|'challenge',
+  //   pointsDelta: number,
+  //   pointsAdded: boolean,
+  //   telegramSent: boolean,
+  //   reason?: string
+  // }
   async saveTestResult(results) {
     try {
-      if (!CONFIG?.useFirebase) return false;
+      if (!CONFIG?.useFirebase) {
+        return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'firebase_disabled' };
+      }
       await this.initialize();
 
       const test = appState?.testData;
       if (!test?.code) {
         console.warn('saveTestResult: testData yo‘q yoki code topilmadi');
-        return false;
+        return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'missing_test_code' };
       }
 
       const rawMode = (test?.mode || 'challenge').toString().trim().toLowerCase();
@@ -78,7 +89,7 @@ const firebaseManager = {
       const user = (this.auth && this.auth.currentUser) ? this.auth.currentUser : null;
       if (!user) {
         console.warn('saveTestResult: auth user topilmadi');
-        return false;
+        return { ok: false, mode, pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'no_auth_user' };
       }
 
       const uid = user.uid;
@@ -88,6 +99,9 @@ const firebaseManager = {
       // Points: sizning talab: ball uid dagi pointsga qo‘shilsin
       // (minimal: 100 ball -> 1 point)
       const gainedPoints = Math.max(1, Math.round((results?.finalScore || 0) / 100));
+
+      let pointsAdded = false;
+      let telegramSent = false;
 
       // OPEN MODE: Firestore'ga natija yozilmaydi, faqat 1-urinish points + Telegram
       if (mode === 'open') {
@@ -106,6 +120,8 @@ const firebaseManager = {
             points: firebase.firestore.FieldValue.increment(gainedPoints),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           }, { merge: true });
+
+          pointsAdded = true;
         }
 
         // 2) Telegram xabari
@@ -126,12 +142,20 @@ const firebaseManager = {
                 className: appState?.currentClass || '',
               })
             });
+            telegramSent = true;
           } catch (e) {
             console.warn('Telegram notify xato:', e);
           }
         }
 
-        return true;
+        return {
+          ok: true,
+          mode,
+          pointsDelta: gainedPoints,
+          pointsAdded,
+          telegramSent,
+          reason: pointsAdded ? 'open_first_award' : 'open_already_awarded'
+        };
       }
 
       // CHALLENGE MODE: test_results + points
@@ -139,7 +163,7 @@ const firebaseManager = {
       const existsSnap = await resRef.get();
       if (existsSnap.exists) {
         // singleAttempt bo‘lsa, bu false qaytarib UI’da xabar chiqaramiz
-        return false;
+        return { ok: false, mode, pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'challenge_already_submitted' };
       }
 
       await resRef.set({
@@ -157,10 +181,19 @@ const firebaseManager = {
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
-      return true;
+      pointsAdded = true;
+
+      return {
+        ok: true,
+        mode,
+        pointsDelta: gainedPoints,
+        pointsAdded,
+        telegramSent: false,
+        reason: 'challenge_saved'
+      };
     } catch (e) {
       console.error('❌ saveTestResult xato:', e);
-      return false;
+      return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'error' };
     }
   }
 };

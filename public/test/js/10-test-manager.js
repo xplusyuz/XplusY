@@ -967,11 +967,52 @@
                 appState.detailedResults = this.getDetailedResults();
                 results.detailedResults = appState.detailedResults;
                 
-                const saveSuccess = await firebaseManager.saveTestResult(results);
-                if (saveSuccess) {
-                    console.log('Natija muvaffaqiyatli saqlandi');
-                } else {
-                    // Challengeda ikkinchi marta yuborishni to'xtatamiz
+                const saveStatus = await firebaseManager.saveTestResult(results);
+
+                // Natijada "points qo'shildi/qo'shilmadi" ko'rsatamiz
+                const ps = document.getElementById('pointsStatus');
+                if (ps) {
+                    ps.classList.remove('is-ok','is-warn','is-error');
+                    // default
+                    let html = '';
+
+                    if (saveStatus?.ok) {
+                        // OPEN: 1-marta qo'shiladi, keyin qo'shilmaydi
+                        if (saveStatus.mode === 'open') {
+                            if (saveStatus.pointsAdded) {
+                                ps.classList.add('is-ok');
+                                html = `⭐ Umumiy ballga <b>+${saveStatus.pointsDelta}</b> points qo'shildi. <small>OPEN mode: bu faqat 1‑urinishda qo'shiladi.</small>`;
+                            } else {
+                                ps.classList.add('is-warn');
+                                html = `ℹ️ Points qo'shilmadi. <small>OPEN mode: points faqat birinchi urinishda qo'shiladi.</small>`;
+                            }
+
+                            if (CONFIG.telegramNotifyOpen) {
+                                html += saveStatus.telegramSent
+                                    ? `<small>📩 Telegramga xabar yuborildi.</small>`
+                                    : `<small>⚠️ Telegramga yuborishda muammo bo'ldi (lekin test yakunlandi).</small>`;
+                            }
+                        } else {
+                            // CHALLENGE
+                            ps.classList.add('is-ok');
+                            html = `⭐ Umumiy ballga <b>+${saveStatus.pointsDelta}</b> points qo'shildi. <small>CHALLENGE mode: natija reytingga yozildi.</small>`;
+                        }
+                    } else {
+                        // Saqlanmadi
+                        if (saveStatus?.reason === 'challenge_already_submitted') {
+                            ps.classList.add('is-error');
+                            html = `❌ Points qo'shilmadi. <small>Siz bu challengeni oldin ishlagansiz — natija qayta yuborilmadi.</small>`;
+                        } else {
+                            ps.classList.add('is-error');
+                            html = `⚠️ Points qo'shilmadi. <small>Natijani saqlashda xatolik bo'ldi (internet/rules/cashe). Keyinroq qayta urinib ko'ring.</small>`;
+                        }
+                    }
+
+                    ps.innerHTML = html;
+                }
+
+                // Oldingi UX xabari (challengeda ikkinchi marta yuborishni to'xtatamiz)
+                if (!saveStatus?.ok && saveStatus?.reason === 'challenge_already_submitted') {
                     if (CONFIG.singleAttempt && this.isChallengeMode()) {
                         utils.showMessage("❌ Siz bu challengeni oldin ishlagansiz. Natija qayta yuborilmadi.", 'error');
                     }
