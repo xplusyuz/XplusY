@@ -10,7 +10,18 @@
             maxWindowSwitchViolations: 3,
             autoLoadImages: true,
             singleAttempt: true,
-            logUserActions: true,
+            // Resurs tejamkorlik: defaultda user action log yozmaymiz (faqat kerak bo'lsa yoqing)
+            logUserActions: false,
+
+            // ===== Mode bo'yicha yozish strategiyasi =====
+            // challenge: Firestore'ga yoziladi (reyting uchun)
+            // open: Firestore'ga natija yozilmaydi (faqat Telegramga yuboriladi)
+            telegramNotifyOpen: true,
+            telegramEndpoint: '/.netlify/functions/notify-open',
+
+            // Challengeda ham resurs tejash uchun default minimal natija yoziladi
+            // (admin uchun ham yetarli: score/time/violations). Kerak bo'lsa true qiling.
+            storeFullResultForChallenge: false,
             
             // Ochiq javoblar uchun yangi sozlamalar
             openAnswerCheckType: 'strict',

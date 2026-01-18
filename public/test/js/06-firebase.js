@@ -161,12 +161,16 @@
                     : null;
                 const isChallenge = ((modeRaw || 'challenge') + '').toLowerCase() === 'challenge';
                 
+                const nowIso = new Date().toISOString();
+
+                // Eslatma: localStorage'ga ham saqlab qo'yamiz (offline/diagnostika uchun)
                 const testResult = {
                     studentId: appState.currentStudent.id,
                     studentName: appState.currentStudent.fullName,
                     studentClass: appState.currentClass,
                     testCode: appState.currentTestCode,
                     testTitle: appState.testData?.title || 'Test',
+                    mode: isChallenge ? 'challenge' : 'open',
                     score: results.finalScore,
                     totalScore: results.totalScore,
                     correctAnswers: results.correctCount,
@@ -174,54 +178,145 @@
                     totalQuestions: appState.testData?.questions?.length || 0,
                     timeSpent: appState.timeSpent,
                     violations: appState.violations,
-                    userAnswers: appState.userAnswers,
-                    userActions: CONFIG.logUserActions ? appState.userActions : [],
-                    completedAt: new Date().toISOString(),
-                    detailedResults: results.detailedResults || [],
-                    sectionScores: results.sectionScores || {},
-                    penalty: results.penalty || 0
+                    // Katta maydonlar resurs yeb qo'yadi: faqat challenge + kerak bo'lsa yozamiz
+                    userAnswers: (isChallenge && CONFIG.storeFullResultForChallenge) ? (appState.userAnswers || {}) : undefined,
+                    userActions: (isChallenge && CONFIG.logUserActions) ? (appState.userActions || []) : undefined,
+                    detailedResults: (isChallenge && CONFIG.storeFullResultForChallenge) ? (results.detailedResults || []) : undefined,
+                    sectionScores: (isChallenge && CONFIG.storeFullResultForChallenge) ? (results.sectionScores || {}) : undefined,
+                    penalty: results.penalty || 0,
+                    completedAt: nowIso
+                };
+
+                const userId = appState.currentStudent.id || appState.currentStudent.loginId;
+                const code = appState.currentTestCode;
+                const pointsToAdd = Math.round(Number(results.finalScore) || 0);
+
+                // Telegramga yuborish (open mode) - token/clientga chiqmaydi: netlify function orqali
+                const notifyTelegramOpen = async (payload) => {
+                    try {
+                        if (!CONFIG.telegramNotifyOpen) return;
+                        const url = CONFIG.telegramEndpoint || '/.netlify/functions/notify-open';
+                        await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                    } catch (e) {
+                        console.warn('Telegram notify xato:', e);
+                    }
                 };
                 
                 try {
                     if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
-                        // 1) Har qanday testda points qo'shiladi (oddiy + challenge)
-                        await this.addUserPoints(results.finalScore);
-
-                        // 2) Oddiy testda result umuman yozilmaydi (resurs tejash)
+                        // ====== OPEN MODE: natija Firestore'ga yozilmaydi, Telegramga yuboriladi ======
                         if (!isChallenge) {
-                            const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
+                            // 1) Points faqat 1-urinishda qo'shilsin (resurs + adolat)
+                            //    Buni serverda ishonchli qilish uchun "open_awards/{code}__{uid}" doc ishlatamiz.
+                            let pointsAdded = false;
+                            if (pointsToAdd) {
+                                const awardId = `${code}__${userId}`;
+                                const awardRef = appState.db.collection('open_awards').doc(String(awardId));
+                                const userRef = appState.db.collection('users').doc(String(userId));
+
+                                await appState.db.runTransaction(async (tx) => {
+                                    const awardSnap = await tx.get(awardRef);
+                                    if (awardSnap.exists) {
+                                        pointsAdded = false;
+                                        return;
+                                    }
+                                    // 1-urinish: award yaratamiz + points qo'shamiz
+                                    const userSnap = await tx.get(userRef);
+                                    const oldPoints = (userSnap.exists && typeof userSnap.data().points === 'number') ? userSnap.data().points : 0;
+                                    const newPoints = Math.round(Number(oldPoints) || 0) + pointsToAdd;
+                                    tx.set(userRef, { points: newPoints }, { merge: true });
+                                    tx.create(awardRef, {
+                                        uid: String(userId),
+                                        testCode: String(code),
+                                        score: pointsToAdd,
+                                        createdAt: nowIso
+                                    });
+                                    pointsAdded = true;
+                                });
+                            }
+
+                            // 2) Telegramga har safar yuboramiz (points qo'shildimi - ham ko'rsatamiz)
+                            await notifyTelegramOpen({
+                                ...testResult,
+                                pointsAdded,
+                                pointsAddedAmount: pointsAdded ? pointsToAdd : 0
+                            });
+
+                            const localStorageKey = `test_attempt_${code}_${userId}`;
                             localStorage.setItem(localStorageKey, JSON.stringify(testResult));
                             return true;
                         }
 
-                        // Challengeda 1 marta ishlash: serverdan ham tekshiramiz (localStorage o'chirilsa ham)
-                        if (isChallenge && CONFIG.singleAttempt) {
-                            const attemptsRef = appState.db.collection('test_results')
-                                .where('studentId', '==', appState.currentStudent.id)
-                                .where('testCode', '==', appState.currentTestCode)
-                                .limit(1);
-                            const snapshot = await attemptsRef.get();
-                            if (!snapshot.empty) {
-                                // Oldin topshirilgan
-                                return false;
-                            }
-                        }
+                        // ====== CHALLENGE MODE: Firestore'ga minimal natija + reyting ======
+                        // Yagona urinish: doc id deterministik, transaction ichida "create" qilamiz.
+                        const resultId = `${code}__${userId}`;
+                        const resultRef = appState.db.collection('test_results').doc(String(resultId));
+                        const userRef = appState.db.collection('users').doc(String(userId));
 
-                        const resultRef = appState.db.collection('test_results').doc();
-                        await resultRef.set(testResult);
-                        
-                        if (CONFIG.logUserActions && appState.userActions.length > 0) {
+                        await appState.db.runTransaction(async (tx) => {
+                            const existing = await tx.get(resultRef);
+                            if (existing.exists && CONFIG.singleAttempt) {
+                                throw new Error('ALREADY_SUBMITTED');
+                            }
+                            // Natija (minimal)
+                            const minimal = {
+                                studentId: String(userId),
+                                studentName: String(appState.currentStudent.fullName || ''),
+                                studentClass: String(appState.currentClass || ''),
+                                testCode: String(code),
+                                testTitle: String(appState.testData?.title || 'Test'),
+                                mode: 'challenge',
+                                score: Number(results.finalScore) || 0,
+                                totalScore: Number(results.totalScore) || 0,
+                                correctAnswers: Number(results.correctCount) || 0,
+                                wrongAnswers: Number(results.wrongCount) || 0,
+                                totalQuestions: Number(appState.testData?.questions?.length || 0),
+                                timeSpent: Number(appState.timeSpent) || 0,
+                                violations: Number(appState.violations) || 0,
+                                penalty: Number(results.penalty) || 0,
+                                completedAt: nowIso
+                            };
+
+                            // Agar to'liq saqlash kerak bo'lsa
+                            if (CONFIG.storeFullResultForChallenge) {
+                                minimal.userAnswers = appState.userAnswers || {};
+                                minimal.detailedResults = results.detailedResults || [];
+                                minimal.sectionScores = results.sectionScores || {};
+                            }
+
+                            // create => duplicate bo'lsa xato beradi
+                            if (existing.exists) tx.set(resultRef, minimal, { merge: true });
+                            else tx.create(resultRef, minimal);
+
+                            // Points: challengeda ham qo'shiladi (singleAttempt bo'lsa 1 marta)
+                            if (pointsToAdd) {
+                                const userSnap = await tx.get(userRef);
+                                const oldPoints = (userSnap.exists && typeof userSnap.data().points === 'number') ? userSnap.data().points : 0;
+                                const newPoints = Math.round(Number(oldPoints) || 0) + pointsToAdd;
+                                tx.set(userRef, { points: newPoints }, { merge: true });
+                            }
+                        });
+
+                        // (Ixtiyoriy) userActions - faqat yoqilgan bo'lsa va challengeda
+                        if (CONFIG.logUserActions && Array.isArray(appState.userActions) && appState.userActions.length > 0) {
                             const batch = appState.db.batch();
-                            appState.userActions.forEach((action, index) => {
+                            const cap = Math.min(appState.userActions.length, 50); // resurs uchun limit
+                            for (let i = 0; i < cap; i++) {
+                                const action = appState.userActions[i];
                                 const actionRef = appState.db.collection('user_actions').doc();
                                 batch.set(actionRef, {
                                     ...action,
-                                    studentId: appState.currentStudent.id,
-                                    studentName: appState.currentStudent.fullName,
-                                    testCode: appState.currentTestCode,
-                                    resultId: resultRef.id
+                                    studentId: String(userId),
+                                    studentName: String(appState.currentStudent.fullName || ''),
+                                    testCode: String(code),
+                                    resultId: String(resultId),
+                                    createdAt: nowIso
                                 });
-                            });
+                            }
                             await batch.commit();
                         }
                     }
@@ -231,6 +326,9 @@
                     
                     return true;
                 } catch (error) {
+                    if (String(error?.message || '').includes('ALREADY_SUBMITTED')) {
+                        return false;
+                    }
                     console.error('Natijani saqlashda xato:', error);
                     try {
                         const localStorageKey = `test_attempt_${appState.currentTestCode}_${appState.currentStudent.id}`;
