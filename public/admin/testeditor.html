@@ -1418,6 +1418,88 @@
     if (s.includes('$')) return false;
     return /[0-9]|\\|^|_|[+\-*/=<>()[\]|\u03c0\u03b8\u03b1\u03b2\u03b3]/.test(s) && !/[\u0400-\u04FF]/.test(s);
   }
+
+  // ===== 5001-STYLE EXPORT NORMALIZER =====
+  // Saytingiz KaTeX'ni asosan $...$ ichidagi LaTeX bo'yicha render qilayotgan bo'lsa,
+  // A4A4 kabi testlarda ba'zi variantlar/answer'lar "oddiy algebra" bo'lib chiqib qolishi mumkin.
+  // Shu sabab download paytida (faylga yozishda) quyidagi yengil normalizatsiya qilinadi:
+  // - Unicode math belgilarini LaTeX ekvivalentiga almashtirish (∪ -> \cup, ≤ -> \leq, ...)
+  // - Variant/correctAnswer kabi "toza formula" bo'lgan maydonlarda $...$ bilan o'rash.
+  // - Savol matnida (text) esa faqat matnsiz/ko'proq formula bo'lsa o'raymiz (gaplarni buzmaslik uchun).
+
+  const U2L = [
+    ['∪', '\\cup '],
+    ['∩', '\\cap '],
+    ['≤', '\\leq '],
+    ['≥', '\\geq '],
+    ['≠', '\\neq '],
+    ['≈', '\\approx '],
+    ['∞', '\\infty '],
+    ['∈', '\\in '],
+    ['∉', '\\notin '],
+    ['⊂', '\\subset '],
+    ['⊆', '\\subseteq '],
+    ['⊥', '\\perp '],
+    ['∥', '\\parallel '],
+    ['π', '\\pi '],
+    ['α', '\\alpha '],
+    ['β', '\\beta '],
+    ['γ', '\\gamma '],
+    ['θ', '\\theta '],
+  ];
+
+  function normalizeUnicodeMath(s) {
+    s = (s ?? '').toString();
+    for (const [u, l] of U2L) s = s.split(u).join(l);
+    // Common slips
+    s = s.replace(/\\?sqrt\s*\{/g, '\\sqrt{');
+    return s;
+  }
+
+  function hasLetters(s) {
+    // Latin + Uzbek extended + Cyrillic
+    return /[A-Za-z\u00C0-\u024F\u0400-\u04FF]/.test(s);
+  }
+
+  function wrapIfPureMath(s) {
+    s = normalizeUnicodeMath(s).trim();
+    if (!s) return s;
+    if (s.includes('$')) return s; // already 5001-style
+    // If it's likely a formula, wrap whole thing
+    if (looksMath(s) && !hasLetters(s)) return `$${s}$`;
+    return s;
+  }
+
+  function wrapOptionLike(s) {
+    // Options/correctAnswer are usually short -> safe to wrap when math-like
+    s = normalizeUnicodeMath(s).trim();
+    if (!s) return s;
+    if (s.includes('$')) return s;
+    if (looksMath(s)) return `$${s}$`;
+    return s;
+  }
+
+  function exportState5001Style() {
+    const out = structuredClone(state);
+    out.questions = (out.questions || []).map(q => {
+      // normalize strings
+      q.text = (q.text ?? '').toString();
+      q.text = wrapIfPureMath(q.text);
+
+      if (q.type === 'variant') {
+        q.options = Array.isArray(q.options) ? q.options : [];
+        q.options = q.options.map(opt => wrapOptionLike(opt));
+      } else {
+        q.correctAnswer = wrapOptionLike(q.correctAnswer ?? '');
+      }
+
+      // also normalize image fields just in case (no wrapping)
+      q.imageUrl = (q.imageUrl ?? '').toString();
+      q.imagePath = (q.imagePath ?? '').toString();
+      return q;
+    });
+    return out;
+  }
   
   function renderMathLatex(latex) {
     try {
@@ -2421,7 +2503,8 @@
     $('btnDownload').onclick = () => {
       normalize();
       const filename = `${state.code || "test"}.json`;
-      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const out = exportState5001Style();
+      const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = filename;
