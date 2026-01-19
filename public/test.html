@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeaderMath Test</title>
+<script src="authUtils.js"></script>
+<style>
+body{font-family:Arial;background:#f5f7fb;margin:0;padding:0}
+header{background:#2E8B57;color:#fff;padding:12px;text-align:center}
+#app{max-width:900px;margin:auto;padding:16px}
+.q{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px}
+.q img{max-width:100%;border-radius:8px}
+.btn{background:#2E8B57;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:16px}
+.btn:disabled{opacity:.5}
+.timer{font-weight:bold;color:#c0392b}
+</style>
+</head>
+<body>
+<header>
+  <h2 id="title">Test yuklanmoqda...</h2>
+  <div>⏳ <span id="timer">--:--</span></div>
+</header>
+<div id="app"></div>
+<div style="text-align:center;padding:16px">
+  <button class="btn" id="submitBtn">Yakunlash</button>
+</div>
+<script>
+(async function(){
+  const user = await authUtils.requireUser({returnTo:location.pathname+location.search});
+  const params = new URLSearchParams(location.search);
+  const testId = params.get("id");
+  const code = params.get("code") || "";
+  if(!testId){ alert("Test ID yo‘q"); return; }
+
+  const url = authUtils.apiUrl("tests/get") + "&id=" + encodeURIComponent(testId) + "&code=" + encodeURIComponent(code);
+  const res = await fetch(url);
+  const data = await res.json();
+  if(!res.ok){ alert(data.error||"Test ochilmadi"); return; }
+
+  const test = data.test;
+  document.getElementById("title").innerText = test.title;
+  const app = document.getElementById("app");
+
+  let answers = new Array(test.questions.length).fill("");
+  test.questions.forEach((q,i)=>{
+    const d = document.createElement("div");
+    d.className="q";
+    d.innerHTML = `<h4>${i+1})</h4>`;
+    if(q.img) d.innerHTML += `<img src="/tests/${test.folder}/${q.img}">`;
+    if(q.type==="mcq"){
+      q.options.forEach((opt,idx)=>{
+        const id = "q"+i+"_"+idx;
+        d.innerHTML += `<div><label><input type="radio" name="q${i}" value="${idx}" id="${id}"> ${opt}</label></div>`;
+      });
+      d.addEventListener("change",e=>{
+        if(e.target.name==="q"+i) answers[i]=e.target.value;
+      });
+    }else{
+      const inp = document.createElement("input");
+      inp.type="text"; inp.style.width="100%";
+      inp.oninput=()=>answers[i]=inp.value;
+      d.appendChild(inp);
+    }
+    app.appendChild(d);
+  });
+
+  let remain = test.durationSec;
+  const timerEl = document.getElementById("timer");
+  const tick = ()=>{
+    if(remain<=0){ submit(); return; }
+    const m = String(Math.floor(remain/60)).padStart(2,"0");
+    const s = String(remain%60).padStart(2,"0");
+    timerEl.innerText = m+":"+s;
+    remain--;
+  };
+  if(test.durationSec>0){ tick(); setInterval(tick,1000); }
+
+  document.getElementById("submitBtn").onclick = submit;
+
+  async function submit(){
+    document.getElementById("submitBtn").disabled=true;
+    const res = await authUtils.fetchApi("tests/submit",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({id:testId,answers,timeSpentSec:test.durationSec-remain})
+    });
+    const out = await res.json();
+    if(!res.ok){ alert(out.error||"Xatolik"); return; }
+    alert(`Natija: ${out.result.score} ball\nTo‘g‘ri: ${out.result.correct}/${out.result.total}`);
+    location.href="/app.html";
+  }
+})();
+</script>
+</body>
+</html>
