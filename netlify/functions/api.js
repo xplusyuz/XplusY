@@ -108,9 +108,9 @@ function parseBody(event){
 function loadLocalTestJson(testId){
   const id = String(testId || "").trim();
   if(!id) return null;
-  // Netlify functions runtime: process.cwd() -> /var/task
-  const base = process.cwd();
-  const p = pathMod.join(base, "public", "test", `${id}.json`);
+  // Resolve relative to this file for Netlify compatibility
+  const __dirname = new URL('.', import.meta.url).pathname;
+  const p = pathMod.join(__dirname, "..", "..", "public", "test", `${id}.json`);
   try{
     if(!fs.existsSync(p)) return null;
     const txt = fs.readFileSync(p, "utf-8");
