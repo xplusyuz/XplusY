@@ -1058,6 +1058,7 @@ export const handler = async (event) => {
     // TESTS / CHALLENGES API
     // Collection: tests/{id}
     // Submissions: tests/{id}/submissions/{loginId}
+    // Attempts: tests/{id}/attempts/{loginId}
     // =====================
 
     if(path === "/tests/list" && method === "GET"){
@@ -1121,6 +1122,156 @@ export const handler = async (event) => {
       }
     }
 
+    // ===== Challenge attempt lock =====
+    // - Start bosilganda attempt yaratiladi
+    // - Cancel bo'lsa ham qayta yechib bo'lmaydi
+    // - Submit bo'lganda status=completed bo'ladi
+
+    if(path === "/tests/start" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const body = parseBody(event);
+        const id = String(body.id || "").trim();
+        if(!id) return json(400, { error:"id kerak" });
+
+        const ref = db.collection("tests").doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = { id: snap.id, ...(snap.data()||{}) };
+
+        // open mode -> lock kerak emas
+        if(String(t.mode||'open') !== 'challenge'){
+          return json(200, { ok:true, attempt:null, mode:'open' });
+        }
+
+        const w = withinWindow(Date.now(), t.startAt, t.endAt);
+        if(!w.ok) return json(403, { error: w.reason === 'not_started' ? "Challenge hali boshlanmagan" : "Challenge yakunlangan", startAt:w.startAt, endAt:w.endAt });
+
+        const attemptRef = ref.collection('attempts').doc(auth.loginId);
+        const durationSec = Math.max(0, Number(t.durationSec||0) || 0);
+
+        const out = await db.runTransaction(async (tx)=>{
+          const a = await tx.get(attemptRef);
+          if(a.exists){
+            const d = a.data() || {};
+            const st = String(d.status||'started');
+            if(st === 'completed') throw new Error('Siz bu testni avval topshirgansiz');
+            if(st === 'cancelled') throw new Error('Test bekor qilingan. Qayta yechib bo‘lmaydi');
+            // resume
+            return { ...d, status:'started' };
+          }
+          const attemptId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+"_"+Math.random().toString(16).slice(2)));
+          const payload = {
+            loginId: auth.loginId,
+            testId: id,
+            status: 'started',
+            attemptId,
+            durationSec,
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          };
+          tx.set(attemptRef, payload, { merge:false });
+          return payload;
+        });
+
+        // serverTimestamp ni millisga aylantirib beramiz
+        const attemptSnap = await attemptRef.get();
+        const d = attemptSnap.data() || out || {};
+        return json(200, { ok:true, attempt: {
+          status: d.status || 'started',
+          attemptId: d.attemptId || out.attemptId,
+          durationSec: Number(d.durationSec||0) || durationSec,
+          startedAt: toMillis(d.startedAt) || Date.now()
+        }});
+      }catch(e){
+        return json(400, { error: e.message || 'start_error' });
+      }
+    }
+
+    if(path === "/tests/cancel" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const body = parseBody(event);
+        const id = String(body.id || "").trim();
+        const reason = safeStr(body.reason || 'cancelled', 200);
+        if(!id) return json(400, { error:"id kerak" });
+        const ref = db.collection('tests').doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = snap.data() || {};
+        if(String(t.mode||'open') !== 'challenge') return json(200, { ok:true });
+
+        const attemptRef = ref.collection('attempts').doc(auth.loginId);
+        await db.runTransaction(async (tx)=>{
+          const a = await tx.get(attemptRef);
+          if(a.exists){
+            const d = a.data() || {};
+            if(String(d.status||'') === 'completed') return; // completed ni o'zgartirmaymiz
+            tx.set(attemptRef, {
+              status:'cancelled',
+              cancelReason: reason,
+              cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge:true });
+            return;
+          }
+          tx.set(attemptRef, {
+            loginId: auth.loginId,
+            testId: id,
+            status:'cancelled',
+            cancelReason: reason,
+            cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge:false });
+        });
+
+        return json(200, { ok:true });
+      }catch(e){
+        return json(400, { error: e.message || 'cancel_error' });
+      }
+    }
+
+    if(path === "/tests/attempt" && method === "GET"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+      try{
+        const id = String(event.queryStringParameters?.id || "").trim();
+        if(!id) return json(400, { error:"id kerak" });
+        const ref = db.collection('tests').doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+
+        const attemptRef = ref.collection('attempts').doc(auth.loginId);
+        const subRef = ref.collection('submissions').doc(auth.loginId);
+        const [a, s] = await Promise.all([attemptRef.get(), subRef.get()]);
+        const attempt = a.exists ? (a.data() || {}) : null;
+        const submission = s.exists ? (s.data() || {}) : null;
+        const outAttempt = attempt ? {
+          status: attempt.status || 'started',
+          attemptId: attempt.attemptId || null,
+          durationSec: Number(attempt.durationSec||0) || 0,
+          startedAt: toMillis(attempt.startedAt),
+          cancelledAt: toMillis(attempt.cancelledAt),
+          completedAt: toMillis(attempt.completedAt),
+          cancelReason: attempt.cancelReason || ''
+        } : null;
+        const outSub = submission ? {
+          score: submission.score ?? 0,
+          correct: submission.correct ?? 0,
+          wrong: submission.wrong ?? 0,
+          total: submission.total ?? 0,
+          timeSpentSec: submission.timeSpentSec ?? 0,
+          submittedAt: toMillis(submission.submittedAt)
+        } : null;
+
+        return json(200, { attempt: outAttempt, submission: outSub });
+      }catch(e){
+        return json(500, { error:"Attempt status error", message: e.message });
+      }
+    }
+
     if(path === "/tests/submit" && method === "POST"){
       const auth = requireToken(event);
       if(!auth.ok) return auth.error;
@@ -1144,8 +1295,18 @@ export const handler = async (event) => {
 
         const res = scoreTest(t, answers);
         const subRef = ref.collection('submissions').doc(auth.loginId);
+        const attemptRef = ref.collection('attempts').doc(auth.loginId);
 
         await db.runTransaction(async (tx)=>{
+          // Attempt lock check (challenge only)
+          if(String(t.mode||'open') === 'challenge'){
+            const aSnap = await tx.get(attemptRef);
+            if(aSnap.exists){
+              const curA = aSnap.data() || {};
+              if(curA.status === 'completed') throw new Error('Siz bu testni avval topshirgansiz');
+              if(curA.status === 'cancelled') throw new Error('Urinish bekor qilingan. Qayta yechib bo‘lmaydi');
+            }
+          }
           const prev = await tx.get(subRef);
           if(prev.exists) throw new Error("Siz bu testni avval topshirgansiz");
           tx.set(subRef, {
@@ -1158,6 +1319,12 @@ export const handler = async (event) => {
             timeSpentSec,
             answers
           }, { merge:false });
+
+          // mark attempt completed
+          if(String(t.mode||'open') === 'challenge'){
+            const now = admin.firestore.FieldValue.serverTimestamp();
+            tx.set(attemptRef, { loginId: auth.loginId, status:'completed', completedAt: now, updatedAt: now }, { merge:true });
+          }
 
           // points only for challenge
           if(String(t.mode||'open') === 'challenge'){

@@ -4,8 +4,11 @@
             enableSecurity: true,
             enableRandomOrder: true,
             enableRandomOptions: true,
-            useFirebase: true,
-            fallbackToJSON: true,
+            // ✅ Endi test tizimi Firestore client-config emas, Netlify API orqali ishlaydi.
+            // (Resurs tejamkor, xavfsiz, yagona login token bilan.)
+            useFirebase: false,
+            // Offline/backup kerak bo'lsa true qoldiring (code.json orqali)
+            fallbackToJSON: false,
             maxMinorViolations: 20,
             maxWindowSwitchViolations: 3,
             autoLoadImages: true,
@@ -35,14 +38,13 @@
             normalizeAnswers: true,
             allowMultipleFormats: true,
         };
-        
-        const FIREBASE_CONFIG = {
-          apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-          authDomain: "xplusy-760fa.firebaseapp.com",
-          databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
-          projectId: "xplusy-760fa",
-          storageBucket: "xplusy-760fa.firebasestorage.app",
-          messagingSenderId: "992512966017",
-          appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-          measurementId: "G-459PLJ7P7L"
+
+        // API sozlamalar
+        CONFIG.apiBase = '/.netlify/functions/api';
+        CONFIG.apiPaths = {
+          getTest: 'tests/get',
+          startAttempt: 'tests/start',
+          cancelAttempt: 'tests/cancel',
+          attemptStatus: 'tests/attempt',
+          submit: 'tests/submit'
         };
