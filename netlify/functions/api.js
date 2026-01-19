@@ -1,6 +1,8 @@
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import fs from "fs";
+import pathMod from "path";
 
 function json(statusCode, obj){
   return { statusCode, headers: { "Content-Type":"application/json" }, body: JSON.stringify(obj) };
@@ -100,6 +102,23 @@ function toMillis(ts){
 function parseBody(event){
   try{ return JSON.parse(event.body || "{}"); }
   catch(_){ return {}; }
+}
+
+// ===== Local JSON tests fallback (public/test/*.json) =====
+function loadLocalTestJson(testId){
+  const id = String(testId || "").trim();
+  if(!id) return null;
+  // Netlify functions runtime: process.cwd() -> /var/task
+  const base = process.cwd();
+  const p = pathMod.join(base, "public", "test", `${id}.json`);
+  try{
+    if(!fs.existsSync(p)) return null;
+    const txt = fs.readFileSync(p, "utf-8");
+    const data = JSON.parse(txt);
+    return { id, ...(data||{}) };
+  }catch(_){
+    return null;
+  }
 }
 
 // ===== Tests helpers =====
@@ -1101,19 +1120,38 @@ export const handler = async (event) => {
 
     if(path === "/tests/get" && method === "GET"){
       try{
-        const id = String(event.queryStringParameters?.id || "").trim();
-        if(!id) return json(400, { error:"id kerak" });
-        const code = String(event.queryStringParameters?.code || "").trim();
+        const idRaw = String(event.queryStringParameters?.id || "").trim();
+        const codeParam = String(event.queryStringParameters?.code || "").trim();
+        const id = idRaw || codeParam;
+        if(!id) return json(400, { error:"id (yoki code) kerak" });
+        // Backward compatible:
+        // - old: ?id=TEST_ID&code=ACCESS_CODE
+        // - new: ?code=TEST_ID (open) or ?id=TEST_ID&accessCode=ACCESS_CODE
+        const accessCode = String(event.queryStringParameters?.accessCode || "").trim()
+          || String(event.queryStringParameters?.access || "").trim()
+          || (idRaw ? codeParam : "");
 
-        const ref = db.collection("tests").doc(id);
-        const snap = await ref.get();
-        if(!snap.exists) return json(404, { error:"Test topilmadi" });
-        const t = { id: snap.id, ...(snap.data()||{}) };
+        // 1) Firestore'dan olishga harakat
+        let t = null;
+        try{
+          const ref = db.collection("tests").doc(id);
+          const snap = await ref.get();
+          if(snap.exists) t = { id: snap.id, ...(snap.data()||{}) };
+        }catch(_){
+          // ENV yo'q bo'lsa yoki Firestore xato bo'lsa, file fallback ishlaydi
+        }
+
+        // 2) Local JSON fallback: public/test/<id>.json
+        if(!t){
+          t = loadLocalTestJson(id);
+        }
+
+        if(!t) return json(404, { error:"Test topilmadi" });
 
         if(String(t.mode||'open') === 'challenge'){
           const w = withinWindow(Date.now(), t.startAt, t.endAt);
           if(!w.ok) return json(403, { error: w.reason === 'not_started' ? "Challenge hali boshlanmagan" : "Challenge yakunlangan", startAt:w.startAt, endAt:w.endAt });
-          if(!code || String(code) !== String(t.accessCode||"")) return json(403, { error:"Kirish kodi noto‘g‘ri" });
+          if(!accessCode || String(accessCode) !== String(t.accessCode||"")) return json(403, { error:"Kirish kodi noto‘g‘ri" });
         }
 
         return json(200, { test: sanitizeTestForClient(t) });

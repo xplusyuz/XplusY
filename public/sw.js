@@ -68,6 +68,26 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
+  // Range so'rovlar (video/audio) ko'pincha 206 qaytaradi. 206'ni cache.put qila olmaymiz.
+  const hasRange = (() => {
+    try { return req.headers && req.headers.has("range"); } catch (_) { return false; }
+  })();
+
+  function canCache(res) {
+    try {
+      if (!res) return false;
+      // 200 OK (yoki opaque) bo'lsa cache qilamiz, 206 Partial Content bo'lsa yo'q
+      if (res.status === 206) return false;
+      if (hasRange) return false;
+      // opaque (cross-origin) yoki basic (same-origin) bo'lsa OK
+      if (res.type === "opaque") return true;
+      if (res.type === "basic") return res.status === 200;
+      return res.status === 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Only GET, same-origin
   if (req.method !== "GET") return;
   if (!isSameOrigin(req.url)) return;
@@ -94,8 +114,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+          if (canCache(res)) {
+            const copy = res.clone();
+            event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+          }
           return res;
         })
         .catch(() =>
@@ -113,15 +135,20 @@ self.addEventListener("fetch", (event) => {
       if (cached) {
         event.waitUntil(
           fetch(req).then((res) => {
-            const copy = res.clone();
-            return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+            if (canCache(res)) {
+              const copy = res.clone();
+              return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+            }
+            return;
           }).catch(()=>{})
         );
         return cached;
       }
       return fetch(req).then((res) => {
-        const copy = res.clone();
-        event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+        if (canCache(res)) {
+          const copy = res.clone();
+          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+        }
         return res;
       });
     })
