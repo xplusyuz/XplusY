@@ -130,9 +130,17 @@
                     if (ok) {
                         await this.openIntroForCurrentStudent();
                     } else {
-                        // Fallback: eski sinf/o'quvchi oqimi
-                        await this.populateClasses();
-                        dom.showScreen('classSelection');
+                        // Sinf/o'quvchi tanlash kerak emas.
+                        // Login bo'lmasa app sahifaga qaytaramiz.
+                        try {
+                            const returnTo = location.pathname + location.search;
+                            await (leaderMathAuth?.requireUser?.({
+                                redirect: true,
+                                appHome: '/app.html',
+                                returnTo
+                            }) ?? Promise.resolve(null));
+                        } catch (_) {}
+                        dom.showScreen('codeInput');
                     }
                 }
             },

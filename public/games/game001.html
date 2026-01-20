@@ -8,6 +8,10 @@
     
     <!-- LeaderMath authUtils (lm_token) -->
     <script src="/assets/js/authUtils.js"></script>
+    <script>
+      // game sahifa /games/ ichida: login yo'q bo'lsa app.html ga qaytaramiz
+      try { window.authUtils && authUtils.configure && authUtils.configure({ appHome: '../app.html' }); } catch(e){}
+    </script>
 <!-- Auth tizimi -->
 <!-- MathJax for LaTeX -->
     <script>
@@ -1889,8 +1893,19 @@ function displayLeaderboard(leaderboard) {
 
 
 async function ensureLoggedUserOrBlock(){
+  // Yagona oqim: token bo'lsa userni avto tortamiz, bo'lmasa app'ga yuboramiz.
+  if (window.authUtils?.requireUser) {
+    const user = await authUtils.requireUser({
+      redirect: true,
+      appHome: '../app.html',
+      returnTo: location.pathname + location.search
+    }).catch(()=>null);
+    if (user) { window.__LM_USER = user; return user; }
+  }
+  // Fallback: eski usul
   const user = await (window.authUtils?.me ? authUtils.me() : Promise.resolve(null)).catch(()=>null);
   if(!user){ showNeedLoginOverlay(); throw new Error("NO_USER"); }
+  window.__LM_USER = user;
   return user;
 }
 
@@ -1905,7 +1920,7 @@ window.game001CommitXP = window.game001CommitXP || (async function(user, xpRecor
   };
 
   if (window.authUtils?.fetchApi) {
-    const res = await authUtils.fetchApi("/games/submit", {
+    const res = await authUtils.fetchApi("games/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)

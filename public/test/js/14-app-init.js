@@ -28,14 +28,24 @@
                             if (testManager.blockTestAccess()) return;
                             await eventHandlers.openIntroForCurrentStudent();
                         } else {
-                            // 2) LeaderMath login orqali avto aniqlash
+                            // 2) LeaderMath login orqali avto aniqlash (YAGONA OQIM)
                             const ok = await eventHandlers.autoIdentifyCurrentUser();
                             if (ok) {
                                 await eventHandlers.openIntroForCurrentStudent();
                             } else {
-                                // 3) Fallback: eski sinf/o'quvchi tanlash
-                                await eventHandlers.populateClasses();
-                                dom.showScreen('classSelection');
+                                // Sinf/o'quvchi tanlash kerak emas.
+                                // Login bo'lmasa app sahifaga qaytaramiz.
+                                try {
+                                    const returnTo = location.pathname + location.search;
+                                    await (leaderMathAuth?.requireUser?.({
+                                        redirect: true,
+                                        appHome: '/app.html',
+                                        returnTo
+                                    }) ?? Promise.resolve(null));
+                                } catch (_) {}
+
+                                // Fallback: kod kiritish oynasiga qaytaramiz (redirect bo'lmasa ham)
+                                dom.showScreen('codeInput');
                             }
                         }
                     }
@@ -56,20 +66,23 @@
                     if (e.key === 'Enter') eventHandlers.handleTestCodeLoad();
                 });
                 
-                dom.elements.nextToStudentBtn.addEventListener('click', () => {
-                    appState.currentClass = dom.elements.classSelect.value;
-                    if (!appState.currentClass) {
-                        utils.showMessage('Iltimos, sinfni tanlang', 'error');
-                        return;
-                    }
-                    eventHandlers.populateStudents(appState.currentClass);
-                    dom.showScreen('studentSelection');
-                });
+                // Eski sinf/o'quvchi oqimi (endilikda ishlatilmaydi) — DOM bo'lmasa ham xato bermasin.
+                if (dom.elements.nextToStudentBtn && dom.elements.classSelect) {
+                    dom.elements.nextToStudentBtn.addEventListener('click', () => {
+                        appState.currentClass = dom.elements.classSelect.value;
+                        if (!appState.currentClass) {
+                            utils.showMessage('Iltimos, sinfni tanlang', 'error');
+                            return;
+                        }
+                        eventHandlers.populateStudents(appState.currentClass);
+                        dom.showScreen('studentSelection');
+                    });
+                }
                 
                 dom.elements.backToCodeBtn.addEventListener('click', () => dom.showScreen('codeInput'));
                 
-                dom.elements.nextToIntroBtn.addEventListener('click', eventHandlers.handleNextToIntro.bind(eventHandlers));
-                dom.elements.backToClassBtn.addEventListener('click', () => dom.showScreen('classSelection'));
+                if (dom.elements.nextToIntroBtn) dom.elements.nextToIntroBtn.addEventListener('click', eventHandlers.handleNextToIntro.bind(eventHandlers));
+                if (dom.elements.backToClassBtn) dom.elements.backToClassBtn.addEventListener('click', () => dom.showScreen('classSelection'));
                 
                 dom.elements.viewPreviousAttemptBtn.addEventListener('click', () => {
                     if (appState.previousAttempt) {
