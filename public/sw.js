@@ -1,143 +1,27 @@
-/* LeaderMath.UZ Service Worker (Optimal) */
-const VERSION = "lm-pwa-v1.0.3-20260120"; // har deployda yangila!
-const STATIC_CACHE = `static-${VERSION}`;
-const RUNTIME_CACHE = `runtime-${VERSION}`;
+// LeaderMath Cacheless PWA Service Worker
+// Network-only: no runtime caching. Keeps app installable while avoiding stale assets.
+// NOTE: Offline mode is intentionally disabled.
 
-// JSON'lar hech qachon precache qilinmaydi!
-const PRECACHE_URLS = [
-  "./",
-  "./index.html",
-  "./app.html",
-  "./offline.html",
-  "./manifest.webmanifest",
-  "./favicon.ico",
-  "./logo.png",
-  "./assets/css/style.css",
-  "./assets/css/ui.css",
-  "./assets/css/app.css",
-  "./assets/css/bridge.css",
-  "./assets/css/pwa.css",
-  "./assets/js/core.js",
-  "./assets/js/api.js",
-  "./assets/js/auth.js",
-  "./assets/js/seasons.js",
-  "./assets/js/pwa.js"
-];
-
-const NEVER_CACHE_PATHS = new Set([
-  "/content.json",
-  "/challenge.json"
-]);
-
-function isHTML(req){
-  return req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
-}
-function isSameOrigin(url){
-  try { return new URL(url).origin === self.location.origin; } catch { return false; }
-}
-function isNeverCache(req){
-  const u = new URL(req.url);
-  return NEVER_CACHE_PATHS.has(u.pathname);
-}
-
-function canCache(req, res){
-  try{
-    if(!res) return false;
-    // Range request (206 Partial Content) ni cache'ga qo'ymaymiz — Chrome Cache API buni yoqtirmaydi.
-    if(req.headers && req.headers.get('range')) return false;
-    if(res.status && res.status !== 200) return false;
-    if(!res.ok) return false;
-    return true;
-  }catch(_){
-    return false;
-  }
-}
-
-// Install: app shell precache
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
-  );
+self.addEventListener('install', (event) => {
+  // Activate immediately
+  self.skipWaiting();
 });
 
-// Allow page to trigger immediate activation
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    // Remove ALL existing caches created by older SW versions
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    } catch (_) {}
+
+    // Take control of open pages
+    await self.clients.claim();
+  })());
 });
 
-// Activate: clean old caches
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.map((k) => {
-        if (k !== STATIC_CACHE && k !== RUNTIME_CACHE) return caches.delete(k);
-      })))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  const req = event.request;
-
-  // Only GET, same-origin
-  if (req.method !== "GET") return;
-  if (!isSameOrigin(req.url)) return;
-
-  // 1) JSON: NETWORK-ONLY (NO CACHE). Offline bo'lsa: oxirgi runtime nusxa fallback.
-  if (isNeverCache(req)) {
-    event.respondWith(
-      fetch(req, { cache: "no-store" })
-        .then((res) => {
-          // ixtiyoriy: offline fallback uchun runtime'ga oxirgi nusxani yozib qo'yamiz
-          const copy = res.clone();
-          event.waitUntil(
-            (canCache(req, res) ? caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)) : Promise.resolve()).catch(()=>{})
-          );
-          return res;
-        })
-        .catch(() => caches.match(req)) // offline'da oxirgi bor olingan nusxa
-    );
-    return;
-  }
-
-  // 2) HTML: NETWORK-FIRST (fresh), fallback cache/offline
-  if (isHTML(req)) {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          event.waitUntil((canCache(req, res) ? caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)) : Promise.resolve()).catch(()=>{}));
-          return res;
-        })
-        .catch(() =>
-          caches.match(req)
-            .then((m) => m || caches.match("./index.html"))
-            .then((m) => m || caches.match("./offline.html"))
-        )
-    );
-    return;
-  }
-
-  // 3) Static assets: CACHE-FIRST + background update (tezlik uchun)
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) {
-        event.waitUntil(
-          fetch(req).then((res) => {
-            const copy = res.clone();
-            if(!canCache(req, res)) return;
-            return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
-          }).catch(()=>{})
-        );
-        return cached;
-      }
-      return fetch(req).then((res) => {
-        const copy = res.clone();
-        event.waitUntil((canCache(req, res) ? caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)) : Promise.resolve()).catch(()=>{}));
-        return res;
-      });
-    })
-  );
+self.addEventListener('fetch', (event) => {
+  // Pure pass-through to network.
+  // This also avoids cache.put() issues with 206 Partial Content / Range requests.
+  event.respondWith(fetch(event.request));
 });

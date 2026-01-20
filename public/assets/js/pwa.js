@@ -42,7 +42,7 @@
   async function registerSW() {
     if (!("serviceWorker" in navigator)) return;
     try {
-      const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      const reg = await navigator.serviceWorker.register("./sw.js?v=lm-nocache-20260120", { scope: "./" });
       setupSwUpdateUI(reg);
       // Periodic update checks (safe)
       setInterval(() => { try { reg.update(); } catch(e){} }, 60 * 60 * 1000);
