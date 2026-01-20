@@ -1,23 +1,4 @@
-// Primary backend (Netlify). If you host elsewhere, the fallback below will try "/api".
 export const API_BASE = "/.netlify/functions/api";
-const API_FALLBACK = "/api";
-
-async function fetchWithFallback(urlPrimary, init){
-  const res = await fetch(urlPrimary, init);
-  // If Netlify Functions are not available on this host, retry on "/api".
-  if (res.status === 404) {
-    try{
-      const u = new URL(urlPrimary);
-      const alt = new URL(API_FALLBACK, location.origin);
-      // keep same query params
-      u.searchParams.forEach((v,k)=> alt.searchParams.set(k,v));
-      return await fetch(alt.toString(), init);
-    }catch(_){
-      return res;
-    }
-  }
-  return res;
-}
 
 // api(path, { method, body, token, query })
 // - path: "comments" | "leaderboard" ...
@@ -35,7 +16,7 @@ export async function api(path, {method="GET", body=null, token=null, query=null
   const url = u.toString();
   const headers = { "Content-Type":"application/json" };
   if(token) headers.Authorization = "Bearer " + token;
-  const res = await fetchWithFallback(url, { method, headers, body: body? JSON.stringify(body): null });
+  const res = await fetch(url, { method, headers, body: body? JSON.stringify(body): null });
   const ct = (res.headers.get('content-type')||'').toLowerCase();
   let data = null;
   if(ct.includes('application/json')){

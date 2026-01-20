@@ -1717,31 +1717,31 @@
             document.getElementById("final-correct").textContent = gameState.correctCount;
             document.getElementById("final-xp").textContent = gameState.xpCount;
 
-            // ============ NATIJALAR SAQLASH (Firestore: users/{id}.points + users/{id}.game001) ============
-try {
-    const user = getCurrentUser();
-    if (user) {
+	            // ============ NATIJALAR SAQLASH (API -> Firestore users/{loginId}.games.game001 + points) ============
+	try {
+	    const user = window.__LM_USER || (window.authUtils?.me ? await authUtils.me().catch(()=>null) : null);
+	    if (user) {
         // 1) Record (XP) — game001 (max) sifatida saqlanadi
         const xpRecord = Number(gameState.xpCount || 0);
 
         // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
         // 5.6 => 6, 7.2 => 7
-        const pointsDelta = Math.round(xpRecord / 10);
+	        const pointsDelta = Math.round(xpRecord / 100);
 
         console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
 
-        // Firestore transaction orqali yozamiz (resurs tejaladi, xavfsiz)
-        if (window.game001CommitXP) {
-            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
-            console.log('Firestore commit:', commitRes);
-        } else {
-            console.warn('game001CommitXP mavjud emas (Firebase script yuklanmagan bo‘lishi mumkin).');
-        }
+	        // API orqali yozamiz
+	        if (window.game001CommitXP) {
+	            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
+	            console.log('API commit:', commitRes);
+	        } else {
+	            console.warn('game001CommitXP mavjud emas (authUtils yuklanmagan bo‘lishi mumkin).');
+	        }
 
         // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
         // Bu backend yozuv bo‘lmasa ham, local ko‘rinish uchun.
-        try {
-            const currentUser = getCurrentUser() || user;
+	        try {
+	            const currentUser = window.__LM_USER_VIEW || user;
             const currentPoints = Number(currentUser.points || 0);
             const newPoints = currentPoints + pointsDelta;
             if (authUtils.updateUserData) { await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) }); }

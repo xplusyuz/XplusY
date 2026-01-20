@@ -1002,16 +1002,9 @@
                         if (saveStatus?.reason === 'challenge_already_submitted') {
                             ps.classList.add('is-error');
                             html = `❌ Points qo'shilmadi. <small>Siz bu challengeni oldin ishlagansiz — natija qayta yuborilmadi.</small>`;
-                        } else if (saveStatus?.reason === 'auth_required') {
-                            ps.classList.add('is-error');
-                            html = `🔒 Points qo'shilmadi. <small>Profilga kirish kerak (token topilmadi yoki yaroqsiz). App sahifada qayta login qilib, testni qayta yakunlang.</small>`;
-                        } else if (saveStatus?.reason === 'api_not_found') {
-                            ps.classList.add('is-error');
-                            html = `🧩 Points qo'shilmadi. <small>Server API topilmadi (/.netlify/functions/api yoki /api). Hostingda serverless yoqilmagan bo'lishi mumkin.</small>`;
                         } else {
                             ps.classList.add('is-error');
-                            const extra = saveStatus?.status ? ` (HTTP ${saveStatus.status})` : '';
-                            html = `⚠️ Points qo'shilmadi. <small>Natijani saqlashda xatolik bo'ldi${extra}. Internet/cache/hosting sozlamalarini tekshirib ko'ring.</small>`;
+                            html = `⚠️ Points qo'shilmadi. <small>Natijani saqlashda xatolik bo'ldi (internet/rules/cashe). Keyinroq qayta urinib ko'ring.</small>`;
                         }
                     }
 
