@@ -13,7 +13,10 @@
 
   const DEFAULTS = {
     tokenKey: 'lm_token',
+    // Primary API base (Netlify Functions)
     apiBase: '/.netlify/functions/api',
+    // Fallback API base (custom server / reverse proxy)
+    apiBaseAlt: '/api',
     mePath: 'auth/me',
     // Token yo'q yoki yaroqsiz bo'lsa qaytish sahifasi (login modali odatda shu yerda)
     appHome: '/app.html',
@@ -33,6 +36,28 @@
     const u = new URL(apiBase, location.origin);
     u.searchParams.set('path', path);
     return u.toString();
+  }
+
+  async function fetchApiWithFallback(cfg, path, init) {
+    // Try primary base first
+    const primary = cfg.apiBase;
+    const alt = cfg.apiBaseAlt;
+
+    const url1 = buildApiUrl(primary, path);
+    const res1 = await fetch(url1, init);
+
+    // If Netlify functions path doesn't exist on this hosting, it will usually be 404.
+    // In that case, retry with /api and make it sticky for the rest of the session.
+    if (res1.status === 404 && alt && primary !== alt) {
+      const url2 = buildApiUrl(alt, path);
+      const res2 = await fetch(url2, init);
+      if (res2.ok || res2.status !== 404) {
+        cfg.apiBase = alt;
+      }
+      return res2;
+    }
+
+    return res1;
   }
 
   async function safeJson(res) {
@@ -74,8 +99,7 @@
       const token = this.getToken();
       if (!token) return null;
 
-      const url = this.apiUrl(this._cfg.mePath);
-      const res = await fetch(url, {
+      const res = await fetchApiWithFallback(this._cfg, this._cfg.mePath, {
         method: 'GET',
         headers: { Authorization: 'Bearer ' + token }
       });
@@ -94,12 +118,10 @@
      */
     async fetchApi(path, options) {
       const token = this.getToken();
-      const url = this.apiUrl(path);
-
       const headers = new Headers((options && options.headers) || {});
       if (token) headers.set('Authorization', 'Bearer ' + token);
 
-      const res = await fetch(url, {
+      const res = await fetchApiWithFallback(this._cfg, path, {
         ...(options || {}),
         headers
       });
