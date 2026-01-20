@@ -1,42 +1,49 @@
 // ==================== LEADERMATH AUTO USER (lm_token) ====================
-// Talab: sinf/o'quvchi tanlash YO'Q.
-// Test tizimi kirgan foydalanuvchini LeaderMath umumiy authUtils orqali avto aniqlaydi.
-//
-// Eslatma:
-//  - authUtils.js o'zi API fallback qiladi: /.netlify/functions/api -> /api
-//  - Token bo'lmasa: app.html?login=1 ga qaytaradi
+// Bu fayl test tizimini LeaderMath platformasidagi login bilan bog'laydi.
+// Talab: sinf/o'quvchi tanlash o'rniga kirgan foydalanuvchini avto aniqlash.
 
-(function(){
-  'use strict';
+const leaderMathAuth = {
+  tokenKey: 'lm_token',
+  apiBase: '/.netlify/functions/api',
 
-  // authUtils mavjud bo'lmasa ham test sahifa ochilib turishi uchun yengil wrapper.
-  const au = (typeof window !== 'undefined' && window.authUtils) ? window.authUtils : null;
+  getToken() {
+    try { return localStorage.getItem(this.tokenKey) || ''; } catch (_) { return ''; }
+  },
 
-  // Test sahifa /test/ ichida bo'lgani uchun appHome ni aniq berib qo'yamiz.
-  try {
-    if (au && typeof au.configure === 'function') {
-      au.configure({ appHome: '/app.html' });
-    }
-  } catch (_) {}
+  async me() {
+    const token = this.getToken();
+    if (!token) return null;
 
-  window.leaderMathAuth = {
-    async me(){
-      if (!au || typeof au.me !== 'function') return null;
-      return await au.me().catch(()=>null);
-    },
+    // LeaderMath API: /.netlify/functions/api?path=auth/me
+    const u = new URL(this.apiBase, location.origin);
+    u.searchParams.set('path', 'auth/me');
 
-    async requireUser(opts){
-      if (!au || typeof au.requireUser !== 'function') return null;
-      return await au.requireUser(opts || {});
-    },
+    const res = await fetch(u.toString(), {
+      method: 'GET',
+      headers: { Authorization: 'Bearer ' + token }
+    });
 
-    toStudent(user){
-      if (!au || typeof au.toStudent !== 'function') {
-        if (!user) return null;
-        const fullName = (user.name || `${user.firstName||''} ${user.lastName||''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
-        return { id: user.loginId || user.id || user.uid || 'unknown', fullName, _lm: user };
+    if (!res.ok) {
+      // Token yaroqsiz bo'lsa, test ichida ham tozalab yuboramiz.
+      if (res.status === 401 || res.status === 403) {
+        try { localStorage.removeItem(this.tokenKey); } catch (_) {}
       }
-      return au.toStudent(user);
+      return null;
     }
-  };
-})();
+
+    const data = await res.json().catch(() => null);
+    const user = data?.user || data?.data?.user || null;
+    return user;
+  },
+
+  toStudent(user) {
+    if (!user) return null;
+    const fullName = (user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
+    return {
+      id: user.loginId || user.id || user.uid || 'unknown',
+      fullName,
+      // qo'shimcha: test header/watermark kerak bo'lsa
+      _lm: user
+    };
+  }
+};

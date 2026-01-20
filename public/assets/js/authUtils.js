@@ -1,168 +1,97 @@
 /**
- * authUtils — LeaderMath kirish tizimiga mos (lm_token + Netlify API)
- *
- * Asosiy g'oya:
- *  - Saytga kirish qilinsa localStorage'da `lm_token` bo'ladi.
- *  - `/.netlify/functions/api?path=auth/me` ga Bearer token yuborib user olinadi.
- *  - Token bo'lmasa yoki yaroqsiz bo'lsa: mehmon YO'Q (user = null).
- *
- * Global: window.authUtils
+ * authUtils — LeaderMath yagona tokenli login helper
+ * - lm_token localStorage
+ * - auth/me orqali userni avtomatik tortadi
+ * - API base auto-fallback: /.netlify/functions/api -> /api (va eslab qoladi)
  */
 (function (global) {
   'use strict';
 
-  const DEFAULTS = {
-    tokenKey: 'lm_token',
-    // Primary API base (Netlify Functions)
-    apiBase: '/.netlify/functions/api',
-    // Fallback API base (custom server / reverse proxy)
-    apiBaseAlt: '/api',
-    mePath: 'auth/me',
-    // Token yo'q yoki yaroqsiz bo'lsa qaytish sahifasi (login modali odatda shu yerda)
-    appHome: '/app.html',
-  };
+  const LS_TOKEN = 'lm_token';
+  const LS_API = 'lm_api_base';
 
   function safeGet(key) {
     try { return localStorage.getItem(key) || ''; } catch (_) { return ''; }
   }
+
   function safeSet(key, value) {
     try { localStorage.setItem(key, value); } catch (_) {}
   }
+
   function safeRemove(key) {
     try { localStorage.removeItem(key); } catch (_) {}
   }
 
-  function buildApiUrl(apiBase, path) {
-    const u = new URL(apiBase, location.origin);
-    u.searchParams.set('path', path);
-    return u.toString();
+  function getBases() {
+    const all = ['/.netlify/functions/api', '/api'];
+    const saved = safeGet(LS_API);
+    if (saved && all.includes(saved)) return [saved, ...all.filter((x) => x !== saved)];
+    return all;
   }
 
-  async function fetchApiWithFallback(cfg, path, init) {
-    // Try primary base first
-    const primary = cfg.apiBase;
-    const alt = cfg.apiBaseAlt;
-
-    const url1 = buildApiUrl(primary, path);
-    const res1 = await fetch(url1, init);
-
-    // If Netlify functions path doesn't exist on this hosting, it will usually be 404.
-    // In that case, retry with /api and make it sticky for the rest of the session.
-    if (res1.status === 404 && alt && primary !== alt) {
-      const url2 = buildApiUrl(alt, path);
-      const res2 = await fetch(url2, init);
-      if (res2.ok || res2.status !== 404) {
-        cfg.apiBase = alt;
-      }
-      return res2;
-    }
-
-    return res1;
+  function buildUrl(base, path) {
+    const u = new URL(base, location.origin);
+    u.searchParams.set('path', String(path || '').replace(/^\/+/, ''));
+    return u.toString();
   }
 
   async function safeJson(res) {
     try { return await res.json(); } catch (_) { return null; }
   }
 
+  async function fetchMeOnce(base, token) {
+    const url = buildUrl(base, 'auth/me');
+    const res = await fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + token } });
+    return res;
+  }
+
   const authUtils = {
-    // sozlamalarni kerak bo'lsa override qilish mumkin: authUtils.configure({tokenKey:'...'})
-    _cfg: { ...DEFAULTS },
+    getToken() { return safeGet(LS_TOKEN); },
+    setToken(t) { safeSet(LS_TOKEN, String(t || '')); },
+    clearToken() { safeRemove(LS_TOKEN); },
 
-    configure(partial) {
-      if (partial && typeof partial === 'object') {
-        this._cfg = { ...this._cfg, ...partial };
-      }
-      return this._cfg;
-    },
-
-    getToken() {
-      return safeGet(this._cfg.tokenKey);
-    },
-
-    setToken(token) {
-      safeSet(this._cfg.tokenKey, String(token || ''));
-    },
-
-    clearToken() {
-      safeRemove(this._cfg.tokenKey);
-    },
-
-    apiUrl(path) {
-      return buildApiUrl(this._cfg.apiBase, path);
-    },
-
-    /**
-     * LeaderMath user info (auth/me)
-     * @returns {Promise<object|null>} user
-     */
     async me() {
       const token = this.getToken();
       if (!token) return null;
 
-      const res = await fetchApiWithFallback(this._cfg, this._cfg.mePath, {
-        method: 'GET',
-        headers: { Authorization: 'Bearer ' + token }
-      });
-
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) this.clearToken();
-        return null;
+      for (const base of getBases()) {
+        try {
+          const res = await fetchMeOnce(base, token);
+          if (!res.ok) {
+            // Token invalid
+            if (res.status === 401 || res.status === 403) {
+              this.clearToken();
+              return null;
+            }
+            // Try fallback on 404/502/503
+            if ([404, 502, 503].includes(res.status)) continue;
+            return null;
+          }
+          // Remember working base
+          safeSet(LS_API, base);
+          const data = await safeJson(res);
+          return data?.user || data?.data?.user || null;
+        } catch (_) {
+          continue;
+        }
       }
-
-      const data = await safeJson(res);
-      return data?.user || data?.data?.user || null;
+      return null;
     },
 
-    /**
-     * Auth header bilan API chaqirish.
-     */
-    async fetchApi(path, options) {
-      const token = this.getToken();
-      const headers = new Headers((options && options.headers) || {});
-      if (token) headers.set('Authorization', 'Bearer ' + token);
-
-      const res = await fetchApiWithFallback(this._cfg, path, {
-        ...(options || {}),
-        headers
-      });
-
-      // Token yaroqsiz bo'lsa tozalaymiz
-      if (!res.ok && (res.status === 401 || res.status === 403)) {
-        this.clearToken();
-      }
-      return res;
-    },
-
-    /**
-     * Login shart: user topilmasa o'yin/bo'limni bloklash uchun.
-     * - redirect=false bo'lsa: exception tashlaydi
-     * - redirect=true bo'lsa: appHome ga qaytaradi
-     */
     async requireUser(opts) {
-      const cfg = this._cfg;
-      const o = {
-        redirect: true,
-        appHome: cfg.appHome,
-        // qaytish URL ni saqlab qo'yish (app login bo'lgach qaytishi uchun)
-        returnTo: '',
-        ... (opts || {})
-      };
-
+      const o = { redirect: true, appHome: '/app.html', returnTo: '', ...(opts || {}) };
       const user = await this.me();
       if (user) return user;
 
-      // returnTo ni saqlab qo'yamiz (app tarafda o'qib, login'dan keyin qaytarish mumkin)
       if (o.returnTo) {
         try { sessionStorage.setItem('lm_return_to', o.returnTo); } catch (_) {}
       }
 
       if (o.redirect) {
-        // appHome ga "?login=1" bilan borish — app shu paramni ko'rib login modalni ochishi mumkin
-        const u = new URL(o.appHome || cfg.appHome || '/app.html', location.origin);
+        const u = new URL(o.appHome || '/app.html', location.origin);
         u.searchParams.set('login', '1');
         if (o.returnTo) u.searchParams.set('returnTo', o.returnTo);
         location.replace(u.toString());
-        // navigatsiya ketadi, lekin tiplar uchun:
         return null;
       }
 
@@ -171,9 +100,6 @@
       throw err;
     },
 
-    /**
-     * Game/test ichida ishlatish uchun soddalashtirilgan student obyekt.
-     */
     toStudent(user) {
       if (!user) return null;
       const fullName = (user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.loginId || 'Foydalanuvchi').trim();
@@ -181,23 +107,18 @@
         id: user.loginId || user.id || user.uid || 'unknown',
         fullName,
         numericId: user.numericId ?? user.numericID ?? user.studentId ?? null,
-        _lm: user
+        _lm: user,
       };
     },
 
-    /**
-     * Logout (tokenni tozalaydi) va appHome'ga qaytaradi.
-     */
     logout(redirectTo) {
       this.clearToken();
-      const target = redirectTo || this._cfg.appHome || '/app.html';
+      const target = redirectTo || '/app.html';
       const u = new URL(target, location.origin);
       u.searchParams.set('login', '1');
       location.href = u.toString();
     }
   };
 
-  // globalga chiqaramiz
   global.authUtils = authUtils;
-
 })(typeof window !== 'undefined' ? window : this);

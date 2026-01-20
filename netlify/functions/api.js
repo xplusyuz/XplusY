@@ -1,9 +1,6 @@
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import fs from "fs";
-import pathMod from "path";
-import { fileURLToPath } from "url";
 
 function json(statusCode, obj){
   return { statusCode, headers: { "Content-Type":"application/json" }, body: JSON.stringify(obj) };
@@ -41,35 +38,6 @@ function getDb(){
 
 
 const JWT_SECRET = getEnv("JWT_SECRET", "dev_secret_change_me");
-
-// ===== Local tests loader (for public/test/*.json and functions/data/tests/*.json) =====
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = pathMod.dirname(__filename);
-
-function safeReadJson(filePath){
-  try{
-    if(!fs.existsSync(filePath)) return null;
-    const txt = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(txt);
-  }catch(_){
-    return null;
-  }
-}
-
-function loadLocalTestJson(id){
-  const code = String(id||"").trim();
-  if(!code) return null;
-  // 1) Ideal: netlify/functions/data/tests/<CODE>.json
-  const p1 = pathMod.join(__dirname, "data", "tests", `${code}.json`);
-  const j1 = safeReadJson(p1);
-  if(j1) return { id: code, code, ...(j1||{}) };
-
-  // 2) Fallback: public/test/<CODE>.json (when published together with functions)
-  const p2 = pathMod.join(__dirname, "..", "..", "public", "test", `${code}.json`);
-  const j2 = safeReadJson(p2);
-  if(j2) return { id: code, code, ...(j2||{}) };
-  return null;
-}
 
 function signToken(loginId){
   return jwt.sign({ sub: loginId }, JWT_SECRET, { expiresIn: "30d" });
@@ -172,33 +140,14 @@ function sanitizeTestForClient(t){
     folder: t.folder || (t.code || t.id || ""),
     shuffleQuestions: t.shuffleQuestions !== false,
     shuffleOptions: t.shuffleOptions !== false,
-    questions: Array.isArray(t.questions) ? t.questions.map((q, i)=>{
-      const type = String(q.type || 'variant').toLowerCase();
-      // image resolution (supports both Firestore schema and local JSON schema)
-      const hasImage = !!(q.hasImage || q.imageUrl || q.imagePath || q.img || q.image);
-      const autoPath = q.autoImagePath !== false; // default true for your local tests
-      const folder = safeStr(t.folder || t.code || t.id || '', 120) || safeStr(t.code || t.id || '', 120);
-      const imgName = safeStr(q.img || q.image || q.imagePath || (String(i+1)+'.png'), 160);
-      let img = "";
-      if(hasImage){
-        if(q.imageUrl) img = safeStr(q.imageUrl, 240);
-        else if(q.imagePath) img = safeStr(q.imagePath, 240);
-        else if(folder && autoPath) img = `images/${folder}/${imgName}`;
-        else img = safeStr(imgName, 200);
-      }
-
-      return {
-        i,
-        type,
-        section: safeStr(q.section || q.chapter || "", 60),
-        points: Number(q.points||1) || 1,
-        text: safeStr(q.text || q.q || q.question || "", 4000),
-        hasImage,
-        img,
-        // options for variant/mcq
-        options: Array.isArray(q.options) ? q.options.map(o=>safeStr(o, 500)) : [],
-      };
-    }) : []
+    questions: Array.isArray(t.questions) ? t.questions.map((q, i)=>({
+      i,
+      type: q.type || 'mcq',
+      points: Number(q.points||1) || 1,
+      img: safeStr(q.img || q.image || (String(i+1)+'.png'), 120),
+      // options for mcq
+      options: Array.isArray(q.options) ? q.options.map(o=>safeStr(o, 120)) : [],
+    })) : []
   };
   return out;
 }
@@ -215,34 +164,12 @@ function scoreTest(test, answers){
     const pts = Number(q.points||1) || 1;
     const a = ans[i];
     let ok = false;
-    const qType = String(q.type || 'variant').toLowerCase();
-
-    // OPEN: eski formatlarda correctAnswer bo'lishi mumkin.
-    if(qType === 'open'){
-      const list = Array.isArray(q.answers) ? q.answers :
-        (q.correctAnswer != null ? [q.correctAnswer] : (q.correct != null ? [q.correct] : []));
+    if((q.type||'mcq') === 'open'){
+      const list = Array.isArray(q.answers) ? q.answers : [];
       const na = String(a ?? '').trim().toLowerCase().replace(/\s+/g,'');
       ok = list.some(x => String(x ?? '').trim().toLowerCase().replace(/\s+/g,'') === na);
     }else{
-      // VARIANT/MCQ: formatlar:
-      //  - correctIndex (number)
-      //  - correct (string)
-      //  - client answer: index(number|string) yoki option text
-      if(Number.isInteger(q.correctIndex)){
-        const ai = (typeof a === 'number') ? a : (String(a ?? '').match(/^\d+$/) ? Number(a) : NaN);
-        ok = Number.isFinite(ai) && ai === q.correctIndex;
-        // agar client option text yuborsa ham tekshiramiz
-        if(!ok && Array.isArray(q.options)){
-          const correctText = q.options[q.correctIndex];
-          ok = (correctText != null) && (String(a ?? '') === String(correctText));
-        }
-      }else if(q.correct != null){
-        ok = (String(a ?? '') === String(q.correct ?? ''));
-      }else if(q.correctAnswer != null){
-        ok = (String(a ?? '') === String(q.correctAnswer ?? ''));
-      }else{
-        ok = false;
-      }
+      ok = (String(a ?? '') === String(q.correct ?? ''));
     }
     if(ok){ score += pts; correct++; }
     else { wrong++; }
@@ -311,7 +238,8 @@ function requireToken(event){
 
 export const handler = async (event) => {
   try{
-    const db = getDb();
+    let db;
+    try{ db = getDb(); }catch(e){ return json(503, { error: "SERVER_NOT_CONFIGURED", message: String(e && e.message || e) }); }
     let qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
     if(!qpath){
       const p = (event.path || "").replace(/^.*\/\.netlify\/functions\/api\/?/,"");
@@ -1177,21 +1105,10 @@ export const handler = async (event) => {
         if(!id) return json(400, { error:"id kerak" });
         const code = String(event.queryStringParameters?.code || "").trim();
 
-        // 1) Firestore test (admin panel orqali)
-        let t = null;
-        try{
-          const ref = db.collection("tests").doc(id);
-          const snap = await ref.get();
-          if(snap.exists) t = { id: snap.id, ...(snap.data()||{}) };
-        }catch(_){ /* ignore */ }
-
-        // 2) Local JSON: public/test/<CODE>.json yoki functions/data/tests/<CODE>.json
-        if(!t){
-          const local = loadLocalTestJson(id);
-          if(local) t = local;
-        }
-
-        if(!t) return json(404, { error:"Test topilmadi" });
+        const ref = db.collection("tests").doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = { id: snap.id, ...(snap.data()||{}) };
 
         if(String(t.mode||'open') === 'challenge'){
           const w = withinWindow(Date.now(), t.startAt, t.endAt);
@@ -1215,22 +1132,10 @@ export const handler = async (event) => {
         const timeSpentSec = Math.max(0, Math.min(24*3600, Number(body.timeSpentSec||0) || 0));
         if(!id) return json(400, { error:"id kerak" });
 
-        // 1) Firestore test
-        let t = null;
-        let ref = null;
-        try{
-          ref = db.collection("tests").doc(id);
-          const snap = await ref.get();
-          if(snap.exists) t = { id: snap.id, ...(snap.data()||{}) };
-        }catch(_){ /* ignore */ }
-
-        // 2) Local JSON test
-        if(!t){
-          const local = loadLocalTestJson(id);
-          if(local) t = local;
-        }
-
-        if(!t) return json(404, { error:"Test topilmadi" });
+        const ref = db.collection("tests").doc(id);
+        const snap = await ref.get();
+        if(!snap.exists) return json(404, { error:"Test topilmadi" });
+        const t = { id: snap.id, ...(snap.data()||{}) };
 
         // window check for challenge
         if(String(t.mode||'open') === 'challenge'){
@@ -1239,21 +1144,12 @@ export const handler = async (event) => {
         }
 
         const res = scoreTest(t, answers);
-
-        // OPEN: cheksiz yechish (default) — faqat natijani qaytaramiz
-        if(String(t.mode||'open') === 'open'){
-          return json(200, { ok:true, mode:'open', pointsDelta:0, pointsAdded:false, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
-        }
-
-        // CHALLENGE: 1 ta urinish + points
-        const submissionId = `${id}__${auth.loginId}`;
-        const subRef = db.collection('test_submissions').doc(submissionId);
+        const subRef = ref.collection('submissions').doc(auth.loginId);
 
         await db.runTransaction(async (tx)=>{
           const prev = await tx.get(subRef);
           if(prev.exists) throw new Error("Siz bu testni avval topshirgansiz");
           tx.set(subRef, {
-            testId: id,
             loginId: auth.loginId,
             submittedAt: admin.firestore.FieldValue.serverTimestamp(),
             score: res.score,
@@ -1264,14 +1160,14 @@ export const handler = async (event) => {
             answers
           }, { merge:false });
 
-          const pointsDelta = Math.max(0, Math.round(Number(res.score||0) || 0));
-          if(pointsDelta > 0){
+          // points only for challenge
+          if(String(t.mode||'open') === 'challenge'){
             const uref = db.collection('users').doc(auth.loginId);
-            tx.set(uref, { points: admin.firestore.FieldValue.increment(pointsDelta), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge:true });
+            tx.set(uref, { points: admin.firestore.FieldValue.increment(res.score) }, { merge:true });
           }
         });
 
-        return json(200, { ok:true, mode:'challenge', pointsDelta: Math.max(0, Math.round(Number(res.score||0) || 0)), pointsAdded: true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
+        return json(200, { ok:true, result: { score: res.score, correct: res.correct, wrong: res.wrong, total: res.total } });
       }catch(e){
         const msg = e.message || "Submit error";
         return json(400, { error: msg });
