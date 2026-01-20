@@ -4,7 +4,8 @@
             enableSecurity: true,
             enableRandomOrder: true,
             enableRandomOptions: true,
-            useFirebase: true,
+            useFirebase: false,
+            // Test natijalari endi server API orqali yoziladi (Firebase client write yo'q).
             fallbackToJSON: true,
             maxMinorViolations: 20,
             maxWindowSwitchViolations: 3,

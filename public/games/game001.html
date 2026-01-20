@@ -1716,44 +1716,39 @@
             document.getElementById("final-questions").textContent = gameState.questionCount;
             document.getElementById("final-correct").textContent = gameState.correctCount;
             document.getElementById("final-xp").textContent = gameState.xpCount;
+            // ============ NATIJALAR SAQLASH (API: /games/submit) ============
+            try {
+                const user = (window.authUtils && authUtils.me) ? await authUtils.me().catch(() => null) : null;
+                const xpRecord = Number(gameState.xpCount || 0) || 0;
+                // XP/100 -> points (560 -> 6, 720 -> 7)
+                const pointsDelta = xpRecord > 0 ? Math.max(1, Math.round(xpRecord / 100)) : 0;
 
-            // ============ NATIJALAR SAQLASH (Firestore: users/{id}.points + users/{id}.game001) ============
-try {
-    const user = getCurrentUser();
-    if (user) {
-        // 1) Record (XP) — game001 (max) sifatida saqlanadi
-        const xpRecord = Number(gameState.xpCount || 0);
+                if (user && pointsDelta > 0) {
+                    const token = (() => { try { return localStorage.getItem('lm_token') || ''; } catch(_) { return ''; } })();
+                    if (!token) throw new Error('No token');
 
-        // 2) Points qo‘shish qoidasi: XP/100 -> taxminan (560 -> 6, 720 -> 7)
-        // 5.6 => 6, 7.2 => 7
-        const pointsDelta = Math.round(xpRecord / 10);
+                    const url = new URL('/.netlify/functions/api', location.origin);
+                    url.searchParams.set('path', '/games/submit');
 
-        console.log('O‘yin tugadi. XP:', xpRecord, 'Points +', pointsDelta);
-
-        // Firestore transaction orqali yozamiz (resurs tejaladi, xavfsiz)
-        if (window.game001CommitXP) {
-            const commitRes = await window.game001CommitXP(user, xpRecord, pointsDelta);
-            console.log('Firestore commit:', commitRes);
-        } else {
-            console.warn('game001CommitXP mavjud emas (Firebase script yuklanmagan bo‘lishi mumkin).');
-        }
-
-        // UI / sessiondagi user data ham yangilansin (agar sizda auth-utils update ishlasa)
-        // Bu backend yozuv bo‘lmasa ham, local ko‘rinish uchun.
-        try {
-            const currentUser = getCurrentUser() || user;
-            const currentPoints = Number(currentUser.points || 0);
-            const newPoints = currentPoints + pointsDelta;
-            if (authUtils.updateUserData) { await authUtils.updateUserData({ points: newPoints, game001: Math.max(Number(currentUser.game001||0), xpRecord) }); }
-        } catch (e) {
-            // auth-utils update bo‘lmasa ham o‘yin ishlayveradi
-            console.warn('Local userData update skip:', e?.message || e);
-        }
-    }
-} catch (error) {
-    console.error('Yakuniy natijalarni saqlashda xatolik:', error);
-}
-
+                    const res = await fetch(url.toString(), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({
+                            gameId: 'game001',
+                            xp: Math.floor(xpRecord),
+                            pointsDelta: Math.floor(pointsDelta)
+                        })
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data?.error || data?.message || ('HTTP ' + res.status));
+                    console.log('Game001 saved:', data);
+                }
+            } catch (error) {
+                console.error('Yakuniy natijalarni saqlashda xatolik:', error);
+            }
 document.getElementById("game-over").style.display = 'block';
         }
 

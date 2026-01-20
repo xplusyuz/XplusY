@@ -16,7 +16,7 @@ const leaderMathAuth = {
 
     // LeaderMath API: /.netlify/functions/api?path=auth/me
     const u = new URL(this.apiBase, location.origin);
-    u.searchParams.set('path', 'auth/me');
+    u.searchParams.set('path','/auth/me');
 
     const res = await fetch(u.toString(), {
       method: 'GET',

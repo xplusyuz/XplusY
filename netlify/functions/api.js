@@ -238,8 +238,7 @@ function requireToken(event){
 
 export const handler = async (event) => {
   try{
-    let db;
-    try{ db = getDb(); }catch(e){ return json(503, { error: "SERVER_NOT_CONFIGURED", message: String(e && e.message || e) }); }
+    const db = getDb();
     let qpath = (event.queryStringParameters?.path || "").replace(/^\/+/,"");
     if(!qpath){
       const p = (event.path || "").replace(/^.*\/\.netlify\/functions\/api\/?/,"");
