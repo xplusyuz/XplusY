@@ -130,8 +130,10 @@
 
         const out = await submitToApi(payload);
         if (!out.ok) {
-          const errMsg = out.data?.error || out.data?.message || 'submit_failed';
-          return { ok:false, mode, pointsDelta: 0, pointsAdded:false, telegramSent:false, reason: errMsg };
+          let reason = out.data?.error || out.data?.message || 'submit_failed';
+          if (out.status === 404) reason = 'api_not_found';
+          if (out.status === 401 || out.status === 403) reason = 'auth_required';
+          return { ok:false, mode, pointsDelta: 0, pointsAdded:false, telegramSent:false, reason, status: out.status };
         }
 
         const score = Number(out.data?.result?.score ?? out.data?.result?.points ?? 0) || 0;

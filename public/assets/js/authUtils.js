@@ -14,6 +14,7 @@
   const DEFAULTS = {
     tokenKey: 'lm_token',
     apiBase: '/.netlify/functions/api',
+    apiFallback: '/api',
     mePath: 'auth/me',
     // Token yo'q yoki yaroqsiz bo'lsa qaytish sahifasi (login modali odatda shu yerda)
     appHome: '/app.html',
@@ -33,6 +34,20 @@
     const u = new URL(apiBase, location.origin);
     u.searchParams.set('path', path);
     return u.toString();
+  }
+
+  async function fetchApiWithFallback(cfg, path, options){
+    const primary = buildApiUrl(cfg.apiBase, path);
+    const res1 = await fetch(primary, options);
+    if (res1.status === 404 && cfg.apiFallback) {
+      try{
+        const alt = buildApiUrl(cfg.apiFallback, path);
+        return await fetch(alt, options);
+      }catch(_){
+        return res1;
+      }
+    }
+    return res1;
   }
 
   async function safeJson(res) {
@@ -74,8 +89,7 @@
       const token = this.getToken();
       if (!token) return null;
 
-      const url = this.apiUrl(this._cfg.mePath);
-      const res = await fetch(url, {
+      const res = await fetchApiWithFallback(this._cfg, this._cfg.mePath, {
         method: 'GET',
         headers: { Authorization: 'Bearer ' + token }
       });
@@ -94,12 +108,10 @@
      */
     async fetchApi(path, options) {
       const token = this.getToken();
-      const url = this.apiUrl(path);
-
       const headers = new Headers((options && options.headers) || {});
       if (token) headers.set('Authorization', 'Bearer ' + token);
 
-      const res = await fetch(url, {
+      const res = await fetchApiWithFallback(this._cfg, path, {
         ...(options || {}),
         headers
       });

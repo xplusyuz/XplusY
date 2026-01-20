@@ -1,6 +1,6 @@
 /* LeaderMath.UZ Service Worker (Optimal) */
 // IMPORTANT: bump VERSION on each deploy so clients refresh caches.
-const VERSION = "lm-pwa-v1.0.3-20260120"; // har deployda yangila!
+const VERSION = "lm-pwa-v1.0.4-20260120"; // har deployda yangila!
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -29,6 +29,19 @@ const NEVER_CACHE_PATHS = new Set([
   "/content.json",
   "/challenge.json"
 ]);
+
+function hasRange(req){
+  try { return !!req.headers.get('range'); } catch { return false; }
+}
+
+function canCacheResponse(req, res){
+  // Cache API does not support caching 206 Partial Content responses.
+  // Also skip caching any Range requests.
+  if (!res) return false;
+  if (hasRange(req)) return false;
+  if (res.status === 206) return false;
+  return true;
+}
 
 function isTestJson(req){
   try{
@@ -99,8 +112,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+          if (canCacheResponse(req, res)) {
+            const copy = res.clone();
+            event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(()=>{}));
+          }
           return res;
         })
         .catch(() =>
@@ -118,15 +133,18 @@ self.addEventListener("fetch", (event) => {
       if (cached) {
         event.waitUntil(
           fetch(req).then((res) => {
+            if (!canCacheResponse(req, res)) return;
             const copy = res.clone();
-            return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+            return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(()=>{});
           }).catch(()=>{})
         );
         return cached;
       }
       return fetch(req).then((res) => {
-        const copy = res.clone();
-        event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
+        if (canCacheResponse(req, res)) {
+          const copy = res.clone();
+          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(()=>{}));
+        }
         return res;
       });
     })
