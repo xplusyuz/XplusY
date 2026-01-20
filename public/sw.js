@@ -1,5 +1,6 @@
 /* LeaderMath.UZ Service Worker (Optimal) */
-const VERSION = "lm-pwa-v1.0.2-20260117"; // har deployda yangila!
+// IMPORTANT: bump VERSION on each deploy so clients refresh caches.
+const VERSION = "lm-pwa-v1.0.3-20260120"; // har deployda yangila!
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -28,6 +29,13 @@ const NEVER_CACHE_PATHS = new Set([
   "/content.json",
   "/challenge.json"
 ]);
+
+function isTestJson(req){
+  try{
+    const u = new URL(req.url);
+    return u.pathname.startsWith("/test/") && u.pathname.toLowerCase().endsWith(".json");
+  }catch{ return false; }
+}
 
 function isHTML(req){
   return req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
@@ -68,43 +76,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
 
-  // Range so'rovlar (video/audio) ko'pincha 206 qaytaradi. 206'ni cache.put qila olmaymiz.
-  const hasRange = (() => {
-    try { return req.headers && req.headers.has("range"); } catch (_) { return false; }
-  })();
-
-  function canCache(res) {
-    try {
-      if (!res) return false;
-      // 200 OK (yoki opaque) bo'lsa cache qilamiz, 206 Partial Content bo'lsa yo'q
-      if (res.status === 206) return false;
-      if (hasRange) return false;
-      // opaque (cross-origin) yoki basic (same-origin) bo'lsa OK
-      if (res.type === "opaque") return true;
-      if (res.type === "basic") return res.status === 200;
-      return res.status === 200;
-    } catch (_) {
-      return false;
-    }
-  }
-
   // Only GET, same-origin
   if (req.method !== "GET") return;
   if (!isSameOrigin(req.url)) return;
 
-  // 1) JSON: NETWORK-ONLY (NO CACHE). Offline bo'lsa: oxirgi runtime nusxa fallback.
-  if (isNeverCache(req)) {
+  // 1) Critical JSON: NETWORK-ONLY (NO CACHE)
+  // - /content.json, /challenge.json (site config)
+  // - /test/*.json (test payloads)
+  // Reason: caching test JSON leads to "Test topilmadi" after updates.
+  if (isNeverCache(req) || isTestJson(req)) {
     event.respondWith(
       fetch(req, { cache: "no-store" })
-        .then((res) => {
-          // ixtiyoriy: offline fallback uchun runtime'ga oxirgi nusxani yozib qo'yamiz
-          const copy = res.clone();
-          event.waitUntil(
-            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(()=>{})
-          );
-          return res;
-        })
-        .catch(() => caches.match(req)) // offline'da oxirgi bor olingan nusxa
+        .then((res) => res)
+        // offline bo'lsa: oxirgi runtime nusxa (agar bor bo'lsa)
+        .catch(() => caches.match(req))
     );
     return;
   }
@@ -114,10 +99,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (canCache(res)) {
-            const copy = res.clone();
-            event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
-          }
+          const copy = res.clone();
+          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
           return res;
         })
         .catch(() =>
@@ -135,20 +118,15 @@ self.addEventListener("fetch", (event) => {
       if (cached) {
         event.waitUntil(
           fetch(req).then((res) => {
-            if (canCache(res)) {
-              const copy = res.clone();
-              return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
-            }
-            return;
+            const copy = res.clone();
+            return caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
           }).catch(()=>{})
         );
         return cached;
       }
       return fetch(req).then((res) => {
-        if (canCache(res)) {
-          const copy = res.clone();
-          event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
-        }
+        const copy = res.clone();
+        event.waitUntil(caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)));
         return res;
       });
     })

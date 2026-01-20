@@ -48,12 +48,16 @@
                         if (raw) return JSON.parse(raw);
                     }
 
-                    // ✅ API attempt lock (server-side)
-                    const st = await firebaseManager.getAttempt(appState.currentTestCode);
-                    const lock = st?.attempt || null;
-                    if (lock) {
-                        if (k) localStorage.setItem(k, JSON.stringify(lock));
-                        return lock;
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (!docId) return null;
+                        const ref = appState.db.collection('test_attempt_locks').doc(docId);
+                        const snap = await ref.get();
+                        if (snap.exists) {
+                            const lock = { id: snap.id, ...snap.data() };
+                            if (k) localStorage.setItem(k, JSON.stringify(lock));
+                            return lock;
+                        }
                     }
                     return null;
                 } catch (e) {
@@ -91,21 +95,83 @@
                         localStorage.setItem(attemptIdKey, localAttemptId);
                     }
 
-                    // ✅ API: server tomonda attempt lock yaratiladi.
-                    // Bu challenge testni "bekor bo'lsa ham" qayta yechishni bloklaydi.
-                    const attempt = await firebaseManager.startAttempt(code);
-                    if (attempt) {
+                    // Firestore mavjud bo'lsa — yagona lock/attempt shu yerda boshqariladi
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const ref = appState.db.collection('test_attempt_locks').doc(docId);
+
+                        const txRes = await appState.db.runTransaction(async (tx) => {
+                            const snap = await tx.get(ref);
+
+                            // 1) Lock yo'q -> yaratamiz
+                            if (!snap.exists) {
+                                const durationSec = Math.round(((appState.testData?.durationMinutes || 30) * 60));
+                                const payload = {
+                                    studentId: sid,
+                                    studentName: appState.currentStudent.fullName,
+                                    studentClass: appState.currentClass || '',
+                                    testCode: code,
+                                    testTitle: appState.testData?.title || 'Test',
+                                    mode: (appState.testData?.mode || appState.testData?.type || 'challenge'),
+                                    status: 'started',
+                                    attemptId: localAttemptId,
+                                    durationSec,
+                                    startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                                };
+                                tx.set(ref, payload, { merge: false });
+                                return { ok: true, action: 'created', attemptId: localAttemptId };
+                            }
+
+                            // 2) Lock bor -> holat tekshirish
+                            const data = snap.data() || {};
+                            if (data.status === 'completed') return { ok: false, reason: 'completed', lock: { id: snap.id, ...data } };
+                            if (data.status === 'cancelled') return { ok: false, reason: 'cancelled', lock: { id: snap.id, ...data } };
+
+                            // status started
+                            const serverAttemptId = data.attemptId;
+
+                            // Bu brauzerda attemptId yo'q bo'lsa — serverdagini yozib qo'yamiz (resume)
+                            if (!localAttemptId) {
+                                localStorage.setItem(attemptIdKey, serverAttemptId);
+                                localAttemptId = serverAttemptId;
+                            }
+
+                            // Mos bo'lsa -> resume
+                            if (String(localAttemptId) === String(serverAttemptId)) {
+                                tx.set(ref, { updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                                return { ok: true, action: 'resumed', attemptId: serverAttemptId };
+                            }
+
+                            // Boshqa browser/qurilmada boshlangan -> blok
+                            return { ok: false, reason: 'started_elsewhere', lock: { id: snap.id, ...data } };
+                        });
+
+                        // Cache lock (UI uchun)
                         try {
                             const k = this._lockLocalKey();
-                            if (k) localStorage.setItem(k, JSON.stringify(attempt));
+                            if (k && txRes && txRes.lock) localStorage.setItem(k, JSON.stringify(txRes.lock));
                         } catch (e) {}
-                        appState.activeAttemptLock = attempt;
-                        // Timer sinxron
-                        if (attempt.startedAt) appState.attemptStartMs = Number(attempt.startedAt) || null;
-                        if (attempt.durationSec) appState.attemptDurationSec = Number(attempt.durationSec) || null;
+
+                        // startedAt ni olish uchun lockni qayta o'qiymiz (timer sinxron bo'lishi uchun)
+                        if (txRes && txRes.ok) {
+                            try {
+                                const snap = await ref.get({ source: 'server' }).catch(() => ref.get());
+                                if (snap && snap.exists) {
+                                    const lock = { id: snap.id, ...snap.data() };
+                                    appState.activeAttemptLock = lock;
+                                    const st = lock.startedAt && lock.startedAt.toDate ? lock.startedAt.toDate().getTime() : null;
+                                    if (st) appState.attemptStartMs = st;
+                                    appState.attemptDurationSec = Number(lock.durationSec || 0) || Math.round(((appState.testData?.durationMinutes || 30) * 60));
+                                }
+                            } catch (e) {}
+                        }
+
+                        return txRes;
                     }
 
-                    return { ok: true, action: 'api', attemptId: attempt?.attemptId || localAttemptId };
+                    // Firestore yo'q -> faqat shu brauzerda resume (cheklov global bo'lmaydi)
+                    return { ok: true, action: 'local_only', attemptId: localAttemptId };
                 } catch (e) {
                     console.warn('Attempt lock yaratish/resume xato:', e);
                     // Yomon holatda ham testni to'xtatib qo'ymaymiz
@@ -128,8 +194,17 @@
                         localStorage.setItem(k, JSON.stringify(lock));
                     }
 
-                    // ✅ Server-side bloklash: cancelled bo'lsa qayta yechib bo'lmaydi
-                    firebaseManager.cancelAttempt(appState.currentTestCode, reason || 'cancelled');
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (docId) {
+                            appState.db.collection('test_attempt_locks').doc(docId).set({
+                                status: 'cancelled',
+                                cancelReason: reason || 'cancelled',
+                                cancelledAt: new Date().toISOString(),
+                                completedAt: new Date().toISOString()
+                            }, { merge: true }).catch(()=>{});
+                        }
+                    }
                 } catch (e) {
                     console.warn('Attempt cancel update xato:', e);
                 }
@@ -148,7 +223,16 @@
                         localStorage.setItem(k, JSON.stringify(lock));
                     }
 
-                    // Completed holatini server submit endpoint o'zi qo'yadi.
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const docId = this._lockDocId();
+                        if (docId) {
+                            appState.db.collection('test_attempt_locks').doc(docId).set({
+                                status: 'completed',
+                                completedAt: new Date().toISOString(),
+                                score: (typeof finalScore === 'number') ? finalScore : undefined
+                            }, { merge: true }).catch(()=>{});
+                        }
+                    }
                 } catch (e) {
                     console.warn('Attempt completed update xato:', e);
                 }
@@ -173,28 +257,24 @@
                     const lock = await this.getAttemptLock();
                     if (lock && (lock.status === 'completed' || lock.status === 'cancelled')) return lock;
 
-                    // ✅ API orqali (server) tekshirish
-                    const st = await firebaseManager.getAttempt(appState.currentTestCode);
-                    const serverAttempt = st?.attempt || null;
-                    const submission = st?.submission || null;
-
-                    if (submission) {
-                        // UI eski format bilan mos bo'lsin
-                        const attempt = {
-                            status: 'completed',
-                            completedAt: submission.submittedAt || new Date().toISOString(),
-                            score: Number(submission.score ?? 0) || 0,
-                            correctAnswers: Number(submission.correct ?? 0) || 0,
-                            wrongAnswers: Number(submission.wrong ?? 0) || 0,
-                            totalScore: Number(submission.total ?? 0) || 0,
-                            timeSpent: Number(submission.timeSpentSec ?? 0) || 0,
-                        };
-                        localStorage.setItem(localStorageKey, JSON.stringify(attempt));
-                        return attempt;
-                    }
-                    if (serverAttempt && (serverAttempt.status === 'completed' || serverAttempt.status === 'cancelled')) {
-                        localStorage.setItem(localStorageKey, JSON.stringify(serverAttempt));
-                        return serverAttempt;
+                    if (CONFIG.useFirebase && appState.firebaseAvailable && appState.db) {
+                        const attemptsRef = appState.db.collection('test_results')
+                            .where('studentId', '==', appState.currentStudent.id)
+                            .where('testCode', '==', appState.currentTestCode)
+                            .limit(1);
+                        
+                        const snapshot = await attemptsRef.get();
+                        
+                        if (!snapshot.empty) {
+                            const doc = snapshot.docs[0];
+                            const attempt = {
+                                id: doc.id,
+                                ...doc.data()
+                            };
+                            
+                            localStorage.setItem(localStorageKey, JSON.stringify(attempt));
+                            return attempt;
+                        }
                     }
                     
                     return null;
