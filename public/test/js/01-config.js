@@ -4,7 +4,9 @@
             enableSecurity: true,
             enableRandomOrder: true,
             enableRandomOptions: true,
-            useFirebase: true,
+            useFirebase: false,
+            // IMPORTANT: Test tizimi endi Firebase client SDK emas, Netlify API orqali ishlaydi.
+            // Shuning uchun doim false.
             fallbackToJSON: true,
             maxMinorViolations: 20,
             maxWindowSwitchViolations: 3,

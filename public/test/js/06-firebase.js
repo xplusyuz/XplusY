@@ -1,199 +1,145 @@
-// ==================== FIREBASE MANAGER (compat) ====================
-// Bu fayl test tizimining Firebase bilan ishlashini boshqaradi.
-// Muhim: 14-app-init.js firebaseManager.initialize() chaqiradi.
-// Shuning uchun bu obyekt GLOBAL bo'lishi shart.
+// ==================== DATA MANAGER (API MODE) ====================
+// File name kept for backward compatibility.
+// IMPORTANT: This project no longer uses Firebase client SDK.
+// All persistence goes through Netlify API.
+//
+// Global required by 14-app-init.js: window.firebaseManager.initialize()
 
-const firebaseManager = {
-  app: null,
-  db: null,
-  auth: null,
-  _initDone: false,
-  _initPromise: null,
+(function(){
+  'use strict';
 
-  async initialize() {
-    if (this._initDone) return true;
-    if (this._initPromise) return this._initPromise;
+  async function safeJson(res){
+    try { return await res.json(); } catch (_) { return null; }
+  }
 
-    this._initPromise = (async () => {
-      try {
-        if (!CONFIG?.useFirebase) {
-          this._initDone = true;
-          return true;
-        }
+  function getTestMeta(){
+    const t = (window.appState && window.appState.testData) ? window.appState.testData : null;
+    return t && typeof t === 'object' ? t : null;
+  }
 
-        // Firebase app init
-        if (!firebase.apps.length) {
-          firebase.initializeApp(FIREBASE_CONFIG);
-        }
-        this.app = firebase.app();
-        this.db = firebase.firestore();
+  function getMode(){
+    const t = getTestMeta();
+    const m = String((t && t.mode) ? t.mode : 'challenge').trim().toLowerCase();
+    return (m === 'open' || m === 'challenge') ? m : 'challenge';
+  }
 
-        // Firebase Auth kerak (rules uchun). Agar auth script ulangan bo'lmasa,
-        // firebase.auth bo'lmaydi va app-init yiqiladi.
-        if (typeof firebase.auth !== 'function') {
-          console.warn('⚠️ firebase-auth-compat ulangan emas. Auth bo‘lmasa rules yozishlar bloklanishi mumkin.');
-          this._initDone = true;
-          return true;
-        }
+  function getTestId(){
+    const t = getTestMeta();
+    return String((t && (t.code || t.id)) ? (t.code || t.id) : '').trim();
+  }
 
-        this.auth = firebase.auth();
+  function getAnswersArray(){
+    // Prefer runtime state answers (selected options / typed open answers)
+    const a = (window.appState && Array.isArray(window.appState.userAnswers)) ? window.appState.userAnswers : null;
+    if (a) return a;
+    // Some builds may keep answers on results
+    return [];
+  }
 
-        // Anonymous sign-in: test tizimi ichida "signedIn" talabini qondiradi.
-        // LeaderMath login alohida bo‘lib qoladi; bu faqat Firestore write uchun.
-        try {
-          await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-        } catch (_) {}
+  function getTimeSpentSec(fallback){
+    const v = (window.appState && typeof window.appState.timeSpent === 'number') ? window.appState.timeSpent : null;
+    const n = Number(v ?? fallback ?? 0);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
 
-        if (!this.auth.currentUser) {
-          await this.auth.signInAnonymously();
-        }
-
-        this._initDone = true;
-        return true;
-      } catch (e) {
-        console.error('❌ Firebase init xato:', e);
-        return false;
-      }
-    })();
-
-    return this._initPromise;
-  },
-
-  // TestManager shu metodni chaqiradi: const status = await firebaseManager.saveTestResult(results)
-  // status:
-  // {
-  //   ok: boolean,
-  //   mode: 'open'|'challenge',
-  //   pointsDelta: number,
-  //   pointsAdded: boolean,
-  //   telegramSent: boolean,
-  //   reason?: string
-  // }
-  async saveTestResult(results) {
-    try {
-      if (!CONFIG?.useFirebase) {
-        return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'firebase_disabled' };
-      }
-      await this.initialize();
-
-      const test = appState?.testData;
-      if (!test?.code) {
-        console.warn('saveTestResult: testData yo‘q yoki code topilmadi');
-        return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'missing_test_code' };
-      }
-
-      const rawMode = (test?.mode || 'challenge').toString().trim().toLowerCase();
-      const mode = (rawMode === 'open' || rawMode === 'challenge') ? rawMode : 'challenge';
-
-      // Auth bo‘lmasa — rules bo‘yicha yozishlar baribir blok bo‘lishi mumkin.
-      const user = (this.auth && this.auth.currentUser) ? this.auth.currentUser : null;
-      if (!user) {
-        console.warn('saveTestResult: auth user topilmadi');
-        return { ok: false, mode, pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'no_auth_user' };
-      }
-
-      const uid = user.uid;
-      const testCode = test.code;
-      const db = this.db;
-
-      // Points: sizning talab: ball uid dagi pointsga qo‘shilsin
-      // (minimal: 100 ball -> 1 point)
-      const gainedPoints = Math.max(1, Math.round((results?.finalScore || 0) / 100));
-
-      let pointsAdded = false;
-      let telegramSent = false;
-
-      // OPEN MODE: Firestore'ga natija yozilmaydi, faqat 1-urinish points + Telegram
-      if (mode === 'open') {
-        // 1) points faqat 1 marta
-        const awardRef = db.collection('open_awards').doc(`${testCode}__${uid}`);
-        const awardSnap = await awardRef.get();
-        if (!awardSnap.exists) {
-          await awardRef.set({
-            uid,
-            testCode,
-            points: gainedPoints,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          });
-
-          await db.collection('users').doc(uid).set({
-            points: firebase.firestore.FieldValue.increment(gainedPoints),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          }, { merge: true });
-
-          pointsAdded = true;
-        }
-
-        // 2) Telegram xabari
-        if (CONFIG.telegramNotifyOpen && CONFIG.telegramEndpoint) {
-          try {
-            await fetch(CONFIG.telegramEndpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                uid,
-                testCode,
-                score: results?.finalScore ?? 0,
-                correct: results?.correctCount ?? 0,
-                wrong: results?.wrongCount ?? 0,
-                time: appState?.timeSpent ?? results?.timeSpent ?? 0,
-                // LeaderMath user info bo‘lsa, telegramga ham qo‘shib yuboramiz
-                studentName: appState?.currentStudent?.fullName || '',
-                className: appState?.currentClass || '',
-              })
-            });
-            telegramSent = true;
-          } catch (e) {
-            console.warn('Telegram notify xato:', e);
-          }
-        }
-
-        return {
-          ok: true,
-          mode,
-          pointsDelta: gainedPoints,
-          pointsAdded,
-          telegramSent,
-          reason: pointsAdded ? 'open_first_award' : 'open_already_awarded'
-        };
-      }
-
-      // CHALLENGE MODE: test_results + points
-      const resRef = db.collection('test_results').doc(`${testCode}__${uid}`);
-      const existsSnap = await resRef.get();
-      if (existsSnap.exists) {
-        // singleAttempt bo‘lsa, bu false qaytarib UI’da xabar chiqaramiz
-        return { ok: false, mode, pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'challenge_already_submitted' };
-      }
-
-      await resRef.set({
-        uid,
-        testCode,
-        score: results?.finalScore ?? 0,
-        correct: results?.correctCount ?? 0,
-        wrong: results?.wrongCount ?? 0,
-        timeSpent: appState?.timeSpent ?? results?.timeSpent ?? 0,
-        submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  async function submitToApi(payload){
+    // Prefer global authUtils if present, else use leaderMathAuth token directly.
+    let res;
+    if (window.authUtils && typeof window.authUtils.fetchApi === 'function') {
+      res = await window.authUtils.fetchApi('tests/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
+    } else {
+      const tokenKey = (window.leaderMathAuth && window.leaderMathAuth.tokenKey) ? window.leaderMathAuth.tokenKey : 'lm_token';
+      let token = '';
+      try { token = localStorage.getItem(tokenKey) || ''; } catch (_) { token = ''; }
+      const u = new URL('/.netlify/functions/api', location.origin);
+      u.searchParams.set('path', 'tests/submit');
+      res = await fetch(u.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+    }
+    const data = await safeJson(res);
+    return { ok: res.ok, status: res.status, data };
+  }
 
-      await db.collection('users').doc(uid).set({
-        points: firebase.firestore.FieldValue.increment(gainedPoints),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-
-      pointsAdded = true;
-
-      return {
-        ok: true,
-        mode,
-        pointsDelta: gainedPoints,
-        pointsAdded,
-        telegramSent: false,
-        reason: 'challenge_saved'
-      };
-    } catch (e) {
-      console.error('❌ saveTestResult xato:', e);
-      return { ok: false, mode: 'challenge', pointsDelta: 0, pointsAdded: false, telegramSent: false, reason: 'error' };
+  async function notifyOpen(payload){
+    try{
+      const endpoint = (window.CONFIG && window.CONFIG.telegramEndpoint) ? window.CONFIG.telegramEndpoint : '/.netlify/functions/notify-open';
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    }catch(_){
+      return false;
     }
   }
-};
+
+  // Expose the expected global
+  window.firebaseManager = {
+    _initDone: false,
+
+    async initialize(){
+      this._initDone = true;
+      return true;
+    },
+
+    // Called by test manager at finish
+    // Must return:
+    // { ok, mode, pointsDelta, pointsAdded, telegramSent, reason }
+    async saveTestResult(results){
+      try{
+        const mode = getMode();
+        const testId = getTestId();
+        if (!testId) {
+          return { ok:false, mode, pointsDelta: 0, pointsAdded:false, telegramSent:false, reason:'missing_test_code' };
+        }
+
+        // OPEN mode: do not write submissions, optional telegram notify only
+        if (mode === 'open') {
+          let telegramSent = false;
+          if (window.CONFIG && window.CONFIG.telegramNotifyOpen) {
+            telegramSent = await notifyOpen({
+              testCode: testId,
+              score: Number(results?.finalScore ?? 0) || 0,
+              correct: Number(results?.correctCount ?? 0) || 0,
+              wrong: Number(results?.wrongCount ?? 0) || 0,
+              time: getTimeSpentSec(results?.timeSpent ?? 0),
+            });
+          }
+          return { ok:true, mode, pointsDelta: 0, pointsAdded:false, telegramSent, reason:'open_no_persist' };
+        }
+
+        // CHALLENGE mode: submit to API (server scores and increments points)
+        const answers = getAnswersArray();
+        const payload = {
+          id: testId,
+          answers,
+          timeSpentSec: getTimeSpentSec(results?.timeSpent ?? 0)
+        };
+
+        const out = await submitToApi(payload);
+        if (!out.ok) {
+          const errMsg = out.data?.error || out.data?.message || 'submit_failed';
+          return { ok:false, mode, pointsDelta: 0, pointsAdded:false, telegramSent:false, reason: errMsg };
+        }
+
+        const score = Number(out.data?.result?.score ?? out.data?.result?.points ?? 0) || 0;
+        return { ok:true, mode, pointsDelta: score, pointsAdded:true, telegramSent:false, reason:'challenge_saved_api' };
+      }catch(e){
+        console.error('saveTestResult error:', e);
+        return { ok:false, mode:'challenge', pointsDelta: 0, pointsAdded:false, telegramSent:false, reason:'error' };
+      }
+    }
+  };
+})();

@@ -1182,10 +1182,23 @@ export const handler = async (event) => {
         const timeSpentSec = Math.max(0, Math.min(24*3600, Number(body.timeSpentSec||0) || 0));
         if(!id) return json(400, { error:"id kerak" });
 
-        const ref = db.collection("tests").doc(id);
-        const snap = await ref.get();
-        if(!snap.exists) return json(404, { error:"Test topilmadi" });
-        const t = { id: snap.id, ...(snap.data()||{}) };
+        // Load test:
+        // 1) Firestore (admin-managed)
+        // 2) Fallback to static JSON at /test/<CODE>.json
+        let t = null;
+        let isStatic = false;
+        try{
+          const ref = db.collection("tests").doc(id);
+          const snap = await ref.get();
+          if(snap.exists) t = { id: snap.id, ...(snap.data()||{}) };
+        }catch(_){ /* ignore */ }
+
+        if(!t){
+          const local = await fetchStaticTest(event, id);
+          if(!local) return json(404, { error:"Test topilmadi" });
+          t = { id, code: id, ...local };
+          isStatic = true;
+        }
 
         // window check for challenge
         if(String(t.mode||'open') === 'challenge'){
@@ -1194,11 +1207,29 @@ export const handler = async (event) => {
         }
 
         const res = scoreTest(t, answers);
-        const subRef = ref.collection('submissions').doc(auth.loginId);
+
+        // Where to store submissions:
+        // - Firestore tests: tests/{id}/submissions/{loginId}
+        // - Static tests: tests_static/{id}/submissions/{loginId}
+        const testDocRef = isStatic ? db.collection('tests_static').doc(id) : db.collection('tests').doc(id);
+        const subRef = testDocRef.collection('submissions').doc(auth.loginId);
 
         await db.runTransaction(async (tx)=>{
+          // Ensure parent doc exists for static tests (for easier admin view)
+          if(isStatic){
+            tx.set(testDocRef, {
+              code: safeStr(t.code || id, 80),
+              title: safeStr(t.title || '', 140),
+              mode: (t.mode === 'challenge') ? 'challenge' : 'open',
+              folder: safeStr(t.folder || (t.code || id), 120),
+              questionCount: Array.isArray(t.questions) ? t.questions.length : Number(t.questionCount||0),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge:true });
+          }
+
           const prev = await tx.get(subRef);
           if(prev.exists) throw new Error("Siz bu testni avval topshirgansiz");
+
           tx.set(subRef, {
             loginId: auth.loginId,
             submittedAt: admin.firestore.FieldValue.serverTimestamp(),
