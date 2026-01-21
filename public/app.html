@@ -110,6 +110,8 @@
   border:1px solid rgba(20,40,60,.10);
 }
 .bigChip .ico img{width:16px;height:16px;object-fit:contain}
+.bigChip .ico .emoji{font-size:16px;line-height:1}
+
 .bigChip .tWrap{display:flex;flex-direction:column;gap:2px}
 .bigChip .tWrap b{font-size:11px}
 .bigChip .tWrap small{font-size:9px;opacity:.72}
@@ -273,6 +275,18 @@ header .icon-btn:active{transform: translateY(0px)}
 }
 .contentCard h3{margin:0;font-size:14px}
 .contentCard p{margin:0;font-size:12px;opacity:.72}
+.cardTop{display:flex;align-items:flex-start;gap:12px}
+.cardThumb{width:54px;height:54px;border-radius:16px;flex:0 0 auto;overflow:hidden;
+  background: radial-gradient(circle at 30% 30%, rgba(46,139,87,.20), transparent 60%),
+              linear-gradient(135deg, rgba(46,139,87,.18), rgba(59,130,246,.12));
+  border:1px solid rgba(46,139,87,.20);
+  display:grid;place-items:center;
+}
+.cardThumb img{width:78%;height:78%;object-fit:contain;filter: drop-shadow(0 6px 10px rgba(2,6,23,.18));}
+.cardThumb .emoji{font-size:20px;line-height:1}
+.cardHead{min-width:0}
+.cardHead h3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .cardTags{display:flex;gap:8px;flex-wrap:wrap}
 .cardTag{font-size:9px;padding:4px 8px;border-radius:999px;background: rgba(15,23,42,.06);border:1px dashed rgba(20,40,60,.12)}
 .openBtn{
@@ -294,13 +308,17 @@ header .icon-btn:active{transform: translateY(0px)}
   .contentCard{ padding:12px; border-radius:16px; }
   .contentCard h3{font-size:13px}
   .contentCard p{font-size:11px}
+  .cardThumb{width:50px;height:50px;border-radius:15px}
 }
+
 
 @media (max-width: 520px){
   .bigRow{gap:8px}
   .bigChip{min-width:136px;padding:8px 10px;border-radius:14px;gap:8px}
   .bigChip .ico{width:24px;height:24px;border-radius:9px}
   .bigChip .ico img{width:14px;height:14px}
+  .bigChip .ico .emoji{font-size:14px}
+
   .bigChip .tWrap b{font-size:11px}
   .bigChip .tWrap small{font-size:9px}
   .bigChip .count{width:20px;height:20px}
@@ -2063,11 +2081,16 @@ header .icon-btn:active{transform: translateY(0px)}
     const chips = (state.data?.bigChips||[]).map(c=> ({...c, id:norm(c.id)}));
     if(!state.type && chips.length) state.type = chips[0].id;
 
+    const isImg = (v)=>/\.(png|jpe?g|webp|svg)$/i.test((v||'').trim());
+
     bigRow.innerHTML = chips.map(c=>{
       const cnt = countByType(c.id);
-      const iconSrc = c.iconImg || c.iconPath || 'icon.png';
+      const iconVal = c.iconImg || c.iconPath || c.icon || '';
+      const iconHtml = isImg(iconVal)
+        ? `<img src="${esc(iconVal)}" alt="" loading="lazy"/>`
+        : `<span class="emoji">${esc(iconVal || '✨')}</span>`;
       return `<div class="bigChip ${c.id===state.type?'active':''}" data-id="${c.id}">
-        <div class="ico"><img src="${esc(iconSrc)}" alt="" loading="lazy"/></div>
+        <div class="ico">${iconHtml}</div>
         <div class="tWrap"><b>${esc(c.title||c.id)}</b><small>${cnt} ta</small></div>
         <div class="count">${cnt}</div>
       </div>`;
@@ -2130,13 +2153,26 @@ header .icon-btn:active{transform: translateY(0px)}
       return;
     }
     empty.style.display='none';
+
+    const isImg = (v)=>/\.(png|jpe?g|webp|svg)$/i.test((v||'').trim());
+
     grid.innerHTML = list.map(it=>{
       const tags = (it.tags||[]).slice(0,6).map(t=>`<span class="cardTag">${esc(t)}</span>`).join('');
       const href = it.href || '#';
       const btn = `<a class="openBtn" href="${esc(href)}">Ochish →</a>`;
+      const iconVal = it.icon || it.iconPath || it.iconImg || '';
+      const iconHtml = isImg(iconVal)
+        ? `<img src="${esc(iconVal)}" alt="" loading="lazy"/>`
+        : `<span class="emoji">${esc(iconVal || '📦')}</span>`;
+
       return `<div class="contentCard">
-        <h3>${esc(it.title||'')}</h3>
-        <p>${esc(it.desc||'')}</p>
+        <div class="cardTop">
+          <div class="cardThumb">${iconHtml}</div>
+          <div class="cardHead">
+            <h3>${esc(it.title||'')}</h3>
+            <p>${esc(it.desc||'')}</p>
+          </div>
+        </div>
         <div class="cardTags">${tags}</div>
         ${btn}
       </div>`;
