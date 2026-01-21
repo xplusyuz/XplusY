@@ -665,7 +665,7 @@
             
             loadQuestionImage(randomQuestion, originalIndex) {
                 const imgNum = originalIndex + 1;
-                const imgPath = `images/${appState.currentTestCode}/${imgNum}.png`;
+                const imgPath = `images/${appState.currentTestCode}/${imgNum}.webp`;
 
                 const container = dom.elements.questionImageContainer;
                 const img = dom.elements.questionImage;

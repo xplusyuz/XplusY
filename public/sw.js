@@ -11,7 +11,7 @@ const PRECACHE_URLS = [
   "./offline.html",
   "./manifest.webmanifest",
   "./favicon.ico",
-  "./logo.png",
+  "./logo.webp",
   "./assets/css/style.css",
   "./assets/css/ui.css",
   "./assets/css/app.css",
