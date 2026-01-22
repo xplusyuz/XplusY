@@ -41,22 +41,20 @@ export async function api(path, { method='GET', body=null, token=null, query=nul
         : { raw: await res.text().catch(() => '') };
 
       if (!res.ok){
-        const isAuthMe = apiPath === '/auth/me';
-        // 401: token yo‘q/yaroqsiz — tokenni tozalaymiz va app'dan indexga qaytaramiz
+        // Auth handling:
+        // - 401: token invalid/expired => clear token and go to login (index) from app.html
+        // - 403: often means "profile incomplete" or "forbidden" => DO NOT clear token here,
+        //        let the caller decide (onboarding can use the still-valid token).
         if (res.status === 401){
           try { localStorage.removeItem('lm_token'); } catch (_) {}
           if (location.pathname.endsWith('app.html')) location.href = './';
         }
-        // 403: ruxsat yo‘q. Yangi foydalanuvchi profil to‘ldirmagan bo‘lsa /auth/me 403 qaytarishi mumkin —
-        // bunday holatda app'da onboarding modal ochilishi uchun redirect QILMAYMIZ.
-        if (res.status === 403 && !isAuthMe){
-          if (location.pathname.endsWith('app.html')) location.href = './';
-        }
-
         const err = new Error(data?.error || data?.message || ('HTTP ' + res.status));
         err.status = res.status;
         err.data = data;
         throw err;
+      }
+
       }
 
       try { localStorage.setItem('lm_api_base', base); } catch (_) {}
