@@ -41,10 +41,18 @@ export async function api(path, { method='GET', body=null, token=null, query=nul
         : { raw: await res.text().catch(() => '') };
 
       if (!res.ok){
-        if (res.status === 401 || res.status === 403){
+        const isAuthMe = apiPath === '/auth/me';
+        // 401: token yo‘q/yaroqsiz — tokenni tozalaymiz va app'dan indexga qaytaramiz
+        if (res.status === 401){
           try { localStorage.removeItem('lm_token'); } catch (_) {}
           if (location.pathname.endsWith('app.html')) location.href = './';
         }
+        // 403: ruxsat yo‘q. Yangi foydalanuvchi profil to‘ldirmagan bo‘lsa /auth/me 403 qaytarishi mumkin —
+        // bunday holatda app'da onboarding modal ochilishi uchun redirect QILMAYMIZ.
+        if (res.status === 403 && !isAuthMe){
+          if (location.pathname.endsWith('app.html')) location.href = './';
+        }
+
         const err = new Error(data?.error || data?.message || ('HTTP ' + res.status));
         err.status = res.status;
         err.data = data;

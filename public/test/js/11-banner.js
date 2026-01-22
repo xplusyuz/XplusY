@@ -2,10 +2,9 @@
         const bannerManager = {
             createInfiniteBanners() {
                 const bannerContent = [
-                    "1-IMI.UZ | Ta'lim Sari Birinchi Qadam",
                     "LeaderMath.uz | Matematika Platformasi",
                     "Namangan shahar 1-IMI | Raqamli Ta'lim Markazi",
-                    "www.1-imi.uz | www.LeaderMath.uz"
+                    "|www.LeaderMath.uz"
                 ];
                 
                 let topHTML = '';
@@ -17,7 +16,6 @@
                 dom.elements.topBanner.innerHTML = `<div class="banner-wrapper">${topHTML}</div>`;
                 
                 const bottomContent = [
-                    "1-IMI - Sifatli Ta'lim Kafolati",
                     "LeaderMath - Matematika Olamiga Sayohat",
                     "Telegram: @Help_LeaderMath_bot",
                     "Tel: +998 97 336 69 39"

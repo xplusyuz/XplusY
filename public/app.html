@@ -5761,7 +5761,19 @@ vertical-align:-2px;
       setupLevelUpModal();
 
       try{
-        const r = await me();
+        let r;
+        try{
+          r = await me();
+        }catch(e){
+          // Yangi foydalanuvchi profil to‘ldirmagan bo‘lsa /auth/me 403 bo‘lishi mumkin.
+          // Bu holatda onboarding'ni ishga tushirib, so‘ng qayta me() qilamiz.
+          if(e && e.status === 403){
+            await runOnboarding();
+            r = await me();
+          }else{
+            throw e;
+          }
+        }
         const u = r.user;
         $("userId").textContent = u.loginId;
         $("userName").textContent = (u.name||u.loginId||"").trim().split(/\s+/)[0] || "";
