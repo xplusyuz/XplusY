@@ -780,8 +780,9 @@
         </div>
     </div>
     
-    <script>
-        // DOM elements
+    <script type="module">
+import { login, registerAuto, me, getToken, clearToken } from './assets/js/auth.js';
+// DOM elements
         const toast = document.getElementById('toast');
         const modal = document.getElementById('credentialsModal');
         const loginBtn = document.getElementById('loginBtn');
@@ -814,29 +815,65 @@
                 showToast('❌ Nusxalashda xatolik');
             }
         }
-        import { login, registerAuto, getToken, clearToken } from "./assets/js/auth.js";
-
-        // --- Auth helpers ---
-        async function doRegister(){
-            try{
-                registerBtn.disabled = true;
-                const r = await registerAuto(); // { loginId, password, token }
-                newUserId.value = r.loginId || "";
-                newUserPassword.value = r.password || "";
-                // Convenience: remember last creds for user (optional)
-                localStorage.setItem('lm_id', r.loginId || "");
-                localStorage.setItem('lm_password', r.password || "");
-                modal.classList.add('open');
-                showToast('🎉 Yangi hisob yaratildi! (Profilni keyin to‘ldirasiz)');
+        
+        // Generate random ID
+        function generateId() {
+            const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+            const numbers = '0123456789';
+            let id = 'LM-';
+            
+            for (let i = 0; i < 6; i++) {
+                id += numbers.charAt(Math.floor(Math.random() * numbers.length));
+            }
+            
+            return id;
+        }
+        
+        // Generate random password
+        function generatePassword() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz0123456789';
+            let password = '';
+            
+            for (let i = 0; i < 8; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            
+            return password;
+        }
+        
+        // Check if user is already logged in (token -> /auth/me)
+        async function checkIfLoggedIn() {
+            const token = getToken();
+            if (!token) return;
+            try {
+                await me();
                 alreadyLogged.classList.add('show');
-            }catch(e){
-                showToast('❌ Ro‘yxatdan o‘tishda xatolik: ' + (e?.message || ''));
-            }finally{
-                registerBtn.disabled = false;
+            } catch (e) {
+                // token eskirgan yoki noto‘g‘ri
+                clearToken();
             }
         }
 
-        async function doLogin(){
+        // Event Listeners
+        registerBtn.addEventListener('click', async function() {
+            try{
+                registerBtn.disabled = true;
+                registerBtn.classList.add('loading');
+                const r = await registerAuto(); // backend creates loginId+password+token
+                newUserId.value = r.loginId;
+                newUserPassword.value = r.password;
+                modal.classList.add('open');
+                showToast('🎉 Yangi hisob muvaffaqiyatli yaratildi!');
+                // token allaqachon saqlandi; foydalanuvchi xohlasa darhol appga o‘tadi
+            }catch(e){
+                showToast('❌ Ro‘yxatdan o‘tishda xatolik');
+            }finally{
+                registerBtn.disabled = false;
+                registerBtn.classList.remove('loading');
+            }
+        });
+
+        loginBtn.addEventListener('click', async function() {
             const userId = document.getElementById('userId').value.trim();
             const password = document.getElementById('userPassword').value;
 
@@ -847,42 +884,19 @@
 
             try{
                 loginBtn.disabled = true;
-                await login(userId, password); // token set inside auth.js
-                // also remember last entered creds (optional)
-                localStorage.setItem('lm_id', userId);
-                localStorage.setItem('lm_password', password);
-
+                loginBtn.classList.add('loading');
+                await login(userId, password); // backend returns token; auth.js stores it
                 showToast('✅ Muvaffaqiyatli kirildi!');
                 setTimeout(() => {
                     window.location.href = 'app.html';
-                }, 400);
+                }, 600);
             }catch(e){
-                const msg = e?.data?.error || e?.message || "ID yoki Parol noto‘g‘ri";
-                showToast('❌ ' + msg);
+                showToast('❌ ID yoki Parol noto‘g‘ri');
             }finally{
                 loginBtn.disabled = false;
+                loginBtn.classList.remove('loading');
             }
-        }
-
-        // Check if user is already logged in
-        function checkIfLoggedIn() {
-            const token = getToken();
-            if (token) {
-                alreadyLogged.classList.add('show');
-            }
-        }
-
-        // Event Listeners
-        registerBtn.addEventListener('click', doRegister);
-        loginBtn.addEventListener('click', doLogin);
-
-        // Optional: if stored creds exist, prefill
-        try{
-            const sid = localStorage.getItem('lm_id') || "";
-            const sp = localStorage.getItem('lm_password') || "";
-            if(sid) document.getElementById('userId').value = sid;
-            if(sp) document.getElementById('userPassword').value = sp;
-        }catch(_){}
+        });
 
         copyIdBtn.addEventListener('click', () => {
             copyToClipboard(newUserId.value);
