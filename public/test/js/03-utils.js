@@ -1,6 +1,21 @@
 // ==================== UTILITY FUNKSIYALARI ====================
         const utils = {
-            debounce(func, wait) {
+            
+
+  // Normalize mixed delimiters to KaTeX-friendly ones.
+  normalizeMathDelimiters(input) {
+    if (!input) return '';
+    let t = String(input);
+
+    // Convert MathJax \( \) and \[ \] already supported, keep.
+    // Convert $$...$$ -> \[...\]
+    t = t.replace(/\$\$([\s\S]*?)\$\$/g, '\\[$1\\]');
+    // Convert $...$ -> \(...\) (avoid $$ already handled)
+    t = t.replace(/(^|[^\\])\$([^$\n]+?)\$/g, '$1\\($2\\)');
+
+    return t;
+  },
+debounce(func, wait) {
                 let timeout;
                 return function executedFunction(...args) {
                     const later = () => {
@@ -105,27 +120,18 @@
             },
             
             // LaTeX ni MathJax formatiga o'tkazish
-            renderLatex(latex, mode='inline') {
-                if (!latex || latex.trim() === '') return '';
-                const s = latex.trim();
-                if (mode === 'display') return `\\[${s}\\]`;
-                // inline (nicer fractions)
-                return `\\(\\displaystyle ${s}\\)`;
-            },
-
-            // Matn ichidagi $...$ va $$...$$ ni MathJax delimitersga aylantiradi
-            normalizeMath(text) {
-                if (!text) return '';
-                let s = String(text);
-
-                // $$...$$ -> \[...\]
-                s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `\\[${g1}\\]`);
-
-                // $...$ -> \(...\)
-                s = s.replace(/\$([^\$\n]+?)\$/g, (m, g1) => `\\(\\displaystyle ${g1}\\)`);
-
-                return s;
-            },
+            renderLatex(latex, mode = 'auto') {
+    if (!latex || String(latex).trim() === '') return '';
+    let s = String(latex).trim();
+    // If already contains delimiters, keep them
+    const hasDelims = /\\(|\\[|\$\$|\$/.test(s);
+    if (!hasDelims) {
+      const isComplex = /\frac|\sqrt|\sum|\int|\left|\right|\begin|\overline|\underline/.test(s) || s.length > 18;
+      const display = (mode === 'display') || (mode === 'auto' && isComplex);
+      s = display ? `\[${s}\]` : `\(${s}\)`;
+    }
+    return this.normalizeMathDelimiters(s);
+  },
             
             normalizeMathExpression(expr) {
                 if (!expr) return '';

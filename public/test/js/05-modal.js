@@ -111,11 +111,11 @@
                 if (!latex || latex.trim() === '') {
                     preview.classList.add('empty');
                     preview.classList.remove('empty');
-                    content.innerHTML = '';
+                    content.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
                 } else {
                     preview.classList.remove('empty');
                     const latexHtml = utils.renderLatex(latex);
-                    content.innerHTML = latexHtml;
+                    content.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(latexHtml) : latexHtml);
                     
                     if (window.MathJax && MathJax.typesetPromise) {
                         setTimeout(() => {

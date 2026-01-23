@@ -82,7 +82,7 @@
             },
             
             updateHistory() {
-                dom.elements.violationHistoryList.innerHTML = '';
+                dom.elements.violationHistoryList.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
                 
                 appState.violationHistory.forEach(violation => {
                     const item = document.createElement('div');
@@ -94,10 +94,13 @@
                         'minorViolations': '⚠️'
                     }[violation.type] || '⚠️';
                     
-                    item.innerHTML = `
+                    item.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`
                         <span>${typeIcon} ${violation.description}</span>
                         <span class="violation-time">${violation.time}</span>
-                    `;
+                    `) : `
+                        <span>${typeIcon} ${violation.description}</span>
+                        <span class="violation-time">${violation.time}</span>
+                    `);
                     
                     dom.elements.violationHistoryList.appendChild(item);
                 });
