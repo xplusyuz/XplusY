@@ -104,70 +104,42 @@
                 }, 3000);
             },
             
-            // LaTeX ni MathJax formatiga o'tkazish (chiroyli ko'rinish)
-            // mode: 'inline' | 'display' | 'auto'
+            // LaTeX ni MathJax formatiga o'tkazish
+            prepareMathText(input) {
+                if (input == null) return '';
+                let s = String(input);
+
+                // Basic HTML escape to avoid breaking layout if JSON contains < >
+                s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                // Convert $$...$$ to \[...\]
+                s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `\\[${g1.trim()}\\]`);
+
+                // Convert $...$ to \( ... \) (avoid $$ already handled)
+                s = s.replace(/(^|[^$])\$(?!\$)([\s\S]+?)(?<!\\)\$(?!\$)/g, (m, p1, g2) => {
+                    return `${p1}\\(${g2.trim()}\\)`;
+                });
+
+                // If it looks like LaTeX (has backslash commands) but has no delimiters, wrap inline/display
+                const looksLatex = /\\[a-zA-Z]+/.test(s);
+                const hasDelim = /\\\(|\\\[/.test(s) || /\$\$|\$(?!\$)/.test(s);
+                if (looksLatex && !hasDelim) {
+                    const complex = /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) || s.length > 18;
+                    return complex ? `\\[${s}\\]` : `\\(\\displaystyle ${s}\\)`;
+                }
+
+                return s;
+            },
+
             renderLatex(latex, mode = 'auto') {
-                if (!latex || latex.trim() === '') return '';
-                const s = latex.trim();
-
-                const isComplex = /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) || s.length > 18;
+                if (!latex || String(latex).trim() === '') return '';
+                const s = String(latex).trim();
+                const isComplex =
+                    /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) ||
+                    s.length > 18;
                 const m = (mode === 'auto') ? (isComplex ? 'display' : 'inline') : mode;
-
-                if (m === 'display') return `\\[${s}\\]`;               // katta va chiroyli
-                return `\\(\\displaystyle ${s}\\)`;                       // inline bo'lsa ham kattaroq
-            },
-
-            // Matnda LaTeX buyruqlari bo'lsa va delimitersiz kelsa, avtomatik o'rab beradi
-            // HTML bo'lsa (taglar) tegmaydi.
-            wrapLatexAuto(text, mode = 'auto') {
-                if (typeof text !== 'string') return text;
-                const raw = text.trim();
-                if (!raw) return '';
-
-                const hasHtml = /<\s*\w+[^>]*>/.test(raw);
-                if (hasHtml) return text;
-
-                const looksLikeLatex = /\\[a-zA-Z]+/.test(raw) || /\^\{?\d+\}?/.test(raw);
-                const alreadyWrapped = /\\\(|\\\[|\$\$|\$/.test(raw);
-
-                if (looksLikeLatex && !alreadyWrapped) return this.renderLatex(raw, mode);
-                return text;
-            },
-
-            // Minimal HTML escaping (oddiy matnlar uchun)
-            escapeHtml(str) {
-                return String(str)
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#39;');
-            },
-
-            // Aralash matn: boshida formula + oxirida izoh (masalan: "... = ... ushbu ...")
-            // Hech bo'lmasa formulani display qilib, izohni alohida chiqarishga yordam beradi.
-            splitMathAndText(text) {
-                if (typeof text !== 'string') return { math: '', rest: '' };
-                const raw = text.trim();
-                if (!raw) return { math: '', rest: '' };
-
-                // HTML bo'lsa tegmaymiz
-                const hasHtml = /<\s*\w+[^>]*>/.test(raw);
-                if (hasHtml) return { math: raw, rest: '' };
-
-                // LaTeX belgisi yo'q bo'lsa split kerak emas
-                const looksLikeLatex = /\\[a-zA-Z]+/.test(raw) || /\^\{?\d+\}?/.test(raw) || /\=/.test(raw);
-                if (!looksLikeLatex) return { math: raw, rest: '' };
-
-                // Birinchi 2+ harfli so'zni topamiz (o'zbek/lotin/kiril), shuni "izoh" deb olamiz
-                const m = raw.match(/\s([A-Za-zÀ-ÖØ-öø-ÿЎҚҒҲўқғҳА-Яа-я]{2,})/);
-                if (!m || m.index == null) return { math: raw, rest: '' };
-
-                const cut = m.index; // bo'sh joydan oldin kesamiz
-                const math = raw.slice(0, cut).trim();
-                const rest = raw.slice(cut).trim();
-                if (!math) return { math: raw, rest: '' };
-                return { math, rest };
+                if (m === 'display') return `\\[${s}\\]`;
+                return `\\(\\displaystyle ${s}\\)`;
             },
             
             normalizeMathExpression(expr) {

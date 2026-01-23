@@ -623,16 +623,8 @@
                 // Rasm yuklash (mavjud DOM elementlarida)
                 this.loadQuestionImage(randomQuestion, originalIndex);
 
-                // Savol matni (LaTeX auto-wrap: display/inline)
-                // Qo'shimcha: agar savol "formula + izoh" aralash kelgan bo'lsa,
-                // formulani display qilib chiroyli ajratamiz.
-                const qRaw = (randomQuestion.text || '');
-                const parts = utils.splitMathAndText(qRaw);
-                if (parts.rest) {
-                    dom.elements.questionText.innerHTML = `${utils.renderLatex(parts.math, 'display')}<div class="q-note">${utils.escapeHtml(parts.rest)}</div>`;
-                } else {
-                    dom.elements.questionText.innerHTML = utils.wrapLatexAuto(qRaw, 'auto');
-                }
+                // Savol matni (mavjud elementga)
+                dom.elements.questionText.innerHTML = utils.prepareMathText(randomQuestion.text || '');
 
                 // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {
@@ -726,11 +718,7 @@
 
                     const label = document.createElement('label');
                     label.htmlFor = `option_${index}`;
-                    if (typeof option === 'string') {
-                        label.innerHTML = utils.wrapLatexAuto(option, 'auto');
-                    } else {
-                        label.innerHTML = String(option ?? '');
-                    }
+                    label.innerHTML = utils.prepareMathText(option);
 
                     const applySelection = () => {
                         // clear selection UI
