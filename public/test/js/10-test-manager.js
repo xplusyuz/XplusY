@@ -624,7 +624,7 @@
                 this.loadQuestionImage(randomQuestion, originalIndex);
 
                 // Savol matni (mavjud elementga)
-                dom.elements.questionText.innerHTML = utils.prepareMathText(randomQuestion.text || '');
+                dom.elements.questionText.innerHTML = utils.normalizeMath(randomQuestion.text || '');
 
                 // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {
@@ -718,7 +718,7 @@
 
                     const label = document.createElement('label');
                     label.htmlFor = `option_${index}`;
-                    label.innerHTML = utils.prepareMathText(option);
+                    label.innerHTML = utils.normalizeMath(option);
 
                     const applySelection = () => {
                         // clear selection UI

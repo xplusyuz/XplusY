@@ -105,41 +105,26 @@
             },
             
             // LaTeX ni MathJax formatiga o'tkazish
-            prepareMathText(input) {
-                if (input == null) return '';
-                let s = String(input);
-
-                // Basic HTML escape to avoid breaking layout if JSON contains < >
-                s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-                // Convert $$...$$ to \[...\]
-                s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `\\[${g1.trim()}\\]`);
-
-                // Convert $...$ to \( ... \) (avoid $$ already handled)
-                s = s.replace(/(^|[^$])\$(?!\$)([\s\S]+?)(?<!\\)\$(?!\$)/g, (m, p1, g2) => {
-                    return `${p1}\\(${g2.trim()}\\)`;
-                });
-
-                // If it looks like LaTeX (has backslash commands) but has no delimiters, wrap inline/display
-                const looksLatex = /\\[a-zA-Z]+/.test(s);
-                const hasDelim = /\\\(|\\\[/.test(s) || /\$\$|\$(?!\$)/.test(s);
-                if (looksLatex && !hasDelim) {
-                    const complex = /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) || s.length > 18;
-                    return complex ? `\\[${s}\\]` : `\\(\\displaystyle ${s}\\)`;
-                }
-
-                return s;
+            renderLatex(latex, mode='inline') {
+                if (!latex || latex.trim() === '') return '';
+                const s = latex.trim();
+                if (mode === 'display') return `\\[${s}\\]`;
+                // inline (nicer fractions)
+                return `\\(\\displaystyle ${s}\\)`;
             },
 
-            renderLatex(latex, mode = 'auto') {
-                if (!latex || String(latex).trim() === '') return '';
-                const s = String(latex).trim();
-                const isComplex =
-                    /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) ||
-                    s.length > 18;
-                const m = (mode === 'auto') ? (isComplex ? 'display' : 'inline') : mode;
-                if (m === 'display') return `\\[${s}\\]`;
-                return `\\(\\displaystyle ${s}\\)`;
+            // Matn ichidagi $...$ va $$...$$ ni MathJax delimitersga aylantiradi
+            normalizeMath(text) {
+                if (!text) return '';
+                let s = String(text);
+
+                // $$...$$ -> \[...\]
+                s = s.replace(/\$\$([\s\S]+?)\$\$/g, (m, g1) => `\\[${g1}\\]`);
+
+                // $...$ -> \(...\)
+                s = s.replace(/\$([^\$\n]+?)\$/g, (m, g1) => `\\(\\displaystyle ${g1}\\)`);
+
+                return s;
             },
             
             normalizeMathExpression(expr) {
