@@ -104,10 +104,34 @@
                 }, 3000);
             },
             
-            // LaTeX ni MathJax formatiga o'tkazish
-            renderLatex(latex) {
+            // LaTeX ni MathJax formatiga o'tkazish (chiroyli ko'rinish)
+            // mode: 'inline' | 'display' | 'auto'
+            renderLatex(latex, mode = 'auto') {
                 if (!latex || latex.trim() === '') return '';
-                return `\\(${latex}\\)`;
+                const s = latex.trim();
+
+                const isComplex = /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) || s.length > 18;
+                const m = (mode === 'auto') ? (isComplex ? 'display' : 'inline') : mode;
+
+                if (m === 'display') return `\\[${s}\\]`;               // katta va chiroyli
+                return `\\(\\displaystyle ${s}\\)`;                       // inline bo'lsa ham kattaroq
+            },
+
+            // Matnda LaTeX buyruqlari bo'lsa va delimitersiz kelsa, avtomatik o'rab beradi
+            // HTML bo'lsa (taglar) tegmaydi.
+            wrapLatexAuto(text, mode = 'auto') {
+                if (typeof text !== 'string') return text;
+                const raw = text.trim();
+                if (!raw) return '';
+
+                const hasHtml = /<\s*\w+[^>]*>/.test(raw);
+                if (hasHtml) return text;
+
+                const looksLikeLatex = /\\[a-zA-Z]+/.test(raw) || /\^\{?\d+\}?/.test(raw);
+                const alreadyWrapped = /\\\(|\\\[|\$\$|\$/.test(raw);
+
+                if (looksLikeLatex && !alreadyWrapped) return this.renderLatex(raw, mode);
+                return text;
             },
             
             normalizeMathExpression(expr) {

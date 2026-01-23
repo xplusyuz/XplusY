@@ -623,8 +623,9 @@
                 // Rasm yuklash (mavjud DOM elementlarida)
                 this.loadQuestionImage(randomQuestion, originalIndex);
 
-                // Savol matni (mavjud elementga)
-                dom.elements.questionText.innerHTML = randomQuestion.text || '';
+                // Savol matni (LaTeX auto-wrap: display/inline)
+                const qRaw = (randomQuestion.text || '');
+                dom.elements.questionText.innerHTML = utils.wrapLatexAuto(qRaw, 'auto');
 
                 // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {
@@ -718,7 +719,11 @@
 
                     const label = document.createElement('label');
                     label.htmlFor = `option_${index}`;
-                    label.innerHTML = option;
+                    if (typeof option === 'string') {
+                        label.innerHTML = utils.wrapLatexAuto(option, 'auto');
+                    } else {
+                        label.innerHTML = String(option ?? '');
+                    }
 
                     const applySelection = () => {
                         // clear selection UI
