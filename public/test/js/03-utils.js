@@ -2,18 +2,32 @@
         const utils = {
             
 
-  // Normalize mixed delimiters to KaTeX-friendly ones.
+  // Convert $...$ and $$...$$ to KaTeX-friendly delimiters too.
   normalizeMathDelimiters(input) {
-    if (!input) return '';
+    if (input == null) return '';
     let t = String(input);
 
-    // Convert MathJax \( \) and \[ \] already supported, keep.
-    // Convert $$...$$ -> \[...\]
+    // $$...$$ -> \[...\]
     t = t.replace(/\$\$([\s\S]*?)\$\$/g, '\\[$1\\]');
-    // Convert $...$ -> \(...\) (avoid $$ already handled)
+    // $...$ -> \(...\)  (avoid newlines)
     t = t.replace(/(^|[^\\])\$([^$\n]+?)\$/g, '$1\\($2\\)');
 
     return t;
+  },
+
+  // Wrap raw LaTeX (no delimiters) intelligently.
+  wrapLatex(latex) {
+    if (!latex) return '';
+    const s = String(latex).trim();
+    const has = /\\\(|\\\[|\$\$|\$/.test(s);
+    if (has) return this.normalizeMathDelimiters(s);
+    const complex = /\\frac|\\sqrt|\\sum|\\int|\\left|\\right|\\begin|\\overline|\\underline/.test(s) || s.length > 18;
+    return this.normalizeMathDelimiters(complex ? `\\[${s}\\]` : `\\(${s}\\)`);
+  },
+
+  // Re-render KaTeX in a root element (or whole page)
+  renderMath(root) {
+    try { window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(root || document.body); } catch(e) {}
   },
 debounce(func, wait) {
                 let timeout;
@@ -120,18 +134,10 @@ debounce(func, wait) {
             },
             
             // LaTeX ni MathJax formatiga o'tkazish
-            renderLatex(latex, mode = 'auto') {
-    if (!latex || String(latex).trim() === '') return '';
-    let s = String(latex).trim();
-    // If already contains delimiters, keep them
-    const hasDelims = /\\(|\\[|\$\$|\$/.test(s);
-    if (!hasDelims) {
-      const isComplex = /\frac|\sqrt|\sum|\int|\left|\right|\begin|\overline|\underline/.test(s) || s.length > 18;
-      const display = (mode === 'display') || (mode === 'auto' && isComplex);
-      s = display ? `\[${s}\]` : `\(${s}\)`;
-    }
-    return this.normalizeMathDelimiters(s);
-  },
+            renderLatex(latex) {
+                if (!latex || latex.trim() === '') return '';
+                return `\\(${latex}\\)`;
+            },
             
             normalizeMathExpression(expr) {
                 if (!expr) return '';

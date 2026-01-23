@@ -286,11 +286,9 @@
             
             blockTestAccess() {
                 if (CONFIG.singleAttempt && appState.previousAttempt) {
-                    document.body.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`
+                    document.body.innerHTML = `
                         <div style="
-                            position: fixed) : `
-                        <div style="
-                            position: fixed);
+                            position: fixed;
                             top: 0;
                             left: 0;
                             width: 100%;
@@ -545,7 +543,7 @@
             buildVerticalNavDots() {
                 if (!appState.shuffledQuestions || appState.shuffledQuestions.length === 0) return;
                 
-                dom.elements.verticalNavDots.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+                dom.elements.verticalNavDots.innerHTML = '';
                 
                 appState.shuffledQuestions.forEach((_, randomIndex) => {
                     const originalIndex = (appState.shuffledToOriginalMap[randomIndex] !== undefined)
@@ -602,10 +600,6 @@
                     return;
                 }
 
-// KaTeX render (after question is injected)
-try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector('.card') || document.body); }catch(e){}
-
-
                 const randomQuestion = appState.shuffledQuestions[appState.currentQuestionIndex];
                 const originalIndex = appState.shuffledToOriginalMap[appState.currentQuestionIndex] !== undefined ?
                                     appState.shuffledToOriginalMap[appState.currentQuestionIndex] : appState.currentQuestionIndex;
@@ -630,7 +624,8 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                 this.loadQuestionImage(randomQuestion, originalIndex);
 
                 // Savol matni (mavjud elementga)
-                dom.elements.questionText.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(randomQuestion.text || '') : randomQuestion.text || '');
+                dom.elements.questionText.innerHTML = utils.normalizeMathDelimiters(randomQuestion.text || '');
+                utils.renderMath(dom.elements.questionCard || dom.elements.questionText);
 
                 // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {
@@ -667,10 +662,7 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                 // Navigatsiya tugmalarini yangilash
                 this.updateNavigationButtons();
                 this.updateVerticalNavDots();
-            
-                // KaTeX render after question
-                try { window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(dom.elements.questionCard || document.body); } catch (e) {}
-},
+            },
             
             loadQuestionImage(randomQuestion, originalIndex) {
                 const imgNum = originalIndex + 1;
@@ -707,7 +699,7 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
             
             renderOptions(randomQuestion, originalIndex) {
                 const optionsContainer = dom.elements.optionsContainer;
-                optionsContainer.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+                optionsContainer.innerHTML = '';
                 optionsContainer.classList.remove('hidden');
 
                 const options = appState.shuffledOptionsMap[originalIndex] || randomQuestion.options || [];
@@ -727,7 +719,8 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
 
                     const label = document.createElement('label');
                     label.htmlFor = `option_${index}`;
-                    label.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(option) : option);
+                    label.innerHTML = utils.normalizeMathDelimiters(option);
+                    utils.renderMath(label);
 
                     const applySelection = () => {
                         // clear selection UI
@@ -798,15 +791,15 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                 const currentAnswer = appState.userAnswers[originalIndex] || '';
                 if (currentAnswer) {
                     answerPreview.classList.remove('empty');
-                    answerPreviewContent.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(utils.renderLatex(currentAnswer)) : utils.renderLatex(currentAnswer));
+                    answerPreviewContent.innerHTML = utils.renderLatex(currentAnswer);
 
                     clearAnswerBtn.style.display = 'block';
                     openMathEditorBtn.textContent = '✏️ Javobni tahrirlash';
                 } else {
                     answerPreview.classList.add('empty');
-                    answerPreviewContent.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+                    answerPreviewContent.innerHTML = '';
                     clearAnswerBtn.style.display = 'none';
-                    openMathEditorBtn.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('<i class="fas fa-calculator"></i> Matematik javob yozish') : '<i class="fas fa-calculator"></i> Matematik javob yozish');
+                    openMathEditorBtn.innerHTML = '<i class="fas fa-calculator"></i> Matematik javob yozish';
                 }
 
                 if (window.MathJax && MathJax.typesetPromise) {
@@ -1017,7 +1010,7 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                         }
                     }
 
-                    ps.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(html) : html);
+                    ps.innerHTML = html;
                 }
 
                 // Oldingi UX xabari (challengeda ikkinchi marta yuborishni to'xtatamiz)
@@ -1042,19 +1035,15 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                     const scores = results.sectionScores || {};
                     const entries = Object.entries(scores);
                     if (entries.length === 0) {
-                        breakdownEl.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+                        breakdownEl.innerHTML = '';
                     } else {
                         // Katta bo'limlar birinchi chiqishi uchun possible bo'yicha sort
                         entries.sort((a,b) => (b[1].possible||0) - (a[1].possible||0));
-                        breakdownEl.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`
+                        breakdownEl.innerHTML = `
                             <div class="section-breakdown-title">📌 Bo'limlar bo'yicha ball</div>
                             <div class="section-breakdown-grid">
                                 ${entries.map(([name,s]) => {
-                                    const earned = (s.earned||0)) : `
-                            <div class="section-breakdown-title">📌 Bo'limlar bo'yicha ball</div>
-                            <div class="section-breakdown-grid">
-                                ${entries.map(([name,s]) => {
-                                    const earned = (s.earned||0));
+                                    const earned = (s.earned||0);
                                     const possible = (s.possible||0);
                                     const correct = (s.correct||0);
                                     const total = (s.total||0);
@@ -1127,11 +1116,9 @@ try{ window.__LM_KATEX_RENDER && window.__LM_KATEX_RENDER(document.querySelector
                     padding: 20px;
                 `;
                 
-                modal.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`
+                modal.innerHTML = `
                     <div style="
-                        background: white) : `
-                    <div style="
-                        background: white);
+                        background: white;
                         border-radius: 12px;
                         width: 100%;
                         max-width: 800px;

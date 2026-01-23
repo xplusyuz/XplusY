@@ -35,7 +35,7 @@
 
                 if (appState.testData.sections && appState.testData.sections.length > 0) {
                     dom.elements.testSections.textContent = appState.testData.sections.length;
-                    dom.elements.sectionList.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('<h3>Bo\'limlar:</h3>') : '<h3>Bo\'limlar:</h3>');
+                    dom.elements.sectionList.innerHTML = '<h3>Bo\'limlar:</h3>';
                     appState.testData.sections.forEach(section => {
                         const div = document.createElement('div');
                         div.style.padding = '8px';
@@ -167,7 +167,7 @@
                 try {
                     appState.classes = await firebaseManager.loadClasses();
                     
-                    dom.elements.classSelect.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('<option value="">Sinfni tanlang</option>') : '<option value="">Sinfni tanlang</option>');
+                    dom.elements.classSelect.innerHTML = '<option value="">Sinfni tanlang</option>';
                     if (appState.classes.length > 0) {
                         appState.classes.forEach(cls => {
                             const option = document.createElement('option');
@@ -185,7 +185,7 @@
                 try {
                     appState.students = await firebaseManager.loadStudents(className);
                     
-                    dom.elements.studentSelect.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('<option value="">O\'quvchini tanlang</option>') : '<option value="">O\'quvchini tanlang</option>');
+                    dom.elements.studentSelect.innerHTML = '<option value="">O\'quvchini tanlang</option>';
                     if (appState.students.length > 0) {
                         appState.students.forEach(student => {
                             const option = document.createElement('option');

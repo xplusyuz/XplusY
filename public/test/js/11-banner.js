@@ -14,7 +14,7 @@
                         topHTML += `<div class="banner-item">${item}</div>`;
                     });
                 }
-                dom.elements.topBanner.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<div class="banner-wrapper">${topHTML}</div>`) : `<div class="banner-wrapper">${topHTML}</div>`);
+                dom.elements.topBanner.innerHTML = `<div class="banner-wrapper">${topHTML}</div>`;
                 
                 const bottomContent = [
                     "1-IMI - Sifatli Ta'lim Kafolati",
@@ -29,6 +29,6 @@
                         bottomHTML += `<div class="bottom-banner-item">${item}</div>`;
                     });
                 }
-                dom.elements.bottomBanner.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<div class="bottom-banner-wrapper">${bottomHTML}</div>`) : `<div class="bottom-banner-wrapper">${bottomHTML}</div>`);
+                dom.elements.bottomBanner.innerHTML = `<div class="bottom-banner-wrapper">${bottomHTML}</div>`;
             }
         };

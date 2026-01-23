@@ -108,7 +108,7 @@ async function logout() {
 async function loadTestsList() {
   const db = adminState.db;
   const sel = $('#testSelect');
-  sel.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('<option value="">— test tanlang —</option>') : '<option value="">— test tanlang —</option>');
+  sel.innerHTML = '<option value="">— test tanlang —</option>';
 
   // 1) Avval "testlar" kolleksiyasidan (agar mavjud bo'lsa)
   let arr = [];
@@ -286,10 +286,10 @@ async function fetchTopUsers() {
 // ---------- Render tables ----------
 function renderLocks() {
   const tb = $('#attemptsTbody');
-  tb.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+  tb.innerHTML = '';
   const rows = adminState.locks;
   if (!rows.length) {
-    tb.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<tr><td colspan="5" class="muted">Lock topilmadi.</td></tr>`) : `<tr><td colspan="5" class="muted">Lock topilmadi.</td></tr>`);
+    tb.innerHTML = `<tr><td colspan="5" class="muted">Lock topilmadi.</td></tr>`;
     return;
   }
   for (const r of rows) {
@@ -302,17 +302,17 @@ function renderLocks() {
       <button class="tabBtn btnDanger" data-action="deleteLock" data-id="${escapeHtml(r.id)}">Unlock</button>
     `;
     const tr = document.createElement('tr');
-    tr.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<td>${who}</td><td>${st}</td><td>${tm}</td><td>${rs}</td><td>${act}</td>`) : `<td>${who}</td><td>${st}</td><td>${tm}</td><td>${rs}</td><td>${act}</td>`);
+    tr.innerHTML = `<td>${who}</td><td>${st}</td><td>${tm}</td><td>${rs}</td><td>${act}</td>`;
     tb.appendChild(tr);
   }
 }
 
 function renderResults() {
   const tb = $('#resultsTbody');
-  tb.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+  tb.innerHTML = '';
   const rows = adminState.results;
   if (!rows.length) {
-    tb.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<tr><td colspan="5" class="muted">Natija topilmadi (bu test oddiy bo'lishi ham mumkin).</td></tr>`) : `<tr><td colspan="5" class="muted">Natija topilmadi (bu test oddiy bo'lishi ham mumkin).</td></tr>`);
+    tb.innerHTML = `<tr><td colspan="5" class="muted">Natija topilmadi (bu test oddiy bo'lishi ham mumkin).</td></tr>`;
     return;
   }
   for (const r of rows) {
@@ -325,7 +325,7 @@ function renderResults() {
       <button class="tabBtn btnDanger" data-action="deleteResult" data-id="${escapeHtml(r.id)}">O'chirish</button>
     `;
     const tr = document.createElement('tr');
-    tr.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<td>${who}</td><td>${sc}</td><td>${vio}</td><td>${tm}</td><td>${act}</td>`) : `<td>${who}</td><td>${sc}</td><td>${vio}</td><td>${tm}</td><td>${act}</td>`);
+    tr.innerHTML = `<td>${who}</td><td>${sc}</td><td>${vio}</td><td>${tm}</td><td>${act}</td>`;
     tb.appendChild(tr);
   }
 }
@@ -333,26 +333,26 @@ function renderResults() {
 function renderLeaderboards() {
   // test leaderboard = results sorted
   const tb1 = $('#testLeaderTbody');
-  tb1.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+  tb1.innerHTML = '';
   const res = [...adminState.results].sort((a, b) => num(b.score) - num(a.score));
   if (!res.length) {
-    tb1.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<tr><td colspan="5" class="muted">Natija yo'q.</td></tr>`) : `<tr><td colspan="5" class="muted">Natija yo'q.</td></tr>`);
+    tb1.innerHTML = `<tr><td colspan="5" class="muted">Natija yo'q.</td></tr>`;
   } else {
     res.slice(0, 100).forEach((r, i) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<td class="mono">${i + 1}</td><td>${escapeHtml(r.studentName || '—')}</td><td class="mono"><strong>${escapeHtml(r.score ?? 0)}</strong></td><td class="muted">${escapeHtml(r.studentClass || '')}</td><td class="muted">${escapeHtml(fmtTime(r.completedAt))}</td>`) : `<td class="mono">${i + 1}</td><td>${escapeHtml(r.studentName || '—')}</td><td class="mono"><strong>${escapeHtml(r.score ?? 0)}</strong></td><td class="muted">${escapeHtml(r.studentClass || '')}</td><td class="muted">${escapeHtml(fmtTime(r.completedAt))}</td>`);
+      tr.innerHTML = `<td class="mono">${i + 1}</td><td>${escapeHtml(r.studentName || '—')}</td><td class="mono"><strong>${escapeHtml(r.score ?? 0)}</strong></td><td class="muted">${escapeHtml(r.studentClass || '')}</td><td class="muted">${escapeHtml(fmtTime(r.completedAt))}</td>`;
       tb1.appendChild(tr);
     });
   }
   const tb2 = $('#pointsLeaderTbody');
-  tb2.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters('') : '');
+  tb2.innerHTML = '';
   const us = adminState.users;
   if (!us.length) {
-    tb2.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<tr><td colspan="4" class="muted">Users topilmadi.</td></tr>`) : `<tr><td colspan="4" class="muted">Users topilmadi.</td></tr>`);
+    tb2.innerHTML = `<tr><td colspan="4" class="muted">Users topilmadi.</td></tr>`;
   } else {
     us.forEach((u, i) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = (window.utils && utils.normalizeMathDelimiters ? utils.normalizeMathDelimiters(`<td class="mono">${i + 1}</td><td>${escapeHtml(u.name || '—')}</td><td class="mono"><strong>${escapeHtml(u.points)}</strong></td><td class="mono muted">${escapeHtml(u.id)}</td>`) : `<td class="mono">${i + 1}</td><td>${escapeHtml(u.name || '—')}</td><td class="mono"><strong>${escapeHtml(u.points)}</strong></td><td class="mono muted">${escapeHtml(u.id)}</td>`);
+      tr.innerHTML = `<td class="mono">${i + 1}</td><td>${escapeHtml(u.name || '—')}</td><td class="mono"><strong>${escapeHtml(u.points)}</strong></td><td class="mono muted">${escapeHtml(u.id)}</td>`;
       tb2.appendChild(tr);
     });
   }
