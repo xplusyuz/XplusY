@@ -1225,26 +1225,58 @@ export const handler = async (event) => {
     // ==================== GAMES: SUBMIT (user-only + points delta) ====================
     // Writes ONLY into: users/{loginId}.games.{gameId} and users/{loginId}.points
     // Does NOT write any global "games" collection.
+        // ==================== GAMES: SUBMIT (user-only + points delta) ====================
+    // Writes ONLY into: users/{loginId}.games.{gameId} and users/{loginId}.points
+    // Does NOT write any global "games" collection.
+    // ✅ Idempotent: for test_* gameIds, pointsDelta is applied only once per user per gameId.
     if(path === "/games/submit" && method === "POST"){
       const auth = requireToken(event);
       if(!auth.ok) return auth.error;
+
       try{
         const body = parseBody(event);
         const gameId = String(body.gameId || "").trim() || "game001";
         const xp = Math.max(0, Math.floor(Number(body.xp || 0) || 0));
-        const pointsDelta = Math.max(0, Math.floor(Number(body.pointsDelta || 0) || 0));
+        const pointsDeltaIn = Math.max(0, Math.floor(Number(body.pointsDelta || 0) || 0));
         const ts = Date.now();
 
         const userRef = db.collection("users").doc(auth.loginId);
 
+        // ✅ Rule: only "test_*" should be one-time points (open tests)
+        const isOnce = gameId.startsWith("test_");
+
+        let appliedDelta = 0;
+        let alreadyApplied = false;
+
         await db.runTransaction(async (tx) => {
           const snap = await tx.get(userRef);
           const data = snap.exists ? (snap.data() || {}) : {};
-          const g = (data.games && data.games[gameId]) ? data.games[gameId] : {};
+
+          const games = (data.games && typeof data.games === "object") ? data.games : {};
+          const g = (games && games[gameId]) ? (games[gameId] || {}) : {};
+
           const prevBest = Math.max(0, Math.floor(Number(g.bestXp || 0) || 0));
           const bestXp = Math.max(prevBest, xp);
 
-          // points update
+          // ✅ idempotency check
+          const prevOnce = !!g.pointsOnceApplied;
+
+          if(pointsDeltaIn > 0){
+            if(isOnce){
+              if(prevOnce){
+                appliedDelta = 0;
+                alreadyApplied = true;
+              }else{
+                appliedDelta = pointsDeltaIn;
+                alreadyApplied = false;
+              }
+            }else{
+              // non-test games: always apply
+              appliedDelta = pointsDeltaIn;
+              alreadyApplied = false;
+            }
+          }
+
           const updates = {
             games: {
               [gameId]: {
@@ -1252,22 +1284,34 @@ export const handler = async (event) => {
                 lastXp: xp,
                 lastPlayedAt: ts,
                 plays: admin.firestore.FieldValue.increment(1),
+
+                ...(isOnce && appliedDelta > 0
+                  ? { pointsOnceApplied: true, pointsOnceAppliedAt: ts }
+                  : {})
               }
             }
           };
 
           tx.set(userRef, updates, { merge:true });
 
-          if(pointsDelta > 0){
-            tx.set(userRef, { points: admin.firestore.FieldValue.increment(pointsDelta) }, { merge:true });
+          if(appliedDelta > 0){
+            tx.set(userRef, { points: admin.firestore.FieldValue.increment(appliedDelta) }, { merge:true });
           }
         });
 
-        return json(200, { ok:true, gameId, xp, pointsDelta });
+        return json(200, {
+          ok:true,
+          gameId,
+          xp,
+          pointsDeltaRequested: pointsDeltaIn,
+          pointsDeltaApplied: appliedDelta,
+          alreadyApplied
+        });
       }catch(e){
         return json(400, { error: e.message || "Submit game error" });
       }
     }
+
 
 
     // ==================== GAMES: LEADERBOARD (bestXp from users/{uid}.games.{gameId}.bestXp) ====================
