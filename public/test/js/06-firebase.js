@@ -36,7 +36,9 @@
         });
 
         const ct = (res.headers.get('content-type') || '').toLowerCase();
-        const data = ct.includes('application/json') ? await res.json().catch(() => ({})) : { raw: await res.text().catch(() => '') };
+        const data = ct.includes('application/json')
+          ? await res.json().catch(() => ({}))
+          : { raw: await res.text().catch(() => '') };
 
         if (!res.ok){
           const err = new Error(data?.error || data?.message || ('HTTP ' + res.status));
@@ -62,11 +64,13 @@
       const q = qs[i] || {};
       const ua = (window.appState && Array.isArray(appState.userAnswers)) ? appState.userAnswers[i] : undefined;
 
+      // OPEN
       if ((q.type || '').toLowerCase() === 'open'){
         out[i] = (ua == null) ? '' : String(ua);
         continue;
       }
 
+      // MCQ/VARIANT
       if (typeof ua === 'number'){
         const shuffled = (window.appState && appState.shuffledOptionsMap) ? appState.shuffledOptionsMap[i] : null;
         const opts = Array.isArray(shuffled) && shuffled.length ? shuffled : (Array.isArray(q.options) ? q.options : []);
@@ -79,11 +83,65 @@
     return out;
   }
 
-  // ✅ ENDI 100 GA BO‘LINMAYDI
+  // ✅ ENDI 100 GA BO‘LINMAYDI: ball qancha bo‘lsa, shuncha points
   function safePointsDeltaFromFinalScore(finalScore){
     const fs = Number(finalScore);
     if (!Number.isFinite(fs) || fs <= 0) return 0;
-    return Math.floor(fs); // 7.5 → 7, 12 → 12
+    return Math.floor(fs); // 7.5 -> 7, 12 -> 12
+  }
+
+  // ✅ OPEN mode tugaganda Telegram endpointga yuborish
+  async function notifyTelegramOpen({ token, payload }){
+    try {
+      const endpoint = (window.CONFIG && CONFIG.telegramEndpoint) ? String(CONFIG.telegramEndpoint) : '/.netlify/functions/notify-open';
+      if (!endpoint) return false;
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload || {})
+      });
+
+      if (!res.ok) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function buildTelegramPayload({ test, results, mode }){
+    const testId = String(test?.id || test?.docId || test?.code || '').trim();
+    const testCode = String(test?.code || testId || '').trim();
+    const title = String(test?.title || test?.name || testCode || 'Test').trim();
+
+    const timeSpentSec = Number(window.appState?.timeSpent || 0) || 0;
+    const v = window.appState?.violations || { windowSwitch: 0, minorViolations: 0, fullScreenExit: 0 };
+
+    return {
+      kind: 'open_test_finished',
+      mode,
+      testId,
+      testCode,
+      title,
+      score: {
+        finalScore: Number(results?.finalScore || 0) || 0,
+        totalScore: Number(results?.totalScore || 0) || 0,
+        penalty: Number(results?.penalty || 0) || 0,
+        correctCount: Number(results?.correctCount || 0) || 0,
+        wrongCount: Number(results?.wrongCount || 0) || 0
+      },
+      timeSpentSec,
+      violations: {
+        windowSwitch: Number(v.windowSwitch || 0) || 0,
+        minorViolations: Number(v.minorViolations || 0) || 0,
+        fullScreenExit: Number(v.fullScreenExit || 0) || 0
+      },
+      // foydali: qaysi sahifadan kelgani
+      page: location?.href || ''
+    };
   }
 
   window.firebaseManager = {
@@ -95,6 +153,8 @@
     },
 
     async saveTestResult(results){
+      let telegramSent = false;
+
       try {
         await this.initialize();
 
@@ -104,11 +164,26 @@
         const mode = String(test?.mode || 'open').toLowerCase() === 'challenge' ? 'challenge' : 'open';
 
         const token = getToken();
-        if (!token){
-          return { ok:false, mode, pointsDelta:0, pointsAdded:false, telegramSent:false, reason:'no_token' };
+
+        // 🔔 OPEN mode bo'lsa — natijani Telegramga yuborishga harakat qilamiz
+        if (mode === 'open' && window.CONFIG && CONFIG.telegramNotifyOpen) {
+          const payload = buildTelegramPayload({ test, results, mode });
+          telegramSent = await notifyTelegramOpen({ token, payload });
         }
 
-        // 1) Firestore/API testlar uchun
+        // Token yo'q bo'lsa: API'ga points yozolmaymiz, lekin Telegram urinishini qaytaramiz
+        if (!token){
+          return {
+            ok: false,
+            mode,
+            pointsDelta: 0,
+            pointsAdded: false,
+            telegramSent,
+            reason: 'no_token'
+          };
+        }
+
+        // 1) Try server-side tests/submit (works for Firestore-backed tests)
         if (testId){
           try {
             const answers = buildAnswersForApi(test);
@@ -125,7 +200,7 @@
               mode,
               pointsDelta: (mode === 'challenge') ? score : 0,
               pointsAdded: (mode === 'challenge') ? (score > 0) : false,
-              telegramSent: false,
+              telegramSent,
               reason: 'submitted_via_api'
             };
           } catch (e) {
@@ -137,10 +212,10 @@
           }
         }
 
-        // 2) LOCAL JSON testlar uchun
+        // 2) Fallback: local JSON tests — submit points only via /games/submit
         const pointsDelta = safePointsDeltaFromFinalScore(results?.finalScore);
         if (pointsDelta <= 0){
-          return { ok:true, mode, pointsDelta:0, pointsAdded:false, telegramSent:false, reason:'no_points' };
+          return { ok:true, mode, pointsDelta:0, pointsAdded:false, telegramSent, reason:'no_points' };
         }
 
         await apiFetch('/games/submit', {
@@ -153,7 +228,7 @@
           }
         });
 
-        return { ok:true, mode, pointsDelta, pointsAdded:true, telegramSent:false, reason:'local_test_points' };
+        return { ok:true, mode, pointsDelta, pointsAdded:true, telegramSent, reason:'local_test_points' };
       } catch (e) {
         console.error('saveTestResult error:', e);
         return { ok:false, mode:'challenge', pointsDelta:0, pointsAdded:false, telegramSent:false, reason:'error' };
