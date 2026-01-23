@@ -14,7 +14,6 @@
     if (stored) c.push(stored);
     c.push('/.netlify/functions/api');
     c.push('/api');
-    // uniq
     return [...new Set(c)];
   }
 
@@ -50,7 +49,6 @@
         return data;
       } catch (e) {
         lastErr = e;
-        // try next candidate
       }
     }
     throw lastErr || new Error('API error');
@@ -64,15 +62,12 @@
       const q = qs[i] || {};
       const ua = (window.appState && Array.isArray(appState.userAnswers)) ? appState.userAnswers[i] : undefined;
 
-      // OPEN
       if ((q.type || '').toLowerCase() === 'open'){
         out[i] = (ua == null) ? '' : String(ua);
         continue;
       }
 
-      // MCQ/VARIANT
       if (typeof ua === 'number'){
-        // map index -> option text, respecting shuffle if it exists
         const shuffled = (window.appState && appState.shuffledOptionsMap) ? appState.shuffledOptionsMap[i] : null;
         const opts = Array.isArray(shuffled) && shuffled.length ? shuffled : (Array.isArray(q.options) ? q.options : []);
         out[i] = (opts[ua] == null) ? '' : String(opts[ua]);
@@ -84,11 +79,11 @@
     return out;
   }
 
+  // ✅ ENDI 100 GA BO‘LINMAYDI
   function safePointsDeltaFromFinalScore(finalScore){
-    const fs = Number(finalScore || 0) || 0;
-    if (fs <= 0) return 0;
-    // Rule: 560 -> 6, 720 -> 7
-    return Math.max(1, Math.round(fs / 100));
+    const fs = Number(finalScore);
+    if (!Number.isFinite(fs) || fs <= 0) return 0;
+    return Math.floor(fs); // 7.5 → 7, 12 → 12
   }
 
   window.firebaseManager = {
@@ -113,7 +108,7 @@
           return { ok:false, mode, pointsDelta:0, pointsAdded:false, telegramSent:false, reason:'no_token' };
         }
 
-        // 1) Try server-side tests/submit (works for Firestore-backed tests)
+        // 1) Firestore/API testlar uchun
         if (testId){
           try {
             const answers = buildAnswersForApi(test);
@@ -134,17 +129,15 @@
               reason: 'submitted_via_api'
             };
           } catch (e) {
-            // if test isn't in Firestore, fall back to points-only submit below
             const msg = String(e?.message || '');
             const st = Number(e?.status || 0) || 0;
             if (!(st === 404 || msg.toLowerCase().includes('topilmadi'))){
-              // real error
               throw e;
             }
           }
         }
 
-        // 2) Fallback: local JSON tests — submit points only via /games/submit
+        // 2) LOCAL JSON testlar uchun
         const pointsDelta = safePointsDeltaFromFinalScore(results?.finalScore);
         if (pointsDelta <= 0){
           return { ok:true, mode, pointsDelta:0, pointsAdded:false, telegramSent:false, reason:'no_points' };
