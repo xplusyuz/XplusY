@@ -624,8 +624,15 @@
                 this.loadQuestionImage(randomQuestion, originalIndex);
 
                 // Savol matni (LaTeX auto-wrap: display/inline)
+                // Qo'shimcha: agar savol "formula + izoh" aralash kelgan bo'lsa,
+                // formulani display qilib chiroyli ajratamiz.
                 const qRaw = (randomQuestion.text || '');
-                dom.elements.questionText.innerHTML = utils.wrapLatexAuto(qRaw, 'auto');
+                const parts = utils.splitMathAndText(qRaw);
+                if (parts.rest) {
+                    dom.elements.questionText.innerHTML = `${utils.renderLatex(parts.math, 'display')}<div class="q-note">${utils.escapeHtml(parts.rest)}</div>`;
+                } else {
+                    dom.elements.questionText.innerHTML = utils.wrapLatexAuto(qRaw, 'auto');
+                }
 
                 // Variantlar yoki ochiq javob (mavjud containerlarda)
                 if (randomQuestion.type === 'variant') {

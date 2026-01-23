@@ -133,6 +133,42 @@
                 if (looksLikeLatex && !alreadyWrapped) return this.renderLatex(raw, mode);
                 return text;
             },
+
+            // Minimal HTML escaping (oddiy matnlar uchun)
+            escapeHtml(str) {
+                return String(str)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            },
+
+            // Aralash matn: boshida formula + oxirida izoh (masalan: "... = ... ushbu ...")
+            // Hech bo'lmasa formulani display qilib, izohni alohida chiqarishga yordam beradi.
+            splitMathAndText(text) {
+                if (typeof text !== 'string') return { math: '', rest: '' };
+                const raw = text.trim();
+                if (!raw) return { math: '', rest: '' };
+
+                // HTML bo'lsa tegmaymiz
+                const hasHtml = /<\s*\w+[^>]*>/.test(raw);
+                if (hasHtml) return { math: raw, rest: '' };
+
+                // LaTeX belgisi yo'q bo'lsa split kerak emas
+                const looksLikeLatex = /\\[a-zA-Z]+/.test(raw) || /\^\{?\d+\}?/.test(raw) || /\=/.test(raw);
+                if (!looksLikeLatex) return { math: raw, rest: '' };
+
+                // Birinchi 2+ harfli so'zni topamiz (o'zbek/lotin/kiril), shuni "izoh" deb olamiz
+                const m = raw.match(/\s([A-Za-zÀ-ÖØ-öø-ÿЎҚҒҲўқғҳА-Яа-я]{2,})/);
+                if (!m || m.index == null) return { math: raw, rest: '' };
+
+                const cut = m.index; // bo'sh joydan oldin kesamiz
+                const math = raw.slice(0, cut).trim();
+                const rest = raw.slice(cut).trim();
+                if (!math) return { math: raw, rest: '' };
+                return { math, rest };
+            },
             
             normalizeMathExpression(expr) {
                 if (!expr) return '';
