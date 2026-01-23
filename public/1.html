@@ -328,6 +328,37 @@ animation: pulse 4s infinite;
   background: linear-gradient(90deg, rgba(46,139,87,.92), rgba(22,245,167,.86), rgba(59,130,246,.70));
   box-shadow: 0 12px 26px rgba(46,139,87,.16);
 }
+
+.levelMiniBar{ position: relative; }
+.levelMiniFill{ display:block; height:100%; border-radius:999px; }
+.levelMiniKnob{
+position:absolute;
+top:50%;
+transform: translate(-50%,-50%);
+width: 16px; height: 16px;
+border-radius: 999px;
+background: #fff;
+border: 2px solid rgba(46,139,87,.65);
+box-shadow: 0 10px 22px rgba(15,23,42,.12);
+}
+.levelMiniTooltip{
+position:absolute;
+top:-42px;
+transform: translateX(-50%);
+padding: 6px 10px;
+border-radius: 999px;
+background: rgba(255,255,255,.92);
+border: 1px solid rgba(46,139,87,.18);
+box-shadow: 0 14px 30px rgba(15,23,42,.10);
+font-size: 12px;
+font-weight: 900;
+color: rgba(15,23,42,.78);
+white-space: nowrap;
+opacity: 0;
+pointer-events:none;
+transition: opacity .12s ease, transform .12s ease;
+}
+.levelMiniBar:hover .levelMiniTooltip{ opacity: 1; transform: translateX(-50%) translateY(-2px); }
 .levelMiniPct{
   width: 52px;
   text-align:right;
@@ -1240,8 +1271,14 @@ width:max-content;
 will-change: transform;
 }
 .top10Track.run{
-animation: lmMarquee 18s linear infinite;
+animation: lmMarquee var(--marquee-duration, 42s) linear infinite;
 }
+.top10Marquee:hover .top10Track.run{ animation-play-state: paused; }
+.top10Marquee:active .top10Track.run{ animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce){
+  .top10Track.run{ animation:none !important; transform:none !important; }
+}
+
 @keyframes lmMarquee{
 from{ transform: translateX(0); }
 to{ transform: translateX(-50%); }
@@ -4902,8 +4939,10 @@ pointer-events:none;
       </div>
 
       <div class="levelMini">
-        <div class="levelMiniBar" aria-hidden="true">
+        <div class="levelMiniBar" id="levelMiniBar">
           <span class="levelMiniFill" id="levelProgress" style="width:0%"></span>
+          <span class="levelMiniKnob" id="levelKnob" style="left:0%"></span>
+          <span class="levelMiniTooltip" id="levelTip" style="left:0%">0%</span>
         </div>
         <div class="levelMiniPct" id="levelPct">0%</div>
       </div>
@@ -5337,11 +5376,9 @@ pointer-events:none;
       tryNext();
     }
 
-    function renderLevelBars(){
-      wrap.innerHTML = bars.join("");
-    }
+    function renderLevelBars(){ /* histogram removed intentionally */ }
 
-    function openLevelUp(level){
+function openLevelUp(level){
       var modal = $("levelUpModal");
       if(!modal) return;
 
@@ -5381,6 +5418,80 @@ pointer-events:none;
       }
     }
 
+    
+    // ===== Animated progress (ring + mini bar) =====
+    var __lm_prog = { pct: 0 };
+    function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+    function setLevelProgressInstant(pct){
+      pct = Math.max(0, Math.min(1, pct||0));
+      __lm_prog.pct = pct;
+
+      var fill = $("levelProgress");
+      var knob = $("levelKnob");
+      var tip  = $("levelTip");
+      var ring = $("levelRingCircle");
+
+      var pct100 = Math.round(pct*100);
+
+      if(fill) fill.style.width = pct100 + "%";
+      if(knob) knob.style.left = pct100 + "%";
+      if(tip){ tip.style.left = pct100 + "%"; tip.textContent = pct100 + "%"; }
+
+      if(ring){
+        var C = 289; // circumference for r=46
+        ring.style.strokeDasharray = C;
+        ring.style.strokeDashoffset = Math.round((1 - pct) * C);
+      }
+
+      var pctEl = $("levelPct");
+      if(pctEl) pctEl.textContent = pct100 + "%";
+    }
+
+    function setLevelProgressAnimated(targetPct){
+      targetPct = Math.max(0, Math.min(1, targetPct||0));
+      var from = __lm_prog.pct || 0;
+      var to   = targetPct;
+
+      if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+        setLevelProgressInstant(to);
+        return;
+      }
+
+      var start = performance.now();
+      var dur = 650;
+
+      function step(now){
+        var t = Math.min(1, (now - start)/dur);
+        var v = from + (to - from) * easeOutCubic(t);
+        setLevelProgressInstant(v);
+        if(t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ===== Top-10 marquee: auto speed by content width =====
+    function startTop10Marquee(){
+      var wrap = document.querySelector(".top10Marquee");
+      var track = $("top10Track");
+      if(!wrap || !track) return;
+
+      // If not duplicated, duplicate once for seamless loop
+      if(!track.dataset.duped){
+        track.innerHTML = track.innerHTML + track.innerHTML;
+        track.dataset.duped = "1";
+      }
+
+      // Measure half width (one set)
+      requestAnimationFrame(function(){
+        var w = track.scrollWidth / 2;
+        // speed ~ 65px/sec; keep in [32..70] seconds range
+        var seconds = Math.max(32, Math.min(70, Math.round(w / 65)));
+        wrap.style.setProperty("--marquee-duration", seconds + "s");
+        track.classList.add("run");
+      });
+    }
+
     function updateMedalUI(points){
       var p = Math.max(0, Number(points)||0);
       var L = levelFromPoints(p);
@@ -5406,18 +5517,10 @@ pointer-events:none;
 
       if($("levelText")) $("levelText").textContent = "Daraja: " + L + " / " + LEVEL_MAX;
       if($("levelRange")) $("levelRange").textContent = (L < LEVEL_MAX) ? (curStart + " → " + nextStart) : (nextStart + " (MAX)");
-      if($("levelProgress")) $("levelProgress").style.width = Math.round(pct*100) + "%";
 
-      // Ring progress (neo UI)
-      var ring = $("levelRingCircle");
-      if(ring){
-        var C = 289; // circumference for r=46
-        ring.style.strokeDasharray = C;
-        ring.style.strokeDashoffset = Math.round((1 - pct) * C);
-      }
+      // Animated progress (bar + ring + knob + tooltip)
+      setLevelProgressAnimated(pct);
 
-      if($("levelPct")) $("levelPct").textContent = Math.round(pct*100) + "%";
-      if($("nextHint")) $("nextHint").textContent = (L < LEVEL_MAX) ? ("Keyingi darajagacha: " + Math.max(0, nextStart - p) + " ball") : "Siz maksimal darajaga yetdingiz!";
       /* histogram removed */
 
       // Level-up detect (local only)
@@ -5653,6 +5756,7 @@ pointer-events:none;
       const list = Array.isArray(items) ? items.slice(0,10) : [];
       if(!list.length){
         track.classList.remove("run");
+        track.dataset.duped = "";
         track.innerHTML = `<div class="muted" style="padding:6px 4px">Top 10 ma’lumotlari yo‘q</div>`;
         return;
       }
@@ -5673,8 +5777,9 @@ pointer-events:none;
         `;
       }).join("");
 
-      // duplicate for seamless marquee
-      track.innerHTML = html + html;
+      // set base items (duplication + speed handled by startTop10Marquee)
+      track.innerHTML = html;
+      track.dataset.duped = "";
 
       // hydrate medal images
       try{
@@ -5684,10 +5789,8 @@ pointer-events:none;
         });
       }catch(_){}
 
-      // restart animation
-      track.classList.remove("run");
-      void track.offsetWidth;
-      track.classList.add("run");
+      // start marquee with adaptive speed
+      startTop10Marquee();
     }
 
 async function loadLeaderboard(){
