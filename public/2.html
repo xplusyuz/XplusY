@@ -8382,6 +8382,12 @@ async function loadLeaderboard(){
         }
         const data = await api("leaderboard", { query: { limit: 60, cursor: lbCursor } });
         const items = data?.items || [];
+      // Fallback: some builds keep leaderboard preloaded in global lbAll
+      if((!items || !items.length) && Array.isArray(window.lbAll) && window.lbAll.length){
+        // use already loaded data if API returns empty
+        items.push(...window.lbAll);
+      }
+
         if(reset) body.innerHTML = "";
         body.insertAdjacentHTML("beforeend", items.map((u,i)=>{
           const pts = Number(u.points||0);
@@ -9536,6 +9542,8 @@ const openCommentsAny = ()=>{
   let meOnly = false;
   let query = "";
 
+  let lastOpener = null;
+
   function esc(s){
     try{ return escapeHtml(String(s ?? "")); }catch(_){
       return String(s ?? "").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
@@ -9558,6 +9566,7 @@ const openCommentsAny = ()=>{
   }
 
   function open(){
+    lastOpener = document.activeElement || null;
     if(!modal) return;
     modal.classList.add("open");
     modal.setAttribute("aria-hidden","false");
@@ -9568,6 +9577,7 @@ const openCommentsAny = ()=>{
 
   function close(){
     if(!modal) return;
+    try{ if(lastOpener && lastOpener.focus) lastOpener.focus(); }catch(_){ }
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden","true");
     lockBody(false);
