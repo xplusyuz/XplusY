@@ -6784,6 +6784,89 @@ vertical-align:-2px;
   .championBar::after{ animation:none !important; opacity:0 !important; }
 }
 
+
+/* =========================
+   PATCH v7.1 — Badges slide-in + sparkle + real avatars
+========================= */
+
+/* Badge motion */
+.podiumBadges{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.podiumBadge{
+  flex:1;
+  min-width: 220px;
+  opacity: 0;
+  transform: translateY(10px) scale(.98);
+  animation: badgeIn .38s ease-out forwards;
+}
+.podiumBadge:nth-child(1){ animation-delay: .06s; }
+.podiumBadge:nth-child(2){ animation-delay: .12s; }
+
+@keyframes badgeIn{
+  to{ opacity:1; transform: translateY(0) scale(1); }
+}
+
+/* Champion entrance */
+.lmPodiumNew .championBar{
+  animation: champIn .40s cubic-bezier(.2,.9,.2,1) both, champFloat 4.8s ease-in-out .45s infinite;
+}
+@keyframes champIn{
+  from{ opacity:0; transform: translateY(14px) scale(.98); }
+  to{ opacity:1; transform: translateY(0) scale(1); }
+}
+@keyframes champFloat{
+  0%,100%{ transform: translateY(0) }
+  50%{ transform: translateY(-6px) }
+}
+
+/* Sparkle on crown */
+.champCrown{
+  position:absolute;
+  left: 44px;
+  top: -6px;
+}
+.champCrown::after{
+  content:"";
+  position:absolute;
+  width:10px; height:10px;
+  border-radius: 999px;
+  right:-10px; top:-8px;
+  background: radial-gradient(circle, rgba(255,255,255,.95), rgba(255,255,255,0) 70%);
+  opacity:0;
+  transform: scale(.6);
+  animation: crownSpark 2.1s ease-in-out infinite;
+}
+@keyframes crownSpark{
+  0%,72%,100%{ opacity:0; transform: scale(.6) rotate(0deg); }
+  74%{ opacity:.95; transform: scale(1.2) rotate(25deg); }
+  80%{ opacity:0; transform: scale(.8) rotate(60deg); }
+}
+
+/* Avatar ring pulse (#1 only) */
+.champAvatar{
+  box-shadow: 0 0 0 0 rgba(255,215,0,0), 0 18px 40px rgba(0,0,0,.28);
+}
+.championBar:hover .champAvatar{ filter:saturate(115%); }
+.championBar .champAvatar{
+  animation: avatarPulse 2.7s ease-in-out infinite;
+}
+@keyframes avatarPulse{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(255,215,0,0), 0 18px 40px rgba(0,0,0,.28); }
+  50%{ box-shadow: 0 0 0 10px rgba(255,215,0,.10), 0 22px 50px rgba(0,0,0,.32); }
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  .podiumBadge, .lmPodiumNew .championBar, .champCrown::after, .championBar .champAvatar{
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Ensure old modal glass doesn't interfere */
 #ratingModal .modal, #lbModal .modal{display:none !important;}
 
@@ -6803,7 +6886,7 @@ vertical-align:-2px;
 <div class="lmLogo" aria-label="LeaderMath.UZ logo">
   <span class="lmTile" aria-hidden="true"></span>
   <span class="lmBadge">
-    <img alt="LeaderMath.UZ" class="logo-img" src="logo.webp"/>
+    <img alt="LeaderMath.UZ" class="logo-img" src="${avatarSrc(u)}"/>
   </span>
   <span class="lmPulse" aria-hidden="true"></span>
 </div>
@@ -7222,6 +7305,23 @@ vertical-align:-2px;
 
     function escapeHtml(s){
       return String(s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;" }[m]));
+    }
+
+
+    // Avatar resolver (supports http(s), /path, or plain filename)
+    function avatarSrc(u){
+      const v = u && (u.avatarUrl || u.avatarURL || u.avatar || u.photo || u.photoUrl || u.pic || u.image || u.img);
+      if(!v) return "logo.webp";
+      const s = String(v);
+      if(/^https?:\/\//i.test(s) || s.startsWith("data:") || s.startsWith("/")) return s;
+      // If looks like a file with extension, try /avatars/ fallback
+      if(/\.(png|jpg|jpeg|webp|gif|svg)$/i.test(s)){
+        if(s.includes("/")) return s;
+        return "avatars/" + s;
+      }
+      // If just a token/number, try common patterns
+      if(/^\d+$/.test(s)) return "avatars/" + s + ".webp";
+      return s;
     }
 
     // Simple modal helpers
@@ -7694,7 +7794,7 @@ function openLevelUp(level){
             <button class="championBar" type="button" data-pick="${id1}" title="${nm1}">
               <div class="champLeft">
                 <div style="position:relative">
-                  <img class="champAvatar" alt="avatar" src="logo.webp"/>
+                  <img class="champAvatar" alt="avatar" src="${avatarSrc(u1)}"/>
                   <span class="champCrown" aria-hidden="true">👑</span>
                 </div>
                 <div class="champText">
@@ -7729,7 +7829,7 @@ function openLevelUp(level){
             </div>
 
             <div class="lbAvatarWrap">
-              <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.webp"/>
+              <img class="lbAvatar" data-lvl="${lvl}" alt="avatar" src="${avatarSrc(u)}"/>
               <span class="lbLvl" title="Yosh" aria-label="Yosh">${ageTxt}</span>
             </div>
 
@@ -7789,7 +7889,7 @@ function openLevelUp(level){
         const short = name.length>18 ? (name.slice(0,16)+"…") : name;
         return `
           <div class="top10Item ${me?'me':''}" title="${escapeHtml(name)} • ${pts} ball">
-            <img class="top10Avatar" data-lvl="${lvl}" alt="medal" src="logo.webp"/>
+            <img class="top10Avatar" data-lvl="${lvl}" alt="avatar" src="${avatarSrc(u)}"/>
             <div class="top10Name">#${i+1} ${escapeHtml(short)}</div>
             <span class="top10Sep">•</span>
             <div class="top10Pts">${pts}</div>
@@ -7852,7 +7952,7 @@ async function loadLeaderboard(){
             <button class="lbItem lbItemSmall" type="button" data-pick="${escapeHtml(u.loginId||"")}" data-name="${escapeHtml((u.name||"").trim())}">
               <div class="lbRank"><span class="rankBadge">${lbRankBase + i + 1}</span></div>
               <div class="lbAvatarWrap">
-                <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.webp"/>
+                <img class="lbAvatar" data-lvl="${lvl}" alt="avatar" src="${avatarSrc(u)}"/>
                 <span class="lbLvl" title="Yosh" aria-label="Yosh">${ageTxt}</span>
               </div>
               <div class="lbMain">
