@@ -6073,6 +6073,34 @@ vertical-align:-2px;
   .lmLbPanel .lbScorePill{padding: 8px 10px;}
   .lmLbPanel .lbScorePill .n{font-size: 18px;}
 }
+
+/* === LEADERBOARD v6 tweaks: even more flexible + mobile-first === */
+.lmLbPanel{
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.lmLbTop{ padding-top: calc(16px + env(safe-area-inset-top)); }
+.lmLbFooter{ padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+.lmLbContent{ flex:1; min-height:0; }
+.lmLbList, .lmLbAll{
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+}
+.lmLbBtn:focus-visible, .lmLbSearchInput:focus-visible, .lbItem:focus-visible{
+  outline: 3px solid rgba(56,189,248,.65);
+  outline-offset: 2px;
+}
+@media (max-width: 720px){
+  .lmLbPanel{ inset: 0; border-radius: 0; }
+  .lmLbTop{ padding: 14px 14px 8px 14px; padding-top: calc(14px + env(safe-area-inset-top)); }
+  .lmLbSearchRow{ padding: 0 14px 12px 14px; }
+  .lmLbContent{ padding: 0 14px 14px 14px; }
+  .lmPodium{ gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce){
+  .lmLbPanel *, .lmLbPanel *::before, .lmLbPanel *::after{ transition: none !important; animation: none !important; scroll-behavior:auto !important; }
+}
+
 /* Ensure old modal glass doesn't interfere */
 #ratingModal .modal, #lbModal .modal{display:none !important;}
 
@@ -6337,7 +6365,18 @@ vertical-align:-2px;
       </div>
     </div>
 
-    <div class="lmLbContent">
+
+    <div class="lmLbSearchRow" style="padding-top:0;">
+      <div class="lmLbSearch" title="Qidiruv (all)">
+        <span class="lmLbSearchIco" aria-hidden="true">🔎</span>
+        <input class="lmLbSearchInput" id="lbModalSearch" placeholder="Barchasidan qidirish… (ID/ism)" autocomplete="off" />
+        <button class="lmLbClear" id="lbModalClear" type="button" aria-label="Qidiruvni tozalash" title="Tozalash">✕</button>
+      </div>
+      <button class="lmLbBtn" id="lbModalOnlyMe" type="button" aria-pressed="false" title="Faqat meni ko‘rsatish">⭐ Meni</button>
+      <button class="lmLbBtn icon" id="lbJumpMe" type="button" aria-label="Menga sakrash" title="Menga sakrash">⬇</button>
+    </div>
+
+<div class="lmLbContent">
       <div class="lmLbListWrap">
         <div class="lmLbListTitle">
           <span>Barchasi</span>
@@ -7106,7 +7145,7 @@ async function loadLeaderboard(){
           const age = ageYears(u.birthdate);
           const ageTxt = age==null ? "—" : String(age);
           return `
-            <button class="lbItem lbItemSmall" type="button" data-pick="${escapeHtml(u.loginId||"")}">
+            <button class="lbItem lbItemSmall" type="button" data-pick="${escapeHtml(u.loginId||"")}" data-name="${escapeHtml((u.name||"").trim())}">
               <div class="lbRank"><span class="rankBadge">${lbRankBase + i + 1}</span></div>
               <div class="lbAvatarWrap">
                 <img class="lbAvatar" data-lvl="${lvl}" alt="medal" src="logo.webp"/>
@@ -7123,6 +7162,8 @@ async function loadLeaderboard(){
         lbRankBase += items.length;
         lbCursor = data?.nextCursor || null;
         try{ body.querySelectorAll("img.lbAvatar").forEach(img=>setMedalImg(img, Number(img.dataset.lvl||1)||1)); }catch(_){ }
+        // apply lbModal filters if present
+        try{ filterLbModal(); }catch(_){ }
         btn.style.display = lbCursor ? "inline-flex" : "none";
         if(!items.length && reset){
           body.innerHTML = `<div class="lbEmpty small">Hozircha reyting yo‘q</div>`;
@@ -7589,7 +7630,66 @@ $("lbOnlyMe")?.addEventListener("click", (e)=>{
       e.currentTarget.classList.toggle("active", lbMeOnly);
       renderLeaderboard();
     });
-    // Click to spotlight a user in the table/podium
+    
+
+    // ===== Leaderboard ALL modal (lbModal) tools =====
+    let lbModalQuery = "";
+    let lbModalMeOnly = false;
+
+    function filterLbModal(){
+      const q = (lbModalQuery||"").toLowerCase().trim();
+      const body = $("lbAllBody");
+      if(!body) return;
+      const items = body.querySelectorAll(".lbItemSmall");
+      let shown = 0;
+      items.forEach(el=>{
+        const pick = (el.getAttribute("data-pick")||"").toLowerCase();
+        const name = (el.getAttribute("data-name")||"").toLowerCase();
+        const okQ = !q || pick.includes(q) || name.includes(q);
+        const okMe = !lbModalMeOnly || (myLoginId && pick===String(myLoginId).toLowerCase());
+        const show = okQ && okMe;
+        el.style.display = show ? "" : "none";
+        if(show) shown++;
+      });
+      const hint = $("lbModalHint");
+      if(hint){
+        hint.textContent = q ? (`Qidiruv: “${lbModalQuery}” • Ko‘rinmoqda: ${shown}`) : (lbModalMeOnly ? `Faqat siz • Ko‘rinmoqda: ${shown}` : `Ball bo‘yicha saralangan`);
+      }
+    }
+
+    function jumpToMe(){
+      const body = $("lbAllBody");
+      if(!body || !myLoginId) return;
+      const meEl = body.querySelector(`.lbItemSmall[data-pick="${String(myLoginId)}"]`);
+      if(meEl){
+        meEl.scrollIntoView({ behavior:"smooth", block:"center" });
+        meEl.classList.add("flash");
+        setTimeout(()=>meEl.classList.remove("flash"), 900);
+      }else{
+        toast("Sizning o‘rningiz hali yuklanmadi. “Yana yuklash”ni bosing.");
+      }
+    }
+
+    $("lbModalSearch")?.addEventListener("input", (e)=>{
+      lbModalQuery = e.target.value || "";
+      filterLbModal();
+    });
+    $("lbModalClear")?.addEventListener("click", ()=>{
+      const inp = $("lbModalSearch");
+      if(!inp) return;
+      inp.value = "";
+      lbModalQuery = "";
+      filterLbModal();
+      try{ inp.focus(); }catch(_){}
+    });
+    $("lbModalOnlyMe")?.addEventListener("click", (e)=>{
+      lbModalMeOnly = !lbModalMeOnly;
+      e.currentTarget.setAttribute("aria-pressed", String(lbModalMeOnly));
+      e.currentTarget.classList.toggle("active", lbModalMeOnly);
+      filterLbModal();
+    });
+    $("lbJumpMe")?.addEventListener("click", jumpToMe);
+// Click to spotlight a user in the table/podium
     function pickUser(loginId){
       if(!loginId) return;
       lbQuery = String(loginId);
