@@ -39,8 +39,9 @@ function getDb(){
 
 const JWT_SECRET = getEnv("JWT_SECRET", "dev_secret_change_me");
 
-function signToken(loginId){
-  return jwt.sign({ sub: loginId }, JWT_SECRET, { expiresIn: "30d" });
+function signToken(loginId, extraClaims={}){
+  // loginId -> JWT subject (sub). extraClaims -> other safe fields
+  return jwt.sign({ sub: loginId, ...extraClaims }, JWT_SECRET, { expiresIn: "30d" });
 }
 
 function verifyToken(token){
@@ -657,7 +658,9 @@ export const handler = async (event) => {
       }catch(e){
         return json(500, { error:"Update error", message: e.message });
       }
-    }    if(path === "/auth/google" && method === "POST"){
+    }
+
+    if(path === "/auth/google" && method === "POST"){
       const body = parseBody(event);
       const idToken = String(body.idToken || "");
       if(!idToken) return json(400, { error:"idToken kerak" });
@@ -667,8 +670,7 @@ export const handler = async (event) => {
         if(email !== "sohibjonmath@gmail.com"){
           return json(403, { error:"Admin email mos emas" });
         }
-        const token = signToken({
-          loginId: email,
+        const token = signToken(email, {
           name: decoded.name || "Sohibjon",
           role: "admin",
           provider: "google",
@@ -1054,81 +1056,7 @@ export const handler = async (event) => {
       }
     }
 
-    
     // =====================
-    // TEST RESULTS (by testCode)
-    // Writes:
-    //   test_codes/{testCode}/results/{loginId}   (latest per user)
-    //   test_codes/{testCode}/attempts/{attemptId} (history)
-    // Auth: JWT Bearer (same as other endpoints)
-    // =====================
-    if(path === "/results/submit" && method === "POST"){
-      const auth = requireToken(event);
-      if(!auth.ok) return auth.error;
-
-      try{
-        const body = parseBody(event);
-        const testCode = safeStr(body.testCode || "", 80).replace(/\s+/g,'').trim();
-        if(!testCode) return json(400, { error:"testCode kerak" });
-
-        const testTitle = safeStr(body.testTitle || body.title || testCode, 140);
-        const mode = (String(body.mode||"open").toLowerCase() === "challenge") ? "challenge" : "open";
-        const score = Math.max(0, Number(body.score||0) || 0);
-        const correct = Math.max(0, Math.floor(Number(body.correct||0) || 0));
-        const wrong = Math.max(0, Math.floor(Number(body.wrong||0) || 0));
-        const total = Math.max(0, Math.floor(Number(body.total||0) || 0));
-        const timeSpentSec = Math.max(0, Math.min(24*3600, Math.floor(Number(body.timeSpentSec||0) || 0)));
-        const penalty = Math.max(0, Number(body.penalty||0) || 0);
-        const violations = (body.violations && typeof body.violations === "object") ? body.violations : null;
-        // answers can be large; store only if provided
-        const answers = Array.isArray(body.answers) ? body.answers.slice(0, 300) : null;
-
-        const baseRef = db.collection("test_codes").doc(testCode);
-        const latestRef = baseRef.collection("results").doc(auth.loginId);
-        const attemptRef = baseRef.collection("attempts").doc();
-        const now = admin.firestore.FieldValue.serverTimestamp();
-
-        await db.runTransaction(async (tx)=>{
-          tx.set(latestRef, {
-            loginId: auth.loginId,
-            testCode,
-            testTitle,
-            mode,
-            score,
-            correct,
-            wrong,
-            total,
-            timeSpentSec,
-            penalty,
-            violations,
-            updatedAt: now,
-            lastAttemptId: attemptRef.id
-          }, { merge:true });
-
-          tx.set(attemptRef, {
-            loginId: auth.loginId,
-            testCode,
-            testTitle,
-            mode,
-            score,
-            correct,
-            wrong,
-            total,
-            timeSpentSec,
-            penalty,
-            violations,
-            ...(answers ? { answers } : {}),
-            createdAt: now
-          }, { merge:false });
-        });
-
-        return json(200, { ok:true, testCode, attemptId: attemptRef.id });
-      }catch(e){
-        return json(500, { error:"Results submit error", message: e.message });
-      }
-    }
-
-// =====================
     // TESTS / CHALLENGES API
     // Collection: tests/{id}
     // Submissions: tests/{id}/submissions/{loginId}
@@ -1428,7 +1356,81 @@ export const handler = async (event) => {
     }
 
 
-return json(404, { error:"Endpoint topilmadi", path, method });
+
+
+// =====================
+// TEST RESULTS (by testCode)
+// Writes:
+//   test_codes/{testCode}/results/{loginId}   (latest per user)
+//   test_codes/{testCode}/attempts/{attemptId} (history)
+// Auth: JWT Bearer (same as other endpoints)
+// =====================
+if(path === "/results/submit" && method === "POST"){
+  const auth = requireToken(event);
+  if(!auth.ok) return auth.error;
+
+  try{
+    const body = parseBody(event);
+    const testCode = safeStr(body.testCode || "", 80).replace(/\s+/g,'').trim();
+    if(!testCode) return json(400, { error:"testCode kerak" });
+
+    const testTitle = safeStr(body.testTitle || body.title || testCode, 140);
+    const mode = (String(body.mode||"open").toLowerCase() === "challenge") ? "challenge" : "open";
+    const score = Math.max(0, Number(body.score||0) || 0);
+    const correct = Math.max(0, Math.floor(Number(body.correct||0) || 0));
+    const wrong = Math.max(0, Math.floor(Number(body.wrong||0) || 0));
+    const total = Math.max(0, Math.floor(Number(body.total||0) || 0));
+    const timeSpentSec = Math.max(0, Math.min(24*3600, Math.floor(Number(body.timeSpentSec||0) || 0)));
+    const penalty = Math.max(0, Number(body.penalty||0) || 0);
+    const violations = (body.violations && typeof body.violations === "object") ? body.violations : null;
+    const answers = Array.isArray(body.answers) ? body.answers.slice(0, 300) : null;
+
+    const baseRef = db.collection("test_codes").doc(testCode);
+    const latestRef = baseRef.collection("results").doc(auth.loginId);
+    const attemptRef = baseRef.collection("attempts").doc();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    await db.runTransaction(async (tx)=>{
+      tx.set(latestRef, {
+        loginId: auth.loginId,
+        testCode,
+        testTitle,
+        mode,
+        score,
+        correct,
+        wrong,
+        total,
+        timeSpentSec,
+        penalty,
+        violations,
+        updatedAt: now,
+        lastAttemptId: attemptRef.id
+      }, { merge:true });
+
+      tx.set(attemptRef, {
+        loginId: auth.loginId,
+        testCode,
+        testTitle,
+        mode,
+        score,
+        correct,
+        wrong,
+        total,
+        timeSpentSec,
+        penalty,
+        violations,
+        ...(answers ? { answers } : {}),
+        createdAt: now
+      }, { merge:false });
+    });
+
+    return json(200, { ok:true, testCode, attemptId: attemptRef.id });
+  }catch(e){
+    return json(500, { error:"Results submit error", message: e.message });
+  }
+}
+
+    return json(404, { error:"Endpoint topilmadi", path, method });
   }catch(e){
     return json(500, { error: e.message || "Server error" });
   }
