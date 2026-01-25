@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Super Admin Dashboard — LeaderMath</title>
+  <link rel="stylesheet" href="css/dashboard.css" />
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <script src="js/01-config.js"></script>
+  <script src="js/admin_dashboard.js" defer></script>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="shell">
+      <div class="topbarRow">
+        <div class="brand">
+          <div class="logoDot"></div>
+          <div>
+            <div class="h1">Super Admin Dashboard</div>
+            <div class="sub">Analytics · grafiklar · monitoring (Firestore)</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="pill">
+            <span class="small">Test:</span>
+            <select id="testSelect" title="Test code">
+              <option value="">— yuklanmoqda —</option>
+            </select>
+            <button class="btn btnGhost" id="refreshBtn">↻ Refresh</button>
+          </div>
+
+          <div class="pill">
+            <span id="authState" class="small">Kirish kutilmoqda…</span>
+          </div>
+          <button class="btn" id="loginBtn">Google bilan kirish</button>
+          <button class="btn btnDanger" id="logoutBtn" style="display:none">Chiqish</button>
+        </div>
+      </div>
+
+      <div id="notice" class="notice">Yuklanmoqda…</div>
+    </div>
+  </div>
+
+  <div class="shell">
+    <div class="cards" id="kpiCards">
+      <div class="card">
+        <div class="cardHd">
+          <strong>👤 Users</strong>
+          <span class="tag" id="tagUsers">—</span>
+        </div>
+        <div class="cardBd kpi">
+          <div class="value mono" id="kpiUsers">—</div>
+          <div class="meta" id="kpiUsersMeta">Jami foydalanuvchilar</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardHd">
+          <strong>🧪 Attempts (locks)</strong>
+          <span class="tag" id="tagAttempts">—</span>
+        </div>
+        <div class="cardBd kpi">
+          <div class="value mono" id="kpiAttempts">—</div>
+          <div class="meta" id="kpiAttemptsMeta">Tanlangan test bo‘yicha locklar</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardHd">
+          <strong>🏁 Results</strong>
+          <span class="tag" id="tagResults">—</span>
+        </div>
+        <div class="cardBd kpi">
+          <div class="value mono" id="kpiResults">—</div>
+          <div class="meta" id="kpiResultsMeta">Tanlangan test natijalari</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:12px">
+      <div>
+        <div class="card">
+          <div class="cardHd">
+            <div>
+              <strong>📈 Natijalar trendi (30 kun)</strong>
+              <div class="small">completedAt bo‘yicha: attempts count, avg score, violations</div>
+            </div>
+            <div class="row">
+              <span class="tag ok" id="tagHealth">HEALTH: —</span>
+            </div>
+          </div>
+          <div class="cardBd">
+            <div class="canvasBox">
+              <canvas id="chartTrend"></canvas>
+            </div>
+            <div class="footerNote" id="trendNote">—</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="cardHd">
+            <div>
+              <strong>🏆 Top results</strong>
+              <div class="small">Tanlangan test — eng yuqori ball (Top 20)</div>
+            </div>
+            <div class="row">
+              <span class="tag" id="tagTop">—</span>
+            </div>
+          </div>
+          <div class="cardBd tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th><th>O‘quvchi</th><th>Ball</th><th>Viol</th><th>Vaqt</th><th>ID</th>
+                </tr>
+              </thead>
+              <tbody id="topResultsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="cardHd">
+            <div>
+              <strong>⚠️ Integrity</strong>
+              <div class="small">Cheat / violation signallari</div>
+            </div>
+            <span class="tag warn" id="tagIntegrity">—</span>
+          </div>
+          <div class="cardBd">
+            <div class="tableWrap">
+              <table>
+                <thead>
+                  <tr><th>Metric</th><th>Value</th><th>Comment</th></tr>
+                </thead>
+                <tbody id="integrityTbody"></tbody>
+              </table>
+            </div>
+            <hr class="sep" />
+            <div class="small">Eslatma: schema har xil bo‘lishi mumkin. Dashboard eng ko‘p uchraydigan maydonlardan hisoblaydi.</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="cardHd">
+            <div>
+              <strong>🗂️ Top tests (by activity)</strong>
+              <div class="small">Oxirgi 30 kun: locks + results bo‘yicha</div>
+            </div>
+            <span class="tag" id="tagTests">—</span>
+          </div>
+          <div class="cardBd tableWrap">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Test</th><th>Locks</th><th>Results</th><th>Avg score</th></tr>
+              </thead>
+              <tbody id="topTestsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footerNote">
+      🔒 Kirish: faqat admin email. 📦 Ma’lumotlar: Firestore (<span class="mono">users</span>, <span class="mono">test_attempt_locks</span>, <span class="mono">test_results</span>, ixtiyoriy <span class="mono">testlar</span>).
+    </div>
+  </div>
+</body>
+</html>
