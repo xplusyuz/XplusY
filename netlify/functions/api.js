@@ -1222,80 +1222,7 @@ export const handler = async (event) => {
     }
 
     
-    
-    // ==================== RESULTS: SUBMIT (per testCode) ====================
-    // Writes:
-    //   test_codes/{testCode}/results/{loginId}   (latest)
-    //   test_codes/{testCode}/attempts/{attemptId} (history)
-    // Does NOT touch Telegram.
-    if(path === "/results/submit" && method === "POST"){
-      const auth = requireToken(event);
-      if(!auth.ok) return auth.error;
-
-      try{
-        const body = parseBody(event);
-
-        const testCode = String(body.testCode || "").trim();
-        if(!testCode) return json(400, { error:"testCode_required" });
-
-        const testTitle = safeStr(body.testTitle || body.title || testCode, 120);
-        const mode = String(body.mode || "open").toLowerCase() === "challenge" ? "challenge" : "open";
-
-        const score = Math.max(0, Number(body.score || 0) || 0);
-        const correct = Math.max(0, Math.floor(Number(body.correct || 0) || 0));
-        const wrong = Math.max(0, Math.floor(Number(body.wrong || 0) || 0));
-        const timeSpentSec = Math.max(0, Math.floor(Number(body.timeSpentSec || 0) || 0));
-        const penalty = Math.max(0, Number(body.penalty || 0) || 0);
-
-        // Optional fields (kept small)
-        const violations = body.violations ?? null;
-        const answers = body.answers ?? null;
-
-        const baseRef = db.collection("test_codes").doc(testCode);
-        const latestRef = baseRef.collection("results").doc(auth.loginId);
-        const attemptRef = baseRef.collection("attempts").doc(); // auto-id
-
-        const now = admin.firestore.FieldValue.serverTimestamp();
-
-        await db.runTransaction(async (tx) => {
-          tx.set(latestRef, {
-            loginId: auth.loginId,
-            testCode,
-            testTitle,
-            mode,
-            score,
-            correct,
-            wrong,
-            timeSpentSec,
-            penalty,
-            violations,
-            updatedAt: now,
-            lastAttemptId: attemptRef.id
-          }, { merge:true });
-
-          tx.set(attemptRef, {
-            loginId: auth.loginId,
-            testCode,
-            testTitle,
-            mode,
-            score,
-            correct,
-            wrong,
-            timeSpentSec,
-            penalty,
-            violations,
-            answers,
-            createdAt: now
-          }, { merge:false });
-        });
-
-        return json(200, { ok:true, saved:true, testCode, attemptId: attemptRef.id });
-      }catch(e){
-        return json(500, { error:"results_submit_failed", message: e.message || String(e) });
-      }
-    }
-
-// ==================== GAMES: SUBMIT (user-only + points delta) ====================
+    // ==================== GAMES: SUBMIT (user-only + points delta) ====================
     // Writes ONLY into: users/{loginId}.games.{gameId} and users/{loginId}.points
     // Does NOT write any global "games" collection.
         // ==================== GAMES: SUBMIT (user-only + points delta) ====================
@@ -1423,6 +1350,79 @@ export const handler = async (event) => {
         return json(200, { ok:true, gameId, limit, rows });
       }catch(e){
         return json(400, { error: e.message || "Leaderboard error" });
+      }
+    }
+
+
+    // ==================== RESULTS: SUBMIT (per testCode) ====================
+    // Writes:
+    //   test_codes/{testCode}/results/{loginId}    (latest)
+    //   test_codes/{testCode}/attempts/{attemptId} (history)
+    // Does NOT touch Telegram.
+    if(path === "/results/submit" && method === "POST"){
+      const auth = requireToken(event);
+      if(!auth.ok) return auth.error;
+
+      try{
+        const body = parseBody(event);
+
+        const testCode = String(body.testCode || "").trim();
+        if(!testCode) return json(400, { error:"testCode_required" });
+
+        const testTitle = safeStr(body.testTitle || body.title || testCode, 120);
+        const mode = String(body.mode || "open").toLowerCase() === "challenge" ? "challenge" : "open";
+
+        const score = Math.max(0, Number(body.score || 0) || 0);
+        const correct = Math.max(0, Math.floor(Number(body.correct || 0) || 0));
+        const wrong = Math.max(0, Math.floor(Number(body.wrong || 0) || 0));
+        const timeSpentSec = Math.max(0, Math.floor(Number(body.timeSpentSec || 0) || 0));
+        const penalty = Math.max(0, Number(body.penalty || 0) || 0);
+
+        // Optional fields (kept small)
+        const violations = body.violations ?? null;
+        const answers = body.answers ?? null;
+
+        const baseRef = db.collection("test_codes").doc(testCode);
+        const latestRef = baseRef.collection("results").doc(auth.loginId);
+        const attemptRef = baseRef.collection("attempts").doc(); // auto-id
+
+        const now = admin.firestore.FieldValue.serverTimestamp();
+
+        await db.runTransaction(async (tx) => {
+          tx.set(latestRef, {
+            loginId: auth.loginId,
+            testCode,
+            testTitle,
+            mode,
+            score,
+            correct,
+            wrong,
+            timeSpentSec,
+            penalty,
+            violations,
+            updatedAt: now,
+            lastAttemptId: attemptRef.id
+          }, { merge:true });
+
+          tx.set(attemptRef, {
+            loginId: auth.loginId,
+            testCode,
+            testTitle,
+            mode,
+            score,
+            correct,
+            wrong,
+            timeSpentSec,
+            penalty,
+            violations,
+            answers,
+            createdAt: now
+          }, { merge:false });
+        });
+
+        return json(200, { ok:true, saved:true, testCode, attemptId: attemptRef.id });
+      }catch(e){
+        return json(500, { error:"results_submit_failed", message: e.message || String(e) });
       }
     }
 
