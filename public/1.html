@@ -7089,50 +7089,6 @@ vertical-align:-2px;
 /* Ensure old modal glass doesn't interfere */
 #ratingModal .modal, #lbModal .modal{display:none !important;}
 
-
-/* =========================
-   FINAL FIX v7.4 — All leaderboard fills modal (no empty right side)
-========================= */
-.lmLbContent{
-  grid-template-columns: 1fr !important;
-  overflow: hidden !important;
-}
-.lmLbListWrap{
-  width: 100%;
-  max-width: none !important;
-}
-.lmLbList{
-  max-height: calc(100vh - 260px);
-}
-@media (max-width: 520px){
-  .lmLbContent{ padding: 0 12px 12px 12px !important; }
-  .lmLbList{ max-height: calc(100vh - 240px); }
-}
-
-
-/* =========================
-   v7.5 — Score/points pills prettier in list
-========================= */
-.lbItemSmall{
-  position: relative;
-}
-.lbItemSmall .lbScorePill{
-  background:
-    radial-gradient(220px 120px at 30% 30%, rgba(46,139,87,.22), transparent 60%),
-    rgba(255,255,255,.10) !important;
-  border: 1px solid rgba(255,255,255,.16) !important;
-  box-shadow: 0 14px 34px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.10);
-}
-.lbItemSmall .lbScoreNum{
-  font-weight: 1000 !important;
-  letter-spacing: -.02em;
-}
-.lbItemSmall .lbScoreTxt{
-  font-weight: 900 !important;
-  letter-spacing: .22em;
-  opacity: .9;
-}
-
 </style>
 </head>
 <body data-page="app">
@@ -7590,19 +7546,11 @@ vertical-align:-2px;
     // Simple modal helpers
     function openModal(el){
       if(!el) return;
+      // bridge.css modalApp animatsiyasi .open orqali ishlaydi
       el.classList.add("open");
       el.style.display = "flex";
       el.setAttribute("aria-hidden","false");
       document.body.classList.add("noScroll");
-
-      // Auto-load leaderboard immediately on open (no button press)
-      try{
-        if(el.id === "lbModal" && typeof loadLeaderboardMore === "function"){
-          setTimeout(()=>loadLeaderboardMore(true), 30);
-          // focus search for fast typing
-          setTimeout(()=>{ try{ $("lbSearch")?.focus(); }catch(_){ } }, 60);
-        }
-      }catch(_){}
     }
     function closeModal(el){
       if(!el) return;
@@ -8686,51 +8634,28 @@ function renderCommentItem(c){
     $("commentInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendComment(); });
     $("cmLoadMoreInline").onclick = ()=>loadComments(false);
 
-    // Leaderboard interactivity (Barchasi modal uses these controls)
-    const lbSearchEl = $("lbSearch");
-    const lbClearEl = $("lbClear");
-    const lbOnlyMeEl = $("lbOnlyMe");
-
-    function syncModalFilters(){
-      // update modal vars and filter modal list
-      lbModalQuery = lbSearchEl ? (lbSearchEl.value || "") : (lbModalQuery||"");
-      lbModalMeOnly = !!(lbOnlyMeEl && lbOnlyMeEl.classList.contains("active"));
-      filterLbModal();
-    }
-
-    lbSearchEl?.addEventListener("input", ()=>{
-      // keep old vars for backward compatibility, but drive modal filter
-      lbQuery = lbSearchEl.value || "";
-      lbModalQuery = lbQuery;
-      filterLbModal();
+    // Leaderboard interactivity
+    $("lbSearch")?.addEventListener("input", (e)=>{
+      lbQuery = e.target.value || "";
+      renderLeaderboard();
     });
-
-    lbClearEl?.addEventListener("click", ()=>{
-      if(!lbSearchEl) return;
-      lbSearchEl.value = "";
+    
+    // Clear search (new UI)
+    $("lbClear")?.addEventListener("click", ()=>{
+      const inp = $("lbSearch");
+      if(!inp) return;
+      inp.value = "";
       lbQuery = "";
-      lbModalQuery = "";
-      filterLbModal();
-      try{ lbSearchEl.focus(); }catch(_){}
+      renderLeaderboard();
+      try{ inp.focus(); }catch(_){}
     });
-
-    lbOnlyMeEl?.addEventListener("click", (e)=>{
-      const on = !lbOnlyMeEl.classList.contains("active");
-      lbOnlyMeEl.classList.toggle("active", on);
-      lbOnlyMeEl.setAttribute("aria-pressed", String(on));
-      lbMeOnly = on;          // legacy
-      lbModalMeOnly = on;     // modal
-      filterLbModal();
-      // If "Meni" enabled, scroll to me (first match)
-      if(on){
-        try{
-          const body = $("lbAllBody");
-          const meId = (currentUser?.loginId || currentUser?.numericId || currentUser?.uid || "").toString().toLowerCase();
-          const meEl = body?.querySelector(meId ? `.lbItemSmall[data-pick="${meId}"], .lbItemSmall[data-pick="${meId.toUpperCase()}"]` : null);
-          meEl?.scrollIntoView({behavior:"smooth", block:"center"});
-        }catch(_){}
-      }
+$("lbOnlyMe")?.addEventListener("click", (e)=>{
+      lbMeOnly = !lbMeOnly;
+      e.currentTarget.setAttribute("aria-pressed", String(lbMeOnly));
+      e.currentTarget.classList.toggle("active", lbMeOnly);
+      renderLeaderboard();
     });
+    
 
     // ===== Leaderboard ALL modal (lbModal) tools =====
     let lbModalQuery = "";
