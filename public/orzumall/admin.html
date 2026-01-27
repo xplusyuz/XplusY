@@ -106,9 +106,7 @@
       border:1px solid rgba(255,255,255,.18);
       background:rgba(0,0,0,.45); color:#fff; cursor:pointer;
     }
-    .list{
-      display:flex; flex-direction:column; gap:10px;
-    }
+    .list{display:flex; flex-direction:column; gap:10px;}
     .item{
       padding:12px; border-radius:16px;
       background:rgba(0,0,0,.20);
@@ -154,7 +152,7 @@
         <div class="logo">OM</div>
         <div class="title">
           <b>OrzuMall Admin</b>
-          <small>Products boshqaruvi (Firestore + Storage)</small>
+          <small>Products (Firestore + Storage)</small>
         </div>
       </div>
       <div class="actions">
@@ -205,7 +203,7 @@
             <div>
               <label>Kategoriya</label>
               <select id="categoryId"></select>
-              <div class="help">Kategoriyalarni pastdagi “Katalog sozlamalari”dan boshqarasiz.</div>
+              <div class="help">Kategoriyalar “Katalog sozlamalari”dan boshqariladi.</div>
             </div>
           </div>
 
@@ -222,9 +220,6 @@
             <span class="muted" id="uploadInfo"></span>
           </div>
           <div class="imgRow" id="imgRow"></div>
-          <div class="notice">
-            Tavsiya: rasmlarni webp qiling (xotira tejaladi). Bu kod har qanday rasmni Storage’ga yuklaydi.
-          </div>
 
           <div class="bar" style="margin-top:14px">
             <button class="btn primary" id="btnSave">💾 Saqlash</button>
@@ -236,7 +231,7 @@
       </div>
 
       <div class="card">
-        <h3>📦 Mahsulotlar ro‘yxati <span id="countHint">0 ta</span></h3>
+        <h3>📦 Mahsulotlar <span id="countHint">0 ta</span></h3>
         <div class="body">
           <div class="bar" style="margin-bottom:10px">
             <input id="q" placeholder="Qidirish (nom/tag)..." />
@@ -253,15 +248,18 @@
             <h3>⚙️ Katalog sozlamalari <span>meta/config</span></h3>
             <div class="body">
               <label>Kategoriyalar (JSON array)</label>
-              <textarea id="categoriesJson" placeholder='[{"id":"phones","title":"Telefonlar"},{"id":"headphones","title":"Quloqchin"}]'></textarea>
+              <textarea id="categoriesJson" placeholder='[{"id":"phones","title":"Telefonlar"}]'></textarea>
               <div class="bar" style="margin-top:10px">
                 <button class="btn primary" id="btnSaveMeta">💾 Saqlash</button>
                 <span class="muted" id="metaInfo"></span>
               </div>
-              <div class="help">Bu ro‘yxat index.html’da kategoriya filter uchun ishlatiladi.</div>
+              <div class="help">Index sahifada filter chips shundan chiqadi.</div>
             </div>
           </div>
 
+          <div class="notice">
+            Agar upload xato bersa: Storage bucket nomini Firebase Console → Storage’da tekshiring.
+          </div>
         </div>
       </div>
     </div>
@@ -282,7 +280,6 @@
     // ========= Admin emails =========
     const ADMIN_EMAILS = new Set([
       "sohibjonmath@gmail.com"
-      // yana admin email qo‘shing
     ]);
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -337,8 +334,6 @@
     const metaInfo = $("metaInfo");
 
     let currentUser = null;
-
-    // form state
     let editingId = null;
     let imageUrls = [];
     let coverUrl = "";
@@ -352,7 +347,6 @@
         .filter(Boolean)
         .slice(0, 30);
     }
-
     function tagsFromInput(val){
       return (val||"")
         .split(",")
@@ -360,14 +354,20 @@
         .filter(Boolean)
         .slice(0, 20);
     }
-
     function money(v){
       if(v === null || v === undefined || v === "") return "";
       const n = Number(v);
       if(Number.isNaN(n)) return "";
       return n.toLocaleString("uz-UZ");
     }
-
+    function escapeHtml(str){
+      return String(str)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
     function renderThumbs(){
       imgRow.innerHTML = "";
       imageUrls.forEach((url, idx)=>{
@@ -385,7 +385,6 @@
         imgRow.appendChild(d);
       });
     }
-
     function resetForm(){
       editingId = null;
       titleEl.value = "";
@@ -402,7 +401,6 @@
       editHint.textContent = "Yangi mahsulot";
       saveInfo.textContent = "";
     }
-
     async function ensureAdmin(){
       if(!currentUser) throw new Error("Login qiling.");
       const email = (currentUser.email || "").toLowerCase();
@@ -413,13 +411,11 @@
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     };
-
     btnLogout.onclick = async ()=>{ await signOut(auth); };
 
     onAuthStateChanged(auth, async (user)=>{
       currentUser = user || null;
       const isAdmin = !!(user && ADMIN_EMAILS.has((user.email||"").toLowerCase()));
-
       if(user){
         userChip.textContent = `${isAdmin ? "✅ Admin" : "⚠️ Not admin"} — ${user.email}`;
         btnLogin.style.display = "none";
@@ -429,7 +425,6 @@
         btnLogin.style.display = "";
         btnLogout.style.display = "none";
       }
-
       await loadMetaConfig();
       subscribeProducts();
     });
@@ -437,23 +432,20 @@
     async function loadMetaConfig(){
       const refDoc = doc(db, "meta", "config");
       const snap = await getDoc(refDoc);
-
-      let cats = [{id:"all", title:"Hammasi"}];
+      let cats = [];
       if(snap.exists()){
         const d = snap.data();
-        if(Array.isArray(d.categories) && d.categories.length){
-          cats = [{id:"all", title:"Hammasi"}, ...d.categories];
-        }
-        categoriesJsonEl.value = JSON.stringify(d.categories || [], null, 2);
+        cats = Array.isArray(d.categories) ? d.categories : [];
+        categoriesJsonEl.value = JSON.stringify(cats, null, 2);
       } else {
-        categoriesJsonEl.value = JSON.stringify([{id:"phones", title:"Telefonlar"}], null, 2);
+        cats = [{id:"phones", title:"Telefonlar"}];
+        categoriesJsonEl.value = JSON.stringify(cats, null, 2);
       }
-
       categoryEl.innerHTML = "";
-      cats.filter(c=>c.id!=="all").forEach(c=>{
+      cats.forEach(c=>{
         const opt = document.createElement("option");
-        opt.value = c.id;
-        opt.textContent = c.title;
+        opt.value = String(c.id||"");
+        opt.textContent = String(c.title||c.id||"");
         categoryEl.appendChild(opt);
       });
     }
@@ -463,7 +455,6 @@
         await ensureAdmin();
         const arr = JSON.parse(categoriesJsonEl.value || "[]");
         if(!Array.isArray(arr)) throw new Error("JSON array bo‘lishi kerak.");
-
         const categories = arr
           .map(x=>({ id:String(x.id||"").trim(), title:String(x.title||"").trim() }))
           .filter(x=>x.id && x.title)
@@ -510,7 +501,6 @@
     btnSave.onclick = async ()=>{
       try{
         await ensureAdmin();
-
         const title = titleEl.value.trim();
         if(!title) throw new Error("Nomi kerak.");
         const price = Number(priceEl.value);
@@ -532,14 +522,9 @@
         ])).slice(0, 40);
 
         const payload = {
-          title,
-          price,
+          title, price,
           oldPrice: oldPrice ?? null,
-          currency,
-          categoryId,
-          tags,
-          desc,
-          status,
+          currency, categoryId, tags, desc, status,
           coverUrl: coverUrl || imageUrls[0] || "",
           imageUrls: imageUrls.slice(0, 12),
           searchTokens: tokens,
@@ -553,13 +538,12 @@
           saveInfo.textContent = "✅ Yangilandi";
         }else{
           payload.createdAt = serverTimestamp();
-          const refNew = await addDoc(collection(db, "products"), payload);
-          editingId = refNew.id;
+          const refDoc = await addDoc(collection(db, "products"), payload);
+          editingId = refDoc.id;
           btnDelete.style.display = "";
           editHint.textContent = "Tahrirlash: " + editingId.slice(0,8) + "…";
           saveInfo.textContent = "✅ Saqlandi";
         }
-
         setTimeout(()=>saveInfo.textContent="", 1500);
       }catch(e){
         saveInfo.textContent = "❌ " + (e.message || e);
@@ -581,7 +565,6 @@
       }
     };
 
-    // ===== Products list (realtime) =====
     let unsubscribe = null;
     let allProducts = [];
 
@@ -602,6 +585,24 @@
         (p.tags||[]).some(t=>String(t).toLowerCase().includes(s)) ||
         (p.categoryId||"").toLowerCase().includes(s)
       );
+    }
+
+    function loadToForm(p){
+      editingId = p.id;
+      titleEl.value = p.title || "";
+      statusEl.value = p.status || "active";
+      priceEl.value = p.price ?? "";
+      oldPriceEl.value = p.oldPrice ?? "";
+      currencyEl.value = p.currency || "UZS";
+      categoryEl.value = p.categoryId || (categoryEl.options[0]?.value || "");
+      tagsEl.value = (p.tags || []).join(", ");
+      descEl.value = p.desc || "";
+      imageUrls = Array.isArray(p.imageUrls) ? [...p.imageUrls] : [];
+      coverUrl = p.coverUrl || imageUrls[0] || "";
+      btnDelete.style.display = "";
+      editHint.textContent = "Tahrirlash: " + p.id.slice(0,8) + "…";
+      renderThumbs();
+      window.scrollTo({top:0, behavior:"smooth"});
     }
 
     function renderList(){
@@ -634,35 +635,8 @@
       });
     }
 
-    function loadToForm(p){
-      editingId = p.id;
-      titleEl.value = p.title || "";
-      statusEl.value = p.status || "active";
-      priceEl.value = p.price ?? "";
-      oldPriceEl.value = p.oldPrice ?? "";
-      currencyEl.value = p.currency || "UZS";
-      categoryEl.value = p.categoryId || (categoryEl.options[0]?.value || "");
-      tagsEl.value = (p.tags || []).join(", ");
-      descEl.value = p.desc || "";
-      imageUrls = Array.isArray(p.imageUrls) ? [...p.imageUrls] : [];
-      coverUrl = p.coverUrl || imageUrls[0] || "";
-      btnDelete.style.display = "";
-      editHint.textContent = "Tahrirlash: " + p.id.slice(0,8) + "…";
-      renderThumbs();
-      window.scrollTo({top:0, behavior:"smooth"});
-    }
-
     qEl.addEventListener("input", renderList);
     filterStatusEl.addEventListener("change", renderList);
-
-    function escapeHtml(str){
-      return String(str)
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
-    }
 
     resetForm();
   </script>
