@@ -38,9 +38,7 @@ function initAdmin() {
 
 exports.handler = async (event) => {
   try {
-    if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: "Method Not Allowed" };
-    }
+    if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
     const BOT_TOKEN = process.env.TG_BOT_TOKEN;
     if (!BOT_TOKEN) throw new Error("No TG_BOT_TOKEN");
@@ -83,8 +81,8 @@ exports.handler = async (event) => {
     const userRef = admin.firestore().doc(`users/${uid}`);
     await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
-
       const existing = snap.exists ? snap.data() : {};
+
       const base = {
         uid,
         provider: "telegram",
@@ -101,21 +99,16 @@ exports.handler = async (event) => {
           phone: existing?.profile?.phone || "",
           avatar: existing?.profile?.avatar || photoURL || "",
         },
-        // demo counters
         balance: existing?.balance ?? 0,
         favoritesCount: existing?.favoritesCount ?? 0,
         cartCount: existing?.cartCount ?? 0,
-
         status: existing?.status || "active",
         role: existing?.role || "user",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
       if (!snap.exists) {
-        tx.set(userRef, {
-          ...base,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        tx.set(userRef, { ...base, createdAt: admin.firestore.FieldValue.serverTimestamp() });
       } else {
         tx.set(userRef, base, { merge: true });
       }
