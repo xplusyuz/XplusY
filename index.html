@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>OrzuMall Minimal</title>
+
+<style>
+body{font-family:system-ui;margin:30px;max-width:800px}
+.box{border:1px solid #eee;border-radius:14px;padding:18px;margin:14px 0}
+button{padding:10px 14px;border-radius:10px;border:none;background:#111;color:#fff}
+pre{background:#f4f4f4;padding:12px;border-radius:10px}
+</style>
+</head>
+
+<body>
+
+<h2>OrzuMall — Telegram Login</h2>
+
+<div class="box">
+<div id="tgLogin"></div>
+</div>
+
+<div class="box">
+<button id="logout" disabled>Logout</button>
+<button id="load" disabled>Load Products JSON</button>
+<pre id="out">Kutilmoqda...</pre>
+</div>
+
+<div class="box">
+<div id="grid">Products chiqadi...</div>
+</div>
+
+<script type="module">
+
+const firebaseConfig = {
+ apiKey:"PASTE_API_KEY",
+ authDomain:"PASTE.firebaseapp.com",
+ projectId:"PASTE"
+};
+
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithCustomToken,signOut}
+from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+const out=document.getElementById("out");
+const logout=document.getElementById("logout");
+const load=document.getElementById("load");
+const grid=document.getElementById("grid");
+
+function log(v){
+ out.textContent = typeof v==="string"?v:JSON.stringify(v,null,2);
+}
+
+logout.onclick=()=>signOut(auth);
+
+load.onclick=async()=>{
+ const r=await fetch("/products.json");
+ const j=await r.json();
+ grid.innerHTML=j.products.map(p=>`
+ <div style="border:1px solid #eee;padding:10px;border-radius:10px;margin:6px 0">
+ <b>${p.title}</b><br>${p.price}
+ </div>`).join("");
+};
+
+onAuthStateChanged(auth,u=>{
+ if(u){
+ log({login:true,uid:u.uid});
+ logout.disabled=false;
+ load.disabled=false;
+ }else{
+ log("Login qilinmagan");
+ logout.disabled=true;
+ load.disabled=true;
+ }
+});
+
+window.onTelegramAuth=async(user)=>{
+ try{
+ log(user);
+
+ const r=await fetch("/.netlify/functions/tg-auth",{
+ method:"POST",
+ headers:{"content-type":"application/json"},
+ body:JSON.stringify({tg:user})
+ });
+
+ const j=await r.json();
+ if(!j.ok) throw new Error(j.error);
+
+ await signInWithCustomToken(auth,j.customToken);
+ log("Firebase login OK");
+
+ }catch(e){
+ log(e.message);
+ }
+};
+
+const BOT="OrzuMallUZ_bot";
+
+const s=document.createElement("script");
+s.async=true;
+s.src="https://telegram.org/js/telegram-widget.js?22";
+s.setAttribute("data-telegram-login",BOT);
+s.setAttribute("data-size","large");
+s.setAttribute("data-userpic","true");
+s.setAttribute("data-request-access","write");
+s.setAttribute("data-onauth","onTelegramAuth(user)");
+
+document.getElementById("tgLogin").appendChild(s);
+
+</script>
+</body>
+</html>
