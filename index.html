@@ -1,117 +1,161 @@
 <!doctype html>
 <html lang="uz">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>OrzuMall Minimal</title>
-
-<style>
-body{font-family:system-ui;margin:30px;max-width:800px}
-.box{border:1px solid #eee;border-radius:14px;padding:18px;margin:14px 0}
-button{padding:10px 14px;border-radius:10px;border:none;background:#111;color:#fff}
-pre{background:#f4f4f4;padding:12px;border-radius:10px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OrzuMall — Minimal (Telegram Login)</title>
+  <meta name="theme-color" content="#6A0DAD" />
+  <style>
+    :root{--bg:#ffffff;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--brand:#6A0DAD}
+    *{box-sizing:border-box}
+    body{margin:24px auto;max-width:860px;padding:0 14px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--text);background:var(--bg)}
+    h1{font-size:22px;margin:0 0 10px}
+    .muted{color:var(--muted);font-size:13px}
+    .card{border:1px solid var(--border);border-radius:16px;background:var(--card);padding:16px;margin:12px 0}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    button{border:1px solid var(--border);background:#111;color:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;font-weight:600}
+    button.secondary{background:#fff;color:#111}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    pre{white-space:pre-wrap;word-break:break-word;background:#f6f7f9;border:1px solid var(--border);padding:12px;border-radius:12px;margin:10px 0 0}
+    .grid{display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:10px}
+    @media (min-width:720px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+    .p{border:1px solid var(--border);border-radius:14px;padding:12px}
+    .price{font-weight:800}
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#111;background:#f3f4f6;border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+    .pill{display:inline-flex;align-items:center;gap:8px}
+    code{background:#f3f4f6;border:1px solid var(--border);border-radius:8px;padding:2px 6px}
+    .warn{color:#b45309}
+  </style>
 </head>
-
 <body>
+  <h1>OrzuMall — Telegram Login (Minimal)</h1>
+  <div class="muted">
+    1) Telegram Login Widget → 2) Netlify Function (<code>/.netlify/functions/tg-auth</code>) → 3) Firebase Custom Token → 4) Firestore <code>users/{uid}</code>
+  </div>
 
-<h2>OrzuMall — Telegram Login</h2>
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="pill">
+        <span class="badge">1) Telegram</span>
+        <span class="muted">Login tugmasi chiqishi kerak</span>
+      </div>
+      <span class="badge" id="domainBadge">domain: ...</span>
+    </div>
+    <div style="margin-top:10px" id="tgLogin"></div>
+    <div class="muted" style="margin-top:8px">
+      Agar <span class="warn">Bot domain invalid</span> chiqsa: BotFather → <code>/setdomain</code> → aynan shu domenni qo‘ying.
+    </div>
+  </div>
 
-<div class="box">
-<div id="tgLogin"></div>
-</div>
+  <div class="card">
+    <div class="row">
+      <button id="btnLogout" disabled>Logout</button>
+      <button id="btnLoad" class="secondary" disabled>JSON productlarni o‘qish</button>
+    </div>
+    <pre id="out">Kutilmoqda...</pre>
+  </div>
 
-<div class="box">
-<button id="logout" disabled>Logout</button>
-<button id="load" disabled>Load Products JSON</button>
-<pre id="out">Kutilmoqda...</pre>
-</div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="pill">
+        <span class="badge">3) Products</span>
+        <span class="muted">products.json dan</span>
+      </div>
+    </div>
+    <div id="grid" class="grid muted" style="margin-top:10px">Hali yuklanmadi.</div>
+  </div>
 
-<div class="box">
-<div id="grid">Products chiqadi...</div>
-</div>
+  <script type="module">
+    // ====== 0) Firebase config ======
+    // Firebase Console → Project settings → Your apps → Web app → firebaseConfig
+    const firebaseConfig = {
+      apiKey: "PASTE_API_KEY",
+      authDomain: "PASTE.firebaseapp.com",
+      projectId: "PASTE_PROJECT_ID",
+    };
 
-<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut }
+      from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-const firebaseConfig = {
- apiKey:"PASTE_API_KEY",
- authDomain:"PASTE.firebaseapp.com",
- projectId:"PASTE"
-};
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
 
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import {getAuth,onAuthStateChanged,signInWithCustomToken,signOut}
-from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    const out = document.getElementById("out");
+    const btnLogout = document.getElementById("btnLogout");
+    const btnLoad = document.getElementById("btnLoad");
+    const grid = document.getElementById("grid");
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+    document.getElementById("domainBadge").textContent = "domain: " + location.host;
 
-const out=document.getElementById("out");
-const logout=document.getElementById("logout");
-const load=document.getElementById("load");
-const grid=document.getElementById("grid");
+    function log(v){
+      out.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+    }
 
-function log(v){
- out.textContent = typeof v==="string"?v:JSON.stringify(v,null,2);
-}
+    btnLogout.onclick = async () => { await signOut(auth); };
 
-logout.onclick=()=>signOut(auth);
+    btnLoad.onclick = async () => {
+      const res = await fetch("/products.json", { cache: "no-store" });
+      const json = await res.json();
+      const items = json.products || [];
+      grid.classList.remove("muted");
+      grid.innerHTML = items.map(p => `
+        <div class="p">
+          <div style="font-weight:800">${p.title ?? "No title"}</div>
+          <div class="muted" style="margin-top:6px">${p.category ?? ""}</div>
+          <div class="price" style="margin-top:10px">${Number(p.price||0).toLocaleString("uz-UZ")} so‘m</div>
+        </div>
+      `).join("") || "<div class='muted'>Bo‘sh.</div>";
+    };
 
-load.onclick=async()=>{
- const r=await fetch("/products.json");
- const j=await r.json();
- grid.innerHTML=j.products.map(p=>`
- <div style="border:1px solid #eee;padding:10px;border-radius:10px;margin:6px 0">
- <b>${p.title}</b><br>${p.price}
- </div>`).join("");
-};
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        log({ ok:true, uid: user.uid, email: user.email ?? null });
+        btnLogout.disabled = false;
+        btnLoad.disabled = false;
+      } else {
+        log("Login qilinmagan.");
+        btnLogout.disabled = true;
+        btnLoad.disabled = true;
+        grid.textContent = "Hali yuklanmadi.";
+        grid.classList.add("muted");
+      }
+    });
 
-onAuthStateChanged(auth,u=>{
- if(u){
- log({login:true,uid:u.uid});
- logout.disabled=false;
- load.disabled=false;
- }else{
- log("Login qilinmagan");
- logout.disabled=true;
- load.disabled=true;
- }
-});
+    // ====== 1) Telegram Login ======
+    const BOT_USERNAME = "OrzuMallUZ_bot"; // @ ni yozmang
 
-window.onTelegramAuth=async(user)=>{
- try{
- log(user);
+    window.onTelegramAuth = async (tgUser) => {
+      try {
+        log({ step:"telegram_callback", tgUser });
 
- const r=await fetch("/.netlify/functions/tg-auth",{
- method:"POST",
- headers:{"content-type":"application/json"},
- body:JSON.stringify({tg:user})
- });
+        const r = await fetch("/.netlify/functions/tg-auth", {
+          method: "POST",
+          headers: { "content-type":"application/json" },
+          body: JSON.stringify({ tg: tgUser })
+        });
 
- const j=await r.json();
- if(!j.ok) throw new Error(j.error);
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "Auth failed");
+        log({ step:"got_customToken", uid: j.uid });
 
- await signInWithCustomToken(auth,j.customToken);
- log("Firebase login OK");
+        await signInWithCustomToken(auth, j.customToken);
+        log({ step:"firebase_signed_in", uid: auth.currentUser?.uid });
 
- }catch(e){
- log(e.message);
- }
-};
+      } catch (e) {
+        log({ ok:false, error: e.message });
+      }
+    };
 
-const BOT="OrzuMallUZ_bot";
-
-const s=document.createElement("script");
-s.async=true;
-s.src="https://telegram.org/js/telegram-widget.js?22";
-s.setAttribute("data-telegram-login",BOT);
-s.setAttribute("data-size","large");
-s.setAttribute("data-userpic","true");
-s.setAttribute("data-request-access","write");
-s.setAttribute("data-onauth","onTelegramAuth(user)");
-
-document.getElementById("tgLogin").appendChild(s);
-
-</script>
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://telegram.org/js/telegram-widget.js?22";
+    s.setAttribute("data-telegram-login", BOT_USERNAME);
+    s.setAttribute("data-size", "large");
+    s.setAttribute("data-userpic", "true");
+    s.setAttribute("data-request-access", "write");
+    s.setAttribute("data-onauth", "onTelegramAuth(user)");
+    document.getElementById("tgLogin").appendChild(s);
+  </script>
 </body>
 </html>

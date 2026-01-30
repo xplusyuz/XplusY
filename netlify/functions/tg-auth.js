@@ -26,7 +26,6 @@ function telegramVerify(tg, botToken) {
 
   const secret = crypto.createHash("sha256").update(botToken).digest();
   const hmac = crypto.createHmac("sha256", secret).update(checkString).digest("hex");
-
   return timingSafeEq(hmac, hash);
 }
 
@@ -39,7 +38,9 @@ function initAdmin() {
 
 exports.handler = async (event) => {
   try {
-    if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: "Method Not Allowed" };
+    }
 
     const BOT_TOKEN = process.env.TG_BOT_TOKEN;
     if (!BOT_TOKEN) throw new Error("No TG_BOT_TOKEN");
@@ -61,14 +62,12 @@ exports.handler = async (event) => {
 
     initAdmin();
 
-    // 3) Firebase Auth user
     const uid = `tg:${tg.id}`;
 
-    // (ixtiyoriy) Auth profilini ham update qilamiz
+    // 3) Ensure Firebase Auth user exists + update profile
     const displayName = [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim();
     const photoURL = tg.photo_url || "";
 
-    // Ensure auth user exists & update profile
     try {
       await admin.auth().getUser(uid);
       await admin.auth().updateUser(uid, {
@@ -76,7 +75,6 @@ exports.handler = async (event) => {
         photoURL: photoURL || undefined,
       });
     } catch (e) {
-      // not found -> create
       await admin.auth().createUser({
         uid,
         displayName: displayName || undefined,
@@ -115,12 +113,11 @@ exports.handler = async (event) => {
           status: "active",
         });
       } else {
-        // createdAt ni saqlab qolamiz
         tx.set(userRef, base, { merge: true });
       }
     });
 
-    // 5) customToken beramiz
+    // 5) Return customToken
     const customToken = await admin.auth().createCustomToken(uid, {
       provider: "telegram",
       tg_id: String(tg.id),
