@@ -61,10 +61,10 @@ exports.handler = async (event) => {
     initAdmin();
 
     const uid = `tg:${tg.id}`;
-
     const displayName = [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim();
     const photoURL = tg.photo_url || "";
 
+    // Ensure Auth user
     try {
       await admin.auth().getUser(uid);
       await admin.auth().updateUser(uid, {
@@ -79,10 +79,12 @@ exports.handler = async (event) => {
       });
     }
 
+    // Create/update Firestore user doc
     const userRef = admin.firestore().doc(`users/${uid}`);
     await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
 
+      const existing = snap.exists ? snap.data() : {};
       const base = {
         uid,
         provider: "telegram",
@@ -95,14 +97,17 @@ exports.handler = async (event) => {
           auth_date: authDate,
         },
         profile: {
-          name: displayName || tg.username || `User ${tg.id}`,
-          avatar: photoURL || "",
+          name: (existing?.profile?.name) || (displayName || tg.username || `User ${tg.id}`),
+          phone: existing?.profile?.phone || "",
+          avatar: existing?.profile?.avatar || photoURL || "",
         },
-        // counters (demo)
-        balance: snap.exists ? (snap.data().balance ?? 0) : 0,
-        favoritesCount: snap.exists ? (snap.data().favoritesCount ?? 0) : 0,
-        cartCount: snap.exists ? (snap.data().cartCount ?? 0) : 0,
+        // demo counters
+        balance: existing?.balance ?? 0,
+        favoritesCount: existing?.favoritesCount ?? 0,
+        cartCount: existing?.cartCount ?? 0,
 
+        status: existing?.status || "active",
+        role: existing?.role || "user",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
@@ -110,8 +115,6 @@ exports.handler = async (event) => {
         tx.set(userRef, {
           ...base,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          role: "user",
-          status: "active",
         });
       } else {
         tx.set(userRef, base, { merge: true });
