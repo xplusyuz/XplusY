@@ -3,67 +3,146 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>OrzuMall — Minimal (Telegram Login)</title>
+  <title>OrzuMall — Minimal (Telegram Login + Mini Header)</title>
   <meta name="theme-color" content="#6A0DAD" />
   <style>
     :root{--bg:#ffffff;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--brand:#6A0DAD}
     *{box-sizing:border-box}
-    body{margin:24px auto;max-width:860px;padding:0 14px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--text);background:var(--bg)}
-    h1{font-size:22px;margin:0 0 10px}
+    body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:14px}
+    h1{font-size:18px;margin:0}
     .muted{color:var(--muted);font-size:13px}
     .card{border:1px solid var(--border);border-radius:16px;background:var(--card);padding:16px;margin:12px 0}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    button{border:1px solid var(--border);background:#111;color:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;font-weight:600}
+    button{border:1px solid var(--border);background:#111;color:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;font-weight:700}
     button.secondary{background:#fff;color:#111}
     button:disabled{opacity:.55;cursor:not-allowed}
     pre{white-space:pre-wrap;word-break:break-word;background:#f6f7f9;border:1px solid var(--border);padding:12px;border-radius:12px;margin:10px 0 0}
     .grid{display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:10px}
-    @media (min-width:720px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+    @media (min-width:720px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     .p{border:1px solid var(--border);border-radius:14px;padding:12px}
-    .price{font-weight:800}
-    .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#111;background:#f3f4f6;border:1px solid var(--border);padding:6px 10px;border-radius:999px}
-    .pill{display:inline-flex;align-items:center;gap:8px}
+    .price{font-weight:900}
     code{background:#f3f4f6;border:1px solid var(--border);border-radius:8px;padding:2px 6px}
-    .warn{color:#b45309}
+
+    /* ===== MINI HEADER ===== */
+    .mini-header{
+      position:sticky; top:0; z-index:1000;
+      display:flex; justify-content:space-between; align-items:center;
+      padding:10px 12px;
+      backdrop-filter: blur(12px);
+      background:rgba(255,255,255,.86);
+      border-bottom:1px solid var(--border);
+    }
+    .h-left{display:flex; align-items:center; gap:10px; min-width:120px}
+    .logo{
+      font-weight:900; letter-spacing:.2px;
+      color:var(--brand); font-size:18px;
+    }
+    .h-right{display:flex; align-items:center; gap:10px}
+    .h-btn{
+      position:relative;
+      border:none; background:#111; color:#fff;
+      border-radius:12px; padding:8px 10px;
+      cursor:pointer; font-size:16px; line-height:1;
+      min-width:42px; height:38px;
+      display:inline-flex; align-items:center; justify-content:center;
+    }
+    .badge{
+      position:absolute; top:-6px; right:-6px;
+      background:#ef4444; color:#fff;
+      font-size:10px; font-weight:800;
+      padding:2px 6px; border-radius:999px;
+      border:2px solid #fff;
+    }
+    .balance-box{
+      display:flex; align-items:center; gap:6px;
+      background:#f3f4f6; border:1px solid var(--border);
+      padding:8px 10px; border-radius:12px;
+      font-size:13px;
+    }
+    .balance-box b{font-size:13px}
+    .avatar{
+      width:36px; height:36px; border-radius:50%;
+      overflow:hidden; border:2px solid #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.06);
+      background:#f3f4f6;
+      cursor:pointer;
+    }
+    .avatar img{width:100%; height:100%; object-fit:cover; display:block}
+    .chip{
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:12px; font-weight:700;
+      background:#f3f4f6; border:1px solid var(--border);
+      padding:6px 10px; border-radius:999px;
+    }
+    .toast{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:18px; z-index:2000;
+      background:#111; color:#fff;
+      padding:10px 12px; border-radius:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.22);
+      font-size:13px; display:none;
+      max-width:min(92vw,520px);
+    }
   </style>
 </head>
 <body>
-  <h1>OrzuMall — Telegram Login (Minimal)</h1>
-  <div class="muted">
-    1) Telegram Login Widget → 2) Netlify Function (<code>/.netlify/functions/tg-auth</code>) → 3) Firebase Custom Token → 4) Firestore <code>users/{uid}</code>
-  </div>
 
-  <div class="card">
-    <div class="row" style="justify-content:space-between">
-      <div class="pill">
-        <span class="badge">1) Telegram</span>
-        <span class="muted">Login tugmasi chiqishi kerak</span>
+  <!-- MINI HEADER -->
+  <header class="mini-header">
+    <div class="h-left">
+      <div class="logo">OrzuMall</div>
+      <span class="chip" id="authChip">⛔ Guest</span>
+    </div>
+
+    <div class="h-right">
+      <button class="h-btn" id="favBtn" title="Sevimlilar">
+        ❤️ <span class="badge" id="favCount">0</span>
+      </button>
+
+      <button class="h-btn" id="cartBtn" title="Savatcha">
+        🛒 <span class="badge" id="cartCount">0</span>
+      </button>
+
+      <div class="balance-box" title="Balans">
+        <span>💰</span> <b id="balance">0</b>
       </div>
-      <span class="badge" id="domainBadge">domain: ...</span>
-    </div>
-    <div style="margin-top:10px" id="tgLogin"></div>
-    <div class="muted" style="margin-top:8px">
-      Agar <span class="warn">Bot domain invalid</span> chiqsa: BotFather → <code>/setdomain</code> → aynan shu domenni qo‘ying.
-    </div>
-  </div>
 
-  <div class="card">
-    <div class="row">
-      <button id="btnLogout" disabled>Logout</button>
-      <button id="btnLoad" class="secondary" disabled>JSON productlarni o‘qish</button>
-    </div>
-    <pre id="out">Kutilmoqda...</pre>
-  </div>
-
-  <div class="card">
-    <div class="row" style="justify-content:space-between">
-      <div class="pill">
-        <span class="badge">3) Products</span>
-        <span class="muted">products.json dan</span>
+      <div class="avatar" id="avatarBox" title="Profil">
+        <img id="avatarImg" alt="avatar" src=""/>
       </div>
     </div>
-    <div id="grid" class="grid muted" style="margin-top:10px">Hali yuklanmadi.</div>
+  </header>
+
+  <div class="wrap">
+
+    <div class="card">
+      <h1>Telegram Login (Minimal)</h1>
+      <div class="muted" style="margin-top:6px">
+        Telegram Login Widget → Netlify Function (<code>/.netlify/functions/tg-auth</code>) → Firebase Custom Token → Firestore <code>users/{uid}</code>.
+        <br/>Agar <b>Bot domain invalid</b> chiqsa: BotFather → <code>/setdomain</code> → shu domenni kiriting: <code id="domainText"></code>
+      </div>
+      <div style="margin-top:12px" id="tgLogin"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button id="btnLogout" disabled>Logout</button>
+        <button id="btnLoad" class="secondary" disabled>JSON productlarni o‘qish</button>
+      </div>
+      <pre id="out">Kutilmoqda...</pre>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <span class="chip">📦 Products</span>
+        <span class="muted">/products.json</span>
+      </div>
+      <div id="grid" class="grid muted" style="margin-top:10px">Hali yuklanmadi.</div>
+    </div>
   </div>
+
+  <div class="toast" id="toast"></div>
 
   <script type="module">
     // ====== 0) Firebase config ======
@@ -77,16 +156,34 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut }
       from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import { getFirestore, doc, getDoc }
+      from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
 
     const out = document.getElementById("out");
     const btnLogout = document.getElementById("btnLogout");
     const btnLoad = document.getElementById("btnLoad");
     const grid = document.getElementById("grid");
+    const toast = document.getElementById("toast");
 
-    document.getElementById("domainBadge").textContent = "domain: " + location.host;
+    // header nodes
+    const authChip = document.getElementById("authChip");
+    const avatarImg = document.getElementById("avatarImg");
+    const balanceEl = document.getElementById("balance");
+    const favCountEl = document.getElementById("favCount");
+    const cartCountEl = document.getElementById("cartCount");
+
+    document.getElementById("domainText").textContent = location.host;
+
+    function showToast(msg){
+      toast.textContent = msg;
+      toast.style.display = "block";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=>toast.style.display="none", 2200);
+    }
 
     function log(v){
       out.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
@@ -101,25 +198,65 @@
       grid.classList.remove("muted");
       grid.innerHTML = items.map(p => `
         <div class="p">
-          <div style="font-weight:800">${p.title ?? "No title"}</div>
+          <div style="font-weight:900">${p.title ?? "No title"}</div>
           <div class="muted" style="margin-top:6px">${p.category ?? ""}</div>
           <div class="price" style="margin-top:10px">${Number(p.price||0).toLocaleString("uz-UZ")} so‘m</div>
         </div>
       `).join("") || "<div class='muted'>Bo‘sh.</div>";
     };
 
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        log({ ok:true, uid: user.uid, email: user.email ?? null });
-        btnLogout.disabled = false;
-        btnLoad.disabled = false;
-      } else {
+    // Header actions (placeholder)
+    document.getElementById("favBtn").onclick = () => showToast("Sevimlilar (demo) — keyin Firestore favorites ulanadi");
+    document.getElementById("cartBtn").onclick = () => showToast("Savatcha (demo) — keyin Firestore cart ulanadi");
+    document.getElementById("avatarBox").onclick = () => showToast("Profil (demo) — keyin profil modal qo‘shamiz");
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
         log("Login qilinmagan.");
         btnLogout.disabled = true;
         btnLoad.disabled = true;
         grid.textContent = "Hali yuklanmadi.";
         grid.classList.add("muted");
+
+        // header reset
+        authChip.textContent = "⛔ Guest";
+        balanceEl.textContent = "0";
+        favCountEl.textContent = "0";
+        cartCountEl.textContent = "0";
+        avatarImg.src = "https://ui-avatars.com/api/?name=Guest&background=F3F4F6&color=111";
+        return;
       }
+
+      btnLogout.disabled = false;
+      btnLoad.disabled = false;
+
+      // read Firestore user doc that server creates: users/{uid}
+      const ref = doc(db, "users", user.uid);
+      const snap = await getDoc(ref);
+
+      const docData = snap.exists() ? snap.data() : null;
+
+      const name =
+        docData?.profile?.name ||
+        docData?.tg?.username ||
+        user.displayName ||
+        "User";
+
+      authChip.textContent = "✅ " + name;
+
+      const avatar =
+        docData?.profile?.avatar ||
+        docData?.tg?.photo_url ||
+        user.photoURL ||
+        ("https://ui-avatars.com/api/?name=" + encodeURIComponent(name) + "&background=F3F4F6&color=111");
+
+      avatarImg.src = avatar;
+
+      balanceEl.textContent = (docData?.balance ?? 0).toLocaleString("uz-UZ");
+      favCountEl.textContent = String(docData?.favoritesCount ?? 0);
+      cartCountEl.textContent = String(docData?.cartCount ?? 0);
+
+      log({ ok:true, uid: user.uid, hasUserDoc: snap.exists(), userDoc: docData });
     });
 
     // ====== 1) Telegram Login ======
@@ -140,10 +277,11 @@
         log({ step:"got_customToken", uid: j.uid });
 
         await signInWithCustomToken(auth, j.customToken);
-        log({ step:"firebase_signed_in", uid: auth.currentUser?.uid });
+        showToast("Login OK ✅");
 
       } catch (e) {
         log({ ok:false, error: e.message });
+        showToast("Xato: " + e.message);
       }
     };
 

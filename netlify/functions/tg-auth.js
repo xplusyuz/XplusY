@@ -48,12 +48,10 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body || "{}");
     const tg = body.tg || body;
 
-    // 1) Telegram signature check
     if (!telegramVerify(tg, BOT_TOKEN)) {
       return { statusCode: 401, body: JSON.stringify({ ok: false, error: "Telegram hash invalid" }) };
     }
 
-    // 2) auth_date expiry (24h)
     const authDate = Number(tg.auth_date || 0);
     const now = Math.floor(Date.now() / 1000);
     if (!authDate || now - authDate > 24 * 3600) {
@@ -64,7 +62,6 @@ exports.handler = async (event) => {
 
     const uid = `tg:${tg.id}`;
 
-    // 3) Ensure Firebase Auth user exists + update profile
     const displayName = [tg.first_name, tg.last_name].filter(Boolean).join(" ").trim();
     const photoURL = tg.photo_url || "";
 
@@ -82,7 +79,6 @@ exports.handler = async (event) => {
       });
     }
 
-    // 4) Firestore users/{uid}
     const userRef = admin.firestore().doc(`users/${uid}`);
     await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
@@ -102,6 +98,11 @@ exports.handler = async (event) => {
           name: displayName || tg.username || `User ${tg.id}`,
           avatar: photoURL || "",
         },
+        // counters (demo)
+        balance: snap.exists ? (snap.data().balance ?? 0) : 0,
+        favoritesCount: snap.exists ? (snap.data().favoritesCount ?? 0) : 0,
+        cartCount: snap.exists ? (snap.data().cartCount ?? 0) : 0,
+
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
@@ -117,7 +118,6 @@ exports.handler = async (event) => {
       }
     });
 
-    // 5) Return customToken
     const customToken = await admin.auth().createCustomToken(uid, {
       provider: "telegram",
       tg_id: String(tg.id),
