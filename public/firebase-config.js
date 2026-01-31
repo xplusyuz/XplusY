@@ -7,10 +7,10 @@ import {
 
 // ⚠️ Firebase Console → Project settings → Your apps → Web app config'dan OLIB qo'ying.
 export const firebaseConfig = {
- apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  authDomain: "xplusy-760fa.firebaseapp.com",
-  projectId: "xplusy-760fa",
-  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  appId: "YOUR_APP_ID",
 };
 
 function looksPlaceholder(v){

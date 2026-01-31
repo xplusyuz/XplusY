@@ -85,6 +85,7 @@ function initAdmin(){
 }
 
 export async function handler(event){
+  let stage = "start";
   try{
     if(event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
 
@@ -106,27 +107,44 @@ export async function handler(event){
 
     initAdmin();
 
-    const uid = `tg_${tgUser.id}`;
-    const displayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
-    const photoURL = tgUser.photo_url || undefined;
+const uid = `tg_${tgUser.id}`;
+const displayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
+const photoURL = tgUser.photo_url || "";
 
-    try{
-      await admin.auth().getUser(uid);
-      await admin.auth().updateUser(uid, { displayName: displayName || undefined, photoURL });
-    } catch(e){
-      await admin.auth().createUser(uid, { uid, displayName: displayName || "Telegram User", photoURL });
-    }
+// Safer: only pass defined properties to updateUser/createUser
+const update = {};
+if (displayName) update.displayName = displayName;
+if (photoURL) update.photoURL = photoURL;
 
-    const customToken = await admin.auth().createCustomToken(uid, {
-      provider: "telegram",
-      tg: { id: tgUser.id, username: tgUser.username || null }
-    });
+let stage = "getUser";
+try{
+  stage = "getUser";
+  await admin.auth().getUser(uid);
 
-    return json(200, { customToken });
+  if(Object.keys(update).length){
+    stage = "updateUser";
+    await admin.auth().updateUser(uid, update);
+  }
+} catch(e){
+  // If user doesn't exist -> create
+  stage = "createUser";
+  const create = { uid, displayName: displayName || "Telegram User" };
+  if (photoURL) create.photoURL = photoURL;
+  await admin.auth().createUser(create);
+}
+
+stage = "createCustomToken";
+const customToken = await admin.auth().createCustomToken(uid, {
+  provider: "telegram",
+  tg: { id: tgUser.id, username: tgUser.username || null }
+});
+
+return json(200, { customToken });
 
   } catch(err){
     return json(500, {
       error: "Function error",
+      stage,
       details: err?.message || String(err),
       envHints: {
         hasTG_BOT_TOKEN: !!safeStr(process.env.TG_BOT_TOKEN).trim(),
