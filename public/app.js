@@ -86,12 +86,13 @@ async function loadProducts(){
 }
 
 function setUserUI(user){
-  const authCard = els.authCard;
+  const authCard = els.authCard || document.getElementById("authCard");
+
+  // robust: body class controls CSS hide/show
+  document.body.classList.toggle("signed-in", !!user);
 
   if(!user){
-    // show login block
-    if(authCard) authCard.hidden = false;
-
+    if(authCard) authCard.style.display = "";
     els.userName.textContent = "Mehmon";
     els.userSmall.textContent = "Kirish talab qilinadi";
     els.avatar.src = "";
@@ -101,7 +102,7 @@ function setUserUI(user){
   }
 
   // hide login block after sign-in
-  if(authCard) authCard.hidden = true;
+  if(authCard) authCard.style.display = "none";
 
   const name = user.displayName || user.email || user.phoneNumber || "User";
   els.userName.textContent = name;

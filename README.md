@@ -27,3 +27,7 @@ Telegram bosganda NOTICE’da `DETAILS` va `ENV` chiqadi.
 
 ## v5
 - Login (Kirish) bloki: user kirgandan keyin avtomatik yashirinadi (authCard.hidden=true).
+
+
+## v6
+- Kirgandan keyin 'Kirish' bo'limi 2 yo'l bilan yashiriladi: body.signed-in CSS + authCard.style.display.
