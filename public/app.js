@@ -109,16 +109,17 @@ function setUserUI(user){
   els.btnLogout.hidden = false;
 }
 
-// Google login
 els.btnGoogle.addEventListener("click", async ()=>{
-  const provider = new GoogleAuthProvider();
-  await signInWithPopup(auth, provider);
+  try{
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  }catch(e){
+    alert("Google login xatolik. Console’ni tekshiring. Eng ko‘p sabab: firebase-config.js apiKey noto‘g‘ri.");
+    console.error(e);
+  }
 });
 
-// Logout
-els.btnLogout.addEventListener("click", async ()=>{
-  await signOut(auth);
-});
+els.btnLogout.addEventListener("click", async ()=>{ await signOut(auth); });
 
 window.addEventListener("tg_auth", async (e)=>{
   const tgUser = e.detail;
@@ -135,7 +136,8 @@ window.addEventListener("tg_auth", async (e)=>{
     if(!r.ok){
       const msg = out?.error || "Telegram auth xatolik";
       const details = out?.details ? `\nDETAILS: ${out.details}` : "";
-      showTgNotice(msg + details);
+      const hints = out?.envHints ? `\nENV: ${JSON.stringify(out.envHints)}` : "";
+      showTgNotice(msg + details + hints);
       console.error("telegramAuth error:", out);
       return;
     }

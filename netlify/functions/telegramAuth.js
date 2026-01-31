@@ -9,9 +9,7 @@ function json(statusCode, obj){
   };
 }
 
-function safeStr(v){
-  return (v ?? "").toString();
-}
+function safeStr(v){ return (v ?? "").toString(); }
 
 function verifyTelegramAuth(tgUser, botToken){
   const { hash, ...rest } = tgUser || {};
@@ -26,29 +24,51 @@ function verifyTelegramAuth(tgUser, botToken){
   return hmac === hash;
 }
 
+function tryParseJSONMaybeQuoted(s){
+  const t = safeStr(s).trim();
+  if(!t) return null;
+  if(t.startsWith("{") && t.endsWith("}")){
+    return JSON.parse(t);
+  }
+  if((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))){
+    const unq = t.slice(1,-1);
+    const restored = unq.replace(/\\n/g, "\n").replace(/\"/g, '"');
+    if(restored.trim().startsWith("{")) return JSON.parse(restored);
+  }
+  return null;
+}
+
 function loadServiceAccount(){
-  const raw = safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64).trim();
-  if(!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env");
+  const rawB64 = safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64).trim();
+  const rawJson = safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT).trim();
 
-  const compact = raw.replace(/\s+/g, "");
   let obj = null;
+  let mode = "";
 
-  if(compact.startsWith("{") && compact.endsWith("}")){
-    obj = JSON.parse(raw);
-  } else {
+  if(rawJson){
+    obj = tryParseJSONMaybeQuoted(rawJson);
+    if(obj) mode = "raw_json";
+  }
+
+  if(!obj){
+    if(!rawB64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env (yoki FIREBASE_SERVICE_ACCOUNT_JSON)");
+    const compact = rawB64.replace(/\s+/g, "");
     const decoded = Buffer.from(compact, "base64").toString("utf-8").trim();
-    if(!decoded.startsWith("{")) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 is not valid base64 JSON");
-    }
-    obj = JSON.parse(decoded);
+    obj = tryParseJSONMaybeQuoted(decoded);
+    if(!obj) throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 decode/parse failed (base64 JSON emas yoki buzilgan)");
+    mode = "base64";
   }
 
   const pid = obj.project_id || obj.projectId;
   const email = obj.client_email || obj.clientEmail;
   const key = obj.private_key || obj.privateKey;
 
-  if(!pid || !email || !key){
-    throw new Error("Service account missing project_id/client_email/private_key");
+  const missing = [];
+  if(!pid) missing.push("project_id");
+  if(!email) missing.push("client_email");
+  if(!key) missing.push("private_key");
+  if(missing.length){
+    throw new Error(`Service account missing: ${missing.join(", ")} (mode=${mode})`);
   }
 
   return {
@@ -60,8 +80,8 @@ function loadServiceAccount(){
 
 function initAdmin(){
   if(admin.apps.length) return;
-  const sa = loadServiceAccount();
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
+  const cred = loadServiceAccount();
+  admin.initializeApp({ credential: admin.credential.cert(cred) });
 }
 
 export async function handler(event){
@@ -105,6 +125,14 @@ export async function handler(event){
     return json(200, { customToken });
 
   } catch(err){
-    return json(500, { error: "Function error", details: err?.message || String(err) });
+    return json(500, {
+      error: "Function error",
+      details: err?.message || String(err),
+      envHints: {
+        hasTG_BOT_TOKEN: !!safeStr(process.env.TG_BOT_TOKEN).trim(),
+        hasFIREBASE_SERVICE_ACCOUNT_BASE64: !!safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64).trim(),
+        hasFIREBASE_SERVICE_ACCOUNT_JSON: !!safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_JSON).trim() || !!safeStr(process.env.FIREBASE_SERVICE_ACCOUNT).trim(),
+      }
+    });
   }
 }
