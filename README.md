@@ -1,27 +1,14 @@
-# OrzuMall — Telegram + Google Login + products.json (Netlify + Firebase) — v2 (fix)
+# OrzuMall — v3 (CSS fix + better Telegram debug)
 
-## Netlify ENV (SIZDA BOR)
+## Netlify ENV
 - FIREBASE_SERVICE_ACCOUNT_BASE64
 - TG_BOT_TOKEN
 
-### FIREBASE_SERVICE_ACCOUNT_BASE64 ni to'g'ri qilish
-Bu qiymat 2 xil ko'rinishda bo'lishi mumkin — v2 funksiya ikkalasini ham qabul qiladi:
+## CSS muammosi (v2 da sizda oq sahifa bo'lib qolgan)
+v3 da:
+- styles.css to'liq qayta qo'shildi
+- index.html da cache-bust: styles.css?v=3
 
-1) **Base64** (tavsiya):
-- Windows PowerShell:
-  `[Convert]::ToBase64String([IO.File]::ReadAllBytes("serviceAccount.json"))`
-- macOS/Linux:
-  `base64 -w 0 serviceAccount.json`
-
-2) **JSON string** (agar base64 qilmasdan qo'yib yuborgan bo'lsangiz):
-- Netlify env ga to'liq JSON ni qo'ysangiz ham bo'ladi (v2 avtomatik aniqlaydi).
-
-⚠️ Private key ichida `\n` bo'lsa — bu normal.
-
-## Firebase Web Config
-`public/firebase-config.js` ichidagi apiKey/authDomain/projectId/appId ni o'zingiznikiga almashtiring.
-
-## Debug
-Agar Telegram login xatolik bersa:
-- Browser console → Network → /.netlify/functions/telegramAuth → response’da `details` chiqadi.
-- Netlify → Functions logs’da ham ko'rinadi.
+## Telegram 500 bo'lsa
+UI ichida Telegram blokida "NOTICE" chiqadi.
+Shu NOTICE matnini menga yuboring — aniq sababini aytaman.

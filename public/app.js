@@ -18,9 +18,16 @@ const els = {
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),
   btnReload: document.getElementById("btnReload"),
+  tgNotice: document.getElementById("tgNotice"),
 };
 
 let products = [];
+
+function showTgNotice(msg){
+  if(!els.tgNotice) return;
+  els.tgNotice.hidden = !msg;
+  els.tgNotice.textContent = msg || "";
+}
 
 function moneyUZS(n){
   try { return new Intl.NumberFormat("uz-UZ").format(n) + " so‘m"; }
@@ -113,9 +120,9 @@ els.btnLogout.addEventListener("click", async ()=>{
   await signOut(auth);
 });
 
-// Telegram widget → function → custom token
 window.addEventListener("tg_auth", async (e)=>{
   const tgUser = e.detail;
+  showTgNotice("Telegram auth yuborildi...");
 
   try{
     const r = await fetch("/.netlify/functions/telegramAuth", {
@@ -127,15 +134,17 @@ window.addEventListener("tg_auth", async (e)=>{
     const out = await r.json().catch(()=> ({}));
     if(!r.ok){
       const msg = out?.error || "Telegram auth xatolik";
-      const details = out?.details ? `\n\nDETAILS: ${out.details}` : "";
-      alert(msg + details);
+      const details = out?.details ? `\nDETAILS: ${out.details}` : "";
+      showTgNotice(msg + details);
       console.error("telegramAuth error:", out);
       return;
     }
 
+    showTgNotice("Firebase token olindi. Kirish...");
     await signInWithCustomToken(auth, out.customToken);
+    showTgNotice("");
   }catch(err){
-    alert("Telegram auth network/server xatolik");
+    showTgNotice("Telegram auth network/server xatolik");
     console.error(err);
   }
 });
