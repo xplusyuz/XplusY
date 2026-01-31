@@ -9,6 +9,10 @@ function json(statusCode, obj){
   };
 }
 
+function safeStr(v){
+  return (v ?? "").toString();
+}
+
 function verifyTelegramAuth(tgUser, botToken){
   const { hash, ...rest } = tgUser || {};
   if(!hash) return false;
@@ -22,25 +26,62 @@ function verifyTelegramAuth(tgUser, botToken){
   return hmac === hash;
 }
 
+function loadServiceAccount(){
+  // Netlify env: FIREBASE_SERVICE_ACCOUNT_BASE64
+  // v2: accepts either base64 OR raw JSON string.
+  const raw = safeStr(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64).trim();
+  if(!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env");
+
+  // Remove whitespace/newlines to be robust for base64 pasted with breaks
+  const compact = raw.replace(/\s+/g, "");
+
+  let obj = null;
+
+  // If it looks like JSON, parse directly
+  if(compact.startsWith("{") && compact.endsWith("}")){
+    obj = JSON.parse(raw); // keep original raw (might include spaces/newlines)
+  } else {
+    // base64 decode
+    const decoded = Buffer.from(compact, "base64").toString("utf-8").trim();
+    if(!decoded.startsWith("{")) {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT_BASE64 is not valid base64 JSON");
+    }
+    obj = JSON.parse(decoded);
+  }
+
+  if(!obj || typeof obj !== "object"){
+    throw new Error("Service account JSON parse failed");
+  }
+
+  // Validate required fields
+  const pid = obj.project_id || obj.projectId;
+  const email = obj.client_email || obj.clientEmail;
+  const key = obj.private_key || obj.privateKey;
+
+  if(!pid || !email || !key){
+    throw new Error("Service account missing project_id/client_email/private_key");
+  }
+
+  // Normalize for firebase-admin
+  return {
+    projectId: pid,
+    clientEmail: email,
+    privateKey: safeStr(key).replace(/\\n/g, "\n"),
+  };
+}
+
 function initAdmin(){
   if(admin.apps.length) return;
 
-  // Netlify ENV (sizning namingiz):
-  // - FIREBASE_SERVICE_ACCOUNT_BASE64
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if(!b64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_BASE64 env");
-
-  const saJson = Buffer.from(b64, "base64").toString("utf-8");
-  const cred = JSON.parse(saJson);
-
-  admin.initializeApp({ credential: admin.credential.cert(cred) });
+  const sa = loadServiceAccount();
+  admin.initializeApp({ credential: admin.credential.cert(sa) });
 }
 
 export async function handler(event){
   try{
     if(event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
 
-    const botToken = process.env.TG_BOT_TOKEN;
+    const botToken = safeStr(process.env.TG_BOT_TOKEN).trim();
     if(!botToken) return json(500, { error: "Missing TG_BOT_TOKEN env" });
 
     const body = JSON.parse(event.body || "{}");
@@ -60,11 +101,6 @@ export async function handler(event){
     initAdmin();
 
     const uid = `tg_${tgUser.id}`;
-    const additionalClaims = {
-      provider: "telegram",
-      tg: { id: tgUser.id, username: tgUser.username || null }
-    };
-
     const displayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ").trim();
     const photoURL = tgUser.photo_url || undefined;
 
@@ -82,10 +118,17 @@ export async function handler(event){
       });
     }
 
-    const customToken = await admin.auth().createCustomToken(uid, additionalClaims);
+    const customToken = await admin.auth().createCustomToken(uid, {
+      provider: "telegram",
+      tg: { id: tgUser.id, username: tgUser.username || null }
+    });
+
     return json(200, { customToken });
 
   } catch(err){
-    return json(500, { error: err?.message || "Server error" });
+    return json(500, {
+      error: "Function error",
+      details: err?.message || String(err)
+    });
   }
 }

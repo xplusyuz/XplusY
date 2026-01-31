@@ -26,7 +26,6 @@ function moneyUZS(n){
   try { return new Intl.NumberFormat("uz-UZ").format(n) + " so‘m"; }
   catch { return `${n} UZS`; }
 }
-
 function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
 function applyFilterSort(){
@@ -114,33 +113,37 @@ els.btnLogout.addEventListener("click", async ()=>{
   await signOut(auth);
 });
 
-// Telegram widget event → Netlify function → custom token → firebase sign-in
+// Telegram widget → function → custom token
 window.addEventListener("tg_auth", async (e)=>{
   const tgUser = e.detail;
 
-  const r = await fetch("/.netlify/functions/telegramAuth", {
-    method: "POST",
-    headers: {"content-type":"application/json"},
-    body: JSON.stringify({ tgUser })
-  });
+  try{
+    const r = await fetch("/.netlify/functions/telegramAuth", {
+      method: "POST",
+      headers: {"content-type":"application/json"},
+      body: JSON.stringify({ tgUser })
+    });
 
-  const out = await r.json();
-  if(!r.ok){
-    alert(out?.error || "Telegram auth xatolik");
-    return;
+    const out = await r.json().catch(()=> ({}));
+    if(!r.ok){
+      const msg = out?.error || "Telegram auth xatolik";
+      const details = out?.details ? `\n\nDETAILS: ${out.details}` : "";
+      alert(msg + details);
+      console.error("telegramAuth error:", out);
+      return;
+    }
+
+    await signInWithCustomToken(auth, out.customToken);
+  }catch(err){
+    alert("Telegram auth network/server xatolik");
+    console.error(err);
   }
-
-  await signInWithCustomToken(auth, out.customToken);
 });
 
 els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
 els.btnReload.addEventListener("click", loadProducts);
 
-// Auth state
-onAuthStateChanged(auth, (user)=>{
-  setUserUI(user);
-});
+onAuthStateChanged(auth, (user)=> setUserUI(user));
 
-// boot
 await loadProducts();
