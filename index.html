@@ -214,7 +214,7 @@
   <!-- LOGIN SCREEN -->
   <main class="center" id="loginScreen">
     <div class="panel">
-      <h1>Telegram orqali kirish</h1>
+      <h1>Kirish</h1>
       <div class="muted">
         Telegram Login Widget → Netlify Function (<code>/.netlify/functions/tg-auth</code>) → Firebase Custom Token → Firestore <code>users/{uid}</code>
         <div style="margin-top:8px">
@@ -222,6 +222,17 @@
         </div>
       </div>
       <div style="margin-top:12px" id="tgLogin"></div>
+      <div id="altLogin" style="margin-top:14px;display:none">
+        <div class="sep" style="margin:12px 0">yoki</div>
+        <button class="btn" id="googleLoginBtn" style="width:100%;justify-content:center">
+          <span style="font-size:18px">G</span>
+          <span>Google (Gmail) orqali kirish</span>
+        </button>
+        <div class="muted" style="margin-top:8px">
+          Eslatma: Google login ixtiyoriy. O‘chirish/yoqish uchun kod ichidagi <code>ENABLE_GOOGLE_LOGIN</code> ni o‘zgartiring.
+        </div>
+      </div>
+
       <pre id="out">Kutilmoqda...</pre>
     </div>
   </main>
@@ -354,7 +365,7 @@
     };
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut }
+    import { getAuth, onAuthStateChanged, signInWithCustomToken, signOut, GoogleAuthProvider, signInWithPopup }
       from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
     import { getFirestore, doc, getDoc, updateDoc, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -397,6 +408,12 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+
+    // ===== Login options =====
+    // Agar Google (Gmail) orqali kirishni UMUMAN xohlamasangiz: ENABLE_GOOGLE_LOGIN = false qoldiring.
+    // Agar foydalanuvchi tanlashi kerak bo‘lsa: true qiling (Telegram + Google tugmasi chiqadi).
+    const ENABLE_GOOGLE_LOGIN = false;
+
 
     // Modals
     const profileReqOverlay = document.getElementById("profileReqOverlay");
@@ -849,6 +866,22 @@
         showToast("Xato: " + e.message);
       }
     };
+
+    // Google login (optional)
+    const altLogin = document.getElementById("altLogin");
+    const googleLoginBtn = document.getElementById("googleLoginBtn");
+    if (ENABLE_GOOGLE_LOGIN) {
+      altLogin.style.display = "";
+      googleLoginBtn.onclick = async ()=>{
+        try{
+          const provider = new GoogleAuthProvider();
+          await signInWithPopup(auth, provider);
+          showToast("Google login OK ✅");
+        }catch(e){
+          showToast("Xato: " + (e?.message||e));
+        }
+      };
+    }
 
     const s = document.createElement("script");
     s.async = true;
