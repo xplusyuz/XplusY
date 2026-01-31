@@ -19,6 +19,7 @@ const els = {
   sort: document.getElementById("sort"),
   btnReload: document.getElementById("btnReload"),
   tgNotice: document.getElementById("tgNotice"),
+  authCard: document.getElementById("authCard"),
 };
 
 let products = [];
@@ -85,7 +86,12 @@ async function loadProducts(){
 }
 
 function setUserUI(user){
+  const authCard = els.authCard;
+
   if(!user){
+    // show login block
+    if(authCard) authCard.hidden = false;
+
     els.userName.textContent = "Mehmon";
     els.userSmall.textContent = "Kirish talab qilinadi";
     els.avatar.src = "";
@@ -93,6 +99,9 @@ function setUserUI(user){
     els.btnLogout.hidden = true;
     return;
   }
+
+  // hide login block after sign-in
+  if(authCard) authCard.hidden = true;
 
   const name = user.displayName || user.email || user.phoneNumber || "User";
   els.userName.textContent = name;
