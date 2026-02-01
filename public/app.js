@@ -127,7 +127,6 @@ function render(arr){
         <div class="ptags">${(p.tags||[]).map(t=>`#${t}`).join(" ")}</div>
         <div class="priceRow">
           <div class="price">${moneyUZS(p.price || 0)}</div>
-          <div class="badge">ID: ${p.id || "-"}</div>
         </div>
         <div class="pActions">
           <button class="pBtn ghost" data-act="buy" title="Tezkor buyurtma">⚡</button>
