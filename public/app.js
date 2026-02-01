@@ -46,6 +46,40 @@ const LS = {
   favs: "om_favs",
   cart: "om_cart"
 };
+// Variant selections per product (in-memory)
+const selected = new Map(); // id -> {color, size}
+
+function normColors(p){
+  const arr = p.colors || p.colorOptions || [];
+  return arr.map(c=>{
+    if(typeof c === "string") return {name:c, hex:null};
+    return {name: c.name || c.label || "Color", hex: c.hex || c.color || null};
+  });
+}
+function normSizes(p){
+  const arr = p.sizes || p.sizeOptions || [];
+  return arr.map(s=> typeof s === "string" ? s : (s.label||s.name||""));
+}
+function getDefaultSel(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  return {
+    color: colors[0]?.name || null,
+    size: sizes[0] || null,
+  };
+}
+function getSel(p){
+  if(selected.has(p.id)) return selected.get(p.id);
+  const d = getDefaultSel(p);
+  selected.set(p.id, d);
+  return d;
+}
+function variantKey(id, sel){
+  const c = sel?.color || "";
+  const s = sel?.size || "";
+  return `${id}::${c}::${s}`;
+}
+
 
 function loadLS(key, fallback){
   try{ return JSON.parse(localStorage.getItem(key) || "") ?? fallback; }
@@ -57,7 +91,15 @@ function saveLS(key, value){
 
 let viewMode = "all"; // all | fav
 let favs = new Set(loadLS(LS.favs, []));
-let cart = loadLS(LS.cart, []); // [{id, qty}]
+let cart = loadLS(LS.cart, []);
+// migrate legacy cart items: {id,qty} -> {key,id,color,size,qty}
+cart = (cart||[]).map(x=>{
+  if(x && x.key) return x;
+  const id = x?.id;
+  const qty = x?.qty ?? 1;
+  const key = `${id}::::`;
+  return {key, id, color:null, size:null, qty};
+}); // [{id, qty}]
 
 
 function showTgNotice(msg){
@@ -109,6 +151,37 @@ function applyFilterSort(){
   render(arr);
 }
 
+
+function renderOptions(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  if(colors.length===0 && sizes.length===0) return "";
+  const sel = getSel(p);
+
+  const sw = colors.length ? `
+    <div class="swatches" aria-label="Rang">
+      ${colors.map(c=>{
+        const active = (sel.color===c.name) ? "active" : "";
+        const style = c.hex ? `style="--c:${c.hex}"` : "";
+        return `<button class="swatch ${active}" ${style} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}"></button>`;
+      }).join("")}
+    </div>` : "";
+
+  const sz = sizes.length ? `
+    <div class="sizes" aria-label="O'lcham">
+      ${sizes.map(s=>{
+        const active = (sel.size===s) ? "active" : "";
+        return `<button class="sizeChip ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
+      }).join("")}
+    </div>` : "";
+
+  return `<div class="optRow">${sw}${sz}</div>`;
+}
+
+function escapeHtml(str){
+  return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
 function render(arr){
   els.grid.innerHTML = "";
   els.empty.hidden = arr.length !== 0;
@@ -125,6 +198,7 @@ function render(arr){
       <div class="pbody">
         <div class="pname">${p.name || "Nomsiz"}</div>
         <div class="ptags">${(p.tags||[]).map(t=>`#${t}`).join(" ")}</div>
+        ${renderOptions(p)}
         <div class="priceRow">
           <div class="price">${moneyUZS(p.price || 0)}</div>
         </div>
@@ -144,14 +218,33 @@ function render(arr){
       if(viewMode === "fav") applyFilterSort();
     });
 
+
+    // Variant option listeners
+    const sel = getSel(p);
+    card.querySelectorAll(".swatch").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        sel.color = btn.getAttribute("data-c");
+        selected.set(p.id, sel);
+        // update active
+        card.querySelectorAll(".swatch").forEach(b=>b.classList.toggle("active", b===btn));
+      });
+    });
+    card.querySelectorAll(".sizeChip").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        sel.size = btn.getAttribute("data-s");
+        selected.set(p.id, sel);
+        card.querySelectorAll(".sizeChip").forEach(b=>b.classList.toggle("active", b===btn));
+      });
+    });
+
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
-      addToCart(p.id, 1);
+      addToCart(p.id, 1, getSel(p));
       openPanel("cart");
     });
 
     card.querySelector('[data-act="buy"]').addEventListener("click", ()=>{
       // quick order: add 1 and open panel
-      addToCart(p.id, 1);
+      addToCart(p.id, 1, getSel(p));
       openPanel("cart");
     });
 
@@ -160,10 +253,11 @@ function render(arr){
 }
 
 
-function addToCart(id, qty){
-  const item = cart.find(x=>x.id===id);
+function addToCart(id, qty, sel){
+  const key = variantKey(id, sel || {color:null,size:null});
+  const item = cart.find(x=>x.key===key);
   if(item) item.qty += qty;
-  else cart.push({id, qty});
+  else cart.push({key, id, color: sel?.color || null, size: sel?.size || null, qty});
   cart = cart.filter(x=>x.qty>0);
   saveLS(LS.cart, cart);
   updateBadges();
@@ -212,7 +306,18 @@ function closePanel(){
   }, t);
 }
 
+
+function renderVariantLine(ci){
+  if(!ci) return "";
+  const parts = [];
+  if(ci.color) parts.push(ci.color);
+  if(ci.size) parts.push(ci.size);
+  if(parts.length===0) return "";
+  return `<div class="ptags">${parts.map(x=>`#${escapeHtml(x)}`).join(" ")}</div>`;
+}
+
 function renderPanel(mode){
+
   els.panelList.innerHTML = "";
   const list = [];
 
@@ -224,7 +329,7 @@ function renderPanel(mode){
   } else {
     for(const ci of cart){
       const p = products.find(x=>x.id===ci.id);
-      if(p) list.push({p, qty: ci.qty || 1});
+      if(p) list.push({p, qty: ci.qty || 1, ci});
     }
   }
 
@@ -242,6 +347,7 @@ function renderPanel(mode){
       <img class="cartImg" src="${p.image||""}" alt="${p.name||"product"}" />
       <div class="cartMeta">
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        ${mode==="cart" ? renderVariantLine(row.ci) : ""}
         <div class="cartRow">
           <div class="price">${moneyUZS(p.price||0)}</div>
           <button class="removeBtn" title="O‘chirish">🗑️</button>
@@ -271,7 +377,7 @@ function renderPanel(mode){
         renderPanel("fav");
         if(viewMode==="fav") applyFilterSort();
       } else {
-        cart = cart.filter(x=>x.id!==p.id);
+        cart = cart.filter(x=>x.key!==row.ci.key);
         saveLS(LS.cart, cart);
         updateBadges();
         renderPanel("cart");
@@ -280,17 +386,17 @@ function renderPanel(mode){
 
     if(mode==="cart"){
       item.querySelector('[data-q="-"]').addEventListener("click", ()=>{
-        addToCart(p.id, -1);
+        addToCart(p.id, -1, row.ci);
         renderPanel("cart");
       });
       item.querySelector('[data-q="+"]').addEventListener("click", ()=>{
-        addToCart(p.id, +1);
+        addToCart(p.id, +1, row.ci);
         renderPanel("cart");
       });
     } else {
       const addBtn = item.querySelector("[data-add]");
       addBtn.addEventListener("click", ()=>{
-        addToCart(p.id, 1);
+        addToCart(p.id, 1, getSel(p));
         openPanel("cart");
       });
     }
