@@ -17,7 +17,6 @@ const els = {
   empty: document.getElementById("empty"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),
-  btnReload: document.getElementById("btnReload"),
   tgNotice: document.getElementById("tgNotice"),
   authCard: document.getElementById("authCard"),
 
@@ -266,6 +265,81 @@ function parsePrice(v){
 }
 function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
+// Variant pricing support
+function getVariantPricing(p, sel){
+  const color = (sel?.color ?? "").toString();
+  const size  = (sel?.size  ?? "").toString();
+  const base = {
+    price: parsePrice(p.price),
+    oldPrice: parsePrice(p.oldPrice),
+    installmentText: (p.installmentText ?? "").toString()
+  };
+
+  const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
+  if(vp && typeof vp === "object"){
+    const keys = [
+      `${color}|${size}`,
+      `${color}|`,
+      `|${size}`,
+      color,
+      size
+    ].filter(k=>k && k !== "|");
+    for(const k of keys){
+      if(Object.prototype.hasOwnProperty.call(vp, k)){
+        const v = vp[k];
+        if(typeof v === "number" || typeof v === "string"){
+          base.price = parsePrice(v);
+        } else if(v && typeof v === "object"){
+          if(v.price != null) base.price = parsePrice(v.price);
+          if(v.oldPrice != null) base.oldPrice = parsePrice(v.oldPrice);
+          if(v.installmentText != null) base.installmentText = v.installmentText.toString();
+        }
+        break;
+      }
+    }
+  }
+  return base;
+}
+
+function minVariantPrice(p){
+  let min = parsePrice(p.price);
+  const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
+  if(vp && typeof vp === "object"){
+    for(const v of Object.values(vp)){
+      const n = (v && typeof v === "object") ? parsePrice(v.price) : parsePrice(v);
+      if(n>0) min = Math.min(min||n, n);
+    }
+  }
+  return min || 0;
+}
+
+function updateCardPricing(cardEl, p, sel){
+  const pr = getVariantPricing(p, sel);
+  const nowEl = cardEl.querySelector(".ppriceNow");
+  const oldEl = cardEl.querySelector(".ppriceOld");
+  const instEl = cardEl.querySelector(".pinstall");
+
+  if(nowEl) nowEl.textContent = moneyUZS(pr.price || 0);
+
+  if(oldEl){
+    if(pr.oldPrice && pr.oldPrice > (pr.price||0)){
+      oldEl.textContent = moneyUZS(pr.oldPrice);
+      oldEl.style.display = "";
+    } else {
+      oldEl.style.display = "none";
+    }
+  }
+
+  if(instEl){
+    if(pr.installmentText){
+      instEl.textContent = pr.installmentText;
+      instEl.style.display = "";
+    } else {
+      instEl.style.display = "none";
+    }
+  }
+}
+
 function applyFilterSort(){
   const query = norm(els.q.value);
   let arr = [...products];
@@ -347,11 +421,11 @@ function render(arr){
 
       <div class="pbody uz">
         <div class="ppriceRow">
-          <div class="ppriceNow">${moneyUZS(p.price || 0)}</div>
-          ${p.oldPrice ? `<div class="ppriceOld">${moneyUZS(p.oldPrice)}</div>` : ``}
+          <div class="ppriceNow">${moneyUZS(getVariantPricing(p, sel).price || 0)}</div>
+          <div class="ppriceOld" style="display:none"></div>
         </div>
 
-        ${p.installmentText ? `<div class="pinstall">${escapeHtml(p.installmentText)}</div>` : ``}
+        <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
 
@@ -370,6 +444,9 @@ function render(arr){
         </div>
       </div>
     `;
+
+    // Apply dynamic pricing for current selection
+    updateCardPricing(card, p, sel);
 
     const favBtn = card.querySelector(".favBtn");
     favBtn.addEventListener("click", ()=>{
@@ -409,6 +486,7 @@ function render(arr){
         setCardImage(imgEl, p, sel);
         // update active
         card.querySelectorAll(".swatch").forEach(b=>b.classList.toggle("active", b===btn));
+        updateCardPricing(card, p, sel);
       });
     });
     card.querySelectorAll(".sizeChip").forEach(btn=>{
@@ -416,6 +494,7 @@ function render(arr){
         sel.size = btn.getAttribute("data-s");
         selected.set(p.id, sel);
         card.querySelectorAll(".sizeChip").forEach(b=>b.classList.toggle("active", b===btn));
+        updateCardPricing(card, p, sel);
       });
     });
 
@@ -647,7 +726,7 @@ function renderPanel(mode){
 
   for(const row of list){
     const {p, qty} = row;
-    if(mode === "cart") total += (p.price||0) * qty;
+    if(mode === "cart") total += (getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0) * qty;
 
     const imgSrc = (mode === "cart")
       ? (row.ci?.image || getCurrentImage(p, {color: row.ci?.color || null, size: row.ci?.size || null, imgIdx: 0}))
@@ -661,7 +740,7 @@ function renderPanel(mode){
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${mode==="cart" ? renderVariantLine(row.ci) : ""}
         <div class="cartRow">
-          <div class="price">${moneyUZS(p.price||0)}</div>
+          <div class="price">${moneyUZS(getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)}</div>
           <button class="removeBtn" title="O‘chirish">🗑️</button>
         </div>
         ${mode==="cart" ? `
@@ -671,7 +750,7 @@ function renderPanel(mode){
             <span>${qty}</span>
             <button data-q="+">+</button>
           </div>
-          <div class="badge">${moneyUZS((p.price||0)*qty)}</div>
+          <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
           <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
@@ -730,7 +809,7 @@ async function loadProducts(){
     id: (p.id ?? "").toString(),
     name: (p.name ?? "").toString(),
     tags: Array.isArray(p.tags) ? p.tags.map(x=>x.toString()) : [],
-    _price: parsePrice(p.price),
+    _price: minVariantPrice(p),
     _created: Date.parse(p.createdAt ?? "") || 0,
   }));
   applyFilterSort();
@@ -814,7 +893,6 @@ window.addEventListener("tg_auth", async (e)=>{
 
 els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
-els.btnReload.addEventListener("click", loadProducts);
 
 // panel & views
 // Favorites should open like cart (drawer), not just filter the grid.
@@ -879,11 +957,15 @@ els.checkoutBtn?.addEventListener("click", ()=>{
   const lines = cart.map(ci=>{
     const p = products.find(x=>x.id===ci.id);
     if(!p) return null;
-    return `${p.name} x${ci.qty} = ${moneyUZS((p.price||0)*ci.qty)}`;
+    const pr = getVariantPricing(p, {color: ci.color||null, size: ci.size||null});
+    const variant = [ci.color, ci.size].filter(Boolean).join(" / ");
+    return `${p.name}${variant?` (${variant})`:``} x${ci.qty} = ${moneyUZS((pr.price||0)*(ci.qty||0))}`;
   }).filter(Boolean);
   const total = cart.reduce((s,ci)=>{
     const p = products.find(x=>x.id===ci.id);
-    return s + (p? (p.price||0)*(ci.qty||0) : 0);
+    if(!p) return s;
+    const pr = getVariantPricing(p, {color: ci.color||null, size: ci.size||null});
+    return s + (pr.price||0) * (ci.qty||0);
   },0);
   const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(total))}`;
   // Try open Telegram share (works if user has TG installed or web)
