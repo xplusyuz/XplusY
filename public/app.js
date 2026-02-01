@@ -34,6 +34,7 @@ const els = {
   panelList: document.getElementById("panelList"),
   panelEmpty: document.getElementById("panelEmpty"),
   panelBottom: document.getElementById("panelBottom"),
+  totalRow: document.getElementById("totalRow"),
   cartTotal: document.getElementById("cartTotal"),
   checkoutBtn: document.getElementById("checkoutBtn"),
   clearBtn: document.getElementById("clearBtn"),
@@ -167,8 +168,13 @@ function updateBadges(){
 
 function openPanel(mode){
   if(!els.sidePanel || !els.overlay) return;
-  els.panelBottom.style.display = (mode === "cart") ? "" : "none";
-  els.panelTitle.textContent = (mode === "cart") ? "Savatcha" : "Sevimlilar";
+  // bottom controls exist for both, but differ
+  els.panelBottom.style.display = "";
+  const isCart = (mode === "cart");
+  if(els.totalRow) els.totalRow.style.display = isCart ? "" : "none";
+  if(els.checkoutBtn) els.checkoutBtn.style.display = isCart ? "" : "none";
+  if(els.clearBtn) els.clearBtn.textContent = isCart ? "Tozalash" : "Sevimlilarni tozalash";
+  els.panelTitle.textContent = isCart ? "Savatcha" : "Sevimlilar";
   renderPanel(mode);
 
   // show + animate
@@ -372,11 +378,8 @@ els.sort.addEventListener("change", applyFilterSort);
 els.btnReload.addEventListener("click", loadProducts);
 
 // panel & views
-els.favViewBtn?.addEventListener("click", ()=>{
-  viewMode = (viewMode === "fav") ? "all" : "fav";
-  els.favViewBtn.classList.toggle("active", viewMode === "fav");
-  applyFilterSort();
-});
+// Favorites should open like cart (drawer), not just filter the grid.
+els.favViewBtn?.addEventListener("click", ()=> openPanel("fav"));
 els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
