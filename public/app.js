@@ -14,6 +14,7 @@ const els = {
   btnGoogle: document.getElementById("btnGoogle"),
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
+  tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),
   tgNotice: document.getElementById("tgNotice"),
@@ -466,7 +467,8 @@ function setSelectedTag(tag){
   applyFilterSort();
 }
 
-function applyFilterSort(){  const query = norm(els.q.value);
+function applyFilterSort(){
+  const query = norm(els.q.value);
   let arr = [...products];
 
   if(viewMode === "fav"){
@@ -493,7 +495,6 @@ function applyFilterSort(){  const query = norm(els.q.value);
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
   render(arr);
-  // keep tag bar visible/active
   renderTagBar();
 }
 
