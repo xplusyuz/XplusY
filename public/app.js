@@ -43,6 +43,7 @@ const els = {
   imgViewer: document.getElementById("imgViewer"),
   imgViewerBackdrop: document.getElementById("imgViewerBackdrop"),
   imgViewerTitle: document.getElementById("imgViewerTitle"),
+  imgViewerDesc: document.getElementById("imgViewerDesc"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
   imgPrev: document.getElementById("imgPrev"),
@@ -325,6 +326,7 @@ function render(arr){
       if(!imgs.length) return;
       openImageViewer({
         title: p.name || "Rasm",
+        desc: p.description || p.desc || "",
         images: imgs,
         startIndex: getSel(p).imgIdx || 0,
         onSelect: (i)=>{
@@ -437,6 +439,7 @@ function renderViewer(){
   const idx = clampIdx(viewer.idx || 0, imgs.length);
   viewer.idx = idx;
   els.imgViewerTitle.textContent = viewer.title || "Rasm";
+  if(els.imgViewerDesc) els.imgViewerDesc.textContent = viewer.desc || "";
 
   els.imgViewerImg.src = imgs[idx] || "";
 
@@ -459,11 +462,12 @@ function renderViewer(){
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
 }
 
-function openImageViewer({title, images, startIndex=0, onSelect}){
+function openImageViewer({title, desc, images, startIndex=0, onSelect}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
     title: title || "Rasm",
+    desc: desc || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
     onSelect: onSelect || null
