@@ -20,9 +20,44 @@ const els = {
   btnReload: document.getElementById("btnReload"),
   tgNotice: document.getElementById("tgNotice"),
   authCard: document.getElementById("authCard"),
+
+  // new UI
+  favViewBtn: document.getElementById("favViewBtn"),
+  cartBtn: document.getElementById("cartBtn"),
+  favCount: document.getElementById("favCount"),
+  cartCount: document.getElementById("cartCount"),
+
+  overlay: document.getElementById("overlay"),
+  sidePanel: document.getElementById("sidePanel"),
+  panelTitle: document.getElementById("panelTitle"),
+  panelClose: document.getElementById("panelClose"),
+  panelList: document.getElementById("panelList"),
+  panelEmpty: document.getElementById("panelEmpty"),
+  panelBottom: document.getElementById("panelBottom"),
+  cartTotal: document.getElementById("cartTotal"),
+  checkoutBtn: document.getElementById("checkoutBtn"),
+  clearBtn: document.getElementById("clearBtn"),
 };
 
 let products = [];
+
+const LS = {
+  favs: "om_favs",
+  cart: "om_cart"
+};
+
+function loadLS(key, fallback){
+  try{ return JSON.parse(localStorage.getItem(key) || "") ?? fallback; }
+  catch{ return fallback; }
+}
+function saveLS(key, value){
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+let viewMode = "all"; // all | fav
+let favs = new Set(loadLS(LS.favs, []));
+let cart = loadLS(LS.cart, []); // [{id, qty}]
+
 
 function showTgNotice(msg){
   if(!els.tgNotice) return;
@@ -39,6 +74,10 @@ function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 function applyFilterSort(){
   const query = norm(els.q.value);
   let arr = [...products];
+
+  if(viewMode === "fav"){
+    arr = arr.filter(p=>favs.has(p.id));
+  }
 
   if(query){
     arr = arr.filter(p=>{
@@ -63,7 +102,11 @@ function render(arr){
   for(const p of arr){
     const card = document.createElement("div");
     card.className = "pcard";
+
+    const isFav = favs.has(p.id);
+
     card.innerHTML = `
+      <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">❤️</button>
       <img class="pimg" src="${p.image || ""}" alt="${p.name || "product"}" loading="lazy"/>
       <div class="pbody">
         <div class="pname">${p.name || "Nomsiz"}</div>
@@ -72,11 +115,160 @@ function render(arr){
           <div class="price">${moneyUZS(p.price || 0)}</div>
           <div class="badge">ID: ${p.id || "-"}</div>
         </div>
+        <div class="pActions">
+          <button class="pBtn ghost" data-act="buy">⚡ Tezkor</button>
+          <button class="pBtn" data-act="cart">🛒 Savatcha</button>
+        </div>
       </div>
     `;
+
+    const favBtn = card.querySelector(".favBtn");
+    favBtn.addEventListener("click", ()=>{
+      if(favs.has(p.id)) favs.delete(p.id); else favs.add(p.id);
+      saveLS(LS.favs, Array.from(favs));
+      favBtn.classList.toggle("active", favs.has(p.id));
+      updateBadges();
+      if(viewMode === "fav") applyFilterSort();
+    });
+
+    card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
+      addToCart(p.id, 1);
+      openPanel("cart");
+    });
+
+    card.querySelector('[data-act="buy"]').addEventListener("click", ()=>{
+      // quick order: add 1 and open panel
+      addToCart(p.id, 1);
+      openPanel("cart");
+    });
+
     els.grid.appendChild(card);
   }
 }
+
+
+function addToCart(id, qty){
+  const item = cart.find(x=>x.id===id);
+  if(item) item.qty += qty;
+  else cart.push({id, qty});
+  cart = cart.filter(x=>x.qty>0);
+  saveLS(LS.cart, cart);
+  updateBadges();
+}
+
+function cartCount(){
+  return cart.reduce((s,x)=>s + (x.qty||0), 0);
+}
+
+function updateBadges(){
+  if(els.favCount) els.favCount.textContent = String(favs.size);
+  if(els.cartCount) els.cartCount.textContent = String(cartCount());
+}
+
+function openPanel(mode){
+  if(!els.sidePanel || !els.overlay) return;
+  els.overlay.hidden = false;
+  els.sidePanel.hidden = false;
+  els.panelBottom.style.display = (mode === "cart") ? "" : "none";
+  els.panelTitle.textContent = (mode === "cart") ? "Savatcha" : "Sevimlilar";
+  renderPanel(mode);
+}
+
+function closePanel(){
+  if(!els.sidePanel || !els.overlay) return;
+  els.overlay.hidden = true;
+  els.sidePanel.hidden = true;
+}
+
+function renderPanel(mode){
+  els.panelList.innerHTML = "";
+  const list = [];
+
+  if(mode === "fav"){
+    for(const id of favs){
+      const p = products.find(x=>x.id===id);
+      if(p) list.push({p, qty:0});
+    }
+  } else {
+    for(const ci of cart){
+      const p = products.find(x=>x.id===ci.id);
+      if(p) list.push({p, qty: ci.qty || 1});
+    }
+  }
+
+  els.panelEmpty.hidden = list.length !== 0;
+
+  let total = 0;
+
+  for(const row of list){
+    const {p, qty} = row;
+    if(mode === "cart") total += (p.price||0) * qty;
+
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${p.image||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        <div class="cartRow">
+          <div class="price">${moneyUZS(p.price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        ${mode==="cart" ? `
+        <div class="cartRow">
+          <div class="qty">
+            <button data-q="-">−</button>
+            <span>${qty}</span>
+            <button data-q="+">+</button>
+          </div>
+          <div class="badge">${moneyUZS((p.price||0)*qty)}</div>
+        </div>` : `
+        <div class="cartRow">
+          <button class="pBtn" style="padding:8px 10px" data-add>🛒 Savatchaga</button>
+          <div class="badge">❤️ Sevimli</div>
+        </div>`}
+      </div>
+    `;
+
+    const removeBtn = item.querySelector(".removeBtn");
+    removeBtn.addEventListener("click", ()=>{
+      if(mode==="fav"){
+        favs.delete(p.id);
+        saveLS(LS.favs, Array.from(favs));
+        updateBadges();
+        renderPanel("fav");
+        if(viewMode==="fav") applyFilterSort();
+      } else {
+        cart = cart.filter(x=>x.id!==p.id);
+        saveLS(LS.cart, cart);
+        updateBadges();
+        renderPanel("cart");
+      }
+    });
+
+    if(mode==="cart"){
+      item.querySelector('[data-q="-"]').addEventListener("click", ()=>{
+        addToCart(p.id, -1);
+        renderPanel("cart");
+      });
+      item.querySelector('[data-q="+"]').addEventListener("click", ()=>{
+        addToCart(p.id, +1);
+        renderPanel("cart");
+      });
+    } else {
+      const addBtn = item.querySelector("[data-add]");
+      addBtn.addEventListener("click", ()=>{
+        addToCart(p.id, 1);
+        openPanel("cart");
+      });
+    }
+
+    els.panelList.appendChild(item);
+  }
+
+  if(els.cartTotal) els.cartTotal.textContent = moneyUZS(total);
+}
+
 
 async function loadProducts(){
   const res = await fetch("./products.json", { cache: "no-store" });
@@ -165,6 +357,44 @@ els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
 els.btnReload.addEventListener("click", loadProducts);
 
+// panel & views
+els.favViewBtn?.addEventListener("click", ()=>{
+  viewMode = (viewMode === "fav") ? "all" : "fav";
+  els.favViewBtn.classList.toggle("active", viewMode === "fav");
+  applyFilterSort();
+});
+els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
+els.panelClose?.addEventListener("click", closePanel);
+els.overlay?.addEventListener("click", closePanel);
+els.clearBtn?.addEventListener("click", ()=>{
+  if(els.panelTitle.textContent.includes("Sevimli")){
+    favs = new Set();
+    saveLS(LS.favs, []);
+  } else {
+    cart = [];
+    saveLS(LS.cart, []);
+  }
+  updateBadges();
+  renderPanel(els.panelTitle.textContent.includes("Sevimli") ? "fav" : "cart");
+  if(viewMode === "fav") applyFilterSort();
+});
+els.checkoutBtn?.addEventListener("click", ()=>{
+  // This demo doesn't send automatically. Provide copyable text.
+  const lines = cart.map(ci=>{
+    const p = products.find(x=>x.id===ci.id);
+    if(!p) return null;
+    return `${p.name} x${ci.qty} = ${moneyUZS((p.price||0)*ci.qty)}`;
+  }).filter(Boolean);
+  const total = cart.reduce((s,ci)=>{
+    const p = products.find(x=>x.id===ci.id);
+    return s + (p? (p.price||0)*(ci.qty||0) : 0);
+  },0);
+  const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(total))}`;
+  // Try open Telegram share (works if user has TG installed or web)
+  window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
+});
+
 onAuthStateChanged(auth, (user)=> setUserUI(user));
 
 await loadProducts();
+updateBadges();
