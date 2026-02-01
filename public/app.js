@@ -466,8 +466,7 @@ function setSelectedTag(tag){
   applyFilterSort();
 }
 
-function applyFilterSort(){
-  const query = norm(els.q.value);
+function applyFilterSort(){  const query = norm(els.q.value);
   let arr = [...products];
 
   if(viewMode === "fav"){
@@ -494,6 +493,8 @@ function applyFilterSort(){
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
   render(arr);
+  // keep tag bar visible/active
+  renderTagBar();
 }
 
 
