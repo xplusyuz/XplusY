@@ -292,19 +292,31 @@ function render(arr){
     const currentImg = getCurrentImage(p, sel);
 
     card.innerHTML = `
-      <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">❤️</button>
-      <img class="pimg" src="${currentImg || ""}" alt="${p.name || "product"}" loading="lazy"/>
-      <div class="pbody">
-        <div class="pname">${p.name || "Nomsiz"}</div>
-        <div class="ptags">${(p.tags||[]).map(t=>`#${t}`).join(" ")}</div>
+      <div class="pmedia">
+        <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
+        ${p.badge ? `<div class="pbadge">${escapeHtml(p.badge)}</div>` : ``}
+        <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
+        <button class="qbuy" data-act="buy" title="Tezkor">⚡</button>
+      </div>
+
+      <div class="pbody uz">
+        <div class="ppriceRow">
+          <div class="ppriceNow">${moneyUZS(p.price || 0)}</div>
+          ${p.oldPrice ? `<div class="ppriceOld">${moneyUZS(p.oldPrice)}</div>` : ``}
+        </div>
+
+        ${p.installmentText ? `<div class="pinstall">${escapeHtml(p.installmentText)}</div>` : ``}
+
+        <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
+
+        ${p.subtitle ? `<div class="psub">${escapeHtml(p.subtitle)}</div>` : (p.description ? `<div class="psub">${escapeHtml(String(p.description).split(/[.
+]/)[0])}</div>` : ``)}
+
+        ${(p.rating ? `<div class="prating">⭐ ${Number(p.rating).toFixed(1)} <span>(${Number(p.reviewsCount||0)} sharhlar)</span></div>` : ``)}
+
         ${renderOptions(p)}
-        <div class="priceRow">
-          <div class="price">${moneyUZS(p.price || 0)}</div>
-        </div>
-        <div class="pActions">
-          <button class="pBtn ghost" data-act="buy" title="Tezkor buyurtma">⚡</button>
-          <button class="pBtn" data-act="cart" title="Savatchaga">🛒</button>
-        </div>
+
+        <button class="pcta" data-act="cart" title="Savatchaga">🚚 Ertaga</button>
       </div>
     `;
 
