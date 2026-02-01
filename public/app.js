@@ -62,7 +62,51 @@ const els = {
   // viewer actions
   viewerCart: document.getElementById("viewerCart"),
   viewerBuy: document.getElementById("viewerBuy"),
-};
+};// === Desktop horizontal scroll helpers (PC: wheel + drag) ===
+const isFinePointer = () => window.matchMedia && window.matchMedia("(pointer:fine)").matches;
+
+function enhanceHScroll(el){
+  if(!el || el.dataset.hscrollInit==="1") return;
+  el.dataset.hscrollInit="1";
+
+  // Wheel: use vertical wheel to scroll horizontally when hovering the row (PC)
+  el.addEventListener("wheel", (e)=>{
+    if(!isFinePointer()) return;
+    // If user is already doing horizontal wheel/trackpad, don't override
+    if(Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    if(e.deltaY === 0) return;
+    el.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, {passive:false});
+
+  // Drag to scroll (mouse)
+  let down = false;
+  let startX = 0;
+  let startLeft = 0;
+
+  el.addEventListener("pointerdown", (e)=>{
+    if(!isFinePointer()) return;
+    if(e.pointerType === "touch") return;
+    down = true;
+    startX = e.clientX;
+    startLeft = el.scrollLeft;
+    el.classList.add("dragging");
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+  });
+
+  el.addEventListener("pointermove", (e)=>{
+    if(!down) return;
+    const dx = e.clientX - startX;
+    el.scrollLeft = startLeft - dx;
+  });
+
+  const up = ()=>{
+    down = false;
+    el.classList.remove("dragging");
+  };
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+}
 
 let products = [];
 
@@ -512,6 +556,10 @@ function render(arr){
     });
 
     els.grid.appendChild(card);
+
+    // PC scroll: make option rows smooth with wheel+drag
+    card.querySelectorAll('.optLine').forEach(enhanceHScroll);
+
   }
 }
 
