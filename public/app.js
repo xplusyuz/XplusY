@@ -67,8 +67,21 @@ function showTgNotice(msg){
 }
 
 function moneyUZS(n){
-  try { return new Intl.NumberFormat("uz-UZ").format(n) + " so‘m"; }
-  catch { return `${n} UZS`; }
+  const x = typeof n === "number" && Number.isFinite(n) ? n : parsePrice(n);
+  try { return new Intl.NumberFormat("uz-UZ").format(x) + " so‘m"; }
+  catch { return `${x} UZS`; }
+}
+
+// Accept numbers or strings like: "349 000", "349,000 so'm", "349000 UZS"
+function parsePrice(v){
+  if(typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const s = (v ?? "").toString();
+  // Keep digits only
+  const digits = s.replace(/[^0-9]/g, "");
+  if(!digits) return 0;
+  // Guard against extremely large values (accidental)
+  const n = parseInt(digits.slice(0, 12), 10);
+  return Number.isFinite(n) ? n : 0;
 }
 function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
@@ -88,9 +101,9 @@ function applyFilterSort(){
   }
 
   const sort = els.sort.value;
-  if(sort === "price_asc") arr.sort((a,b)=>(a.price||0)-(b.price||0));
-  if(sort === "price_desc") arr.sort((a,b)=>(b.price||0)-(a.price||0));
-  if(sort === "new") arr.sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  if(sort === "price_asc") arr.sort((a,b)=>(a._price||0)-(b._price||0));
+  if(sort === "price_desc") arr.sort((a,b)=>(b._price||0)-(a._price||0));
+  if(sort === "new") arr.sort((a,b)=> (b._created||0) - (a._created||0));
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
   render(arr);
@@ -293,7 +306,16 @@ function renderPanel(mode){
 async function loadProducts(){
   const res = await fetch("./products.json", { cache: "no-store" });
   const json = await res.json();
-  products = Array.isArray(json.items) ? json.items : [];
+  const raw = Array.isArray(json.items) ? json.items : [];
+  // Normalize for robust filtering/sorting even if JSON has strings for price/date
+  products = raw.map(p=>({
+    ...p,
+    id: (p.id ?? "").toString(),
+    name: (p.name ?? "").toString(),
+    tags: Array.isArray(p.tags) ? p.tags.map(x=>x.toString()) : [],
+    _price: parsePrice(p.price),
+    _created: Date.parse(p.createdAt ?? "") || 0,
+  }));
   applyFilterSort();
 }
 
