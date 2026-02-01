@@ -453,6 +453,8 @@ function render(arr){
       if(favs.has(p.id)) favs.delete(p.id); else favs.add(p.id);
       saveLS(LS.favs, Array.from(favs));
       favBtn.classList.toggle("active", favs.has(p.id));
+      favBtn.textContent = favs.has(p.id) ? "♥" : "♡";
+      favBtn.setAttribute("aria-pressed", favs.has(p.id) ? "true" : "false");
       updateBadges();
       if(viewMode === "fav") applyFilterSort();
     });
