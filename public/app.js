@@ -79,33 +79,63 @@ function enhanceHScroll(el){
     e.preventDefault();
   }, {passive:false});
 
-  // Drag to scroll (mouse)
+  // Drag to scroll (mouse) — doesn't break clicks (threshold + cancel-click-after-drag)
   let down = false;
+  let moved = false;
   let startX = 0;
   let startLeft = 0;
+  let pid = null;
+
+  const DRAG_THRESHOLD = 6; // px
 
   el.addEventListener("pointerdown", (e)=>{
     if(!isFinePointer()) return;
     if(e.pointerType === "touch") return;
+    if(e.button != null && e.button !== 0) return; // left click only
+
     down = true;
+    moved = false;
+    pid = e.pointerId;
     startX = e.clientX;
     startLeft = el.scrollLeft;
-    el.classList.add("dragging");
-    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    // NOTE: no pointer capture here — only after threshold, so clicks still work.
   });
 
   el.addEventListener("pointermove", (e)=>{
     if(!down) return;
     const dx = e.clientX - startX;
+
+    if(!moved){
+      if(Math.abs(dx) < DRAG_THRESHOLD) return;
+      moved = true;
+      el.classList.add("dragging");
+      try{ el.setPointerCapture(pid); }catch(_){}
+    }
     el.scrollLeft = startLeft - dx;
+    e.preventDefault();
   });
 
-  const up = ()=>{
+  const finish = ()=>{
+    if(moved){
+      el.dataset.justDragged = "1";
+      setTimeout(()=>{ delete el.dataset.justDragged; }, 140);
+    }
     down = false;
+    moved = false;
+    pid = null;
     el.classList.remove("dragging");
   };
-  el.addEventListener("pointerup", up);
-  el.addEventListener("pointercancel", up);
+
+  el.addEventListener("pointerup", finish);
+  el.addEventListener("pointercancel", finish);
+
+  // If we just dragged, kill the click so options don't accidentally toggle.
+  el.addEventListener("click", (e)=>{
+    if(el.dataset.justDragged === "1"){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 }
 
 let products = [];
