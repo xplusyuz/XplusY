@@ -117,8 +117,8 @@ function render(arr){
           <div class="badge">ID: ${p.id || "-"}</div>
         </div>
         <div class="pActions">
-          <button class="pBtn ghost" data-act="buy">⚡ Tezkor</button>
-          <button class="pBtn" data-act="cart">🛒 Savatcha</button>
+          <button class="pBtn ghost" data-act="buy" title="Tezkor buyurtma">⚡</button>
+          <button class="pBtn" data-act="cart" title="Savatchaga">🛒</button>
         </div>
       </div>
     `;
@@ -244,8 +244,8 @@ function renderPanel(mode){
           <div class="badge">${moneyUZS((p.price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
-          <button class="pBtn" style="padding:8px 10px" data-add>🛒 Savatchaga</button>
-          <div class="badge">❤️ Sevimli</div>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <div class="badge">❤️</div>
         </div>`}
       </div>
     `;
