@@ -517,12 +517,12 @@ function render(arr){
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
 
 
-        ${(showAvg ? `<div class="prating">⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount} sharhlar)</span></div>` : ``)}
+        
 
         ${renderOptions(p)}
 
         <div class="pactions">
-          <button class="iconPill" data-act="buy" title="Bir zumda">⚡</button>
+          <div class="pratingInline">${(showAvg ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -588,12 +588,6 @@ function render(arr){
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
-      addToCart(p.id, 1, getSel(p));
-      openPanel("cart");
-    });
-
-    card.querySelector('[data-act="buy"]').addEventListener("click", ()=>{
-      // quick order: add 1 and open panel
       addToCart(p.id, 1, getSel(p));
       openPanel("cart");
     });
@@ -1290,3 +1284,21 @@ onAuthStateChanged(auth, (user)=> setUserUI(user));
 
 await loadProducts();
 updateBadges();
+
+
+/* ===== Inline rating near cart (compact) ===== */
+document.addEventListener("DOMContentLoaded", ()=>{
+  document.querySelectorAll(".pcard").forEach(card=>{
+    const actions = card.querySelector(".pactions");
+    if(!actions) return;
+    if(actions.querySelector(".pratingInline")) return;
+
+    const rating = card.querySelector(".prating");
+    if(!rating) return;
+
+    const inline = document.createElement("div");
+    inline.className = "pratingInline";
+    inline.innerHTML = rating.innerHTML;
+    actions.prepend(inline);
+  });
+});
