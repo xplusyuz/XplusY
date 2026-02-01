@@ -309,8 +309,7 @@ function render(arr){
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
 
-        ${p.subtitle ? `<div class="psub">${escapeHtml(p.subtitle)}</div>` : (p.description ? `<div class="psub">${escapeHtml(String(p.description).split(/[.
-]/)[0])}</div>` : ``)}
+        ${p.subtitle ? `<div class="psub">${escapeHtml(p.subtitle)}</div>` : (p.description ? `<div class="psub">${escapeHtml(String(p.description).split(/[.\n]/)[0])}</div>` : ``)}
 
         ${(p.rating ? `<div class="prating">⭐ ${Number(p.rating).toFixed(1)} <span>(${Number(p.reviewsCount||0)} sharhlar)</span></div>` : ``)}
 
