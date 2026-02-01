@@ -42,26 +42,69 @@ const els = {
   // image viewer (gallery)
   imgViewer: document.getElementById("imgViewer"),
   imgViewerBackdrop: document.getElementById("imgViewerBackdrop"),
+  // Title is hidden; we show product name in the old description style
   imgViewerTitle: document.getElementById("imgViewerTitle"),
+  imgViewerName: document.getElementById("imgViewerName"),
   imgViewerDesc: document.getElementById("imgViewerDesc"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
   imgPrev: document.getElementById("imgPrev"),
   imgNext: document.getElementById("imgNext"),
   imgThumbs: document.getElementById("imgThumbs"),
+
+  // reviews
+  revScore: document.getElementById("revScore"),
+  revCount: document.getElementById("revCount"),
+  revStars: document.getElementById("revStars"),
+  revText: document.getElementById("revText"),
+  revSend: document.getElementById("revSend"),
+  revList: document.getElementById("revList"),
+
+  // viewer actions
+  viewerCart: document.getElementById("viewerCart"),
+  viewerBuy: document.getElementById("viewerBuy"),
 };
 
 let products = [];
 
 const LS = {
   favs: "om_favs",
-  cart: "om_cart"
+  cart: "om_cart",
+  reviews: "om_reviews_v1"
 };
+
+// ---------------- Reviews (local, per-product) ----------------
+function loadReviewsMap(){
+  return loadLS(LS.reviews, {});
+}
+function saveReviewsMap(map){
+  saveLS(LS.reviews, map);
+}
+function getReviews(productId){
+  const map = loadReviewsMap();
+  const list = Array.isArray(map[productId]) ? map[productId] : [];
+  // newest first
+  return list.slice().sort((a,b)=> (b?.ts||0) - (a?.ts||0));
+}
+function addReview(productId, stars, text){
+  const map = loadReviewsMap();
+  const list = Array.isArray(map[productId]) ? map[productId] : [];
+  const author = (els.userName?.textContent || els.userSmall?.textContent || "Mehmon").trim() || "Mehmon";
+  list.push({ stars, text, author, ts: Date.now() });
+  map[productId] = list;
+  saveReviewsMap(map);
+}
+function reviewStats(productId){
+  const list = getReviews(productId);
+  if(!list.length) return { avg: null, count: 0 };
+  const sum = list.reduce((s,r)=> s + (Number(r.stars)||0), 0);
+  return { avg: sum / list.length, count: list.length };
+}
 // Variant selections per product (in-memory)
 const selected = new Map(); // id -> {color, size, imgIdx}
 
 // Image viewer state
-let viewer = { open:false, title:"", images:[], idx:0, onSelect:null };
+let viewer = { open:false, productId:null, title:"", desc:"", images:[], idx:0, onSelect:null };
 
 function normColors(p){
   const arr = p.colors || p.colorOptions || [];
@@ -291,12 +334,15 @@ function render(arr){
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
+    const localStats = reviewStats(p.id);
+    const showAvg = localStats.count ? localStats.avg : (p.rating ? Number(p.rating) : null);
+    const showCount = localStats.count ? localStats.count : Number(p.reviewsCount||0);
+
     card.innerHTML = `
       <div class="pmedia">
         <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
         ${p.badge ? `<div class="pbadge">${escapeHtml(p.badge)}</div>` : ``}
         <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
-        <button class="qbuy" data-act="buy" title="Tezkor">⚡</button>
       </div>
 
       <div class="pbody uz">
@@ -311,11 +357,18 @@ function render(arr){
 
         ${p.subtitle ? `<div class="psub">${escapeHtml(p.subtitle)}</div>` : (p.description ? `<div class="psub">${escapeHtml(String(p.description).split(/[.\n]/)[0])}</div>` : ``)}
 
-        ${(p.rating ? `<div class="prating">⭐ ${Number(p.rating).toFixed(1)} <span>(${Number(p.reviewsCount||0)} sharhlar)</span></div>` : ``)}
+        ${(showAvg ? `<div class="prating">⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount} sharhlar)</span></div>` : ``)}
 
         ${renderOptions(p)}
 
-        <button class="pcta" data-act="cart" title="Savatchaga">🚚 Ertaga</button>
+        <div class="pactions">
+          <button class="iconPill" data-act="buy" title="Bir zumda">⚡</button>
+          <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
+            </svg>
+          </button>
+        </div>
       </div>
     `;
 
@@ -336,6 +389,7 @@ function render(arr){
       const imgs = getImagesFor(p, getSel(p));
       if(!imgs.length) return;
       openImageViewer({
+        productId: p.id,
         title: p.name || "Rasm",
         desc: p.description || p.desc || "",
         images: imgs,
@@ -449,7 +503,9 @@ function renderViewer(){
   const imgs = viewer.images || [];
   const idx = clampIdx(viewer.idx || 0, imgs.length);
   viewer.idx = idx;
-  els.imgViewerTitle.textContent = viewer.title || "Rasm";
+  // Top line: full product name (same style as old description)
+  if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
+  // Description block below thumbs
   if(els.imgViewerDesc) els.imgViewerDesc.textContent = viewer.desc || "";
 
   els.imgViewerImg.src = imgs[idx] || "";
@@ -471,12 +527,14 @@ function renderViewer(){
   const hasNav = imgs.length > 1;
   if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
+  renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({title, desc, images, startIndex=0, onSelect}){
+function openImageViewer({productId, title, desc, images, startIndex=0, onSelect}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
+    productId: productId || null,
     title: title || "Rasm",
     desc: desc || "",
     images: (images||[]).filter(Boolean),
@@ -501,6 +559,60 @@ function stepViewer(dir){
   viewer.idx = clampIdx((viewer.idx||0) + dir, n);
   renderViewer();
   viewer.onSelect?.(viewer.idx);
+}
+
+// ---------- Reviews UI (in fullscreen viewer) ----------
+let draftStars = 5;
+
+function renderStarSelector(){
+  if(!els.revStars) return;
+  els.revStars.innerHTML = "";
+  for(let i=1;i<=5;i++){
+    const b = document.createElement("button");
+    b.className = "starBtn" + (i<=draftStars ? " active" : "");
+    b.type = "button";
+    b.title = `${i} / 5`;
+    b.textContent = "★";
+    b.addEventListener("click", ()=>{
+      draftStars = i;
+      renderStarSelector();
+    });
+    els.revStars.appendChild(b);
+  }
+}
+
+function renderReviewsUI(productId){
+  if(!productId) return;
+  renderStarSelector();
+
+  const list = getReviews(productId);
+  const st = reviewStats(productId);
+  if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+  if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
+
+  if(els.revList){
+    els.revList.innerHTML = "";
+    if(!list.length){
+      const d = document.createElement("div");
+      d.className = "revItem";
+      d.innerHTML = `<div class="revItemText">Hozircha sharh yo‘q. Birinchi bo‘lib yozing 🙂</div>`;
+      els.revList.appendChild(d);
+    } else {
+      for(const r of list.slice(0, 12)){
+        const it = document.createElement("div");
+        it.className = "revItem";
+        const when = new Date(r.ts||Date.now()).toLocaleDateString("uz-UZ");
+        it.innerHTML = `
+          <div class="revItemTop">
+            <b>⭐ ${Number(r.stars||0).toFixed(0)} — ${escapeHtml(r.author||"Mehmon")}</b>
+            <span>${escapeHtml(when)}</span>
+          </div>
+          <div class="revItemText">${escapeHtml(r.text||"")}</div>
+        `;
+        els.revList.appendChild(it);
+      }
+    }
+  }
 }
 
 
@@ -717,6 +829,34 @@ els.imgViewerClose?.addEventListener("click", closeImageViewer);
 els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
 els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
+
+// reviews (viewer)
+els.revSend?.addEventListener("click", ()=>{
+  if(!viewer.productId) return;
+  const text = (els.revText?.value || "").trim();
+  if(text.length < 2) return;
+  addReview(viewer.productId, draftStars, text.slice(0, 280));
+  if(els.revText) els.revText.value = "";
+  renderReviewsUI(viewer.productId);
+  // refresh ratings on cards (if visible)
+  applyFilterSort();
+});
+
+// viewer actions
+els.viewerCart?.addEventListener("click", ()=>{
+  const p = products.find(x=>x.id===viewer.productId);
+  if(!p) return;
+  addToCart(p.id, 1, getSel(p));
+  updateBadges();
+  openPanel("cart");
+});
+els.viewerBuy?.addEventListener("click", ()=>{
+  const p = products.find(x=>x.id===viewer.productId);
+  if(!p) return;
+  addToCart(p.id, 1, getSel(p));
+  updateBadges();
+  openPanel("cart");
+});
 window.addEventListener("keydown", (e)=>{
   if(!viewer.open) return;
   if(e.key === "Escape") closeImageViewer();
