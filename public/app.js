@@ -298,7 +298,7 @@ function renderOptions(p){
   const sel = getSel(p);
 
   const sw = colors.length ? `
-    <div class="swatches" aria-label="Rang">
+    <div class="optLine swatchesLine" aria-label="Rang">
       ${colors.map(c=>{
         const active = (sel.color===c.name) ? "active" : "";
         const style = c.hex ? `style="--c:${c.hex}"` : "";
@@ -307,14 +307,14 @@ function renderOptions(p){
     </div>` : "";
 
   const sz = sizes.length ? `
-    <div class="sizes" aria-label="O'lcham">
+    <div class="optLine sizesLine" aria-label="O'lcham">
       ${sizes.map(s=>{
         const active = (sel.size===s) ? "active" : "";
         return `<button class="sizeChip ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
       }).join("")}
     </div>` : "";
 
-  return `<div class="optRow">${sw}${sz}</div>`;
+  return `<div class="optStack">${sw}${sz}</div>`;
 }
 
 function escapeHtml(str){
@@ -355,7 +355,6 @@ function render(arr){
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
 
-        ${p.subtitle ? `<div class="psub">${escapeHtml(p.subtitle)}</div>` : (p.description ? `<div class="psub">${escapeHtml(String(p.description).split(/[.\n]/)[0])}</div>` : ``)}
 
         ${(showAvg ? `<div class="prating">⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount} sharhlar)</span></div>` : ``)}
 
