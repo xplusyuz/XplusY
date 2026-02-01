@@ -167,17 +167,31 @@ function updateBadges(){
 
 function openPanel(mode){
   if(!els.sidePanel || !els.overlay) return;
-  els.overlay.hidden = false;
-  els.sidePanel.hidden = false;
   els.panelBottom.style.display = (mode === "cart") ? "" : "none";
   els.panelTitle.textContent = (mode === "cart") ? "Savatcha" : "Sevimlilar";
   renderPanel(mode);
+
+  // show + animate
+  els.overlay.hidden = false;
+  els.sidePanel.hidden = false;
+  requestAnimationFrame(()=>{
+    els.overlay.classList.add("open");
+    els.sidePanel.classList.add("open");
+  });
 }
 
 function closePanel(){
   if(!els.sidePanel || !els.overlay) return;
-  els.overlay.hidden = true;
-  els.sidePanel.hidden = true;
+
+  els.overlay.classList.remove("open");
+  els.sidePanel.classList.remove("open");
+
+  // wait animation then hide
+  const t = 240;
+  window.setTimeout(()=>{
+    els.overlay.hidden = true;
+    els.sidePanel.hidden = true;
+  }, t);
 }
 
 function renderPanel(mode){
