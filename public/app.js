@@ -38,6 +38,16 @@ const els = {
   cartTotal: document.getElementById("cartTotal"),
   checkoutBtn: document.getElementById("checkoutBtn"),
   clearBtn: document.getElementById("clearBtn"),
+
+  // image viewer (gallery)
+  imgViewer: document.getElementById("imgViewer"),
+  imgViewerBackdrop: document.getElementById("imgViewerBackdrop"),
+  imgViewerTitle: document.getElementById("imgViewerTitle"),
+  imgViewerImg: document.getElementById("imgViewerImg"),
+  imgViewerClose: document.getElementById("imgViewerClose"),
+  imgPrev: document.getElementById("imgPrev"),
+  imgNext: document.getElementById("imgNext"),
+  imgThumbs: document.getElementById("imgThumbs"),
 };
 
 let products = [];
@@ -47,7 +57,10 @@ const LS = {
   cart: "om_cart"
 };
 // Variant selections per product (in-memory)
-const selected = new Map(); // id -> {color, size}
+const selected = new Map(); // id -> {color, size, imgIdx}
+
+// Image viewer state
+let viewer = { open:false, title:"", images:[], idx:0, onSelect:null };
 
 function normColors(p){
   const arr = p.colors || p.colorOptions || [];
@@ -66,6 +79,7 @@ function getDefaultSel(p){
   return {
     color: colors[0]?.name || null,
     size: sizes[0] || null,
+    imgIdx: 0,
   };
 }
 function getSel(p){
@@ -74,10 +88,91 @@ function getSel(p){
   selected.set(p.id, d);
   return d;
 }
+
+// --- Images (multi-image + variant-dependent) ---
+// Supported JSON formats:
+// 1) images: [url1, url2, ...]                         (generic)
+// 2) images: { "Gold": [...], "Black": [...] }          (per color)
+// 3) imagesByColor: { "Gold": [...], ... }               (per color)
+// 4) image: "url"                                       (legacy fallback)
+function normImages(p, sel){
+  const color = sel?.color || "";
+
+  // explicit imagesByColor
+  if(p && p.imagesByColor && typeof p.imagesByColor === "object"){
+    const arr = p.imagesByColor[color] || p.imagesByColor[color?.toLowerCase?.()] || null;
+    if(Array.isArray(arr) && arr.length) return arr;
+  }
+
+  // images can be array or map
+  if(Array.isArray(p?.images) && p.images.length) return p.images;
+  if(p && p.images && typeof p.images === "object"){
+    const arr = p.images[color] || p.images[color?.toLowerCase?.()] || null;
+    if(Array.isArray(arr) && arr.length) return arr;
+    // if object but no matching key, try any first array
+    const firstKey = Object.keys(p.images).find(k=>Array.isArray(p.images[k]) && p.images[k].length);
+    if(firstKey) return p.images[firstKey];
+  }
+
+  // legacy
+  if(p?.image) return [p.image];
+  return [];
+}
+
+function getCurrentImage(p, sel){
+  const imgs = normImages(p, sel);
+  if(!imgs.length) return "";
+  const idx = Math.max(0, Math.min(sel?.imgIdx ?? 0, imgs.length-1));
+  return imgs[idx] || imgs[0];
+}
+
+function setImageIndex(p, idx){
+  const sel = getSel(p);
+  const imgs = normImages(p, sel);
+  if(!imgs.length) return;
+  sel.imgIdx = Math.max(0, Math.min(idx, imgs.length-1));
+  selected.set(p.id, sel);
+}
 function variantKey(id, sel){
   const c = sel?.color || "";
   const s = sel?.size || "";
   return `${id}::${c}::${s}`;
+}
+
+function getImagesFor(p, sel){
+  // Supports:
+  // 1) imagesByColor: {"Gold": [..], "Black": [..]}
+  // 2) images: object map (same as above)
+  // 3) images: array
+  // 4) image: single string
+  const color = sel?.color || null;
+  const byColor = p.imagesByColor || null;
+  if(byColor && color && Array.isArray(byColor[color]) && byColor[color].length){
+    return byColor[color].filter(Boolean);
+  }
+  if(p.images && !Array.isArray(p.images) && typeof p.images === "object"){
+    if(color && Array.isArray(p.images[color]) && p.images[color].length) return p.images[color].filter(Boolean);
+    // fallback: first key
+    const k = Object.keys(p.images)[0];
+    if(k && Array.isArray(p.images[k])) return p.images[k].filter(Boolean);
+  }
+  if(Array.isArray(p.images) && p.images.length) return p.images.filter(Boolean);
+  if(p.image) return [p.image];
+  return [];
+}
+
+function clampIdx(i, n){
+  if(!n) return 0;
+  const x = i % n;
+  return x < 0 ? x + n : x;
+}
+
+function setCardImage(imgEl, p, sel){
+  const imgs = getImagesFor(p, sel);
+  const idx = clampIdx(sel?.imgIdx || 0, imgs.length);
+  if(imgs.length){
+    imgEl.src = imgs[idx];
+  }
 }
 
 
@@ -98,7 +193,7 @@ cart = (cart||[]).map(x=>{
   const id = x?.id;
   const qty = x?.qty ?? 1;
   const key = `${id}::::`;
-  return {key, id, color:null, size:null, qty};
+  return {key, id, color:null, size:null, qty, image:null};
 }); // [{id, qty}]
 
 
@@ -192,9 +287,12 @@ function render(arr){
 
     const isFav = favs.has(p.id);
 
+    const sel = getSel(p);
+    const currentImg = getCurrentImage(p, sel);
+
     card.innerHTML = `
       <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">❤️</button>
-      <img class="pimg" src="${p.image || ""}" alt="${p.name || "product"}" loading="lazy"/>
+      <img class="pimg" src="${currentImg || ""}" alt="${p.name || "product"}" loading="lazy"/>
       <div class="pbody">
         <div class="pname">${p.name || "Nomsiz"}</div>
         <div class="ptags">${(p.tags||[]).map(t=>`#${t}`).join(" ")}</div>
@@ -219,12 +317,30 @@ function render(arr){
     });
 
 
+    const imgEl = card.querySelector(".pimg");
+
+    // Open fullscreen viewer on image click
+    imgEl.addEventListener("click", ()=>{
+      const imgs = getImagesFor(p, getSel(p));
+      if(!imgs.length) return;
+      openImageViewer({
+        title: p.name || "Rasm",
+        images: imgs,
+        startIndex: getSel(p).imgIdx || 0,
+        onSelect: (i)=>{
+          setImageIndex(p, i);
+          setCardImage(imgEl, p, getSel(p));
+        }
+      });
+    });
+
     // Variant option listeners
-    const sel = getSel(p);
     card.querySelectorAll(".swatch").forEach(btn=>{
       btn.addEventListener("click", ()=>{
         sel.color = btn.getAttribute("data-c");
+        sel.imgIdx = 0; // reset to first image for this color
         selected.set(p.id, sel);
+        setCardImage(imgEl, p, sel);
         // update active
         card.querySelectorAll(".swatch").forEach(b=>b.classList.toggle("active", b===btn));
       });
@@ -255,9 +371,16 @@ function render(arr){
 
 function addToCart(id, qty, sel){
   const key = variantKey(id, sel || {color:null,size:null});
+  const p = products.find(x=>x.id===id);
+  const img = p ? getCurrentImage(p, sel || getDefaultSel(p)) : null;
   const item = cart.find(x=>x.key===key);
-  if(item) item.qty += qty;
-  else cart.push({key, id, color: sel?.color || null, size: sel?.size || null, qty});
+  if(item){
+    item.qty += qty;
+    // keep latest selected image for this variant
+    if(img) item.image = img;
+  } else {
+    cart.push({key, id, color: sel?.color || null, size: sel?.size || null, qty, image: img || null});
+  }
   cart = cart.filter(x=>x.qty>0);
   saveLS(LS.cart, cart);
   updateBadges();
@@ -307,6 +430,65 @@ function closePanel(){
 }
 
 
+// ---------- Image viewer (fullscreen gallery) ----------
+function renderViewer(){
+  if(!els.imgViewer || !els.imgViewerImg || !els.imgThumbs) return;
+  const imgs = viewer.images || [];
+  const idx = clampIdx(viewer.idx || 0, imgs.length);
+  viewer.idx = idx;
+  els.imgViewerTitle.textContent = viewer.title || "Rasm";
+
+  els.imgViewerImg.src = imgs[idx] || "";
+
+  // thumbs
+  els.imgThumbs.innerHTML = "";
+  imgs.forEach((src, i)=>{
+    const b = document.createElement("button");
+    b.className = "thumb" + (i===idx ? " active" : "");
+    b.innerHTML = `<img src="${src}" alt="thumb" loading="lazy" />`;
+    b.addEventListener("click", ()=>{
+      viewer.idx = i;
+      renderViewer();
+      viewer.onSelect?.(i);
+    });
+    els.imgThumbs.appendChild(b);
+  });
+
+  const hasNav = imgs.length > 1;
+  if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
+  if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
+}
+
+function openImageViewer({title, images, startIndex=0, onSelect}){
+  if(!els.imgViewer) return;
+  viewer = {
+    open: true,
+    title: title || "Rasm",
+    images: (images||[]).filter(Boolean),
+    idx: startIndex || 0,
+    onSelect: onSelect || null
+  };
+  els.imgViewer.hidden = false;
+  renderViewer();
+  document.body.style.overflow = "hidden";
+}
+
+function closeImageViewer(){
+  if(!els.imgViewer) return;
+  viewer.open = false;
+  els.imgViewer.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function stepViewer(dir){
+  const n = viewer.images?.length || 0;
+  if(n <= 1) return;
+  viewer.idx = clampIdx((viewer.idx||0) + dir, n);
+  renderViewer();
+  viewer.onSelect?.(viewer.idx);
+}
+
+
 function renderVariantLine(ci){
   if(!ci) return "";
   const parts = [];
@@ -341,10 +523,14 @@ function renderPanel(mode){
     const {p, qty} = row;
     if(mode === "cart") total += (p.price||0) * qty;
 
+    const imgSrc = (mode === "cart")
+      ? (row.ci?.image || getCurrentImage(p, {color: row.ci?.color || null, size: row.ci?.size || null, imgIdx: 0}))
+      : getCurrentImage(p, getSel(p));
+
     const item = document.createElement("div");
     item.className = "cartItem";
     item.innerHTML = `
-      <img class="cartImg" src="${p.image||""}" alt="${p.name||"product"}" />
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
       <div class="cartMeta">
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${mode==="cart" ? renderVariantLine(row.ci) : ""}
@@ -510,6 +696,18 @@ els.favViewBtn?.addEventListener("click", ()=> openPanel("fav"));
 els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
+
+// image viewer events
+els.imgViewerClose?.addEventListener("click", closeImageViewer);
+els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
+els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
+els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
+window.addEventListener("keydown", (e)=>{
+  if(!viewer.open) return;
+  if(e.key === "Escape") closeImageViewer();
+  if(e.key === "ArrowLeft") stepViewer(-1);
+  if(e.key === "ArrowRight") stepViewer(+1);
+});
 els.clearBtn?.addEventListener("click", ()=>{
   if(els.panelTitle.textContent.includes("Sevimli")){
     favs = new Set();
