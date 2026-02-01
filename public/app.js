@@ -152,6 +152,8 @@ function enhanceHScroll(el){
 }
 
 let products = [];
+let selectedTag = "all";
+let tagCounts = new Map();
 
 const LS = {
   favs: "om_favs",
@@ -427,6 +429,43 @@ function updateCardPricing(cardEl, p, sel){
   }
 }
 
+
+function buildTagCounts(){
+  tagCounts = new Map();
+  for(const p of products){
+    for(const t of (p.tags || [])){
+      const key = String(t).toLowerCase();
+      tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
+    }
+  }
+}
+
+function titleTag(t){
+  // keep original style: capitalize first letter, keep rest
+  const s = String(t);
+  return s.length ? (s[0].toUpperCase() + s.slice(1)) : s;
+}
+
+function renderTagBar(){
+  if(!els.tagBar) return;
+  const entries = Array.from(tagCounts.entries())
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+
+  const total = products.length;
+  const chips = [];
+  chips.push(`<button class="tagChip ${selectedTag==="all"?"active":""}" data-tag="all">Barchasi <span class="count">${total}</span></button>`);
+  for(const [tag,count] of entries){
+    chips.push(`<button class="tagChip ${selectedTag===tag?"active":""}" data-tag="${tag}">${titleTag(tag)} <span class="count">${count}</span></button>`);
+  }
+  els.tagBar.innerHTML = chips.join("");
+}
+
+function setSelectedTag(tag){
+  selectedTag = tag || "all";
+  renderTagBar();
+  applyFilterSort();
+}
+
 function applyFilterSort(){
   const query = norm(els.q.value);
   let arr = [...products];
@@ -434,6 +473,12 @@ function applyFilterSort(){
   if(viewMode === "fav"){
     arr = arr.filter(p=>favs.has(p.id));
   }
+
+  // tag category filter
+  if(selectedTag && selectedTag !== "all"){
+    arr = arr.filter(p => (p.tags || []).map(t=>String(t).toLowerCase()).includes(selectedTag));
+  }
+
 
   if(query){
     arr = arr.filter(p=>{
@@ -899,6 +944,8 @@ async function loadProducts(){
     _price: minVariantPrice(p),
     _created: Date.parse(p.createdAt ?? "") || 0,
   }));
+  buildTagCounts();
+  renderTagBar();
   applyFilterSort();
 }
 
@@ -984,6 +1031,15 @@ window.addEventListener("tg_auth", async (e)=>{
 
 els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
+
+if(els.tagBar){
+  els.tagBar.addEventListener("click", (e)=>{
+    const btn = e.target.closest("[data-tag]");
+    if(!btn) return;
+    setSelectedTag(btn.dataset.tag);
+  });
+}
+
 
 // panel & views
 // Favorites should open like cart (drawer), not just filter the grid.
