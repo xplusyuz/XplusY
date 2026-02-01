@@ -8,11 +8,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const els = {
-  userName: document.getElementById("userName"),
-  userSmall: document.getElementById("userSmall"),
   avatar: document.getElementById("avatar"),
+  avatarBtn: document.getElementById("avatarBtn"),
+  avatarFallback: document.getElementById("avatarFallback"),
   btnGoogle: document.getElementById("btnGoogle"),
-  btnLogout: document.getElementById("btnLogout"),
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   q: document.getElementById("q"),
@@ -28,6 +27,20 @@ const els = {
 
   overlay: document.getElementById("overlay"),
   sidePanel: document.getElementById("sidePanel"),
+
+  // profile modal
+  profileOverlay: document.getElementById("profileOverlay"),
+  profileClose: document.getElementById("profileClose"),
+  profileEditBtn: document.getElementById("profileEditBtn"),
+  profileSave: document.getElementById("profileSave"),
+  profileLogout: document.getElementById("profileLogout"),
+  profileName: document.getElementById("profileName"),
+  profileUid: document.getElementById("profileUid"),
+  profileAvatar: document.getElementById("profileAvatar"),
+  pfPhone: document.getElementById("pfPhone"),
+  pfRegion: document.getElementById("pfRegion"),
+  pfDistrict: document.getElementById("pfDistrict"),
+  pfPost: document.getElementById("pfPost"),
   panelTitle: document.getElementById("panelTitle"),
   panelClose: document.getElementById("panelClose"),
   panelList: document.getElementById("panelList"),
@@ -898,35 +911,39 @@ async function loadProducts(){
 function setUserUI(user){
   const authCard = els.authCard || document.getElementById("authCard");
 
-  // robust: body class controls CSS hide/show
   document.body.classList.toggle("signed-in", !!user);
 
   if(!user){
     if(authCard) authCard.style.display = "";
-    els.userName.textContent = "Mehmon";
-    els.userSmall.textContent = "Kirish talab qilinadi";
-    els.avatar.src = "";
-    els.avatar.style.visibility = "hidden";
-    els.btnLogout.hidden = true;
+    if(els.avatar) els.avatar.src = "";
+    if(els.avatar) els.avatar.style.visibility = "hidden";
+    if(els.avatarFallback) els.avatarFallback.style.display = "grid";
+    if(els.avatarBtn) els.avatarBtn.disabled = true;
     return;
   }
 
-  // hide login block after sign-in
   if(authCard) authCard.style.display = "none";
 
   const name = user.displayName || user.email || user.phoneNumber || "User";
-  els.userName.textContent = name;
-  els.userSmall.textContent = `UID: ${user.uid.slice(0,8)}…`;
+  const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
   const photo = user.photoURL;
   if(photo){
-    els.avatar.src = photo;
-    els.avatar.style.visibility = "visible";
+    if(els.avatar) els.avatar.src = photo;
+    if(els.avatar) els.avatar.style.visibility = "visible";
+    if(els.avatarFallback) els.avatarFallback.style.display = "none";
   } else {
-    els.avatar.src = "";
-    els.avatar.style.visibility = "hidden";
+    if(els.avatar) els.avatar.src = "";
+    if(els.avatar) els.avatar.style.visibility = "hidden";
+    if(els.avatarFallback){
+      els.avatarFallback.textContent = initial;
+      els.avatarFallback.style.display = "grid";
+    }
   }
-  els.btnLogout.hidden = false;
+  if(els.avatarBtn) els.avatarBtn.disabled = false;
+
+  // keep profile modal header in sync
+  if(window.__omProfile) window.__omProfile.syncUser(user);
 }
 
 els.btnGoogle.addEventListener("click", async ()=>{
@@ -939,7 +956,7 @@ els.btnGoogle.addEventListener("click", async ()=>{
   }
 });
 
-els.btnLogout.addEventListener("click", async ()=>{ await signOut(auth); });
+els.profileLogout.addEventListener("click", async ()=>{ await signOut(auth); });
 
 window.addEventListener("tg_auth", async (e)=>{
   const tgUser = e.detail;
@@ -1051,6 +1068,223 @@ els.checkoutBtn?.addEventListener("click", ()=>{
   // Try open Telegram share (works if user has TG installed or web)
   window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
 });
+
+
+/* =========================
+   Profile modal (one-time fill + pencil edit)
+========================= */
+function profileStorageKey(uid){ return `om_profile_v1_${uid}`; }
+
+function safeJSONParse(s){
+  try{ return JSON.parse(s); } catch(e){ return null; }
+}
+
+async function loadRegionData(){
+  try{
+    const res = await fetch("./region.json?v=1", { cache: "no-store" });
+    if(!res.ok) throw new Error("region.json fetch failed");
+    return await res.json();
+  }catch(e){
+    console.warn("region.json load error", e);
+    return { regions: [] };
+  }
+}
+
+function setSelectOptions(sel, items, placeholder){
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = placeholder;
+  sel.appendChild(ph);
+  for(const it of items){
+    const opt = document.createElement("option");
+    opt.value = it;
+    opt.textContent = it;
+    sel.appendChild(opt);
+  }
+}
+
+function setFieldsDisabled(disabled){
+  if(els.pfPhone) els.pfPhone.disabled = disabled;
+  if(els.pfRegion) els.pfRegion.disabled = disabled;
+  if(els.pfDistrict) els.pfDistrict.disabled = disabled;
+  if(els.pfPost) els.pfPost.disabled = disabled;
+  if(els.profileSave) els.profileSave.hidden = disabled;
+}
+
+function openProfile(){
+  if(!els.profileOverlay) return;
+  els.profileOverlay.hidden = false;
+  document.body.classList.add("modal-open");
+}
+function closeProfile(){
+  if(!els.profileOverlay) return;
+  els.profileOverlay.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+window.__omProfile = (function(){
+  let regionData = null;
+  let currentUser = null;
+  let isCompleted = false;
+
+  function readProfile(uid){
+    const raw = localStorage.getItem(profileStorageKey(uid));
+    const obj = raw ? safeJSONParse(raw) : null;
+    return obj && typeof obj === "object" ? obj : null;
+  }
+
+  function writeProfile(uid, data){
+    localStorage.setItem(profileStorageKey(uid), JSON.stringify(data));
+  }
+
+  function computePhone(user){
+    const p1 = user?.phoneNumber || "";
+    const p2 = (user?.providerData || []).map(x=>x?.phoneNumber).find(Boolean) || "";
+    return p1 || p2 || "";
+  }
+
+  function renderHeader(user){
+    const name = user?.displayName || user?.email || user?.phoneNumber || "User";
+    const initial = (name || "U").trim().slice(0,1).toUpperCase();
+
+    if(els.profileName) els.profileName.textContent = name;
+    if(els.profileUid) els.profileUid.textContent = `UID: ${user.uid}`;
+
+    if(els.profileAvatar){
+      const photo = user.photoURL;
+      if(photo){
+        els.profileAvatar.innerHTML = `<img src="${photo}" alt="avatar" />`;
+      } else {
+        els.profileAvatar.textContent = initial;
+      }
+    }
+  }
+
+  function populateDistricts(regionName, selectedDistrict){
+    const region = (regionData?.regions || []).find(r=>r.name===regionName);
+    const districts = region ? region.districts.map(d=>d.name) : [];
+    setSelectOptions(els.pfDistrict, districts, "Tumanni tanlang");
+    if(selectedDistrict) els.pfDistrict.value = selectedDistrict;
+    populatePosts(regionName, selectedDistrict, null);
+  }
+
+  function populatePosts(regionName, districtName, selectedPost){
+    const region = (regionData?.regions || []).find(r=>r.name===regionName);
+    const district = region ? region.districts.find(d=>d.name===districtName) : null;
+    const posts = district ? (district.posts || []) : [];
+    setSelectOptions(els.pfPost, posts, "Pochta indeks");
+    if(selectedPost) els.pfPost.value = selectedPost;
+  }
+
+  async function ensureRegionLoaded(){
+    if(regionData) return regionData;
+    regionData = await loadRegionData();
+    const regions = (regionData.regions || []).map(r=>r.name);
+    setSelectOptions(els.pfRegion, regions, "Viloyatni tanlang");
+    setSelectOptions(els.pfDistrict, [], "Tumanni tanlang");
+    setSelectOptions(els.pfPost, [], "Pochta indeks");
+    return regionData;
+  }
+
+  async function syncUser(user){
+    currentUser = user || null;
+    if(!user) return;
+
+    await ensureRegionLoaded();
+    renderHeader(user);
+
+    const saved = readProfile(user.uid);
+    isCompleted = !!saved?.completedAt;
+
+    // phone: auto fill from auth only if empty or first time
+    const autoPhone = computePhone(user);
+    if(els.pfPhone){
+      els.pfPhone.value = saved?.phone || autoPhone || "";
+      // If saved exists but phone empty, still keep autoPhone visible (user can edit only via pencil)
+    }
+
+    if(els.pfRegion){
+      els.pfRegion.value = saved?.region || "";
+      populateDistricts(saved?.region || "", saved?.district || "");
+      if(els.pfPost) els.pfPost.value = saved?.post || "";
+    }
+
+    // lock after first save
+    setFieldsDisabled(isCompleted);
+  }
+
+  async function open(){
+    if(!currentUser) return;
+    await syncUser(currentUser);
+    openProfile();
+  }
+
+  function enableEdit(){
+    // allow editing only when completed; if not completed, already editable
+    setFieldsDisabled(false);
+    isCompleted = false; // but keep completedAt in storage until saved again
+  }
+
+  function save(){
+    if(!currentUser) return;
+    const phone = (els.pfPhone?.value || "").trim();
+    const region = els.pfRegion?.value || "";
+    const district = els.pfDistrict?.value || "";
+    const post = els.pfPost?.value || "";
+
+    if(!region || !district || !post){
+      alert("Iltimos, viloyat, tuman va pochta indeksini tanlang.");
+      return;
+    }
+
+    const payload = {
+      phone,
+      region,
+      district,
+      post,
+      completedAt: new Date().toISOString()
+    };
+
+    writeProfile(currentUser.uid, payload);
+    isCompleted = true;
+    setFieldsDisabled(true);
+    closeProfile();
+  }
+
+  // wire events
+  if(els.avatarBtn){
+    els.avatarBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      if(document.body.classList.contains("signed-in")) open();
+    });
+  }
+  if(els.profileClose) els.profileClose.addEventListener("click", closeProfile);
+  if(els.profileOverlay){
+    els.profileOverlay.addEventListener("click", (e)=>{
+      if(e.target === els.profileOverlay) closeProfile();
+    });
+  }
+  document.addEventListener("keydown", (e)=>{
+    if(e.key==="Escape" && els.profileOverlay && !els.profileOverlay.hidden) closeProfile();
+  });
+
+  if(els.profileEditBtn) els.profileEditBtn.addEventListener("click", ()=>{
+    enableEdit();
+  });
+
+  if(els.profileSave) els.profileSave.addEventListener("click", save);
+
+  // region change
+  if(els.pfRegion) els.pfRegion.addEventListener("change", ()=>{
+    populateDistricts(els.pfRegion.value, "");
+  });
+  if(els.pfDistrict) els.pfDistrict.addEventListener("change", ()=>{
+    populatePosts(els.pfRegion.value, els.pfDistrict.value, "");
+  });
+
+  return { open, syncUser };
+})();
 
 onAuthStateChanged(auth, (user)=> setUserUI(user));
 
