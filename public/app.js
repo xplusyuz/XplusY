@@ -637,6 +637,7 @@ function render(arr){
           setImageIndex(p, i);
           setCardImage(imgEl, p, getSel(p));
         }
+      });
     };
 
     // Open fullscreen viewer on image click
@@ -651,7 +652,6 @@ function render(arr){
       if(t.closest(".favBtn")) return;
       if(t.closest('[data-act="cart"]')) return;
       openQuickView();
-    });
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
