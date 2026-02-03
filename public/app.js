@@ -77,13 +77,23 @@ const els = {
   viewerCart: document.getElementById("viewerCart"),
   viewerBuy: document.getElementById("viewerBuy"),
 
-  ,
-  // variant picker modal
-  variantOverlay: document.getElementById("variantOverlay"),
-  variantClose: document.getElementById("variantClose"),
-  variantAdd: document.getElementById("variantAdd"),
-  variantBody: document.getElementById("variantBody"),
-  variantHint: document.getElementById("variantHint")
+  // variant modal (add to cart)
+  vOverlay: document.getElementById("vOverlay"),
+  vClose: document.getElementById("vClose"),
+  vCancel: document.getElementById("vCancel"),
+  vConfirm: document.getElementById("vConfirm"),
+  vImg: document.getElementById("vImg"),
+  vName: document.getElementById("vName"),
+  vPrice: document.getElementById("vPrice"),
+  vColors: document.getElementById("vColors"),
+  vColorRow: document.getElementById("vColorRow"),
+  vColorHint: document.getElementById("vColorHint"),
+  vSizes: document.getElementById("vSizes"),
+  vSizeRow: document.getElementById("vSizeRow"),
+  vSizeHint: document.getElementById("vSizeHint"),
+  vMinus: document.getElementById("vMinus"),
+  vPlus: document.getElementById("vPlus"),
+  vQty: document.getElementById("vQty"),
 };// === Desktop horizontal scroll helpers (PC: wheel + drag) ===
 const isFinePointer = () => window.matchMedia && window.matchMedia("(pointer:fine)").matches;
 
@@ -619,204 +629,17 @@ function render(arr){
       });
     });
 
-    // Variant option listeners
-    card.querySelectorAll(".swatch").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        sel.color = btn.getAttribute("data-c");
-        sel.imgIdx = 0; // reset to first image for this color
-        selected.set(p.id, sel);
-        setCardImage(imgEl, p, sel);
-        // update active
-        card.querySelectorAll(".swatch").forEach(b=>b.classList.toggle("active", b===btn));
-        updateCardPricing(card, p, sel);
-      });
-    });
-    card.querySelectorAll(".sizeChip").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        sel.size = btn.getAttribute("data-s");
-        selected.set(p.id, sel);
-        card.querySelectorAll(".sizeChip").forEach(b=>b.classList.toggle("active", b===btn));
-        updateCardPricing(card, p, sel);
-      });
-    });
-
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
-      handleAddToCartFromCard(p);
+      handleAddToCart(p, { openCartAfter: true });
     });
 
     els.grid.appendChild(card);
+
+    // (variant selection is now handled in the modal on Add to Cart)
+
   }
 }
 
-
-
-function needsVariantPicker(p){
-  const colors = normColors(p);
-  const sizes = normSizes(p);
-  // If there are 0 options, no picker. If an option group has exactly 1 value, we can auto-select it.
-  const needColor = colors.length > 1;
-  const needSize  = sizes.length > 1;
-  // If one group exists with 1 value and the other group doesn't exist, no picker.
-  return (needColor || needSize);
-}
-
-function getAutoSel(p){
-  const colors = normColors(p);
-  const sizes = normSizes(p);
-  const sel = { color: null, size: null };
-  if(colors.length === 1) sel.color = colors[0].name;
-  if(sizes.length === 1) sel.size = sizes[0];
-  return sel;
-}
-
-let variantCtx = { open:false, product:null, sel:{color:null,size:null}, qty:1 };
-
-function openVariantPicker(p){
-  const firstOpen = (!variantCtx.open) || (variantCtx.product && variantCtx.product.id !== p.id);
-  variantCtx.open = true;
-  variantCtx.product = p;
-  if(firstOpen) variantCtx.qty = 1;
-
-  // base selection: previously chosen or auto
-  const prev = getSel(p);
-  const auto = getAutoSel(p);
-  variantCtx.sel = { color: prev.color || auto.color || null, size: prev.size || auto.size || null };
-
-  const colors = normColors(p);
-  const sizes  = normSizes(p);
-
-  // Build UI
-  const curPrice = getVariantPricing(p, variantCtx.sel).price || 0;
-  const img = getCurrentImage(p, variantCtx.sel) || (p.images && p.images[0]) || "";
-
-  const colorHtml = colors.length ? `
-    <div class="vsec">
-      <div class="vlabel">Rang</div>
-      <div class="vswatchRow">
-        ${colors.map(c=>{
-          const active = (variantCtx.sel.color === c.name) ? "active" : "";
-          const style = c.hex ? `style="--c:${c.hex}"` : "";
-          return `<button class="vswatch ${active}" ${style} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
-        }).join("")}
-      </div>
-      <div class="vmini">${variantCtx.sel.color ? escapeHtml(variantCtx.sel.color) : "Tanlanmagan"}</div>
-    </div>` : "";
-
-  const sizeHtml = sizes.length ? `
-    <div class="vsec">
-      <div class="vlabel">Razmer</div>
-      <div class="vsizeRow">
-        ${sizes.map(s=>{
-          const active = (variantCtx.sel.size === s) ? "active" : "";
-          return `<button class="vsize ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
-        }).join("")}
-      </div>
-      <div class="vmini">${variantCtx.sel.size ? escapeHtml(variantCtx.sel.size) : "Tanlanmagan"}</div>
-    </div>` : "";
-
-  els.variantBody.innerHTML = `
-    <div class="vhead">
-      <img class="vthumb" src="${img}" alt="${escapeHtml(p.name||"")}" />
-      <div class="vheadMeta">
-        <div class="vname clamp2">${escapeHtml(p.name||"")}</div>
-        <div class="vprice">${moneyUZS(curPrice)}</div>
-      </div>
-    </div>
-    ${colorHtml}
-    ${sizeHtml}
-    <div class="vsec">
-      <div class="vlabel">Miqdor</div>
-      <div class="vqty">
-        <button class="qtyBtn" data-q="-">−</button>
-        <div class="qtyVal" id="variantQtyVal">${variantCtx.qty}</div>
-        <button class="qtyBtn" data-q="+">+</button>
-      </div>
-    </div>
-  `;
-
-  // Update CTA label
-  els.variantAdd.innerHTML = `Savatchaga qo'shish • <span>${moneyUZS(curPrice)}</span>`;
-
-  // Wire
-  els.variantBody.querySelectorAll(".vswatch").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      variantCtx.sel.color = btn.getAttribute("data-c");
-      // if color changes, keep size as is; update preview price/image
-      setSel(p, variantCtx.sel);
-      openVariantPicker(p); // re-render (simple & reliable)
-    });
-  });
-  els.variantBody.querySelectorAll(".vsize").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      variantCtx.sel.size = btn.getAttribute("data-s");
-      setSel(p, variantCtx.sel);
-      openVariantPicker(p);
-    });
-  });
-  els.variantBody.querySelectorAll(".qtyBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const dir = btn.getAttribute("data-q");
-      variantCtx.qty = Math.max(1, variantCtx.qty + (dir==="+" ? 1 : -1));
-      const qEl = document.getElementById("variantQtyVal");
-      if(qEl) qEl.textContent = String(variantCtx.qty);
-    });
-  });
-
-  // Validate notice
-  const needColor = colors.length > 0 && colors.length > 1;
-  const needSize  = sizes.length  > 0 && sizes.length  > 1;
-  const ok = (!needColor || !!variantCtx.sel.color) && (!needSize || !!variantCtx.sel.size);
-  els.variantHint.textContent = ok ? "" : "Iltimos, variantlarni tanlang (rang/razmer).";
-
-  // Show modal
-  els.variantOverlay.hidden = false;
-  document.body.classList.add("modalOpen");
-}
-
-function closeVariantPicker(){
-  variantCtx.open = false;
-  els.variantOverlay.hidden = true;
-  document.body.classList.remove("modalOpen");
-}
-
-function confirmVariantPicker(){
-  const p = variantCtx.product;
-  if(!p) return;
-
-  const colors = normColors(p);
-  const sizes  = normSizes(p);
-
-  const needColor = colors.length > 1;
-  const needSize  = sizes.length > 1;
-
-  if(needColor && !variantCtx.sel.color){
-    toast("Iltimos, rangni tanlang");
-    return;
-  }
-  if(needSize && !variantCtx.sel.size){
-    toast("Iltimos, razmerni tanlang");
-    return;
-  }
-
-  // Persist selection
-  setSel(p, variantCtx.sel);
-
-  addToCart(p.id, variantCtx.qty, variantCtx.sel);
-  closeVariantPicker();
-  openPanel("cart");
-}
-
-function handleAddToCartFromCard(p){
-  if(!p) return;
-  if(needsVariantPicker(p)){
-    openVariantPicker(p);
-    return;
-  }
-  // No picker needed -> auto selection (single option) or none
-  const sel = {...getAutoSel(p), ...getSel(p)};
-  addToCart(p.id, 1, sel);
-  openPanel("cart");
-}
 
 function addToCart(id, qty, sel){
   const key = variantKey(id, sel || {color:null,size:null});
@@ -833,6 +656,125 @@ function addToCart(id, qty, sel){
   cart = cart.filter(x=>x.qty>0);
   saveLS(LS.cart, cart);
   updateBadges();
+}
+
+// ---------- World-class variant selection (opened from Add to Cart) ----------
+const vState = { open:false, product:null, qty:1, sel:{color:null,size:null}, openCartAfter:false };
+
+function productNeedsVariantModal(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  return (colors.length > 1) || (sizes.length > 1);
+}
+
+function normalizeSelectionForProduct(p, baseSel){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = { ...(baseSel || {}) };
+  if(!sel.color && colors.length === 1) sel.color = colors[0].name;
+  if(!sel.size && sizes.length === 1) sel.size = sizes[0];
+  return { color: sel.color || null, size: sel.size || null };
+}
+
+function handleAddToCart(p, opts={}){
+  const openCartAfter = !!opts.openCartAfter;
+  if(!productNeedsVariantModal(p)){
+    const sel = normalizeSelectionForProduct(p, getSel(p));
+    addToCart(p.id, 1, sel);
+    updateBadges();
+    if(openCartAfter) openPanel("cart");
+    return;
+  }
+  openVariantModal(p, { openCartAfter });
+}
+
+function openVariantModal(p, opts={}){
+  if(!els.vOverlay) return;
+  vState.open = true;
+  vState.product = p;
+  vState.openCartAfter = !!opts.openCartAfter;
+  vState.qty = 1;
+  vState.sel = normalizeSelectionForProduct(p, getSel(p));
+  renderVariantModal();
+  els.vOverlay.hidden = false;
+  document.body.classList.add("modalOpen");
+}
+
+function closeVariantModal(){
+  if(!els.vOverlay) return;
+  vState.open = false;
+  vState.product = null;
+  els.vOverlay.hidden = true;
+  document.body.classList.remove("modalOpen");
+}
+
+function renderVariantModal(){
+  const p = vState.product;
+  if(!p) return;
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = vState.sel || {color:null,size:null};
+
+  if(els.vName) els.vName.textContent = p.name || "—";
+  const pricing = getVariantPricing(p, sel);
+  if(els.vPrice) els.vPrice.textContent = moneyUZS(pricing.price || 0);
+  if(els.vQty) els.vQty.textContent = String(vState.qty || 1);
+  if(els.vImg){
+    const img = getCurrentImage(p, sel) || getCurrentImage(p, getDefaultSel(p)) || "";
+    els.vImg.src = img;
+  }
+
+  const showColors = colors.length > 0;
+  if(els.vColors) els.vColors.hidden = !showColors;
+  if(els.vColorRow) els.vColorRow.innerHTML = showColors ? colors.map(c=>{
+    const active = sel.color === c.name ? "active" : "";
+    const bg = c.hex ? `style="background:${c.hex};"` : "";
+    return `<button class="vSwatch ${active}" ${bg} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
+  }).join("") : "";
+
+  const showSizes = sizes.length > 0;
+  if(els.vSizes) els.vSizes.hidden = !showSizes;
+  if(els.vSizeRow) els.vSizeRow.innerHTML = showSizes ? sizes.map(s=>{
+    const active = sel.size === s ? "active" : "";
+    return `<button class="vChip ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
+  }).join("") : "";
+
+  if(els.vColorHint) els.vColorHint.hidden = true;
+  if(els.vSizeHint) els.vSizeHint.hidden = true;
+
+  els.vColorRow?.querySelectorAll(".vSwatch").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      vState.sel.color = btn.getAttribute("data-c");
+      // keep selection for future image viewer usage
+      const now = getSel(p);
+      now.color = vState.sel.color;
+      now.imgIdx = 0;
+      selected.set(p.id, now);
+      renderVariantModal();
+    });
+  });
+  els.vSizeRow?.querySelectorAll(".vChip").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      vState.sel.size = btn.getAttribute("data-s");
+      const now = getSel(p);
+      now.size = vState.sel.size;
+      selected.set(p.id, now);
+      renderVariantModal();
+    });
+  });
+}
+
+function validateVariantSelection(){
+  const p = vState.product;
+  if(!p) return false;
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = normalizeSelectionForProduct(p, vState.sel);
+  vState.sel = sel;
+  let ok = true;
+  if(colors.length > 0 && !sel.color){ ok = false; if(els.vColorHint) els.vColorHint.hidden = false; }
+  if(sizes.length > 0 && !sel.size){ ok = false; if(els.vSizeHint) els.vSizeHint.hidden = false; }
+  return ok;
 }
 
 function cartCount(){
@@ -1220,15 +1162,30 @@ els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
 
-
-// variant picker events
-els.variantClose?.addEventListener("click", closeVariantPicker);
-els.variantAdd?.addEventListener("click", confirmVariantPicker);
-els.variantOverlay?.addEventListener("click", (e)=>{
-  if(e.target === els.variantOverlay) closeVariantPicker();
+// variant modal events
+els.vClose?.addEventListener("click", closeVariantModal);
+els.vCancel?.addEventListener("click", closeVariantModal);
+els.vOverlay?.addEventListener("click", (e)=>{
+  // click on the dim area closes; click inside card does not
+  if(e.target === els.vOverlay) closeVariantModal();
 });
-document.addEventListener("keydown", (e)=>{
-  if(e.key==="Escape" && els.variantOverlay && !els.variantOverlay.hidden) closeVariantPicker();
+els.vMinus?.addEventListener("click", ()=>{
+  vState.qty = Math.max(1, (vState.qty||1) - 1);
+  if(els.vQty) els.vQty.textContent = String(vState.qty);
+});
+els.vPlus?.addEventListener("click", ()=>{
+  vState.qty = Math.min(99, (vState.qty||1) + 1);
+  if(els.vQty) els.vQty.textContent = String(vState.qty);
+});
+els.vConfirm?.addEventListener("click", ()=>{
+  const p = vState.product;
+  if(!p) return;
+  if(!validateVariantSelection()) return;
+  const sel = normalizeSelectionForProduct(p, vState.sel);
+  addToCart(p.id, vState.qty || 1, sel);
+  updateBadges();
+  closeVariantModal();
+  if(vState.openCartAfter) openPanel("cart");
 });
 
 // image viewer events
@@ -1253,18 +1210,18 @@ els.revSend?.addEventListener("click", ()=>{
 els.viewerCart?.addEventListener("click", ()=>{
   const p = products.find(x=>x.id===viewer.productId);
   if(!p) return;
-  addToCart(p.id, 1, getSel(p));
-  updateBadges();
-  openPanel("cart");
+  handleAddToCart(p, { openCartAfter: true });
 });
 els.viewerBuy?.addEventListener("click", ()=>{
   const p = products.find(x=>x.id===viewer.productId);
   if(!p) return;
-  addToCart(p.id, 1, getSel(p));
-  updateBadges();
-  openPanel("cart");
+  handleAddToCart(p, { openCartAfter: true });
 });
 window.addEventListener("keydown", (e)=>{
+  if(vState.open && e.key === "Escape"){
+    closeVariantModal();
+    return;
+  }
   if(!viewer.open) return;
   if(e.key === "Escape") closeImageViewer();
   if(e.key === "ArrowLeft") stepViewer(-1);
