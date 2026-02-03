@@ -59,6 +59,11 @@ const els = {
   imgViewerTitle: document.getElementById("imgViewerTitle"),
   imgViewerName: document.getElementById("imgViewerName"),
   imgViewerDesc: document.getElementById("imgViewerDesc"),
+  qvPrice: document.getElementById("qvPrice"),
+  qvOldPrice: document.getElementById("qvOldPrice"),
+  qvRating: document.getElementById("qvRating"),
+  qvTags: document.getElementById("qvTags"),
+  qvBadge: document.getElementById("qvBadge"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
   imgPrev: document.getElementById("imgPrev"),
@@ -621,6 +626,11 @@ function render(arr){
         productId: p.id,
         title: p.name || "Rasm",
         desc: p.description || p.desc || "",
+        pricing: getVariantPricing(p, getSel(p)),
+        rating: Number(p.rating || 0),
+        reviewsCount: Number(p.reviewsCount || 0),
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        badge: p.badge || "",
         images: imgs,
         startIndex: getSel(p).imgIdx || 0,
         onSelect: (i)=>{
@@ -635,12 +645,11 @@ function render(arr){
       openQuickView();
     });
 
-    // Open quick view when clicking anywhere on the card (except buttons)
+    // Open quick view when clicking anywhere on the card (except fav/cart)
     card.addEventListener("click", (e)=>{
       const t = e.target;
       if(t.closest(".favBtn")) return;
       if(t.closest('[data-act="cart"]')) return;
-      if(t.closest("button, a, input, select, textarea, label")) return;
       openQuickView();
     });
     });
@@ -843,9 +852,35 @@ function renderViewer(){
   const imgs = viewer.images || [];
   const idx = clampIdx(viewer.idx || 0, imgs.length);
   viewer.idx = idx;
-  // Top line: full product name (same style as old description)
+  // Header title
   if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
-  // Description block below thumbs
+
+  // Price + meta (optional)
+  const pr = viewer.pricing || null;
+  if(els.qvPrice) els.qvPrice.textContent = pr ? moneyUZS(pr.price||0) : "";
+  if(els.qvOldPrice){
+    const op = pr ? (pr.oldPrice||0) : 0;
+    els.qvOldPrice.textContent = op ? moneyUZS(op) : "";
+    els.qvOldPrice.style.display = op ? "" : "none";
+  }
+  if(els.qvRating){
+    const r = Number(viewer.rating||0);
+    const c = Number(viewer.reviewsCount||0);
+    els.qvRating.textContent = (r||c) ? `⭐ ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
+    els.qvRating.style.display = (r||c) ? "" : "none";
+  }
+  if(els.qvBadge){
+    const b = (viewer.badge||"").toString().trim();
+    els.qvBadge.textContent = b;
+    els.qvBadge.style.display = b ? "" : "none";
+  }
+  if(els.qvTags){
+    const tagsArr = Array.isArray(viewer.tags) ? viewer.tags : [];
+    els.qvTags.innerHTML = tagsArr.slice(0,12).map(t=>`<span class="qvTag">${escapeHtml(String(t))}</span>`).join("");
+    els.qvTags.style.display = tagsArr.length ? "" : "none";
+  }
+
+  // Description
   if(els.imgViewerDesc) els.imgViewerDesc.textContent = viewer.desc || "";
 
   els.imgViewerImg.src = imgs[idx] || "";
@@ -870,13 +905,18 @@ function renderViewer(){
   renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({productId, title, desc, images, startIndex=0, onSelect}){
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
     productId: productId || null,
     title: title || "Rasm",
     desc: desc || "",
+    pricing: pricing || null,
+    rating: Number.isFinite(+rating) ? +rating : 0,
+    reviewsCount: Number.isFinite(+reviewsCount) ? +reviewsCount : 0,
+    tags: Array.isArray(tags) ? tags : [],
+    badge: badge || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
     onSelect: onSelect || null
