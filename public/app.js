@@ -76,6 +76,14 @@ const els = {
   // viewer actions
   viewerCart: document.getElementById("viewerCart"),
   viewerBuy: document.getElementById("viewerBuy"),
+
+  ,
+  // variant picker modal
+  variantOverlay: document.getElementById("variantOverlay"),
+  variantClose: document.getElementById("variantClose"),
+  variantAdd: document.getElementById("variantAdd"),
+  variantBody: document.getElementById("variantBody"),
+  variantHint: document.getElementById("variantHint")
 };// === Desktop horizontal scroll helpers (PC: wheel + drag) ===
 const isFinePointer = () => window.matchMedia && window.matchMedia("(pointer:fine)").matches;
 
@@ -566,8 +574,6 @@ function render(arr){
 
         
 
-        ${renderOptions(p)}
-
         <div class="pactions">
           <div class="pratingInline">${(showAvg ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
@@ -635,18 +641,182 @@ function render(arr){
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
-      addToCart(p.id, 1, getSel(p));
-      openPanel("cart");
+      handleAddToCartFromCard(p);
     });
 
     els.grid.appendChild(card);
-
-    // PC scroll: make option rows smooth with wheel+drag
-    card.querySelectorAll('.optLine').forEach(enhanceHScroll);
-
   }
 }
 
+
+
+function needsVariantPicker(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  // If there are 0 options, no picker. If an option group has exactly 1 value, we can auto-select it.
+  const needColor = colors.length > 1;
+  const needSize  = sizes.length > 1;
+  // If one group exists with 1 value and the other group doesn't exist, no picker.
+  return (needColor || needSize);
+}
+
+function getAutoSel(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = { color: null, size: null };
+  if(colors.length === 1) sel.color = colors[0].name;
+  if(sizes.length === 1) sel.size = sizes[0];
+  return sel;
+}
+
+let variantCtx = { open:false, product:null, sel:{color:null,size:null}, qty:1 };
+
+function openVariantPicker(p){
+  const firstOpen = (!variantCtx.open) || (variantCtx.product && variantCtx.product.id !== p.id);
+  variantCtx.open = true;
+  variantCtx.product = p;
+  if(firstOpen) variantCtx.qty = 1;
+
+  // base selection: previously chosen or auto
+  const prev = getSel(p);
+  const auto = getAutoSel(p);
+  variantCtx.sel = { color: prev.color || auto.color || null, size: prev.size || auto.size || null };
+
+  const colors = normColors(p);
+  const sizes  = normSizes(p);
+
+  // Build UI
+  const curPrice = getVariantPricing(p, variantCtx.sel).price || 0;
+  const img = getCurrentImage(p, variantCtx.sel) || (p.images && p.images[0]) || "";
+
+  const colorHtml = colors.length ? `
+    <div class="vsec">
+      <div class="vlabel">Rang</div>
+      <div class="vswatchRow">
+        ${colors.map(c=>{
+          const active = (variantCtx.sel.color === c.name) ? "active" : "";
+          const style = c.hex ? `style="--c:${c.hex}"` : "";
+          return `<button class="vswatch ${active}" ${style} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
+        }).join("")}
+      </div>
+      <div class="vmini">${variantCtx.sel.color ? escapeHtml(variantCtx.sel.color) : "Tanlanmagan"}</div>
+    </div>` : "";
+
+  const sizeHtml = sizes.length ? `
+    <div class="vsec">
+      <div class="vlabel">Razmer</div>
+      <div class="vsizeRow">
+        ${sizes.map(s=>{
+          const active = (variantCtx.sel.size === s) ? "active" : "";
+          return `<button class="vsize ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
+        }).join("")}
+      </div>
+      <div class="vmini">${variantCtx.sel.size ? escapeHtml(variantCtx.sel.size) : "Tanlanmagan"}</div>
+    </div>` : "";
+
+  els.variantBody.innerHTML = `
+    <div class="vhead">
+      <img class="vthumb" src="${img}" alt="${escapeHtml(p.name||"")}" />
+      <div class="vheadMeta">
+        <div class="vname clamp2">${escapeHtml(p.name||"")}</div>
+        <div class="vprice">${moneyUZS(curPrice)}</div>
+      </div>
+    </div>
+    ${colorHtml}
+    ${sizeHtml}
+    <div class="vsec">
+      <div class="vlabel">Miqdor</div>
+      <div class="vqty">
+        <button class="qtyBtn" data-q="-">−</button>
+        <div class="qtyVal" id="variantQtyVal">${variantCtx.qty}</div>
+        <button class="qtyBtn" data-q="+">+</button>
+      </div>
+    </div>
+  `;
+
+  // Update CTA label
+  els.variantAdd.innerHTML = `Savatchaga qo'shish • <span>${moneyUZS(curPrice)}</span>`;
+
+  // Wire
+  els.variantBody.querySelectorAll(".vswatch").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      variantCtx.sel.color = btn.getAttribute("data-c");
+      // if color changes, keep size as is; update preview price/image
+      setSel(p, variantCtx.sel);
+      openVariantPicker(p); // re-render (simple & reliable)
+    });
+  });
+  els.variantBody.querySelectorAll(".vsize").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      variantCtx.sel.size = btn.getAttribute("data-s");
+      setSel(p, variantCtx.sel);
+      openVariantPicker(p);
+    });
+  });
+  els.variantBody.querySelectorAll(".qtyBtn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const dir = btn.getAttribute("data-q");
+      variantCtx.qty = Math.max(1, variantCtx.qty + (dir==="+" ? 1 : -1));
+      const qEl = document.getElementById("variantQtyVal");
+      if(qEl) qEl.textContent = String(variantCtx.qty);
+    });
+  });
+
+  // Validate notice
+  const needColor = colors.length > 0 && colors.length > 1;
+  const needSize  = sizes.length  > 0 && sizes.length  > 1;
+  const ok = (!needColor || !!variantCtx.sel.color) && (!needSize || !!variantCtx.sel.size);
+  els.variantHint.textContent = ok ? "" : "Iltimos, variantlarni tanlang (rang/razmer).";
+
+  // Show modal
+  els.variantOverlay.hidden = false;
+  document.body.classList.add("modalOpen");
+}
+
+function closeVariantPicker(){
+  variantCtx.open = false;
+  els.variantOverlay.hidden = true;
+  document.body.classList.remove("modalOpen");
+}
+
+function confirmVariantPicker(){
+  const p = variantCtx.product;
+  if(!p) return;
+
+  const colors = normColors(p);
+  const sizes  = normSizes(p);
+
+  const needColor = colors.length > 1;
+  const needSize  = sizes.length > 1;
+
+  if(needColor && !variantCtx.sel.color){
+    toast("Iltimos, rangni tanlang");
+    return;
+  }
+  if(needSize && !variantCtx.sel.size){
+    toast("Iltimos, razmerni tanlang");
+    return;
+  }
+
+  // Persist selection
+  setSel(p, variantCtx.sel);
+
+  addToCart(p.id, variantCtx.qty, variantCtx.sel);
+  closeVariantPicker();
+  openPanel("cart");
+}
+
+function handleAddToCartFromCard(p){
+  if(!p) return;
+  if(needsVariantPicker(p)){
+    openVariantPicker(p);
+    return;
+  }
+  // No picker needed -> auto selection (single option) or none
+  const sel = {...getAutoSel(p), ...getSel(p)};
+  addToCart(p.id, 1, sel);
+  openPanel("cart");
+}
 
 function addToCart(id, qty, sel){
   const key = variantKey(id, sel || {color:null,size:null});
@@ -1049,6 +1219,17 @@ els.favViewBtn?.addEventListener("click", ()=> openPanel("fav"));
 els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
+
+
+// variant picker events
+els.variantClose?.addEventListener("click", closeVariantPicker);
+els.variantAdd?.addEventListener("click", confirmVariantPicker);
+els.variantOverlay?.addEventListener("click", (e)=>{
+  if(e.target === els.variantOverlay) closeVariantPicker();
+});
+document.addEventListener("keydown", (e)=>{
+  if(e.key==="Escape" && els.variantOverlay && !els.variantOverlay.hidden) closeVariantPicker();
+});
 
 // image viewer events
 els.imgViewerClose?.addEventListener("click", closeImageViewer);
