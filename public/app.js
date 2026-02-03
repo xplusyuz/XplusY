@@ -614,8 +614,7 @@ function render(arr){
 
     const imgEl = card.querySelector(".pimg");
 
-    // Open fullscreen viewer on image click
-    imgEl.addEventListener("click", ()=>{
+    const openQuickView = ()=>{
       const imgs = getImagesFor(p, getSel(p));
       if(!imgs.length) return;
       openImageViewer({
@@ -628,7 +627,22 @@ function render(arr){
           setImageIndex(p, i);
           setCardImage(imgEl, p, getSel(p));
         }
-      });
+    };
+
+    // Open fullscreen viewer on image click
+    imgEl.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openQuickView();
+    });
+
+    // Open quick view when clicking anywhere on the card (except buttons)
+    card.addEventListener("click", (e)=>{
+      const t = e.target;
+      if(t.closest(".favBtn")) return;
+      if(t.closest('[data-act="cart"]')) return;
+      if(t.closest("button, a, input, select, textarea, label")) return;
+      openQuickView();
+    });
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
