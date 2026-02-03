@@ -93,8 +93,10 @@ const els = {
   vSizeHint: document.getElementById("vSizeHint"),
   vMinus: document.getElementById("vMinus"),
   vPlus: document.getElementById("vPlus"),
-  vQty: document.getElementById("vQty"),
-};// === Desktop horizontal scroll helpers (PC: wheel + drag) ===
+  vQty: document.getElementById("vQty")
+};
+
+// === Desktop horizontal scroll helpers (PC: wheel + drag) ===
 const isFinePointer = () => window.matchMedia && window.matchMedia("(pointer:fine)").matches;
 
 function enhanceHScroll(el){
