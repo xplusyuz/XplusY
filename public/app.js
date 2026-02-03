@@ -943,18 +943,25 @@ function stepViewer(dir){
 
 // ---------- Reviews UI (in fullscreen viewer) ----------
 let draftStars = 5;
+let hoverStars = 0;
 
 function renderStarSelector(){
   if(!els.revStars) return;
   els.revStars.innerHTML = "";
+  const shown = hoverStars || draftStars;
   for(let i=1;i<=5;i++){
     const b = document.createElement("button");
-    b.className = "starBtn" + (i<=draftStars ? " active" : "");
+    b.className = "starBtn" + (i<=shown ? " active" : "");
     b.type = "button";
     b.title = `${i} / 5`;
     b.textContent = "★";
+    b.addEventListener("mouseenter", ()=>{ hoverStars = i; renderStarSelector(); });
+    b.addEventListener("focus", ()=>{ hoverStars = i; renderStarSelector(); });
+    b.addEventListener("mouseleave", ()=>{ hoverStars = 0; renderStarSelector(); });
+    b.addEventListener("blur", ()=>{ hoverStars = 0; renderStarSelector(); });
     b.addEventListener("click", ()=>{
       draftStars = i;
+      hoverStars = 0;
       renderStarSelector();
     });
     els.revStars.appendChild(b);
