@@ -777,28 +777,25 @@ function render(arr){
 
     const imgEl = card.querySelector(".pimg");
 
-    const openQuickView = async () => {
-  const sel = getSel(p);
-  const imgs = getImagesFor(p, sel);
-  if (!imgs.length) return;
-
-  const stQV = (await getStats(p.id)) || {};
-
-  openImageViewer({
-    productId: p.id,
-    title: p.name || "Rasm",
-    desc: p.description || p.desc || "",
-    pricing: getVariantPricing(p, sel),
-    rating: Number(stQV.avg || 0),
-    reviewsCount: Number(stQV.count || 0),
-    tags: Array.isArray(p.tags) ? p.tags : [],
-    badge: p.badge || "",
-    images: imgs,
-    startIndex: sel.imgIdx || 0,
-    onSelect: (i) => {
-      setImageIndex(p, i);
-      setCardImage(imgEl, p, getSel(p));
-    },
+    const openQuickView = ()=>{
+      const imgs = getImagesFor(p, getSel(p));
+      if(!imgs.length) return;
+      openImageViewer({
+        productId: p.id,
+        title: p.name || "Rasm",
+        desc: p.description || p.desc || "",
+        pricing: getVariantPricing(p, getSel(p)),
+        const stQV = getStats(p.id);
+        rating: Number(stQV.avg || 0),
+        reviewsCount: Number(stQV.count || 0),
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        badge: p.badge || "",
+        images: imgs,
+        startIndex: getSel(p).imgIdx || 0,
+        onSelect: (i)=>{
+          setImageIndex(p, i);
+          setCardImage(imgEl, p, getSel(p));
+        }
       });
     };
 
@@ -1463,31 +1460,14 @@ els.revSend?.addEventListener("click", async ()=>{
     }
 
     const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
-    const statRef = doc(db, "product_stats", productId);
     const revRef = doc(db, "products", productId, "reviews", user.uid);
 
-    await runTransaction(db, async (tx)=>{
-      const statSnap = await tx.get(statRef);
+    // ✅ Worldclass: stats (avg/count) ni client yozmaydi.
+    // product_stats ni Cloud Function (server) yangilaydi, biz esa faqat review doc yozamiz.
+    await runTransaction(db, async (tx) => {
       const revSnap = await tx.get(revRef);
-
-      let count = 0;
-      let sum = 0;
-      if(statSnap.exists()){
-        const d = statSnap.data() || {};
-        count = Number(d.count)||0;
-        sum = Number(d.sum)||0;
-      }
-
-      if(revSnap.exists()){
-        const prev = Number((revSnap.data()||{}).stars)||0;
-        sum -= prev;
-      } else {
-        count += 1;
-      }
-
-      sum += stars;
-      if(count < 0) count = 0;
-      const avg = count ? (sum / count) : 0;
+      const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
+      const createdAt = prev.createdAt ? prev.createdAt : serverTimestamp();
 
       tx.set(revRef, {
         uid: user.uid,
@@ -1496,14 +1476,7 @@ els.revSend?.addEventListener("click", async ()=>{
         text,
         images: urls,
         updatedAt: serverTimestamp(),
-        createdAt: revSnap.exists() ? (revSnap.data().createdAt || serverTimestamp()) : serverTimestamp()
-      }, { merge: true });
-
-      tx.set(statRef, {
-        count,
-        sum,
-        avg,
-        updatedAt: serverTimestamp()
+        createdAt
       }, { merge: true });
     });
 
