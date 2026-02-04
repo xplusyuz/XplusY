@@ -1,18 +1,11 @@
-import { auth, db, storage } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-  signOut,
-  signInWithCustomToken
-} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import {
-  doc, getDoc, setDoc, collection, query, orderBy, limit,
-  onSnapshot, runTransaction, serverTimestamp
+  GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
+  signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js"; import {   doc,
+  getDoc, setDoc, collection, query, orderBy, limit, onSnapshot,
+  runTransaction, serverTimestamp, getAggregateFromServer, average,
+  count
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import {
-  ref as sRef, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
 
 
 const els = {
@@ -197,58 +190,66 @@ const LS = {
 };
 
 // ---------------- Reviews (Firestore, realtime) ----------------
-// Stats doc: product_stats/{productId} -> {avg, count, sum, updatedAt}
-// Reviews subcollection: products/{productId}/reviews/{uid} -> {uid, authorName, stars, text, images[], createdAt, updatedAt}
-const statsCache = new Map(); // productId -> {avg, count}
+// Reviews subcollection: products/{productId}/reviews/{uid} -> {uid, authorName, stars, text, createdAt, updatedAt}
+// Rating/Count: Firestore Aggregate (real, server-side), statsCache bilan tezlashtiramiz.
+const statsCache = new Map(); // productId -> {avg, count, ts}
 let unsubReviews = null;
-let unsubStats = null;
-let selectedReviewFiles = []; // File[]
 let viewerProductId = null;
 
 function cleanupReviewSubscriptions(){
   try{ unsubReviews && unsubReviews(); }catch{}
-  try{ unsubStats && unsubStats(); }catch{}
   unsubReviews = null;
-  unsubStats = null;
-}
-
-async function preloadStats(productIds){
-  // light prefetch (parallel). Works fine for dozens of items.
-  await Promise.all((productIds||[]).map(async (id)=>{
-    try{
-      const snap = await getDoc(doc(db, "product_stats", id));
-      if(snap.exists()){
-        const d = snap.data() || {};
-        statsCache.set(id, { avg: Number(d.avg)||0, count: Number(d.count)||0 });
-      }
-    }catch(e){ /* ignore */ }
-  }));
 }
 
 function getStats(productId){
-  return statsCache.get(productId) || { avg: 0, count: 0 };
+  const d = statsCache.get(productId);
+  if(!d) return { avg: 0, count: 0 };
+  return { avg: Number(d.avg)||0, count: Number(d.count)||0 };
+}
+
+async function refreshStats(productId, force=false){
+  const now = Date.now();
+  const cached = statsCache.get(productId);
+  if(!force && cached && (now - (cached.ts||0) < 20000)) return getStats(productId);
+
+  try{
+    const baseRef = collection(db, "products", productId, "reviews");
+    const agg = await getAggregateFromServer(baseRef, {
+      count: count(),
+      avg: average("stars")
+    });
+    const data = agg.data() || {};
+    const out = {
+      avg: Number(data.avg)||0,
+      count: Number(data.count)||0,
+      ts: now
+    };
+    statsCache.set(productId, out);
+    return { avg: out.avg, count: out.count };
+  }catch(e){
+    return getStats(productId);
+  }
+}
+
+async function preloadStats(productIds){
+  await Promise.all((productIds||[]).map(id => refreshStats(id, false)));
 }
 
 function subscribeReviews(productId){
   cleanupReviewSubscriptions();
   viewerProductId = productId;
 
-  // stats realtime
-  unsubStats = onSnapshot(doc(db, "product_stats", productId), (snap)=>{
-    const d = snap.exists() ? (snap.data()||{}) : {};
-    const avg = Number(d.avg)||0;
-    const count = Number(d.count)||0;
-    statsCache.set(productId, {avg, count});
-    if(els.revScore) els.revScore.textContent = `⭐ ${avg ? avg.toFixed(1) : "0.0"}`;
-    if(els.revCount) els.revCount.textContent = `(${count} sharh)`;
+  refreshStats(productId, true).then((st)=>{
+    if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
-  // list realtime
   const q = query(
     collection(db, "products", productId, "reviews"),
     orderBy("createdAt", "desc"),
     limit(30)
   );
+  let statsDebounce = null;
   unsubReviews = onSnapshot(q, (snap)=>{
     const list = [];
     snap.forEach(docu=>{
@@ -258,11 +259,18 @@ function subscribeReviews(productId){
         author: d.authorName || "Foydalanuvchi",
         stars: Number(d.stars)||0,
         text: (d.text||"").toString(),
-        images: Array.isArray(d.images) ? d.images : [],
         ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
       });
     });
     renderReviewsList(list);
+
+    if(statsDebounce) clearTimeout(statsDebounce);
+    statsDebounce = setTimeout(async ()=>{
+      const st = await refreshStats(productId, true);
+      if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+      if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
+      applyFilterSort();
+    }, 400);
   });
 }
 
@@ -777,30 +785,31 @@ function render(arr){
 
     const imgEl = card.querySelector(".pimg");
 
-   const openQuickView = () => {
-  const sel = getSel(p);
-  const imgs = getImagesFor(p, sel);
-  if (!imgs.length) return;
+    
+const openQuickView = ()=>{
+  const selNow = getSel(p);
+  const imgs = getImagesFor(p, selNow);
+  if(!imgs.length) return;
 
-  const stQV = getStats(p.id) || {};
+  const stQV = getStats(p.id);
 
   openImageViewer({
     productId: p.id,
     title: p.name || "Rasm",
     desc: p.description || p.desc || "",
-    pricing: getVariantPricing(p, sel),
+    pricing: getVariantPricing(p, selNow),
     rating: Number(stQV.avg || 0),
     reviewsCount: Number(stQV.count || 0),
     tags: Array.isArray(p.tags) ? p.tags : [],
     badge: p.badge || "",
     images: imgs,
-    startIndex: sel.imgIdx || 0,
-    onSelect: (i) => {
+    startIndex: selNow.imgIdx || 0,
+    onSelect: (i)=>{
       setImageIndex(p, i);
       setCardImage(imgEl, p, getSel(p));
-    },
-      });
-    };
+    }
+  });
+};
 
     // Open fullscreen viewer on image click
     imgEl.addEventListener("click", (e)=>{
@@ -1133,21 +1142,6 @@ function renderStarSelector(){
 
 
 // --- Review images (selection + preview) ---
-function updateReviewPreview(){
-  if(!els.revPreview) return;
-  els.revPreview.innerHTML = "";
-  (selectedReviewFiles||[]).forEach((file, idx)=>{
-    const url = URL.createObjectURL(file);
-    const wrap = document.createElement("div");
-    wrap.className = "revThumb";
-    wrap.innerHTML = `<img src="${url}" alt="preview"/><button type="button" title="O‘chirish">×</button>`;
-    wrap.querySelector("button").addEventListener("click", ()=>{
-      selectedReviewFiles.splice(idx, 1);
-      updateReviewPreview();
-    });
-    els.revPreview.appendChild(wrap);
-  });
-}
 function renderReviewsUI(productId){
   if(!productId) return;
   renderStarSelector();
@@ -1412,20 +1406,6 @@ els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
 
 // reviews (viewer)
-els.revFiles?.addEventListener("change", (e)=>{
-  const files = Array.from(e.target.files || []);
-  // keep only images, max 3, each <= 2MB
-  const ok = [];
-  for(const f of files){
-    if(!f.type.startsWith("image/")) continue;
-    if(f.size > 2 * 1024 * 1024) continue;
-    ok.push(f);
-    if(ok.length >= 3) break;
-  }
-  selectedReviewFiles = ok;
-  updateReviewPreview();
-});
-
 els.revSend?.addEventListener("click", async ()=>{
   const productId = viewer.productId;
   if(!productId) return;
@@ -1438,10 +1418,10 @@ els.revSend?.addEventListener("click", async ()=>{
 
   const stars = Math.max(1, Math.min(5, Number(draftStars)||5));
   const text = (els.revText?.value || "").trim().slice(0, 400);
-  const files = (selectedReviewFiles||[]).slice(0, 3);
 
-  if(text.length < 2 && files.length === 0){
-    alert("Sharh matni yozing yoki rasm qo‘shing.");
+  // Rasm yuklash olib tashlandi
+  if(text.length < 2){
+    alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
     return;
   }
 
@@ -1450,23 +1430,9 @@ els.revSend?.addEventListener("click", async ()=>{
   els.revSend.textContent = "Yuborilmoqda...";
 
   try{
-    // upload images
-    const urls = [];
-    for(let i=0;i<files.length;i++){
-      const f = files[i];
-      const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `reviews/${productId}/${user.uid}/${Date.now()}_${i}.${ext}`;
-      const r = sRef(storage, path);
-      await uploadBytes(r, f, { contentType: f.type });
-      const url = await getDownloadURL(r);
-      urls.push(url);
-    }
-
     const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
     const revRef = doc(db, "products", productId, "reviews", user.uid);
 
-    // ✅ Worldclass: stats (avg/count) ni client yozmaydi.
-    // product_stats ni Cloud Function (server) yangilaydi, biz esa faqat review doc yozamiz.
     await runTransaction(db, async (tx) => {
       const revSnap = await tx.get(revRef);
       const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
@@ -1477,19 +1443,16 @@ els.revSend?.addEventListener("click", async ()=>{
         authorName,
         stars,
         text,
-        images: urls,
         updatedAt: serverTimestamp(),
         createdAt
       }, { merge: true });
     });
 
-    // reset form
     if(els.revText) els.revText.value = "";
-    selectedReviewFiles = [];
-    if(els.revFiles) els.revFiles.value = "";
-    updateReviewPreview();
 
-    // cards refresh
+    // Real stats: Firestore aggregate orqali yangilab qo‘yamiz
+    await refreshStats(productId, true);
+
     applyFilterSort();
   }catch(err){
     console.error(err);
