@@ -5,63 +5,25 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>OrzuMall</title>
   <link rel="stylesheet" href="./styles.css?v=42" />
-
-  <style>
-    /* Header layout: avatar chapda, logo markazda, actions o‘ngda */
-    .topbar { position: sticky; top: 0; z-index: 50; }
-    .topbarInner{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding:10px 14px;
-    }
-    .topbarLeft, .topbarRight{ display:flex; align-items:center; gap:10px; min-width: 110px; }
-    .topbarCenter{ flex:1; display:flex; justify-content:center; }
-    .brand{ display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
-    .logoImg{
-      height: clamp(34px, 3.2vw, 54px);
-      width:auto;
-      display:block;
-      object-fit:contain;
-      filter: drop-shadow(0 10px 18px rgba(0,0,0,.18));
-    }
-    .avatarBtn{ display:inline-flex; align-items:center; justify-content:center; }
-    .actions .iconBtn{ white-space:nowrap; }
-
-    @media (max-width: 520px){
-      .topbarLeft, .topbarRight{ min-width: 88px; }
-      .topbarInner{ padding:8px 10px; }
-      .logoImg{ height: 38px; }
-    }
-  </style>
 </head>
-
 <body>
   <header class="topbar">
-    <div class="topbarInner">
-      <!-- Chap: avatar -->
-      <div class="topbarLeft">
-        <div class="userbox" id="userbox">
-          <button class="avatarBtn" id="avatarBtn" title="Profil">
-            <img class="avatar" id="avatar" alt="avatar" />
-            <span class="avatarFallback" id="avatarFallback">U</span>
-          </button>
-        </div>
-      </div>
+    <div class="userbox userboxLeft" id="userbox">
+      <button class="avatarBtn" id="avatarBtn" title="Profil">
+        <img class="avatar" id="avatar" alt="avatar" />
+        <span class="avatarFallback" id="avatarFallback">U</span>
+      </button>
+    </div>
 
-      <!-- O‘rta: logo -->
-      <div class="topbarCenter">
-        <a class="brand" href="#" aria-label="OrzuMall">
-          <img class="logoImg" src="./logo.png" alt="OrzuMall.uz logo" />
-        </a>
+    <div class="brand brandCenter">
+      <div class="logo">
+        <img class="logoImg" src="./logo.webp" alt="OrzuMall.uz logo" />
       </div>
+    </div>
 
-      <!-- O‘ng: sevimli + savat -->
-      <div class="topbarRight actions">
-        <button class="iconBtn" id="favViewBtn" title="Sevimlilar">❤️ <span class="chipCount" id="favCount">0</span></button>
-        <button class="iconBtn" id="cartBtn" title="Savatcha">🛒 <span class="chipCount" id="cartCount">0</span></button>
-      </div>
+    <div class="actions actionsRight">
+      <button class="iconBtn" id="favViewBtn" title="Sevimlilar">❤️ <span class="chipCount" id="favCount">0</span></button>
+      <button class="iconBtn" id="cartBtn" title="Savatcha">🛒 <span class="chipCount" id="cartCount">0</span></button>
     </div>
   </header>
 
@@ -84,92 +46,241 @@
             <script async src="https://telegram.org/js/telegram-widget.js?22"
               data-telegram-login="OrzuMallUZ_bot"
               data-size="large"
-              data-onauth="onTelegramAuth(user)"
-              data-request-access="write"></script>
+              data-userpic="true"
+              data-request-access="write"
+              data-onauth="onTelegramAuth(user)">
+            </script>
           </div>
 
-          <p class="muted small">Agar Telegram tugmasi ko‘rinmasa: domen/https/allowed origins tekshiring.</p>
+          <div class="hint">Bot: <code>@OrzuMallUZ_bot</code></div>
+          <div class="notice" id="tgNotice" hidden></div>
         </div>
       </div>
     </section>
 
-    <section class="toolbar card">
-      <div class="toolbarRow">
-        <div class="toolbarLeft">
-          <h2>Qidiruv</h2>
-        </div>
-
-        <div class="toolbarRight">
-          <input id="searchInput" class="input" placeholder="Qidirish: nom / tag" />
-          <select id="sortSelect" class="input">
+    <!-- Search strip: header va mahsulotlar orasida -->
+    <section class="card searchCard" aria-label="Qidiruv">
+      <div class="searchRow">
+        <div class="searchTitle">Qidiruv</div>
+        <div class="tools toolsTop">
+          <input class="input" id="q" placeholder="Qidirish: nom / tag" />
+          <select class="select" id="sort">
             <option value="popular">Popular</option>
+            <option value="price_asc">Narx ↑</option>
+            <option value="price_desc">Narx ↓</option>
             <option value="new">Yangi</option>
-            <option value="cheap">Arzon</option>
-            <option value="expensive">Qimmat</option>
-            <option value="rating">Reyting</option>
           </select>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Mahsulotlar</h2>
-
-      <div class="chipRow" id="tagChips"></div>
-
-      <div class="grid" id="productsGrid"></div>
-
-      <div class="empty muted" id="emptyState" style="display:none;">
-        Hech narsa topilmadi.
+    <section class="card productsCard">
+      <div class="row">
+        <h2>Mahsulotlar</h2>
+        <div class="tagBar" id="tagBar" aria-label="Kategoriyalar"></div>
       </div>
+<div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden>Hech narsa topilmadi.</div>
     </section>
   </main>
 
-  <!-- MODALS -->
-  <div class="modal" id="productModal" aria-hidden="true">
-    <div class="modalOverlay" data-close="1"></div>
-    <div class="modalCard">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle" id="pmTitle">Mahsulot</div>
-          <div class="muted small" id="pmSub">—</div>
+  <script type="module" src="./firebase-config.js"></script>
+  <script type="module" src="./app.js"></script>
+
+  <script>
+    window.onTelegramAuth = function(user){
+      window.dispatchEvent(new CustomEvent("tg_auth", { detail: user }));
+    }
+  </script>
+
+  <!-- Fullscreen image viewer (gallery) -->
+  <div class="imgViewer" id="imgViewer" hidden>
+    <div class="imgViewerBackdrop" id="imgViewerBackdrop"></div>
+
+    <div class="imgViewerShell qvShell" role="dialog" aria-modal="true" aria-label="Mahsulot">
+      <button class="qvClose" id="imgViewerClose" title="Yopish" aria-label="Yopish">✕</button>
+
+      <div class="qvGrid">
+        <!-- LEFT: media -->
+        <div class="qvMedia">
+          <div class="qvStage">
+            <button class="navBtn navPrev" id="imgPrev" title="Oldingi" aria-label="Oldingi">◀</button>
+            <img class="imgViewerImg qvImg" id="imgViewerImg" alt="product" />
+            <button class="navBtn navNext" id="imgNext" title="Keyingi" aria-label="Keyingi">▶</button>
+          </div>
+          <div class="thumbRow qvThumbs" id="imgThumbs"></div>
         </div>
-        <button class="iconBtn" id="pmClose" title="Yopish">✕</button>
-      </div>
 
-      <div class="modalBody" id="pmBody">
-        <!-- JS to‘ldiradi -->
+        <!-- RIGHT: info -->
+        <div class="qvPanel">
+          <div class="qvHeader">
+            <div class="qvTitle" id="imgViewerName"></div>
+
+            <div class="qvPriceRow">
+              <div class="qvPrice" id="qvPrice"></div>
+              <div class="qvOldPrice" id="qvOldPrice" style="display:none"></div>
+              <div class="qvBadge" id="qvBadge" style="display:none"></div>
+            </div>
+
+            <div class="qvMetaRow">
+              <div class="qvRating" id="qvRating" style="display:none"></div>
+              <div class="qvTags" id="qvTags" style="display:none"></div>
+            </div>
+          </div>
+
+          <div class="qvDesc" id="imgViewerDesc"></div>
+
+          <div class="qvActions">
+            <button class="qvCartBtn" id="viewerCart" title="Savatchaga" aria-label="Savatchaga">
+              <span class="qvCartIcon">🛒</span>
+              <span>Savatchaga</span>
+            </button>
+          </div>
+
+          <div class="imgViewerReviews" id="imgViewerReviews">
+            <div class="revTop">
+              <div class="revScore" id="revScore">⭐ 0.0</div>
+              <div class="revCount" id="revCount">(0 sharh)</div>
+            </div>
+            <div class="revLabelRow">
+              <div class="revLabel">Reyting bering</div>
+              <div class="revHint">1–5 yulduz</div>
+            </div>
+            <div class="revStars" id="revStars" aria-label="Reyting"></div>
+            <div class="revLabelRow">
+              <div class="revLabel">Sharhingiz</div>
+              <div class="revHint">(ixtiyoriy)</div>
+            </div>
+            <textarea class="revText" id="revText" rows="2" placeholder="Sharh yozing... (masalan: sifat zo'r, yetkazish tez)"></textarea>
+<button class="revBtn" id="revSend">Sharh qoldirish</button>
+            <div class="revList" id="revList"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="cartModal" aria-hidden="true">
-    <div class="modalOverlay" data-close="1"></div>
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle">Savatcha</div>
-        <button class="iconBtn" id="cartClose" title="Yopish">✕</button>
+  <div class="overlay" id="overlay" hidden></div>
+
+  <aside class="sidePanel" id="sidePanel" hidden>
+    <div class="panelTop">
+      <div class="panelTitle" id="panelTitle">Savatcha</div>
+      <button class="iconBtn" id="panelClose" title="Yopish">✕</button>
+    </div>
+
+    <div class="panelBody">
+      <div id="panelList"></div>
+      <div class="panelEmpty" id="panelEmpty" hidden>Hozircha bo‘sh.</div>
+    </div>
+
+    <div class="panelBottom" id="panelBottom">
+      <div class="totalRow" id="totalRow">
+        <div class="muted">Jami</div>
+        <div class="total" id="cartTotal">0 so‘m</div>
       </div>
-      <div class="modalBody" id="cartBody"></div>
+      <button class="btn" id="checkoutBtn">📩 Telegramga yuborish</button>
+      <button class="btn ghost" id="clearBtn">Tozalash</button>
+    </div>
+  </aside>
+
+
+  <!-- Profile modal -->
+  <div class="modalOverlay" id="profileOverlay" hidden>
+    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <div class="modalTop">
+        <div class="modalTitle" id="profileTitle">Profil</div>
+        <div class="modalTopActions">
+          <button class="iconPill" id="profileEditBtn" title="Tahrirlash" aria-label="Tahrirlash">✏️</button>
+          <button class="iconPill" id="profileClose" title="Yopish" aria-label="Yopish">✕</button>
+        </div>
+      </div>
+
+      <div class="modalBody">
+        <div class="profileHead">
+          <div class="profileAvatar" id="profileAvatar"></div>
+          <div class="profileMeta">
+            <div class="profileName" id="profileName">—</div>
+            <div class="profileUid" id="profileUid">—</div>
+          </div>
+        </div>
+
+        <div class="formGrid">
+          <label class="field">
+            <span>Telefon raqam</span>
+            <input id="pfPhone" type="tel" placeholder="+998 90 123 45 67" autocomplete="tel" />
+          </label>
+
+          <label class="field">
+            <span>Viloyat</span>
+            <select id="pfRegion"></select>
+          </label>
+
+          <label class="field">
+            <span>Tuman</span>
+            <select id="pfDistrict"></select>
+          </label>
+
+          <label class="field">
+            <span>Pochta</span>
+            <select id="pfPost"></select>
+          </label>
+        </div>
+
+        <div class="hint" id="profileHint">Ma’lumotlarni bir marta to‘ldirasiz. Keyin faqat ✏️ orqali tahrirlash mumkin.</div>
+      </div>
+
+      <div class="modalBottom">
+        <button class="btn" id="profileSave">Saqlash</button>
+        <button class="btn ghost" id="profileLogout">Chiqish</button>
+      </div>
     </div>
   </div>
 
-  <div class="modal" id="favModal" aria-hidden="true">
-    <div class="modalOverlay" data-close="1"></div>
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle">Sevimlilar</div>
-        <button class="iconBtn" id="favClose" title="Yopish">✕</button>
+  <!-- Variant select modal (opened on Add to Cart when product has colors/sizes) -->
+  <div class="vOverlay" id="vOverlay" hidden>
+    <div class="vCard" role="dialog" aria-modal="true" aria-label="Variant tanlash">
+      <div class="vTop">
+        <div class="vTitle">Variant tanlang</div>
+        <button class="iconBtn" id="vClose" title="Yopish">✕</button>
       </div>
-      <div class="modalBody" id="favBody"></div>
+
+      <div class="vBody">
+        <div class="vProd">
+          <img class="vImg" id="vImg" alt="product" />
+          <div class="vMeta">
+            <div class="vName" id="vName">—</div>
+            <div class="vPrice" id="vPrice">0 so‘m</div>
+          </div>
+        </div>
+
+        <div class="vBlock" id="vColors" hidden>
+          <div class="vLabel">Rang</div>
+          <div class="vRow" id="vColorRow"></div>
+          <div class="vHint" id="vColorHint" hidden>Iltimos, rangni tanlang</div>
+        </div>
+
+        <div class="vBlock" id="vSizes" hidden>
+          <div class="vLabel">O‘lcham</div>
+          <div class="vRow wrap" id="vSizeRow"></div>
+          <div class="vHint" id="vSizeHint" hidden>Iltimos, o‘lchamni tanlang</div>
+        </div>
+
+        <div class="vBlock">
+          <div class="vLabel">Miqdor</div>
+          <div class="qtyRow">
+            <button class="qtyBtn" id="vMinus" aria-label="Kamaytirish">−</button>
+            <div class="qtyVal" id="vQty">1</div>
+            <button class="qtyBtn" id="vPlus" aria-label="Ko‘paytirish">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="vBottom">
+        <button class="btn ghost" id="vCancel">Bekor</button>
+        <button class="btn" id="vConfirm">Savatchaga qo‘shish</button>
+      </div>
     </div>
   </div>
 
-  <!-- SCRIPTS -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-
-  <script src="./app.js?v=42"></script>
 </body>
 </html>
