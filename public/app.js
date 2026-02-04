@@ -1,4 +1,4 @@
-import { auth } from "./firebase-config.js";
+import { auth, db, storage } from "./firebase-config.js";
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -6,6 +6,14 @@ import {
   signOut,
   signInWithCustomToken
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import {
+  doc, getDoc, setDoc, collection, query, orderBy, limit,
+  onSnapshot, runTransaction, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import {
+  ref as sRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
+
 
 const els = {
   avatar: document.getElementById("avatar"),
@@ -77,6 +85,8 @@ const els = {
   revText: document.getElementById("revText"),
   revSend: document.getElementById("revSend"),
   revList: document.getElementById("revList"),
+  revFiles: document.getElementById("revFiles"),
+  revPreview: document.getElementById("revPreview"),
 
   // viewer actions
   viewerCart: document.getElementById("viewerCart"),
@@ -183,38 +193,155 @@ let tagCounts = new Map();
 
 const LS = {
   favs: "om_favs",
-  cart: "om_cart",
-  reviews: "om_reviews_v1"
+  cart: "om_cart"
 };
 
-// ---------------- Reviews (local, per-product) ----------------
-function loadReviewsMap(){
-  return loadLS(LS.reviews, {});
+// ---------------- Reviews (Firestore, realtime) ----------------
+// Stats doc: product_stats/{productId} -> {avg, count, sum, updatedAt}
+// Reviews subcollection: products/{productId}/reviews/{uid} -> {uid, authorName, stars, text, images[], createdAt, updatedAt}
+const statsCache = new Map(); // productId -> {avg, count}
+let unsubReviews = null;
+let unsubStats = null;
+let selectedReviewFiles = []; // File[]
+let viewerProductId = null;
+
+function cleanupReviewSubscriptions(){
+  try{ unsubReviews && unsubReviews(); }catch{}
+  try{ unsubStats && unsubStats(); }catch{}
+  unsubReviews = null;
+  unsubStats = null;
 }
-function saveReviewsMap(map){
-  saveLS(LS.reviews, map);
+
+async function preloadStats(productIds){
+  // light prefetch (parallel). Works fine for dozens of items.
+  await Promise.all((productIds||[]).map(async (id)=>{
+    try{
+      const snap = await getDoc(doc(db, "product_stats", id));
+      if(snap.exists()){
+        const d = snap.data() || {};
+        statsCache.set(id, { avg: Number(d.avg)||0, count: Number(d.count)||0 });
+      }
+    }catch(e){ /* ignore */ }
+  }));
 }
-function getReviews(productId){
-  const map = loadReviewsMap();
-  const list = Array.isArray(map[productId]) ? map[productId] : [];
-  // newest first
-  return list.slice().sort((a,b)=> (b?.ts||0) - (a?.ts||0));
+
+function getStats(productId){
+  return statsCache.get(productId) || { avg: 0, count: 0 };
 }
-function addReview(productId, stars, text){
-  const map = loadReviewsMap();
-  const list = Array.isArray(map[productId]) ? map[productId] : [];
-  const author = (els.userName?.textContent || els.userSmall?.textContent || "Mehmon").trim() || "Mehmon";
-  list.push({ stars, text, author, ts: Date.now() });
-  map[productId] = list;
-  saveReviewsMap(map);
+
+function subscribeReviews(productId){
+  cleanupReviewSubscriptions();
+  viewerProductId = productId;
+
+  // stats realtime
+  unsubStats = onSnapshot(doc(db, "product_stats", productId), (snap)=>{
+    const d = snap.exists() ? (snap.data()||{}) : {};
+    const avg = Number(d.avg)||0;
+    const count = Number(d.count)||0;
+    statsCache.set(productId, {avg, count});
+    if(els.revScore) els.revScore.textContent = `⭐ ${avg ? avg.toFixed(1) : "0.0"}`;
+    if(els.revCount) els.revCount.textContent = `(${count} sharh)`;
+  });
+
+  // list realtime
+  const q = query(
+    collection(db, "products", productId, "reviews"),
+    orderBy("createdAt", "desc"),
+    limit(30)
+  );
+  unsubReviews = onSnapshot(q, (snap)=>{
+    const list = [];
+    snap.forEach(docu=>{
+      const d = docu.data() || {};
+      list.push({
+        uid: d.uid || docu.id,
+        author: d.authorName || "Foydalanuvchi",
+        stars: Number(d.stars)||0,
+        text: (d.text||"").toString(),
+        images: Array.isArray(d.images) ? d.images : [],
+        ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
+      });
+    });
+    renderReviewsList(list);
+  });
 }
-function reviewStats(productId){
-  const list = getReviews(productId);
-  if(!list.length) return { avg: null, count: 0 };
-  const sum = list.reduce((s,r)=> s + (Number(r.stars)||0), 0);
-  return { avg: sum / list.length, count: list.length };
+
+function formatDate(ts){
+  try{
+    if(!ts) return "";
+    const d = new Date(ts);
+    return d.toLocaleDateString("uz-UZ", { year:"numeric", month:"2-digit", day:"2-digit" });
+  }catch{ return ""; }
 }
+
+function renderReviewsList(list){
+  if(!els.revList) return;
+  els.revList.innerHTML = "";
+
+  if(!list.length){
+    const d = document.createElement("div");
+    d.className = "revItem";
+    d.innerHTML = `<div class="revItemText">Hozircha sharh yo‘q. Birinchi bo‘lib sharh qoldiring 🙂</div>`;
+    els.revList.appendChild(d);
+    return;
+  }
+
+  for(const r of list){
+    const item = document.createElement("div");
+    item.className = "revItem";
+    const stars = "★".repeat(Math.max(0, Math.min(5, r.stars))) + "☆".repeat(Math.max(0, 5 - Math.max(0, Math.min(5, r.stars))));
+    const imgs = (r.images||[]).length ? `
+      <div class="revItemImgs">
+        ${(r.images||[]).map(u=>`
+          <div class="revItemImg" data-img="${escapeHtml(u)}"><img src="${escapeHtml(u)}" alt="review image" loading="lazy"/></div>
+        `).join("")}
+      </div>
+    ` : "";
+
+    item.innerHTML = `
+      <div class="revHead">
+        <div class="revAuthor">${escapeHtml(r.author)}</div>
+        <div class="revMeta">
+          <span class="revStarsMini">${stars}</span>
+          <span class="revDate">${escapeHtml(formatDate(r.ts))}</span>
+        </div>
+      </div>
+      ${r.text ? `<div class="revItemText">${escapeHtml(r.text)}</div>` : ""}
+      ${imgs}
+    `;
+    els.revList.appendChild(item);
+  }
+
+  // click any review image to open viewer
+  els.revList.querySelectorAll(".revItemImg").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const u = el.getAttribute("data-img");
+      if(u) openStandaloneImage(u);
+    });
+  });
+}
+
+function openStandaloneImage(url){
+  // reuse existing image viewer as a simple lightbox
+  if(!els.imgViewer) return;
+  // open viewer with single image, no product context
+  openImageViewer({
+    productId: null,
+    title: "Rasm",
+    desc: "",
+    pricing: null,
+    rating: 0,
+    reviewsCount: 0,
+    tags: [],
+    badge: "",
+    images: [url],
+    startIndex: 0,
+    onSelect: null
+  });
+}
+
 // Variant selections per product (in-memory)
+
 const selected = new Map(); // id -> {color, size, imgIdx}
 
 // Image viewer state
@@ -382,22 +509,43 @@ function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
 // Variant pricing support
 function getVariantPricing(p, sel){
-  const color = (sel?.color ?? "").toString();
-  const size  = (sel?.size  ?? "").toString();
+  const color = (sel?.color ?? "").toString() || null;
+  const size  = (sel?.size  ?? "").toString() || null;
+
   const base = {
     price: parsePrice(p.price),
     oldPrice: parsePrice(p.oldPrice),
     installmentText: (p.installmentText ?? "").toString()
   };
 
+  // New optimized format: variants: [{color, size, price, oldPrice?, installmentText?}]
+  if(Array.isArray(p.variants) && p.variants.length){
+    const pick = (c,s)=> p.variants.find(v=>
+      (v?.color ?? null) === (c ?? null) &&
+      (v?.size  ?? null) === (s ?? null)
+    );
+    const v =
+      pick(color, size) ||
+      pick(color, null) ||
+      pick(null, size) ||
+      null;
+
+    if(v){
+      if(v.price != null) base.price = parsePrice(v.price);
+      if(v.oldPrice != null) base.oldPrice = parsePrice(v.oldPrice);
+      if(v.installmentText != null) base.installmentText = (v.installmentText||"").toString();
+    }
+  }
+
+  // Backward compatibility: variantPrices map (old)
   const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
   if(vp && typeof vp === "object"){
     const keys = [
-      `${color}|${size}`,
-      `${color}|`,
-      `|${size}`,
-      color,
-      size
+      `${color||""}|${size||""}`,
+      `${color||""}|`,
+      `|${size||""}`,
+      color||"",
+      size||""
     ].filter(k=>k && k !== "|");
     for(const k of keys){
       if(Object.prototype.hasOwnProperty.call(vp, k)){
@@ -418,6 +566,16 @@ function getVariantPricing(p, sel){
 
 function minVariantPrice(p){
   let min = parsePrice(p.price);
+
+  // new optimized
+  if(Array.isArray(p.variants) && p.variants.length){
+    for(const v of p.variants){
+      const n = parsePrice((v && typeof v === "object") ? v.price : v);
+      if(n>0) min = Math.min(min||n, n);
+    }
+  }
+
+  // old map (backward)
   const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
   if(vp && typeof vp === "object"){
     for(const v of Object.values(vp)){
@@ -567,9 +725,9 @@ function render(arr){
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
-    const localStats = reviewStats(p.id);
-    const showAvg = localStats.count ? localStats.avg : (p.rating ? Number(p.rating) : null);
-    const showCount = localStats.count ? localStats.count : Number(p.reviewsCount||0);
+    const st = getStats(p.id);
+    const showAvg = st.count ? st.avg : 0;
+    const showCount = st.count ? st.count : 0;
 
     card.innerHTML = `
       <div class="pmedia">
@@ -592,7 +750,7 @@ function render(arr){
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showAvg ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -627,8 +785,9 @@ function render(arr){
         title: p.name || "Rasm",
         desc: p.description || p.desc || "",
         pricing: getVariantPricing(p, getSel(p)),
-        rating: Number(p.rating || 0),
-        reviewsCount: Number(p.reviewsCount || 0),
+        const stQV = getStats(p.id);
+        rating: Number(stQV.avg || 0),
+        reviewsCount: Number(stQV.count || 0),
         tags: Array.isArray(p.tags) ? p.tags : [],
         badge: p.badge || "",
         images: imgs,
@@ -930,6 +1089,7 @@ function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
   els.imgViewer.hidden = true;
+  cleanupReviewSubscriptions();
   document.body.style.overflow = "";
 }
 
@@ -968,38 +1128,28 @@ function renderStarSelector(){
   }
 }
 
+
+// --- Review images (selection + preview) ---
+function updateReviewPreview(){
+  if(!els.revPreview) return;
+  els.revPreview.innerHTML = "";
+  (selectedReviewFiles||[]).forEach((file, idx)=>{
+    const url = URL.createObjectURL(file);
+    const wrap = document.createElement("div");
+    wrap.className = "revThumb";
+    wrap.innerHTML = `<img src="${url}" alt="preview"/><button type="button" title="O‘chirish">×</button>`;
+    wrap.querySelector("button").addEventListener("click", ()=>{
+      selectedReviewFiles.splice(idx, 1);
+      updateReviewPreview();
+    });
+    els.revPreview.appendChild(wrap);
+  });
+}
 function renderReviewsUI(productId){
   if(!productId) return;
   renderStarSelector();
-
-  const list = getReviews(productId);
-  const st = reviewStats(productId);
-  if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
-  if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
-
-  if(els.revList){
-    els.revList.innerHTML = "";
-    if(!list.length){
-      const d = document.createElement("div");
-      d.className = "revItem";
-      d.innerHTML = `<div class="revItemText">Hozircha sharh yo‘q. Birinchi bo‘lib yozing 🙂</div>`;
-      els.revList.appendChild(d);
-    } else {
-      for(const r of list.slice(0, 12)){
-        const it = document.createElement("div");
-        it.className = "revItem";
-        const when = new Date(r.ts||Date.now()).toLocaleDateString("uz-UZ");
-        it.innerHTML = `
-          <div class="revItemTop">
-            <b>⭐ ${Number(r.stars||0).toFixed(0)} — ${escapeHtml(r.author||"Mehmon")}</b>
-            <span>${escapeHtml(when)}</span>
-          </div>
-          <div class="revItemText">${escapeHtml(r.text||"")}</div>
-        `;
-        els.revList.appendChild(it);
-      }
-    }
-  }
+  // Firestore realtime updates (subscribe once per opened product)
+  if(viewerProductId !== productId) subscribeReviews(productId);
 }
 
 
@@ -1123,6 +1273,7 @@ async function loadProducts(){
   }));
   buildTagCounts();
   renderTagBar();
+  await preloadStats(products.map(p=>p.id));
   applyFilterSort();
 }
 
@@ -1258,15 +1409,116 @@ els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
 
 // reviews (viewer)
-els.revSend?.addEventListener("click", ()=>{
-  if(!viewer.productId) return;
-  const text = (els.revText?.value || "").trim();
-  if(text.length < 2) return;
-  addReview(viewer.productId, draftStars, text.slice(0, 280));
-  if(els.revText) els.revText.value = "";
-  renderReviewsUI(viewer.productId);
-  // refresh ratings on cards (if visible)
-  applyFilterSort();
+els.revFiles?.addEventListener("change", (e)=>{
+  const files = Array.from(e.target.files || []);
+  // keep only images, max 3, each <= 2MB
+  const ok = [];
+  for(const f of files){
+    if(!f.type.startsWith("image/")) continue;
+    if(f.size > 2 * 1024 * 1024) continue;
+    ok.push(f);
+    if(ok.length >= 3) break;
+  }
+  selectedReviewFiles = ok;
+  updateReviewPreview();
+});
+
+els.revSend?.addEventListener("click", async ()=>{
+  const productId = viewer.productId;
+  if(!productId) return;
+
+  const user = auth.currentUser;
+  if(!user){
+    alert("Sharh qoldirish uchun avval Google/Telegram orqali kiring.");
+    return;
+  }
+
+  const stars = Math.max(1, Math.min(5, Number(draftStars)||5));
+  const text = (els.revText?.value || "").trim().slice(0, 400);
+  const files = (selectedReviewFiles||[]).slice(0, 3);
+
+  if(text.length < 2 && files.length === 0){
+    alert("Sharh matni yozing yoki rasm qo‘shing.");
+    return;
+  }
+
+  els.revSend.disabled = true;
+  const oldLabel = els.revSend.textContent;
+  els.revSend.textContent = "Yuborilmoqda...";
+
+  try{
+    // upload images
+    const urls = [];
+    for(let i=0;i<files.length;i++){
+      const f = files[i];
+      const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `reviews/${productId}/${user.uid}/${Date.now()}_${i}.${ext}`;
+      const r = sRef(storage, path);
+      await uploadBytes(r, f, { contentType: f.type });
+      const url = await getDownloadURL(r);
+      urls.push(url);
+    }
+
+    const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
+    const statRef = doc(db, "product_stats", productId);
+    const revRef = doc(db, "products", productId, "reviews", user.uid);
+
+    await runTransaction(db, async (tx)=>{
+      const statSnap = await tx.get(statRef);
+      const revSnap = await tx.get(revRef);
+
+      let count = 0;
+      let sum = 0;
+      if(statSnap.exists()){
+        const d = statSnap.data() || {};
+        count = Number(d.count)||0;
+        sum = Number(d.sum)||0;
+      }
+
+      if(revSnap.exists()){
+        const prev = Number((revSnap.data()||{}).stars)||0;
+        sum -= prev;
+      } else {
+        count += 1;
+      }
+
+      sum += stars;
+      if(count < 0) count = 0;
+      const avg = count ? (sum / count) : 0;
+
+      tx.set(revRef, {
+        uid: user.uid,
+        authorName,
+        stars,
+        text,
+        images: urls,
+        updatedAt: serverTimestamp(),
+        createdAt: revSnap.exists() ? (revSnap.data().createdAt || serverTimestamp()) : serverTimestamp()
+      }, { merge: true });
+
+      tx.set(statRef, {
+        count,
+        sum,
+        avg,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+
+    // reset form
+    if(els.revText) els.revText.value = "";
+    selectedReviewFiles = [];
+    if(els.revFiles) els.revFiles.value = "";
+    updateReviewPreview();
+
+    // cards refresh
+    applyFilterSort();
+  }catch(err){
+    console.error(err);
+    alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
+  }finally{
+    els.revSend.disabled = false;
+    els.revSend.textContent = oldLabel;
+  }
 });
 
 // viewer actions
