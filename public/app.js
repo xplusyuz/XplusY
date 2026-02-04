@@ -777,25 +777,28 @@ function render(arr){
 
     const imgEl = card.querySelector(".pimg");
 
-    const openQuickView = ()=>{
-      const imgs = getImagesFor(p, getSel(p));
-      if(!imgs.length) return;
-      openImageViewer({
-        productId: p.id,
-        title: p.name || "Rasm",
-        desc: p.description || p.desc || "",
-        pricing: getVariantPricing(p, getSel(p)),
-        const stQV = getStats(p.id);
-        rating: Number(stQV.avg || 0),
-        reviewsCount: Number(stQV.count || 0),
-        tags: Array.isArray(p.tags) ? p.tags : [],
-        badge: p.badge || "",
-        images: imgs,
-        startIndex: getSel(p).imgIdx || 0,
-        onSelect: (i)=>{
-          setImageIndex(p, i);
-          setCardImage(imgEl, p, getSel(p));
-        }
+    const openQuickView = async () => {
+  const sel = getSel(p);
+  const imgs = getImagesFor(p, sel);
+  if (!imgs.length) return;
+
+  const stQV = (await getStats(p.id)) || {};
+
+  openImageViewer({
+    productId: p.id,
+    title: p.name || "Rasm",
+    desc: p.description || p.desc || "",
+    pricing: getVariantPricing(p, sel),
+    rating: Number(stQV.avg || 0),
+    reviewsCount: Number(stQV.count || 0),
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    badge: p.badge || "",
+    images: imgs,
+    startIndex: sel.imgIdx || 0,
+    onSelect: (i) => {
+      setImageIndex(p, i);
+      setCardImage(imgEl, p, getSel(p));
+    },
       });
     };
 
