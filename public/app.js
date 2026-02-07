@@ -4,8 +4,27 @@ import {
   signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js"; import {   doc,
   getDoc, setDoc, collection, query, orderBy, limit, onSnapshot,
   runTransaction, serverTimestamp, getAggregateFromServer, average,
-  count
+  count, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+
+let currentUser = null;
+
+// Lightweight interest tracking -> Firestore events (used to compute real popularity)
+async function logEvent(type, productId){
+  try{
+    if(!currentUser) return;
+    await addDoc(collection(db, "events"), {
+      uid: currentUser.uid,
+      type,
+      productId: String(productId),
+      createdAt: new Date(),
+      ua: navigator.userAgent || "",
+    });
+  }catch(e){
+    console.warn("logEvent failed", e);
+  }
+}
 
 
 const els = {
@@ -260,6 +279,7 @@ async function preloadStats(productIds){
 
 function subscribeReviews(productId){
   cleanupReviewSubscriptions();
+  logEvent('view', productId);
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
@@ -796,7 +816,7 @@ function render(arr){
 
     const favBtn = card.querySelector(".favBtn");
     favBtn.addEventListener("click", ()=>{
-      if(favs.has(p.id)) favs.delete(p.id); else favs.add(p.id);
+      if(favs.has(p.id)) { favs.delete(p.id); } else { favs.add(p.id); logEvent('favorite', p.id); }
       saveLS(LS.favs, Array.from(favs));
       favBtn.classList.toggle("active", favs.has(p.id));
       favBtn.textContent = favs.has(p.id) ? "♥" : "♡";
@@ -861,6 +881,7 @@ const openQuickView = ()=>{
 
 
 function addToCart(id, qty, sel){
+  logEvent('add_to_cart', id);
   const key = variantKey(id, sel || {color:null,size:null});
   const p = products.find(x=>x.id===id);
   const img = p ? getCurrentImage(p, sel || getDefaultSel(p)) : null;
@@ -1274,7 +1295,41 @@ function renderPanel(mode){
 }
 
 
+
+let unsubProducts = null;
+
 async function loadProducts(){
+  // Prefer Firestore products (real-time + real popularity). Fallback to products.json.
+  try{
+    const col = collection(db, "products");
+    const qy = query(col, orderBy("popularScore", "desc"));
+    const ok = await new Promise((resolve)=>{
+      unsubProducts && unsubProducts();
+      unsubProducts = onSnapshot(qy, (snap)=>{
+        const arr = snap.docs.map(d=> {
+          const data = d.data() || {};
+          // keep id as in JSON
+          return { id: String(data.id || d.id), ...data, _docId: d.id };
+        });
+        // If Firestore is empty, fallback
+        if(arr.length === 0){ resolve(false); return; }
+        products = arr;
+        applyFilterSort();
+        resolve(true);
+      }, (err)=>{
+        console.warn("Firestore products error", err);
+        resolve(false);
+      });
+    });
+    if(ok) return;
+  }catch(e){
+    console.warn("Firestore products init failed", e);
+  }
+  // fallback
+  return loadProductsJson();
+}
+
+async function loadProductsJson(){
   const res = await fetch("./products.json", { cache: "no-store" });
   const json = await res.json();
   const raw = Array.isArray(json.items) ? json.items : [];
@@ -1294,6 +1349,7 @@ async function loadProducts(){
 }
 
 function setUserUI(user){
+  currentUser = user || null;
   const authCard = els.authCard || document.getElementById("authCard");
 
   document.body.classList.toggle("signed-in", !!user);
@@ -1515,25 +1571,67 @@ els.clearBtn?.addEventListener("click", ()=>{
   renderPanel(els.panelTitle.textContent.includes("Sevimli") ? "fav" : "cart");
   if(viewMode === "fav") applyFilterSort();
 });
-els.checkoutBtn?.addEventListener("click", ()=>{
-  // This demo doesn't send automatically. Provide copyable text.
-  const lines = cart.map(ci=>{
+els.checkoutBtn?.addEventListener("click", async ()=>{
+  if(!currentUser){
+    // prompt login
+    toast("Avval kirish qiling (Google / Telegram).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if(cart.length === 0){
+    toast("Savatcha bo'sh.");
+    return;
+  }
+
+  // Build order payload
+  const items = cart.map(ci=>{
     const p = products.find(x=>x.id===ci.id);
-    if(!p) return null;
-    const pr = getVariantPricing(p, {color: ci.color||null, size: ci.size||null});
-    const variant = [ci.color, ci.size].filter(Boolean).join(" / ");
-    return `${p.name}${variant?` (${variant})`:``} x${ci.qty} = ${moneyUZS((pr.price||0)*(ci.qty||0))}`;
-  }).filter(Boolean);
-  const total = cart.reduce((s,ci)=>{
-    const p = products.find(x=>x.id===ci.id);
-    if(!p) return s;
-    const pr = getVariantPricing(p, {color: ci.color||null, size: ci.size||null});
-    return s + (pr.price||0) * (ci.qty||0);
-  },0);
-  const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(total))}`;
-  // Try open Telegram share (works if user has TG installed or web)
+    const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
+    return {
+      productId: ci.id,
+      name: p?.name || "",
+      color: ci.color || null,
+      size: ci.size || null,
+      qty: Number(ci.qty||1),
+      priceUZS: Number(pr.price||0),
+    };
+  });
+
+  const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
+
+  try{
+    await addDoc(collection(db, "orders"), {
+      uid: currentUser.uid,
+      status: "created",
+      items,
+      totalUZS,
+      createdAt: new Date(),
+      source: "web",
+    });
+    toast("Buyurtma qabul qilindi ✅");
+  }catch(e){
+    console.warn("order create failed", e);
+    toast("Buyurtma yuborilmadi. Qayta urinib ko'ring.");
+    return;
+  }
+
+  // Optional Telegram share (operator uchun qulay)
+  const lines = items.map(it=>{
+    const variant = [it.color, it.size].filter(Boolean).join(" / ");
+    return `${it.name}${variant?` (${variant})`:``} x${it.qty} = ${moneyUZS((it.priceUZS||0)*(it.qty||0))}`;
+  });
+  const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(totalUZS))}`;
   window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
+
+  // clear cart locally
+  cart.length = 0;
+  saveLS(LS.cart, cart);
+  updateBadges();
+  renderPanel("cart");
 });
+
+
+
 
 
 /* =========================
