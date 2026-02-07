@@ -20,6 +20,7 @@ const els = {
   sort: document.getElementById("sort"),
   tgNotice: document.getElementById("tgNotice"),
   authCard: document.getElementById("authCard"),
+  heroAuthJump: document.getElementById("heroAuthJump"),
 
   // new UI
   favViewBtn: document.getElementById("favViewBtn"),
@@ -1706,6 +1707,20 @@ window.__omProfile = (function(){
       if(document.body.classList.contains("signed-in")) open();
     });
   }
+  if(els.heroAuthJump){
+    els.heroAuthJump.addEventListener("click", ()=>{
+      // If signed-in -> open profile, else jump to login card
+      if(document.body.classList.contains("signed-in")){
+        try{ open(); }catch(e){ openProfile(); }
+      }else{
+        els.authCard?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+        // small pulse to draw attention
+        els.authCard?.classList?.add("pulse");
+        setTimeout(()=>els.authCard?.classList?.remove("pulse"), 800);
+      }
+    });
+  }
+
   if(els.profileClose) els.profileClose.addEventListener("click", closeProfile);
   if(els.profileOverlay){
     els.profileOverlay.addEventListener("click", (e)=>{
