@@ -1,15 +1,30 @@
-// Firebase config (TO'LDIRING)
-// Firebase Console -> Project settings -> Web app -> SDK config
-export const FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import {
+  getAuth,
+  setPersistence,
+  browserLocalPersistence,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+// ⚠️ Firebase Console → Project settings → Your apps → Web app config'dan OLIB qo'ying.
+export const firebaseConfig = {
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  authDomain: "xplusy-760fa.firebaseapp.com",
+  projectId: "xplusy-760fa",
+  storageBucket: "xplusy-760fa.appspot.com",
+  appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80",
 };
 
-// Admin email allowlist (front-end). Firestore rules ham qo'ying!
-export const DEFAULT_ADMIN_EMAILS = [
-  "sohibjonmath@gmail.com"
-];
+function looksPlaceholder(v){
+  return !v || String(v).includes("YOUR_");
+}
+if (looksPlaceholder(firebaseConfig.apiKey) || looksPlaceholder(firebaseConfig.projectId)) {
+  alert("Firebase Web config to'ldirilmagan! public/firebase-config.js ichidagi apiKey/authDomain/projectId/appId ni o'zingiznikiga almashtiring.");
+}
+
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+
+await setPersistence(auth, browserLocalPersistence);
+
+export const db = getFirestore(app);
