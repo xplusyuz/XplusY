@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read, create, update: if isSelf(uid);
+      allow delete: if false;
+      match /favorites/{pid} { allow read, write: if isSelf(uid); }
+      match /cart/{pid} { allow read, write: if isSelf(uid); }
+    }
+
+    match /events/{eventId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.type in ['view','favorite','add_to_cart']
+        && request.resource.data.productId is string
+        && request.resource.data.createdAt is timestamp;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'created'
+        && request.resource.data.createdAt is timestamp;
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /configs/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

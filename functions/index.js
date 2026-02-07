@@ -67,7 +67,7 @@ async function bumpProductScoreTx(productId, type, extra = {}) {
 }
 
 // --- Admin bootstrap: set custom claim admin=true for allowlisted emails ---
-exports.claimAdmin = onCall({ region: "us-central1" }, async (req) => {
+exports.claimAdmin = onCall({ region: "us-central1", cors: true }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in first.");
   const email = (req.auth.token.email || "").toLowerCase();
 

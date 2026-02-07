@@ -10,7 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 const app = initializeApp(FIREBASE_CONFIG);
-const functions = getFunctions(app);
+const functions = getFunctions(app, 'us-central1');
 const claimAdmin = httpsCallable(functions, 'claimAdmin');
 const db = getFirestore(app);
 const auth = getAuth(app);
