@@ -105,6 +105,28 @@ const els = {
   vQty: document.getElementById("vQty")
 };
 
+// ---- Modal helpers (world-class, animated, accessibility-friendly) ----
+function _anyOverlayOpen(){
+  return [els.profileOverlay, els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
+}
+function _syncModalBody(){
+  if(_anyOverlayOpen()) document.body.classList.add("modalOpen");
+  else document.body.classList.remove("modalOpen");
+}
+function showOverlay(el){
+  if(!el) return;
+  el.hidden = false;
+  // allow CSS transitions
+  requestAnimationFrame(()=>{ el.classList.add("isOpen"); });
+  _syncModalBody();
+}
+function hideOverlay(el){
+  if(!el) return;
+  el.classList.remove("isOpen");
+  // keep in DOM briefly for exit animation
+  window.setTimeout(()=>{ el.hidden = true; _syncModalBody(); }, 190);
+}
+
 // === Desktop horizontal scroll helpers (PC: wheel + drag) ===
 const isFinePointer = () => window.matchMedia && window.matchMedia("(pointer:fine)").matches;
 
@@ -893,16 +915,14 @@ function openVariantModal(p, opts={}){
   vState.qty = 1;
   vState.sel = normalizeSelectionForProduct(p, getSel(p));
   renderVariantModal();
-  els.vOverlay.hidden = false;
-  document.body.classList.add("modalOpen");
+  showOverlay(els.vOverlay);
 }
 
 function closeVariantModal(){
   if(!els.vOverlay) return;
   vState.open = false;
   vState.product = null;
-  els.vOverlay.hidden = true;
-  document.body.classList.remove("modalOpen");
+  hideOverlay(els.vOverlay);
 }
 
 function renderVariantModal(){
@@ -1093,17 +1113,15 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
     idx: startIndex || 0,
     onSelect: onSelect || null
   };
-  els.imgViewer.hidden = false;
+  showOverlay(els.imgViewer);
   renderViewer();
-  document.body.style.overflow = "hidden";
 }
 
 function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
-  els.imgViewer.hidden = true;
   cleanupReviewSubscriptions();
-  document.body.style.overflow = "";
+  hideOverlay(els.imgViewer);
 }
 
 function stepViewer(dir){
@@ -1562,13 +1580,11 @@ function setFieldsDisabled(disabled){
 
 function openProfile(){
   if(!els.profileOverlay) return;
-  els.profileOverlay.hidden = false;
-  document.body.classList.add("modal-open");
+  showOverlay(els.profileOverlay);
 }
 function closeProfile(){
   if(!els.profileOverlay) return;
-  els.profileOverlay.hidden = true;
-  document.body.classList.remove("modal-open");
+  hideOverlay(els.profileOverlay);
 }
 
 window.__omProfile = (function(){
@@ -1728,7 +1744,11 @@ window.__omProfile = (function(){
     });
   }
   document.addEventListener("keydown", (e)=>{
-    if(e.key==="Escape" && els.profileOverlay && !els.profileOverlay.hidden) closeProfile();
+    if(e.key==="Escape"){
+      if(els.vOverlay && !els.vOverlay.hidden) closeVariantModal();
+      else if(els.profileOverlay && !els.profileOverlay.hidden) closeProfile();
+      else if(els.imgViewer && !els.imgViewer.hidden) closeImgViewer();
+    }
   });
 
   if(els.profileEditBtn) els.profileEditBtn.addEventListener("click", ()=>{
