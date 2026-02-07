@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email in ['sohibjonmath@gmail.com']
+          || (
+            exists(/databases/$(database)/documents/meta/adminSettings) &&
+            request.auth.token.email in get(/databases/$(database)/documents/meta/adminSettings).data.adminEmails
+          )
+        );
+    }
+
+    match /products/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /meta/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
