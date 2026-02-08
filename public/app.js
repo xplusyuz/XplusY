@@ -2413,9 +2413,8 @@ function closeProfile(){ goTab("home"); }
 window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
-let isEditing = false;
-  let isCompleted = false;
   let isEditing = false;
+  let isCompleted = false;
 
   function readProfile(uid){
     const raw = localStorage.getItem(profileStorageKey(uid));
