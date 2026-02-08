@@ -8,6 +8,58 @@ import {
   count, addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
+/* =========================
+   Toast helper
+========================= */
+function toast(message, type="info"){
+  try{
+    const id = "om_toast_host";
+    let host = document.getElementById(id);
+    if(!host){
+      host = document.createElement("div");
+      host.id = id;
+      host.style.position = "fixed";
+      host.style.left = "50%";
+      host.style.bottom = "18px";
+      host.style.transform = "translateX(-50%)";
+      host.style.zIndex = "99999";
+      host.style.display = "flex";
+      host.style.flexDirection = "column";
+      host.style.gap = "8px";
+      host.style.pointerEvents = "none";
+      document.body.appendChild(host);
+    }
+    const el = document.createElement("div");
+    el.textContent = String(message ?? "");
+    el.style.maxWidth = "min(92vw, 520px)";
+    el.style.padding = "12px 14px";
+    el.style.borderRadius = "14px";
+    el.style.background = "rgba(15,23,42,.92)";
+    el.style.color = "#fff";
+    el.style.boxShadow = "0 12px 28px rgba(0,0,0,.22)";
+    el.style.fontSize = "14px";
+    el.style.lineHeight = "1.25";
+    el.style.pointerEvents = "auto";
+    el.style.opacity = "0";
+    el.style.transition = "opacity .18s ease, transform .18s ease";
+    el.style.transform = "translateY(8px)";
+    host.appendChild(el);
+    requestAnimationFrame(()=>{
+      el.style.opacity = "1";
+      el.style.transform = "translateY(0)";
+    });
+    const ttl = type === "error" ? 3800 : 2600;
+    setTimeout(()=>{
+      el.style.opacity = "0";
+      el.style.transform = "translateY(8px)";
+      setTimeout(()=> el.remove(), 220);
+    }, ttl);
+  }catch(e){
+    // fallback
+    alert(message);
+  }
+}
+
 
 let currentUser = null;
 
