@@ -1299,53 +1299,35 @@ function renderPanel(mode){
 let unsubProducts = null;
 
 async function loadProducts(){
-  // Prefer Firestore products (real-time + real popularity). Fallback to products.json.
+  // Firestore is the single source of truth (no products.json fallback).
   try{
-    const col = collection(db, "products");
-    const qy = query(col, orderBy("popularScore", "desc"));
-    const ok = await new Promise((resolve)=>{
-      unsubProducts && unsubProducts();
-      unsubProducts = onSnapshot(qy, (snap)=>{
-        const arr = snap.docs.map(d=> {
-          const data = d.data() || {};
-          // keep id as in JSON
-          return { id: String(data.id || d.id), ...data, _docId: d.id };
-        });
-        // If Firestore is empty, fallback
-        if(arr.length === 0){ resolve(false); return; }
-        products = arr;
-        applyFilterSort();
-        resolve(true);
-      }, (err)=>{
-        console.warn("Firestore products error", err);
-        resolve(false);
+    const colRef = collection(db, "products");
+    const qy = query(colRef, orderBy("popularScore", "desc"));
+    unsubProducts && unsubProducts();
+    unsubProducts = onSnapshot(qy, (snap)=>{
+      const arr = snap.docs.map(d=> {
+        const data = d.data() || {};
+        return { id: String(data.id || d.id), ...data, _docId: d.id };
       });
+      products = arr;
+      applyFilterSort();
+
+      // If empty, show a helpful hint for setup
+      if(arr.length === 0){
+        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+      }
+    }, (err)=>{
+      console.warn("Firestore products error", err);
+      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
+      products = [];
+      applyFilterSort();
     });
-    if(ok) return;
   }catch(e){
     console.warn("Firestore products init failed", e);
+    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
+    products = [];
+    applyFilterSort();
   }
-  // fallback
-  return loadProductsJson();
-}
-
-async function loadProductsJson(){
-  const res = await fetch("./products.json", { cache: "no-store" });
-  const json = await res.json();
-  const raw = Array.isArray(json.items) ? json.items : [];
-  // Normalize for robust filtering/sorting even if JSON has strings for price/date
-  products = raw.map(p=>({
-    ...p,
-    id: (p.id ?? "").toString(),
-    name: (p.name ?? "").toString(),
-    tags: Array.isArray(p.tags) ? p.tags.map(x=>x.toString()) : [],
-    _price: minVariantPrice(p),
-    _created: Date.parse(p.createdAt ?? "") || 0,
-  }));
-  buildTagCounts();
-  renderTagBar();
-  await preloadStats(products.map(p=>p.id));
-  applyFilterSort();
 }
 
 function setUserUI(user){

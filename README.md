@@ -72,7 +72,7 @@ Deploydan keyin:
 - Admin: `/admin`
 
 Admin’da:
-- Import JSON: `public/products.json` ni yuklab “Import/Upsert”
+- Import JSON: `public/Firestore (products collection)` ni yuklab “Import/Upsert”
 - Keyin storefront Firestore’dan real-time o‘qiydi.
 
 ## 5) Eslatma
