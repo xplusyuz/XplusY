@@ -81,6 +81,30 @@ function toast(message, type="info"){
 let currentUser = null;
 let isEditing = false;
 
+// Normalize price / createdAt for reliable client-side sorting
+function parseUZS(value){
+  // Accept number or strings like "680,000 so'm" / "680000".
+  if(typeof value === "number" && Number.isFinite(value)) return value;
+  if(value == null) return 0;
+  const s = String(value);
+  const digits = s.replace(/[^0-9]/g, "");
+  const n = parseInt(digits || "0", 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function toMillis(ts){
+  try{
+    if(!ts) return 0;
+    if(typeof ts === "number" && Number.isFinite(ts)) return ts;
+    if(ts.toMillis) return ts.toMillis();
+    if(ts.toDate) return +ts.toDate();
+    const d = new Date(ts);
+    return Number.isNaN(+d) ? 0 : +d;
+  }catch(e){
+    return 0;
+  }
+}
+
 // Lightweight interest tracking -> Firestore events (used to compute real popularity)
 async function logEvent(type, productId){
   try{
@@ -1307,6 +1331,8 @@ function updateBadges(){
   if(els.cartCount) els.cartCount.textContent = String(cartCount());
   const nb = document.getElementById("navCartBadge");
   if(nb){ const c = cartCount(); nb.textContent = String(c); nb.hidden = (c<=0); }
+  const fb = document.getElementById("navFavBadge");
+  if(fb){ const c = favs.size; fb.textContent = String(c); fb.hidden = (c<=0); }
 }
 
 
@@ -1971,7 +1997,15 @@ async function loadProducts(){
     unsubProducts = onSnapshot(qy, (snap)=>{
       const arr = snap.docs.map(d=> {
         const data = d.data() || {};
-        return { id: String(data.id || d.id), ...data, _docId: d.id };
+        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+        const created = (data.createdAt ?? data.created_at ?? data.created);
+        return {
+          id: String(data.id || d.id),
+          ...data,
+          _docId: d.id,
+          _price: parseUZS(price),
+          _created: toMillis(created),
+        };
       });
       products = arr;
       buildTagCounts();
