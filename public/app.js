@@ -1424,7 +1424,13 @@ function showView(tab){
 function goTab(tab){
   const safe = ["home","categories","fav","cart","profile"];
   if(!safe.includes(tab)) tab = "home";
-  location.hash = "#"+tab;
+  const target = "#"+tab;
+  // If hash is already the same, hashchange will not fire — render immediately.
+  if(location.hash === target){
+    showView(tab);
+    return;
+  }
+  location.hash = target;
 }
 
 function handleHash(){
@@ -1439,8 +1445,11 @@ window.addEventListener("hashchange", handleHash);
 els.navBar?.addEventListener("click", (e)=>{
   const btn = e.target.closest(".nav-btn");
   if(!btn) return;
+  e.preventDefault();
   const tab = btn.dataset.tab;
   goTab(tab);
+  // Ensure instant navigation even before the first hashchange.
+  showView(tab);
 });
 
 // categories back
