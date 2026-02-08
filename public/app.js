@@ -72,22 +72,6 @@ import {
   addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-
-/* =========================
-   Telegram WebApp detect
-========================= */
-const IS_TG_WEBAPP = typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp;
-function getTgWebUser(){
-  try{
-    const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
-    return u && typeof u === "object" ? u : null;
-  }catch(_e){ return null; }
-}
-if(IS_TG_WEBAPP){
-  try{ window.Telegram.WebApp.ready(); }catch(_e){}
-  try{ window.Telegram.WebApp.expand(); }catch(_e){}
-}
-
 /* =========================
    Toast helper
 ========================= */
@@ -188,11 +172,11 @@ async function logEvent(type, productId){
 const els = {
   avatar: document.getElementById("avatar"),
   avatarBtn: document.getElementById("avatarBtn"),
-  avatarFallback: document.getElementById("avatarFallback"),  grid: document.getElementById("grid"),
+  avatarFallback: document.getElementById("avatarFallback"),grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
-  sort: document.getElementById("sort"),  authCard: document.getElementById("authCard"),
+  sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
   loginForm: document.getElementById("loginForm"),
@@ -207,6 +191,7 @@ const els = {
   btnSignup: document.getElementById("btnSignup"),
   authNotice: document.getElementById("authNotice"),
   authNotice2: document.getElementById("authNotice2"),
+
   heroAuthJump: document.getElementById("heroAuthJump"),
 
   // new UI
@@ -787,138 +772,1560 @@ cart = (cart||[]).map(x=>{
 }); // [{id, qty}]
 
 
-/* ================== PHONE + PASSWORD AUTH ================== */
-function normPhone(raw){
-  const s = String(raw||"").trim();
-  const digits = s.replace(/\D+/g, "");
-  if(!digits) return null;
-
-  // Accept: 9 digits (UZ local), 12 digits starting with 998, or full +998...
-  if(digits.length === 9){
-    return "+998" + digits;
-  }
-  if(digits.length === 12 && digits.startsWith("998")){
-    return "+" + digits;
-  }
-  if(digits.length === 13 && digits.startsWith("998")){ // just in case
-    return "+" + digits.slice(0,12);
-  }
-  if(digits.length >= 10 && digits.length <= 15){
-    // best-effort E164
-    return "+" + digits;
-  }
-  return null;
-}
-function phoneToEmail(e164){
-  // Map phone to a stable pseudo-email for Firebase email/password auth
-  const d = String(e164).replace(/\D+/g, "");
-  return `p${d}@orzumall.phone`;
-}
-function showAuthNotice(el, msg, kind){
-  if(!el) return;
-  el.hidden = false;
-  el.textContent = msg;
-  el.classList.remove("isError","isOk");
-  if(kind === "error") el.classList.add("isError");
-  if(kind === "ok") el.classList.add("isOk");
-}
-function clearAuthNotices(){
-  if(els.authNotice){ els.authNotice.hidden = true; els.authNotice.textContent=""; els.authNotice.classList.remove("isError","isOk"); }
-  if(els.authNotice2){ els.authNotice2.hidden = true; els.authNotice2.textContent=""; els.authNotice2.classList.remove("isError","isOk"); }
-}
-function setAuthTab(which){
-  const isLogin = which === "login";
-  els.tabLogin?.classList.toggle("isActive", isLogin);
-  els.tabSignup?.classList.toggle("isActive", !isLogin);
-  els.tabLogin?.setAttribute("aria-selected", String(isLogin));
-  els.tabSignup?.setAttribute("aria-selected", String(!isLogin));
-  if(els.loginForm) els.loginForm.hidden = !isLogin;
-  if(els.signupForm) els.signupForm.hidden = isLogin;
-  clearAuthNotices();
+function showTgNotice(msg){
+  if(!els.tgNotice) return;
+  els.tgNotice.hidden = !msg;
+  els.tgNotice.textContent = msg || "";
 }
 
-// Tabs
-els.tabLogin?.addEventListener("click", ()=> setAuthTab("login"));
-els.tabSignup?.addEventListener("click", ()=> setAuthTab("signup"));
+function moneyUZS(n){
+  const x = typeof n === "number" && Number.isFinite(n) ? n : parsePrice(n);
+  try { return new Intl.NumberFormat("uz-UZ").format(x) + " so‘m"; }
+  catch { return `${x} UZS`; }
+}
 
-// Login
-els.loginForm?.addEventListener("submit", async (e)=>{
-  e.preventDefault();
-  clearAuthNotices();
+// Accept numbers or strings like: "349 000", "349,000 so'm", "349000 UZS"
+function parsePrice(v){
+  if(typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const s = (v ?? "").toString();
+  // Keep digits only
+  const digits = s.replace(/[^0-9]/g, "");
+  if(!digits) return 0;
+  // Guard against extremely large values (accidental)
+  const n = parseInt(digits.slice(0, 12), 10);
+  return Number.isFinite(n) ? n : 0;
+}
+function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
-  const phone = normPhone(els.loginPhone?.value);
-  const pass = String(els.loginPass?.value || "");
-  if(!phone) return showAuthNotice(els.authNotice, "Telefon raqam noto‘g‘ri. Masalan: +998901234567", "error");
-  if(pass.length < 6) return showAuthNotice(els.authNotice, "Parol kamida 6 ta belgidan iborat bo‘lsin.", "error");
+// Variant pricing support
+function getVariantPricing(p, sel){
+  const color = (sel?.color ?? "").toString() || null;
+  const size  = (sel?.size  ?? "").toString() || null;
 
-  try{
-    const email = phoneToEmail(phone);
-    await signInWithEmailAndPassword(auth, email, pass);
-    showAuthNotice(els.authNotice, "Kirish muvaffaqiyatli ✅", "ok");
-  }catch(err){
-    console.error(err);
-    showAuthNotice(els.authNotice, "Kirish xato. Telefon yoki parol noto‘g‘ri.", "error");
-  }
-});
+  const base = {
+    price: parsePrice(p.price),
+    oldPrice: parsePrice(p.oldPrice),
+    installmentText: (p.installmentText ?? "").toString()
+  };
 
-// Signup
-els.signupForm?.addEventListener("submit", async (e)=>{
-  e.preventDefault();
-  clearAuthNotices();
+  // New optimized format: variants: [{color, size, price, oldPrice?, installmentText?}]
+  if(Array.isArray(p.variants) && p.variants.length){
+    const pick = (c,s)=> p.variants.find(v=>
+      (v?.color ?? null) === (c ?? null) &&
+      (v?.size  ?? null) === (s ?? null)
+    );
+    const v =
+      pick(color, size) ||
+      pick(color, null) ||
+      pick(null, size) ||
+      null;
 
-  const name = String(els.signupName?.value || "").trim();
-  const phone = normPhone(els.signupPhone?.value);
-  const pass = String(els.signupPass?.value || "");
-  const pass2 = String(els.signupPass2?.value || "");
-
-  if(!name) return showAuthNotice(els.authNotice2, "Ismni kiriting.", "error");
-  if(!phone) return showAuthNotice(els.authNotice2, "Telefon raqam noto‘g‘ri. Masalan: +998901234567", "error");
-  if(pass.length < 6) return showAuthNotice(els.authNotice2, "Parol kamida 6 ta belgidan iborat bo‘lsin.", "error");
-  if(pass !== pass2) return showAuthNotice(els.authNotice2, "Parollar bir xil emas.", "error");
-
-  try{
-    const email = phoneToEmail(phone);
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-
-    // Firestore user doc + auto numericId
-    const u = cred.user;
-    const userRef = doc(db, "users", u.uid);
-
-    await runTransaction(db, async (tx)=>{
-      const counterRef = doc(db, "meta", "counters");
-      const counterSnap = await tx.get(counterRef);
-      const data = counterSnap.exists() ? counterSnap.data() : {};
-      const cur = (data && data.userCounter) ? Number(data.userCounter) : 0;
-      const next = cur + 1;
-      tx.set(counterRef, { userCounter: next }, { merge: true });
-      tx.set(userRef, {
-        uid: u.uid,
-        name,
-        phone,
-        numericId: next,
-        createdAt: serverTimestamp(),
-        role: "user"
-      }, { merge: true });
-    });
-
-    showAuthNotice(els.authNotice2, "Ro‘yxatdan o‘tish muvaffaqiyatli ✅", "ok");
-    setAuthTab("login");
-    if(els.loginPhone) els.loginPhone.value = phone;
-    if(els.loginPass) els.loginPass.focus();
-  }catch(err){
-    console.error(err);
-    const code = String(err?.code || "");
-    if(code.includes("auth/email-already-in-use")){
-      showAuthNotice(els.authNotice2, "Bu telefon raqam bilan akkaunt mavjud. Kirish bo‘limidan kiring.", "error");
-    }else{
-      showAuthNotice(els.authNotice2, "Ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring.", "error");
+    if(v){
+      if(v.price != null) base.price = parsePrice(v.price);
+      if(v.oldPrice != null) base.oldPrice = parsePrice(v.oldPrice);
+      if(v.installmentText != null) base.installmentText = (v.installmentText||"").toString();
     }
   }
+
+  // Backward compatibility: variantPrices map (old)
+  const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
+  if(vp && typeof vp === "object"){
+    const keys = [
+      `${color||""}|${size||""}`,
+      `${color||""}|`,
+      `|${size||""}`,
+      color||"",
+      size||""
+    ].filter(k=>k && k !== "|");
+    for(const k of keys){
+      if(Object.prototype.hasOwnProperty.call(vp, k)){
+        const v = vp[k];
+        if(typeof v === "number" || typeof v === "string"){
+          base.price = parsePrice(v);
+        } else if(v && typeof v === "object"){
+          if(v.price != null) base.price = parsePrice(v.price);
+          if(v.oldPrice != null) base.oldPrice = parsePrice(v.oldPrice);
+          if(v.installmentText != null) base.installmentText = v.installmentText.toString();
+        }
+        break;
+      }
+    }
+  }
+  return base;
+}
+
+function minVariantPrice(p){
+  let min = parsePrice(p.price);
+
+  // new optimized
+  if(Array.isArray(p.variants) && p.variants.length){
+    for(const v of p.variants){
+      const n = parsePrice((v && typeof v === "object") ? v.price : v);
+      if(n>0) min = Math.min(min||n, n);
+    }
+  }
+
+  // old map (backward)
+  const vp = (p.variantPrices || p.pricesByVariant || p.pricingByVariant || null);
+  if(vp && typeof vp === "object"){
+    for(const v of Object.values(vp)){
+      const n = (v && typeof v === "object") ? parsePrice(v.price) : parsePrice(v);
+      if(n>0) min = Math.min(min||n, n);
+    }
+  }
+  return min || 0;
+}
+
+function updateCardPricing(cardEl, p, sel){
+  const pr = getVariantPricing(p, sel);
+  const nowEl = cardEl.querySelector(".ppriceNow");
+  const oldEl = cardEl.querySelector(".ppriceOld");
+  const instEl = cardEl.querySelector(".pinstall");
+
+  if(nowEl) nowEl.textContent = moneyUZS(pr.price || 0);
+
+  if(oldEl){
+    if(pr.oldPrice && pr.oldPrice > (pr.price||0)){
+      oldEl.textContent = moneyUZS(pr.oldPrice);
+      oldEl.style.display = "";
+    } else {
+      oldEl.style.display = "none";
+    }
+  }
+
+  if(instEl){
+    if(pr.installmentText){
+      instEl.textContent = pr.installmentText;
+      instEl.style.display = "";
+    } else {
+      instEl.style.display = "none";
+    }
+  }
+}
+
+
+function buildTagCounts(){
+  tagCounts = new Map();
+  for(const p of products){
+    for(const t of (p.tags || [])){
+      const key = String(t).toLowerCase();
+      tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
+    }
+  }
+}
+
+function titleTag(t){
+  // keep original style: capitalize first letter, keep rest
+  const s = String(t);
+  return s.length ? (s[0].toUpperCase() + s.slice(1)) : s;
+}
+
+function renderTagBar(){
+  if(!els.tagBar) return;
+  const entries = Array.from(tagCounts.entries())
+    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+
+  const total = products.length;
+  const chips = [];
+  chips.push(`<button class="tagChip ${selectedTag==="all"?"active":""}" data-tag="all">Barchasi <span class="count">${total}</span></button>`);
+  for(const [tag,count] of entries){
+    chips.push(`<button class="tagChip ${selectedTag===tag?"active":""}" data-tag="${tag}">${titleTag(tag)} <span class="count">${count}</span></button>`);
+  }
+  els.tagBar.innerHTML = chips.join("");
+}
+
+function setSelectedTag(tag){
+  selectedTag = tag || "all";
+  renderTagBar();
+  applyFilterSort();
+}
+
+
+/* ===== Categories from tags (nested) ===== */
+let catTree = null;
+
+function normalizeTag(t){
+  return String(t||"").trim().toLowerCase();
+}
+
+function buildCategoryTree(){
+  const root = { name:"root", count:0, children: new Map() };
+  for(const p of products || []){
+    const tags = Array.isArray(p.tags) ? p.tags : [];
+    const path = tags.map(x=>String(x||"").trim()).filter(Boolean).slice(0, 6);
+    if(path.length===0) continue;
+    root.count++;
+    let node = root;
+    for(const raw of path){
+      const key = normalizeTag(raw);
+      if(!key) continue;
+      if(!node.children.has(key)){
+        node.children.set(key, { key, name: raw.trim(), count:0, children: new Map() });
+      }
+      const child = node.children.get(key);
+      child.count++;
+      node = child;
+    }
+  }
+  catTree = root;
+}
+
+function getNodeByPath(path){
+  let node = catTree;
+  for(const part of path){
+    if(!node || !node.children) return null;
+    const key = normalizeTag(part);
+    node = node.children.get(key);
+  }
+  return node;
+}
+
+function renderCategoriesPage(){
+  if(!els.catList || !els.catCrumbs) return;
+  if(!catTree) buildCategoryTree();
+
+  const node = getNodeByPath(activeCatPath) || catTree;
+
+  // crumbs
+  els.catCrumbs.innerHTML = "";
+  const homeCr = document.createElement("button");
+  homeCr.className = "crumb";
+  homeCr.type = "button";
+  homeCr.textContent = "Barchasi";
+  homeCr.addEventListener("click", ()=>{ activeCatPath = []; renderCategoriesPage(); });
+  els.catCrumbs.appendChild(homeCr);
+
+  let acc = [];
+  for(const part of activeCatPath){
+    acc.push(part);
+    const b = document.createElement("button");
+    b.className = "crumb";
+    b.type = "button";
+    b.textContent = part;
+    const snap = acc.slice();
+    b.addEventListener("click", ()=>{ activeCatPath = snap; renderCategoriesPage(); });
+    els.catCrumbs.appendChild(b);
+  }
+
+  const children = Array.from((node?.children || new Map()).values())
+    .sort((a,b)=> (b.count||0)-(a.count||0) || String(a.name).localeCompare(String(b.name)));
+
+  els.catList.innerHTML = "";
+  if(els.catEmpty) els.catEmpty.hidden = children.length !== 0;
+
+  for(const ch of children){
+    const item = document.createElement("div");
+    item.className = "catItem";
+    item.innerHTML = `
+      <div class="catName">${escapeHtml(ch.name)}</div>
+      <div class="catMeta">
+        <div class="catCount">${ch.count}</div>
+        <div class="catArrow">›</div>
+      </div>`;
+    item.addEventListener("click", ()=>{
+      activeCatPath = [...activeCatPath, ch.name];
+      renderCategoriesPage();
+    });
+    els.catList.appendChild(item);
+  }
+}
+
+function productMatchesCategory(p, path){
+  const usePath = Array.isArray(path) ? path : [];
+  if(usePath.length===0) return true;
+  const tags = Array.isArray(p.tags) ? p.tags.map(x=>String(x||"").trim()) : [];
+  if(tags.length < usePath.length) return false;
+  for(let i=0;i<usePath.length;i++){
+    if(normalizeTag(tags[i]) !== normalizeTag(usePath[i])) return false;
+  }
+  return true;
+}
+function applyFilterSort(){
+  const query = norm(els.q.value);
+  let arr = [...products];
+
+  if(viewMode === "fav"){
+    arr = arr.filter(p=>favs.has(p.id));
+  }
+
+  // Mobile nested category filter (prefix match)
+  if(Array.isArray(appliedCatPath) && appliedCatPath.length>0){
+    arr = arr.filter(p=>productMatchesCategory(p, appliedCatPath));
+  }
+
+  // tag category filter
+  if(selectedTag && selectedTag !== "all"){
+    arr = arr.filter(p => (p.tags || []).map(t=>String(t).toLowerCase()).includes(selectedTag));
+  }
+
+
+  if(query){
+    arr = arr.filter(p=>{
+      const hay = `${p.name} ${(p.tags||[]).join(" ")}`.toLowerCase();
+      return hay.includes(query);
+    });
+  }
+
+  const sort = els.sort.value;
+  if(sort === "price_asc") arr.sort((a,b)=>(a._price||0)-(b._price||0));
+  if(sort === "price_desc") arr.sort((a,b)=>(b._price||0)-(a._price||0));
+  if(sort === "new") arr.sort((a,b)=> (b._created||0) - (a._created||0));
+  if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
+
+  render(arr);
+  renderTagBar();
+}
+
+
+function renderOptions(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  if(colors.length===0 && sizes.length===0) return "";
+  const sel = getSel(p);
+
+  const sw = colors.length ? `
+    <div class="optLine swatchesLine" aria-label="Rang">
+      ${colors.map(c=>{
+        const active = (sel.color===c.name) ? "active" : "";
+        const style = c.hex ? `style="--c:${c.hex}"` : "";
+        return `<button class="swatch ${active}" ${style} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}"></button>`;
+      }).join("")}
+    </div>` : "";
+
+  const sz = sizes.length ? `
+    <div class="optLine sizesLine" aria-label="O'lcham">
+      ${sizes.map(s=>{
+        const active = (sel.size===s) ? "active" : "";
+        return `<button class="sizeChip ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
+      }).join("")}
+    </div>` : "";
+
+  return `<div class="optStack">${sw}${sz}</div>`;
+}
+
+function escapeHtml(str){
+  return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
+function render(arr){
+  els.grid.innerHTML = "";
+  els.empty.hidden = arr.length !== 0;
+
+  for(const p of arr){
+    const card = document.createElement("div");
+    card.className = "pcard";
+
+    const isFav = favs.has(p.id);
+
+    const sel = getSel(p);
+    const currentImg = getCurrentImage(p, sel);
+
+    const st = getStats(p.id);
+    const showAvg = st.count ? st.avg : 0;
+    const showCount = st.count ? st.count : 0;
+
+    card.innerHTML = `
+      <div class="pmedia">
+        <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
+        ${p.badge ? `<div class="pbadge">${escapeHtml(p.badge)}</div>` : ``}
+        <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
+      </div>
+
+      <div class="pbody uz">
+        <div class="ppriceRow">
+          <div class="ppriceNow">${moneyUZS(getVariantPricing(p, sel).price || 0)}</div>
+          <div class="ppriceOld" style="display:none"></div>
+        </div>
+
+        <div class="pinstall" style="display:none"></div>
+
+        <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
+
+
+        
+
+        <div class="pactions">
+          <div class="pratingInline">${(showCount ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Apply dynamic pricing for current selection
+    updateCardPricing(card, p, sel);
+
+    const favBtn = card.querySelector(".favBtn");
+    favBtn.addEventListener("click", ()=>{
+      if(favs.has(p.id)) { favs.delete(p.id); } else { favs.add(p.id); logEvent('favorite', p.id); }
+      saveLS(LS.favs, Array.from(favs));
+      favBtn.classList.toggle("active", favs.has(p.id));
+      favBtn.textContent = favs.has(p.id) ? "♥" : "♡";
+      favBtn.setAttribute("aria-pressed", favs.has(p.id) ? "true" : "false");
+      updateBadges();
+      if(viewMode === "fav") applyFilterSort();
+    });
+
+
+    const imgEl = card.querySelector(".pimg");
+
+    
+const openQuickView = ()=>{
+  const selNow = getSel(p);
+  const imgs = getImagesFor(p, selNow);
+  if(!imgs.length) return;
+
+  const stQV = getStats(p.id);
+
+  openImageViewer({
+    productId: p.id,
+    title: p.name || "Rasm",
+    desc: p.description || p.desc || "",
+    pricing: getVariantPricing(p, selNow),
+    rating: Number(stQV.avg || 0),
+    reviewsCount: Number(stQV.count || 0),
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    badge: p.badge || "",
+    images: imgs,
+    startIndex: selNow.imgIdx || 0,
+    onSelect: (i)=>{
+      setImageIndex(p, i);
+      setCardImage(imgEl, p, getSel(p));
+    }
+  });
+};
+
+    // Open fullscreen viewer on image click
+    imgEl.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openQuickView();
+    });
+
+    // Open quick view when clicking anywhere on the card (except fav/cart)
+    card.addEventListener("click", (e)=>{
+      const t = e.target;
+      if(t.closest(".favBtn")) return;
+      if(t.closest('[data-act="cart"]')) return;
+      openQuickView();
+    });
+
+    card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
+      handleAddToCart(p, { openCartAfter: true });
+    });
+
+    els.grid.appendChild(card);
+
+    // (variant selection is now handled in the modal on Add to Cart)
+
+  }
+}
+
+
+function addToCart(id, qty, sel){
+  logEvent('add_to_cart', id);
+  const key = variantKey(id, sel || {color:null,size:null});
+  const p = products.find(x=>x.id===id);
+  const img = p ? getCurrentImage(p, sel || getDefaultSel(p)) : null;
+  const item = cart.find(x=>x.key===key);
+  if(item){
+    item.qty += qty;
+    // keep latest selected image for this variant
+    if(img) item.image = img;
+  } else {
+    cart.push({key, id, color: sel?.color || null, size: sel?.size || null, qty, image: img || null});
+  }
+  cart = cart.filter(x=>x.qty>0);
+  saveLS(LS.cart, cart);
+  updateBadges();
+}
+
+// ---------- World-class variant selection (opened from Add to Cart) ----------
+const vState = { open:false, product:null, qty:1, sel:{color:null,size:null}, openCartAfter:false };
+
+function productNeedsVariantModal(p){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  return (colors.length > 1) || (sizes.length > 1);
+}
+
+function normalizeSelectionForProduct(p, baseSel){
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = { ...(baseSel || {}) };
+  if(!sel.color && colors.length === 1) sel.color = colors[0].name;
+  if(!sel.size && sizes.length === 1) sel.size = sizes[0];
+  return { color: sel.color || null, size: sel.size || null };
+}
+
+function handleAddToCart(p, opts={}){
+  const openCartAfter = !!opts.openCartAfter;
+  if(!productNeedsVariantModal(p)){
+    const sel = normalizeSelectionForProduct(p, getSel(p));
+    addToCart(p.id, 1, sel);
+    updateBadges();
+    if(openCartAfter) openPanel("cart");
+    return;
+  }
+  openVariantModal(p, { openCartAfter });
+}
+
+function openVariantModal(p, opts={}){
+  if(!els.vOverlay) return;
+  vState.open = true;
+  vState.product = p;
+  vState.openCartAfter = !!opts.openCartAfter;
+  vState.qty = 1;
+  vState.sel = normalizeSelectionForProduct(p, getSel(p));
+  renderVariantModal();
+  showOverlay(els.vOverlay);
+}
+
+function closeVariantModal(){
+  if(!els.vOverlay) return;
+  vState.open = false;
+  vState.product = null;
+  hideOverlay(els.vOverlay);
+}
+
+function renderVariantModal(){
+  const p = vState.product;
+  if(!p) return;
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = vState.sel || {color:null,size:null};
+
+  if(els.vName) els.vName.textContent = p.name || "—";
+  const pricing = getVariantPricing(p, sel);
+  if(els.vPrice) els.vPrice.textContent = moneyUZS(pricing.price || 0);
+  if(els.vQty) els.vQty.textContent = String(vState.qty || 1);
+  if(els.vImg){
+    const img = getCurrentImage(p, sel) || getCurrentImage(p, getDefaultSel(p)) || "";
+    els.vImg.src = img;
+  
+    // click to zoom (image only)
+    els.vImg.onclick = (e)=>{
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      try{ e?.stopImmediatePropagation?.(); }catch(_){ }
+      openImageZoom(els.vImg.src || "");
+    };
+  }
+
+  const showColors = colors.length > 0;
+  if(els.vColors) els.vColors.hidden = !showColors;
+  if(els.vColorRow) els.vColorRow.innerHTML = showColors ? colors.map(c=>{
+    const active = sel.color === c.name ? "active" : "";
+    const bg = c.hex ? `style="background:${c.hex};"` : "";
+    return `<button class="vSwatch ${active}" ${bg} data-c="${escapeHtml(c.name)}" title="${escapeHtml(c.name)}" aria-label="${escapeHtml(c.name)}"></button>`;
+  }).join("") : "";
+
+  const showSizes = sizes.length > 0;
+  if(els.vSizes) els.vSizes.hidden = !showSizes;
+  if(els.vSizeRow) els.vSizeRow.innerHTML = showSizes ? sizes.map(s=>{
+    const active = sel.size === s ? "active" : "";
+    return `<button class="vChip ${active}" data-s="${escapeHtml(s)}">${escapeHtml(s)}</button>`;
+  }).join("") : "";
+
+  if(els.vColorHint) els.vColorHint.hidden = true;
+  if(els.vSizeHint) els.vSizeHint.hidden = true;
+
+  els.vColorRow?.querySelectorAll(".vSwatch").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      vState.sel.color = btn.getAttribute("data-c");
+      // keep selection for future image viewer usage
+      const now = getSel(p);
+      now.color = vState.sel.color;
+      now.imgIdx = 0;
+      selected.set(p.id, now);
+      renderVariantModal();
+    });
+  });
+  els.vSizeRow?.querySelectorAll(".vChip").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      vState.sel.size = btn.getAttribute("data-s");
+      const now = getSel(p);
+      now.size = vState.sel.size;
+      selected.set(p.id, now);
+      renderVariantModal();
+    });
+  });
+}
+
+function validateVariantSelection(){
+  const p = vState.product;
+  if(!p) return false;
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const sel = normalizeSelectionForProduct(p, vState.sel);
+  vState.sel = sel;
+  let ok = true;
+  if(colors.length > 0 && !sel.color){ ok = false; if(els.vColorHint) els.vColorHint.hidden = false; }
+  if(sizes.length > 0 && !sel.size){ ok = false; if(els.vSizeHint) els.vSizeHint.hidden = false; }
+  return ok;
+}
+
+function cartCount(){
+  return cart.reduce((s,x)=>s + (x.qty||0), 0);
+}
+
+
+function updateCartSelectUI(){
+  if(!els.panelSelectRow || !els.selectAllBox) return;
+
+  const isCart = (els.panelTitle?.textContent || "").trim() === "Savatcha";
+  els.panelSelectRow.hidden = !(isCart && cart.length > 0);
+
+  if(cart.length === 0) return;
+
+  const allSel = allCartSelected();
+  els.selectAllBox.checked = allSel;
+
+  if(els.selectAllLabel){
+    const selCount = selectedCartItems().length;
+    els.selectAllLabel.textContent = (selCount === cart.length)
+      ? `Hammasi tanlangan (${selCount})`
+      : `Tanlangan: ${selCount} / ${cart.length}`;
+  }
+}
+
+function updateBadges(){
+  if(els.favCount) els.favCount.textContent = String(favs.size);
+  if(els.cartCount) els.cartCount.textContent = String(cartCount());
+  const nb = document.getElementById("navCartBadge");
+  if(nb){ const c = cartCount(); nb.textContent = String(c); nb.hidden = (c<=0); }
+  const fb = document.getElementById("navFavBadge");
+  if(fb){ const c = favs.size; fb.textContent = String(c); fb.hidden = (c<=0); }
+}
+
+
+/* =========================
+   Orders (profile page)
+========================= */
+let ordersUnsub = null;
+let ordersCache = [];
+
+function fmtDate(ts){
+  try{
+    const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+    if(!d || Number.isNaN(+d)) return "";
+    return d.toLocaleString("uz-UZ", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+  }catch(e){
+    return "";
+  }
+}
+
+
+function orderStatusLabel(s){
+  const v = (s||"").toString();
+  const m = {
+    "pending":"Kutilmoqda",
+    "pending_cash":"Kutilmoqda (naqd)",
+    "pending_payment":"To‘lov kutilmoqda",
+    "paid":"To‘langan",
+    "delivered":"Yetkazildi",
+    "cancelled":"Bekor qilindi"
+  };
+  return m[v] || (v ? v : "");
+}
+function orderStatusClass(s){
+  const v = (s||"").toString();
+  if(!v) return "";
+  return "status-"+v.replace(/[^a-z0-9_\-]/gi,"").toLowerCase();
+}
+
+function renderOrders(orders){
+  if(!els.ordersList || !els.ordersEmpty) return;
+  const arr = Array.isArray(orders) ? orders : [];
+  ordersCache = arr;
+  els.ordersList.innerHTML = "";
+  els.ordersEmpty.hidden = arr.length !== 0;
+
+  for(const o of arr){
+    const id = String(o.id || "").slice(-6);
+    const total = moneyUZS(Number(o.totalUZS||0));
+    const status = (o.status||"").toString();
+    const provider = (o.provider||"").toString();
+    const when = fmtDate(o.createdAt);
+    const row = document.createElement("div");
+    row.className = "orderRow";
+    row.innerHTML = `
+      <div class="orderTop">
+        <div class="orderId">#${escapeHtml(id)}</div>
+        <div class="orderTotal">${escapeHtml(total)}</div>
+      </div>
+      <div class="orderMeta">
+        ${status ? `<span class="orderPill ${orderStatusClass(status)}">${escapeHtml(orderStatusLabel(status))}</span>` : ""}
+        ${provider ? `<span class="orderPill">${escapeHtml(provider)}</span>` : ""}
+        ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
+      </div>
+    `;
+    els.ordersList.appendChild(row);
+  }
+}
+
+function subscribeOrders(uid){
+  if(!uid || !db || !els.ordersList) return;
+  try{ ordersUnsub?.(); }catch(e){}
+
+  // If security rules disallow, we fail gracefully.
+  const qy = query(
+    collection(db, "users", uid, "orders"),
+    orderBy("createdAt", "desc"),
+    limit(20)
+  );
+
+  ordersUnsub = onSnapshot(qy, (snap)=>{
+    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+    renderOrders(arr);
+  }, (err)=>{
+    console.warn("orders subscribe error", err);
+    // Fallback to cache if any
+    renderOrders(ordersCache);
+  });
+}
+
+els.ordersReload?.addEventListener("click", ()=>{
+  if(!currentUser?.uid){ toast("Avval kirish qiling."); return; }
+  subscribeOrders(currentUser.uid);
+  toast("Buyurtmalar yangilanmoqda...");
 });
 
-// Logout
-els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
+
+/* ===== Mobile SPA Router (Android-like pages) ===== */
+let activeTab = "home";
+let activeCatPath = []; // array of strings
+let appliedCatPath = []; // applied category filter (prefix path)
+
+function setActiveNav(tab){
+  document.querySelectorAll(".mobile-bottom-bar .nav-btn").forEach(btn=>{
+    const on = (btn.dataset.tab === tab);
+    btn.classList.toggle("active", on);
+  });
+}
+
+function showView(tab){
+  const map = {
+    home: els.viewHome,
+    categories: els.viewCategories,
+    fav: els.viewFav,
+    cart: els.viewCart,
+    profile: els.viewProfile
+  };
+  Object.entries(map).forEach(([k, el])=>{
+    if(!el) return;
+    el.classList.toggle("active", k===tab);
+    el.hidden = (k!==tab);
+  });
+  activeTab = tab;
+  setActiveNav(tab);
+
+  // render pages on enter
+  if(tab === "categories") renderCategoriesPage();
+  if(tab === "fav") renderFavPage();
+  if(tab === "cart") renderCartPage();
+  if(tab === "profile") {
+    if(currentUser?.uid) subscribeOrders(currentUser.uid);
+  }
+}
+
+function goTab(tab){
+  const safe = ["home","categories","fav","cart","profile"];
+  if(!safe.includes(tab)) tab = "home";
+  const target = "#"+tab;
+  // If hash is already the same, hashchange will not fire — render immediately.
+  if(location.hash === target){
+    showView(tab);
+    return;
+  }
+  location.hash = target;
+}
+
+function handleHash(){
+  const h = (location.hash || "#home").replace("#","");
+  const tab = h || "home";
+  showView(tab);
+}
+
+window.addEventListener("hashchange", handleHash);
+
+// bottom bar clicks (delegation)
+els.navBar?.addEventListener("click", (e)=>{
+  const btn = e.target.closest(".nav-btn");
+  if(!btn) return;
+  e.preventDefault();
+  const tab = btn.dataset.tab;
+  goTab(tab);
+  // Ensure instant navigation even before the first hashchange.
+  showView(tab);
+});
+
+// categories back
+els.catBackBtn?.addEventListener("click", ()=>{
+  if(activeCatPath.length>0){
+    activeCatPath.pop();
+    renderCategoriesPage();
+  } else {
+    goTab("home");
+  }
+});
+els.catClearBtn?.addEventListener("click", ()=>{
+  activeCatPath = [];
+  appliedCatPath = [];
+  applyFilterSort();
+  renderCategoriesPage();
+});
+els.catApplyBtn?.addEventListener("click", ()=>{
+  // apply activeCatPath filter and go home
+  appliedCatPath = [...activeCatPath];
+  applyFilterSort();
+  goTab("home");
+});
+
+// cart select all (page)
+els.cartSelectAllPage?.addEventListener("change", ()=>{
+  syncCartSelected(false);
+  const checked = !!els.cartSelectAllPage.checked;
+  cartSelected = new Set(checked ? cart.map(x=>x.key) : []);
+  updateCartSelectUI();
+  renderCartPage();
+});
+
+// payme/share/clear page buttons reuse existing handlers when possible
+els.clearCartPage?.addEventListener("click", ()=>{
+  cart = [];
+  cartSelected = new Set();
+  saveLS(LS.cart, cart);
+  updateBadges();
+  renderCartPage();
+});
+
+function openPanel(mode){
+  if(!els.sidePanel || !els.overlay) return;
+  // bottom controls exist for both, but differ
+  els.panelBottom.style.display = "";
+  const isCart = (mode === "cart");
+  if(els.totalRow) els.totalRow.style.display = isCart ? "" : "none";
+  if(els.paymeBtn) els.paymeBtn.style.display = isCart ? "" : "none";
+  if(els.tgShareBtn) els.tgShareBtn.style.display = isCart ? "" : "none";
+  if(els.clearBtn) els.clearBtn.textContent = isCart ? "Tozalash" : "Sevimlilarni tozalash";
+  els.panelTitle.textContent = isCart ? "Savatcha" : "Sevimlilar";
+  renderPanel(mode);
+  updateCartSelectUI();
+
+  // show + animate
+  els.overlay.hidden = false;
+  els.sidePanel.hidden = false;
+  requestAnimationFrame(()=>{
+    els.overlay.classList.add("open");
+    els.sidePanel.classList.add("open");
+  });
+}
+
+function closePanel(){
+  if(!els.sidePanel || !els.overlay) return;
+
+  els.overlay.classList.remove("open");
+  els.sidePanel.classList.remove("open");
+
+  // wait animation then hide
+  const t = 240;
+  window.setTimeout(()=>{
+    els.overlay.hidden = true;
+    els.sidePanel.hidden = true;
+  }, t);
+}
+
+
+// ---------- Image viewer (fullscreen gallery) ----------
+function renderViewer(){
+  if(!els.imgViewer || !els.imgViewerImg || !els.imgThumbs) return;
+  const imgs = viewer.images || [];
+  const idx = clampIdx(viewer.idx || 0, imgs.length);
+  viewer.idx = idx;
+  // Header title
+  if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
+
+  // Price + meta (optional)
+  const pr = viewer.pricing || null;
+  if(els.qvPrice) els.qvPrice.textContent = pr ? moneyUZS(pr.price||0) : "";
+  if(els.qvOldPrice){
+    const op = pr ? (pr.oldPrice||0) : 0;
+    els.qvOldPrice.textContent = op ? moneyUZS(op) : "";
+    els.qvOldPrice.style.display = op ? "" : "none";
+  }
+  if(els.qvRating){
+    const r = Number(viewer.rating||0);
+    const c = Number(viewer.reviewsCount||0);
+    els.qvRating.textContent = (r||c) ? `⭐ ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
+    els.qvRating.style.display = (r||c) ? "" : "none";
+  }
+  if(els.qvBadge){
+    const b = (viewer.badge||"").toString().trim();
+    els.qvBadge.textContent = b;
+    els.qvBadge.style.display = b ? "" : "none";
+  }
+  if(els.qvTags){
+    const tagsArr = Array.isArray(viewer.tags) ? viewer.tags : [];
+    els.qvTags.innerHTML = tagsArr.slice(0,12).map(t=>`<span class="qvTag">${escapeHtml(String(t))}</span>`).join("");
+    els.qvTags.style.display = tagsArr.length ? "" : "none";
+  }
+
+  // Description
+  if(els.imgViewerDesc) els.imgViewerDesc.textContent = viewer.desc || "";
+
+  els.imgViewerImg.src = imgs[idx] || "";
+
+  // thumbs
+  els.imgThumbs.innerHTML = "";
+  imgs.forEach((src, i)=>{
+    const b = document.createElement("button");
+    b.className = "thumb" + (i===idx ? " active" : "");
+    b.innerHTML = `<img src="${src}" alt="thumb" loading="lazy" />`;
+    b.addEventListener("click", ()=>{
+      viewer.idx = i;
+      renderViewer();
+      viewer.onSelect?.(i);
+    });
+    els.imgThumbs.appendChild(b);
+  });
+
+  const hasNav = imgs.length > 1;
+  if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
+  if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
+  renderReviewsUI(viewer.productId);
+}
+
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
+  if(!els.imgViewer) return;
+  viewer = {
+    open: true,
+    productId: productId || null,
+    title: title || "Rasm",
+    desc: desc || "",
+    pricing: pricing || null,
+    rating: Number.isFinite(+rating) ? +rating : 0,
+    reviewsCount: Number.isFinite(+reviewsCount) ? +reviewsCount : 0,
+    tags: Array.isArray(tags) ? tags : [],
+    badge: badge || "",
+    images: (images||[]).filter(Boolean),
+    idx: startIndex || 0,
+    onSelect: onSelect || null
+  };
+  showOverlay(els.imgViewer);
+  renderViewer();
+}
+
+
+// Compatibility helper: some cards call openViewer(productId)
+function openViewer(productId){
+  const p = (products || []).find(x=>String(x.id)===String(productId));
+  if(!p){ toast("Mahsulot topilmadi."); return; }
+  const images = (p.images && p.images.length ? p.images : (p.imagesByColor?.[0]?.images || [])).filter(Boolean);
+  openImageViewer({
+    productId: p.id,
+    title: p.name || "Mahsulot",
+    desc: p.description || "",
+    pricing: { price: p.price, oldPrice: p.oldPrice, currency: p.currency || "UZS" },
+    rating: p.rating || 0,
+    reviewsCount: p.reviewsCount || 0,
+    tags: p.tags || [],
+    badge: p.badge || "",
+    images,
+    startIndex: 0,
+  });
+}
+
+function closeImageViewer(){
+  if(!els.imgViewer) return;
+  viewer.open = false;
+  cleanupReviewSubscriptions();
+  hideOverlay(els.imgViewer);
+}
+
+function stepViewer(dir){
+  const n = viewer.images?.length || 0;
+  if(n <= 1) return;
+  viewer.idx = clampIdx((viewer.idx||0) + dir, n);
+  renderViewer();
+  viewer.onSelect?.(viewer.idx);
+}
+
+// ---------- Reviews UI (in fullscreen viewer) ----------
+let draftStars = 5;
+let hoverStars = 0;
+
+function renderStarSelector(){
+  if(!els.revStars) return;
+  els.revStars.innerHTML = "";
+  const shown = hoverStars || draftStars;
+  for(let i=1;i<=5;i++){
+    const b = document.createElement("button");
+    b.className = "starBtn" + (i<=shown ? " active" : "");
+    b.type = "button";
+    b.title = `${i} / 5`;
+    b.textContent = "★";
+    b.addEventListener("mouseenter", ()=>{ hoverStars = i; renderStarSelector(); });
+    b.addEventListener("focus", ()=>{ hoverStars = i; renderStarSelector(); });
+    b.addEventListener("mouseleave", ()=>{ hoverStars = 0; renderStarSelector(); });
+    b.addEventListener("blur", ()=>{ hoverStars = 0; renderStarSelector(); });
+    b.addEventListener("click", ()=>{
+      draftStars = i;
+      hoverStars = 0;
+      renderStarSelector();
+    });
+    els.revStars.appendChild(b);
+  }
+}
+
+
+// --- Review images (selection + preview) ---
+function renderReviewsUI(productId){
+  if(!productId) return;
+  renderStarSelector();
+  // Firestore realtime updates (subscribe once per opened product)
+  if(viewerProductId !== productId) subscribeReviews(productId);
+}
+
+
+function renderVariantLine(ci){
+  if(!ci) return "";
+  const parts = [];
+  if(ci.color) parts.push(ci.color);
+  if(ci.size) parts.push(ci.size);
+  if(parts.length===0) return "";
+  return `<div class="ptags">${parts.map(x=>`#${escapeHtml(x)}`).join(" ")}</div>`;
+}
+
+function renderPanel(mode){
+
+  els.panelList.innerHTML = "";
+  const list = [];
+  if(mode === "cart") syncCartSelected(true);
+
+  if(mode === "fav"){
+    for(const id of favs){
+      const p = products.find(x=>x.id===id);
+      if(p) list.push({p, qty:0});
+    }
+  } else {
+    for(const ci of cart){
+      const p = products.find(x=>x.id===ci.id);
+      if(p) list.push({p, qty: ci.qty || 1, ci});
+    }
+  }
+
+  els.panelEmpty.hidden = list.length !== 0;
+
+  let total = 0;
+
+  for(const row of list){
+    const {p, qty} = row;
+    if(mode === "cart" && cartSelected.has(row.ci?.key)) total += (getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0) * qty;
+
+    const imgSrc = (mode === "cart")
+      ? (row.ci?.image || getCurrentImage(p, {color: row.ci?.color || null, size: row.ci?.size || null, imgIdx: 0}))
+      : getCurrentImage(p, getSel(p));
+
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        ${mode==="cart" ? `<label class="cartPick"><input type="checkbox" class="cartPickBox" data-pick="${escapeHtml(row.ci.key)}" ${cartSelected.has(row.ci.key) ? "checked" : ""} /><span></span></label>` : ""}
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        ${mode==="cart" ? renderVariantLine(row.ci) : ""}
+        <div class="cartRow">
+          <div class="price">${moneyUZS(getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        ${mode==="cart" ? `
+        <div class="cartRow">
+          <div class="qty">
+            <button data-q="-">−</button>
+            <span>${qty}</span>
+            <button data-q="+">+</button>
+          </div>
+          <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
+        </div>` : `
+        <div class="cartRow">
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <div class="badge">❤️</div>
+        </div>`}
+      </div>
+    `;
+
+    
+    // Click image -> open large viewer
+    const cartImgEl = item.querySelector(".cartImg");
+    if(cartImgEl){
+      cartImgEl.addEventListener("click", (e)=>{
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        try{ e?.stopImmediatePropagation?.(); }catch(_){ }
+        openImageZoom(imgSrc);
+      });
+    }
+
+const pickBox = item.querySelector(".cartPickBox");
+    if(pickBox){
+      pickBox.addEventListener("change", ()=>{
+        const k = pickBox.getAttribute("data-pick");
+        if(pickBox.checked) cartSelected.add(k); else cartSelected.delete(k);
+        updateCartSelectUI();
+        renderPanel("cart");
+      });
+    }
+
+const removeBtn = item.querySelector(".removeBtn");
+    removeBtn.addEventListener("click", ()=>{
+      if(mode==="fav"){
+        favs.delete(p.id);
+        saveLS(LS.favs, Array.from(favs));
+        updateBadges();
+        renderPanel("fav");
+        if(viewMode==="fav") applyFilterSort();
+      } else {
+        cart = cart.filter(x=>x.key!==row.ci.key);
+        saveLS(LS.cart, cart);
+        updateBadges();
+        renderPanel("cart");
+      }
+    });
+
+    if(mode==="cart"){
+      item.querySelector('[data-q="-"]').addEventListener("click", ()=>{
+        addToCart(p.id, -1, row.ci);
+        renderPanel("cart");
+      });
+      item.querySelector('[data-q="+"]').addEventListener("click", ()=>{
+        addToCart(p.id, +1, row.ci);
+        renderPanel("cart");
+      });
+    } else {
+      const addBtn = item.querySelector("[data-add]");
+      addBtn.addEventListener("click", ()=>{
+        addToCart(p.id, 1, getSel(p));
+        openPanel("cart");
+      });
+    }
+
+    els.panelList.appendChild(item);
+  }
+
+  if(els.cartTotal) els.cartTotal.textContent = moneyUZS(total);
+}
+
+
+
+
+/* ===== Page renderers for SPA (Fav/Cart) ===== */
+function renderFavPage(){
+  if(!els.favPageList || !els.favPageEmpty) return;
+  els.favPageList.innerHTML = "";
+  const list = [];
+  for(const id of favs){
+    const p = products.find(x=>x.id===id);
+    if(p) list.push({p});
+  }
+  els.favPageEmpty.hidden = list.length !== 0;
+
+  for(const row of list){
+    const p = row.p;
+    const imgSrc = getCurrentImage(p, getSel(p));
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        <div class="cartRow">
+          <div class="price">${moneyUZS(getVariantPricing(p, {}).price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        <div class="cartRow">
+          <button class="pBtn" data-open>Ko‘rish</button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+        </div>
+      </div>
+    `;
+
+    item.querySelector(".cartImg")?.addEventListener("click", (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      openImageZoom(imgSrc);
+    });
+
+    item.querySelector("[data-open]")?.addEventListener("click", ()=>{
+      openViewer(p.id);
+    });
+
+    item.querySelector("[data-add]")?.addEventListener("click", ()=>{
+      addToCart(p.id, 1, getSel(p));
+      updateBadges();
+      goTab("cart");
+    });
+
+    item.querySelector(".removeBtn")?.addEventListener("click", ()=>{
+      favs.delete(p.id);
+      saveLS(LS.favs, Array.from(favs));
+      updateBadges();
+      renderFavPage();
+      applyFilterSort();
+    });
+
+    els.favPageList.appendChild(item);
+  }
+}
+
+function renderCartPage(){
+  if(!els.cartPageList || !els.cartPageEmpty) return;
+  els.cartPageList.innerHTML = "";
+  syncCartSelected(true);
+
+  const list = [];
+  for(const ci of cart){
+    const p = products.find(x=>x.id===ci.id);
+    if(p) list.push({p, qty: ci.qty||1, ci});
+  }
+  els.cartPageEmpty.hidden = list.length !== 0;
+
+  let total = 0;
+
+  for(const row of list){
+    const {p, qty, ci} = row;
+    const vp = getVariantPricing(p, {color: ci?.color||null, size: ci?.size||null});
+    if(cartSelected.has(ci.key)) total += (vp.price||0) * qty;
+
+    const imgSrc = ci?.image || getCurrentImage(p, {color: ci?.color||null, size: ci?.size||null, imgIdx:0});
+
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        <label class="cartPick">
+          <input type="checkbox" class="cartPickBox" data-pick="${escapeHtml(ci.key)}" ${cartSelected.has(ci.key) ? "checked" : ""} />
+          <span></span>
+        </label>
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        ${renderVariantLine(ci)}
+        <div class="cartRow">
+          <div class="price">${moneyUZS(vp.price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        <div class="cartRow">
+          <div class="qty">
+            <button data-q="-">−</button>
+            <span>${qty}</span>
+            <button data-q="+">+</button>
+          </div>
+          <div class="badge">${moneyUZS((vp.price||0)*qty)}</div>
+        </div>
+      </div>
+    `;
+
+    item.querySelector(".cartImg")?.addEventListener("click", (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      openImageZoom(imgSrc);
+    });
+
+    item.querySelector(".cartPickBox")?.addEventListener("change", (e)=>{
+      const k = e.target.getAttribute("data-pick");
+      if(e.target.checked) cartSelected.add(k); else cartSelected.delete(k);
+      updateCartSelectUI();
+      renderCartPage();
+    });
+
+    item.querySelector(".removeBtn")?.addEventListener("click", ()=>{
+      cart = cart.filter(x=>x.key!==ci.key);
+      saveLS(LS.cart, cart);
+      updateBadges();
+      renderCartPage();
+    });
+
+    item.querySelector('[data-q="-"]')?.addEventListener("click", ()=>{
+      addToCart(p.id, -1, ci);
+      updateBadges();
+      renderCartPage();
+    });
+    item.querySelector('[data-q="+"]')?.addEventListener("click", ()=>{
+      addToCart(p.id, +1, ci);
+      updateBadges();
+      renderCartPage();
+    });
+
+    els.cartPageList.appendChild(item);
+  }
+
+  if(els.cartTotalPage) els.cartTotalPage.textContent = moneyUZS(total);
+
+  // select all checkbox state
+  if(els.cartSelectAllPage){
+    const all = cart.length>0 && cart.every(x=>cartSelected.has(x.key));
+    els.cartSelectAllPage.checked = all;
+    els.cartSelectAllPage.indeterminate = !all && cartSelected.size>0;
+  }
+}
+
+
+
+/* =========================
+   Checkout (Cart -> Order)
+========================= */
+let shipMap = null;
+let shipMarker = null;
+let shipLatLng = null;
+let shipMapInited = false;
+
+function initShipMapOnce(){
+  if(shipMapInited) return;
+  const el = document.getElementById("shipMap");
+  if(!el || typeof L === "undefined") return;
+  shipMapInited = true;
+
+  // Default: Tashkent
+  shipMap = L.map(el, { zoomControl: false }).setView([41.3111, 69.2797], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(shipMap);
+
+  shipMap.on("click", (e)=>{
+    shipLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if(!shipMarker){
+      shipMarker = L.marker(e.latlng).addTo(shipMap);
+    }else{
+      shipMarker.setLatLng(e.latlng);
+    }
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+  });
+}
+
+function openCheckout(){
+  if(!els.checkoutSheet) return;
+  els.checkoutSheet.hidden = false;
+  // Scroll sheet into view
+  els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // init map after visible so Leaflet sizes correctly
+  setTimeout(()=>{
+    initShipMapOnce();
+    try{ shipMap && shipMap.invalidateSize(); }catch(e){}
+  }, 60);
+}
+
+function closeCheckout(){
+  if(!els.checkoutSheet) return;
+  els.checkoutSheet.hidden = true;
+}
+
+function getPayType(){
+  const r = document.querySelector('input[name="paytype"]:checked');
+  return r ? r.value : "cash";
+}
+
+async function createOrderFromCheckout(){
+  if(!currentUser){
+    toast("Avval kirish qiling (Google / Telegram).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+
+  const built = buildSelectedItems();
+  if(!built.ok){ toast(built.reason); return; }
+
+  const address = (els.shipAddress?.value || "").trim();
+  if(!address && !shipLatLng){
+    toast("Manzil kiriting yoki xaritadan belgilang.");
+    return;
+  }
+
+  const payType = getPayType(); // cash | payme
+  const orderId = String(Date.now()); // digits-only
+  const amountTiyin = Math.round(built.totalUZS * 100);
+
+  const payload = {
+    orderId,
+    provider: payType === "payme" ? "payme" : "cash",
+    status: payType === "payme" ? "pending_payment" : "pending_cash",
+    items: built.items,
+    totalUZS: built.totalUZS,
+    amountTiyin: payType === "payme" ? amountTiyin : null,
+    shipping: {
+      addressText: address || null,
+      lat: shipLatLng?.lat ?? null,
+      lng: shipLatLng?.lng ?? null
+    }
+  };
+
+  try{
+    await createOrderDoc(payload);
+    removePurchasedFromCart(built.sel);
+    updateBadges();
+    renderCartPage();
+    closeCheckout();
+  }catch(e){
+    console.warn("checkout order create failed", e);
+    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
+    return;
+  }
+
+  if(payType === "payme"){
+    if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
+      toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
+      return;
+    }
+    const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
+    const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+    const b64 = btoa(unescape(encodeURIComponent(params)));
+    window.location.href = `https://checkout.paycom.uz/${b64}`;
+  }else{
+    toast("Buyurtmangiz qabul qilindi ✅");
+    goTab("profile");
+  }
+}
+
+let unsubProducts = null;
+
+async function loadProducts(){
+  // Firestore is the single source of truth (no products.json fallback).
+  try{
+    const colRef = collection(db, "products");
+    const qy = query(colRef, orderBy("popularScore", "desc"));
+    unsubProducts && unsubProducts();
+    unsubProducts = onSnapshot(qy, (snap)=>{
+      const arr = snap.docs.map(d=> {
+        const data = d.data() || {};
+        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+        const created = (data.createdAt ?? data.created_at ?? data.created);
+        return {
+          id: String(data.id || d.id),
+          ...data,
+          _docId: d.id,
+          _price: parseUZS(price),
+          _created: toMillis(created),
+        };
+      });
+      products = arr;
+      buildTagCounts();
+      renderTagBar();
+      buildCategoryTree();
+      applyFilterSort();
+      if(activeTab==="categories") renderCategoriesPage();
+
+      // If empty, show a helpful hint for setup
+      if(arr.length === 0){
+        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+      }
+    }, (err)=>{
+      console.warn("Firestore products error", err);
+      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
+      products = [];
+      applyFilterSort();
+    });
+  }catch(e){
+    console.warn("Firestore products init failed", e);
+    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
+    products = [];
+    applyFilterSort();
+  }
+}
+
+/* ================== PHONE + PASSWORD AUTH ================== */
+function normPhone(raw){
+  const s = String(raw||"").trim().replace(/[\s\-\(\)]/g,"");
+  if(!s) return "";
+  let p = s;
+  if(p.startsWith("00")) p = "+" + p.slice(2);
+  if(!p.startsWith("+")) p = "+" + p;
+  // allow only + and digits
+  p = "+" + p.replace(/[^0-9]/g,"");
+  // Uzbekistan typical length +998XXXXXXXXX (13 chars)
+  if(!/^\+\d{7,15}$/.test(p)) return "";
+  return p;
+}
+function phoneToEmail(phone){
+  // deterministic pseudo-email for Firebase Auth email/password
+  const digits = String(phone||"").replace(/[^0-9]/g,"");
+  return `p${digits}@orzumall.phone`;
+}
+function showAuthNotice(el, msg, kind="info"){
+  if(!el) return;
+  el.style.display = "";
+  el.textContent = String(msg||"");
+  el.classList.remove("isError","isOk");
+  if(kind==="error") el.classList.add("isError");
+  if(kind==="ok") el.classList.add("isOk");
+}
+function clearAuthNotices(){
+  if(els.authNotice){ els.authNotice.style.display="none"; els.authNotice.textContent=""; els.authNotice.classList.remove("isError","isOk"); }
+  if(els.authNotice2){ els.authNotice2.style.display="none"; els.authNotice2.textContent=""; els.authNotice2.classList.remove("isError","isOk"); }
+}
+function setAuthTab(tab){
+  const isLogin = tab === "login";
+  if(els.tabLogin) els.tabLogin.classList.toggle("isActive", isLogin);
+  if(els.tabSignup) els.tabSignup.classList.toggle("isActive", !isLogin);
+  if(els.tabLogin) els.tabLogin.setAttribute("aria-selected", isLogin ? "true":"false");
+  if(els.tabSignup) els.tabSignup.setAttribute("aria-selected", !isLogin ? "true":"false");
+  if(els.loginForm) els.loginForm.style.display = isLogin ? "" : "none";
+  if(els.signupForm) els.signupForm.style.display = !isLogin ? "" : "none";
+  clearAuthNotices();
+}
+function wireEyeButtons(){
+  document.querySelectorAll("[data-eye]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-eye");
+      const inp = document.getElementById(id);
+      if(!inp) return;
+      inp.type = (inp.type === "password") ? "text" : "password";
+    });
+  });
+}
 /* ================== /PHONE + PASSWORD AUTH ================== */
+
+function setUserUI(user){
+  currentUser = user || null;
+  const authCard = els.authCard || document.getElementById("authCard");
+
+  document.body.classList.toggle("signed-in", !!user);
+
+  if(!user){
+    if(authCard) authCard.style.display = "";
+    if(els.avatar) els.avatar.src = "";
+    if(els.avatar) els.avatar.style.visibility = "hidden";
+    if(els.avatarFallback) els.avatarFallback.style.display = "grid";
+    if(els.avatarBtn) els.avatarBtn.disabled = true;
+    return;
+  }
+
+  if(authCard) authCard.style.display = "none";
+
+  const name = (window.__omProfileData?.name) || user.displayName || user.email || user.phoneNumber || "User";
+  const initial = (name || "U").trim().slice(0,1).toUpperCase();
+
+  const photo = user.photoURL;
+  if(photo){
+    if(els.avatar) els.avatar.src = photo;
+    if(els.avatar) els.avatar.style.visibility = "visible";
+    if(els.avatarFallback) els.avatarFallback.style.display = "none";
+  } else {
+    if(els.avatar) els.avatar.src = "";
+    if(els.avatar) els.avatar.style.visibility = "hidden";
+    if(els.avatarFallback){
+      els.avatarFallback.textContent = initial;
+      els.avatarFallback.style.display = "grid";
+    }
+  }
+  if(els.avatarBtn) els.avatarBtn.disabled = false;
+
+  // keep profile modal header in sync
+  if(window.__omProfile) window.__omProfile.syncUser(user);
+}
+
+els.profileLogout.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
 els.q.addEventListener("input", applyFilterSort);
@@ -975,7 +2382,7 @@ els.vConfirm?.addEventListener("click", ()=>{
   addToCart(p.id, vState.qty || 1, sel);
   updateBadges();
   closeVariantModal();
-  if(vState.openCartAfter) goTab("cart");
+  if(vState.openCartAfter) openPanel("cart");
 });
 
 // image viewer events
@@ -991,7 +2398,7 @@ els.revSend?.addEventListener("click", async ()=>{
 
   const user = auth.currentUser;
   if(!user){
-    alert("Sharh qoldirish uchun avval Google/Telegram orqali kiring.");
+    alert("Sharh qoldirish uchun avval kirish qiling.");
     return;
   }
 
@@ -1482,45 +2889,6 @@ document.addEventListener("keydown", (e)=>{
 
   return { open, syncUser };
 })();
-
-function setUserUI(user){
-  currentUser = user || null;
-  const authCard = els.authCard || document.getElementById("authCard");
-
-  document.body.classList.toggle("signed-in", !!user);
-
-  if(!user){
-    if(authCard) authCard.style.display = "";
-    if(els.avatar) els.avatar.src = "";
-    if(els.avatar) els.avatar.style.visibility = "hidden";
-    if(els.avatarFallback) els.avatarFallback.style.display = "grid";
-    if(els.avatarBtn) els.avatarBtn.disabled = true;
-    return;
-  }
-
-  if(authCard) authCard.style.display = "none";
-
-  const name = user.displayName || user.email || user.phoneNumber || "User";
-  const initial = (name || "U").trim().slice(0,1).toUpperCase();
-
-  const photo = user.photoURL;
-  if(photo){
-    if(els.avatar) els.avatar.src = photo;
-    if(els.avatar) els.avatar.style.visibility = "visible";
-    if(els.avatarFallback) els.avatarFallback.style.display = "none";
-  } else {
-    if(els.avatar) els.avatar.src = "";
-    if(els.avatar) els.avatar.style.visibility = "hidden";
-    if(els.avatarFallback){
-      els.avatarFallback.textContent = initial;
-      els.avatarFallback.style.display = "grid";
-    }
-  }
-  if(els.avatarBtn) els.avatarBtn.disabled = false;
-
-  // keep profile modal header in sync
-  if(window.__omProfile) window.__omProfile.syncUser(user);
-}
 
 onAuthStateChanged(auth, (user)=> setUserUI(user));
 
