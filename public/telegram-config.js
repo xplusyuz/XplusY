@@ -4,6 +4,6 @@
 //
 // Fill these and redeploy:
 window.TG_ADMIN = {
-  botToken: "", // e.g. "123456:ABC..."
-  chatId: ""    // e.g. "2049065724"
+  botToken: "8318922493:AAHXRXrfpEbS-uvtqIOIPrXEhbsxT6ii-M0", // e.g. "123456:ABC..."
+  chatId: "2049065724"    // e.g. "2049065724"
 };
