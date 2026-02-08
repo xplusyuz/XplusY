@@ -1,11 +1,28 @@
 import { auth, db } from "./firebase-config.js";
 import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
 import {
-  GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
-  signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js"; import {   doc,
-  getDoc, setDoc, collection, query, orderBy, limit, onSnapshot,
-  runTransaction, serverTimestamp, getAggregateFromServer, average,
-  count, addDoc
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged,
+  signOut,
+  signInWithCustomToken
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  getAggregateFromServer,
+  average,
+  count,
+  addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 /* =========================
@@ -142,6 +159,11 @@ const els = {
   pfRegion: document.getElementById("pfRegion"),
   pfDistrict: document.getElementById("pfDistrict"),
   pfPost: document.getElementById("pfPost"),
+
+  // orders (profile page)
+  ordersReload: document.getElementById("ordersReload"),
+  ordersList: document.getElementById("ordersList"),
+  ordersEmpty: document.getElementById("ordersEmpty"),
   panelTitle: document.getElementById("panelTitle"),
   panelClose: document.getElementById("panelClose"),
   panelList: document.getElementById("panelList"),
@@ -918,12 +940,13 @@ function renderCategoriesPage(){
   }
 }
 
-function productMatchesCategory(p){
-  if(!activeCatPath || activeCatPath.length===0) return true;
+function productMatchesCategory(p, path){
+  const usePath = Array.isArray(path) ? path : [];
+  if(usePath.length===0) return true;
   const tags = Array.isArray(p.tags) ? p.tags.map(x=>String(x||"").trim()) : [];
-  if(tags.length < activeCatPath.length) return false;
-  for(let i=0;i<activeCatPath.length;i++){
-    if(normalizeTag(tags[i]) !== normalizeTag(activeCatPath[i])) return false;
+  if(tags.length < usePath.length) return false;
+  for(let i=0;i<usePath.length;i++){
+    if(normalizeTag(tags[i]) !== normalizeTag(usePath[i])) return false;
   }
   return true;
 }
@@ -933,6 +956,11 @@ function applyFilterSort(){
 
   if(viewMode === "fav"){
     arr = arr.filter(p=>favs.has(p.id));
+  }
+
+  // Mobile nested category filter (prefix match)
+  if(Array.isArray(appliedCatPath) && appliedCatPath.length>0){
+    arr = arr.filter(p=>productMatchesCategory(p, appliedCatPath));
   }
 
   // tag category filter
@@ -1281,9 +1309,85 @@ function updateBadges(){
 }
 
 
+/* =========================
+   Orders (profile page)
+========================= */
+let ordersUnsub = null;
+let ordersCache = [];
+
+function fmtDate(ts){
+  try{
+    const d = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+    if(!d || Number.isNaN(+d)) return "";
+    return d.toLocaleString("uz-UZ", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+  }catch(e){
+    return "";
+  }
+}
+
+function renderOrders(orders){
+  if(!els.ordersList || !els.ordersEmpty) return;
+  const arr = Array.isArray(orders) ? orders : [];
+  ordersCache = arr;
+  els.ordersList.innerHTML = "";
+  els.ordersEmpty.hidden = arr.length !== 0;
+
+  for(const o of arr){
+    const id = String(o.id || "").slice(-6);
+    const total = moneyUZS(Number(o.totalUZS||0));
+    const status = (o.status||"").toString();
+    const provider = (o.provider||"").toString();
+    const when = fmtDate(o.createdAt);
+    const row = document.createElement("div");
+    row.className = "orderRow";
+    row.innerHTML = `
+      <div class="orderTop">
+        <div class="orderId">#${escapeHtml(id)}</div>
+        <div class="orderTotal">${escapeHtml(total)}</div>
+      </div>
+      <div class="orderMeta">
+        ${status ? `<span class="orderPill">${escapeHtml(status)}</span>` : ""}
+        ${provider ? `<span class="orderPill">${escapeHtml(provider)}</span>` : ""}
+        ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
+      </div>
+    `;
+    els.ordersList.appendChild(row);
+  }
+}
+
+function subscribeOrders(uid){
+  if(!uid || !db || !els.ordersList) return;
+  try{ ordersUnsub?.(); }catch(e){}
+
+  // If security rules disallow, we fail gracefully.
+  const qy = query(
+    collection(db, "orders"),
+    where("uid", "==", uid),
+    orderBy("createdAt", "desc"),
+    limit(20)
+  );
+
+  ordersUnsub = onSnapshot(qy, (snap)=>{
+    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+    renderOrders(arr);
+  }, (err)=>{
+    console.warn("orders subscribe error", err);
+    // Fallback to cache if any
+    renderOrders(ordersCache);
+  });
+}
+
+els.ordersReload?.addEventListener("click", ()=>{
+  if(!currentUser?.uid){ toast("Avval kirish qiling."); return; }
+  subscribeOrders(currentUser.uid);
+  toast("Buyurtmalar yangilanmoqda...");
+});
+
+
 /* ===== Mobile SPA Router (Android-like pages) ===== */
 let activeTab = "home";
 let activeCatPath = []; // array of strings
+let appliedCatPath = []; // applied category filter (prefix path)
 
 function setActiveNav(tab){
   document.querySelectorAll(".mobile-bottom-bar .nav-btn").forEach(btn=>{
@@ -1312,7 +1416,9 @@ function showView(tab){
   if(tab === "categories") renderCategoriesPage();
   if(tab === "fav") renderFavPage();
   if(tab === "cart") renderCartPage();
-  if(tab === "profile") { /* nothing extra */ }
+  if(tab === "profile") {
+    if(currentUser?.uid) subscribeOrders(currentUser.uid);
+  }
 }
 
 function goTab(tab){
@@ -1348,11 +1454,13 @@ els.catBackBtn?.addEventListener("click", ()=>{
 });
 els.catClearBtn?.addEventListener("click", ()=>{
   activeCatPath = [];
+  appliedCatPath = [];
   applyFilterSort();
   renderCategoriesPage();
 });
 els.catApplyBtn?.addEventListener("click", ()=>{
   // apply activeCatPath filter and go home
+  appliedCatPath = [...activeCatPath];
   applyFilterSort();
   goTab("home");
 });
@@ -2088,45 +2196,14 @@ els.clearBtn?.addEventListener("click", ()=>{
   updateCartSelectUI();
   if(viewMode === "fav") applyFilterSort();
 });
-els.paymeBtn?.addEventListener("click", async ()=>{
-if(!currentUser){
-  toast("Avval kirish qiling (Google / Telegram).");
-  document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
-  return;
-}
-if(cart.length === 0){
-  toast("Savatcha bo'sh.");
-  return;
-}
-
-const _selCart = selectedCartItems();
-if(_selCart.length === 0){ toast("Hech narsa tanlanmagan."); return; }
-
-const items = _selCart.map(ci=>{
-  const p = products.find(x=>x.id===ci.id);
-  const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
-  return {
-    productId: ci.id,
-    name: p?.name || "",
-    color: ci.color || null,
-    size: ci.size || null,
-    qty: Number(ci.qty||1),
-    priceUZS: Number(pr.price||0),
-  };
-});
-
-tgShareBtn?.addEventListener("click", async ()=>{
-  if(cart.length === 0){
-    toast("Savatcha bo'sh.");
-    return;
-  }
+function buildSelectedItems(){
   const _selCart = selectedCartItems();
-  if(_selCart.length === 0){ toast("Hech narsa tanlanmagan."); return; }
-
+  if(_selCart.length === 0) return { ok:false, reason:"Hech narsa tanlanmagan.", sel:[], items:[], totalUZS:0 };
   const items = _selCart.map(ci=>{
     const p = products.find(x=>x.id===ci.id);
     const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
     return {
+      productId: ci.id,
       name: p?.name || "",
       color: ci.color || null,
       size: ci.size || null,
@@ -2134,75 +2211,112 @@ tgShareBtn?.addEventListener("click", async ()=>{
       priceUZS: Number(pr.price||0),
     };
   });
-
   const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
-
-  const lines = items.map(it=>{
-    const variant = [it.color, it.size].filter(Boolean).join(" / ");
-    return `${it.name}${variant?` (${variant})`:``} x${it.qty} = ${moneyUZS((it.priceUZS||0)*(it.qty||0))}`;
-  });
-
-  const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(totalUZS))}`;
-  window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
-});
-
-
-const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
-if(!Number.isFinite(totalUZS) || totalUZS <= 0){
-  toast("Jami summa noto‘g‘ri.");
-  return;
+  if(!Number.isFinite(totalUZS) || totalUZS <= 0) return { ok:false, reason:"Jami summa noto‘g‘ri.", sel:_selCart, items, totalUZS:0 };
+  return { ok:true, reason:"", sel:_selCart, items, totalUZS };
 }
 
-// Payme amount is in tiyin
-const amountTiyin = Math.round(totalUZS * 100);
-
-// Digits-only order id (required by your Payme 'order_id' requisite)
-const orderId = String(Date.now()); // 13 digits, unique enough for MVP
-
-try{
+async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin}){
+  if(!currentUser) throw new Error("no_user");
   const orderRef = doc(db, "orders", orderId);
   await setDoc(orderRef, {
     uid: currentUser.uid,
-    status: "pending_payment",
+    status,
     items,
     totalUZS,
-    amountTiyin,
-    provider: "payme",
+    amountTiyin: amountTiyin ?? null,
+    provider,
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
+}
 
-  // Remove purchased items from cart locally (so user doesn't double-pay)
-  const purchased = new Set(_selCart.map(x=>x.key));
+function removePurchasedFromCart(sel){
+  const purchased = new Set((sel||[]).map(x=>x.key));
   cart = cart.filter(x=>!purchased.has(x.key));
   saveLS(LS.cart, cart);
   cartSelected = new Set(cart.map(x=>x.key));
   updateBadges();
-  renderPanel("cart");
+  renderCartPage?.();
+  renderPanel?.("cart");
   updateCartSelectUI();
-
-}catch(e){
-  console.warn("order create failed", e);
-  toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
-  return;
 }
 
-// Build Payme checkout URL (GET base64)
-// Format: https://checkout.paycom.uz/<base64("m=...;ac.order_id=...;a=...;l=...;c=...")>
-// c (return url) -> payme_return.html will show payment status
-if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
-  toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
-  return;
+async function startPaymeCheckout(){
+  if(!currentUser){
+    toast("Avval kirish qiling (Google / Telegram).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+
+  const built = buildSelectedItems();
+  if(!built.ok){ toast(built.reason); return; }
+
+  if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
+    toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
+    return;
+  }
+
+  // Payme amount is in tiyin
+  const amountTiyin = Math.round(built.totalUZS * 100);
+  const orderId = String(Date.now()); // digits-only
+
+  try{
+    await createOrderDoc({
+      orderId,
+      provider: "payme",
+      status: "pending_payment",
+      items: built.items,
+      totalUZS: built.totalUZS,
+      amountTiyin,
+    });
+    removePurchasedFromCart(built.sel);
+  }catch(e){
+    console.warn("order create failed", e);
+    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
+    return;
+  }
+
+  const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
+  const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+  const b64 = btoa(unescape(encodeURIComponent(params)));
+  window.location.href = `https://checkout.paycom.uz/${b64}`;
 }
 
-const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
-const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
-const b64 = btoa(unescape(encodeURIComponent(params)));
-const checkoutUrl = `https://checkout.paycom.uz/${b64}`;
+async function shareOrderTelegram(){
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  const built = buildSelectedItems();
+  if(!built.ok){ toast(built.reason); return; }
 
-// Go to Payme
-window.location.href = checkoutUrl;
-});
+  const orderId = String(Date.now());
+  try{
+    if(currentUser){
+      await createOrderDoc({
+        orderId,
+        provider: "telegram",
+        status: "shared_telegram",
+        items: built.items,
+        totalUZS: built.totalUZS,
+        amountTiyin: null,
+      });
+    }
+  }catch(e){
+    console.warn("telegram order create failed", e);
+  }
+
+  const lines = built.items.map(it=>{
+    const variant = [it.color, it.size].filter(Boolean).join(" / ");
+    return `${it.name}${variant?` (${variant})`:``} x${it.qty} = ${moneyUZS((it.priceUZS||0)*(it.qty||0))}`;
+  });
+  const msg = `OrzuMall buyurtma (ID: ${orderId}):%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(built.totalUZS))}`;
+  window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
+}
+
+els.paymeBtn?.addEventListener("click", startPaymeCheckout);
+els.paymeBtnPage?.addEventListener("click", startPaymeCheckout);
+els.tgShareBtn?.addEventListener("click", shareOrderTelegram);
+els.tgShareBtnPage?.addEventListener("click", shareOrderTelegram);
 
 
 
