@@ -88,6 +88,16 @@ const els = {
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   tagBar: document.getElementById("tagBar"),
+  catBtn: document.getElementById("catBtn"),
+  catModal: document.getElementById("catModal"),
+  catBackdrop: document.getElementById("catBackdrop"),
+  catClose: document.getElementById("catClose"),
+  catBack: document.getElementById("catBack"),
+  catTitle: document.getElementById("catTitle"),
+  catList: document.getElementById("catList"),
+  catAll: document.getElementById("catAll"),
+  catApply: document.getElementById("catApply"),
+  catCrumb: document.getElementById("catCrumb"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),
   tgNotice: document.getElementById("tgNotice"),
@@ -282,6 +292,13 @@ function enhanceHScroll(el){
 let products = [];
 let selectedTag = "all";
 let tagCounts = new Map();
+
+// Mobile nested categories built from product.tags order (1st -> parent, 2nd -> child, 3rd -> leaf)
+const MAX_CAT_DEPTH = 3;
+let categoryTree = null; // { children: Map<string,node>, count: number }
+let selectedCategoryPath = null; // array of lowercase strings (prefix match)
+let catNavPath = []; // navigation path inside modal
+let catPendingPath = null; // chosen path (for Apply)
 
 const LS = {
   favs: "om_favs",
@@ -796,9 +813,97 @@ function renderTagBar(){
   els.tagBar.innerHTML = chips.join("");
 }
 
+function buildCategoryTree(){
+  const root = { children: new Map(), count: 0 };
+  for(const p of products){
+    const raw = Array.isArray(p.tags) ? p.tags : [];
+    const path = raw.map(t=> String(t).trim().toLowerCase()).filter(Boolean).slice(0, MAX_CAT_DEPTH);
+    if(path.length === 0) continue;
+    root.count++;
+    let node = root;
+    for(const seg of path){
+      if(!node.children.has(seg)) node.children.set(seg, { children: new Map(), count: 0 });
+      node = node.children.get(seg);
+      node.count++;
+    }
+  }
+  categoryTree = root;
+}
+
+function getCatNode(path){
+  let node = categoryTree;
+  for(const seg of path){
+    if(!node || !node.children || !node.children.has(seg)) return null;
+    node = node.children.get(seg);
+  }
+  return node;
+}
+
+function formatCrumb(path){
+  if(!path || !path.length) return "Barchasi";
+  return path.map(titleTag).join(" › ");
+}
+
+function updateCatBtnLabel(){
+  if(!els.catBtn) return;
+  const label = selectedCategoryPath && selectedCategoryPath.length ? formatCrumb(selectedCategoryPath) : "Kategoriya";
+  els.catBtn.textContent = `📂 ${label}`;
+}
+
+function renderCatModal(){
+  if(!els.catList || !categoryTree) return;
+  const node = getCatNode(catNavPath) || categoryTree;
+  const entries = Array.from(node.children.entries())
+    .sort((a,b)=> (b[1].count - a[1].count) || a[0].localeCompare(b[0]));
+
+  const html = [];
+  for(const [name, child] of entries){
+    const hasKids = child.children && child.children.size > 0;
+    html.push(
+      `<button class="catItem" type="button" data-cat="${escapeHtml(name)}" data-has="${hasKids?"1":"0"}">
+         <div class="catName">${escapeHtml(titleTag(name))}</div>
+         <div class="catMeta">
+           <span class="catPill">${child.count}</span>
+           <span aria-hidden="true">${hasKids?"›":""}</span>
+         </div>
+       </button>`
+    );
+  }
+  els.catList.innerHTML = html.join("");
+  if(els.catCrumb) els.catCrumb.textContent = formatCrumb(catPendingPath || catNavPath || []);
+  if(els.catTitle) els.catTitle.textContent = catNavPath.length ? titleTag(catNavPath[catNavPath.length-1]) : "Kategoriyalar";
+  if(els.catBack) els.catBack.disabled = (catNavPath.length === 0);
+}
+
+function openCatModal(){
+  if(!els.catModal) return;
+  catNavPath = [];
+  catPendingPath = selectedCategoryPath ? [...selectedCategoryPath] : null;
+  renderCatModal();
+  els.catModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeCatModal(){
+  if(!els.catModal) return;
+  els.catModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
 function setSelectedTag(tag){
   selectedTag = tag || "all";
+  // Desktop chips chosen -> clear mobile category
+  selectedCategoryPath = null;
+  updateCatBtnLabel();
   renderTagBar();
+  applyFilterSort();
+}
+
+function setSelectedCategory(path){
+  selectedCategoryPath = (path && path.length) ? path.map(x=>String(x).toLowerCase()) : null;
+  selectedTag = "all";
+  renderTagBar();
+  updateCatBtnLabel();
   applyFilterSort();
 }
 
@@ -811,7 +916,16 @@ function applyFilterSort(){
   }
 
   // tag category filter
-  if(selectedTag && selectedTag !== "all"){
+  if(selectedCategoryPath && selectedCategoryPath.length){
+    arr = arr.filter(p=>{
+      const tags = (p.tags||[]).map(t=>String(t).trim().toLowerCase()).filter(Boolean);
+      if(tags.length < selectedCategoryPath.length) return false;
+      for(let i=0;i<selectedCategoryPath.length;i++){
+        if(tags[i] !== selectedCategoryPath[i]) return false;
+      }
+      return true;
+    });
+  } else if(selectedTag && selectedTag !== "all"){
     arr = arr.filter(p => (p.tags || []).map(t=>String(t).toLowerCase()).includes(selectedTag));
   }
 
@@ -1466,6 +1580,8 @@ async function loadProducts(){
       });
       products = arr;
       buildTagCounts();
+      buildCategoryTree();
+      updateCatBtnLabel();
       renderTagBar();
       applyFilterSort();
 
@@ -1563,6 +1679,43 @@ if(els.tagBar){
     setSelectedTag(btn.dataset.tag);
   });
 }
+
+// Mobile categories
+els.catBtn?.addEventListener("click", ()=>{
+  if(!categoryTree) buildCategoryTree();
+  openCatModal();
+});
+els.catClose?.addEventListener("click", closeCatModal);
+els.catBackdrop?.addEventListener("click", closeCatModal);
+els.catBack?.addEventListener("click", ()=>{
+  if(catNavPath.length){
+    catNavPath.pop();
+    renderCatModal();
+  }
+});
+els.catAll?.addEventListener("click", ()=>{
+  setSelectedCategory(null);
+  closeCatModal();
+});
+els.catApply?.addEventListener("click", ()=>{
+  setSelectedCategory(catPendingPath || catNavPath);
+  closeCatModal();
+});
+els.catList?.addEventListener("click", (e)=>{
+  const btn = e.target.closest("[data-cat]");
+  if(!btn) return;
+  const name = String(btn.dataset.cat || "").toLowerCase();
+  const has = btn.dataset.has === "1";
+  const next = [...catNavPath, name];
+  if(has && next.length < MAX_CAT_DEPTH){
+    catNavPath = next;
+    renderCatModal();
+  } else {
+    catPendingPath = next;
+    if(els.catCrumb) els.catCrumb.textContent = formatCrumb(catPendingPath);
+    toast(`Tanlandi: ${formatCrumb(catPendingPath)}`);
+  }
+});
 
 
 // panel & views
