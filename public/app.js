@@ -1359,6 +1359,25 @@ function fmtDate(ts){
   }
 }
 
+
+function orderStatusLabel(s){
+  const v = (s||"").toString();
+  const m = {
+    "pending":"Kutilmoqda",
+    "pending_cash":"Kutilmoqda (naqd)",
+    "pending_payment":"To‘lov kutilmoqda",
+    "paid":"To‘langan",
+    "delivered":"Yetkazildi",
+    "cancelled":"Bekor qilindi"
+  };
+  return m[v] || (v ? v : "");
+}
+function orderStatusClass(s){
+  const v = (s||"").toString();
+  if(!v) return "";
+  return "status-"+v.replace(/[^a-z0-9_\-]/gi,"").toLowerCase();
+}
+
 function renderOrders(orders){
   if(!els.ordersList || !els.ordersEmpty) return;
   const arr = Array.isArray(orders) ? orders : [];
@@ -1380,7 +1399,7 @@ function renderOrders(orders){
         <div class="orderTotal">${escapeHtml(total)}</div>
       </div>
       <div class="orderMeta">
-        ${status ? `<span class="orderPill">${escapeHtml(status)}</span>` : ""}
+        ${status ? `<span class="orderPill ${orderStatusClass(status)}">${escapeHtml(orderStatusLabel(status))}</span>` : ""}
         ${provider ? `<span class="orderPill">${escapeHtml(provider)}</span>` : ""}
         ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
       </div>
