@@ -2260,25 +2260,47 @@ function initMobileBottomBar(){
       setActive(tab);
 
       if(tab === "home"){
+        // Go back to main products view
+        try{ closeCatModal(); }catch(e){}
+        try{
+          if(viewMode !== "all"){ viewMode = "all"; applyFilterSort(); renderSidePanel(); }
+        }catch(e){}
+        try{ if(typeof closePanel==='function') closePanel(); }catch(e){}
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
       if(tab === "categories"){
-        const el = document.getElementById("tagBar") || document.querySelector("[data-tags]") || document.querySelector(".tagBar");
-        if(el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Mobile: open nested category sheet (tag bar is hidden on mobile)
+        try{ openCatModal(); }catch(e){
+          // fallback: click category button if exists
+          const b = document.getElementById("catBtn");
+          if(b) b.click();
+        }
         return;
       }
       if(tab === "fav"){
-        // project uses 'fav' mode
-        try{ openPanel("fav"); }catch(e){ toast?.("Sevimlilar"); }
+        try{ closeCatModal(); }catch(e){}
+        // open favorites view
+        try{ openPanel("fav"); }catch(e){
+          const b = document.getElementById("favViewBtn");
+          if(b) b.click();
+        }
         return;
       }
       if(tab === "cart"){
-        try{ openPanel("cart"); }catch(e){ toast?.("Savat"); }
+        try{ closeCatModal(); }catch(e){}
+        try{ openPanel("cart"); }catch(e){
+          const b = document.getElementById("cartBtn");
+          if(b) b.click();
+        }
         return;
       }
       if(tab === "profile"){
-        try{ openProfile(); }catch(e){ toast?.("Profil"); }
+        try{ closeCatModal(); }catch(e){}
+        try{ openProfile(); }catch(e){
+          const b = document.getElementById("avatarBtn") || document.getElementById("userbox");
+          if(b) b.click();
+        }
         return;
       }
     }, { passive: true });
@@ -2300,6 +2322,17 @@ function initMobileBottomBar(){
     badge.hidden = !(n > 0);
     badge.textContent = String(n);
   };
+
+
+  // expose setter for other UI parts (header buttons etc.)
+  window.__setBottomTab = setActive;
+
+  // Sync with header actions
+  const sync = (tab)=>{ try{ setActive(tab); }catch(e){} };
+  const hf = document.getElementById("favViewBtn"); if(hf) hf.addEventListener("click", ()=>sync("fav"), { passive:true });
+  const hc = document.getElementById("cartBtn"); if(hc) hc.addEventListener("click", ()=>sync("cart"), { passive:true });
+  const hp = document.getElementById("avatarBtn"); if(hp) hp.addEventListener("click", ()=>sync("profile"), { passive:true });
+  const hk = document.getElementById("catBtn"); if(hk) hk.addEventListener("click", ()=>sync("categories"), { passive:true });
 
   // hook: run often
   refreshBadge();
