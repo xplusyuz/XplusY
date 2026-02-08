@@ -33,12 +33,25 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
+      // User creates an order that will be paid via Payme
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status in ['pending_payment','created']
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.provider in ['payme']
+        && request.resource.data.amountTiyin is number
+        && request.resource.data.amountTiyin > 0
+        && request.resource.data.totalUZS is number
+        && request.resource.data.totalUZS > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp);
+
+      // Owner or admin can read
       allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+
+      // Only admin can update (payment status, delivery, etc.)
       allow update: if isAdmin();
+
       allow delete: if false;
     }
 
