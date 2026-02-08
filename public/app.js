@@ -960,6 +960,27 @@ function renderVariantModal(){
   if(els.vImg){
     const img = getCurrentImage(p, sel) || getCurrentImage(p, getDefaultSel(p)) || "";
     els.vImg.src = img;
+  
+    // click to zoom (image viewer)
+    els.vImg.onclick = ()=>{
+      const imgs = normImages(p, sel);
+      const listImgs = (Array.isArray(imgs) && imgs.length) ? imgs : normImages(p, getDefaultSel(p));
+      const allImgs = (Array.isArray(listImgs) && listImgs.length) ? listImgs : (Array.isArray(p.images) ? p.images : []);
+      const current = els.vImg.src || "";
+      const startIndex = Math.max(0, (allImgs || []).indexOf(current));
+      openImageViewer({
+        productId: p.id,
+        title: p.name || "Mahsulot",
+        desc: p.description || p.subtitle || "",
+        pricing,
+        rating: p.rating || 0,
+        reviewsCount: p.reviewsCount || 0,
+        tags: p.tags || [],
+        badge: (p.tags||[]).includes("premium") ? "Premium" : "",
+        images: allImgs,
+        startIndex
+      });
+    };
   }
 
   const showColors = colors.length > 0;
@@ -1255,7 +1276,34 @@ function renderPanel(mode){
       </div>
     `;
 
-    const removeBtn = item.querySelector(".removeBtn");
+    
+    // Click image -> open large viewer
+    const cartImgEl = item.querySelector(".cartImg");
+    if(cartImgEl){
+      cartImgEl.addEventListener("click", ()=>{
+        const selForViewer = (mode === "cart")
+          ? { color: row.ci?.color || null, size: row.ci?.size || null }
+          : getSel(p);
+        const imgs = normImages(p, selForViewer);
+        const all = (Array.isArray(imgs) && imgs.length) ? imgs : normImages(p, getDefaultSel(p));
+        const listImgs = (Array.isArray(all) && all.length) ? all : (Array.isArray(p.images) ? p.images : []);
+        const startIndex = Math.max(0, (listImgs || []).indexOf(imgSrc));
+        openImageViewer({
+          productId: p.id,
+          title: p.name || "Mahsulot",
+          desc: p.description || p.subtitle || "",
+          pricing: getVariantPricing(p, selForViewer),
+          rating: p.rating || 0,
+          reviewsCount: p.reviewsCount || 0,
+          tags: p.tags || [],
+          badge: (p.tags||[]).includes("premium") ? "Premium" : "",
+          images: listImgs,
+          startIndex
+        });
+      });
+    }
+
+const removeBtn = item.querySelector(".removeBtn");
     removeBtn.addEventListener("click", ()=>{
       if(mode==="fav"){
         favs.delete(p.id);
