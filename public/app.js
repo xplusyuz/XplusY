@@ -396,8 +396,7 @@ function openImageZoom(src){
 function openStandaloneImage(url){
   openImageZoom(url);
 }
-);
-}
+
 
 // Variant selections per product (in-memory)
 
