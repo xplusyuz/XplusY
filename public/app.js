@@ -1599,6 +1599,26 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
   renderViewer();
 }
 
+
+// Compatibility helper: some cards call openViewer(productId)
+function openViewer(productId){
+  const p = (products || []).find(x=>String(x.id)===String(productId));
+  if(!p){ toast("Mahsulot topilmadi."); return; }
+  const images = (p.images && p.images.length ? p.images : (p.imagesByColor?.[0]?.images || [])).filter(Boolean);
+  openImageViewer({
+    productId: p.id,
+    title: p.name || "Mahsulot",
+    desc: p.description || "",
+    pricing: { price: p.price, oldPrice: p.oldPrice, currency: p.currency || "UZS" },
+    rating: p.rating || 0,
+    reviewsCount: p.reviewsCount || 0,
+    tags: p.tags || [],
+    badge: p.badge || "",
+    images,
+    startIndex: 0,
+  });
+}
+
 function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
@@ -2361,7 +2381,16 @@ function setFieldsDisabled(disabled){
   if(els.pfRegion) els.pfRegion.disabled = disabled;
   if(els.pfDistrict) els.pfDistrict.disabled = disabled;
   if(els.pfPost) els.pfPost.disabled = disabled;
-  if(els.profileSave) els.profileSave.hidden = disabled;
+}
+
+
+function setEditing(on){
+  isEditing = !!on;
+  // when editing => enable fields; otherwise lock fields
+  setFieldsDisabled(!isEditing);
+  if(els.profileSave) els.profileSave.hidden = !isEditing;
+  const vp = document.getElementById("view-profile");
+  if(vp) vp.classList.toggle("editing", isEditing);
 }
 
 function openProfile(){ goTab("profile"); }
@@ -2371,6 +2400,7 @@ window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
   let isCompleted = false;
+  let isEditing = false;
 
   function readProfile(uid){
     const raw = localStorage.getItem(profileStorageKey(uid));
@@ -2454,8 +2484,8 @@ window.__omProfile = (function(){
       if(els.pfPost) els.pfPost.value = saved?.post || "";
     }
 
-    // lock after first save
-    setFieldsDisabled(isCompleted);
+    // start in view mode; editing only via ✏️
+    setEditing(false);
   }
 
   async function open(){
@@ -2466,8 +2496,7 @@ window.__omProfile = (function(){
 
   function enableEdit(){
     // allow editing only when completed; if not completed, already editable
-    setFieldsDisabled(false);
-    isCompleted = false; // but keep completedAt in storage until saved again
+    setEditing(true);
   }
 
   function save(){
@@ -2492,7 +2521,7 @@ window.__omProfile = (function(){
 
     writeProfile(currentUser.uid, payload);
     isCompleted = true;
-    setFieldsDisabled(true);
+    setEditing(false);
     closeProfile();
   }
 

@@ -147,6 +147,7 @@
       <div class="logo"><h1><i class="fas fa-cube"></i> <span>OrzuMall Admin</span></h1></div>
       <ul class="nav-menu">
         <li class="nav-item"><a href="#" class="nav-link active" data-view="products"><i class="fas fa-box"></i><span>Mahsulotlar</span></a></li>
+<li class="nav-item"><a href="#" class="nav-link" data-view="orders"><i class="fas fa-receipt"></i><span>Buyurtmalar</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" data-view="stats"><i class="fas fa-chart-bar"></i><span>Statistika</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" data-view="settings"><i class="fas fa-cog"></i><span>Sozlamalar</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" id="exportJsonNav"><i class="fas fa-download"></i><span>Export JSON</span></a></li>
@@ -206,7 +207,41 @@
         </div>
       </div>
 
-      <div class="card hidden" id="statsView">
+      <div class="card hidden" 
+      <div class="card hidden" id="ordersView">
+        <div class="card-header">
+          <h3>Buyurtmalar</h3>
+          <div class="right-actions">
+            <span class="muted" id="ordersState">—</span>
+            <button class="btn btn-secondary" id="ordersRefresh"><i class="fas fa-rotate"></i> Yangilash</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="ordersTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Status</th>
+                <th>Provider</th>
+                <th>Summa</th>
+                <th>Items</th>
+                <th>Vaqt</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTbody"></tbody>
+          </table>
+        </div>
+
+        <div class="empty-state" id="ordersEmpty" style="display:none">
+          <i class="fas fa-receipt"></i>
+          <h3>Buyurtmalar yo‘q</h3>
+          <p>Hozircha buyurtmalar kelmagan.</p>
+        </div>
+      </div>
+
+id="statsView">
         <div class="card-header"><h3>Statistika</h3><div class="right-actions"><button class="btn btn-light btn-sm" id="recalcStatsBtn"><i class="fas fa-bolt"></i> Qayta hisoblash</button></div></div>
         <div class="card-body pad"><div class="grid2">
           <div class="mini-card"><div class="mini-title">Top 10 (popular)</div><div id="topPopularList" class="mini-list"></div></div>
@@ -544,8 +579,10 @@
       $("productsView").classList.toggle("hidden", view!=="products");
       $("statsView").classList.toggle("hidden", view!=="stats");
       $("settingsView").classList.toggle("hidden", view!=="settings");
+      $("ordersView").classList.toggle("hidden", view!=="orders");
       document.querySelectorAll(".nav-link[data-view]").forEach(a=>a.classList.toggle("active", a.dataset.view===view));
       if(view==="stats") renderStatsPanels();
+      if(view==="orders") subscribeOrdersAdmin();
     }
 
     function renderStatsPanels(){
@@ -926,6 +963,64 @@
       }
       await fetchProducts();
     });
-  </script>
+  
+    function escapeHtml(s){return String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+
+    // ===== Orders (Admin) =====
+    let ordersUnsub = null;
+    let ordersCache = [];
+
+    function formatTS(ts){
+      try{
+        if(!ts) return "—";
+        const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds*1000) : new Date(ts));
+        return d.toLocaleString();
+      }catch(e){ return "—"; }
+    }
+
+    function renderOrdersAdmin(list){
+      const tbody = $("ordersTbody");
+      const empty = $("ordersEmpty");
+      if(!tbody) return;
+      tbody.innerHTML = "";
+      const arr = Array.isArray(list) ? list : [];
+      $("ordersState").textContent = arr.length ? `${arr.length} ta buyurtma` : "—";
+      empty.style.display = arr.length ? "none" : "block";
+      for(const o of arr){
+        const tr = document.createElement("tr");
+        const itemsCount = Array.isArray(o.items) ? o.items.reduce((s,it)=>s+Number(it.qty||1),0) : 0;
+        tr.innerHTML = `
+          <td><code>${escapeHtml(o.id||"")}</code></td>
+          <td style="max-width:220px"><div class="truncate">${escapeHtml(o.uid||"")}</div></td>
+          <td><span class="badge">${escapeHtml(o.status||"")}</span></td>
+          <td>${escapeHtml(o.provider||"")}</td>
+          <td><b>${Number(o.totalUZS||0).toLocaleString()}</b> so'm</td>
+          <td>${itemsCount}</td>
+          <td>${escapeHtml(formatTS(o.createdAt))}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function subscribeOrdersAdmin(){
+      if(!db) return;
+      try{ ordersUnsub?.(); }catch(e){}
+      $("ordersState").textContent = "Yuklanmoqda...";
+      const qy = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
+      ordersUnsub = onSnapshot(qy, (snap)=>{
+        ordersCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        renderOrdersAdmin(ordersCache);
+      }, (err)=>{
+        console.warn("orders admin subscribe error", err);
+        $("ordersState").textContent = "Xatolik (index / rules)";
+        renderOrdersAdmin(ordersCache);
+      });
+    }
+
+    if($("ordersRefresh")){
+      $("ordersRefresh").addEventListener("click", ()=> subscribeOrdersAdmin());
+    }
+
+</script>
 </body>
 </html>
