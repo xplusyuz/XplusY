@@ -1,6 +1,5 @@
 import { FIREBASE_CONFIG, DEFAULT_ADMIN_EMAILS } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc,
   writeBatch, query, orderBy, serverTimestamp
@@ -10,8 +9,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
 const app = initializeApp(FIREBASE_CONFIG);
-const functions = getFunctions(app, 'us-central1');
-const claimAdmin = httpsCallable(functions, 'claimAdmin');
 const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
@@ -520,11 +517,7 @@ function bind(){
 }
 
 onAuthStateChanged(auth, async (user)=>{
-  renderUser(user);
-  // Ensure server-side admin claim (required by Firestore rules)
-  if(user && DEFAULT_ADMIN_EMAILS.map(x=>String(x).toLowerCase()).includes(String(user.email||'').toLowerCase())){
-    try{ await claimAdmin({}); }catch(e){ console.warn('claimAdmin:', e?.message||e); }
-  }
+  renderUser(user);  }
   await loadAdminSettings();
 });
 

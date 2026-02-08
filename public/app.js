@@ -1404,11 +1404,7 @@ window.addEventListener("tg_auth", async (e)=>{
   showTgNotice("Telegram auth yuborildi...");
 
   try{
-    const r = await fetch("/.netlify/functions/telegramAuth", {
-      method: "POST",
-      headers: {"content-type":"application/json"},
-      body: JSON.stringify({ tgUser })
-    });
+    const r = await throw new Error('Telegram login serverless function disabled (no-functions build). Use Google login.');
 
     const out = await r.json().catch(()=> ({}));
     if(!r.ok){

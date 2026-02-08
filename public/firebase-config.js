@@ -5,7 +5,6 @@ import {
   browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getFunctions } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-functions.js";
 
 // ⚠️ Firebase Console → Project settings → Your apps → Web app config'dan OLIB qo'ying.
 export const firebaseConfig = {
@@ -29,4 +28,3 @@ export const auth = getAuth(app);
 await setPersistence(auth, browserLocalPersistence);
 
 export const db = getFirestore(app);
-export const functions = getFunctions(app);
