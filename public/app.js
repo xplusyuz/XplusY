@@ -103,9 +103,35 @@ const els = {
   overlay: document.getElementById("overlay"),
   sidePanel: document.getElementById("sidePanel"),
 
-  // profile modal
-  profileOverlay: document.getElementById("profileOverlay"),
-  profileClose: document.getElementById("profileClose"),
+  // SPA views
+  viewHome: document.getElementById("view-home"),
+  viewCategories: document.getElementById("view-categories"),
+  viewFav: document.getElementById("view-fav"),
+  viewCart: document.getElementById("view-cart"),
+  viewProfile: document.getElementById("view-profile"),
+  navBar: document.querySelector(".mobile-bottom-bar"),
+
+  // categories page
+  catList: document.getElementById("catList"),
+  catCrumbs: document.getElementById("catCrumbs"),
+  catBackBtn: document.getElementById("catBackBtn"),
+  catApplyBtn: document.getElementById("catApplyBtn"),
+  catClearBtn: document.getElementById("catClearBtn"),
+  catEmpty: document.getElementById("catEmpty"),
+
+  // favorites/cart pages
+  favPageList: document.getElementById("favPageList"),
+  favPageEmpty: document.getElementById("favPageEmpty"),
+  cartPageList: document.getElementById("cartPageList"),
+  cartPageEmpty: document.getElementById("cartPageEmpty"),
+  cartTotalPage: document.getElementById("cartTotalPage"),
+  cartSelectAllPage: document.getElementById("cartSelectAllPage"),
+  paymeBtnPage: document.getElementById("paymeBtnPage"),
+  tgShareBtnPage: document.getElementById("tgShareBtnPage"),
+  clearCartPage: document.getElementById("clearCartPage"),
+
+  // profile page
+
   profileEditBtn: document.getElementById("profileEditBtn"),
   profileSave: document.getElementById("profileSave"),
   profileLogout: document.getElementById("profileLogout"),
@@ -183,7 +209,7 @@ const els = {
 
 // ---- Modal helpers (world-class, animated, accessibility-friendly) ----
 function _anyOverlayOpen(){
-  return [els.profileOverlay, els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
+  return [ els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
 }
 function _syncModalBody(){
   if(_anyOverlayOpen()) document.body.classList.add("modalOpen");
@@ -802,6 +828,105 @@ function setSelectedTag(tag){
   applyFilterSort();
 }
 
+
+/* ===== Categories from tags (nested) ===== */
+let catTree = null;
+
+function normalizeTag(t){
+  return String(t||"").trim().toLowerCase();
+}
+
+function buildCategoryTree(){
+  const root = { name:"root", count:0, children: new Map() };
+  for(const p of products || []){
+    const tags = Array.isArray(p.tags) ? p.tags : [];
+    const path = tags.map(x=>String(x||"").trim()).filter(Boolean).slice(0, 6);
+    if(path.length===0) continue;
+    root.count++;
+    let node = root;
+    for(const raw of path){
+      const key = normalizeTag(raw);
+      if(!key) continue;
+      if(!node.children.has(key)){
+        node.children.set(key, { key, name: raw.trim(), count:0, children: new Map() });
+      }
+      const child = node.children.get(key);
+      child.count++;
+      node = child;
+    }
+  }
+  catTree = root;
+}
+
+function getNodeByPath(path){
+  let node = catTree;
+  for(const part of path){
+    if(!node || !node.children) return null;
+    const key = normalizeTag(part);
+    node = node.children.get(key);
+  }
+  return node;
+}
+
+function renderCategoriesPage(){
+  if(!els.catList || !els.catCrumbs) return;
+  if(!catTree) buildCategoryTree();
+
+  const node = getNodeByPath(activeCatPath) || catTree;
+
+  // crumbs
+  els.catCrumbs.innerHTML = "";
+  const homeCr = document.createElement("button");
+  homeCr.className = "crumb";
+  homeCr.type = "button";
+  homeCr.textContent = "Barchasi";
+  homeCr.addEventListener("click", ()=>{ activeCatPath = []; renderCategoriesPage(); });
+  els.catCrumbs.appendChild(homeCr);
+
+  let acc = [];
+  for(const part of activeCatPath){
+    acc.push(part);
+    const b = document.createElement("button");
+    b.className = "crumb";
+    b.type = "button";
+    b.textContent = part;
+    const snap = acc.slice();
+    b.addEventListener("click", ()=>{ activeCatPath = snap; renderCategoriesPage(); });
+    els.catCrumbs.appendChild(b);
+  }
+
+  const children = Array.from((node?.children || new Map()).values())
+    .sort((a,b)=> (b.count||0)-(a.count||0) || String(a.name).localeCompare(String(b.name)));
+
+  els.catList.innerHTML = "";
+  if(els.catEmpty) els.catEmpty.hidden = children.length !== 0;
+
+  for(const ch of children){
+    const item = document.createElement("div");
+    item.className = "catItem";
+    item.innerHTML = `
+      <div class="catName">${escapeHtml(ch.name)}</div>
+      <div class="catMeta">
+        <div class="catCount">${ch.count}</div>
+        <div class="catArrow">›</div>
+      </div>`;
+    item.addEventListener("click", ()=>{
+      activeCatPath = [...activeCatPath, ch.name];
+      renderCategoriesPage();
+    });
+    els.catList.appendChild(item);
+  }
+}
+
+function productMatchesCategory(p){
+  if(!activeCatPath || activeCatPath.length===0) return true;
+  const tags = Array.isArray(p.tags) ? p.tags.map(x=>String(x||"").trim()) : [];
+  if(tags.length < activeCatPath.length) return false;
+  for(let i=0;i<activeCatPath.length;i++){
+    if(normalizeTag(tags[i]) !== normalizeTag(activeCatPath[i])) return false;
+  }
+  return true;
+}
 function applyFilterSort(){
   const query = norm(els.q.value);
   let arr = [...products];
@@ -1151,7 +1276,104 @@ function updateCartSelectUI(){
 function updateBadges(){
   if(els.favCount) els.favCount.textContent = String(favs.size);
   if(els.cartCount) els.cartCount.textContent = String(cartCount());
+  const nb = document.getElementById("navCartBadge");
+  if(nb){ const c = cartCount(); nb.textContent = String(c); nb.hidden = (c<=0); }
 }
+
+
+/* ===== Mobile SPA Router (Android-like pages) ===== */
+let activeTab = "home";
+let activeCatPath = []; // array of strings
+
+function setActiveNav(tab){
+  document.querySelectorAll(".mobile-bottom-bar .nav-btn").forEach(btn=>{
+    const on = (btn.dataset.tab === tab);
+    btn.classList.toggle("active", on);
+  });
+}
+
+function showView(tab){
+  const map = {
+    home: els.viewHome,
+    categories: els.viewCategories,
+    fav: els.viewFav,
+    cart: els.viewCart,
+    profile: els.viewProfile
+  };
+  Object.entries(map).forEach(([k, el])=>{
+    if(!el) return;
+    el.classList.toggle("active", k===tab);
+    el.hidden = (k!==tab);
+  });
+  activeTab = tab;
+  setActiveNav(tab);
+
+  // render pages on enter
+  if(tab === "categories") renderCategoriesPage();
+  if(tab === "fav") renderFavPage();
+  if(tab === "cart") renderCartPage();
+  if(tab === "profile") { /* nothing extra */ }
+}
+
+function goTab(tab){
+  const safe = ["home","categories","fav","cart","profile"];
+  if(!safe.includes(tab)) tab = "home";
+  location.hash = "#"+tab;
+}
+
+function handleHash(){
+  const h = (location.hash || "#home").replace("#","");
+  const tab = h || "home";
+  showView(tab);
+}
+
+window.addEventListener("hashchange", handleHash);
+
+// bottom bar clicks (delegation)
+els.navBar?.addEventListener("click", (e)=>{
+  const btn = e.target.closest(".nav-btn");
+  if(!btn) return;
+  const tab = btn.dataset.tab;
+  goTab(tab);
+});
+
+// categories back
+els.catBackBtn?.addEventListener("click", ()=>{
+  if(activeCatPath.length>0){
+    activeCatPath.pop();
+    renderCategoriesPage();
+  } else {
+    goTab("home");
+  }
+});
+els.catClearBtn?.addEventListener("click", ()=>{
+  activeCatPath = [];
+  applyFilterSort();
+  renderCategoriesPage();
+});
+els.catApplyBtn?.addEventListener("click", ()=>{
+  // apply activeCatPath filter and go home
+  applyFilterSort();
+  goTab("home");
+});
+
+// cart select all (page)
+els.cartSelectAllPage?.addEventListener("change", ()=>{
+  syncCartSelected(false);
+  const checked = !!els.cartSelectAllPage.checked;
+  cartSelected = new Set(checked ? cart.map(x=>x.key) : []);
+  updateCartSelectUI();
+  renderCartPage();
+});
+
+// payme/share/clear page buttons reuse existing handlers when possible
+els.clearCartPage?.addEventListener("click", ()=>{
+  cart = [];
+  cartSelected = new Set();
+  saveLS(LS.cart, cart);
+  updateBadges();
+  renderCartPage();
+});
 
 function openPanel(mode){
   if(!els.sidePanel || !els.overlay) return;
@@ -1451,6 +1673,156 @@ const removeBtn = item.querySelector(".removeBtn");
 
 
 
+
+/* ===== Page renderers for SPA (Fav/Cart) ===== */
+function renderFavPage(){
+  if(!els.favPageList || !els.favPageEmpty) return;
+  els.favPageList.innerHTML = "";
+  const list = [];
+  for(const id of favs){
+    const p = products.find(x=>x.id===id);
+    if(p) list.push({p});
+  }
+  els.favPageEmpty.hidden = list.length !== 0;
+
+  for(const row of list){
+    const p = row.p;
+    const imgSrc = getCurrentImage(p, getSel(p));
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        <div class="cartRow">
+          <div class="price">${moneyUZS(getVariantPricing(p, {}).price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        <div class="cartRow">
+          <button class="pBtn" data-open>Ko‘rish</button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+        </div>
+      </div>
+    `;
+
+    item.querySelector(".cartImg")?.addEventListener("click", (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      openImageZoom(imgSrc);
+    });
+
+    item.querySelector("[data-open]")?.addEventListener("click", ()=>{
+      openViewer(p.id);
+    });
+
+    item.querySelector("[data-add]")?.addEventListener("click", ()=>{
+      addToCart(p.id, 1, getSel(p));
+      updateBadges();
+      goTab("cart");
+    });
+
+    item.querySelector(".removeBtn")?.addEventListener("click", ()=>{
+      favs.delete(p.id);
+      saveLS(LS.favs, Array.from(favs));
+      updateBadges();
+      renderFavPage();
+      applyFilterSort();
+    });
+
+    els.favPageList.appendChild(item);
+  }
+}
+
+function renderCartPage(){
+  if(!els.cartPageList || !els.cartPageEmpty) return;
+  els.cartPageList.innerHTML = "";
+  syncCartSelected(true);
+
+  const list = [];
+  for(const ci of cart){
+    const p = products.find(x=>x.id===ci.id);
+    if(p) list.push({p, qty: ci.qty||1, ci});
+  }
+  els.cartPageEmpty.hidden = list.length !== 0;
+
+  let total = 0;
+
+  for(const row of list){
+    const {p, qty, ci} = row;
+    const vp = getVariantPricing(p, {color: ci?.color||null, size: ci?.size||null});
+    if(cartSelected.has(ci.key)) total += (vp.price||0) * qty;
+
+    const imgSrc = ci?.image || getCurrentImage(p, {color: ci?.color||null, size: ci?.size||null, imgIdx:0});
+
+    const item = document.createElement("div");
+    item.className = "cartItem";
+    item.innerHTML = `
+      <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
+      <div class="cartMeta">
+        <label class="cartPick">
+          <input type="checkbox" class="cartPickBox" data-pick="${escapeHtml(ci.key)}" ${cartSelected.has(ci.key) ? "checked" : ""} />
+          <span></span>
+        </label>
+        <div class="cartTitle">${p.name||"Nomsiz"}</div>
+        ${renderVariantLine(ci)}
+        <div class="cartRow">
+          <div class="price">${moneyUZS(vp.price||0)}</div>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
+        </div>
+        <div class="cartRow">
+          <div class="qty">
+            <button data-q="-">−</button>
+            <span>${qty}</span>
+            <button data-q="+">+</button>
+          </div>
+          <div class="badge">${moneyUZS((vp.price||0)*qty)}</div>
+        </div>
+      </div>
+    `;
+
+    item.querySelector(".cartImg")?.addEventListener("click", (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      openImageZoom(imgSrc);
+    });
+
+    item.querySelector(".cartPickBox")?.addEventListener("change", (e)=>{
+      const k = e.target.getAttribute("data-pick");
+      if(e.target.checked) cartSelected.add(k); else cartSelected.delete(k);
+      updateCartSelectUI();
+      renderCartPage();
+    });
+
+    item.querySelector(".removeBtn")?.addEventListener("click", ()=>{
+      cart = cart.filter(x=>x.key!==ci.key);
+      saveLS(LS.cart, cart);
+      updateBadges();
+      renderCartPage();
+    });
+
+    item.querySelector('[data-q="-"]')?.addEventListener("click", ()=>{
+      addToCart(p.id, -1, ci);
+      updateBadges();
+      renderCartPage();
+    });
+    item.querySelector('[data-q="+"]')?.addEventListener("click", ()=>{
+      addToCart(p.id, +1, ci);
+      updateBadges();
+      renderCartPage();
+    });
+
+    els.cartPageList.appendChild(item);
+  }
+
+  if(els.cartTotalPage) els.cartTotalPage.textContent = moneyUZS(total);
+
+  // select all checkbox state
+  if(els.cartSelectAllPage){
+    const all = cart.length>0 && cart.every(x=>cartSelected.has(x.key));
+    els.cartSelectAllPage.checked = all;
+    els.cartSelectAllPage.indeterminate = !all && cartSelected.size>0;
+  }
+}
+
+
 let unsubProducts = null;
 
 async function loadProducts(){
@@ -1467,7 +1839,9 @@ async function loadProducts(){
       products = arr;
       buildTagCounts();
       renderTagBar();
+      buildCategoryTree();
       applyFilterSort();
+      if(activeTab==="categories") renderCategoriesPage();
 
       // If empty, show a helpful hint for setup
       if(arr.length === 0){
@@ -1567,8 +1941,8 @@ if(els.tagBar){
 
 // panel & views
 // Favorites should open like cart (drawer), not just filter the grid.
-els.favViewBtn?.addEventListener("click", ()=> openPanel("fav"));
-els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
+els.favViewBtn?.addEventListener("click", ()=> goTab("fav"));
+els.cartBtn?.addEventListener("click", ()=> goTab("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
 // cart select all
@@ -1876,14 +2250,8 @@ function setFieldsDisabled(disabled){
   if(els.profileSave) els.profileSave.hidden = disabled;
 }
 
-function openProfile(){
-  if(!els.profileOverlay) return;
-  showOverlay(els.profileOverlay);
-}
-function closeProfile(){
-  if(!els.profileOverlay) return;
-  hideOverlay(els.profileOverlay);
-}
+function openProfile(){ goTab("profile"); }
+function closeProfile(){ goTab("home"); }
 
 window.__omProfile = (function(){
   let regionData = null;
@@ -2034,17 +2402,10 @@ window.__omProfile = (function(){
       }
     });
   }
-
-  if(els.profileClose) els.profileClose.addEventListener("click", closeProfile);
-  if(els.profileOverlay){
-    els.profileOverlay.addEventListener("click", (e)=>{
-      if(e.target === els.profileOverlay) closeProfile();
-    });
-  }
-  document.addEventListener("keydown", (e)=>{
+document.addEventListener("keydown", (e)=>{
     if(e.key==="Escape"){
       if(els.vOverlay && !els.vOverlay.hidden) closeVariantModal();
-      else if(els.profileOverlay && !els.profileOverlay.hidden) closeProfile();
+      else if(null && !null.hidden) closeProfile();
       else if(els.imgViewer && !els.imgViewer.hidden) closeImgViewer();
     }
   });
@@ -2093,96 +2454,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
    Mobile Bottom Bar (App-like)
 ========================= */
 function initMobileBottomBar(){
-  const bar = document.querySelector(".mobile-bottom-bar");
-  if(!bar) return;
-
-  const btns = Array.from(bar.querySelectorAll(".nav-btn"));
-  const setActive = (tab)=>{
-    btns.forEach(b=>b.classList.toggle("active", (b.dataset.tab || "") === tab));
-  };
-
-  // lightweight "close everything" helper for Home
-  const closeAll = ()=>{
-    try{ els?.overlay?.classList.add("hidden"); }catch(e){}
-    try{ els?.sidePanel?.classList.add("hidden"); }catch(e){}
-    try{ document.getElementById("profileOverlay")?.classList.add("hidden"); }catch(e){}
-    try{ document.getElementById("vOverlay")?.classList.add("hidden"); }catch(e){}
-  };
-
-  // Event delegation (more reliable across re-renders)
-  bar.addEventListener("click", (e)=>{
-    const btn = e.target?.closest?.(".nav-btn");
-    if(!btn) return;
-
-    const tab = btn.dataset.tab || "home";
-    setActive(tab);
-
-    if(tab === "home"){
-      closeAll();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    if(tab === "categories"){
-      // If you later add a real categories sheet/modal, expose window.openCategories()
-      if(typeof window.openCategories === "function"){
-        window.openCategories();
-        return;
-      }
-      // fallback: scroll to products top (search/tag area may differ by build)
-      const el = document.getElementById("productsTop") || document.getElementById("searchRow") || document.querySelector(".searchRow") || document.querySelector("main");
-      if(el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    if(tab === "fav"){
-      // uses side panel
-      if(typeof openPanel === "function"){ openPanel("fav"); }
-      return;
-    }
-
-    if(tab === "cart"){
-      if(typeof openPanel === "function"){ openPanel("cart"); }
-      return;
-    }
-
-    if(tab === "profile"){
-      if(typeof openProfile === "function"){ openProfile(); }
-      return;
-    }
-  });
-
-  // keep cart badge in sync with existing UI
-  const badge = document.getElementById("navCartBadge");
-  const syncBadge = ()=>{
-    try{
-      const c = Number((els?.cartCount?.textContent || "0").trim()) || 0;
-      if(!badge) return;
-      badge.hidden = (c <= 0);
-      badge.textContent = String(c);
-    }catch(e){}
-  };
-  syncBadge();
-
-  // observe cartCount changes
-  try{
-    if(els?.cartCount){
-      const mo = new MutationObserver(syncBadge);
-      mo.observe(els.cartCount, { childList:true, subtree:true, characterData:true });
-    }
-  }catch(e){}
-
-  // When other UI opens panels, keep active state aligned (best effort)
-  const hook = (fnName, tab)=>{
-    const orig = window[fnName];
-    if(typeof orig !== "function") return;
-    window[fnName] = function(...args){
-      const res = orig.apply(this, args);
-      try{ setActive(tab); }catch(e){}
-      return res;
-    };
-  };
-  hook("openProfile","profile");
+  // Start SPA routing on first load
+  handleHash();
 }
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
