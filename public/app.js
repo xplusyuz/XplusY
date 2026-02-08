@@ -2088,3 +2088,70 @@ document.addEventListener("DOMContentLoaded", ()=>{
     actions.prepend(inline);
   });
 });
+
+/* =========================
+   Mobile Bottom Bar (App-like)
+========================= */
+function initMobileBottomBar(){
+  const bar = document.querySelector(".mobile-bottom-bar");
+  if(!bar) return;
+
+  const btns = Array.from(bar.querySelectorAll(".nav-btn"));
+  const setActive = (tab)=>{
+    btns.forEach(b=>b.classList.toggle("active", b.dataset.tab === tab));
+  };
+
+  btns.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const tab = btn.dataset.tab;
+      setActive(tab);
+
+      if(tab === "home"){
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      if(tab === "categories"){
+        const el = document.getElementById("tagBar") || document.querySelector("[data-tags]") || document.querySelector(".tagBar");
+        if(el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if(tab === "fav"){
+        // project uses 'fav' mode
+        try{ openPanel("fav"); }catch(e){ toast?.("Sevimlilar"); }
+        return;
+      }
+      if(tab === "cart"){
+        try{ openPanel("cart"); }catch(e){ toast?.("Savat"); }
+        return;
+      }
+      if(tab === "profile"){
+        try{ openProfile(); }catch(e){ toast?.("Profil"); }
+        return;
+      }
+    }, { passive: true });
+  });
+
+  // keep cart badge in sync with existing updateBadges (if present)
+  const badge = document.getElementById("navCartBadge");
+  const refreshBadge = ()=>{
+    if(!badge) return;
+    // try to read existing cart count label
+    const c1 = document.querySelector("[data-cart-count]");
+    let n = 0;
+    if(c1 && c1.textContent) n = parseInt(c1.textContent, 10) || 0;
+    // fallback: look for ids
+    if(!n){
+      const c2 = document.getElementById("cartCount") || document.getElementById("cartBadge");
+      if(c2 && c2.textContent) n = parseInt(c2.textContent, 10) || 0;
+    }
+    badge.hidden = !(n > 0);
+    badge.textContent = String(n);
+  };
+
+  // hook: run often
+  refreshBadge();
+  window.addEventListener("storage", refreshBadge);
+  setInterval(refreshBadge, 1200);
+}
+
+document.addEventListener("DOMContentLoaded", initMobileBottomBar);
