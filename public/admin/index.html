@@ -140,6 +140,16 @@
       .grid2{grid-template-columns:1fr}
     }
   .statusSel{padding:6px 10px;border:1px solid #e9ecef;border-radius:10px;background:#fff;font-weight:700}
+  #orderMap{height:240px;border-radius:12px;overflow:hidden;border:1px solid #e9ecef}
+  .truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-weight:800;font-size:.82rem}
+  .pill.pending{background:#fff4e6;color:#b45309}
+  .pill.pending_payment{background:#e0f2fe;color:#0369a1}
+  .pill.paid{background:#dcfce7;color:#166534}
+  .pill.delivered{background:#ede9fe;color:#5b21b6}
+  .pill.cancelled{background:#fee2e2;color:#991b1b}
+  .modal-content.wide{max-width:980px}
+
   </style>
 </head>
 <body>
@@ -218,6 +228,45 @@
           </div>
         </div>
 
+        <div class="card-body pad" id="ordersFilters">
+          <div class="form-row" style="margin-bottom:0">
+            <div class="form-group" style="min-width:220px">
+              <label>Qidiruv</label>
+              <input id="ordersSearch" class="form-control" placeholder="ID / UID / telefon / manzil">
+            </div>
+            <div class="form-group" style="min-width:180px">
+              <label>Status</label>
+              <select id="ordersStatus" class="form-control">
+                <option value="">Hammasi</option>
+                <option value="pending">pending</option>
+                <option value="pending_payment">pending_payment</option>
+                <option value="paid">paid</option>
+                <option value="delivered">delivered</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:170px">
+              <label>To‘lov</label>
+              <select id="ordersProvider" class="form-control">
+                <option value="">Hammasi</option>
+                <option value="cash">Naqd</option>
+                <option value="payme">Payme</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (dan)</label>
+              <input id="ordersFrom" type="date" class="form-control">
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (gacha)</label>
+              <input id="ordersTo" type="date" class="form-control">
+            </div>
+          </div>
+          <div class="right-actions" style="justify-content:flex-end;margin-top:10px">
+            <button class="btn btn-light btn-sm" id="ordersClear"><i class="fas fa-eraser"></i> Tozalash</button>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table class="table" id="ordersTable">
             <thead>
@@ -263,6 +312,49 @@ id="statsView">
       </div>
     </main>
   </div>
+
+
+  <!-- Order Detail Modal -->
+  <div class="modal" id="orderModal">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h3><i class="fas fa-receipt"></i> Buyurtma tafsiloti</h3>
+        <button class="btn btn-light btn-sm" id="closeOrderModalBtn"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="grid2">
+          <div class="mini-card">
+            <div class="mini-title">Asosiy</div>
+            <div class="mini-list" id="orderKv"></div>
+          </div>
+          <div class="mini-card">
+            <div class="mini-title">Yetkazib berish</div>
+            <div class="mini-list" id="shipKv"></div>
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="mini-card">
+          <div class="mini-title">Mahsulotlar</div>
+          <div id="orderItemsWrap" class="table-container"></div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="mini-card" id="mapCard">
+          <div class="mini-title">Xarita</div>
+          <div id="orderMap"></div>
+          <div class="muted" id="mapNote" style="margin-top:8px;display:none">Koordinata yo‘q. Faqat matnli manzil saqlangan.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" id="copyOrderBtn"><i class="fas fa-copy"></i> Copy</button>
+        <button class="btn btn-primary" id="closeOrderModalBtn2"><i class="fas fa-check"></i> Yopish</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Product Modal -->
   <div class="modal" id="productModal">
@@ -532,6 +624,8 @@ id="statsView">
       }
       data.forEach(p=>{
         const tr = document.createElement("tr");
+        tr.style.cursor="pointer";
+        tr.dataset.oid = o.id || "";
         const old = p.oldPrice>0?`<span class="old-price">${formatPrice(p.oldPrice)}</span>`:"";
         const tags = (p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("") || `<span style="color:var(--gray)">-</span>`;
         const colors = (p.colors||[]).slice(0,3).map(c=>`<span class="color-preview" style="background:${esc(c.hex)}" title="${esc(c.name)}"></span>`).join("") || `<span style="color:var(--gray)">-</span>`;
@@ -971,6 +1065,179 @@ id="statsView">
     let ordersUnsub = null;
     let ordersCache = [];
 
+    let ordersById = new Map();
+    let orderModalMap = null;
+    let orderModalMarker = null;
+
+    function toDate(ts){
+      try{
+        if(!ts) return null;
+        if(ts.toDate) return ts.toDate();
+        if(ts.seconds) return new Date(ts.seconds*1000);
+        const d = new Date(ts);
+        return isNaN(+d) ? null : d;
+      }catch(e){ return null; }
+    }
+
+    function setIfExists(id, val){
+      const el = $(id);
+      if(el) el.value = val ?? "";
+    }
+
+    function formatProvider(o){
+      const p = (o.paymentType||o.provider||"").toLowerCase();
+      if(p.includes("payme")) return "payme";
+      if(p.includes("cash") || p.includes("naqd")) return "cash";
+      return p || "—";
+    }
+
+    function getOrderSearchBlob(o){
+      const ship = o.shipping || {};
+      const addr = ship.addressText || o.addressText || o.address || "";
+      const phone = o.phone || ship.phone || "";
+      return [
+        o.id, o.uid, o.status, o.provider, o.paymentType, formatProvider(o),
+        addr, phone,
+        Array.isArray(o.items)? o.items.map(it=>it.name||it.title||it.id).join(" ") : ""
+      ].join(" ").toLowerCase();
+    }
+
+    function applyOrdersFilters(){
+      const q = ($("ordersSearch")?.value || "").trim().toLowerCase();
+      const st = ($("ordersStatus")?.value || "").trim();
+      const prov = ($("ordersProvider")?.value || "").trim().toLowerCase();
+      const fromV = $("ordersFrom")?.value;
+      const toV = $("ordersTo")?.value;
+
+      const fromD = fromV ? new Date(fromV+"T00:00:00") : null;
+      const toD = toV ? new Date(toV+"T23:59:59") : null;
+
+      const out = (ordersCache||[]).filter(o=>{
+        if(st && String(o.status||"pending") !== st) return false;
+        if(prov){
+          const p = formatProvider(o);
+          if(p !== prov) return false;
+        }
+        if(q){
+          const blob = getOrderSearchBlob(o);
+          if(!blob.includes(q)) return false;
+        }
+        if(fromD || toD){
+          const d = toDate(o.createdAt);
+          if(!d) return false;
+          if(fromD && d < fromD) return false;
+          if(toD && d > toD) return false;
+        }
+        return true;
+      });
+
+      renderOrdersAdmin(out);
+    }
+
+    function kvRow(k,v){
+      return `<div class="mini-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v)}</div></div>`;
+    }
+
+    function statusPill(status){
+      const s = String(status||"pending");
+      return `<span class="pill ${escapeHtml(s)}"><i class="fas fa-circle"></i> ${escapeHtml(s)}</span>`;
+    }
+
+    function openOrderModal(order){
+      if(!order) return;
+      openModal("orderModal");
+
+      const ship = order.shipping || {};
+      const addr = ship.addressText || order.addressText || order.address || "—";
+      const phone = ship.phone || order.phone || "—";
+      const lat = ship.lat ?? order.lat ?? ship.latitude ?? null;
+      const lng = ship.lng ?? order.lng ?? ship.longitude ?? null;
+
+      $("orderKv").innerHTML = [
+        kvRow("ID", order.id||""),
+        kvRow("UID", order.uid||"—"),
+        kvRow("Status", ""),
+        kvRow("Provider", formatProvider(order)||"—"),
+        kvRow("Summa", Number(order.totalUZS||0).toLocaleString()+" so'm"),
+        kvRow("Vaqt", formatTS(order.createdAt))
+      ].join("");
+      // inject pill into the Status row (3rd mini-row)
+      try{
+        const rows = $("orderKv").querySelectorAll(".mini-row");
+        if(rows[2]){
+          rows[2].querySelector(".v").innerHTML = statusPill(order.status);
+        }
+      }catch(e){}
+
+      $("shipKv").innerHTML = [
+        kvRow("Manzil", addr),
+        kvRow("Telefon", phone),
+        kvRow("Koordinata", (lat && lng) ? `${lat}, ${lng}` : "—")
+      ].join("");
+
+      // items table
+      const items = Array.isArray(order.items) ? order.items : [];
+      const t = `
+        <table style="width:100%;border-collapse:collapse">
+          <thead style="background:#f8f9fa">
+            <tr>
+              <th style="padding:10px;border-bottom:1px solid #e9ecef">Nomi</th>
+              <th style="padding:10px;border-bottom:1px solid #e9ecef">Variant</th>
+              <th style="padding:10px;border-bottom:1px solid #e9ecef">Qty</th>
+              <th style="padding:10px;border-bottom:1px solid #e9ecef">Narx</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(it=>`
+              <tr>
+                <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(it.name||it.title||it.id||"")}</b></td>
+                <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml([it.color,it.size].filter(Boolean).join(" / ")||"—")}</td>
+                <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(String(it.qty||1))}</td>
+                <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(String(it.priceUZS||it.price||"—"))}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      $("orderItemsWrap").innerHTML = t;
+
+      // map
+      const mapCard = $("mapCard");
+      const note = $("mapNote");
+      if(lat && lng && window.L){
+        note.style.display="none";
+        mapCard.style.display="block";
+        setTimeout(()=>{
+          const center = [Number(lat), Number(lng)];
+          if(!orderModalMap){
+            orderModalMap = L.map("orderMap",{ zoomControl:true });
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              maxZoom: 19,
+              attribution: "&copy; OpenStreetMap"
+            }).addTo(orderModalMap);
+          }
+          orderModalMap.setView(center, 16);
+          if(orderModalMarker){ orderModalMarker.remove(); }
+          orderModalMarker = L.marker(center).addTo(orderModalMap);
+          setTimeout(()=>{ try{ orderModalMap.invalidateSize(); }catch(e){} }, 150);
+        }, 50);
+      }else{
+        // no coords
+        if(orderModalMap){
+          try{ orderModalMap.invalidateSize(); }catch(e){}
+        }
+        note.style.display="block";
+      }
+
+      // copy
+      $("copyOrderBtn").onclick = async ()=>{
+        const payload = JSON.stringify(order, null, 2);
+        try{ await navigator.clipboard.writeText(payload); toast("Copy qilindi"); }
+        catch(e){ toast("Copy bo‘lmadi","error"); }
+      };
+    }
+
+
     function formatTS(ts){
       try{
         if(!ts) return "—";
@@ -980,6 +1247,7 @@ id="statsView">
     }
 
     function renderOrdersAdmin(list){
+      ordersById.clear();
       const tbody = $("ordersTbody");
       const empty = $("ordersEmpty");
       if(!tbody) return;
@@ -989,7 +1257,10 @@ id="statsView">
       empty.style.display = arr.length ? "none" : "block";
       for(const o of arr){
         const tr = document.createElement("tr");
+        tr.style.cursor="pointer";
+        tr.dataset.oid = o.id || "";
         const itemsCount = Array.isArray(o.items) ? o.items.reduce((s,it)=>s+Number(it.qty||1),0) : 0;
+        ordersById.set(o.id, o);
         tr.innerHTML = `
           <td><code>${escapeHtml(o.id||"")}</code></td>
           <td style="max-width:220px"><div class="truncate">${escapeHtml(o.uid||"")}</div></td>
@@ -1035,17 +1306,49 @@ id="statsView">
       const qy = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
       ordersUnsub = onSnapshot(qy, (snap)=>{
         ordersCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        renderOrdersAdmin(ordersCache);
+        applyOrdersFilters();
       }, (err)=>{
         console.warn("orders admin subscribe error", err);
         $("ordersState").textContent = "Xatolik (index / rules)";
-        renderOrdersAdmin(ordersCache);
+        applyOrdersFilters();
       });
     }
 
     if($("ordersRefresh")){
       $("ordersRefresh").addEventListener("click", ()=> subscribeOrdersAdmin());
     }
+
+    // Filters
+    ["ordersSearch","ordersStatus","ordersProvider","ordersFrom","ordersTo"].forEach(id=>{
+      const el = $(id);
+      if(!el) return;
+      el.addEventListener("input", applyOrdersFilters);
+      el.addEventListener("change", applyOrdersFilters);
+    });
+    $("ordersClear")?.addEventListener("click", ()=>{
+      setIfExists("ordersSearch","");
+      setIfExists("ordersStatus","");
+      setIfExists("ordersProvider","");
+      setIfExists("ordersFrom","");
+      setIfExists("ordersTo","");
+      applyOrdersFilters();
+    });
+
+    // Row click => detail modal
+    $("ordersTbody")?.addEventListener("click", (e)=>{
+      const t = e.target;
+      if(t && (t.tagName==="SELECT" || t.closest("select"))) return;
+      const tr = t?.closest("tr");
+      const oid = tr?.dataset?.oid;
+      if(!oid) return;
+      const o = ordersById.get(oid);
+      openOrderModal(o);
+    });
+
+    // close order modal
+    ["closeOrderModalBtn","closeOrderModalBtn2"].forEach(id=>{
+      $(id)?.addEventListener("click", ()=> closeModal("orderModal"));
+    });
 
 </script>
 </body>
