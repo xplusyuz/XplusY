@@ -148,9 +148,13 @@ els.loginForm?.addEventListener("submit", async (e)=>{
   }catch(err){
     const code = err?.code || "";
     let msg = "Kirishda xatolik. Qayta urinib ko‘ring.";
+    if(code.includes("unauthorized-domain")){
+      msg = "Domain ruxsat etilmagan. Firebase Console → Authentication → Settings → Authorized domains ga saytingiz domenini qo‘shing (masalan: xplusy.netlify.app).";
+    }
     if(code.includes("invalid-credential") || code.includes("wrong-password")) msg = "Telefon yoki parol noto‘g‘ri.";
     if(code.includes("user-not-found")) msg = "Bunday foydalanuvchi topilmadi. Ro‘yxatdan o‘ting.";
     if(code.includes("too-many-requests")) msg = "Ko‘p urinish. Birozdan so‘ng qayta urinib ko‘ring.";
+    if(msg === "Kirishda xatolik. Qayta urinib ko‘ring." && err?.message) msg = err.message;
     showNotice(els.authNotice, msg, "error");
   }
 });
@@ -188,8 +192,12 @@ els.signupForm?.addEventListener("submit", async (e)=>{
   }catch(err){
     const code = err?.code || "";
     let msg = "Ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring.";
+    if(code.includes("unauthorized-domain")){
+      msg = "Domain ruxsat etilmagan. Firebase Console → Authentication → Settings → Authorized domains ga saytingiz domenini qo‘shing (masalan: xplusy.netlify.app).";
+    }
     if(code.includes("email-already-in-use")) msg = "Bu telefon raqam bilan foydalanuvchi mavjud. Kirish qiling.";
     if(code.includes("weak-password")) msg = "Parol juda oddiy. Kamida 6 ta belgi kiriting.";
+    if(msg === "Ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring." && err?.message) msg = err.message;
     showNotice(els.authNotice2, msg, "error");
   }
 });
