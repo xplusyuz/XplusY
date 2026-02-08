@@ -1,3 +1,51 @@
+
+/* ========= TELEGRAM ADMIN NOTIFY (NO FUNCTIONS) =========
+   Sends a lightweight notification to admin chat when a new order is created.
+   Uses GET (Image beacon) and/or no-cors POST to avoid CORS issues.
+   Requires window.TG_ADMIN { botToken, chatId } from telegram-config.js.
+*/
+function tgAdminEnabled(){
+  return typeof window !== "undefined"
+    && window.TG_ADMIN
+    && typeof window.TG_ADMIN.botToken === "string"
+    && window.TG_ADMIN.botToken.trim().length > 10
+    && typeof window.TG_ADMIN.chatId === "string"
+    && window.TG_ADMIN.chatId.trim().length > 2;
+}
+function tgEscape(s){ return String(s??"").replace(/[<>&]/g, c=>({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
+
+function tgSendAdmin(text){
+  try{
+    if(!tgAdminEnabled()) return;
+    const token = window.TG_ADMIN.botToken.trim();
+    const chatId = window.TG_ADMIN.chatId.trim();
+    const base = `https://api.telegram.org/bot${token}/sendMessage`;
+    // 1) GET beacon (no CORS)
+    const url = base + `?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}&disable_web_page_preview=true`;
+    const img = new Image();
+    img.src = url;
+    // 2) best-effort POST (no-cors) — ok if GET is blocked
+    try{
+      const body = new URLSearchParams({ chat_id: chatId, text, disable_web_page_preview: "true" }).toString();
+      fetch(base, { method:"POST", mode:"no-cors", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+    }catch(_e){}
+  }catch(_e){}
+}
+function tgNotifyNewOrder(o){
+  try{
+    if(!tgAdminEnabled()) return;
+    const lines = [
+      "🛒 Yangi buyurtma!",
+      `ID: ${o.orderId || o.id || ""}`,
+      `Summa: ${o.totalUZS || o.total || 0} so'm`,
+      `To'lov: ${o.provider || o.paymentType || ""}`,
+      o.shipping?.phone ? `Tel: ${o.shipping.phone}` : (o.phone ? `Tel: ${o.phone}` : ""),
+      o.shipping?.addressText ? `Manzil: ${o.shipping.addressText}` : "",
+    ].filter(Boolean);
+    tgSendAdmin(lines.join("\n"));
+  }catch(_e){}
+}
+
 import { auth, db } from "./firebase-config.js";
 import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
 import {
@@ -2450,6 +2498,9 @@ await setDoc(userOrderRef, {
   orderId,
   source: "web",
 }, { merge: true });
+
+  // notify admin via Telegram (optional)
+  try{ tgNotifyNewOrder({ orderId, provider, totalUZS }); }catch(_e){}
 }
 
 function removePurchasedFromCart(sel){
