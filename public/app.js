@@ -79,6 +79,7 @@ function toast(message, type="info"){
 
 
 let currentUser = null;
+let isEditing = false;
 
 // Lightweight interest tracking -> Firestore events (used to compute real popularity)
 async function logEvent(type, productId){
@@ -1361,8 +1362,7 @@ function subscribeOrders(uid){
 
   // If security rules disallow, we fail gracefully.
   const qy = query(
-    collection(db, "orders"),
-    where("uid", "==", uid),
+    collection(db, "users", uid, "orders"),
     orderBy("createdAt", "desc"),
     limit(20)
   );
@@ -2249,6 +2249,20 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
+
+// also store under user subcollection to avoid composite index for profile history
+const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
+await setDoc(userOrderRef, {
+  uid: currentUser.uid,
+  status,
+  items,
+  totalUZS,
+  amountTiyin: amountTiyin ?? null,
+  provider,
+  createdAt: serverTimestamp(),
+  orderId,
+  source: "web",
+}, { merge: true });
 }
 
 function removePurchasedFromCart(sel){
@@ -2399,6 +2413,7 @@ function closeProfile(){ goTab("home"); }
 window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
+let isEditing = false;
   let isCompleted = false;
   let isEditing = false;
 
