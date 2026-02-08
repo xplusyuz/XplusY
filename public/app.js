@@ -171,6 +171,13 @@ const els = {
   paymeBtnPage: document.getElementById("paymeBtnPage"),
   tgShareBtnPage: document.getElementById("tgShareBtnPage"),
   clearCartPage: document.getElementById("clearCartPage"),
+  orderBtnPage: document.getElementById("orderBtnPage"),
+  checkoutSheet: document.getElementById("checkoutSheet"),
+  checkoutClose: document.getElementById("checkoutClose"),
+  checkoutSubmit: document.getElementById("checkoutSubmit"),
+  shipAddress: document.getElementById("shipAddress"),
+  useMyLocation: document.getElementById("useMyLocation"),
+  shipCoordsText: document.getElementById("shipCoordsText"),
 
   // profile page
 
@@ -1986,6 +1993,124 @@ function renderCartPage(){
 }
 
 
+
+/* =========================
+   Checkout (Cart -> Order)
+========================= */
+let shipMap = null;
+let shipMarker = null;
+let shipLatLng = null;
+let shipMapInited = false;
+
+function initShipMapOnce(){
+  if(shipMapInited) return;
+  const el = document.getElementById("shipMap");
+  if(!el || typeof L === "undefined") return;
+  shipMapInited = true;
+
+  // Default: Tashkent
+  shipMap = L.map(el, { zoomControl: false }).setView([41.3111, 69.2797], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(shipMap);
+
+  shipMap.on("click", (e)=>{
+    shipLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+    if(!shipMarker){
+      shipMarker = L.marker(e.latlng).addTo(shipMap);
+    }else{
+      shipMarker.setLatLng(e.latlng);
+    }
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+  });
+}
+
+function openCheckout(){
+  if(!els.checkoutSheet) return;
+  els.checkoutSheet.hidden = false;
+  // Scroll sheet into view
+  els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // init map after visible so Leaflet sizes correctly
+  setTimeout(()=>{
+    initShipMapOnce();
+    try{ shipMap && shipMap.invalidateSize(); }catch(e){}
+  }, 60);
+}
+
+function closeCheckout(){
+  if(!els.checkoutSheet) return;
+  els.checkoutSheet.hidden = true;
+}
+
+function getPayType(){
+  const r = document.querySelector('input[name="paytype"]:checked');
+  return r ? r.value : "cash";
+}
+
+async function createOrderFromCheckout(){
+  if(!currentUser){
+    toast("Avval kirish qiling (Google / Telegram).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+
+  const built = buildSelectedItems();
+  if(!built.ok){ toast(built.reason); return; }
+
+  const address = (els.shipAddress?.value || "").trim();
+  if(!address && !shipLatLng){
+    toast("Manzil kiriting yoki xaritadan belgilang.");
+    return;
+  }
+
+  const payType = getPayType(); // cash | payme
+  const orderId = String(Date.now()); // digits-only
+  const amountTiyin = Math.round(built.totalUZS * 100);
+
+  const payload = {
+    orderId,
+    provider: payType === "payme" ? "payme" : "cash",
+    status: payType === "payme" ? "pending_payment" : "pending_cash",
+    items: built.items,
+    totalUZS: built.totalUZS,
+    amountTiyin: payType === "payme" ? amountTiyin : null,
+    shipping: {
+      addressText: address || null,
+      lat: shipLatLng?.lat ?? null,
+      lng: shipLatLng?.lng ?? null
+    }
+  };
+
+  try{
+    await createOrderDoc(payload);
+    removePurchasedFromCart(built.sel);
+    updateBadges();
+    renderCartPage();
+    closeCheckout();
+  }catch(e){
+    console.warn("checkout order create failed", e);
+    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
+    return;
+  }
+
+  if(payType === "payme"){
+    if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
+      toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
+      return;
+    }
+    const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
+    const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+    const b64 = btoa(unescape(encodeURIComponent(params)));
+    window.location.href = `https://checkout.paycom.uz/${b64}`;
+  }else{
+    toast("Buyurtmangiz qabul qilindi ✅");
+    goTab("profile");
+  }
+}
+
 let unsubProducts = null;
 
 async function loadProducts(){
@@ -2394,6 +2519,36 @@ els.paymeBtn?.addEventListener("click", startPaymeCheckout);
 els.paymeBtnPage?.addEventListener("click", startPaymeCheckout);
 els.tgShareBtn?.addEventListener("click", shareOrderTelegram);
 els.tgShareBtnPage?.addEventListener("click", shareOrderTelegram);
+
+// Cart -> single order flow
+els.orderBtnPage?.addEventListener("click", ()=>{
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  openCheckout();
+});
+els.checkoutClose?.addEventListener("click", closeCheckout);
+els.checkoutSubmit?.addEventListener("click", createOrderFromCheckout);
+
+els.useMyLocation?.addEventListener("click", ()=>{
+  if(!navigator.geolocation){
+    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    initShipMapOnce();
+    try{
+      if(shipMap){
+        shipMap.setView([shipLatLng.lat, shipLatLng.lng], 16);
+        if(!shipMarker) shipMarker = L.marker([shipLatLng.lat, shipLatLng.lng]).addTo(shipMap);
+        else shipMarker.setLatLng([shipLatLng.lat, shipLatLng.lng]);
+      }
+    }catch(e){}
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+  }, ()=>{
+    toast("Lokatsiyani olishga ruxsat berilmadi.");
+  }, { enableHighAccuracy: true, timeout: 8000 });
+});
+
 
 
 
