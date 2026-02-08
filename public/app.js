@@ -535,20 +535,29 @@ let favs = new Set(loadLS(LS.favs, []));
 let cart = loadLS(LS.cart, []);
 // Cart selection (for partial checkout / later buy)
 let cartSelected = new Set(); // contains cart item keys
+let lastCartKeys = new Set(cart.map(x=>x.key)); // track additions (so deselected items stay deselected)
 
 function syncCartSelected(autoSelectNew=true){
   const keys = new Set(cart.map(x=>x.key));
+
+  // first run: default everything selected
   if(cartSelected.size === 0){
-    // default: everything selected
     cartSelected = new Set(keys);
+    lastCartKeys = new Set(keys);
     return;
   }
-  // drop removed
+
+  // drop removed items
   cartSelected = new Set(Array.from(cartSelected).filter(k=>keys.has(k)));
-  // auto-select new items
+
+  // auto-select ONLY newly added items (do not re-select deselected ones)
   if(autoSelectNew){
-    for(const k of keys) cartSelected.add(k);
+    for(const k of keys){
+      if(!lastCartKeys.has(k)) cartSelected.add(k);
+    }
   }
+
+  lastCartKeys = new Set(keys);
 }
 
 function allCartSelected(){
@@ -1401,6 +1410,8 @@ async function loadProducts(){
         return { id: String(data.id || d.id), ...data, _docId: d.id };
       });
       products = arr;
+      buildTagCounts();
+      renderTagBar();
       applyFilterSort();
 
       // If empty, show a helpful hint for setup
