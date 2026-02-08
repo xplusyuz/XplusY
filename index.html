@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini Shop — products.json</title>
+  <style>
+    :root{
+      --bg:#0b1220; --card:#0f1b2f; --muted:#9bb0d0; --text:#eaf0ff; --stroke:rgba(255,255,255,.10);
+      --brand:#2E8B57;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(46,139,87,.35), transparent 60%),
+        radial-gradient(900px 600px at 90% 0%, rgba(83,134,255,.25), transparent 55%),
+        var(--bg);
+    }
+    header{
+      position:sticky; top:0; z-index:5;
+      backdrop-filter: blur(10px);
+      background: rgba(11,18,32,.55);
+      border-bottom: 1px solid var(--stroke);
+      padding:14px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .brand{display:flex; gap:10px; align-items:center}
+    .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid var(--stroke)}
+    .t1{font-weight:850}
+    .t2{font-size:12px;color:var(--muted)}
+    a.btn{
+      text-decoration:none; color:var(--text);
+      border:1px solid rgba(46,139,87,.6);
+      background: linear-gradient(180deg, rgba(46,139,87,.95), rgba(20,59,38,.95));
+      padding:10px 12px; border-radius:14px; font-weight:800;
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:18px 16px 40px}
+    .hero{border:1px solid var(--stroke);border-radius:18px;background:rgba(255,255,255,.05);padding:16px;margin:12px 0 18px}
+    .hero h1{margin:0 0 6px;font-size:22px}
+    .hero p{margin:0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    @media(min-width:860px){.grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}}
+    .card{border:1px solid var(--stroke);border-radius:18px;background:rgba(255,255,255,.05);overflow:hidden}
+    .imgBox{aspect-ratio:1/1;background:rgba(255,255,255,.04)}
+    img{width:100%;height:100%;object-fit:cover;display:block}
+    .body{padding:12px}
+    .title{font-weight:800;font-size:13px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px}
+    .meta{margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted)}
+    .price{font-weight:900;color:#d7ffe8}
+    .src{color:var(--muted);text-decoration:none;border-bottom:1px dashed rgba(255,255,255,.25)}
+    .src:hover{color:var(--text)}
+    .pill{font-size:11px;padding:6px 9px;border-radius:999px;border:1px solid var(--stroke);background:rgba(255,255,255,.06)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .warn{margin-top:10px;color:var(--muted);font-size:12px}
+    code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">🛒</div>
+      <div>
+        <div class="t1">Mini Shop</div>
+        <div class="t2">products.json (admin.html orqali generatsiya)</div>
+      </div>
+    </div>
+    <div class="row">
+      <span class="pill" id="srcMode">Loading…</span>
+      <a class="btn" href="./admin.html">Admin</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Mahsulotlar</h1>
+      <p>Bu sahifa avval <code>products.json</code> ni o‘qiydi. Agar u yangilanmagan bo‘lsa, <code>admin.html</code> saqlagan LocalStorage ma’lumotini ko‘rsatadi.</p>
+      <div class="warn" id="warn"></div>
+    </section>
+
+    <section class="grid" id="grid"></section>
+
+    <template id="tpl">
+      <article class="card">
+        <div class="imgBox"><img class="img" alt="" loading="lazy"></div>
+        <div class="body">
+          <div class="title"></div>
+          <div class="meta">
+            <span class="price"></span>
+            <a class="src" target="_blank" rel="noreferrer">Manba</a>
+          </div>
+        </div>
+      </article>
+    </template>
+  </main>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const tpl = document.getElementById('tpl');
+    const srcMode = document.getElementById('srcMode');
+    const warn = document.getElementById('warn');
+
+    function placeholder(){
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'>" +
+        "<rect width='100%' height='100%' fill='rgba(255,255,255,.06)'/>" +
+        "<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='rgba(255,255,255,.55)' font-family='Arial' font-size='28'>No image</text>" +
+        "</svg>"
+      );
+    }
+    function esc(s){ return (s ?? '').toString(); }
+
+    function render(items){
+      grid.innerHTML = '';
+      items.forEach(p => {
+        const node = tpl.content.cloneNode(true);
+        const img = node.querySelector('.img');
+        const title = node.querySelector('.title');
+        const price = node.querySelector('.price');
+        const src = node.querySelector('.src');
+
+        img.src = (p.images && p.images[0]) ? p.images[0] : placeholder();
+        img.alt = esc(p.title || '');
+        title.textContent = esc(p.title || 'Nomsiz');
+        price.textContent = esc(p.priceUZS || p.priceText || '');
+        src.href = esc(p.sourceUrl || '#');
+
+        grid.appendChild(node);
+      });
+    }
+
+    async function loadProducts(){
+      // 1) Try products.json
+      try{
+        const r = await fetch('./products.json', {cache:'no-store'});
+        if(!r.ok) throw new Error('no products.json');
+        const j = await r.json();
+        if(Array.isArray(j.products) && j.products.length){
+          srcMode.textContent = 'Source: products.json';
+          render(j.products);
+          return;
+        }
+        throw new Error('empty products.json');
+      }catch(e){
+        // 2) Fallback to localStorage
+        const raw = localStorage.getItem('MINISHOP_PRODUCTS');
+        if(raw){
+          try{
+            const arr = JSON.parse(raw);
+            if(Array.isArray(arr) && arr.length){
+              srcMode.textContent = 'Source: LocalStorage';
+              warn.textContent = "Eslatma: products.json topilmadi yoki bo‘sh. Hozir admin saqlagan LocalStorage ma’lumoti ko‘rsatilmoqda. Hostingga products.json’ni yangilab qo‘ysangiz hammaga bir xil ko‘rinadi.";
+              render(arr);
+              return;
+            }
+          }catch{}
+        }
+        srcMode.textContent = 'Source: none';
+        warn.textContent = "Hozircha mahsulot yo‘q. admin.html ga kirib 1688 link import qiling va products.json’ni download qilib hostingga qo‘ying.";
+        render([]);
+      }
+    }
+    loadProducts();
+  </script>
+</body>
+</html>
