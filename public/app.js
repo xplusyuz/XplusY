@@ -88,16 +88,6 @@ const els = {
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   tagBar: document.getElementById("tagBar"),
-  catBtn: document.getElementById("catBtn"),
-  catModal: document.getElementById("catModal"),
-  catBackdrop: document.getElementById("catBackdrop"),
-  catClose: document.getElementById("catClose"),
-  catBack: document.getElementById("catBack"),
-  catTitle: document.getElementById("catTitle"),
-  catList: document.getElementById("catList"),
-  catAll: document.getElementById("catAll"),
-  catApply: document.getElementById("catApply"),
-  catCrumb: document.getElementById("catCrumb"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),
   tgNotice: document.getElementById("tgNotice"),
@@ -292,13 +282,6 @@ function enhanceHScroll(el){
 let products = [];
 let selectedTag = "all";
 let tagCounts = new Map();
-
-// Mobile nested categories built from product.tags order (1st -> parent, 2nd -> child, 3rd -> leaf)
-const MAX_CAT_DEPTH = 3;
-let categoryTree = null; // { children: Map<string,node>, count: number }
-let selectedCategoryPath = null; // array of lowercase strings (prefix match)
-let catNavPath = []; // navigation path inside modal
-let catPendingPath = null; // chosen path (for Apply)
 
 const LS = {
   favs: "om_favs",
@@ -813,97 +796,9 @@ function renderTagBar(){
   els.tagBar.innerHTML = chips.join("");
 }
 
-function buildCategoryTree(){
-  const root = { children: new Map(), count: 0 };
-  for(const p of products){
-    const raw = Array.isArray(p.tags) ? p.tags : [];
-    const path = raw.map(t=> String(t).trim().toLowerCase()).filter(Boolean).slice(0, MAX_CAT_DEPTH);
-    if(path.length === 0) continue;
-    root.count++;
-    let node = root;
-    for(const seg of path){
-      if(!node.children.has(seg)) node.children.set(seg, { children: new Map(), count: 0 });
-      node = node.children.get(seg);
-      node.count++;
-    }
-  }
-  categoryTree = root;
-}
-
-function getCatNode(path){
-  let node = categoryTree;
-  for(const seg of path){
-    if(!node || !node.children || !node.children.has(seg)) return null;
-    node = node.children.get(seg);
-  }
-  return node;
-}
-
-function formatCrumb(path){
-  if(!path || !path.length) return "Barchasi";
-  return path.map(titleTag).join(" › ");
-}
-
-function updateCatBtnLabel(){
-  if(!els.catBtn) return;
-  const label = selectedCategoryPath && selectedCategoryPath.length ? formatCrumb(selectedCategoryPath) : "Kategoriya";
-  els.catBtn.textContent = `📂 ${label}`;
-}
-
-function renderCatModal(){
-  if(!els.catList || !categoryTree) return;
-  const node = getCatNode(catNavPath) || categoryTree;
-  const entries = Array.from(node.children.entries())
-    .sort((a,b)=> (b[1].count - a[1].count) || a[0].localeCompare(b[0]));
-
-  const html = [];
-  for(const [name, child] of entries){
-    const hasKids = child.children && child.children.size > 0;
-    html.push(
-      `<button class="catItem" type="button" data-cat="${escapeHtml(name)}" data-has="${hasKids?"1":"0"}">
-         <div class="catName">${escapeHtml(titleTag(name))}</div>
-         <div class="catMeta">
-           <span class="catPill">${child.count}</span>
-           <span aria-hidden="true">${hasKids?"›":""}</span>
-         </div>
-       </button>`
-    );
-  }
-  els.catList.innerHTML = html.join("");
-  if(els.catCrumb) els.catCrumb.textContent = formatCrumb(catPendingPath || catNavPath || []);
-  if(els.catTitle) els.catTitle.textContent = catNavPath.length ? titleTag(catNavPath[catNavPath.length-1]) : "Kategoriyalar";
-  if(els.catBack) els.catBack.disabled = (catNavPath.length === 0);
-}
-
-function openCatModal(){
-  if(!els.catModal) return;
-  catNavPath = [];
-  catPendingPath = selectedCategoryPath ? [...selectedCategoryPath] : null;
-  renderCatModal();
-  els.catModal.hidden = false;
-  document.body.style.overflow = "hidden";
-}
-
-function closeCatModal(){
-  if(!els.catModal) return;
-  els.catModal.hidden = true;
-  document.body.style.overflow = "";
-}
-
 function setSelectedTag(tag){
   selectedTag = tag || "all";
-  // Desktop chips chosen -> clear mobile category
-  selectedCategoryPath = null;
-  updateCatBtnLabel();
   renderTagBar();
-  applyFilterSort();
-}
-
-function setSelectedCategory(path){
-  selectedCategoryPath = (path && path.length) ? path.map(x=>String(x).toLowerCase()) : null;
-  selectedTag = "all";
-  renderTagBar();
-  updateCatBtnLabel();
   applyFilterSort();
 }
 
@@ -916,16 +811,7 @@ function applyFilterSort(){
   }
 
   // tag category filter
-  if(selectedCategoryPath && selectedCategoryPath.length){
-    arr = arr.filter(p=>{
-      const tags = (p.tags||[]).map(t=>String(t).trim().toLowerCase()).filter(Boolean);
-      if(tags.length < selectedCategoryPath.length) return false;
-      for(let i=0;i<selectedCategoryPath.length;i++){
-        if(tags[i] !== selectedCategoryPath[i]) return false;
-      }
-      return true;
-    });
-  } else if(selectedTag && selectedTag !== "all"){
+  if(selectedTag && selectedTag !== "all"){
     arr = arr.filter(p => (p.tags || []).map(t=>String(t).toLowerCase()).includes(selectedTag));
   }
 
@@ -1580,8 +1466,6 @@ async function loadProducts(){
       });
       products = arr;
       buildTagCounts();
-      buildCategoryTree();
-      updateCatBtnLabel();
       renderTagBar();
       applyFilterSort();
 
@@ -1679,43 +1563,6 @@ if(els.tagBar){
     setSelectedTag(btn.dataset.tag);
   });
 }
-
-// Mobile categories
-els.catBtn?.addEventListener("click", ()=>{
-  if(!categoryTree) buildCategoryTree();
-  openCatModal();
-});
-els.catClose?.addEventListener("click", closeCatModal);
-els.catBackdrop?.addEventListener("click", closeCatModal);
-els.catBack?.addEventListener("click", ()=>{
-  if(catNavPath.length){
-    catNavPath.pop();
-    renderCatModal();
-  }
-});
-els.catAll?.addEventListener("click", ()=>{
-  setSelectedCategory(null);
-  closeCatModal();
-});
-els.catApply?.addEventListener("click", ()=>{
-  setSelectedCategory(catPendingPath || catNavPath);
-  closeCatModal();
-});
-els.catList?.addEventListener("click", (e)=>{
-  const btn = e.target.closest("[data-cat]");
-  if(!btn) return;
-  const name = String(btn.dataset.cat || "").toLowerCase();
-  const has = btn.dataset.has === "1";
-  const next = [...catNavPath, name];
-  if(has && next.length < MAX_CAT_DEPTH){
-    catNavPath = next;
-    renderCatModal();
-  } else {
-    catPendingPath = next;
-    if(els.catCrumb) els.catCrumb.textContent = formatCrumb(catPendingPath);
-    toast(`Tanlandi: ${formatCrumb(catPendingPath)}`);
-  }
-});
 
 
 // panel & views
@@ -2251,93 +2098,91 @@ function initMobileBottomBar(){
 
   const btns = Array.from(bar.querySelectorAll(".nav-btn"));
   const setActive = (tab)=>{
-    btns.forEach(b=>b.classList.toggle("active", b.dataset.tab === tab));
+    btns.forEach(b=>b.classList.toggle("active", (b.dataset.tab || "") === tab));
   };
 
-  btns.forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const tab = btn.dataset.tab;
-      setActive(tab);
+  // lightweight "close everything" helper for Home
+  const closeAll = ()=>{
+    try{ els?.overlay?.classList.add("hidden"); }catch(e){}
+    try{ els?.sidePanel?.classList.add("hidden"); }catch(e){}
+    try{ document.getElementById("profileOverlay")?.classList.add("hidden"); }catch(e){}
+    try{ document.getElementById("vOverlay")?.classList.add("hidden"); }catch(e){}
+  };
 
-      if(tab === "home"){
-        // Go back to main products view
-        try{ closeCatModal(); }catch(e){}
-        try{
-          if(viewMode !== "all"){ viewMode = "all"; applyFilterSort(); renderSidePanel(); }
-        }catch(e){}
-        try{ if(typeof closePanel==='function') closePanel(); }catch(e){}
-        window.scrollTo({ top: 0, behavior: "smooth" });
+  // Event delegation (more reliable across re-renders)
+  bar.addEventListener("click", (e)=>{
+    const btn = e.target?.closest?.(".nav-btn");
+    if(!btn) return;
+
+    const tab = btn.dataset.tab || "home";
+    setActive(tab);
+
+    if(tab === "home"){
+      closeAll();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if(tab === "categories"){
+      // If you later add a real categories sheet/modal, expose window.openCategories()
+      if(typeof window.openCategories === "function"){
+        window.openCategories();
         return;
       }
-      if(tab === "categories"){
-        // Mobile: open nested category sheet (tag bar is hidden on mobile)
-        try{ openCatModal(); }catch(e){
-          // fallback: click category button if exists
-          const b = document.getElementById("catBtn");
-          if(b) b.click();
-        }
-        return;
-      }
-      if(tab === "fav"){
-        try{ closeCatModal(); }catch(e){}
-        // open favorites view
-        try{ openPanel("fav"); }catch(e){
-          const b = document.getElementById("favViewBtn");
-          if(b) b.click();
-        }
-        return;
-      }
-      if(tab === "cart"){
-        try{ closeCatModal(); }catch(e){}
-        try{ openPanel("cart"); }catch(e){
-          const b = document.getElementById("cartBtn");
-          if(b) b.click();
-        }
-        return;
-      }
-      if(tab === "profile"){
-        try{ closeCatModal(); }catch(e){}
-        try{ openProfile(); }catch(e){
-          const b = document.getElementById("avatarBtn") || document.getElementById("userbox");
-          if(b) b.click();
-        }
-        return;
-      }
-    }, { passive: true });
+      // fallback: scroll to products top (search/tag area may differ by build)
+      const el = document.getElementById("productsTop") || document.getElementById("searchRow") || document.querySelector(".searchRow") || document.querySelector("main");
+      if(el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    if(tab === "fav"){
+      // uses side panel
+      if(typeof openPanel === "function"){ openPanel("fav"); }
+      return;
+    }
+
+    if(tab === "cart"){
+      if(typeof openPanel === "function"){ openPanel("cart"); }
+      return;
+    }
+
+    if(tab === "profile"){
+      if(typeof openProfile === "function"){ openProfile(); }
+      return;
+    }
   });
 
-  // keep cart badge in sync with existing updateBadges (if present)
+  // keep cart badge in sync with existing UI
   const badge = document.getElementById("navCartBadge");
-  const refreshBadge = ()=>{
-    if(!badge) return;
-    // try to read existing cart count label
-    const c1 = document.querySelector("[data-cart-count]");
-    let n = 0;
-    if(c1 && c1.textContent) n = parseInt(c1.textContent, 10) || 0;
-    // fallback: look for ids
-    if(!n){
-      const c2 = document.getElementById("cartCount") || document.getElementById("cartBadge");
-      if(c2 && c2.textContent) n = parseInt(c2.textContent, 10) || 0;
-    }
-    badge.hidden = !(n > 0);
-    badge.textContent = String(n);
+  const syncBadge = ()=>{
+    try{
+      const c = Number((els?.cartCount?.textContent || "0").trim()) || 0;
+      if(!badge) return;
+      badge.hidden = (c <= 0);
+      badge.textContent = String(c);
+    }catch(e){}
   };
+  syncBadge();
 
+  // observe cartCount changes
+  try{
+    if(els?.cartCount){
+      const mo = new MutationObserver(syncBadge);
+      mo.observe(els.cartCount, { childList:true, subtree:true, characterData:true });
+    }
+  }catch(e){}
 
-  // expose setter for other UI parts (header buttons etc.)
-  window.__setBottomTab = setActive;
-
-  // Sync with header actions
-  const sync = (tab)=>{ try{ setActive(tab); }catch(e){} };
-  const hf = document.getElementById("favViewBtn"); if(hf) hf.addEventListener("click", ()=>sync("fav"), { passive:true });
-  const hc = document.getElementById("cartBtn"); if(hc) hc.addEventListener("click", ()=>sync("cart"), { passive:true });
-  const hp = document.getElementById("avatarBtn"); if(hp) hp.addEventListener("click", ()=>sync("profile"), { passive:true });
-  const hk = document.getElementById("catBtn"); if(hk) hk.addEventListener("click", ()=>sync("categories"), { passive:true });
-
-  // hook: run often
-  refreshBadge();
-  window.addEventListener("storage", refreshBadge);
-  setInterval(refreshBadge, 1200);
+  // When other UI opens panels, keep active state aligned (best effort)
+  const hook = (fnName, tab)=>{
+    const orig = window[fnName];
+    if(typeof orig !== "function") return;
+    window[fnName] = function(...args){
+      const res = orig.apply(this, args);
+      try{ setActive(tab); }catch(e){}
+      return res;
+    };
+  };
+  hook("openProfile","profile");
 }
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
