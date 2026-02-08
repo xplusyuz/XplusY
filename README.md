@@ -1,80 +1,86 @@
-# OrzuMall — Full Firebase Project (Front + Admin + Real Popularity)
+# Mini loyiha: 1688 link → Import → Saytingda ko‘rsatish (Firebase)
 
-Bu loyiha 3 qismdan iborat:
+Bu demo loyiha 1688 mahsulot linkini admin panel orqali kiritib, backend (Firebase Functions) orqali sahifadan minimal ma’lumotlarni (nom, rasm(lar), narx) ajratib, Firestore'ga saqlaydi va storefront sahifada ko‘rsatadi.
 
-- **/public** — Premium storefront (mahsulotlar, sevimli, savatcha, buyurtma)
-- **/public/admin** — Admin panel (products CRUD + JSON import/export)
-- **/functions** — Real popularity (qiziqish + sotib olishga qarab) hisoblaydigan Cloud Functions
+> Eslatma: 1688 anti-bot himoyasi kuchli. Demo parser "best-effort" — ayrim linklarda CAPTCHA yoki blok sabab ishlamasligi mumkin.
+> Ishonchli production uchun: proxy + cookie/session yoki sourcing-agent API tavsiya qilinadi.
 
-## 1) Firestore sxema
+---
 
-- `products/{id}` — mahsulotlar (admin yozadi, hamma o‘qiydi)
-  - `popularScore` (auto)
-  - `popularStats` (auto: views, favorites, carts, purchases, revenueUZS)
-- `events/{eventId}` — qiziqish eventlari (user create qiladi)
-  - `type`: `view | favorite | add_to_cart`
-  - `productId`
-  - `uid`
-- `orders/{orderId}` — buyurtmalar (user create qiladi)
-  - `items[]` (productId, qty, priceUZS, variant)
-  - `totalUZS`
-  - `status: created`
+## 1) Talablar
+- Node.js 18+
+- Firebase CLI (`npm i -g firebase-tools`)
+- Firebase loyihangiz (Firestore + Functions + Hosting yoqilgan)
 
-## 2) Popularity qanday ishlaydi?
+---
 
-Cloud Functions exponential time-decay ishlatadi:
+## 2) O‘rnatish
+1. Firebase'ga login:
+   ```bash
+   firebase login
+   ```
+2. Loyihani init/deploy:
+   ```bash
+   cd .
+   firebase init
+   # Hosting + Functions + Firestore ni tanlang
+   ```
+   - Functions: **JavaScript**
+   - Node runtime: **18**
+3. `public/firebase-config.js` ichidagi config'ni o‘zingiznikiga almashtiring (Firebase Console → Project settings → Web app).
 
-`score = score * exp(-lambda * dtHours) + weight`
+---
 
-Half-life: **7 kun**. Og‘irliklar:
-- view: 0.2
-- favorite: 1.5
-- add_to_cart: 2.5
-- purchase: 12
-
-Shu bilan “popular” real bo‘ladi: ko‘rish + qiziqish + savat + sotib olish ta’sir qiladi.
-
-## 3) Sozlash (majburiy)
-
-### A) Firebase project yaratish
-Firebase Console → yangi project → Firestore + Authentication (Google) yoqing.
-
-### B) Web config
-`public/firebase-config.js` ichidagi `firebaseConfig` ni o‘z project’ingizdagi config bilan almashtiring.
-
-Admin ham shu configdan foydalanadi (admin ichida alohida config emas).
-
-### C) Admin emails (custom claim)
-Firestore rules write uchun `admin=true` claim kerak.
-
-1) `ORZU_ADMIN_EMAILS` env ga email(lar) yozing:
-- Firebase CLI (Functions v2): Firebase environment variables usuli.
-Eng osoni: deploydan oldin lokal `.env`:
-`functions/.env` ichida:
-`ORZU_ADMIN_EMAILS=sohibjonmath@gmail.com,another@gmail.com`
-
-2) Admin panelga Google bilan kiring → u avtomatik `claimAdmin` callable’ni chaqiradi.
-Keyin qayta login qiling (claim token yangilanishi uchun).
-
-### D) Deploy
-```
-npm i -g firebase-tools
-firebase login
-firebase use --add
-
-# Deploy rules + hosting + functions
+## 3) Deploy
+```bash
+npm --prefix functions install
 firebase deploy
 ```
 
-## 4) Admin panel
 Deploydan keyin:
-- Storefront: `/`
-- Admin: `/admin`
+- Storefront: `https://<project-id>.web.app/`
+- Admin: `https://<project-id>.web.app/admin.html`
 
-Admin’da:
-- Import JSON: `public/products.json` ni yuklab “Import/Upsert”
-- Keyin storefront Firestore’dan real-time o‘qiydi.
+---
 
-## 5) Eslatma
-- Popularity serverda hisoblanadi — user tomonida “soxtalashtirish” qiyinroq.
-- Xohlasangiz keyingi bosqichda: Payment (Payme/Click), order status flow, courier integratsiya qo‘shamiz.
+## 4) Adminlar
+Admin email ro‘yxatini `functions/index.js` ichidan topasiz:
+```js
+const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
+```
+o‘zingizniki bilan to‘ldiring, qayta deploy qiling.
+
+---
+
+## 5) Qanday ishlaydi?
+- Admin Google orqali kiradi
+- 1688 (yoki boshqa) product URL qo‘yadi → **Import**
+- Cloud Function sahifani olib kelib, HTML ichidan:
+  - title/meta
+  - og:image
+  - script ichidagi JSON bo‘laklar (heuristic)
+  ni ajratadi va `products` kolleksiyasiga saqlaydi.
+- Storefront `products` kolleksiyasini real-time o‘qiydi.
+
+---
+
+## 6) Firestore struktura (products)
+```json
+{
+  "source": "1688",
+  "sourceUrl": "https://detail.1688.com/....",
+  "title": "Product title",
+  "priceText": "¥12.50",
+  "images": ["https://..."],
+  "createdAt": "serverTimestamp",
+  "status": "active"
+}
+```
+
+---
+
+## 7) Keyingi bosqich (kuchaytirish)
+- Markup (USTAMA) + UZS narx kalkulyatori
+- Variantlar (rang/razmer) ajratish
+- Proxy + cookie session qo‘llash (CAPTCHA bypass emas — qonuniy yo‘l bilan)
+- Buyurtma (order) + delivery hisoblash
