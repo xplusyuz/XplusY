@@ -8,6 +8,15 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
+function hasValidConfig(cfg){
+  return cfg && typeof cfg === "object"
+    && cfg.apiKey && cfg.projectId && cfg.authDomain;
+}
+
+if(!hasValidConfig(FIREBASE_CONFIG)){
+  console.error("Firebase config is missing/invalid. Please provide firebaseConfig in /firebase-config.js or window.firebaseConfig.");
+}
+
 const app = initializeApp(FIREBASE_CONFIG);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -83,12 +92,18 @@ function normalize(p){
 }
 
 async function fetchProducts(){
-  $("syncState").textContent="Yuklanmoqda...";
-  const snap = await getDocs(query(collection(db,"products"), orderBy("createdAt","desc")));
+  try{
+    $("syncState").textContent="Yuklanmoqda...";
+    const snap = await getDocs(query(collection(db,"products"), orderBy("createdAt","desc")));
   state.products = snap.docs.map(d=>normalize({ id:d.id, ...d.data() }));
   renderTable();
   renderStats();
   $("syncState").textContent="Synced: "+new Date().toLocaleTimeString();
+  }catch(e){
+    console.error(e);
+    $("syncState").textContent="Xato: yuklab bo'lmadi";
+    toast("Firestore o'qishda xato: "+(e?.message||e), "error");
+  }
 }
 
 function renderTable(list=null){
@@ -517,12 +532,17 @@ function bind(){
 }
 
 onAuthStateChanged(auth, async (user)=>{
-  renderUser(user);  }
+  renderUser(user);
   await loadAdminSettings();
+  // refresh list after login/logout
+  await fetchProducts();
 });
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   bind();
   resetForm();
+  if(!hasValidConfig(FIREBASE_CONFIG)){
+    toast("Firebase config topilmadi. /firebase-config.js dagi firebaseConfig ni tekshiring.", "error");
+  }
   await fetchProducts();
 });
