@@ -18,7 +18,7 @@ async function logEvent(type, productId){
       uid: currentUser.uid,
       type,
       productId: String(productId),
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
       ua: navigator.userAgent || "",
     });
   }catch(e){
@@ -68,6 +68,9 @@ const els = {
   panelList: document.getElementById("panelList"),
   panelEmpty: document.getElementById("panelEmpty"),
   panelBottom: document.getElementById("panelBottom"),
+  panelSelectRow: document.getElementById("panelSelectRow"),
+  selectAllBox: document.getElementById("selectAllBox"),
+  selectAllLabel: document.getElementById("selectAllLabel"),
   totalRow: document.getElementById("totalRow"),
   cartTotal: document.getElementById("cartTotal"),
   checkoutBtn: document.getElementById("checkoutBtn"),
@@ -530,6 +533,34 @@ function saveLS(key, value){
 let viewMode = "all"; // all | fav
 let favs = new Set(loadLS(LS.favs, []));
 let cart = loadLS(LS.cart, []);
+// Cart selection (for partial checkout / later buy)
+let cartSelected = new Set(); // contains cart item keys
+
+function syncCartSelected(autoSelectNew=true){
+  const keys = new Set(cart.map(x=>x.key));
+  if(cartSelected.size === 0){
+    // default: everything selected
+    cartSelected = new Set(keys);
+    return;
+  }
+  // drop removed
+  cartSelected = new Set(Array.from(cartSelected).filter(k=>keys.has(k)));
+  // auto-select new items
+  if(autoSelectNew){
+    for(const k of keys) cartSelected.add(k);
+  }
+}
+
+function allCartSelected(){
+  if(cart.length === 0) return false;
+  return cart.every(x=>cartSelected.has(x.key));
+}
+
+function selectedCartItems(){
+  syncCartSelected(true);
+  return cart.filter(ci=>cartSelected.has(ci.key));
+}
+
 // migrate legacy cart items: {id,qty} -> {key,id,color,size,qty}
 cart = (cart||[]).map(x=>{
   if(x && x.key) return x;
@@ -1034,6 +1065,26 @@ function cartCount(){
   return cart.reduce((s,x)=>s + (x.qty||0), 0);
 }
 
+
+function updateCartSelectUI(){
+  if(!els.panelSelectRow || !els.selectAllBox) return;
+
+  const isCart = (els.panelTitle?.textContent || "").trim() === "Savatcha";
+  els.panelSelectRow.hidden = !(isCart && cart.length > 0);
+
+  if(cart.length === 0) return;
+
+  const allSel = allCartSelected();
+  els.selectAllBox.checked = allSel;
+
+  if(els.selectAllLabel){
+    const selCount = selectedCartItems().length;
+    els.selectAllLabel.textContent = (selCount === cart.length)
+      ? `Hammasi tanlangan (${selCount})`
+      : `Tanlangan: ${selCount} / ${cart.length}`;
+  }
+}
+
 function updateBadges(){
   if(els.favCount) els.favCount.textContent = String(favs.size);
   if(els.cartCount) els.cartCount.textContent = String(cartCount());
@@ -1049,6 +1100,7 @@ function openPanel(mode){
   if(els.clearBtn) els.clearBtn.textContent = isCart ? "Tozalash" : "Sevimlilarni tozalash";
   els.panelTitle.textContent = isCart ? "Savatcha" : "Sevimlilar";
   renderPanel(mode);
+  updateCartSelectUI();
 
   // show + animate
   els.overlay.hidden = false;
@@ -1218,6 +1270,7 @@ function renderPanel(mode){
 
   els.panelList.innerHTML = "";
   const list = [];
+  if(mode === "cart") syncCartSelected(true);
 
   if(mode === "fav"){
     for(const id of favs){
@@ -1237,7 +1290,7 @@ function renderPanel(mode){
 
   for(const row of list){
     const {p, qty} = row;
-    if(mode === "cart") total += (getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0) * qty;
+    if(mode === "cart" && cartSelected.has(row.ci?.key)) total += (getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0) * qty;
 
     const imgSrc = (mode === "cart")
       ? (row.ci?.image || getCurrentImage(p, {color: row.ci?.color || null, size: row.ci?.size || null, imgIdx: 0}))
@@ -1248,6 +1301,7 @@ function renderPanel(mode){
     item.innerHTML = `
       <img class="cartImg" src="${imgSrc||""}" alt="${p.name||"product"}" />
       <div class="cartMeta">
+        ${mode==="cart" ? `<label class="cartPick"><input type="checkbox" class="cartPickBox" data-pick="${escapeHtml(row.ci.key)}" ${cartSelected.has(row.ci.key) ? "checked" : ""} /><span></span></label>` : ""}
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${mode==="cart" ? renderVariantLine(row.ci) : ""}
         <div class="cartRow">
@@ -1279,6 +1333,16 @@ function renderPanel(mode){
         e?.stopPropagation?.();
         try{ e?.stopImmediatePropagation?.(); }catch(_){ }
         openImageZoom(imgSrc);
+      });
+    }
+
+const pickBox = item.querySelector(".cartPickBox");
+    if(pickBox){
+      pickBox.addEventListener("change", ()=>{
+        const k = pickBox.getAttribute("data-pick");
+        if(pickBox.checked) cartSelected.add(k); else cartSelected.delete(k);
+        updateCartSelectUI();
+        renderPanel("cart");
       });
     }
 
@@ -1441,6 +1505,18 @@ els.favViewBtn?.addEventListener("click", ()=> openPanel("fav"));
 els.cartBtn?.addEventListener("click", ()=> openPanel("cart"));
 els.panelClose?.addEventListener("click", closePanel);
 els.overlay?.addEventListener("click", closePanel);
+// cart select all
+els.selectAllBox?.addEventListener("change", ()=>{
+  if((els.panelTitle?.textContent || "").trim() !== "Savatcha") return;
+  if(els.selectAllBox.checked){
+    cartSelected = new Set(cart.map(x=>x.key));
+  } else {
+    cartSelected = new Set();
+  }
+  updateCartSelectUI();
+  renderPanel("cart");
+});
+
 
 // variant modal events
 els.vClose?.addEventListener("click", closeVariantModal);
@@ -1558,11 +1634,18 @@ els.clearBtn?.addEventListener("click", ()=>{
     favs = new Set();
     saveLS(LS.favs, []);
   } else {
-    cart = [];
-    saveLS(LS.cart, []);
+    const sel = new Set(selectedCartItems().map(x=>x.key));
+    if(sel.size === 0){
+      toast("Hech narsa tanlanmagan.");
+      return;
+    }
+    cart = cart.filter(x=>!sel.has(x.key));
+    saveLS(LS.cart, cart);
+    cartSelected = new Set(cart.map(x=>x.key));
   }
   updateBadges();
   renderPanel(els.panelTitle.textContent.includes("Sevimli") ? "fav" : "cart");
+  updateCartSelectUI();
   if(viewMode === "fav") applyFilterSort();
 });
 els.checkoutBtn?.addEventListener("click", async ()=>{
@@ -1578,7 +1661,10 @@ els.checkoutBtn?.addEventListener("click", async ()=>{
   }
 
   // Build order payload
-  const items = cart.map(ci=>{
+  const _selCart = selectedCartItems();
+  if(_selCart.length === 0){ toast("Hech narsa tanlanmagan."); return; }
+
+  const items = _selCart.map(ci=>{
     const p = products.find(x=>x.id===ci.id);
     const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
     return {
@@ -1599,10 +1685,17 @@ els.checkoutBtn?.addEventListener("click", async ()=>{
       status: "created",
       items,
       totalUZS,
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
       source: "web",
     });
     toast("Buyurtma qabul qilindi ✅");
+    const purchased = new Set(_selCart.map(x=>x.key));
+    cart = cart.filter(x=>!purchased.has(x.key));
+    saveLS(LS.cart, cart);
+    cartSelected = new Set(cart.map(x=>x.key));
+    updateBadges();
+    renderPanel("cart");
+    updateCartSelectUI();
   }catch(e){
     console.warn("order create failed", e);
     toast("Buyurtma yuborilmadi. Qayta urinib ko'ring.");
