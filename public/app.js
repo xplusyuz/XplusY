@@ -51,6 +51,9 @@ import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signInAnonymously,
   onAuthStateChanged,
   signOut,
   signInWithCustomToken
@@ -72,6 +75,22 @@ import {
   count,
   addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+
+/* =========================
+   Telegram WebApp detect
+========================= */
+const IS_TG_WEBAPP = typeof window !== "undefined" && window.Telegram && window.Telegram.WebApp;
+function getTgWebUser(){
+  try{
+    const u = window.Telegram?.WebApp?.initDataUnsafe?.user;
+    return u && typeof u === "object" ? u : null;
+  }catch(_e){ return null; }
+}
+if(IS_TG_WEBAPP){
+  try{ window.Telegram.WebApp.ready(); }catch(_e){}
+  try{ window.Telegram.WebApp.expand(); }catch(_e){}
+}
 
 /* =========================
    Toast helper
@@ -1256,7 +1275,7 @@ function handleAddToCart(p, opts={}){
     const sel = normalizeSelectionForProduct(p, getSel(p));
     addToCart(p.id, 1, sel);
     updateBadges();
-    if(openCartAfter) openPanel("cart");
+    if(openCartAfter) goTab("cart");
     return;
   }
   openVariantModal(p, { openCartAfter });
@@ -1898,7 +1917,7 @@ const removeBtn = item.querySelector(".removeBtn");
       const addBtn = item.querySelector("[data-add]");
       addBtn.addEventListener("click", ()=>{
         addToCart(p.id, 1, getSel(p));
-        openPanel("cart");
+        goTab("cart");
       });
     }
 
@@ -2264,12 +2283,24 @@ function setUserUI(user){
 }
 
 els.btnGoogle.addEventListener("click", async ()=>{
+  const provider = new GoogleAuthProvider();
+  // Telegram in-app browser / WebApp often blocks popups → use redirect.
+  const preferRedirect = IS_TG_WEBAPP || /Telegram|TelegramBot|FBAN|FBAV|Instagram|Line\//i.test(navigator.userAgent);
   try{
-    const provider = new GoogleAuthProvider();
+    if(preferRedirect){
+      await signInWithRedirect(auth, provider);
+      return;
+    }
+    // Try popup first, fallback to redirect if blocked
     await signInWithPopup(auth, provider);
   }catch(e){
-    alert("Google login xatolik. Console’ni tekshiring. Eng ko‘p sabab: firebase-config.js apiKey noto‘g‘ri.");
-    console.error(e);
+    try{
+      await signInWithRedirect(auth, provider);
+      return;
+    }catch(e2){
+      alert("Google login xatolik. Console’ni tekshiring. Eng ko‘p sabab: firebase-config.js apiKey noto‘g‘ri yoki popup bloklangan.");
+      console.error(e, e2);
+    }
   }
 });
 
@@ -2344,7 +2375,7 @@ els.vConfirm?.addEventListener("click", ()=>{
   addToCart(p.id, vState.qty || 1, sel);
   updateBadges();
   closeVariantModal();
-  if(vState.openCartAfter) openPanel("cart");
+  if(vState.openCartAfter) goTab("cart");
 });
 
 // image viewer events
@@ -2851,6 +2882,34 @@ document.addEventListener("keydown", (e)=>{
 
   return { open, syncUser };
 })();
+
+// Handle Google redirect sign-in (when popup is blocked)
+try{ await getRedirectResult(auth); }catch(_e){}
+
+// If opened inside Telegram WebApp, auto sign-in anonymously (so "Kirish" doesn't break)
+if(IS_TG_WEBAPP){
+  try{
+    if(!auth.currentUser){
+      await signInAnonymously(auth);
+    }
+    // Save Telegram user info into Firestore user doc (optional)
+    const tu = getTgWebUser();
+    if(tu && auth.currentUser){
+      try{
+        await setDoc(doc(db, "users", auth.currentUser.uid), {
+          telegram: {
+            id: tu.id ?? null,
+            username: tu.username ?? null,
+            first_name: tu.first_name ?? null,
+            last_name: tu.last_name ?? null
+          },
+          lastLoginAt: serverTimestamp(),
+          source: "telegram_webapp"
+        }, { merge: true });
+      }catch(_e){}
+    }
+  }catch(_e){}
+}
 
 onAuthStateChanged(auth, (user)=> setUserUI(user));
 
