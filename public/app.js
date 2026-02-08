@@ -2293,11 +2293,9 @@ function setUserUI(user){
   document.body.classList.toggle("signed-in", !!user);
 
   if(!user){
-    if(authCard) authCard.style.display = "";
-    if(els.avatar) els.avatar.src = "";
-    if(els.avatar) els.avatar.style.visibility = "hidden";
-    if(els.avatarFallback) els.avatarFallback.style.display = "grid";
-    if(els.avatarBtn) els.avatarBtn.disabled = true;
+    // Require login: redirect to dedicated login page
+    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+    location.replace(`/login.html?next=${next}`);
     return;
   }
 
@@ -2325,7 +2323,7 @@ function setUserUI(user){
   if(window.__omProfile) window.__omProfile.syncUser(user);
 }
 
-els.profileLogout.addEventListener("click", async ()=>{ await signOut(auth); });
+els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
 els.q.addEventListener("input", applyFilterSort);
@@ -2854,14 +2852,11 @@ window.__omProfile = (function(){
   }
   if(els.heroAuthJump){
     els.heroAuthJump.addEventListener("click", ()=>{
-      // If signed-in -> open profile, else jump to login card
       if(document.body.classList.contains("signed-in")){
         try{ open(); }catch(e){ openProfile(); }
-      }else{
-        els.authCard?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-        // small pulse to draw attention
-        els.authCard?.classList?.add("pulse");
-        setTimeout(()=>els.authCard?.classList?.remove("pulse"), 800);
+      } else {
+        const next = encodeURIComponent(location.pathname + location.search + location.hash);
+        location.href = `/login.html?next=${next}`;
       }
     });
   }
@@ -2890,10 +2885,16 @@ document.addEventListener("keydown", (e)=>{
   return { open, syncUser };
 })();
 
-onAuthStateChanged(auth, (user)=> setUserUI(user));
+let __appStarted = false;
+onAuthStateChanged(auth, async (user)=>{
+  setUserUI(user);
+  if(!user) return; // setUserUI redirects to /login.html
+  if(__appStarted) return;
+  __appStarted = true;
 
-await loadProducts();
-updateBadges();
+  await loadProducts();
+  updateBadges();
+});
 
 
 /* ===== Inline rating near cart (compact) ===== */
