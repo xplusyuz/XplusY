@@ -372,23 +372,31 @@ function renderReviewsList(list){
   });
 }
 
+function openImageZoom(src){
+  try{ if(!src) return; }catch(e){ return; }
+  // lightweight zoom overlay (no product modal)
+  const old = document.querySelector(".imgZoomOverlay");
+  if(old) old.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "imgZoomOverlay";
+  overlay.innerHTML = `\
+    <div class="imgZoomBackdrop"></div>\
+    <div class="imgZoomBox" role="dialog" aria-modal="true">\
+      <button class="imgZoomClose" aria-label="Yopish">×</button>\
+      <img class="imgZoomImg" src="${src}" alt="Zoom"/>\
+    </div>`;
+  const close = ()=>{ overlay.remove(); window.removeEventListener("keydown", onKey); };
+  const onKey = (ev)=>{ if(ev.key==="Escape") close(); };
+  overlay.querySelector(".imgZoomBackdrop").addEventListener("click", close);
+  overlay.querySelector(".imgZoomClose").addEventListener("click", close);
+  window.addEventListener("keydown", onKey);
+  document.body.appendChild(overlay);
+}
+
 function openStandaloneImage(url){
-  // reuse existing image viewer as a simple lightbox
-  if(!els.imgViewer) return;
-  // open viewer with single image, no product context
-  openImageViewer({
-    productId: null,
-    title: "Rasm",
-    desc: "",
-    pricing: null,
-    rating: 0,
-    reviewsCount: 0,
-    tags: [],
-    badge: "",
-    images: [url],
-    startIndex: 0,
-    onSelect: null
-  });
+  openImageZoom(url);
+}
+);
 }
 
 // Variant selections per product (in-memory)
@@ -961,25 +969,12 @@ function renderVariantModal(){
     const img = getCurrentImage(p, sel) || getCurrentImage(p, getDefaultSel(p)) || "";
     els.vImg.src = img;
   
-    // click to zoom (image viewer)
-    els.vImg.onclick = ()=>{
-      const imgs = normImages(p, sel);
-      const listImgs = (Array.isArray(imgs) && imgs.length) ? imgs : normImages(p, getDefaultSel(p));
-      const allImgs = (Array.isArray(listImgs) && listImgs.length) ? listImgs : (Array.isArray(p.images) ? p.images : []);
-      const current = els.vImg.src || "";
-      const startIndex = Math.max(0, (allImgs || []).indexOf(current));
-      openImageViewer({
-        productId: p.id,
-        title: p.name || "Mahsulot",
-        desc: p.description || p.subtitle || "",
-        pricing,
-        rating: p.rating || 0,
-        reviewsCount: p.reviewsCount || 0,
-        tags: p.tags || [],
-        badge: (p.tags||[]).includes("premium") ? "Premium" : "",
-        images: allImgs,
-        startIndex
-      });
+    // click to zoom (image only)
+    els.vImg.onclick = (e)=>{
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      try{ e?.stopImmediatePropagation?.(); }catch(_){ }
+      openImageZoom(els.vImg.src || "");
     };
   }
 
@@ -1280,26 +1275,11 @@ function renderPanel(mode){
     // Click image -> open large viewer
     const cartImgEl = item.querySelector(".cartImg");
     if(cartImgEl){
-      cartImgEl.addEventListener("click", ()=>{
-        const selForViewer = (mode === "cart")
-          ? { color: row.ci?.color || null, size: row.ci?.size || null }
-          : getSel(p);
-        const imgs = normImages(p, selForViewer);
-        const all = (Array.isArray(imgs) && imgs.length) ? imgs : normImages(p, getDefaultSel(p));
-        const listImgs = (Array.isArray(all) && all.length) ? all : (Array.isArray(p.images) ? p.images : []);
-        const startIndex = Math.max(0, (listImgs || []).indexOf(imgSrc));
-        openImageViewer({
-          productId: p.id,
-          title: p.name || "Mahsulot",
-          desc: p.description || p.subtitle || "",
-          pricing: getVariantPricing(p, selForViewer),
-          rating: p.rating || 0,
-          reviewsCount: p.reviewsCount || 0,
-          tags: p.tags || [],
-          badge: (p.tags||[]).includes("premium") ? "Premium" : "",
-          images: listImgs,
-          startIndex
-        });
+      cartImgEl.addEventListener("click", (e)=>{
+        e?.preventDefault?.();
+        e?.stopPropagation?.();
+        try{ e?.stopImmediatePropagation?.(); }catch(_){ }
+        openImageZoom(imgSrc);
       });
     }
 
