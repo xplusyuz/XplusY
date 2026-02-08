@@ -1,4 +1,5 @@
 import { auth, db } from "./firebase-config.js";
+import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
 import {
   GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut,
   signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js"; import {   doc,
@@ -73,7 +74,8 @@ const els = {
   selectAllLabel: document.getElementById("selectAllLabel"),
   totalRow: document.getElementById("totalRow"),
   cartTotal: document.getElementById("cartTotal"),
-  checkoutBtn: document.getElementById("checkoutBtn"),
+  paymeBtn: document.getElementById("paymeBtn"),
+  tgShareBtn: document.getElementById("tgShareBtn"),
   clearBtn: document.getElementById("clearBtn"),
 
   // image viewer (gallery)
@@ -1105,7 +1107,8 @@ function openPanel(mode){
   els.panelBottom.style.display = "";
   const isCart = (mode === "cart");
   if(els.totalRow) els.totalRow.style.display = isCart ? "" : "none";
-  if(els.checkoutBtn) els.checkoutBtn.style.display = isCart ? "" : "none";
+  if(els.paymeBtn) els.paymeBtn.style.display = isCart ? "" : "none";
+  if(els.tgShareBtn) els.tgShareBtn.style.display = isCart ? "" : "none";
   if(els.clearBtn) els.clearBtn.textContent = isCart ? "Tozalash" : "Sevimlilarni tozalash";
   els.panelTitle.textContent = isCart ? "Savatcha" : "Sevimlilar";
   renderPanel(mode);
@@ -1659,19 +1662,38 @@ els.clearBtn?.addEventListener("click", ()=>{
   updateCartSelectUI();
   if(viewMode === "fav") applyFilterSort();
 });
-els.checkoutBtn?.addEventListener("click", async ()=>{
-  if(!currentUser){
-    // prompt login
-    toast("Avval kirish qiling (Google / Telegram).");
-    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
-    return;
-  }
+els.paymeBtn?.addEventListener("click", async ()=>{
+if(!currentUser){
+  toast("Avval kirish qiling (Google / Telegram).");
+  document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+  return;
+}
+if(cart.length === 0){
+  toast("Savatcha bo'sh.");
+  return;
+}
+
+const _selCart = selectedCartItems();
+if(_selCart.length === 0){ toast("Hech narsa tanlanmagan."); return; }
+
+const items = _selCart.map(ci=>{
+  const p = products.find(x=>x.id===ci.id);
+  const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
+  return {
+    productId: ci.id,
+    name: p?.name || "",
+    color: ci.color || null,
+    size: ci.size || null,
+    qty: Number(ci.qty||1),
+    priceUZS: Number(pr.price||0),
+  };
+});
+
+tgShareBtn?.addEventListener("click", async ()=>{
   if(cart.length === 0){
     toast("Savatcha bo'sh.");
     return;
   }
-
-  // Build order payload
   const _selCart = selectedCartItems();
   if(_selCart.length === 0){ toast("Hech narsa tanlanmagan."); return; }
 
@@ -1679,7 +1701,6 @@ els.checkoutBtn?.addEventListener("click", async ()=>{
     const p = products.find(x=>x.id===ci.id);
     const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
     return {
-      productId: ci.id,
       name: p?.name || "",
       color: ci.color || null,
       size: ci.size || null,
@@ -1690,42 +1711,71 @@ els.checkoutBtn?.addEventListener("click", async ()=>{
 
   const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
 
-  try{
-    await addDoc(collection(db, "orders"), {
-      uid: currentUser.uid,
-      status: "created",
-      items,
-      totalUZS,
-      createdAt: serverTimestamp(),
-      source: "web",
-    });
-    toast("Buyurtma qabul qilindi ✅");
-    const purchased = new Set(_selCart.map(x=>x.key));
-    cart = cart.filter(x=>!purchased.has(x.key));
-    saveLS(LS.cart, cart);
-    cartSelected = new Set(cart.map(x=>x.key));
-    updateBadges();
-    renderPanel("cart");
-    updateCartSelectUI();
-  }catch(e){
-    console.warn("order create failed", e);
-    toast("Buyurtma yuborilmadi. Qayta urinib ko'ring.");
-    return;
-  }
-
-  // Optional Telegram share (operator uchun qulay)
   const lines = items.map(it=>{
     const variant = [it.color, it.size].filter(Boolean).join(" / ");
     return `${it.name}${variant?` (${variant})`:``} x${it.qty} = ${moneyUZS((it.priceUZS||0)*(it.qty||0))}`;
   });
+
   const msg = `OrzuMall buyurtma:%0A${encodeURIComponent(lines.join("\n"))}%0A%0AJami: ${encodeURIComponent(moneyUZS(totalUZS))}`;
   window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
+});
 
-  // clear cart locally
-  cart.length = 0;
+
+const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
+if(!Number.isFinite(totalUZS) || totalUZS <= 0){
+  toast("Jami summa noto‘g‘ri.");
+  return;
+}
+
+// Payme amount is in tiyin
+const amountTiyin = Math.round(totalUZS * 100);
+
+// Digits-only order id (required by your Payme 'order_id' requisite)
+const orderId = String(Date.now()); // 13 digits, unique enough for MVP
+
+try{
+  const orderRef = doc(db, "orders", orderId);
+  await setDoc(orderRef, {
+    uid: currentUser.uid,
+    status: "pending_payment",
+    items,
+    totalUZS,
+    amountTiyin,
+    provider: "payme",
+    createdAt: serverTimestamp(),
+    source: "web",
+  }, { merge: true });
+
+  // Remove purchased items from cart locally (so user doesn't double-pay)
+  const purchased = new Set(_selCart.map(x=>x.key));
+  cart = cart.filter(x=>!purchased.has(x.key));
   saveLS(LS.cart, cart);
+  cartSelected = new Set(cart.map(x=>x.key));
   updateBadges();
   renderPanel("cart");
+  updateCartSelectUI();
+
+}catch(e){
+  console.warn("order create failed", e);
+  toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
+  return;
+}
+
+// Build Payme checkout URL (GET base64)
+// Format: https://checkout.paycom.uz/<base64("m=...;ac.order_id=...;a=...;l=...;c=...")>
+// c (return url) -> payme_return.html will show payment status
+if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
+  toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
+  return;
+}
+
+const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
+const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+const b64 = btoa(unescape(encodeURIComponent(params)));
+const checkoutUrl = `https://checkout.paycom.uz/${b64}`;
+
+// Go to Payme
+window.location.href = checkoutUrl;
 });
 
 
