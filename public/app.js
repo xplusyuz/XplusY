@@ -1404,21 +1404,10 @@ window.addEventListener("tg_auth", async (e)=>{
   showTgNotice("Telegram auth yuborildi...");
 
   try{
-    const r = await throw new Error('Telegram login serverless function disabled (no-functions build). Use Google login.');
-
-    const out = await r.json().catch(()=> ({}));
-    if(!r.ok){
-      const msg = out?.error || "Telegram auth xatolik";
-      const details = out?.details ? `\nDETAILS: ${out.details}` : "";
-      const hints = out?.envHints ? `\nENV: ${JSON.stringify(out.envHints)}` : "";
-      showTgNotice(msg + details + hints);
-      console.error("telegramAuth error:", out);
-      return;
-    }
-
-    showTgNotice("Firebase token olindi. Kirish...");
-    await signInWithCustomToken(auth, out.customToken);
-    showTgNotice("");
+    // Telegram login requires a server-side verifier (Cloud Functions / backend).
+    // This build is intentionally 'no-functions', so Telegram login is disabled.
+    showTgNotice("Telegram login o‘chirilgan (functionsiz build). Iltimos, Google bilan kiring.");
+    return;
   }catch(err){
     showTgNotice("Telegram auth network/server xatolik");
     console.error(err);
