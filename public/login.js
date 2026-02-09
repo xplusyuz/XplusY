@@ -11,6 +11,8 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
+let allowAutoRedirect = true;
+
 const els = {
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
@@ -104,7 +106,7 @@ els.toggleSignupPass.addEventListener("click", ()=>{
 
 // If already logged in, go to profile
 onAuthStateChanged(auth, (user)=>{
-  if(user) {
+  if(user && allowAutoRedirect) {
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }
@@ -113,6 +115,7 @@ onAuthStateChanged(auth, (user)=>{
 // Login
 els.loginForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
+  allowAutoRedirect = false;
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
   if(phone.length < 10) return showNotice("Telefon raqam noto‘g‘ri", "err");
@@ -137,6 +140,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
 // Signup
 els.signupForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
+  allowAutoRedirect = false;
   const name = (els.signupName.value || "").trim();
   const phone = normPhone(els.signupPhone.value);
   const pass = els.signupPass.value || "";
