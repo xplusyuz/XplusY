@@ -35,7 +35,7 @@ function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
     const lines = [
-      "<i class="fa-solid fa-cart-shopping"></i> Yangi buyurtma!",
+      "Yangi buyurtma!",
       `ID: ${o.orderId || o.id || ""}`,
       `Summa: ${o.totalUZS || o.total || 0} so'm`,
       `To'lov: ${o.provider || o.paymentType || ""}`,
@@ -1392,8 +1392,11 @@ function updateCartSelectUI(){
 }
 
 function updateBadges(){
-  if(els.favCount) els.favCount.textContent = String(favs.size);
-  if(els.cartCount) els.cartCount.textContent = String(cartCount());
+  const f = favs.size;
+  const c = cartCount();
+  if(els.favCount){ els.favCount.textContent = String(f); els.favCount.style.display = f ? "grid" : "none"; }
+  if(els.cartCount){ els.cartCount.textContent = String(c); els.cartCount.style.display = c ? "grid" : "none"; }
+
   const nb = document.getElementById("navCartBadge");
   if(nb){ const c = cartCount(); nb.textContent = String(c); nb.hidden = (c<=0); }
   const fb = document.getElementById("navFavBadge");
