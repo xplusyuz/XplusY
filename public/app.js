@@ -1257,12 +1257,21 @@ function normalizeSelectionForProduct(p, baseSel){
 }
 
 function handleAddToCart(p, opts={}){
-  const openCartAfter = !!opts.openCartAfter;
+  // If the product has selectable variants (color/size), open the variant modal first.
+  // After confirming, we ONLY show a toast (no extra confirmation/cart modal).
+  const colors = normColors(p);
+  const sizes = normSizes(p);
+  const needsChoice = (colors.length > 1) || (sizes.length > 1);
+
+  if(needsChoice && els.vOverlay){
+    openVariantModal(p, { openCartAfter: false });
+    return;
+  }
+
   const sel = normalizeSelectionForProduct(p, getSel(p));
   addToCart(p.id, 1, sel);
   updateBadges();
   toast("Savatga qo‘shildi");
-  if(openCartAfter) openPanel("cart");
 }
 
 
