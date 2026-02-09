@@ -35,7 +35,7 @@ function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
     const lines = [
-      "🛒 Yangi buyurtma!",
+      "Yangi buyurtma!",
       `ID: ${o.orderId || o.id || ""}`,
       `Summa: ${o.totalUZS || o.total || 0} so'm`,
       `To'lov: ${o.provider || o.paymentType || ""}`,
@@ -478,7 +478,7 @@ function subscribeReviews(productId){
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
-    if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
     if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
@@ -505,7 +505,7 @@ function subscribeReviews(productId){
     if(statsDebounce) clearTimeout(statsDebounce);
     statsDebounce = setTimeout(async ()=>{
       const st = await refreshStats(productId, true);
-      if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+      if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
       if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
       applyFilterSort();
     }, 400);
@@ -1145,7 +1145,7 @@ function render(arr){
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -1213,7 +1213,7 @@ const openQuickView = ()=>{
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
-      handleAddToCart(p, { openCartAfter: true });
+      handleAddToCart(p, { openCartAfter: false });
     });
 
     els.grid.appendChild(card);
@@ -1245,11 +1245,7 @@ function addToCart(id, qty, sel){
 // ---------- World-class variant selection (opened from Add to Cart) ----------
 const vState = { open:false, product:null, qty:1, sel:{color:null,size:null}, openCartAfter:false };
 
-function productNeedsVariantModal(p){
-  const colors = normColors(p);
-  const sizes = normSizes(p);
-  return (colors.length > 1) || (sizes.length > 1);
-}
+function productNeedsVariantModal(p){ return false; }
 
 function normalizeSelectionForProduct(p, baseSel){
   const colors = normColors(p);
@@ -1262,15 +1258,13 @@ function normalizeSelectionForProduct(p, baseSel){
 
 function handleAddToCart(p, opts={}){
   const openCartAfter = !!opts.openCartAfter;
-  if(!productNeedsVariantModal(p)){
-    const sel = normalizeSelectionForProduct(p, getSel(p));
-    addToCart(p.id, 1, sel);
-    updateBadges();
-    if(openCartAfter) openPanel("cart");
-    return;
-  }
-  openVariantModal(p, { openCartAfter });
+  const sel = normalizeSelectionForProduct(p, getSel(p));
+  addToCart(p.id, 1, sel);
+  updateBadges();
+  toast("Savatga qo‘shildi");
+  if(openCartAfter) openPanel("cart");
 }
+
 
 function openVariantModal(p, opts={}){
   if(!els.vOverlay) return;
@@ -1659,7 +1653,7 @@ function renderViewer(){
   if(els.qvRating){
     const r = Number(viewer.rating||0);
     const c = Number(viewer.reviewsCount||0);
-    els.qvRating.textContent = (r||c) ? `⭐ ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
+    els.qvRating.textContent = (r||c) ? `${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
     els.qvRating.style.display = (r||c) ? "" : "none";
   }
   if(els.qvBadge){
@@ -1839,7 +1833,7 @@ function renderPanel(mode){
         ${mode==="cart" ? renderVariantLine(row.ci) : ""}
         <div class="cartRow">
           <div class="price">${moneyUZS(getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑️</button>
+          <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
         </div>
         ${mode==="cart" ? `
         <div class="cartRow">
@@ -1851,8 +1845,8 @@ function renderPanel(mode){
           <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
-          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
-          <div class="badge">❤️</div>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></button>
+          <div class="badge"><i class="fa-solid fa-heart" aria-hidden="true"></i></div>
         </div>`}
       </div>
     `;
@@ -1943,11 +1937,11 @@ function renderFavPage(){
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(getVariantPricing(p, {}).price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑️</button>
+          <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
         </div>
         <div class="cartRow">
           <button class="pBtn" data-open>Ko‘rish</button>
-          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add><i class="fa-solid fa-cart-shopping" aria-hidden="true"></i></button>
         </div>
       </div>
     `;
@@ -1964,7 +1958,7 @@ function renderFavPage(){
     item.querySelector("[data-add]")?.addEventListener("click", ()=>{
       addToCart(p.id, 1, getSel(p));
       updateBadges();
-      goTab("cart");
+      toast("Savatga qo‘shildi");
     });
 
     item.querySelector(".removeBtn")?.addEventListener("click", ()=>{
@@ -2013,7 +2007,7 @@ function renderCartPage(){
         ${renderVariantLine(ci)}
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑️</button>
+          <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
         </div>
         <div class="cartRow">
           <div class="qty">
@@ -2183,7 +2177,7 @@ async function createOrderFromCheckout(){
     const b64 = btoa(unescape(encodeURIComponent(params)));
     window.location.href = `https://checkout.paycom.uz/${b64}`;
   }else{
-    toast("Buyurtmangiz qabul qilindi ✅");
+    toast("Buyurtmangiz qabul qilindi");
     goTab("profile");
   }
 }
@@ -2451,12 +2445,12 @@ els.revSend?.addEventListener("click", async ()=>{
 els.viewerCart?.addEventListener("click", ()=>{
   const p = products.find(x=>x.id===viewer.productId);
   if(!p) return;
-  handleAddToCart(p, { openCartAfter: true });
+  handleAddToCart(p, { openCartAfter: false });
 });
 els.viewerBuy?.addEventListener("click", ()=>{
   const p = products.find(x=>x.id===viewer.productId);
   if(!p) return;
-  handleAddToCart(p, { openCartAfter: true });
+  handleAddToCart(p, { openCartAfter: false });
 });
 window.addEventListener("keydown", (e)=>{
   if(vState.open && e.key === "Escape"){
