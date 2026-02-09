@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (request.auth.token.email == 'sohibjonmath@gmail.com');
+    }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // ---------- PRODUCTS (public read, admin write) ----------
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---------- USERS ----------
+    match /users/{uid} {
+      // User can read/update own profile; admin can read for support/admin UI
+      allow read: if isSelf(uid) || isAdmin();
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+
+      // Favorites + Cart are per-user
+      match /favorites/{pid} { allow read, write: if isSelf(uid); }
+      match /cart/{pid} { allow read, write: if isSelf(uid); }
+
+      // Orders subcollection (NO composite index needed for reading)
+      match /orders/{orderId} {
+        allow create: if isSelf(uid)
+          && request.resource.data.uid == uid
+          && request.resource.data.status in ['pending_payment','created','shared_telegram','pending']
+          && request.resource.data.provider in ['payme','telegram','manual']
+          && request.resource.data.totalUZS is number
+          && request.resource.data.totalUZS > 0
+          && request.resource.data.items is list
+          && request.resource.data.items.size() > 0
+          && request.resource.data.createdAt is timestamp;
+
+        allow read: if isSelf(uid) || isAdmin();
+        allow update: if isAdmin();   // (optional) admin can mirror status updates
+        allow delete: if false;
+      }
+    }
+
+    // ---------- EVENTS (optional analytics) ----------
+    match /events/{eventId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.type in ['view','favorite','add_to_cart']
+        && request.resource.data.productId is string
+        && request.resource.data.createdAt is timestamp;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---------- GLOBAL ORDERS (admin dashboard + user create) ----------
+    match /orders/{orderId} {
+      // User creates an order record (admin dashboard reads from here)
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status in ['pending_payment','created','shared_telegram','pending']
+        && request.resource.data.provider in ['payme','telegram','manual']
+        && request.resource.data.totalUZS is number
+        && request.resource.data.totalUZS > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.createdAt is timestamp;
+
+      // Admin can read all; user can read only own
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+
+      // Only admin updates (payment/delivery statuses)
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ---------- CONFIGS (admin-only) ----------
+    match /configs/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
