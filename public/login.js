@@ -83,6 +83,7 @@ function wireEyeButtons(){
       const inp = document.getElementById(id);
       if(!inp) return;
       inp.type = (inp.type === "password") ? "text" : "password";
+      setEyeIcon(btn, inp.type === "text");
     });
   });
 }
@@ -201,3 +202,35 @@ els.signupForm?.addEventListener("submit", async (e)=>{
     showNotice(els.authNotice2, msg, "error");
   }
 });
+
+
+// --- PWA Install prompt (Android) ---
+let deferredPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.hidden = false;
+});
+
+async function triggerInstall(){
+  if (!deferredPrompt) return;
+  try{
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+  }catch(_){}
+  deferredPrompt = null;
+  if (installBtn) installBtn.hidden = true;
+}
+
+if (installBtn){
+  installBtn.addEventListener('click', triggerInstall);
+}
+
+// --- Eye icon swap (SVG) ---
+function setEyeIcon(btn, isShown){
+  const use = btn?.querySelector('use');
+  if(!use) return;
+  use.setAttribute('href', isShown ? '#i-eye-off' : '#i-eye');
+}

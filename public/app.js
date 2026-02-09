@@ -35,7 +35,7 @@ function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
     const lines = [
-      "🛒 Yangi buyurtma!",
+      " Yangi buyurtma!",
       `ID: ${o.orderId || o.id || ""}`,
       `Summa: ${o.totalUZS || o.total || 0} so'm`,
       `To'lov: ${o.provider || o.paymentType || ""}`,
@@ -485,7 +485,7 @@ function subscribeReviews(productId){
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
-    if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revScore) els.revScore.textContent = ` ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
     if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
@@ -512,7 +512,7 @@ function subscribeReviews(productId){
     if(statsDebounce) clearTimeout(statsDebounce);
     statsDebounce = setTimeout(async ()=>{
       const st = await refreshStats(productId, true);
-      if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+      if(els.revScore) els.revScore.textContent = ` ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
       if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
       applyFilterSort();
     }, 400);
@@ -1152,7 +1152,7 @@ function render(arr){
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? ` ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -1666,7 +1666,7 @@ function renderViewer(){
   if(els.qvRating){
     const r = Number(viewer.rating||0);
     const c = Number(viewer.reviewsCount||0);
-    els.qvRating.textContent = (r||c) ? `⭐ ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
+    els.qvRating.textContent = (r||c) ? ` ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
     els.qvRating.style.display = (r||c) ? "" : "none";
   }
   if(els.qvBadge){
@@ -1858,8 +1858,8 @@ function renderPanel(mode){
           <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
-          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
-          <div class="badge">❤️</div>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add></button>
+          <div class="badge"></div>
         </div>`}
       </div>
     `;
@@ -1954,7 +1954,7 @@ function renderFavPage(){
         </div>
         <div class="cartRow">
           <button class="pBtn" data-open>Ko‘rish</button>
-          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add></button>
         </div>
       </div>
     `;
@@ -2946,3 +2946,27 @@ function initMobileBottomBar(){
 }
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
+
+// --- PWA Install prompt (Android) ---
+let deferredPrompt = null;
+const installBtn = document.getElementById('installBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.hidden = false;
+});
+
+async function triggerInstall(){
+  if (!deferredPrompt) return;
+  try{
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+  }catch(_){}
+  deferredPrompt = null;
+  if (installBtn) installBtn.hidden = true;
+}
+
+if (installBtn){
+  installBtn.addEventListener('click', triggerInstall);
+}
