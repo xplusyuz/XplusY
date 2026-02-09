@@ -2783,41 +2783,44 @@ window.__omProfile = (function(){
     return regionData;
   }
 
-  async function syncUser(user){
+  
+  function makeOmId(uid){
+    // Deterministic 6-digit OM ID derived from uid (no Firestore meta/counters needed)
+    let h = 0;
+    for(let i=0;i<uid.length;i++){
+      h = ((h << 5) - h) + uid.charCodeAt(i);
+      h |= 0; // 32-bit
+    }
+    const num = Math.abs(h) % 1000000;
+    return "OM" + String(num).padStart(6, "0");
+  }
+
+async function syncUser(user){
     currentUser = user || null;
     if(!user) return;
 
     await ensureRegionLoaded();
 
-    // Ensure user has OMXXXXXX and store basic user doc in Firestore
+    // Ensure user has OMXXXXXX and store basic user doc in Firestore (no meta/counters)
     const userRef = doc(db, "users", user.uid);
-    const countersRef = doc(db, "meta", "counters");
-    const meta = await runTransaction(db, async (tx)=>{
-      const [uSnap, cSnap] = await Promise.all([tx.get(userRef), tx.get(countersRef)]);
-      const u = uSnap.exists() ? (uSnap.data() || {}) : {};
-      const c = cSnap.exists() ? (cSnap.data() || {}) : {};
-      let omId = u.omId;
+    const uSnap = await getDoc(userRef);
+    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
 
-      if(!omId){
-        const cur = Number(c.omCounter || 0);
-        const next = cur + 1;
-        omId = "OM" + String(next).padStart(6, "0");
-        tx.set(countersRef, { omCounter: next }, { merge:true });
-      }
+    const name = (u.name || user.displayName || user.email || "User").toString();
+    const phone = (u.phone || "").toString();
 
-      const name = (u.name || user.displayName || user.email || "User").toString();
-      const phone = (u.phone || "").toString();
+    const omId = (u.omId || makeOmId(user.uid)).toString();
 
-      tx.set(userRef, {
-        name,
-        phone,
-        omId,
-        updatedAt: serverTimestamp(),
-        ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
-      }, { merge:true });
+    await setDoc(userRef, {
+      name,
+      phone,
+      omId,
+      updatedAt: serverTimestamp(),
+      ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
+    }, { merge:true });
 
-      return { name, omId, phone };
-    });
+    const meta = { name, omId, phone };
+
 
     renderHeader(user, meta);
 
