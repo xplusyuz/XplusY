@@ -75,7 +75,25 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ---------- CONFIGS (admin-only) ----------
+    
+    // ---------- META COUNTERS (OM ID auto-increment) ----------
+    match /meta/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && docId == "counters"
+        && request.resource.data.omCounter is number
+        && request.resource.data.omCounter == 1;
+      allow update: if signedIn()
+        && docId == "counters"
+        && request.resource.data.omCounter is number
+        && (
+          // allow first-time creation via update if doc exists
+          (resource.data.omCounter is number && request.resource.data.omCounter == resource.data.omCounter + 1)
+        );
+      allow delete: if false;
+    }
+
+// ---------- CONFIGS (admin-only) ----------
     match /configs/{docId} {
       allow read, write: if isAdmin();
     }

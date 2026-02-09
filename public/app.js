@@ -35,7 +35,7 @@ function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
     const lines = [
-      " Yangi buyurtma!",
+      "🛒 Yangi buyurtma!",
       `ID: ${o.orderId || o.id || ""}`,
       `Summa: ${o.totalUZS || o.total || 0} so'm`,
       `To'lov: ${o.provider || o.paymentType || ""}`,
@@ -243,7 +243,7 @@ const els = {
   profileSave: document.getElementById("profileSave"),
   profileLogout: document.getElementById("profileLogout"),
   profileName: document.getElementById("profileName"),
-  profileUid: document.getElementById("profileUid"),
+  profileOmId: document.getElementById("profileOmId"),
   profileAvatar: document.getElementById("profileAvatar"),
   pfPhone: document.getElementById("pfPhone"),
   pfRegion: document.getElementById("pfRegion"),
@@ -478,7 +478,7 @@ function subscribeReviews(productId){
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
-    if(els.revScore) els.revScore.textContent = ` ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
     if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
@@ -505,7 +505,7 @@ function subscribeReviews(productId){
     if(statsDebounce) clearTimeout(statsDebounce);
     statsDebounce = setTimeout(async ()=>{
       const st = await refreshStats(productId, true);
-      if(els.revScore) els.revScore.textContent = ` ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+      if(els.revScore) els.revScore.textContent = `⭐ ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
       if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
       applyFilterSort();
     }, 400);
@@ -1145,7 +1145,7 @@ function render(arr){
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? ` ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? `⭐ ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -1659,7 +1659,7 @@ function renderViewer(){
   if(els.qvRating){
     const r = Number(viewer.rating||0);
     const c = Number(viewer.reviewsCount||0);
-    els.qvRating.textContent = (r||c) ? ` ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
+    els.qvRating.textContent = (r||c) ? `⭐ ${r ? r.toFixed(1) : "0.0"} (${c||0})` : "";
     els.qvRating.style.display = (r||c) ? "" : "none";
   }
   if(els.qvBadge){
@@ -1839,7 +1839,7 @@ function renderPanel(mode){
         ${mode==="cart" ? renderVariantLine(row.ci) : ""}
         <div class="cartRow">
           <div class="price">${moneyUZS(getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑</button>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
         </div>
         ${mode==="cart" ? `
         <div class="cartRow">
@@ -1851,8 +1851,8 @@ function renderPanel(mode){
           <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
-          <button class="pBtn iconOnly" title="Savatchaga" data-add></button>
-          <div class="badge"></div>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <div class="badge">❤️</div>
         </div>`}
       </div>
     `;
@@ -1943,11 +1943,11 @@ function renderFavPage(){
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(getVariantPricing(p, {}).price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑</button>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
         </div>
         <div class="cartRow">
           <button class="pBtn" data-open>Ko‘rish</button>
-          <button class="pBtn iconOnly" title="Savatchaga" data-add></button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
         </div>
       </div>
     `;
@@ -2013,7 +2013,7 @@ function renderCartPage(){
         ${renderVariantLine(ci)}
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
-          <button class="removeBtn" title="O‘chirish">🗑</button>
+          <button class="removeBtn" title="O‘chirish">🗑️</button>
         </div>
         <div class="cartRow">
           <div class="qty">
@@ -2128,7 +2128,7 @@ function getPayType(){
 
 async function createOrderFromCheckout(){
   if(!currentUser){
-    toast("Avval kirish qiling (Google / Telegram).");
+    toast("Avval kirish qiling (Telefon raqam + parol).");
     document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
     return;
   }
@@ -2183,7 +2183,7 @@ async function createOrderFromCheckout(){
     const b64 = btoa(unescape(encodeURIComponent(params)));
     window.location.href = `https://checkout.paycom.uz/${b64}`;
   }else{
-    toast("Buyurtmangiz qabul qilindi ");
+    toast("Buyurtmangiz qabul qilindi ✅");
     goTab("profile");
   }
 }
@@ -2552,7 +2552,7 @@ function removePurchasedFromCart(sel){
 
 async function startPaymeCheckout(){
   if(!currentUser){
-    toast("Avval kirish qiling (Google / Telegram).");
+    toast("Avval kirish qiling (Telefon raqam + parol).");
     document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
     return;
   }
@@ -2736,23 +2736,13 @@ window.__omProfile = (function(){
     return p1 || p2 || "";
   }
 
-  function renderHeader(user){
-    const name = user?.displayName || user?.email || user?.phoneNumber || "User";
+  function renderHeader(user, meta){
+    const name = (meta?.name || user?.displayName || user?.email || user?.phoneNumber || "User").toString();
+    const omId = (meta?.omId || "").toString();
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
-    // Profile display should show Name + OMXXXXXX (not UID/email)
-    try{
-      const uref = doc(db, "users", user.uid);
-      const usnap = await getDoc(uref);
-      const udata = usnap.exists() ? usnap.data() : {};
-      const displayName = (udata.name || user.displayName || "User").trim();
-      const omId = udata.omId || "";
-      if(els.profileName) els.profileName.textContent = displayName;
-      if(els.profileUid) els.profileUid.textContent = omId ? `ID: ${omId}` : "";
-    } catch(e){
-      if(els.profileName) els.profileName.textContent = name || "User";
-      if(els.profileUid) els.profileUid.textContent = "";
-    }
+    if(els.profileName) els.profileName.textContent = name;
+    if(els.profileOmId) els.profileOmId.textContent = omId ? `ID: ${omId}` : "—";
 
     if(els.profileAvatar){
       const photo = user.photoURL;
@@ -2795,7 +2785,38 @@ window.__omProfile = (function(){
     if(!user) return;
 
     await ensureRegionLoaded();
-    renderHeader(user);
+
+    // Ensure user has OMXXXXXX and store basic user doc in Firestore
+    const userRef = doc(db, "users", user.uid);
+    const countersRef = doc(db, "meta", "counters");
+    const meta = await runTransaction(db, async (tx)=>{
+      const [uSnap, cSnap] = await Promise.all([tx.get(userRef), tx.get(countersRef)]);
+      const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+      const c = cSnap.exists() ? (cSnap.data() || {}) : {};
+      let omId = u.omId;
+
+      if(!omId){
+        const cur = Number(c.omCounter || 0);
+        const next = cur + 1;
+        omId = "OM" + String(next).padStart(6, "0");
+        tx.set(countersRef, { omCounter: next }, { merge:true });
+      }
+
+      const name = (u.name || user.displayName || user.email || "User").toString();
+      const phone = (u.phone || "").toString();
+
+      tx.set(userRef, {
+        name,
+        phone,
+        omId,
+        updatedAt: serverTimestamp(),
+        ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
+      }, { merge:true });
+
+      return { name, omId, phone };
+    });
+
+    renderHeader(user, meta);
 
     const saved = readProfile(user.uid);
     isCompleted = !!saved?.completedAt;
@@ -2813,7 +2834,7 @@ window.__omProfile = (function(){
       if(els.pfPost) els.pfPost.value = saved?.post || "";
     }
 
-    // start in view mode; editing only via ✏
+    // start in view mode; editing only via ✏️
     setEditing(false);
   }
 
