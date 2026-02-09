@@ -112,7 +112,8 @@ async function assignNumericId(uid){
     const next = cur + 1;
     tx.set(counterRef, { userCounter: next }, { merge: true });
     const userRef = doc(db, "users", uid);
-    tx.set(userRef, { numericId: next, updatedAt: serverTimestamp() }, { merge: true });
+    const omId = "OM" + String(next).padStart(6,"0");
+    tx.set(userRef, { numericId: next, omId, updatedAt: serverTimestamp() }, { merge: true });
     return next;
   });
   return newId;
@@ -186,7 +187,7 @@ els.signupForm?.addEventListener("submit", async (e)=>{
     });
 
     const numericId = await assignNumericId(uid);
-    showNotice(els.authNotice2, `Ro‘yxatdan o‘tildi ✅ Sizning ID: ${numericId}`, "ok");
+    showNotice(els.authNotice2, `Ro‘yxatdan o‘tildi ✅ Sizning ID: ${'OM' + String(numericId).padStart(6,'0')}`, "ok");
 
     setTimeout(()=> location.replace(getNextUrl()), 650);
   }catch(err){

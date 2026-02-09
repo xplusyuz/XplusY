@@ -35,7 +35,7 @@ function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
     const lines = [
-      "Yangi buyurtma!",
+      "🛒 Yangi buyurtma!",
       `ID: ${o.orderId || o.id || ""}`,
       `Summa: ${o.totalUZS || o.total || 0} so'm`,
       `To'lov: ${o.provider || o.paymentType || ""}`,
@@ -1392,11 +1392,8 @@ function updateCartSelectUI(){
 }
 
 function updateBadges(){
-  const f = favs.size;
-  const c = cartCount();
-  if(els.favCount){ els.favCount.textContent = String(f); els.favCount.style.display = f ? "grid" : "none"; }
-  if(els.cartCount){ els.cartCount.textContent = String(c); els.cartCount.style.display = c ? "grid" : "none"; }
-
+  if(els.favCount) els.favCount.textContent = String(favs.size);
+  if(els.cartCount) els.cartCount.textContent = String(cartCount());
   const nb = document.getElementById("navCartBadge");
   if(nb){ const c = cartCount(); nb.textContent = String(c); nb.hidden = (c<=0); }
   const fb = document.getElementById("navFavBadge");
@@ -1854,8 +1851,8 @@ function renderPanel(mode){
           <div class="badge">${moneyUZS((getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)*qty)}</div>
         </div>` : `
         <div class="cartRow">
-          <button class="pBtn iconOnly" title="Savatchaga" data-add><i class="fa-solid fa-cart-shopping"></i></button>
-          <div class="badge"><i class="fa-solid fa-heart"></i></div>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
+          <div class="badge">❤️</div>
         </div>`}
       </div>
     `;
@@ -1950,7 +1947,7 @@ function renderFavPage(){
         </div>
         <div class="cartRow">
           <button class="pBtn" data-open>Ko‘rish</button>
-          <button class="pBtn iconOnly" title="Savatchaga" data-add><i class="fa-solid fa-cart-shopping"></i></button>
+          <button class="pBtn iconOnly" title="Savatchaga" data-add>🛒</button>
         </div>
       </div>
     `;
@@ -2289,7 +2286,26 @@ function wireEyeButtons(){
 }
 /* ================== /PHONE + PASSWORD AUTH ================== */
 
-function setUserUI(user){
+
+async function loadUserProfileData(user){
+  try{
+    const ref = doc(db, "users", user.uid);
+    const snap = await getDoc(ref);
+    if(snap.exists()){
+      const data = snap.data() || {};
+      // normalize OM id
+      if(!data.omId && typeof data.numericId === "number"){
+        data.omId = "OM" + String(data.numericId).padStart(6,"0");
+      }
+      window.__omProfileData = data;
+      return data;
+    }
+  }catch(e){}
+  window.__omProfileData = null;
+  return null;
+}
+
+async function setUserUI(user){
   currentUser = user || null;
   const authCard = els.authCard || document.getElementById("authCard");
 
@@ -2304,7 +2320,11 @@ function setUserUI(user){
 
   if(authCard) authCard.style.display = "none";
 
-  const name = (window.__omProfileData?.name) || user.displayName || user.email || user.phoneNumber || "User";
+  // Load Firestore profile (name + OM ID)
+  const prof = await loadUserProfileData(user);
+
+
+  const name = (prof?.name) || user.displayName || user.phoneNumber || "User";
   const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
   const photo = user.photoURL;
@@ -2740,11 +2760,15 @@ window.__omProfile = (function(){
   }
 
   function renderHeader(user){
-    const name = user?.displayName || user?.email || user?.phoneNumber || "User";
+    const prof = (window.__omProfileData || {});
+    const name = prof.name || user?.displayName || user?.phoneNumber || "User";
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
     if(els.profileName) els.profileName.textContent = name;
-    if(els.profileUid) els.profileUid.textContent = `UID: ${user.uid}`;
+    if(els.profileUid){
+      const omId = prof.omId || (typeof prof.numericId==="number" ? ("OM"+String(prof.numericId).padStart(6,"0")) : null);
+      els.profileUid.textContent = omId ? (`ID: ${omId}`) : (`UID: ${user.uid}`);
+    }
 
     if(els.profileAvatar){
       const photo = user.photoURL;
@@ -2890,7 +2914,7 @@ document.addEventListener("keydown", (e)=>{
 
 let __appStarted = false;
 onAuthStateChanged(auth, async (user)=>{
-  setUserUI(user);
+  await setUserUI(user);
   if(!user) return; // setUserUI redirects to /login.html
   if(__appStarted) return;
   __appStarted = true;
