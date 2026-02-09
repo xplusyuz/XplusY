@@ -48,6 +48,13 @@ function tgNotifyNewOrder(o){
 
 import { auth, db } from "./firebase-config.js";
 import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
+// PWA: register service worker (offline shell)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+  });
+}
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -2079,6 +2086,21 @@ let shipMarker = null;
 let shipLatLng = null;
 let shipMapInited = false;
 
+let leafletPromise = null;
+function loadLeaflet(){
+  if (typeof window !== 'undefined' && window.L) return Promise.resolve();
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Leaflet load failed'));
+    document.head.appendChild(s);
+  });
+  return leafletPromise;
+}
+
 function initShipMapOnce(){
   if(shipMapInited) return;
   const el = document.getElementById("shipMap");
@@ -2103,14 +2125,15 @@ function initShipMapOnce(){
   });
 }
 
-function openCheckout(){
+async function openCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = false;
   // Scroll sheet into view
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // init map after visible so Leaflet sizes correctly
-  setTimeout(()=>{
+  setTimeout(async ()=>{
+    try{ await loadLeaflet(); }catch(e){}
     initShipMapOnce();
     try{ shipMap && shipMap.invalidateSize(); }catch(e){}
   }, 60);
@@ -2128,7 +2151,7 @@ function getPayType(){
 
 async function createOrderFromCheckout(){
   if(!currentUser){
-    toast("Avval kirish qiling (Google / Telegram).");
+    toast("Avval kirish qiling.");
     document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
     return;
   }
@@ -2552,7 +2575,7 @@ function removePurchasedFromCart(sel){
 
 async function startPaymeCheckout(){
   if(!currentUser){
-    toast("Avval kirish qiling (Google / Telegram).");
+    toast("Avval kirish qiling.");
     document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
     return;
   }
