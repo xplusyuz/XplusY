@@ -243,7 +243,7 @@ const els = {
   profileSave: document.getElementById("profileSave"),
   profileLogout: document.getElementById("profileLogout"),
   profileName: document.getElementById("profileName"),
-  profileUid: document.getElementById("profileUid"),
+  profileOmId: document.getElementById("profileOmId"),
   profileAvatar: document.getElementById("profileAvatar"),
   pfPhone: document.getElementById("pfPhone"),
   pfRegion: document.getElementById("pfRegion"),
@@ -2286,26 +2286,7 @@ function wireEyeButtons(){
 }
 /* ================== /PHONE + PASSWORD AUTH ================== */
 
-
-async function loadUserProfileData(user){
-  try{
-    const ref = doc(db, "users", user.uid);
-    const snap = await getDoc(ref);
-    if(snap.exists()){
-      const data = snap.data() || {};
-      // normalize OM id
-      if(!data.omId && typeof data.numericId === "number"){
-        data.omId = "OM" + String(data.numericId).padStart(6,"0");
-      }
-      window.__omProfileData = data;
-      return data;
-    }
-  }catch(e){}
-  window.__omProfileData = null;
-  return null;
-}
-
-async function setUserUI(user){
+function setUserUI(user){
   currentUser = user || null;
   const authCard = els.authCard || document.getElementById("authCard");
 
@@ -2320,11 +2301,7 @@ async function setUserUI(user){
 
   if(authCard) authCard.style.display = "none";
 
-  // Load Firestore profile (name + OM ID)
-  const prof = await loadUserProfileData(user);
-
-
-  const name = (prof?.name) || user.displayName || user.phoneNumber || "User";
+  const name = (window.__omProfileData?.name) || user.displayName || user.email || user.phoneNumber || "User";
   const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
   const photo = user.photoURL;
@@ -2759,16 +2736,13 @@ window.__omProfile = (function(){
     return p1 || p2 || "";
   }
 
-  function renderHeader(user){
-    const prof = (window.__omProfileData || {});
-    const name = prof.name || user?.displayName || user?.phoneNumber || "User";
+  function renderHeader(user, meta){
+    const name = (meta?.name || user?.displayName || user?.email || user?.phoneNumber || "User").toString();
+    const omId = (meta?.omId || "").toString();
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
     if(els.profileName) els.profileName.textContent = name;
-    if(els.profileUid){
-      const omId = prof.omId || (typeof prof.numericId==="number" ? ("OM"+String(prof.numericId).padStart(6,"0")) : null);
-      els.profileUid.textContent = omId ? (`ID: ${omId}`) : (`UID: ${user.uid}`);
-    }
+    if(els.profileOmId) els.profileOmId.textContent = omId ? `ID: ${omId}` : "—";
 
     if(els.profileAvatar){
       const photo = user.photoURL;
@@ -2811,7 +2785,38 @@ window.__omProfile = (function(){
     if(!user) return;
 
     await ensureRegionLoaded();
-    renderHeader(user);
+
+    // Ensure user has OMXXXXXX and store basic user doc in Firestore
+    const userRef = doc(db, "users", user.uid);
+    const countersRef = doc(db, "meta", "counters");
+    const meta = await runTransaction(db, async (tx)=>{
+      const [uSnap, cSnap] = await Promise.all([tx.get(userRef), tx.get(countersRef)]);
+      const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+      const c = cSnap.exists() ? (cSnap.data() || {}) : {};
+      let omId = u.omId;
+
+      if(!omId){
+        const cur = Number(c.omCounter || 0);
+        const next = cur + 1;
+        omId = "OM" + String(next).padStart(6, "0");
+        tx.set(countersRef, { omCounter: next }, { merge:true });
+      }
+
+      const name = (u.name || user.displayName || user.email || "User").toString();
+      const phone = (u.phone || "").toString();
+
+      tx.set(userRef, {
+        name,
+        phone,
+        omId,
+        updatedAt: serverTimestamp(),
+        ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
+      }, { merge:true });
+
+      return { name, omId, phone };
+    });
+
+    renderHeader(user, meta);
 
     const saved = readProfile(user.uid);
     isCompleted = !!saved?.completedAt;
@@ -2914,7 +2919,7 @@ document.addEventListener("keydown", (e)=>{
 
 let __appStarted = false;
 onAuthStateChanged(auth, async (user)=>{
-  await setUserUI(user);
+  setUserUI(user);
   if(!user) return; // setUserUI redirects to /login.html
   if(__appStarted) return;
   __appStarted = true;
