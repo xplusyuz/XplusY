@@ -122,7 +122,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
   if(phone.length < 10) return showNotice("Telefon raqam noto‘g‘ri", "err");
-  if(pass.length < 4) return showNotice("Parol kamida 4 ta belgidan iborat bo‘lsin", "err");
+  if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
   try{
     const email = phoneToEmail(phone);
@@ -150,7 +150,7 @@ els.signupForm.addEventListener("submit", async (e)=>{
 
   if(!name) return showNotice("Ismni kiriting", "err");
   if(phone.length < 10) return showNotice("Telefon raqam noto‘g‘ri", "err");
-  if(pass.length < 4) return showNotice("Parol kamida 4 ta belgidan iborat bo‘lsin", "err");
+  if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
   try{
@@ -168,9 +168,21 @@ els.signupForm.addEventListener("submit", async (e)=>{
     console.error(err);
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
-      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan", "err");
+      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
+      // auto switch to login tab
+      try{
+        els.tabLogin?.click();
+        if(els.loginPhone) els.loginPhone.value = phone;
+        els.loginPass?.focus();
+      }catch(_){}
+    }else{
+      if(String(err?.code||"").includes("weak-password")){
+      showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
+    }else if(String(err?.code||"").includes("invalid-email")){
+      showNotice("Telefon raqam formati noto‘g‘ri.", "err");
     }else{
       showNotice("Ro‘yxatdan o‘tishda xatolik", "err");
+    }
     }
   }
 });
