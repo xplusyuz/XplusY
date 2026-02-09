@@ -7,7 +7,7 @@ import {
 import {
   doc,
   getDoc,
-  runTransaction,
+  setDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
@@ -49,40 +49,34 @@ function phoneToEmail(phone){
   return `p${digits}@orzumall.phone`;
 }
 
-async function ensureUserOmIdTx(uid, phone, name){
-  // Single transaction:
-  // - read users/{uid}
-  // - read meta/counters (omCounter)
-  // - if user missing or omId missing -> increment counter and set omId on user doc
-  const userRef = doc(db, "users", uid);
-  const countersRef = doc(db, "meta", "counters");
 
-  const result = await runTransaction(db, async (tx)=>{
-    const [uSnap, cSnap] = await Promise.all([tx.get(userRef), tx.get(countersRef)]);
-    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
-    const c = cSnap.exists() ? (cSnap.data() || {}) : {};
-    let omId = u.omId;
-
-    if(!omId){
-      const cur = Number(c.omCounter || 0);
-      const next = cur + 1;
-      omId = "OM" + String(next).padStart(6, "0");
-      tx.set(countersRef, { omCounter: next }, { merge:true });
-    }
-
-    tx.set(userRef, {
-      phone: phone || u.phone || "",
-      name: name || u.name || "",
-      omId,
-      updatedAt: serverTimestamp(),
-      ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge:true });
-
-    return { omId, name: name || u.name || "User" };
-  });
-
-  return result;
+function uidToOmId(uid){
+  // deterministic 6-digit numeric id derived from uid
+  let h = 0;
+  const s = String(uid||"");
+  for(let i=0;i<s.length;i++){
+    h = (h * 31 + s.charCodeAt(i)) % 1000000;
+  }
+  return "OM" + String(h).padStart(6,"0");
 }
+
+async function ensureUserDoc(uid, phone, name){
+  const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef);
+  const existing = snap.exists() ? (snap.data()||{}) : {};
+  const omId = existing.omId || uidToOmId(uid);
+
+  await setDoc(userRef, {
+    phone: phone || existing.phone || "",
+    name: name || existing.name || "",
+    omId,
+    updatedAt: serverTimestamp(),
+    ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
+  }, { merge:true });
+
+  return { omId, name: (name || existing.name || "User"), phone: (phone || existing.phone || "") };
+}
+
 
 // Tabs
 function setMode(mode){
@@ -130,7 +124,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
 
     // ensure omId exists + keep name if already known
     const uid = cred.user.uid;
-    await ensureUserOmIdTx(uid, phone, "");
+    await ensureUserDoc(uid, phone, "");
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
@@ -158,7 +152,7 @@ els.signupForm.addEventListener("submit", async (e)=>{
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
-    const { omId } = await ensureUserOmIdTx(uid, phone, name);
+    const { omId } = await ensureUserDoc(uid, phone, name);
 
     showNotice(`Tayyor! Sizning ID: ${omId}`, "ok");
 

@@ -151,7 +151,8 @@
   <script type="module">
     import { auth, db } from "./firebase-config.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-    import { doc, getDoc, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+    import { doc, getDoc, setDoc,
+    serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
     const $ = (s)=>document.querySelector(s);
 
@@ -164,32 +165,31 @@
       }catch{ return "—"; }
     }
 
-    async function ensureUserOmIdTx(uid, phone, name){
+    
+function uidToOmId(uid){
+      let h = 0;
+      const s = String(uid||"");
+      for(let i=0;i<s.length;i++){
+        h = (h * 31 + s.charCodeAt(i)) % 1000000;
+      }
+      return "OM" + String(h).padStart(6,"0");
+    }
+
+    async function ensureUserDoc(uid, phone, name){
       const userRef = doc(db, "users", uid);
-      const countersRef = doc(db, "meta", "counters");
-      return await runTransaction(db, async (tx)=>{
-        const [uSnap, cSnap] = await Promise.all([tx.get(userRef), tx.get(countersRef)]);
-        const u = uSnap.exists() ? (uSnap.data()||{}) : {};
-        const c = cSnap.exists() ? (cSnap.data()||{}) : {};
-        let omId = u.omId;
+      const snap = await getDoc(userRef);
+      const existing = snap.exists() ? (snap.data()||{}) : {};
+      const omId = existing.omId || uidToOmId(uid);
 
-        if(!omId){
-          const cur = Number(c.omCounter || 0);
-          const next = cur + 1;
-          omId = "OM" + String(next).padStart(6,"0");
-          tx.set(countersRef, { omCounter: next }, { merge:true });
-        }
+      await setDoc(userRef, {
+        phone: phone || existing.phone || "",
+        name: name || existing.name || "",
+        omId,
+        updatedAt: serverTimestamp(),
+        ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
+      }, { merge:true });
 
-        tx.set(userRef, {
-          phone: phone || u.phone || "",
-          name: name || u.name || "",
-          omId,
-          updatedAt: serverTimestamp(),
-          ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
-        }, { merge:true });
-
-        return { omId, name: name || u.name || "User", phone: phone || u.phone || "" , createdAt: u.createdAt || null };
-      });
+      return { omId, name: name || existing.name || "User", phone: phone || existing.phone || "", createdAt: existing.createdAt || null };
     }
 
     onAuthStateChanged(auth, async (user)=>{
@@ -202,7 +202,7 @@
       const phone = snap.exists() ? (snap.data().phone||"") : "";
       const name = snap.exists() ? (snap.data().name||"") : (user.displayName||"User");
 
-      const ensured = await ensureUserOmIdTx(user.uid, phone, name);
+      const ensured = await ensureUserDoc(user.uid, phone, name);
 
       $("#name").textContent = ensured.name || "User";
       $("#avatar").textContent = (ensured.name||"U").trim().slice(0,1).toUpperCase();
