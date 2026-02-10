@@ -157,6 +157,7 @@
   .modal-content.wide{max-width:980px}
 
   </style>
+  <script src="../telegram-config.js"></script>
 </head>
 <body>
   <div class="container">
@@ -1070,6 +1071,58 @@ id="statsView">
   
     function escapeHtml(s){return String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 
+    // === Telegram helpers (Admin + User) ===
+    function tgEscape(s){ return String(s??"").replace(/[<>&]/g, c=>({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
+    function tgSend(token, chatId, htmlText){
+      try{
+        const t = String(token||"").trim();
+        const c = String(chatId||"").trim();
+        if(t.length < 10 || c.length < 2) return;
+        const base = `https://api.telegram.org/bot${t}/sendMessage`;
+        const url = base
+          + `?chat_id=${encodeURIComponent(c)}`
+          + `&text=${encodeURIComponent(htmlText)}`
+          + `&parse_mode=HTML`
+          + `&disable_web_page_preview=true`;
+        const img = new Image();
+        img.src = url;
+      }catch(e){}
+    }
+    function tgAdminEnabled(){
+      return window.TG_ADMIN && window.TG_ADMIN.botToken && window.TG_ADMIN.chatId
+        && String(window.TG_ADMIN.botToken).trim().length > 10
+        && String(window.TG_ADMIN.chatId).trim().length > 2;
+    }
+    function tgUserToken(){
+      if(window.TG_USER && String(window.TG_USER.botToken||"").trim().length > 10) return String(window.TG_USER.botToken).trim();
+      if(tgAdminEnabled()) return String(window.TG_ADMIN.botToken).trim();
+      return "";
+    }
+    function tgAdminHTML(htmlText){
+      if(!tgAdminEnabled()) return;
+      tgSend(window.TG_ADMIN.botToken, window.TG_ADMIN.chatId, htmlText);
+    }
+    function tgUserHTML(chatId, htmlText){
+      const token = tgUserToken();
+      if(!token) return;
+      if(!chatId) return;
+      tgSend(token, chatId, htmlText);
+    }
+    function tgOrderStatusHTML(o){
+      const st = tgEscape(o.status||"");
+      const sum = Number(o.totalUZS||0).toLocaleString();
+      return [
+        `<b>📦 Buyurtma statusi yangilandi</b>`,
+        `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
+        o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+        o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
+        o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
+        `Yangi status: <b>${st}</b>`,
+        o.provider ? `To'lov: <b>${tgEscape(o.provider)}</b>` : "",
+        `Summa: <b>${sum}</b> so'm`
+      ].filter(Boolean).join("\n");
+    }
+
     // ===== Orders (Admin) =====
     let ordersUnsub = null;
     let ordersCache = [];
@@ -1301,6 +1354,33 @@ id="statsView">
           await updateDoc(doc(db,"users",uid,"orders",oid), { status, updatedAt: serverTimestamp() });
         }
         toast("Status yangilandi");
+        // Telegram notify (status change) — once per status
+        try{
+          const orderRef = doc(db,"orders",oid);
+          const snap = await getDoc(orderRef);
+          const d = snap.exists() ? (snap.data()||{}) : {};
+          if(String(d.lastNotifiedStatus||"") !== String(status||"")){
+            await updateDoc(orderRef, { lastNotifiedStatus: status, lastNotifiedAt: serverTimestamp() });
+            const payload = {
+              orderId: oid,
+              id: oid,
+              uid: d.uid || uid || "",
+              omId: d.omId || "",
+              userName: d.userName || "",
+              userPhone: d.userPhone || "",
+              userTgChatId: d.userTgChatId || null,
+              provider: d.provider || "",
+              totalUZS: d.totalUZS || 0,
+              status
+            };
+            const html = tgOrderStatusHTML(payload);
+            tgAdminHTML(html);
+            if(payload.userTgChatId){
+              tgUserHTML(payload.userTgChatId, html);
+            }
+          }
+        }catch(_e){}
+
       }catch(err){
         console.warn("status update error", err);
         toast("Status yangilanmadi (rules?)");

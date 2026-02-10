@@ -12,56 +12,87 @@ function tgAdminEnabled(){
     && typeof window.TG_ADMIN.chatId === "string"
     && window.TG_ADMIN.chatId.trim().length > 2;
 }
+function tgUserEnabled(){
+  const t = (window.TG_USER && typeof window.TG_USER.botToken === "string") ? window.TG_USER.botToken.trim() : "";
+  const fallback = tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "";
+  return (t.length > 10) || (fallback.length > 10);
+}
 function tgEscape(s){ return String(s??"").replace(/[<>&]/g, c=>({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
 
-function tgSendAdmin(text){
+function tgSend(token, chatId, htmlText){
   try{
-    if(!tgAdminEnabled()) return;
-    const token = window.TG_ADMIN.botToken.trim();
-    const chatId = window.TG_ADMIN.chatId.trim();
-    const base = `https://api.telegram.org/bot${token}/sendMessage`;
-    const url = base + `?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}&disable_web_page_preview=true`;
+    const t = String(token||"").trim();
+    const c = String(chatId||"").trim();
+    if(t.length < 10 || c.length < 2) return;
+    const base = `https://api.telegram.org/bot${t}/sendMessage`;
+    const url = base
+      + `?chat_id=${encodeURIComponent(c)}`
+      + `&text=${encodeURIComponent(htmlText)}`
+      + `&parse_mode=HTML`
+      + `&disable_web_page_preview=true`;
     const img = new Image();
     img.src = url;
-  }catch(e){
-    console.warn("tgSendAdmin error", e);
-  }
+  }catch(e){}
 }
 
-
-function tgNotifyNewOrder(o){
-  try{
-    if(!tgAdminEnabled()) return;
-
-    const items = Array.isArray(o.items) ? o.items : [];
-    const itemsLines = items.slice(0, 8).map((it, i)=>{
-      const title = (it.title || it.name || it.productTitle || "Mahsulot").toString();
-      const qty = Number(it.qty || it.count || 1) || 1;
-      const sku = (it.sku || it.variantKey || it.key || "").toString();
-      const price = Number(it.priceUZS || it.price || 0) || 0;
-      const tail = [sku ? `SKU:${sku}` : "", price ? `${price} so'm` : ""].filter(Boolean).join(" · ");
-      return `${i+1}) ${title} ×${qty}${tail ? " ("+tail+")" : ""}`;
-    });
-    if(items.length > 8) itemsLines.push(`... yana ${items.length - 8} ta`);
-
-    const lines = [
-      "🛒 Yangi buyurtma!",
-      `Buyurtma ID: ${o.orderId || o.id || ""}`,
-      o.uid ? `Foydalanuvchi UID: ${o.uid}` : "",
-      o.omId ? `Foydalanuvchi ID: ${o.omId}` : "",
-      o.userName ? `Ism: ${o.userName}` : "",
-      o.userPhone ? `Tel: ${o.userPhone}` : (o.shipping?.phone ? `Tel: ${o.shipping.phone}` : (o.phone ? `Tel: ${o.phone}` : "")),
-      `To'lov: ${o.provider || o.paymentType || ""}`,
-      `Summa: ${o.totalUZS || o.total || 0} so'm`,
-      o.shipping?.addressText ? `Manzil: ${o.shipping.addressText}` : "",
-      itemsLines.length ? "— Mahsulotlar —" : "",
-      ...itemsLines
-    ].filter(Boolean);
-
-    tgSendAdmin(lines.join("
-"));
-  }catch(_e){}
+function tgSendAdminHTML(htmlText){
+  if(!tgAdminEnabled()) return;
+  tgSend(window.TG_ADMIN.botToken, window.TG_ADMIN.chatId, htmlText);
 }
+
+function tgSendUserHTML(chatId, htmlText){
+  if(!tgUserEnabled()) return;
+  const token = (window.TG_USER && window.TG_USER.botToken && window.TG_USER.botToken.trim().length > 10)
+    ? window.TG_USER.botToken.trim()
+    : (tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "");
+  if(!token) return;
+  tgSend(token, chatId, htmlText);
+}
+
+function tgOrderCreatedHTML(o){
+  const items = Array.isArray(o.items) ? o.items : [];
+  const itemLines = items.slice(0, 8).map((it)=>{
+    const title = tgEscape(it.title || it.name || it.productTitle || "Mahsulot");
+    const qty = Number(it.qty || it.count || 1) || 1;
+    const sku = tgEscape(it.sku || it.variantKey || it.key || "");
+    const price = Number(it.priceUZS || it.price || 0) || 0;
+    const tail = [sku ? `<code>${sku}</code>` : "", price ? `${price.toLocaleString()} so'm` : ""].filter(Boolean).join(" · ");
+    return `• ${title} ×${qty}${tail ? ` <i>(${tail})</i>` : ""}`;
+  });
+  const more = items.length > 8 ? `<i>... yana ${items.length-8} ta</i>` : "";
+  const addr = o.shipping?.addressText ? tgEscape(o.shipping.addressText) : "";
+  const pay = tgEscape(o.provider || "");
+  const sum = Number(o.totalUZS||0).toLocaleString();
+
+  return [
+    `<b>🛒 Yangi buyurtma!</b>`,
+    `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
+    o.uid ? `UID: <code>${tgEscape(o.uid)}</code>` : "",
+    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
+    o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
+    `To'lov: <b>${pay}</b>`,
+    `Summa: <b>${sum}</b> so'm`,
+    addr ? `Manzil: ${addr}` : "",
+    items.length ? `<b>— Mahsulotlar —</b>` : "",
+    ...itemLines,
+    more
+  ].filter(Boolean).join("\n");
+}
+
+function tgOrderStatusHTML(o){
+  const st = tgEscape(o.status||"");
+  const sum = Number(o.totalUZS||0).toLocaleString();
+  return [
+    `<b>📦 Buyurtma statusi yangilandi</b>`,
+    `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
+    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    `Yangi status: <b>${st}</b>`,
+    o.provider ? `To'lov: <b>${tgEscape(o.provider)}</b>` : "",
+    `Summa: <b>${sum}</b> so'm`
+  ].filter(Boolean).join("\n");
+}
+
 
 import { auth, db } from "./firebase-config.js";
 import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
@@ -2518,17 +2549,19 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
   // pull richer user fields for order + telegram
   const userRef = doc(db, "users", currentUser.uid);
-  let userName = null, userPhone = null, omId = null;
+  let userName = null, userPhone = null, omId = null, userTgChatId = null;
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
     userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
     userPhone = (u.phone || "").toString();
     omId = (u.omId || makeOmId(currentUser.uid)).toString();
+    userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
   }catch(_e){
     userName = (currentUser.displayName || currentUser.email || "User").toString();
     userPhone = "";
     omId = makeOmId(currentUser.uid);
+    userTgChatId = null;
   }
 
   const orderRef = doc(db, "orders", orderId);
@@ -2540,6 +2573,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     omId,
     userName,
     userPhone,
+    userTgChatId,
     status,
     items,
     totalUZS,
@@ -2559,6 +2593,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     omId,
     userName,
     userPhone,
+    userTgChatId,
     status,
     items,
     totalUZS,
@@ -2569,7 +2604,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     source: "web",
   }, { merge: true });
 
-  // notify admin via Telegram — EXACTLY ONCE (idempotent flag in Firestore)
+  // notify (create) — EXACTLY ONCE (idempotent flag in Firestore)
   let shouldSend = false;
   try{
     await runTransaction(db, async (tx)=>{
@@ -2583,7 +2618,14 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
   if(shouldSend){
     try{
-      tgNotifyNewOrder({ orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null });
+      const payload = { orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null };
+      const html = tgOrderCreatedHTML(payload);
+      // Admin message
+      tgSendAdminHTML(html);
+      // User message (optional)
+      if(userTgChatId){
+        tgSendUserHTML(userTgChatId, html);
+      }
     }catch(_e){}
   }
 }
