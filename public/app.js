@@ -20,11 +20,14 @@ function tgSendAdmin(text){
     const token = window.TG_ADMIN.botToken.trim();
     const chatId = window.TG_ADMIN.chatId.trim();
     const base = `https://api.telegram.org/bot${token}/sendMessage`;
-    // 1) GET beacon (no CORS)
     const url = base + `?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}&disable_web_page_preview=true`;
     const img = new Image();
     img.src = url;
+  }catch(e){
+    console.warn("tgSendAdmin error", e);
+  }
 }
+
 
 function tgNotifyNewOrder(o){
   try{
