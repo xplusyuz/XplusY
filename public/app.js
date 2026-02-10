@@ -24,25 +24,39 @@ function tgSendAdmin(text){
     const url = base + `?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}&disable_web_page_preview=true`;
     const img = new Image();
     img.src = url;
-    // 2) best-effort POST (no-cors) — ok if GET is blocked
-    try{
-      const body = new URLSearchParams({ chat_id: chatId, text, disable_web_page_preview: "true" }).toString();
-      fetch(base, { method:"POST", mode:"no-cors", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
-    }catch(_e){}
-  }catch(_e){}
 }
+
 function tgNotifyNewOrder(o){
   try{
     if(!tgAdminEnabled()) return;
+
+    const items = Array.isArray(o.items) ? o.items : [];
+    const itemsLines = items.slice(0, 8).map((it, i)=>{
+      const title = (it.title || it.name || it.productTitle || "Mahsulot").toString();
+      const qty = Number(it.qty || it.count || 1) || 1;
+      const sku = (it.sku || it.variantKey || it.key || "").toString();
+      const price = Number(it.priceUZS || it.price || 0) || 0;
+      const tail = [sku ? `SKU:${sku}` : "", price ? `${price} so'm` : ""].filter(Boolean).join(" · ");
+      return `${i+1}) ${title} ×${qty}${tail ? " ("+tail+")" : ""}`;
+    });
+    if(items.length > 8) itemsLines.push(`... yana ${items.length - 8} ta`);
+
     const lines = [
-      "Yangi buyurtma!",
-      `ID: ${o.orderId || o.id || ""}`,
-      `Summa: ${o.totalUZS || o.total || 0} so'm`,
+      "🛒 Yangi buyurtma!",
+      `Buyurtma ID: ${o.orderId || o.id || ""}`,
+      o.uid ? `Foydalanuvchi UID: ${o.uid}` : "",
+      o.omId ? `Foydalanuvchi ID: ${o.omId}` : "",
+      o.userName ? `Ism: ${o.userName}` : "",
+      o.userPhone ? `Tel: ${o.userPhone}` : (o.shipping?.phone ? `Tel: ${o.shipping.phone}` : (o.phone ? `Tel: ${o.phone}` : "")),
       `To'lov: ${o.provider || o.paymentType || ""}`,
-      o.shipping?.phone ? `Tel: ${o.shipping.phone}` : (o.phone ? `Tel: ${o.phone}` : ""),
+      `Summa: ${o.totalUZS || o.total || 0} so'm`,
       o.shipping?.addressText ? `Manzil: ${o.shipping.addressText}` : "",
+      itemsLines.length ? "— Mahsulotlar —" : "",
+      ...itemsLines
     ].filter(Boolean);
-    tgSendAdmin(lines.join("\n"));
+
+    tgSendAdmin(lines.join("
+"));
   }catch(_e){}
 }
 
@@ -2496,36 +2510,79 @@ function buildSelectedItems(){
   return { ok:true, reason:"", sel:_selCart, items, totalUZS };
 }
 
-async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin}){
+async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin, shipping}){
   if(!currentUser) throw new Error("no_user");
+
+  // pull richer user fields for order + telegram
+  const userRef = doc(db, "users", currentUser.uid);
+  let userName = null, userPhone = null, omId = null;
+  try{
+    const uSnap = await getDoc(userRef);
+    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
+    userPhone = (u.phone || "").toString();
+    omId = (u.omId || makeOmId(currentUser.uid)).toString();
+  }catch(_e){
+    userName = (currentUser.displayName || currentUser.email || "User").toString();
+    userPhone = "";
+    omId = makeOmId(currentUser.uid);
+  }
+
   const orderRef = doc(db, "orders", orderId);
+
+  // write order (main)
   await setDoc(orderRef, {
+    orderId,
     uid: currentUser.uid,
+    omId,
+    userName,
+    userPhone,
     status,
     items,
     totalUZS,
     amountTiyin: amountTiyin ?? null,
     provider,
+    shipping: shipping || null,
+    createdAt: serverTimestamp(),
+    source: "web",
+    tgSent: false,
+  }, { merge: true });
+
+  // also store under user subcollection to avoid composite index for profile history
+  const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
+  await setDoc(userOrderRef, {
+    orderId,
+    uid: currentUser.uid,
+    omId,
+    userName,
+    userPhone,
+    status,
+    items,
+    totalUZS,
+    amountTiyin: amountTiyin ?? null,
+    provider,
+    shipping: shipping || null,
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
 
-// also store under user subcollection to avoid composite index for profile history
-const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
-await setDoc(userOrderRef, {
-  uid: currentUser.uid,
-  status,
-  items,
-  totalUZS,
-  amountTiyin: amountTiyin ?? null,
-  provider,
-  createdAt: serverTimestamp(),
-  orderId,
-  source: "web",
-}, { merge: true });
+  // notify admin via Telegram — EXACTLY ONCE (idempotent flag in Firestore)
+  let shouldSend = false;
+  try{
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(orderRef);
+      const d = snap.exists() ? (snap.data() || {}) : {};
+      if(d.tgSent === true) return; // already sent
+      tx.set(orderRef, { tgSent: true, tgSentAt: serverTimestamp() }, { merge:true });
+      shouldSend = true;
+    });
+  }catch(_e){ /* ignore */ }
 
-  // notify admin via Telegram (optional)
-  try{ tgNotifyNewOrder({ orderId, provider, totalUZS }); }catch(_e){}
+  if(shouldSend){
+    try{
+      tgNotifyNewOrder({ orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null });
+    }catch(_e){}
+  }
 }
 
 function removePurchasedFromCart(sel){
