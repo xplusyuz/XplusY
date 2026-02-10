@@ -2582,7 +2582,6 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     shipping: shipping || null,
     createdAt: serverTimestamp(),
     source: "web",
-    tgSent: false,
   }, { merge: true });
 
   // also store under user subcollection to avoid composite index for profile history
@@ -2603,29 +2602,19 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
-
-  // notify (create) — EXACTLY ONCE (idempotent flag in Firestore)
-  let shouldSend = false;
+  // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
   try{
-    await runTransaction(db, async (tx)=>{
-      const snap = await tx.get(orderRef);
-      const d = snap.exists() ? (snap.data() || {}) : {};
-      if(d.tgSent === true) return; // already sent
-      tx.set(orderRef, { tgSent: true, tgSentAt: serverTimestamp() }, { merge:true });
-      shouldSend = true;
-    });
-  }catch(_e){ /* ignore */ }
-
-  if(shouldSend){
-    try{
+    window.__tgSentOrders = window.__tgSentOrders || new Set();
+    if(!window.__tgSentOrders.has(orderId)){
+      window.__tgSentOrders.add(orderId);
       const payload = { orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null };
       const html = tgOrderCreatedHTML(payload);
-      // Admin message
       tgSendAdminHTML(html);
-      // User message (optional)
       if(userTgChatId){
         tgSendUserHTML(userTgChatId, html);
       }
+    }
+  }catch(_e){}
     }catch(_e){}
   }
 }
