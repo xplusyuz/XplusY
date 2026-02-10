@@ -170,9 +170,9 @@ async function logEvent(type, productId){
 
 
 const els = {
-  avatar: document.getElementById("avatar"),
+  avatarIcon: document.getElementById("avatarIcon"),
   avatarBtn: document.getElementById("avatarBtn"),
-  avatarFallback: document.getElementById("avatarFallback"),grid: document.getElementById("grid"),
+  grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
   tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
@@ -2304,22 +2304,8 @@ function setUserUI(user){
 
   if(authCard) authCard.style.display = "none";
 
-  const name = (window.__omProfileData?.name) || user.displayName || user.email || user.phoneNumber || "User";
-  const initial = (name || "U").trim().slice(0,1).toUpperCase();
-
-  const photo = user.photoURL;
-  if(photo){
-    if(els.avatar) els.avatar.src = photo;
-    if(els.avatar) els.avatar.style.visibility = "visible";
-    if(els.avatarFallback) els.avatarFallback.style.display = "none";
-  } else {
-    if(els.avatar) els.avatar.src = "";
-    if(els.avatar) els.avatar.style.visibility = "hidden";
-    if(els.avatarFallback){
-      els.avatarFallback.textContent = initial;
-      els.avatarFallback.style.display = "grid";
-    }
-  }
+  // Avatar: always use Font Awesome profile icon (no image / initials)
+  if(els.avatarIcon) els.avatarIcon.style.display = "grid";
   if(els.avatarBtn) els.avatarBtn.disabled = false;
 
   // keep profile modal header in sync
