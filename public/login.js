@@ -30,6 +30,7 @@ const els = {
   toggleSignupPass: document.getElementById("toggleSignupPass"),
 
   notice: document.getElementById("notice"),
+  forgotLink: document.getElementById("forgotLink"),
 };
 
 function showNotice(msg, kind="ok"){
@@ -104,6 +105,17 @@ els.toggleSignupPass.addEventListener("click", ()=>{
   els.toggleSignupPass.querySelector("i").className = show ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
 });
 
+
+
+// Forgot password -> Telegram bot
+if(els.forgotLink){
+  els.forgotLink.addEventListener("click", (e)=>{
+    e.preventDefault();
+    showNotice("Parolni tiklash uchun @OrzuMallUZ_bot ga yozing", "ok");
+    setTimeout(()=> window.open("https://t.me/OrzuMallUZ_bot", "_blank"), 180);
+  });
+}
+
 // If already logged in, go to profile
 onAuthStateChanged(auth, (user)=>{
   if(user && allowAutoRedirect) {
@@ -133,7 +145,17 @@ els.loginForm.addEventListener("submit", async (e)=>{
     location.replace(next);
   }catch(err){
     console.error(err);
-    showNotice("Kirish xatosi: raqam yoki parol noto‘g‘ri", "err");
+    const code = String(err?.code || "");
+    if(code.includes("user-not-found")){
+      showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
+    }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
+      showNotice("Login yoki parol xato", "err");
+    }else if(code.includes("too-many-requests")){
+      showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
+    }else{
+      // fallback
+      showNotice("Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.", "err");
+    }
   }
 });
 
