@@ -2615,7 +2615,6 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
       }
     }
   }catch(_e){}
-    }catch(_e){}
   }
 }
 
