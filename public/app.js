@@ -225,6 +225,10 @@ const els = {
   tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
+
+  // Search UI (mobile)
+  toolsTop: document.getElementById("toolsTop"),
+  searchToggleBtn: document.getElementById("searchToggleBtn"),
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
   loginForm: document.getElementById("loginForm"),
@@ -3036,3 +3040,35 @@ function initMobileBottomBar(){
 }
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
+
+/* =========================
+   Mobile search toggle (icon -> input)
+========================= */
+document.addEventListener("DOMContentLoaded", ()=>{
+  if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
+
+  const closeIfEmpty = () => {
+    // If user cleared input, allow closing
+    if(String(els.q.value||"").trim()===""){
+      els.toolsTop.classList.remove("open");
+    }
+  };
+
+  els.searchToggleBtn.addEventListener("click", (e)=>{
+    e.preventDefault();
+    els.toolsTop.classList.toggle("open");
+    if(els.toolsTop.classList.contains("open")){
+      try{ els.q.focus(); els.q.select(); }catch(_e){}
+    } else {
+      closeIfEmpty();
+    }
+  });
+
+  // Close on blur (small delay so click on select doesn't instantly close)
+  els.q.addEventListener("blur", ()=>{
+    setTimeout(()=>{
+      if(document.activeElement === els.sort) return;
+      closeIfEmpty();
+    }, 120);
+  });
+});
