@@ -38,14 +38,48 @@ function showNotice(msg, kind="ok"){
   els.notice.className = "notice " + (kind==="err" ? "err" : "ok");
   els.notice.textContent = msg;
   els.notice.style.display = "";
-  setTimeout(()=>{ els.notice.style.display="none"; }, 2500);
+  const ms = kind === "err" ? 6500 : 3500;
+  clearTimeout(showNotice._t);
+  showNotice._t = setTimeout(()=>{ els.notice.style.display="none"; }, ms);
 }
+
+// Uzbekistan phone helpers (+998XXXXXXXXX)
 function normPhone(raw){
-  let p = (raw||"").trim();
-  // keep + and digits
-  p = p.replace(/[^0-9+]/g,"");
-  if(!p.startsWith("+")) p = "+" + p.replace(/^\+*/,"");
-  return p;
+  // returns phone in +998XXXXXXXXX format if possible
+  let digits = String(raw||"").replace(/\D/g,"");
+  // strip country if user typed it
+  if(digits.startsWith("998")) digits = digits.slice(3);
+  // keep only 9 digits (operator+number)
+  digits = digits.slice(0, 9);
+  return "+998" + digits;
+}
+function isValidUzPhone(phone){
+  return /^\+998\d{9}$/.test(String(phone||""));
+}
+function attachUzPhoneMask(input){
+  if(!input) return;
+  // default
+  if(!input.value) input.value = "+998";
+
+  input.addEventListener("focus", ()=>{
+    if(!input.value) input.value = "+998";
+    if(!String(input.value).startsWith("+998")) input.value = normPhone(input.value);
+  });
+
+  input.addEventListener("input", ()=>{
+    const v = normPhone(input.value);
+    input.value = v;
+  });
+
+  input.addEventListener("keydown", (e)=>{
+    // prevent deleting the +998 prefix
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? 0;
+    if((e.key === "Backspace" || e.key === "Delete") && start <= 4 && end <= 4){
+      e.preventDefault();
+      input.setSelectionRange(4,4);
+    }
+  });
 }
 function phoneToEmail(phone){
   const digits = String(phone||"").replace(/[^0-9]/g,"");
@@ -93,6 +127,14 @@ els.tabLogin.addEventListener("click", ()=>setMode("login"));
 els.tabSignup.addEventListener("click", ()=>setMode("signup"));
 setMode("login");
 
+// Phone auto +998 formatting
+attachUzPhoneMask(els.loginPhone);
+attachUzPhoneMask(els.signupPhone);
+
+// Phone auto-format (+998)
+attachUzPhoneMask(els.loginPhone);
+attachUzPhoneMask(els.signupPhone);
+
 // Password toggles
 els.toggleLoginPass.addEventListener("click", ()=>{
   const show = els.loginPass.type === "password";
@@ -130,7 +172,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
   allowAutoRedirect = false;
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
-  if(phone.length < 10) return showNotice("Telefon raqam noto‘g‘ri", "err");
+  if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
   try{
@@ -169,7 +211,7 @@ els.signupForm.addEventListener("submit", async (e)=>{
   const pass2 = els.signupPass2.value || "";
 
   if(!name) return showNotice("Ismni kiriting", "err");
-  if(phone.length < 10) return showNotice("Telefon raqam noto‘g‘ri", "err");
+  if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
