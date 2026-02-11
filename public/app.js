@@ -3076,37 +3076,71 @@ function initMobileBottomBar(){
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 
 /* =========================
-   Search toggle (🔍 -> input)  — PC + mobile
+   Search toggle (🔍 -> input)  — PC + mobile (robust)
 ========================= */
 document.addEventListener("DOMContentLoaded", ()=>{
-  if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
+  // Agar inputda oldindan qiymat bo‘lsa (back/refresh) — ochiq tursin
+  try{
+    const tools = document.getElementById("toolsTop");
+    const q = document.getElementById("q");
+    if(tools && q && String(q.value||"").trim() !== "") tools.classList.add("open");
+  }catch(_e){}
+});
 
-  const hasValue = ()=> String(els.q.value||"").trim() !== "";
+// Delegated click: DOM qayta render bo‘lsa ham ishlaydi
+document.addEventListener("click", (e)=>{
+  const btn = e.target.closest("#searchToggleBtn, .searchToggleBtn, .searchToggleBtn *");
+  if(!btn) return;
+
+  // button ichidagi icon bosilganda ham topishi uchun:
+  const realBtn = btn.matches("#searchToggleBtn, .searchToggleBtn") ? btn : btn.closest("#searchToggleBtn, .searchToggleBtn");
+  if(!realBtn) return;
+
+  e.preventDefault();
+
+  const tools = realBtn.closest(".toolsTop") || document.getElementById("toolsTop");
+  if(!tools) return;
+
+  const q = tools.querySelector("#q") || document.getElementById("q");
+  if(!q) return;
+
+  const hasValue = ()=> String(q.value||"").trim() !== "";
 
   const open = ()=>{
-    els.toolsTop.classList.add("open");
-    try{ els.q.focus(); els.q.select(); }catch(_e){}
+    tools.classList.add("open");
+    try{ q.focus(); q.select(); }catch(_e){}
   };
 
   const closeIfEmpty = ()=>{
-    if(!hasValue()) els.toolsTop.classList.remove("open");
+    if(!hasValue()) tools.classList.remove("open");
   };
 
-  // Agar query oldindan bor bo‘lsa (masalan, qayta kirganda) — ochiq tursin
-  if(hasValue()) els.toolsTop.classList.add("open");
+  if(tools.classList.contains("open")){
+    closeIfEmpty();
+    if(tools.classList.contains("open")) open();
+  } else {
+    open();
+  }
+});
 
-  els.searchToggleBtn.addEventListener("click", (e)=>{
-    e.preventDefault();
-    if(els.toolsTop.classList.contains("open")){
-      // ochiq bo‘lsa — faqat bo‘sh bo‘lganda yopamiz
-      closeIfEmpty();
-      if(!els.toolsTop.classList.contains("open")) return;
-      // bo‘sh emas — fokus
-      open();
-    } else {
-      open();
-    }
-  });
+// Blur: bo‘sh bo‘lsa yopiladi (delegated)
+document.addEventListener("focusout", (e)=>{
+  const q = e.target && (e.target.id === "q" ? e.target : null);
+  if(!q) return;
+  const tools = q.closest(".toolsTop") || document.getElementById("toolsTop");
+  if(!tools) return;
+  if(String(q.value||"").trim() === "") tools.classList.remove("open");
+});
+
+// Enter bosilganda ochiq tursin
+document.addEventListener("keydown", (e)=>{
+  const q = e.target && (e.target.id === "q" ? e.target : null);
+  if(!q) return;
+  if(e.key === "Enter"){
+    const tools = q.closest(".toolsTop") || document.getElementById("toolsTop");
+    if(tools) tools.classList.add("open");
+  }
+});
 
   // Enter bosilganda ham ochiq tursin
   els.q.addEventListener("keydown", (e)=>{
