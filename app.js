@@ -224,7 +224,6 @@ const els = {
   empty: document.getElementById("empty"),
   tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
-  searchToggle: document.getElementById("searchToggle"),
   sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
@@ -367,66 +366,6 @@ const els = {
   vPlus: document.getElementById("vPlus"),
   vQty: document.getElementById("vQty")
 };
-
-/* =========================
-   Search toggle (mobile: icon -> input)
-   - Mobile starts collapsed via <body class="searchCollapsed">
-   - Desktop input always visible; icon focuses input.
-========================= */
-function openSearchInput(){
-  const q = els.q;
-  if(!q) return;
-  document.body.classList.remove("searchCollapsed");
-  q.style.display = ""; // let CSS decide
-  try{ q.focus({ preventScroll:true }); }catch(e){ q.focus(); }
-}
-function toggleSearchInput(){
-  const q = els.q;
-  if(!q) return;
-  const isMobile = window.matchMedia("(max-width: 720px)").matches;
-  if(!isMobile){
-    openSearchInput();
-    return;
-  }
-  const collapsed = document.body.classList.contains("searchCollapsed");
-  if(collapsed){
-    openSearchInput();
-  }else{
-    // collapse only if empty
-    if(!String(q.value||"").trim()){
-      document.body.classList.add("searchCollapsed");
-    }else{
-      openSearchInput();
-    }
-  }
-}
-document.addEventListener("click", (e)=>{
-  const btn = e.target && e.target.closest ? e.target.closest("#searchToggle") : null;
-  if(!btn) return;
-  e.preventDefault();
-  toggleSearchInput();
-});
-document.addEventListener("keydown", (e)=>{
-  if(e.key==="Escape"){
-    const q=els.q;
-    if(q && window.matchMedia("(max-width: 720px)").matches){
-      if(!String(q.value||"").trim()){
-        document.body.classList.add("searchCollapsed");
-      }
-    }
-  }
-});
-document.addEventListener("focusout", (e)=>{
-  const q=els.q;
-  if(!q) return;
-  const isMobile = window.matchMedia("(max-width: 720px)").matches;
-  if(!isMobile) return;
-  if(e.target===q){
-    if(!String(q.value||"").trim()){
-      document.body.classList.add("searchCollapsed");
-    }
-  }
-});
 
 // ---- Modal helpers (world-class, animated, accessibility-friendly) ----
 function _anyOverlayOpen(){
@@ -2962,22 +2901,16 @@ async function syncUser(user){
 
     renderHeader(user, meta);
 
-    const savedLocal = readProfile(user.uid) || null;
-    const saved = {
-      phone: (savedLocal?.phone || u.phone || "").toString(),
-      region: (savedLocal?.region || u.region || "").toString(),
-      district: (savedLocal?.district || u.district || "").toString(),
-      post: (savedLocal?.post || u.post || "").toString(),
-      completedAt: (savedLocal?.completedAt || (u.profileCompletedAt ? "1" : "")).toString()
+    const savedLocal = readProfile(user.uid);
+    const savedRemote = {
+      phone: (u.phone || "").toString(),
+      region: (u.region || "").toString(),
+      district: (u.district || "").toString(),
+      post: (u.post || "").toString(),
+      completedAt: u.completedAt || ""
     };
-
-    // completed when address fields exist (local or Firestore)
-    isCompleted = !!(saved.region && saved.district && saved.post);
-
-    // If Firestore has data but local cache is empty, cache it for faster UX
-    if(!savedLocal && isCompleted){
-      try{ writeProfile(user.uid, saved); }catch(e){}
-    }
+    const saved = (savedLocal && (savedLocal.region||savedLocal.district||savedLocal.post)) ? savedLocal : (savedRemote.region? savedRemote : savedLocal);
+    isCompleted = !!saved?.completedAt;
 
     // phone: auto fill from auth only if empty or first time
     const autoPhone = computePhone(user);
@@ -3027,10 +2960,10 @@ async function syncUser(user){
       completedAt: new Date().toISOString()
     };
 
-    // 1) Save locally (fast)
+
     writeProfile(currentUser.uid, payload);
 
-    // 2) Save to Firestore (persistent across devices/browsers)
+    // Persist profile to Firestore so user doesn't have to refill every time
     try{
       const userRef = doc(db, "users", currentUser.uid);
       await setDoc(userRef, {
@@ -3038,14 +2971,12 @@ async function syncUser(user){
         region,
         district,
         post,
-        profileCompletedAt: serverTimestamp(),
+        completedAt: payload.completedAt,
         updatedAt: serverTimestamp()
       }, { merge:true });
     }catch(e){
-      console.warn("profile save Firestore error", e);
-      // local saved anyway
+      console.warn("Profile Firestore save failed:", e);
     }
-
     isCompleted = true;
     setEditing(false);
     closeProfile();
@@ -3131,3 +3062,43 @@ function initMobileBottomBar(){
 }
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
+
+/* ===== Search toggle (robust delegated) ===== */
+(function(){
+  const q = ()=>document.getElementById("q");
+  const applyDefault = ()=>{
+    if(window.innerWidth <= 720){
+      document.body.classList.add("searchCollapsed");
+    }else{
+      document.body.classList.remove("searchCollapsed");
+    }
+  };
+  window.addEventListener("resize", applyDefault);
+  document.addEventListener("DOMContentLoaded", applyDefault);
+
+  document.addEventListener("click", (e)=>{
+    const btn = e.target.closest("#searchToggle");
+    if(!btn) return;
+    document.body.classList.toggle("searchCollapsed");
+    const inp = q();
+    if(inp && !document.body.classList.contains("searchCollapsed")){
+      inp.focus();
+      try{ inp.select(); }catch(_){}
+    }
+  });
+
+  document.addEventListener("focusin", (e)=>{
+    if(e.target && e.target.id==="q"){
+      document.body.classList.remove("searchCollapsed");
+    }
+  });
+  document.addEventListener("focusout", (e)=>{
+    if(e.target && e.target.id==="q"){
+      const inp = q();
+      if(inp && !inp.value.trim() && window.innerWidth <= 720){
+        document.body.classList.add("searchCollapsed");
+      }
+    }
+  });
+})();
+
