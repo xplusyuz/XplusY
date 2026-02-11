@@ -2903,14 +2903,31 @@ async function syncUser(user){
 
     renderHeader(user, meta);
 
-    const saved = readProfile(user.uid);
+    const savedLocal = readProfile(user.uid);
+
+    // Firestore’dagi saqlangan profil (doimiy)
+    const savedRemote = {
+      phone: (u.phone || "").toString(),
+      region: (u.region || "").toString(),
+      district: (u.district || "").toString(),
+      post: (u.post || "").toString(),
+      completedAt: (u.profileCompletedAt || "").toString()
+    };
+
+    // Remote bo‘lsa — remote ustun, bo‘lmasa localStorage
+    const hasRemote = !!(savedRemote.region && savedRemote.district && savedRemote.post);
+    const saved = hasRemote ? {
+      ...savedLocal,
+      ...savedRemote,
+      completedAt: savedRemote.completedAt || savedLocal?.completedAt || ""
+    } : savedLocal;
+
     isCompleted = !!saved?.completedAt;
 
-    // phone: auto fill from auth only if empty or first time
+    // phone: auto fill from auth only if empty
     const autoPhone = computePhone(user);
     if(els.pfPhone){
-      els.pfPhone.value = saved?.phone || autoPhone || "";
-      // If saved exists but phone empty, still keep autoPhone visible (user can edit only via pencil)
+      els.pfPhone.value = (saved?.phone || autoPhone || "");
     }
 
     if(els.pfRegion){
@@ -2954,7 +2971,24 @@ async function syncUser(user){
       completedAt: new Date().toISOString()
     };
 
+    // 1) LocalStorage (tezkor)
     writeProfile(currentUser.uid, payload);
+
+    // 2) Firestore (doimiy) — shunda qayta-qayta to‘ldirish shart bo‘lmaydi
+    try{
+      const userRef = doc(db, "users", currentUser.uid);
+      setDoc(userRef, {
+        phone,
+        region,
+        district,
+        post,
+        profileCompletedAt: payload.completedAt,
+        updatedAt: serverTimestamp()
+      }, { merge:true });
+    }catch(e){
+      console.warn("profile save (firestore) failed:", e);
+    }
+
     isCompleted = true;
     setEditing(false);
     closeProfile();
@@ -3042,33 +3076,53 @@ function initMobileBottomBar(){
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 
 /* =========================
-   Mobile search toggle (icon -> input)
+   Search toggle (🔍 -> input)  — PC + mobile
 ========================= */
 document.addEventListener("DOMContentLoaded", ()=>{
   if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
 
-  const closeIfEmpty = () => {
-    // If user cleared input, allow closing
-    if(String(els.q.value||"").trim()===""){
-      els.toolsTop.classList.remove("open");
-    }
+  const hasValue = ()=> String(els.q.value||"").trim() !== "";
+
+  const open = ()=>{
+    els.toolsTop.classList.add("open");
+    try{ els.q.focus(); els.q.select(); }catch(_e){}
   };
+
+  const closeIfEmpty = ()=>{
+    if(!hasValue()) els.toolsTop.classList.remove("open");
+  };
+
+  // Agar query oldindan bor bo‘lsa (masalan, qayta kirganda) — ochiq tursin
+  if(hasValue()) els.toolsTop.classList.add("open");
 
   els.searchToggleBtn.addEventListener("click", (e)=>{
     e.preventDefault();
-    els.toolsTop.classList.toggle("open");
     if(els.toolsTop.classList.contains("open")){
-      try{ els.q.focus(); els.q.select(); }catch(_e){}
-    } else {
+      // ochiq bo‘lsa — faqat bo‘sh bo‘lganda yopamiz
       closeIfEmpty();
+      if(!els.toolsTop.classList.contains("open")) return;
+      // bo‘sh emas — fokus
+      open();
+    } else {
+      open();
     }
   });
 
-  // Close on blur (small delay so click on select doesn't instantly close)
+  // Enter bosilganda ham ochiq tursin
+  els.q.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter") els.toolsTop.classList.add("open");
+  });
+
+  // Blur: faqat bo‘sh bo‘lsa yopiladi
   els.q.addEventListener("blur", ()=>{
     setTimeout(()=>{
       if(document.activeElement === els.sort) return;
       closeIfEmpty();
-    }, 120);
+    }, 140);
+  });
+
+  // Input tozalansa, blur bo‘lganda yopiladi; yozilsa ochiq qoladi
+  els.q.addEventListener("input", ()=>{
+    if(hasValue()) els.toolsTop.classList.add("open");
   });
 });
