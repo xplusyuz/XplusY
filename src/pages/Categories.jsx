@@ -1,1 +1,0 @@
-export default function Categories(){return <div className='container' style={{paddingBottom:110}}><div className='h1'>Kategoriya</div><div className='panel' style={{padding:14}}><div className='p'>Keyingi patchda: ichma-ich kategoriya (taglar) super UI.</div></div></div>}
