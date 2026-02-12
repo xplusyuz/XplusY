@@ -2129,33 +2129,114 @@ function renderCartPage(){
 /* =========================
    Checkout (Cart -> Order)
 ========================= */
-let shipMap = null;
-let shipMarker = null;
-let shipLatLng = null;
+let shipMap = null;          // google.maps.Map
+let shipMarker = null;       // google.maps.Marker
+let shipLatLng = null;       // {lat,lng}
+let shipGeocoder = null;     // google.maps.Geocoder
+let shipAutocomplete = null; // google.maps.places.Autocomplete
 let shipMapInited = false;
 
-function initShipMapOnce(){
+let _gmapsPromise = null;
+function loadGoogleMapsOnce(){
+  if(_gmapsPromise) return _gmapsPromise;
+  _gmapsPromise = new Promise((resolve, reject)=>{
+    if(typeof window !== "undefined" && window.google && window.google.maps){
+      resolve(window.google.maps);
+      return;
+    }
+    const key = "AIzaSyCf8SAINzWwcTXF6GYXLCzXtkMyqc1DIl4";
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
+    s.async = true;
+    s.defer = true;
+    s.onload = ()=> resolve(window.google.maps);
+    s.onerror = ()=> reject(new Error("Google Maps yuklanmadi"));
+    document.head.appendChild(s);
+  });
+  return _gmapsPromise;
+}
+
+async function reverseGeocodeShip(lat, lng){
+  try{
+    if(!shipGeocoder) shipGeocoder = new google.maps.Geocoder();
+    const res = await shipGeocoder.geocode({ location: { lat, lng } });
+    const addr = res?.results?.[0]?.formatted_address || "";
+    if(els.shipAddress && addr) els.shipAddress.value = addr;
+    return addr;
+  }catch(e){
+    return "";
+  }
+}
+
+async function initShipMapOnce(){
   if(shipMapInited) return;
   const el = document.getElementById("shipMap");
-  if(!el || typeof L === "undefined") return;
+  if(!el) return;
+
+  try{
+    await loadGoogleMapsOnce();
+  }catch(e){
+    console.warn(e);
+    toast("Google Maps yuklanmadi. Internetni tekshiring.");
+    return;
+  }
+
   shipMapInited = true;
 
-  // Default: Tashkent
-  shipMap = L.map(el, { zoomControl: false }).setView([41.3111, 69.2797], 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(shipMap);
+  const defaultCenter = { lat: 41.0, lng: 71.6 }; // Namangan atrofida
+  shipLatLng = shipLatLng || defaultCenter;
 
-  shipMap.on("click", (e)=>{
-    shipLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
-    if(!shipMarker){
-      shipMarker = L.marker(e.latlng).addTo(shipMap);
-    }else{
-      shipMarker.setLatLng(e.latlng);
-    }
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+  shipMap = new google.maps.Map(el, {
+    center: shipLatLng,
+    zoom: 13,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
   });
+
+  shipMarker = new google.maps.Marker({
+    position: shipLatLng,
+    map: shipMap,
+    draggable: true,
+  });
+
+  // Click on map
+  shipMap.addListener("click", async (e)=>{
+    shipLatLng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    shipMarker.setPosition(shipLatLng);
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
+  });
+
+  // Drag marker
+  shipMarker.addListener("dragend", async ()=>{
+    const p = shipMarker.getPosition();
+    shipLatLng = { lat: p.lat(), lng: p.lng() };
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
+  });
+
+  // Autocomplete
+  if(els.shipAddress){
+    shipAutocomplete = new google.maps.places.Autocomplete(els.shipAddress, {
+      fields: ["geometry", "formatted_address", "name"]
+    });
+    shipAutocomplete.addListener("place_changed", ()=>{
+      const place = shipAutocomplete.getPlace();
+      if(!place || !place.geometry || !place.geometry.location) return;
+      const loc = place.geometry.location;
+      shipLatLng = { lat: loc.lat(), lng: loc.lng() };
+      shipMap.panTo(shipLatLng);
+      shipMap.setZoom(16);
+      shipMarker.setPosition(shipLatLng);
+      if(place.formatted_address) els.shipAddress.value = place.formatted_address;
+      if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+    });
+  }
+
+  // First display coords text
+  if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+  reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
 }
 
 function openCheckout(){
@@ -2725,13 +2806,14 @@ els.useMyLocation?.addEventListener("click", ()=>{
     shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     initShipMapOnce();
     try{
-      if(shipMap){
-        shipMap.setView([shipLatLng.lat, shipLatLng.lng], 16);
-        if(!shipMarker) shipMarker = L.marker([shipLatLng.lat, shipLatLng.lng]).addTo(shipMap);
-        else shipMarker.setLatLng([shipLatLng.lat, shipLatLng.lng]);
+      if(shipMap && window.google && google.maps){
+        shipMap.setCenter(shipLatLng);
+        shipMap.setZoom(16);
+        if(shipMarker) shipMarker.setPosition(shipLatLng);
       }
     }catch(e){}
     if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
   }, ()=>{
     toast("Lokatsiyani olishga ruxsat berilmadi.");
   }, { enableHighAccuracy: true, timeout: 8000 });
@@ -3042,45 +3124,33 @@ function initMobileBottomBar(){
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 
 /* =========================
-/* =========================
    Mobile search toggle (icon -> input)
-   Robust init (works even if script loads after DOMContentLoaded)
 ========================= */
-function initMobileSearchToggle(){
-  const toolsTop = document.getElementById("toolsTop");
-  const searchToggleBtn = document.getElementById("searchToggleBtn");
-  const q = document.getElementById("q");
-  const sort = document.getElementById("sort");
-
-  if(!toolsTop || !searchToggleBtn || !q) return;
+document.addEventListener("DOMContentLoaded", ()=>{
+  if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
 
   const closeIfEmpty = () => {
-    if(String(q.value||"").trim()===""){
-      toolsTop.classList.remove("open");
+    // If user cleared input, allow closing
+    if(String(els.q.value||"").trim()===""){
+      els.toolsTop.classList.remove("open");
     }
   };
 
-  searchToggleBtn.addEventListener("click", (e)=>{
+  els.searchToggleBtn.addEventListener("click", (e)=>{
     e.preventDefault();
-    toolsTop.classList.toggle("open");
-    if(toolsTop.classList.contains("open")){
-      try{ q.focus(); q.select(); }catch(_e){}
+    els.toolsTop.classList.toggle("open");
+    if(els.toolsTop.classList.contains("open")){
+      try{ els.q.focus(); els.q.select(); }catch(_e){}
     } else {
       closeIfEmpty();
     }
   });
 
   // Close on blur (small delay so click on select doesn't instantly close)
-  q.addEventListener("blur", ()=>{
+  els.q.addEventListener("blur", ()=>{
     setTimeout(()=>{
-      if(sort && document.activeElement === sort) return;
+      if(document.activeElement === els.sort) return;
       closeIfEmpty();
     }, 120);
   });
-}
-
-if(document.readyState === "loading"){
-  document.addEventListener("DOMContentLoaded", initMobileSearchToggle);
-} else {
-  initMobileSearchToggle();
-}
+});

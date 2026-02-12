@@ -3,7 +3,7 @@
 
 // 1) Merchant ID (required)
 // Example: export const PAYME_MERCHANT_ID = "YOUR_MERCHANT_ID";
-export const PAYME_MERCHANT_ID = "697ba4c920e090490061e8c1";
+export const PAYME_MERCHANT_ID = "";
 
 // 2) UI language hint (optional)
 // Use: "uz" | "ru" | "en"
