@@ -1,37 +1,34 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() { return request.auth != null; }
-    function email() { return signedIn() ? request.auth.token.email : ""; }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
-    function isAdmin() {
-      return signedIn() && email() in [
-        "sohibjonmath@gmail.com"
-      ];
-    }
 
+    // public products
     match /products/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      // write should be admin-only in real project
+      allow write: if false;
     }
 
+    // counter doc used for OM ID
     match /meta/counters {
-      allow read, create, update: if signedIn();
+      allow read: if signedIn();
+      // allow transaction increment for signed-in users (Anonymous ham signedIn hisoblanadi)
+      allow update: if signedIn();
+      allow create: if signedIn();
       allow delete: if false;
     }
 
     match /users/{uid} {
       allow read, write: if isOwner(uid);
-      match /cart/{pid} { allow read, write: if isOwner(uid); }
-      match /favorites/{pid} { allow read, write: if isOwner(uid); }
-    }
 
-    match /orders/{orderId} {
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
-      allow read: if signedIn() && resource.data.uid == request.auth.uid;
-      allow update: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin();
+      match /cart/{pid} {
+        allow read, write: if isOwner(uid);
+      }
+      match /favorites/{pid} {
+        allow read, write: if isOwner(uid);
+      }
     }
   }
 }
