@@ -1,6 +1,6 @@
-// Firebase Web configni shu yerga qo‘ying
+// Firebase Web config (xplusy-760fa)
 window.__FIREBASE_CONFIG__ = {
- apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+  apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   authDomain: "xplusy-760fa.firebaseapp.com",
   databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
   projectId: "xplusy-760fa",

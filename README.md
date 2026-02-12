@@ -54,3 +54,8 @@ Ixtiyoriy:
 ## 5) Deploy (Netlify)
 Build yo‘q. Root papkani deploy qiling.
 
+
+
+## Next stage (qilingan)
+- login.html qo‘shildi: telefon+parol (Firebase Auth Email/Password)
+- checkout: /orders ga buyurtma yaratadi va cartni tozalaydi

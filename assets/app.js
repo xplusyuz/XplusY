@@ -4,7 +4,7 @@ import {
   getFirestore, collection, getDocs, query, orderBy, limit,
   doc, setDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -435,6 +435,12 @@ function closeCart(){ $("#cartModalBackdrop").classList.remove("show"); }
 
 /* ===== Boot ===== */
 function initUI(){
+  // Logout (if exists)
+  const lo = document.getElementById('btnLogout');
+  if(lo){
+    lo.onclick = async ()=>{ try{ await signOut(auth); }catch(e){} window.location.href='login.html'; };
+  }
+
   $("#btnCart").onclick = openCart;
   $("#btnFav").onclick = ()=> setActivePage("favorites");
   $("#btnBell").onclick = ()=> toast("Bildirishnomalar keyin qo‘shiladi");
