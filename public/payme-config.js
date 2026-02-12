@@ -1,7 +1,14 @@
-// Payme config (edit this file)
-// PAYME_MERCHANT_ID is shown in Payme Business cabinet (merchant / kassа settings).
-// Example format: "66f3c0c0..." (string)
-export const PAYME_MERCHANT_ID = "YOUR_PAYME_MERCHANT_ID";
+// Payme public config (safe to expose)
+// This file is imported as an ES module from public/app.js
 
-// Language sent to Payme checkout: uz / ru / en
+// 1) Merchant ID (required)
+// Example: export const PAYME_MERCHANT_ID = "YOUR_MERCHANT_ID";
+export const PAYME_MERCHANT_ID = "";
+
+// 2) UI language hint (optional)
+// Use: "uz" | "ru" | "en"
 export const PAYME_LANG = "uz";
+
+// Backward-compatible globals
+window.PAYME_MERCHANT_ID = window.PAYME_MERCHANT_ID || PAYME_MERCHANT_ID;
+window.PAYME_LANG = window.PAYME_LANG || PAYME_LANG;
