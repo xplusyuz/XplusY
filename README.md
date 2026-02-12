@@ -1,61 +1,35 @@
-# OrzuMall (Static + Firebase) — Variant A+ (Real structure)
+# OrzuMall — Keyingi bosqich (Auth + Orders) — Static + Firebase
 
-Bu A+ patch OrzuMall real yondashuviga yaqinlashtirildi:
-- Bottom bar: Home + Kategoriya + Yurak + Savat + Profil
-- Products: `image / images / imagesByColor` ni qo‘llaydi
-- Kategoriya: `category` yoki `tags[0]` (parent) + `tags[1]` (child) orqali
-- User profile: `/users/{uid}` avtomatik yaratiladi, `OMXXXXXX` numericId transaction bilan
-- Cart/Favorites realtime
+Bu paket A+ ustiga quyidagilar qo‘shildi:
 
-## 1) Firebase config
-`assets/firebase-config.js` ichiga Web configni qo‘ying.
+✅ **Telefon + Parol bilan kirish/ro‘yxatdan o‘tish** (Email/Password orqali):
+- Email o‘rniga: `+998901234567@orzumall.uz` formatida ichki email ishlatiladi
+- Telefon raqam +998 formatga avtomatik to‘g‘rilanadi
+- Parol esdan chiqdi: botga murojaat (matn chiqadi)
 
-## 2) Auth
-A+ default: **Anonymous Auth**
-Firebase Console → Authentication → Sign-in method → Anonymous ON
+✅ **Buyurtma berish (Orders)**
+- Checkout bosilganda `/orders` ga buyurtma yoziladi
+- Status: `new`
+- `/users/{uid}` doc’da OM ID saqlanadi (oldingi kabi)
 
-## 3) Firestore schema
-### products (collection)
-Minimal:
-- title (string)
-- price (number)
-Ixtiyoriy:
-- oldPrice (number)
-- installmentText (string)
-- rating (number 0..5)
-- reviewsCount (number)
-- category (string)  // masalan "Elektronika"
-- tags (array<string>) // masalan ["Kiyim","Ayollar"]
-- imagesByColor (map<string, array<string>>) // { "black": ["url1","url2"] }
-- images (array<string>)
-- image (string)
-- createdAt (timestamp)
+✅ **Admin: buyurtmalar ro‘yxati (oddiy)**
+- Admin email ro‘yxati `assets/app.js` ichida `ADMIN_EMAILS`
+- Admin bo‘lsa “Admin” sahifa chiqadi: buyurtmalar + status o‘zgartirish
 
-### users/{uid} (doc)
-- numericId (number)  // counter orqali
-- omId (string)       // "OM000123"
-- createdAt (timestamp)
-- name (string, optional)
-- phone (string, optional)
+## Firebase Console sozlash
+1) Authentication → Sign-in method → **Email/Password ON**
+2) (ixtiyoriy) Anonymous OFF qilishingiz mumkin
 
-### meta/counters (doc)
-- userCounter (number)
+## Firestore schema
+- products (oldingi kabi)
+- orders (collection):
+  - uid, omId, phone
+  - items: [{productId,title,price,qty}]
+  - total
+  - status: "new" | "processing" | "shipped" | "done" | "canceled"
+  - createdAt, updatedAt
 
-### users/{uid}/cart/{productId}
-- qty (number)
-- addedAt (timestamp)
+## Firestore Rules
+`firestore.rules.sample` yangilandi: products read public, orders read/write owner, admin update status.
 
-### users/{uid}/favorites/{productId}
-- addedAt (timestamp)
-
-## 4) Recommended Firestore Rules (sample)
-`firestore.rules.sample` faylida bor — Firebase Rules’ga qo‘ying.
-
-## 5) Deploy (Netlify)
-Build yo‘q. Root papkani deploy qiling.
-
-
-
-## Next stage (qilingan)
-- login.html qo‘shildi: telefon+parol (Firebase Auth Email/Password)
-- checkout: /orders ga buyurtma yaratadi va cartni tozalaydi
+Netlify: build yo‘q, shunchaki deploy.

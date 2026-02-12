@@ -1,13 +1,21 @@
-/* OrzuMall Static + Firebase (Variant A+) */
+/* OrzuMall Static + Firebase — Next Stage (Phone+Password via Email/Password) */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
   getFirestore, collection, getDocs, query, orderBy, limit,
-  doc, setDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, runTransaction
+  doc, setDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, runTransaction,
+  addDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import {
+  getAuth, onAuthStateChanged, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+/* ===== Config ===== */
+const ADMIN_EMAILS = ["sohibjonmath@gmail.com"]; // add more if needed
+const PHONE_DOMAIN = "orzumall.uz"; // internal email domain for phone-login
 
 function fmt(n){
   if (n == null || isNaN(n)) return "";
@@ -27,12 +35,37 @@ function toast(msg){
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toast._tm);
-  toast._tm = setTimeout(()=>t.classList.remove("show"), 1600);
+  toast._tm = setTimeout(()=>t.classList.remove("show"), 1700);
 }
 function safeConfig(){
   const cfg = window.__FIREBASE_CONFIG__;
-  if(!cfg || !cfg.apiKey || cfg.apiKey==="PASTE_ME") return null;
+  if(!cfg || !cfg.apiKey) return null;
   return cfg;
+}
+
+/* ===== Phone normalization ===== */
+function normalizePhone(input){
+  let s = String(input||"").trim();
+  // keep digits only
+  const digits = s.replace(/\D/g,"");
+  // Uzbekistan numbers usually 12 digits with 998
+  if (digits.startsWith("998")) return "+" + digits;
+  // if user typed 9 digits (like 901234567) or 10 digits (90...)
+  if (digits.length === 9) return "+998" + digits;
+  if (digits.length === 10 && digits.startsWith("0")) return "+998" + digits.slice(1);
+  if (digits.length === 9) return "+998" + digits;
+  if (digits.length === 12) return "+" + digits;
+  // fallback: if starts with 9 and len 9/10 etc
+  if (digits.length >= 9 && digits.length <= 12){
+    if (!digits.startsWith("998")) return "+998" + digits.slice(-9);
+    return "+" + digits;
+  }
+  return s.startsWith("+") ? s : ("+998" + digits);
+}
+function phoneToEmail(phone){
+  // "+998901234567" -> "998901234567@orzumall.uz"
+  const digits = phone.replace(/\D/g,"");
+  return `${digits}@${PHONE_DOMAIN}`;
 }
 
 /* ===== Data helpers ===== */
@@ -69,9 +102,6 @@ function ratingStars(r){
   );
 }
 function getCatPair(p){
-  // priority:
-  // - category string as parent
-  // - tags[0] as parent, tags[1] as child
   const tags = Array.isArray(p.tags) ? p.tags.map(String) : [];
   const parent = (p.category ? String(p.category) : (tags[0] || "Boshqa"));
   const child = (tags[1] || "");
@@ -79,65 +109,46 @@ function getCatPair(p){
 }
 
 /* ===== Firebase ===== */
-let app, db, auth, uid=null;
-let products=[];
+let app, db, auth;
+let user = null;
+let products = [];
 let currentFilter = { parent:"all", child:"" };
-let searchText="";
+let searchText = "";
+const state = { favorites: new Set() };
 
-const state = {
-  favorites: new Set(),
-};
+function setActivePage(page){
+  $$(".page").forEach(p=>p.classList.remove("active"));
+  $(`#page-${page}`).classList.add("active");
+  $$(".nav-item").forEach(n=>n.classList.toggle("active", n.dataset.page===page));
+}
 
-async function ensureFirebase(){
+async function initFirebase(){
   const cfg = safeConfig();
   if(!cfg){
     $("#fbWarn").style.display = "block";
+    $("#fbWarn").textContent = "Firebase config topilmadi (assets/firebase-config.js).";
     return false;
   }
   app = initializeApp(cfg);
   db = getFirestore(app);
   auth = getAuth(app);
-
-  try{
-    await new Promise((res)=> {
-      const unsub = onAuthStateChanged(auth, (u)=>{
-        if (u){
-          uid = u.uid;
-          unsub();
-          res();
-        }
-      });
-    });
-    if(!uid){
-      await signInAnonymously(auth);
-    }
-  }catch(err){
-    console.error(err);
-    $("#fbWarn").style.display = "block";
-    $("#fbWarn").textContent = "Firebase Auth xato: Anonymous Sign-in yoqilganini tekshiring.";
-    return false;
-  }
-
-  await ensureUserDoc(); // OM ID create
-  wireCounters();
   return true;
 }
 
+/* ===== OM ID ===== */
 function omFromNumeric(n){
   const s = String(n).padStart(6,"0");
   return `OM${s}`;
 }
-
 async function ensureUserDoc(){
-  if(!uid || !db) return;
+  const uid = user?.uid;
+  if(!uid) return;
   const uref = doc(db, "users", uid);
   const cur = await getDoc(uref);
   if(cur.exists()){
-    const d = cur.data() || {};
-    renderProfile(d);
+    renderProfile(cur.data()||{});
     return;
   }
-  // transaction to increment /meta/counters.userCounter
   const cref = doc(db, "meta", "counters");
   try{
     const numericId = await runTransaction(db, async (tx)=>{
@@ -148,38 +159,35 @@ async function ensureUserDoc(){
       tx.set(uref, {
         numericId: next,
         omId: omFromNumeric(next),
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        phone: user.phoneNumber || null
       }, { merge:true });
       return next;
     });
-    const d = { numericId, omId: omFromNumeric(numericId) };
-    renderProfile(d);
+    renderProfile({ numericId, omId: omFromNumeric(numericId), phone: user.phoneNumber||"" });
   }catch(e){
     console.error(e);
-    // fallback: create without numericId
     await setDoc(uref, { createdAt: serverTimestamp() }, { merge:true });
-    renderProfile({ omId: "OM??????" });
+    renderProfile({ omId:"OM??????" });
   }
 }
 
 function renderProfile(d){
-  $("#profUid").textContent = uid ? uid.slice(0,8) + "…" : "-";
+  $("#profUid").textContent = user ? user.uid.slice(0,8) + "…" : "-";
   $("#profOm").textContent = d.omId || (d.numericId ? omFromNumeric(d.numericId) : "OM??????");
-  $("#profName").textContent = d.name || "Mehmon";
+  $("#profName").textContent = d.name || "Mijoz";
 }
 
 /* ===== Products ===== */
 async function loadProducts(){
   const q = query(collection(db,"products"), orderBy("createdAt","desc"), limit(80));
   let snap;
-  try{
-    snap = await getDocs(q);
-  }catch(e){
-    snap = await getDocs(collection(db,"products"));
-  }
+  try{ snap = await getDocs(q); }
+  catch(e){ snap = await getDocs(collection(db,"products")); }
   products = snap.docs.map(d=>({ id:d.id, ...d.data() }));
   renderHome();
   renderCategoriesPage();
+  renderFavoritesPage();
 }
 
 function filteredProducts(){
@@ -187,7 +195,6 @@ function filteredProducts(){
     const t = (p.title||"").toLowerCase();
     const okSearch = !searchText || t.includes(searchText);
     const { parent, child } = getCatPair(p);
-
     const okParent = (currentFilter.parent==="all") || (parent===currentFilter.parent);
     const okChild  = (!currentFilter.child) || (child===currentFilter.child);
     return okSearch && okParent && okChild;
@@ -220,10 +227,10 @@ function productCard(p){
       </div>
       ${ins}
       <div class="actions">
-        <button class="btn dark js-fav" title="Saralangan" aria-label="Saralangan">
+        <button class="btn dark js-fav" title="Saralangan">
           <i class="fas fa-heart"></i>
         </button>
-        <button class="btn gold js-cart" aria-label="Savatga qo‘shish">
+        <button class="btn gold js-cart">
           <i class="fas fa-cart-plus"></i> Savatga
         </button>
       </div>
@@ -236,8 +243,8 @@ function hydrateCardButtons(root){
     const id = card.dataset.id;
     const favBtn = $(".js-fav", card);
     const cartBtn = $(".js-cart", card);
-
     const favOn = state.favorites.has(id);
+
     favBtn.style.opacity = favOn ? "1" : ".65";
     favBtn.style.borderColor = favOn ? "rgba(212,175,55,.40)" : "rgba(34,41,58,.9)";
     favBtn.style.background = favOn ? "rgba(212,175,55,.10)" : "rgba(255,255,255,.04)";
@@ -246,13 +253,6 @@ function hydrateCardButtons(root){
     cartBtn.onclick = ()=> addToCart(id, 1);
     favBtn.onclick = ()=> toggleFavorite(id);
   });
-}
-
-/* ===== UI pages ===== */
-function setActivePage(page){
-  $$(".page").forEach(p=>p.classList.remove("active"));
-  $(`#page-${page}`).classList.add("active");
-  $$(".nav-item").forEach(n=>n.classList.toggle("active", n.dataset.page===page));
 }
 
 function renderHome(){
@@ -268,18 +268,13 @@ function renderHome(){
 
 function renderCategoriesPage(){
   const box = $("#catList");
-  // build tree: parent -> set(children)
   const tree = new Map();
   for (const p of products){
     const { parent, child } = getCatPair(p);
     if(!tree.has(parent)) tree.set(parent, new Set());
     if(child) tree.get(parent).add(child);
   }
-
-  if(!tree.size){
-    box.innerHTML = `<div class="empty">Kategoriya yo‘q</div>`;
-    return;
-  }
+  if(!tree.size){ box.innerHTML = `<div class="empty">Kategoriya yo‘q</div>`; return; }
 
   const cards = [];
   for (const [parent, children] of tree.entries()){
@@ -294,12 +289,11 @@ function renderCategoriesPage(){
         </div>
         ${kids.length ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">
           ${kids.map(ch=>`<button class="cat-chip" data-parent="${escapeHtml(parent)}" data-child="${escapeHtml(ch)}" style="margin:0;">${escapeHtml(ch)}</button>`).join("")}
-        </div>` : `<div class="muted" style="margin-top:8px;font-size:12px;">Bo‘lim ichida subkategoriya yo‘q</div>`}
+        </div>` : `<div class="muted" style="margin-top:8px;font-size:12px;">Subkategoriya yo‘q</div>`}
       </div>
     `);
   }
   box.innerHTML = cards.join("");
-
   box.onclick = (e)=>{
     const btn = e.target.closest("[data-parent]");
     if(!btn) return;
@@ -312,9 +306,21 @@ function renderCategoriesPage(){
   };
 }
 
-/* ===== Cart / Favorites ===== */
+function renderFavoritesPage(){
+  const grid = $("#grid-fav");
+  const list = products.filter(p=>state.favorites.has(p.id));
+  if(!list.length){
+    grid.innerHTML = `<div class="empty">Saralanganlar bo‘sh</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(productCard).join("");
+  hydrateCardButtons(grid);
+}
+
+/* ===== Cart/Favorites ===== */
 async function addToCart(productId, inc){
-  if(!uid || !db){ toast("Firebase sozlanmagan"); return; }
+  if(!user){ toast("Avval kiring"); setActivePage("auth"); return; }
+  const uid = user.uid;
   const ref = doc(db, "users", uid, "cart", productId);
   const cur = await getDoc(ref);
   const qty = (cur.exists() ? (cur.data().qty||1) : 0) + inc;
@@ -323,7 +329,8 @@ async function addToCart(productId, inc){
 }
 
 async function toggleFavorite(productId){
-  if(!uid || !db){ toast("Firebase sozlanmagan"); return; }
+  if(!user){ toast("Avval kiring"); setActivePage("auth"); return; }
+  const uid = user.uid;
   const ref = doc(db, "users", uid, "favorites", productId);
   const cur = await getDoc(ref);
   if(cur.exists()){
@@ -336,10 +343,12 @@ async function toggleFavorite(productId){
     toast("Saralanganlarga qo‘shildi");
   }
   renderHome();
+  renderFavoritesPage();
 }
 
-function wireCounters(){
-  if(!uid || !db) return;
+function wireRealtime(){
+  if(!user) return;
+  const uid = user.uid;
 
   onSnapshot(collection(db, "users", uid, "cart"), snap=>{
     const n = snap.size;
@@ -361,30 +370,26 @@ function wireCounters(){
   });
 }
 
-function renderFavoritesPage(){
-  const grid = $("#grid-fav");
-  const list = products.filter(p=>state.favorites.has(p.id));
-  if(!list.length){
-    grid.innerHTML = `<div class="empty">Saralanganlar bo‘sh</div>`;
-    return;
-  }
-  grid.innerHTML = list.map(productCard).join("");
-  hydrateCardButtons(grid);
-}
-
-/* ===== Cart modal ===== */
+/* ===== Cart modal + Orders ===== */
 async function openCart(){
-  if(!uid || !db){ toast("Firebase sozlanmagan"); return; }
+  if(!user){ toast("Avval kiring"); setActivePage("auth"); return; }
+
   $("#cartModalBackdrop").classList.add("show");
   const listEl = $("#cartList");
   listEl.innerHTML = "<div class='empty'>Yuklanmoqda...</div>";
 
+  const uid = user.uid;
   onSnapshot(collection(db, "users", uid, "cart"), async (snap)=>{
     if(!snap.size){
       listEl.innerHTML = "<div class='empty'>Savat bo‘sh</div>";
       $("#cartTotal").textContent = "0 so‘m";
+      $("#checkoutBtn").disabled = true;
+      $("#checkoutBtn").style.opacity = .7;
       return;
     }
+    $("#checkoutBtn").disabled = false;
+    $("#checkoutBtn").style.opacity = 1;
+
     const items = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     const byId = new Map(products.map(p=>[p.id,p]));
     let total = 0;
@@ -429,20 +434,187 @@ async function openCart(){
         await setDoc(ref, { qty:q }, { merge:true });
       };
     });
+
+    // attach checkout with latest computed items/total
+    $("#checkoutBtn").onclick = ()=> createOrder(items, byId, total);
   });
 }
 function closeCart(){ $("#cartModalBackdrop").classList.remove("show"); }
 
-/* ===== Boot ===== */
-function initUI(){
-  // Logout (if exists)
-  const lo = document.getElementById('btnLogout');
-  if(lo){
-    lo.onclick = async ()=>{ try{ await signOut(auth); }catch(e){} window.location.href='login.html'; };
-  }
+async function createOrder(cartItems, byId, total){
+  try{
+    const uid = user.uid;
+    // fetch user profile for omId/phone
+    const uref = doc(db, "users", uid);
+    const usnap = await getDoc(uref);
+    const ud = usnap.exists() ? (usnap.data()||{}) : {};
+    const order = {
+      uid,
+      omId: ud.omId || null,
+      phone: ud.phone || null,
+      status: "new",
+      total: Number(total||0),
+      items: cartItems.map(it=>{
+        const p = byId.get(it.id) || {};
+        return {
+          productId: it.id,
+          title: p.title || "",
+          price: Number(p.price||0),
+          qty: Number(it.qty||1)
+        };
+      }),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
 
+    const ref = await addDoc(collection(db, "orders"), order);
+
+    // clear cart (client-side)
+    for (const it of cartItems){
+      await deleteDoc(doc(db, "users", uid, "cart", it.id));
+    }
+
+    toast("Buyurtma yaratildi ✅");
+    closeCart();
+
+    // orders page simple message
+    setActivePage("profile");
+    toast(`Order ID: ${ref.id.slice(0,8)}…`);
+  }catch(e){
+    console.error(e);
+    toast("Buyurtma yaratishda xato");
+  }
+}
+
+/* ===== Admin ===== */
+function isAdminUser(){
+  const email = user?.email || "";
+  return ADMIN_EMAILS.includes(email);
+}
+
+function renderAdminButton(){
+  const b = $("#btnAdminGo");
+  if(!b) return;
+  b.style.display = isAdminUser() ? "inline-flex" : "none";
+  b.onclick = ()=>{
+    setActivePage("admin");
+    loadAdminOrders();
+  };
+}
+
+async function loadAdminOrders(){
+  if(!isAdminUser()){
+    $("#adminBox").innerHTML = `<div class="empty">Admin ruxsati yo‘q</div>`;
+    return;
+  }
+  $("#adminBox").innerHTML = `<div class="empty">Yuklanmoqda...</div>`;
+
+  const q = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(50));
+  onSnapshot(q, (snap)=>{
+    if(!snap.size){
+      $("#adminBox").innerHTML = `<div class="empty">Buyurtma yo‘q</div>`;
+      return;
+    }
+    const rows = snap.docs.map(d=>{
+      const o = d.data()||{};
+      const id = d.id;
+      const items = Array.isArray(o.items) ? o.items : [];
+      const count = items.reduce((a,x)=>a+Number(x.qty||1),0);
+      const st = String(o.status||"new");
+      return `
+        <div class="card" style="margin:0 16px 12px; padding:12px;">
+          <div style="display:flex;justify-content:space-between;gap:10px;">
+            <div>
+              <div style="font-weight:900">#${escapeHtml(id.slice(0,8))} <span class="muted" style="font-size:12px;">${escapeHtml(o.omId||"")}</span></div>
+              <div class="muted" style="font-size:12px;margin-top:4px;">${escapeHtml(o.phone||"")}</div>
+              <div style="margin-top:6px;color:var(--gold2);font-weight:900;">${fmt(o.total||0)} so‘m</div>
+              <div class="muted" style="font-size:12px;margin-top:4px;">${count} ta mahsulot</div>
+            </div>
+            <div style="min-width:140px;">
+              <div class="muted" style="font-size:12px;margin-bottom:6px;">Status</div>
+              <select data-oid="${escapeHtml(id)}" class="stsel"
+                style="width:100%;padding:10px;border-radius:12px;border:1px solid rgba(34,41,58,.9);background:rgba(255,255,255,.03);color:var(--text);outline:none;">
+                ${["new","processing","shipped","done","canceled"].map(s=>`<option value="${s}" ${s===st?"selected":""}>${s}</option>`).join("")}
+              </select>
+              <button class="btn gold saveStatus" data-oid="${escapeHtml(id)}" style="margin-top:8px;width:100%;padding:10px;">
+                <i class="fas fa-floppy-disk"></i> Saqlash
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+    $("#adminBox").innerHTML = rows;
+
+    // bind save
+    $$(".saveStatus").forEach(btn=>{
+      btn.onclick = async ()=>{
+        const oid = btn.dataset.oid;
+        const sel = $(`select.stsel[data-oid="${oid}"]`);
+        const val = sel.value;
+        try{
+          await updateDoc(doc(db,"orders",oid), { status: val, updatedAt: serverTimestamp() });
+          toast("Status saqlandi");
+        }catch(e){
+          console.error(e);
+          toast("Status saqlanmadi");
+        }
+      };
+    });
+  });
+}
+
+/* ===== Auth UI ===== */
+function setAuthMsg(msg, isErr=false){
+  const el = $("#authMsg");
+  el.textContent = msg || "";
+  el.style.color = isErr ? "#ffd1d1" : "var(--muted)";
+}
+
+async function doLogin(){
+  const phone = normalizePhone($("#authPhone").value);
+  $("#authPhone").value = phone;
+  const pass = ($("#authPass").value||"").trim();
+  if(!pass || pass.length < 6){ setAuthMsg("Parol kamida 6 ta belgi bo‘lsin", true); return; }
+  const email = phoneToEmail(phone);
+  try{
+    await signInWithEmailAndPassword(auth, email, pass);
+    setAuthMsg("");
+  }catch(e){
+    console.error(e);
+    const code = e.code || "";
+    if(code.includes("user-not-found")) setAuthMsg("Bu telefon ro‘yxatdan o‘tmagan", true);
+    else if(code.includes("wrong-password") || code.includes("invalid-credential")) setAuthMsg("Parol yoki telefon xato", true);
+    else setAuthMsg("Kirishda xato: " + code, true);
+  }
+}
+
+async function doRegister(){
+  const phone = normalizePhone($("#authPhone").value);
+  $("#authPhone").value = phone;
+  const pass = ($("#authPass").value||"").trim();
+  if(!pass || pass.length < 6){ setAuthMsg("Parol kamida 6 ta belgi bo‘lsin", true); return; }
+  const email = phoneToEmail(phone);
+  try{
+    await createUserWithEmailAndPassword(auth, email, pass);
+    setAuthMsg("Ro‘yxatdan o‘tildi ✅");
+  }catch(e){
+    console.error(e);
+    const code = e.code || "";
+    if(code.includes("email-already-in-use")) setAuthMsg("Bu telefon oldin ro‘yxatdan o‘tgan", true);
+    else if(code.includes("weak-password")) setAuthMsg("Parol juda oson (kamida 6 belgi)", true);
+    else setAuthMsg("Ro‘yxatdan o‘tishda xato: " + code, true);
+  }
+}
+
+async function doLogout(){
+  try{ await signOut(auth); toast("Chiqildi"); }
+  catch(e){ console.error(e); }
+}
+
+function initUI(){
   $("#btnCart").onclick = openCart;
-  $("#btnFav").onclick = ()=> setActivePage("favorites");
+  $("#btnFav").onclick = ()=> setActivePage(user ? "favorites" : "auth");
   $("#btnBell").onclick = ()=> toast("Bildirishnomalar keyin qo‘shiladi");
 
   $("#q").addEventListener("input", (e)=>{
@@ -453,10 +625,13 @@ function initUI(){
   $$(".nav-item").forEach(n=>{
     n.onclick = ()=>{
       const page = n.dataset.page;
+      if(!user && ["home","categories","favorites","profile"].includes(page)){
+        setActivePage("auth");
+        return;
+      }
       setActivePage(page);
       if(page==="favorites") renderFavoritesPage();
       if(page==="categories") renderCategoriesPage();
-      if(page==="profile") toast("Profil ma’lumotlari pastda");
     };
   });
 
@@ -465,14 +640,69 @@ function initUI(){
     if(e.target.id==="cartModalBackdrop") closeCart();
   });
 
-  $("#checkoutBtn").onclick = ()=> toast("Checkout (A+) keyingi bosqichda");
+  $("#btnLogin").onclick = doLogin;
+  $("#btnRegister").onclick = doRegister;
+  $("#btnForgot").onclick = ()=>{
+    setAuthMsg("Parolni tiklash: @OrzuMallUZ_bot ga murojaat qiling.", false);
+    toast("Botga murojaat qiling");
+  };
+
+  $("#btnLogout").onclick = doLogout;
+
+  // auto +998
+  const ph = $("#authPhone");
+  ph.addEventListener("focus", ()=>{
+    if(!ph.value) ph.value = "+998";
+  });
+  ph.addEventListener("input", ()=>{
+    // keep + and digits
+    let v = ph.value.replace(/[^\d+]/g,"");
+    if(!v.startsWith("+")) v = "+" + v.replace(/\+/g,"");
+    if(v === "+") v = "+998";
+    ph.value = v;
+  });
 }
 
 async function boot(){
   initUI();
-  const ok = await ensureFirebase();
+  const ok = await initFirebase();
   if(!ok) return;
-  await loadProducts();
+
+  onAuthStateChanged(auth, async (u)=>{
+    user = u;
+
+    if(!user){
+      // gate
+      setActivePage("auth");
+      $("#btnAdminGo").style.display = "none";
+      $("#authMsg").textContent = "";
+      return;
+    }
+
+    // fill profile phone from internal email
+    const email = user.email || "";
+    // "99890....@orzumall.uz"
+    const digits = email.split("@")[0] || "";
+    if(digits && digits.startsWith("998")){
+      // store display phone in users doc
+      try{
+        await setDoc(doc(db,"users",user.uid), { phone: "+"+digits }, { merge:true });
+      }catch(e){}
+    }
+
+    await ensureUserDoc();
+    wireRealtime();
+    renderAdminButton();
+
+    // load products once
+    if(!products.length) await loadProducts();
+
+    // default page home
+    setActivePage("home");
+
+    // show warning off
+    $("#fbWarn").style.display = "none";
+  });
 }
 
 boot();
