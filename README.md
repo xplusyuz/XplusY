@@ -1,27 +1,45 @@
-# OrzuMall (Static + Firebase) — Variant A
+# OrzuMall (Static + Firebase) — Variant A+ (Real structure)
 
-Bu loyiha static (Netlify) ishlaydi: **index.html + assets/**. Backend yo‘q (functions/CLI kerak emas).
+Bu A+ patch OrzuMall real yondashuviga yaqinlashtirildi:
+- Bottom bar: Home + Kategoriya + Yurak + Savat + Profil
+- Products: `image / images / imagesByColor` ni qo‘llaydi
+- Kategoriya: `category` yoki `tags[0]` (parent) + `tags[1]` (child) orqali
+- User profile: `/users/{uid}` avtomatik yaratiladi, `OMXXXXXX` numericId transaction bilan
+- Cart/Favorites realtime
 
-## 1) Firebase sozlash
-1. Firebase Console → Project Settings → Web app qo‘shing (yoki mavjudini oling)
-2. `assets/firebase-config.js` faylini ochib, config qiymatlarini kiriting.
+## 1) Firebase config
+`assets/firebase-config.js` ichiga Web configni qo‘ying.
 
-## 2) Firestore kolleksiyalar (minimum)
-### products
-`products` kolleksiyasiga quyidagi fieldlar bilan hujjatlar qo‘shing:
+## 2) Auth
+A+ default: **Anonymous Auth**
+Firebase Console → Authentication → Sign-in method → Anonymous ON
 
+## 3) Firestore schema
+### products (collection)
+Minimal:
 - title (string)
 - price (number)
-- oldPrice (number, ixtiyoriy)
-- discountPercent (number, ixtiyoriy)
-- rating (number, ixtiyoriy) — 0..5
-- reviewsCount (number, ixtiyoriy)
-- category (string, ixtiyoriy)
-- tags (array<string>, ixtiyoriy)
-- image (string URL) yoki images (array<string>) yoki imagesByColor (map)
-- createdAt (timestamp, ixtiyoriy)
+Ixtiyoriy:
+- oldPrice (number)
+- installmentText (string)
+- rating (number 0..5)
+- reviewsCount (number)
+- category (string)  // masalan "Elektronika"
+- tags (array<string>) // masalan ["Kiyim","Ayollar"]
+- imagesByColor (map<string, array<string>>) // { "black": ["url1","url2"] }
+- images (array<string>)
+- image (string)
+- createdAt (timestamp)
 
-**Eslatma:** rasm bo‘lmasa, cardda placeholder chiqadi.
+### users/{uid} (doc)
+- numericId (number)  // counter orqali
+- omId (string)       // "OM000123"
+- createdAt (timestamp)
+- name (string, optional)
+- phone (string, optional)
+
+### meta/counters (doc)
+- userCounter (number)
 
 ### users/{uid}/cart/{productId}
 - qty (number)
@@ -30,14 +48,9 @@ Bu loyiha static (Netlify) ishlaydi: **index.html + assets/**. Backend yo‘q (f
 ### users/{uid}/favorites/{productId}
 - addedAt (timestamp)
 
-## 3) Auth (yengil)
-Loyiha default **Anonymous Auth** ishlatadi (cart/favorites uchun). Firebase Console → Authentication → Sign-in method → **Anonymous** ni yoqing.
+## 4) Recommended Firestore Rules (sample)
+`firestore.rules.sample` faylida bor — Firebase Rules’ga qo‘ying.
 
-## 4) Netlify
-- Project rootni deploy qiling (index.html shu yerda)
-- Build command kerak emas.
+## 5) Deploy (Netlify)
+Build yo‘q. Root papkani deploy qiling.
 
-## 5) Xavfsizlik (tavsiya)
-Mahsulotlar read: true bo‘lsin, cart/favorites faqat owner yozsin.
-
-Tayyor!

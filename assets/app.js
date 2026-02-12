@@ -1,12 +1,10 @@
-/* OrzuMall Static + Firebase (Variant A) */
+/* OrzuMall Static + Firebase (Variant A+) */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
   getFirestore, collection, getDocs, query, orderBy, limit,
-  doc, setDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp
+  doc, setDoc, deleteDoc, getDoc, onSnapshot, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
-import {
-  getAuth, signInAnonymously, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -16,7 +14,14 @@ function fmt(n){
   const s = Math.round(Number(n)).toString();
   return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
-
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
 function toast(msg){
   const t = $("#toast");
   t.textContent = msg;
@@ -24,38 +29,26 @@ function toast(msg){
   clearTimeout(toast._tm);
   toast._tm = setTimeout(()=>t.classList.remove("show"), 1600);
 }
-
 function safeConfig(){
   const cfg = window.__FIREBASE_CONFIG__;
   if(!cfg || !cfg.apiKey || cfg.apiKey==="PASTE_ME") return null;
   return cfg;
 }
 
-let app, db, auth, uid = null;
-let products = [];
-let currentCategory = "all";
-let searchText = "";
-
-const state = {
-  cart: new Map(),       // productId -> {qty}
-  favorites: new Set()   // productId
-};
-
+/* ===== Data helpers ===== */
 function pickImage(p){
-  // priority: image -> images[0] -> imagesByColor first -> null
   if (p.image) return p.image;
   if (Array.isArray(p.images) && p.images.length) return p.images[0];
   if (p.imagesByColor && typeof p.imagesByColor === "object"){
     const colors = Object.keys(p.imagesByColor);
     for (const c of colors){
-      const arr = p.imagesByColor[c];
-      if (Array.isArray(arr) && arr.length) return arr[0];
-      if (typeof arr === "string") return arr;
+      const v = p.imagesByColor[c];
+      if (Array.isArray(v) && v.length) return v[0];
+      if (typeof v === "string") return v;
     }
   }
   return null;
 }
-
 function calcDiscount(p){
   if (p.discountPercent != null) return Number(p.discountPercent);
   if (p.oldPrice && p.price) {
@@ -64,7 +57,6 @@ function calcDiscount(p){
   }
   return 0;
 }
-
 function ratingStars(r){
   const x = Math.max(0, Math.min(5, Number(r||0)));
   const full = Math.floor(x);
@@ -76,12 +68,140 @@ function ratingStars(r){
     "<i class='far fa-star'></i>".repeat(empty)
   );
 }
+function getCatPair(p){
+  // priority:
+  // - category string as parent
+  // - tags[0] as parent, tags[1] as child
+  const tags = Array.isArray(p.tags) ? p.tags.map(String) : [];
+  const parent = (p.category ? String(p.category) : (tags[0] || "Boshqa"));
+  const child = (tags[1] || "");
+  return { parent, child };
+}
+
+/* ===== Firebase ===== */
+let app, db, auth, uid=null;
+let products=[];
+let currentFilter = { parent:"all", child:"" };
+let searchText="";
+
+const state = {
+  favorites: new Set(),
+};
+
+async function ensureFirebase(){
+  const cfg = safeConfig();
+  if(!cfg){
+    $("#fbWarn").style.display = "block";
+    return false;
+  }
+  app = initializeApp(cfg);
+  db = getFirestore(app);
+  auth = getAuth(app);
+
+  try{
+    await new Promise((res)=> {
+      const unsub = onAuthStateChanged(auth, (u)=>{
+        if (u){
+          uid = u.uid;
+          unsub();
+          res();
+        }
+      });
+    });
+    if(!uid){
+      await signInAnonymously(auth);
+    }
+  }catch(err){
+    console.error(err);
+    $("#fbWarn").style.display = "block";
+    $("#fbWarn").textContent = "Firebase Auth xato: Anonymous Sign-in yoqilganini tekshiring.";
+    return false;
+  }
+
+  await ensureUserDoc(); // OM ID create
+  wireCounters();
+  return true;
+}
+
+function omFromNumeric(n){
+  const s = String(n).padStart(6,"0");
+  return `OM${s}`;
+}
+
+async function ensureUserDoc(){
+  if(!uid || !db) return;
+  const uref = doc(db, "users", uid);
+  const cur = await getDoc(uref);
+  if(cur.exists()){
+    const d = cur.data() || {};
+    renderProfile(d);
+    return;
+  }
+  // transaction to increment /meta/counters.userCounter
+  const cref = doc(db, "meta", "counters");
+  try{
+    const numericId = await runTransaction(db, async (tx)=>{
+      const csnap = await tx.get(cref);
+      const prev = csnap.exists() ? Number(csnap.data().userCounter||0) : 0;
+      const next = prev + 1;
+      tx.set(cref, { userCounter: next }, { merge:true });
+      tx.set(uref, {
+        numericId: next,
+        omId: omFromNumeric(next),
+        createdAt: serverTimestamp()
+      }, { merge:true });
+      return next;
+    });
+    const d = { numericId, omId: omFromNumeric(numericId) };
+    renderProfile(d);
+  }catch(e){
+    console.error(e);
+    // fallback: create without numericId
+    await setDoc(uref, { createdAt: serverTimestamp() }, { merge:true });
+    renderProfile({ omId: "OM??????" });
+  }
+}
+
+function renderProfile(d){
+  $("#profUid").textContent = uid ? uid.slice(0,8) + "…" : "-";
+  $("#profOm").textContent = d.omId || (d.numericId ? omFromNumeric(d.numericId) : "OM??????");
+  $("#profName").textContent = d.name || "Mehmon";
+}
+
+/* ===== Products ===== */
+async function loadProducts(){
+  const q = query(collection(db,"products"), orderBy("createdAt","desc"), limit(80));
+  let snap;
+  try{
+    snap = await getDocs(q);
+  }catch(e){
+    snap = await getDocs(collection(db,"products"));
+  }
+  products = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  renderHome();
+  renderCategoriesPage();
+}
+
+function filteredProducts(){
+  return products.filter(p=>{
+    const t = (p.title||"").toLowerCase();
+    const okSearch = !searchText || t.includes(searchText);
+    const { parent, child } = getCatPair(p);
+
+    const okParent = (currentFilter.parent==="all") || (parent===currentFilter.parent);
+    const okChild  = (!currentFilter.child) || (child===currentFilter.child);
+    return okSearch && okParent && okChild;
+  });
+}
 
 function productCard(p){
   const img = pickImage(p);
   const d = calcDiscount(p);
   const r = Number(p.rating||0);
   const rc = Number(p.reviewsCount||0);
+  const ins = p.installmentText ? `<div style="margin-top:6px;color:var(--muted);font-size:11px"><i class="fas fa-coins"></i> ${escapeHtml(p.installmentText)}</div>` : "";
+  const favOn = state.favorites.has(p.id);
+
   return `
   <div class="card" data-id="${p.id}">
     <div class="img">
@@ -98,81 +218,17 @@ function productCard(p){
         <span>${ratingStars(r)}</span>
         <span class="meta">${rc ? `(${rc})` : ""}</span>
       </div>
+      ${ins}
       <div class="actions">
-        <button class="btn dark js-fav" title="Saralangan">
+        <button class="btn dark js-fav" title="Saralangan" aria-label="Saralangan">
           <i class="fas fa-heart"></i>
         </button>
-        <button class="btn gold js-cart">
+        <button class="btn gold js-cart" aria-label="Savatga qo‘shish">
           <i class="fas fa-cart-plus"></i> Savatga
         </button>
       </div>
     </div>
   </div>`;
-}
-
-function escapeHtml(s){
-  return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-/* ===== UI ===== */
-function setActivePage(page){
-  $$(".page").forEach(p=>p.classList.remove("active"));
-  $(`#page-${page}`).classList.add("active");
-
-  $$(".nav-item").forEach(n=>n.classList.remove("active"));
-  $(`.nav-item[data-page="${page}"]`).classList.add("active");
-}
-
-function renderCategories(){
-  const el = $("#cats");
-  const cats = new Map(); // key->count
-  for (const p of products){
-    const c = (p.category || (Array.isArray(p.tags)&&p.tags[0]) || "Boshqa").toString();
-    cats.set(c, (cats.get(c)||0)+1);
-  }
-  const items = [["all","Hammasi", "fa-layer-group"]];
-  for (const [k] of cats.entries()){
-    items.push([k, k, "fa-tag"]);
-  }
-  el.innerHTML = items.map(([key,label,icon])=>`
-    <button class="cat-chip ${key===currentCategory?"active":""}" data-cat="${escapeHtml(key)}">
-      <i class="fas ${icon}"></i><span>${escapeHtml(label)}</span>
-    </button>
-  `).join("");
-
-  el.addEventListener("click",(e)=>{
-    const b = e.target.closest(".cat-chip");
-    if(!b) return;
-    currentCategory = b.dataset.cat;
-    $$(".cat-chip").forEach(x=>x.classList.toggle("active", x.dataset.cat===currentCategory));
-    renderProducts();
-  }, { once:true });
-}
-
-function filteredProducts(){
-  return products.filter(p=>{
-    const t = (p.title||"").toLowerCase();
-    const cat = (p.category || (Array.isArray(p.tags)&&p.tags[0]) || "Boshqa").toString();
-    const okCat = (currentCategory==="all") || (cat===currentCategory);
-    const okSearch = !searchText || t.includes(searchText);
-    return okCat && okSearch;
-  });
-}
-
-function renderProducts(){
-  const list = filteredProducts();
-  const grid = $("#grid-home");
-  if(!list.length){
-    grid.innerHTML = `<div class="empty">Mahsulot topilmadi</div>`;
-    return;
-  }
-  grid.innerHTML = list.slice(0, 40).map(productCard).join("");
-  hydrateCardButtons(grid);
 }
 
 function hydrateCardButtons(root){
@@ -181,85 +237,82 @@ function hydrateCardButtons(root){
     const favBtn = $(".js-fav", card);
     const cartBtn = $(".js-cart", card);
 
-    favBtn.style.opacity = state.favorites.has(id) ? "1" : ".65";
-    favBtn.style.borderColor = state.favorites.has(id) ? "rgba(212,175,55,.40)" : "rgba(34,41,58,.9)";
-    favBtn.style.background = state.favorites.has(id) ? "rgba(212,175,55,.10)" : "rgba(255,255,255,.04)";
-    favBtn.querySelector("i").style.color = state.favorites.has(id) ? "var(--gold2)" : "var(--text)";
+    const favOn = state.favorites.has(id);
+    favBtn.style.opacity = favOn ? "1" : ".65";
+    favBtn.style.borderColor = favOn ? "rgba(212,175,55,.40)" : "rgba(34,41,58,.9)";
+    favBtn.style.background = favOn ? "rgba(212,175,55,.10)" : "rgba(255,255,255,.04)";
+    favBtn.querySelector("i").style.color = favOn ? "var(--gold2)" : "var(--text)";
 
-    cartBtn.addEventListener("click", ()=> addToCart(id, 1));
-    favBtn.addEventListener("click", ()=> toggleFavorite(id));
+    cartBtn.onclick = ()=> addToCart(id, 1);
+    favBtn.onclick = ()=> toggleFavorite(id);
   });
 }
 
-/* ===== Firebase data ===== */
-async function ensureFirebase(){
-  const cfg = safeConfig();
-  if(!cfg){
-    $("#fbWarn").style.display = "block";
-    return false;
-  }
-  app = initializeApp(cfg);
-  db = getFirestore(app);
-  auth = getAuth(app);
-
-  // anonymous auth for cart/fav
-  try{
-    await new Promise((res)=> {
-      const unsub = onAuthStateChanged(auth, (u)=>{
-        if (u){
-          uid = u.uid;
-          unsub();
-          res();
-        }
-      });
-    });
-    if (!uid) {
-      await signInAnonymously(auth);
-    }
-  }catch(err){
-    console.error(err);
-    $("#fbWarn").style.display = "block";
-    $("#fbWarn").innerHTML = "Firebase Auth xato: Anonymous Sign-in yoqilganini tekshiring.";
-    return false;
-  }
-
-  wireRealtimeCounters();
-  return true;
+/* ===== UI pages ===== */
+function setActivePage(page){
+  $$(".page").forEach(p=>p.classList.remove("active"));
+  $(`#page-${page}`).classList.add("active");
+  $$(".nav-item").forEach(n=>n.classList.toggle("active", n.dataset.page===page));
 }
 
-function wireRealtimeCounters(){
-  if(!uid || !db) return;
-
-  onSnapshot(collection(db, "users", uid, "cart"), snap=>{
-    $("#cartCount").textContent = String(snap.size);
-    $("#navCartCount").textContent = String(snap.size);
-    $("#cartCount").style.display = snap.size ? "inline-block" : "none";
-    $("#navCartCount").style.display = snap.size ? "inline-block" : "none";
-  });
-
-  onSnapshot(collection(db, "users", uid, "favorites"), snap=>{
-    $("#favCount").textContent = String(snap.size);
-    $("#navFavCount").textContent = String(snap.size);
-    $("#favCount").style.display = snap.size ? "inline-block" : "none";
-    $("#navFavCount").style.display = snap.size ? "inline-block" : "none";
-  });
-}
-
-async function loadProducts(){
-  const q = query(collection(db, "products"), orderBy("createdAt","desc"), limit(60));
-  let snap;
-  try{
-    snap = await getDocs(q);
-  }catch(e){
-    // if createdAt index missing, fallback
-    snap = await getDocs(collection(db, "products"));
+function renderHome(){
+  const list = filteredProducts();
+  const grid = $("#grid-home");
+  if(!list.length){
+    grid.innerHTML = `<div class="empty">Mahsulot topilmadi</div>`;
+    return;
   }
-  products = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-  renderCategories();
-  renderProducts();
+  grid.innerHTML = list.slice(0, 60).map(productCard).join("");
+  hydrateCardButtons(grid);
 }
 
-/* ===== Cart/Favorites ===== */
+function renderCategoriesPage(){
+  const box = $("#catList");
+  // build tree: parent -> set(children)
+  const tree = new Map();
+  for (const p of products){
+    const { parent, child } = getCatPair(p);
+    if(!tree.has(parent)) tree.set(parent, new Set());
+    if(child) tree.get(parent).add(child);
+  }
+
+  if(!tree.size){
+    box.innerHTML = `<div class="empty">Kategoriya yo‘q</div>`;
+    return;
+  }
+
+  const cards = [];
+  for (const [parent, children] of tree.entries()){
+    const kids = Array.from(children);
+    cards.push(`
+      <div class="card" style="margin:0 16px 12px; padding:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-weight:900"><i class="fas fa-tags" style="color:var(--gold2)"></i> ${escapeHtml(parent)}</div>
+          <button class="btn gold" style="flex:0; padding:8px 12px;" data-parent="${escapeHtml(parent)}" data-child="">
+            Ko‘rish <i class="fas fa-arrow-right"></i>
+          </button>
+        </div>
+        ${kids.length ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">
+          ${kids.map(ch=>`<button class="cat-chip" data-parent="${escapeHtml(parent)}" data-child="${escapeHtml(ch)}" style="margin:0;">${escapeHtml(ch)}</button>`).join("")}
+        </div>` : `<div class="muted" style="margin-top:8px;font-size:12px;">Bo‘lim ichida subkategoriya yo‘q</div>`}
+      </div>
+    `);
+  }
+  box.innerHTML = cards.join("");
+
+  box.onclick = (e)=>{
+    const btn = e.target.closest("[data-parent]");
+    if(!btn) return;
+    currentFilter.parent = btn.dataset.parent;
+    currentFilter.child = btn.dataset.child || "";
+    $("#q").value = ""; searchText="";
+    setActivePage("home");
+    renderHome();
+    toast("Filtr qo‘yildi");
+  };
+}
+
+/* ===== Cart / Favorites ===== */
 async function addToCart(productId, inc){
   if(!uid || !db){ toast("Firebase sozlanmagan"); return; }
   const ref = doc(db, "users", uid, "cart", productId);
@@ -282,10 +335,44 @@ async function toggleFavorite(productId){
     state.favorites.add(productId);
     toast("Saralanganlarga qo‘shildi");
   }
-  // update visuals in home grid
-  renderProducts();
+  renderHome();
 }
 
+function wireCounters(){
+  if(!uid || !db) return;
+
+  onSnapshot(collection(db, "users", uid, "cart"), snap=>{
+    const n = snap.size;
+    $("#cartCount").textContent = String(n);
+    $("#navCartCount").textContent = String(n);
+    $("#cartCount").style.display = n ? "inline-block" : "none";
+    $("#navCartCount").style.display = n ? "inline-block" : "none";
+  });
+
+  onSnapshot(collection(db, "users", uid, "favorites"), snap=>{
+    const n = snap.size;
+    $("#favCount").textContent = String(n);
+    $("#navFavCount").textContent = String(n);
+    $("#favCount").style.display = n ? "inline-block" : "none";
+    $("#navFavCount").style.display = n ? "inline-block" : "none";
+    state.favorites = new Set(snap.docs.map(d=>d.id));
+    renderHome();
+    renderFavoritesPage();
+  });
+}
+
+function renderFavoritesPage(){
+  const grid = $("#grid-fav");
+  const list = products.filter(p=>state.favorites.has(p.id));
+  if(!list.length){
+    grid.innerHTML = `<div class="empty">Saralanganlar bo‘sh</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(productCard).join("");
+  hydrateCardButtons(grid);
+}
+
+/* ===== Cart modal ===== */
 async function openCart(){
   if(!uid || !db){ toast("Firebase sozlanmagan"); return; }
   $("#cartModalBackdrop").classList.add("show");
@@ -298,7 +385,6 @@ async function openCart(){
       $("#cartTotal").textContent = "0 so‘m";
       return;
     }
-    // load product docs quickly from local cache
     const items = snap.docs.map(d=>({ id:d.id, ...d.data() }));
     const byId = new Map(products.map(p=>[p.id,p]));
     let total = 0;
@@ -327,7 +413,6 @@ async function openCart(){
 
     $("#cartTotal").textContent = `${fmt(total)} so‘m`;
 
-    // bind +/-
     $$(".row", listEl).forEach(row=>{
       const id = row.dataset.id;
       $(".qminus", row).onclick = async ()=>{
@@ -346,70 +431,35 @@ async function openCart(){
     });
   });
 }
+function closeCart(){ $("#cartModalBackdrop").classList.remove("show"); }
 
-function closeCart(){
-  $("#cartModalBackdrop").classList.remove("show");
-}
-
-/* ===== Favorites page ===== */
-function renderFavoritesPage(){
-  if(!uid || !db) return;
-  const grid = $("#grid-fav");
-  grid.innerHTML = "<div class='empty'>Yuklanmoqda...</div>";
-  onSnapshot(collection(db, "users", uid, "favorites"), (snap)=>{
-    if(!snap.size){
-      grid.innerHTML = "<div class='empty'>Saralanganlar bo‘sh</div>";
-      return;
-    }
-    const favIds = new Set(snap.docs.map(d=>d.id));
-    state.favorites = favIds;
-    const list = products.filter(p=>favIds.has(p.id));
-    grid.innerHTML = list.map(productCard).join("");
-    hydrateCardButtons(grid);
-  });
-}
-
-/* ===== Orders page (placeholder) ===== */
-function renderOrdersPage(){
-  $("#ordersBox").innerHTML = `
-    <div class="empty">
-      Buyurtmalar bo‘limi (A variant) — keyingi bosqichda /orders kolleksiyasi bilan ulanadi.
-      <div style="margin-top:10px" class="muted">Hozircha savat ishlaydi ✅</div>
-    </div>`;
-}
-
-/* ===== Wire UI events ===== */
+/* ===== Boot ===== */
 function initUI(){
-  // header icons
   $("#btnCart").onclick = openCart;
-  $("#btnFav").onclick = ()=>{ setActivePage("favorites"); };
+  $("#btnFav").onclick = ()=> setActivePage("favorites");
   $("#btnBell").onclick = ()=> toast("Bildirishnomalar keyin qo‘shiladi");
 
-  // search
   $("#q").addEventListener("input", (e)=>{
     searchText = (e.target.value||"").trim().toLowerCase();
-    renderProducts();
+    renderHome();
   });
 
-  // nav
   $$(".nav-item").forEach(n=>{
     n.onclick = ()=>{
       const page = n.dataset.page;
       setActivePage(page);
       if(page==="favorites") renderFavoritesPage();
-      if(page==="orders") renderOrdersPage();
+      if(page==="categories") renderCategoriesPage();
+      if(page==="profile") toast("Profil ma’lumotlari pastda");
     };
   });
 
-  // modal close
   $("#cartClose").onclick = closeCart;
   $("#cartModalBackdrop").addEventListener("click",(e)=>{
     if(e.target.id==="cartModalBackdrop") closeCart();
   });
 
-  $("#checkoutBtn").onclick = ()=>{
-    toast("Checkout (A variant) keyingi bosqichda");
-  };
+  $("#checkoutBtn").onclick = ()=> toast("Checkout (A+) keyingi bosqichda");
 }
 
 async function boot(){
@@ -417,13 +467,6 @@ async function boot(){
   const ok = await ensureFirebase();
   if(!ok) return;
   await loadProducts();
-
-  // favorites visuals quick sync (so heart states show correctly)
-  onSnapshot(collection(db, "users", uid, "favorites"), (snap)=>{
-    state.favorites = new Set(snap.docs.map(d=>d.id));
-    // update home grid fast
-    renderProducts();
-  });
 }
 
 boot();

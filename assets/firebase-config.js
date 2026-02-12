@@ -1,5 +1,4 @@
 // Firebase Web configni shu yerga qo‘ying
-// Firebase Console → Project settings → Your apps → Web app config
 window.__FIREBASE_CONFIG__ = {
   apiKey: "PASTE_ME",
   authDomain: "PASTE_ME",
