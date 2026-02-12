@@ -3042,33 +3042,45 @@ function initMobileBottomBar(){
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 
 /* =========================
+/* =========================
    Mobile search toggle (icon -> input)
+   Robust init (works even if script loads after DOMContentLoaded)
 ========================= */
-document.addEventListener("DOMContentLoaded", ()=>{
-  if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
+function initMobileSearchToggle(){
+  const toolsTop = document.getElementById("toolsTop");
+  const searchToggleBtn = document.getElementById("searchToggleBtn");
+  const q = document.getElementById("q");
+  const sort = document.getElementById("sort");
+
+  if(!toolsTop || !searchToggleBtn || !q) return;
 
   const closeIfEmpty = () => {
-    // If user cleared input, allow closing
-    if(String(els.q.value||"").trim()===""){
-      els.toolsTop.classList.remove("open");
+    if(String(q.value||"").trim()===""){
+      toolsTop.classList.remove("open");
     }
   };
 
-  els.searchToggleBtn.addEventListener("click", (e)=>{
+  searchToggleBtn.addEventListener("click", (e)=>{
     e.preventDefault();
-    els.toolsTop.classList.toggle("open");
-    if(els.toolsTop.classList.contains("open")){
-      try{ els.q.focus(); els.q.select(); }catch(_e){}
+    toolsTop.classList.toggle("open");
+    if(toolsTop.classList.contains("open")){
+      try{ q.focus(); q.select(); }catch(_e){}
     } else {
       closeIfEmpty();
     }
   });
 
   // Close on blur (small delay so click on select doesn't instantly close)
-  els.q.addEventListener("blur", ()=>{
+  q.addEventListener("blur", ()=>{
     setTimeout(()=>{
-      if(document.activeElement === els.sort) return;
+      if(sort && document.activeElement === sort) return;
       closeIfEmpty();
     }, 120);
   });
-});
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", initMobileSearchToggle);
+} else {
+  initMobileSearchToggle();
+}
