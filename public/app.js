@@ -12,87 +12,39 @@ function tgAdminEnabled(){
     && typeof window.TG_ADMIN.chatId === "string"
     && window.TG_ADMIN.chatId.trim().length > 2;
 }
-function tgUserEnabled(){
-  const t = (window.TG_USER && typeof window.TG_USER.botToken === "string") ? window.TG_USER.botToken.trim() : "";
-  const fallback = tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "";
-  return (t.length > 10) || (fallback.length > 10);
-}
 function tgEscape(s){ return String(s??"").replace(/[<>&]/g, c=>({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
 
-function tgSend(token, chatId, htmlText){
+function tgSendAdmin(text){
   try{
-    const t = String(token||"").trim();
-    const c = String(chatId||"").trim();
-    if(t.length < 10 || c.length < 2) return;
-    const base = `https://api.telegram.org/bot${t}/sendMessage`;
-    const url = base
-      + `?chat_id=${encodeURIComponent(c)}`
-      + `&text=${encodeURIComponent(htmlText)}`
-      + `&parse_mode=HTML`
-      + `&disable_web_page_preview=true`;
+    if(!tgAdminEnabled()) return;
+    const token = window.TG_ADMIN.botToken.trim();
+    const chatId = window.TG_ADMIN.chatId.trim();
+    const base = `https://api.telegram.org/bot${token}/sendMessage`;
+    // 1) GET beacon (no CORS)
+    const url = base + `?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}&disable_web_page_preview=true`;
     const img = new Image();
     img.src = url;
-  }catch(e){}
+    // 2) best-effort POST (no-cors) — ok if GET is blocked
+    try{
+      const body = new URLSearchParams({ chat_id: chatId, text, disable_web_page_preview: "true" }).toString();
+      fetch(base, { method:"POST", mode:"no-cors", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body });
+    }catch(_e){}
+  }catch(_e){}
 }
-
-function tgSendAdminHTML(htmlText){
-  if(!tgAdminEnabled()) return;
-  tgSend(window.TG_ADMIN.botToken, window.TG_ADMIN.chatId, htmlText);
+function tgNotifyNewOrder(o){
+  try{
+    if(!tgAdminEnabled()) return;
+    const lines = [
+      "Yangi buyurtma!",
+      `ID: ${o.orderId || o.id || ""}`,
+      `Summa: ${o.totalUZS || o.total || 0} so'm`,
+      `To'lov: ${o.provider || o.paymentType || ""}`,
+      o.shipping?.phone ? `Tel: ${o.shipping.phone}` : (o.phone ? `Tel: ${o.phone}` : ""),
+      o.shipping?.addressText ? `Manzil: ${o.shipping.addressText}` : "",
+    ].filter(Boolean);
+    tgSendAdmin(lines.join("\n"));
+  }catch(_e){}
 }
-
-function tgSendUserHTML(chatId, htmlText){
-  if(!tgUserEnabled()) return;
-  const token = (window.TG_USER && window.TG_USER.botToken && window.TG_USER.botToken.trim().length > 10)
-    ? window.TG_USER.botToken.trim()
-    : (tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "");
-  if(!token) return;
-  tgSend(token, chatId, htmlText);
-}
-
-function tgOrderCreatedHTML(o){
-  const items = Array.isArray(o.items) ? o.items : [];
-  const itemLines = items.slice(0, 8).map((it)=>{
-    const title = tgEscape(it.title || it.name || it.productTitle || "Mahsulot");
-    const qty = Number(it.qty || it.count || 1) || 1;
-    const sku = tgEscape(it.sku || it.variantKey || it.key || "");
-    const price = Number(it.priceUZS || it.price || 0) || 0;
-    const tail = [sku ? `<code>${sku}</code>` : "", price ? `${price.toLocaleString()} so'm` : ""].filter(Boolean).join(" · ");
-    return `• ${title} ×${qty}${tail ? ` <i>(${tail})</i>` : ""}`;
-  });
-  const more = items.length > 8 ? `<i>... yana ${items.length-8} ta</i>` : "";
-  const addr = o.shipping?.addressText ? tgEscape(o.shipping.addressText) : "";
-  const pay = tgEscape(o.provider || "");
-  const sum = Number(o.totalUZS||0).toLocaleString();
-
-  return [
-    `<b>🛒 Yangi buyurtma!</b>`,
-    `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
-    o.uid ? `UID: <code>${tgEscape(o.uid)}</code>` : "",
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
-    o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
-    o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
-    `To'lov: <b>${pay}</b>`,
-    `Summa: <b>${sum}</b> so'm`,
-    addr ? `Manzil: ${addr}` : "",
-    items.length ? `<b>— Mahsulotlar —</b>` : "",
-    ...itemLines,
-    more
-  ].filter(Boolean).join("\n");
-}
-
-function tgOrderStatusHTML(o){
-  const st = tgEscape(o.status||"");
-  const sum = Number(o.totalUZS||0).toLocaleString();
-  return [
-    `<b>📦 Buyurtma statusi yangilandi</b>`,
-    `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
-    `Yangi status: <b>${st}</b>`,
-    o.provider ? `To'lov: <b>${tgEscape(o.provider)}</b>` : "",
-    `Summa: <b>${sum}</b> so'm`
-  ].filter(Boolean).join("\n");
-}
-
 
 import { auth, db } from "./firebase-config.js";
 import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
@@ -2544,79 +2496,36 @@ function buildSelectedItems(){
   return { ok:true, reason:"", sel:_selCart, items, totalUZS };
 }
 
-async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin, shipping}){
+async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin}){
   if(!currentUser) throw new Error("no_user");
-
-  // pull richer user fields for order + telegram
-  const userRef = doc(db, "users", currentUser.uid);
-  let userName = null, userPhone = null, omId = null, userTgChatId = null;
-  try{
-    const uSnap = await getDoc(userRef);
-    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
-    userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
-    userPhone = (u.phone || "").toString();
-    omId = (u.omId || makeOmId(currentUser.uid)).toString();
-    userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
-  }catch(_e){
-    userName = (currentUser.displayName || currentUser.email || "User").toString();
-    userPhone = "";
-    omId = makeOmId(currentUser.uid);
-    userTgChatId = null;
-  }
-
   const orderRef = doc(db, "orders", orderId);
-
-  // write order (main)
   await setDoc(orderRef, {
-    orderId,
     uid: currentUser.uid,
-    omId,
-    userName,
-    userPhone,
-    userTgChatId,
     status,
     items,
     totalUZS,
     amountTiyin: amountTiyin ?? null,
     provider,
-    shipping: shipping || null,
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
 
-  // also store under user subcollection to avoid composite index for profile history
-  const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
-  await setDoc(userOrderRef, {
-    orderId,
-    uid: currentUser.uid,
-    omId,
-    userName,
-    userPhone,
-    userTgChatId,
-    status,
-    items,
-    totalUZS,
-    amountTiyin: amountTiyin ?? null,
-    provider,
-    shipping: shipping || null,
-    createdAt: serverTimestamp(),
-    source: "web",
-  }, { merge: true });
-  // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
-  try{
-    window.__tgSentOrders = window.__tgSentOrders || new Set();
-    if(!window.__tgSentOrders.has(orderId)){
-      window.__tgSentOrders.add(orderId);
-      const payload = { orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null };
-      const html = tgOrderCreatedHTML(payload);
-      tgSendAdminHTML(html);
-      if(userTgChatId){
-        tgSendUserHTML(userTgChatId, html);
-      }
-    }
-  }catch(_e){}
-    }catch(_e){}
-  }
+// also store under user subcollection to avoid composite index for profile history
+const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
+await setDoc(userOrderRef, {
+  uid: currentUser.uid,
+  status,
+  items,
+  totalUZS,
+  amountTiyin: amountTiyin ?? null,
+  provider,
+  createdAt: serverTimestamp(),
+  orderId,
+  source: "web",
+}, { merge: true });
+
+  // notify admin via Telegram (optional)
+  try{ tgNotifyNewOrder({ orderId, provider, totalUZS }); }catch(_e){}
 }
 
 function removePurchasedFromCart(sel){
