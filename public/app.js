@@ -225,6 +225,10 @@ const els = {
   tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
+
+  // Search UI (mobile)
+  toolsTop: document.getElementById("toolsTop"),
+  searchToggleBtn: document.getElementById("searchToggleBtn"),
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
   loginForm: document.getElementById("loginForm"),
@@ -2900,21 +2904,30 @@ async function syncUser(user){
     renderHeader(user, meta);
 
     const savedLocal = readProfile(user.uid);
+
+    // Firestore’dagi saqlangan profil (doimiy)
     const savedRemote = {
       phone: (u.phone || "").toString(),
       region: (u.region || "").toString(),
       district: (u.district || "").toString(),
       post: (u.post || "").toString(),
-      completedAt: u.completedAt || ""
+      completedAt: (u.profileCompletedAt || "").toString()
     };
-    const saved = (savedLocal && (savedLocal.region||savedLocal.district||savedLocal.post)) ? savedLocal : (savedRemote.region? savedRemote : savedLocal);
+
+    // Remote bo‘lsa — remote ustun, bo‘lmasa localStorage
+    const hasRemote = !!(savedRemote.region && savedRemote.district && savedRemote.post);
+    const saved = hasRemote ? {
+      ...savedLocal,
+      ...savedRemote,
+      completedAt: savedRemote.completedAt || savedLocal?.completedAt || ""
+    } : savedLocal;
+
     isCompleted = !!saved?.completedAt;
 
-    // phone: auto fill from auth only if empty or first time
+    // phone: auto fill from auth only if empty
     const autoPhone = computePhone(user);
     if(els.pfPhone){
-      els.pfPhone.value = saved?.phone || autoPhone || "";
-      // If saved exists but phone empty, still keep autoPhone visible (user can edit only via pencil)
+      els.pfPhone.value = (saved?.phone || autoPhone || "");
     }
 
     if(els.pfRegion){
@@ -2938,7 +2951,7 @@ async function syncUser(user){
     setEditing(true);
   }
 
-  async function save(){
+  function save(){
     if(!currentUser) return;
     const phone = (els.pfPhone?.value || "").trim();
     const region = els.pfRegion?.value || "";
@@ -2958,23 +2971,24 @@ async function syncUser(user){
       completedAt: new Date().toISOString()
     };
 
-
+    // 1) LocalStorage (tezkor)
     writeProfile(currentUser.uid, payload);
 
-    // Persist profile to Firestore so user doesn't have to refill every time
+    // 2) Firestore (doimiy) — shunda qayta-qayta to‘ldirish shart bo‘lmaydi
     try{
       const userRef = doc(db, "users", currentUser.uid);
-      await setDoc(userRef, {
+      setDoc(userRef, {
         phone,
         region,
         district,
         post,
-        completedAt: payload.completedAt,
+        profileCompletedAt: payload.completedAt,
         updatedAt: serverTimestamp()
       }, { merge:true });
     }catch(e){
-      console.warn("Profile Firestore save failed:", e);
+      console.warn("profile save (firestore) failed:", e);
     }
+
     isCompleted = true;
     setEditing(false);
     closeProfile();
@@ -3061,42 +3075,88 @@ function initMobileBottomBar(){
 
 document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 
-/* ===== Search toggle (robust delegated) ===== */
-(function(){
-  const q = ()=>document.getElementById("q");
-  const applyDefault = ()=>{
-    if(window.innerWidth <= 720){
-      document.body.classList.add("searchCollapsed");
-    }else{
-      document.body.classList.remove("searchCollapsed");
-    }
+/* =========================
+   Search toggle (🔍 -> input)  — PC + mobile (robust)
+========================= */
+document.addEventListener("DOMContentLoaded", ()=>{
+  // Agar inputda oldindan qiymat bo‘lsa (back/refresh) — ochiq tursin
+  try{
+    const tools = document.getElementById("toolsTop");
+    const q = document.getElementById("q");
+    if(tools && q && String(q.value||"").trim() !== "") tools.classList.add("open");
+  }catch(_e){}
+});
+
+// Delegated click: DOM qayta render bo‘lsa ham ishlaydi
+document.addEventListener("click", (e)=>{
+  const btn = e.target.closest("#searchToggleBtn, .searchToggleBtn, .searchToggleBtn *");
+  if(!btn) return;
+
+  // button ichidagi icon bosilganda ham topishi uchun:
+  const realBtn = btn.matches("#searchToggleBtn, .searchToggleBtn") ? btn : btn.closest("#searchToggleBtn, .searchToggleBtn");
+  if(!realBtn) return;
+
+  e.preventDefault();
+
+  const tools = realBtn.closest(".toolsTop") || document.getElementById("toolsTop");
+  if(!tools) return;
+
+  const q = tools.querySelector("#q") || document.getElementById("q");
+  if(!q) return;
+
+  const hasValue = ()=> String(q.value||"").trim() !== "";
+
+  const open = ()=>{
+    tools.classList.add("open");
+    try{ q.focus(); q.select(); }catch(_e){}
   };
-  window.addEventListener("resize", applyDefault);
-  document.addEventListener("DOMContentLoaded", applyDefault);
 
-  document.addEventListener("click", (e)=>{
-    const btn = e.target.closest("#searchToggle");
-    if(!btn) return;
-    document.body.classList.toggle("searchCollapsed");
-    const inp = q();
-    if(inp && !document.body.classList.contains("searchCollapsed")){
-      inp.focus();
-      try{ inp.select(); }catch(_){}
-    }
+  const closeIfEmpty = ()=>{
+    if(!hasValue()) tools.classList.remove("open");
+  };
+
+  if(tools.classList.contains("open")){
+    closeIfEmpty();
+    if(tools.classList.contains("open")) open();
+  } else {
+    open();
+  }
+});
+
+// Blur: bo‘sh bo‘lsa yopiladi (delegated)
+document.addEventListener("focusout", (e)=>{
+  const q = e.target && (e.target.id === "q" ? e.target : null);
+  if(!q) return;
+  const tools = q.closest(".toolsTop") || document.getElementById("toolsTop");
+  if(!tools) return;
+  if(String(q.value||"").trim() === "") tools.classList.remove("open");
+});
+
+// Enter bosilganda ochiq tursin
+document.addEventListener("keydown", (e)=>{
+  const q = e.target && (e.target.id === "q" ? e.target : null);
+  if(!q) return;
+  if(e.key === "Enter"){
+    const tools = q.closest(".toolsTop") || document.getElementById("toolsTop");
+    if(tools) tools.classList.add("open");
+  }
+});
+
+  // Enter bosilganda ham ochiq tursin
+  els.q.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter") els.toolsTop.classList.add("open");
   });
 
-  document.addEventListener("focusin", (e)=>{
-    if(e.target && e.target.id==="q"){
-      document.body.classList.remove("searchCollapsed");
-    }
+  // Blur: faqat bo‘sh bo‘lsa yopiladi
+  els.q.addEventListener("blur", ()=>{
+    setTimeout(()=>{
+      if(document.activeElement === els.sort) return;
+      closeIfEmpty();
+    }, 140);
   });
-  document.addEventListener("focusout", (e)=>{
-    if(e.target && e.target.id==="q"){
-      const inp = q();
-      if(inp && !inp.value.trim() && window.innerWidth <= 720){
-        document.body.classList.add("searchCollapsed");
-      }
-    }
-  });
-})();
 
+  // Input tozalansa, blur bo‘lganda yopiladi; yozilsa ochiq qoladi
+  els.q.addEventListener("input", ()=>{
+    if(hasValue()) els.toolsTop.classList.add("open");
+  });
+});
