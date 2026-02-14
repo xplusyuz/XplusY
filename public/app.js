@@ -3126,31 +3126,47 @@ document.addEventListener("DOMContentLoaded", initMobileBottomBar);
 /* =========================
    Mobile search toggle (icon -> input)
 ========================= */
-document.addEventListener("DOMContentLoaded", ()=>{
-  if(!els.toolsTop || !els.searchToggleBtn || !els.q) return;
 
-  const closeIfEmpty = () => {
-    // If user cleared input, allow closing
-    if(String(els.q.value||"").trim()===""){
-      els.toolsTop.classList.remove("open");
-    }
-  };
+// ==== Search toggle (robust: works after re-render / route changes) ====
+(function(){
+  function getEls(){
+    return {
+      toolsTop: document.getElementById("toolsTop"),
+      btn: document.getElementById("searchToggleBtn"),
+      q: document.getElementById("q"),
+      sort: document.getElementById("sort")
+    };
+  }
 
-  els.searchToggleBtn.addEventListener("click", (e)=>{
+  function closeIfEmpty(toolsTop, q){
+    if(!toolsTop || !q) return;
+    if(String(q.value||"").trim()==="") toolsTop.classList.remove("open");
+  }
+
+  // Click delegation so it works even if the DOM is re-rendered later
+  document.addEventListener("click", (e)=>{
+    const btn = e.target && e.target.closest ? e.target.closest("#searchToggleBtn") : null;
+    if(!btn) return;
+    const {toolsTop, q} = getEls();
+    if(!toolsTop || !q) return;
     e.preventDefault();
-    els.toolsTop.classList.toggle("open");
-    if(els.toolsTop.classList.contains("open")){
-      try{ els.q.focus(); els.q.select(); }catch(_e){}
+    toolsTop.classList.toggle("open");
+    if(toolsTop.classList.contains("open")){
+      try{ q.focus(); q.select(); }catch(_e){}
     } else {
-      closeIfEmpty();
+      closeIfEmpty(toolsTop, q);
     }
   });
 
-  // Close on blur (small delay so click on select doesn't instantly close)
-  els.q.addEventListener("blur", ()=>{
+  // Close on blur (focusout bubbles, so delegation works)
+  document.addEventListener("focusout", (e)=>{
+    if(!(e.target && e.target.id==="q")) return;
+    const {toolsTop, q, sort} = getEls();
+    if(!toolsTop || !q) return;
     setTimeout(()=>{
-      if(document.activeElement === els.sort) return;
-      closeIfEmpty();
+      if(sort && document.activeElement === sort) return;
+      closeIfEmpty(toolsTop, q);
     }, 120);
   });
-});
+})();
+
