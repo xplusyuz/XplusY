@@ -525,6 +525,9 @@ id="statsView">
     import {
       getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import {
+      getStorage, ref as sRef, uploadBytes, getDownloadURL
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js";
 
     // Asosiy dastur logikasi
     function hasValidConfig(cfg){
@@ -540,6 +543,7 @@ id="statsView">
     const db = getFirestore(app);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
+    const storage = getStorage(app);
 
     const $ = (id)=>document.getElementById(id);
 
@@ -548,6 +552,17 @@ id="statsView">
       editingId: null,
       adminEmails: [...DEFAULT_ADMIN_EMAILS],
     };
+    // ---- Storage upload helper (no functions needed) ----
+    async function uploadImageFile(file, folder="uploads"){
+      if(!file) throw new Error("Fayl topilmadi");
+      const safeName = (file.name||"image").replace(/[^a-zA-Z0-9._-]+/g,"_");
+      const path = `${folder}/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+      const r = sRef(storage, path);
+      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
+      const url = await getDownloadURL(r);
+      return url;
+    }
+    
 
     function isAdmin(user){
       if(!user?.email) return false;
@@ -749,8 +764,59 @@ id="statsView">
       const c=$("imagesContainer");
       const div=document.createElement("div");
       div.className="list-item";
-      div.innerHTML=`<input class="form-control" placeholder="https://..." value="${esc(val)}"><button type="button" class="btn btn-light btn-sm rm"><i class="fas fa-times"></i></button>`;
+      div.style.gap="10px";
+      div.innerHTML=`
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          <input class="form-control imgUrl" placeholder="https://..." value="${esc(val)}" style="flex:1;min-width:0">
+          <input type="file" class="imgFile" accept="image/*" style="display:none">
+          <button type="button" class="btn btn-light btn-sm up" title="Upload">
+            <i class="fas fa-upload"></i>
+          </button>
+          <img class="imgPrev" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover;display:${val? "block":"none"};border:1px solid #e9ecef">
+        </div>
+        <button type="button" class="btn btn-light btn-sm rm" title="Remove"><i class="fas fa-times"></i></button>
+      `;
       c.appendChild(div);
+
+      const urlEl = div.querySelector(".imgUrl");
+      const fileEl = div.querySelector(".imgFile");
+      const prevEl = div.querySelector(".imgPrev");
+      const upBtn = div.querySelector(".up");
+
+      function setPreview(url){
+        if(url){
+          prevEl.src=url;
+          prevEl.style.display="block";
+        }else{
+          prevEl.removeAttribute("src");
+          prevEl.style.display="none";
+        }
+      }
+      setPreview(urlEl.value.trim());
+
+      urlEl.addEventListener("input", ()=> setPreview(urlEl.value.trim()));
+      upBtn.addEventListener("click", ()=> fileEl.click());
+      fileEl.addEventListener("change", async ()=>{
+        const file = fileEl.files?.[0];
+        if(!file) return;
+        upBtn.disabled = true;
+        upBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        try{
+          const pid = ($("productId")?.value||"temp").trim() || "temp";
+          const url = await uploadImageFile(file, `products/${pid}`);
+          urlEl.value = url;
+          setPreview(url);
+          toast("Rasm yuklandi");
+        }catch(e){
+          console.warn(e);
+          toast("Upload xato: "+(e.message||e),"error");
+        }finally{
+          upBtn.disabled = false;
+          upBtn.innerHTML = '<i class="fas fa-upload"></i>';
+          fileEl.value = "";
+        }
+      });
+
       div.querySelector(".rm").addEventListener("click",()=>{ if(c.querySelectorAll(".list-item").length>1) div.remove(); });
     }
     function addVariant(v=null){
