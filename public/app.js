@@ -225,7 +225,6 @@ const els = {
   avatarBtn: document.getElementById("avatarBtn"),
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
-  tagBar: document.getElementById("tagBar"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
 
@@ -479,7 +478,6 @@ function enhanceHScroll(el){
 }
 
 let products = [];
-let selectedTag = "all";
 let tagCounts = new Map();
 
 const LS = {
@@ -983,69 +981,10 @@ function titleTag(t){
   return s.length ? (s[0].toUpperCase() + s.slice(1)) : s;
 }
 
-function renderTagBar(){
-  // chips disabled (using Categories page instead)
-  if(els.tagBar){ els.tagBar.innerHTML=""; }
-  return;
-  if(!els.tagBar) return;
-  const entries = Array.from(tagCounts.entries())
-    .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
-
-  const total = products.length;
-  const chips = [];
-  chips.push(`<button class="tagChip ${selectedTag==="all"?"active":""}" data-tag="all">Barchasi <span class="count">${total}</span></button>`);
-  for(const [tag,count] of entries){
-    chips.push(`<button class="tagChip ${selectedTag===tag?"active":""}" data-tag="${tag}">${titleTag(tag)} <span class="count">${count}</span></button>`);
-  }
-  els.tagBar.innerHTML = chips.join("");
-
-function setupTagMore(){
-  const bar = els.tagBar;
-  if(!bar) return;
-
-  // remove old button
-  const old = bar.querySelector("#tagMoreBtn");
-  if(old) old.remove();
-
-  // only desktop needs compact/expand
-  if(window.innerWidth < 900) {
-    bar.classList.remove("tagExpanded");
-    return;
-  }
-
-  const chips = Array.from(bar.querySelectorAll(".tagChip"));
-  if(chips.length <= 10){
-    bar.classList.remove("tagExpanded");
-    return;
-  }
-
-  // Add "Ko‘proq / Kamroq" toggle
-  const btn = document.createElement("button");
-  btn.id = "tagMoreBtn";
-  btn.className = "tagChip";
-  btn.type = "button";
-  btn.textContent = bar.classList.contains("tagExpanded") ? "Kamroq" : "Ko‘proq";
-  btn.addEventListener("click", (e)=>{
-    e.preventDefault();
-    bar.classList.toggle("tagExpanded");
-    btn.textContent = bar.classList.contains("tagExpanded") ? "Kamroq" : "Ko‘proq";
-  });
-  bar.appendChild(btn);
-}
-
-// Recalculate on resize
-window.addEventListener("resize", ()=>{
-  // debounce lightly
-  clearTimeout(window.__tagMoreT);
-  window.__tagMoreT = setTimeout(()=>setupTagMore(), 120);
-});
-
-}
 
 function setSelectedTag(tag){
   selectedTag = tag || "all";
-  renderTagBar();
-  applyFilterSort();
+applyFilterSort();
 }
 
 
@@ -1181,7 +1120,6 @@ function applyFilterSort(){
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
   render(arr);
-  renderTagBar();
 }
 
 
@@ -2567,8 +2505,7 @@ async function loadProducts(){
       });
       products = arr;
       buildTagCounts();
-      renderTagBar();
-      buildCategoryTree();
+buildCategoryTree();
       applyFilterSort();
       if(activeTab==="categories") renderCategoriesPage();
 
@@ -2671,13 +2608,6 @@ els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); })
 els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
 
-if(els.tagBar){
-  els.tagBar.addEventListener("click", (e)=>{
-    const btn = e.target.closest("[data-tag]");
-    if(!btn) return;
-    setSelectedTag(btn.dataset.tag);
-  });
-}
 
 
 // panel & views
