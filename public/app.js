@@ -3710,8 +3710,11 @@ els.useProfilePhone?.addEventListener("change", ()=>{
 });
 
 /* ===== Profile: Social links card (injected via JS to avoid template overwrites) ===== */
+function removeProfileSocialLinks(){const el=document.getElementById('socialCard');if(el) el.remove();}
+
 function ensureProfileSocialLinks(){
   try{
+    if(!(location.pathname.includes('/profile') || location.hash.includes('profile'))){ removeProfileSocialLinks(); return; }
     // This app is hash-SPA. Only show on #profile tab.
     const isProfile = ((location.hash || "#home") === "#profile");
     const existing = document.getElementById("socialCard");
@@ -3734,70 +3737,57 @@ function ensureProfileSocialLinks(){
 
     const card = document.createElement("div");
     card.id = "socialCard";
-    card.className = "card softCard";
+    card.className = "card softCard socialCard";
     card.innerHTML = `
-      <div class="sectionTitle" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <i class="fa-solid fa-share-nodes" style="opacity:.85"></i>
-        <span>Ijtimoiy tarmoqlar</span>
+      <div class="socialTop">
+        <div class="title">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>Ijtimoiy tarmoqlar</span>
+        </div>
+        <div class="hint">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>Rasm + izoh yuboring — topib beramiz</span>
+        </div>
       </div>
 
       <div class="socialGrid">
-        <a class="socialTile tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-brands fa-telegram"></i></span>
-          <span class="tx">
-            <b>OrzuMall Search</b>
-            <small>@OrzuMallSearch_bot</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+          <span class="txt"><span class="name">OrzuMall Search</span><span class="sub">@OrzuMallSearch_bot</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
 
-        <a class="socialTile tg2" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-brands fa-telegram"></i></span>
-          <span class="tx">
-            <b>OrzuMall Bot</b>
-            <small>@OrzuMallUZ_bot</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn tg" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+          <span class="txt"><span class="name">OrzuMall Bot</span><span class="sub">@OrzuMallUZ_bot</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
 
-        <a class="socialTile ig" href="https://instagram.com/orzumall.uz" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-brands fa-instagram"></i></span>
-          <span class="tx">
-            <b>Instagram</b>
-            <small>@OrzuMall.uz</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn ig" href="https://instagram.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-instagram"></i></span>
+          <span class="txt"><span class="name">Instagram</span><span class="sub">@OrzuMall.uz</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
 
-        <a class="socialTile tt" href="https://tiktok.com/@orzumall.uz" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-brands fa-tiktok"></i></span>
-          <span class="tx">
-            <b>TikTok</b>
-            <small>@OrzuMall.uz</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn tt" href="https://tiktok.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-tiktok"></i></span>
+          <span class="txt"><span class="name">TikTok</span><span class="sub">@OrzuMall.uz</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
 
-        <a class="socialTile yt" href="https://youtube.com/@OrzuMall" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-brands fa-youtube"></i></span>
-          <span class="tx">
-            <b>YouTube</b>
-            <small>OrzuMall</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-youtube"></i></span>
+          <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
 
-        <a class="socialTile web" href="https://orzumall.uz" target="_blank" rel="noopener">
-          <span class="ic"><i class="fa-solid fa-globe"></i></span>
-          <span class="tx">
-            <b>Sayt</b>
-            <small>OrzuMall.uz</small>
-          </span>
-          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
+        <a class="sBtn web" href="https://xplusy.netlify.app/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-solid fa-globe"></i></span>
+          <span class="txt"><span class="name">Sayt</span><span class="sub">OrzuMall.uz</span></span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
       </div>
 
-      <div class="hintLine"><i class="fa-regular fa-circle-info"></i> Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</div>
     `;
 
     // Put right after profile header block if exists, otherwise top of profile view.
@@ -3832,7 +3822,7 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
       if(!wrap) return;
 
       const card = document.createElement("div");
-      card.className = "card softCard";
+      card.className = "card softCard socialCard";
       card.id = "socialCard";
       card.innerHTML = `
         <div class="cardHead">
@@ -3917,3 +3907,5 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
   setTimeout(run, 0);
 })();
 
+
+setInterval(ensureProfileSocialLinks, 1200);
