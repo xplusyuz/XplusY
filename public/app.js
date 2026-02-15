@@ -1619,6 +1619,8 @@ function showView(tab){
   if(tab === "profile") {
     if(currentUser?.uid) try{ subscribeOrders(currentUser.uid); }catch(e){}
   }
+
+  try{ ensureProfileSocialLinks(); }catch(e){}
 }
 
 function goTab(tab){
@@ -3710,89 +3712,102 @@ els.useProfilePhone?.addEventListener("change", ()=>{
 /* ===== Profile: Social links card (injected via JS to avoid template overwrites) ===== */
 function ensureProfileSocialLinks(){
   try{
-    if(!location.pathname.includes("/profile")) return;
-    if(document.getElementById("socialCard")) return;
+    // This app is hash-SPA. Only show on #profile tab.
+    const isProfile = ((location.hash || "#home") === "#profile");
+    const existing = document.getElementById("socialCard");
 
-    const balanceCard = document.getElementById("balanceCard");
-    if(!balanceCard) return;
+    // If not on profile, never leave it hanging in DOM.
+    if(!isProfile){
+      if(existing) existing.remove();
+      return;
+    }
 
-    const wrap = balanceCard.parentElement; // usually inside .pageWrap
+    // Insert inside the profile view container so it hides with the tab.
+    const profileView = (els && els.viewProfile) ? els.viewProfile : document.getElementById("view-profile");
+    if(!profileView) return;
+
+    if(existing){
+      // If card exists but is outside profile, move it into profile.
+      if(!profileView.contains(existing)) profileView.prepend(existing);
+      return;
+    }
+
     const card = document.createElement("div");
-    card.className = "card softCard";
     card.id = "socialCard";
+    card.className = "card softCard";
     card.innerHTML = `
-      <div class="cardHead">
-        <div class="cardTitle">
-          <i class="fa-solid fa-share-nodes"></i>
-          <span>Ijtimoiy tarmoqlar</span>
-        </div>
+      <div class="sectionTitle" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <i class="fa-solid fa-share-nodes" style="opacity:.85"></i>
+        <span>Ijtimoiy tarmoqlar</span>
       </div>
 
       <div class="socialGrid">
-        <a class="socialBtn tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
-          <span class="txt">
-            <span class="name">OrzuMall Search</span>
-            <span class="sub">@OrzuMallSearch_bot</span>
+        <a class="socialTile tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-brands fa-telegram"></i></span>
+          <span class="tx">
+            <b>OrzuMall Search</b>
+            <small>@OrzuMallSearch_bot</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
 
-        <a class="socialBtn tg2" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
-          <span class="txt">
-            <span class="name">OrzuMall Bot</span>
-            <span class="sub">@OrzuMallUZ_bot</span>
+        <a class="socialTile tg2" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-brands fa-telegram"></i></span>
+          <span class="tx">
+            <b>OrzuMall Bot</b>
+            <small>@OrzuMallUZ_bot</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
 
-        <a class="socialBtn ig" href="https://instagram.com/" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-instagram"></i></span>
-          <span class="txt">
-            <span class="name">Instagram</span>
-            <span class="sub">@OrzuMall.uz</span>
+        <a class="socialTile ig" href="https://instagram.com/orzumall.uz" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-brands fa-instagram"></i></span>
+          <span class="tx">
+            <b>Instagram</b>
+            <small>@OrzuMall.uz</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
 
-        <a class="socialBtn tt" href="https://tiktok.com/" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-tiktok"></i></span>
-          <span class="txt">
-            <span class="name">TikTok</span>
-            <span class="sub">@OrzuMall.uz</span>
+        <a class="socialTile tt" href="https://tiktok.com/@orzumall.uz" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-brands fa-tiktok"></i></span>
+          <span class="tx">
+            <b>TikTok</b>
+            <small>@OrzuMall.uz</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
 
-        <a class="socialBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-youtube"></i></span>
-          <span class="txt">
-            <span class="name">YouTube</span>
-            <span class="sub">OrzuMall</span>
+        <a class="socialTile yt" href="https://youtube.com/@OrzuMall" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-brands fa-youtube"></i></span>
+          <span class="tx">
+            <b>YouTube</b>
+            <small>OrzuMall</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
 
-        <a class="socialBtn web" href="https://xplusy.netlify.app/" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-solid fa-globe"></i></span>
-          <span class="txt">
-            <span class="name">Sayt</span>
-            <span class="sub">OrzuMall.uz</span>
+        <a class="socialTile web" href="https://orzumall.uz" target="_blank" rel="noopener">
+          <span class="ic"><i class="fa-solid fa-globe"></i></span>
+          <span class="tx">
+            <b>Sayt</b>
+            <small>OrzuMall.uz</small>
           </span>
-          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          <span class="go"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>
         </a>
       </div>
 
-      <div class="mutedTip">
-        <i class="fa-solid fa-circle-info"></i>
-        <span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span>
-      </div>
+      <div class="hintLine"><i class="fa-regular fa-circle-info"></i> Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</div>
     `;
-    wrap.insertBefore(card, balanceCard); // show above balance
-  }catch(e){
-    // no-op
-  }
+
+    // Put right after profile header block if exists, otherwise top of profile view.
+    const anchor = profileView.querySelector(".profileHeader, .profileHero, h2, h1");
+    if(anchor && anchor.parentElement === profileView){
+      anchor.insertAdjacentElement("afterend", card);
+    }else{
+      profileView.prepend(card);
+    }
+  }catch(e){}
 }
 
 
