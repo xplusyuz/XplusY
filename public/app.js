@@ -1161,6 +1161,17 @@ function escapeHtml(str){
   return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
 
+function deliveryLine(p){
+  const raw = (p.fulfillmentType ?? p.pType ?? p.type ?? "").toString().toLowerCase();
+  const isCargo = (raw === "cargo" || raw === "keltirib" || raw === "keltirib_beramiz" || raw === "import");
+  const min = Number(p.deliveryMinDays ?? p.deliveryMin ?? p.shipMinDays ?? (isCargo ? 15 : 1));
+  const max = Number(p.deliveryMaxDays ?? p.deliveryMax ?? p.shipMaxDays ?? (isCargo ? 30 : 7));
+  const label = isCargo ? "Keltirib beramiz" : "Bizda bor";
+  const range = (Number.isFinite(min) && Number.isFinite(max)) ? `${min}–${max} kun` : (isCargo ? "15–30 kun" : "1–7 kun");
+  return `${label}: ${range}`;
+}
+
+
 function render(arr){
   els.grid.innerHTML = "";
   els.empty.hidden = arr.length !== 0;
@@ -1194,7 +1205,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        <div class="pship">${p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun"}</div>
+        <div class="pship">${deliveryLine(p)}</div>
 
         
 
