@@ -232,6 +232,7 @@
         </div>
       </div>
 
+      <div class="card hidden" 
       <div class="card hidden" id="ordersView">
         <div class="card-header">
           <h3>Buyurtmalar</h3>
@@ -372,7 +373,7 @@
           </div>
 
           <div class="muted" style="margin-top:10px">
-            * Bu bo‘lim /orders kolleksiyasidan o‘qib, topup va checkout aylanmasini ko‘rsatadi.
+            * Bu bo2018lim /orders kolleksiyasidan o2018qib, topup va checkout aylanmasini ko2018rsatadi.
           </div>
         </div>
       </div>
@@ -479,10 +480,10 @@
               <div class="form-group">
                 <label>Mahsulot turi</label>
                 <select id="pType" class="form-control">
-                  <option value="stock">O‘zimizda (omborda bor)</option>
+                  <option value="stock">O2018zimizda (omborda bor)</option>
                   <option value="cargo">Keltirib beramiz (cargo)</option>
                 </select>
-                <div class="form-text">"Keltirib beramiz" bo‘lsa, min/max kun va prepay avtomatik yoqiladi.</div>
+                <div class="form-text">"Keltirib beramiz" bo2018lsa, min/max kun va prepay avtomatik yoqiladi.</div>
               </div>
               <div class="form-group">
                 <label>Min kun</label>
@@ -495,8 +496,7 @@
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="fas fa-tags"></i> Teglar</h4>
+          ></i> Teglar</h4>
             <div class="form-group"><label>Vergul bilan</label><input id="tagsInput" class="form-control" placeholder="telefon, premium"></div>
             <div id="tagsPreview" class="tags-container"></div>
           </div>
@@ -721,6 +721,137 @@
       if(o.imagesByColor && typeof o.imagesByColor !== "object") delete o.imagesByColor;
       return o;
     }
+    // Fulfillment pill (Mahsulot turi: stock / cargo)
+    function renderFulfillmentPill(p){
+      try{
+        const t = String(p?.pType || p?.fulfillment || p?.fulfillmentType || p?.deliveryType || "stock").toLowerCase();
+        if(t === "cargo" || t === "keltirib" || t === "keltirib_beramiz" || t === "bring"){
+          const dmin = p?.deliveryMinDays;
+          const dmax = p?.deliveryMaxDays;
+          const hint = (dmin||dmax) ? ` (${dmin||""}${(dmin&&dmax)?"-":""}${dmax||""} kun)` : "";
+          return `<span class="pill cargo"><i class="fas fa-truck"></i> Keltirib beramiz${hint}</span>`;
+        }
+        return `<span class="pill stock"><i class="fas fa-box"></i> O‘zimizda</span>`;
+      }catch(e){
+        return `<span class="pill stock"><i class="fas fa-box"></i> O‘zimizda</span>`;
+      }
+    }
+
+    // ======= Turnover (Hisob aylanmasi) =======
+    let unsubTurnover = null;
+    state.turnoverAll = [];
+
+    function toDateOnly(ts){
+      try{
+        if(!ts) return null;
+        const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds*1000) : new Date(ts));
+        if(isNaN(d.getTime())) return null;
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }catch(e){ return null; }
+    }
+
+    function subscribeTurnover(){
+      try{
+        if(unsubTurnover) { unsubTurnover(); unsubTurnover = null; }
+        if(!db){ toast("DB yo‘q","error"); return; }
+        $("turnoverState").textContent = "Yuklanmoqda…";
+        const qy = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
+        unsubTurnover = onSnapshot(qy, (snap)=>{
+          state.turnoverAll = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+          $("turnoverState").textContent = `Loaded: ${state.turnoverAll.length}`;
+          renderTurnover();
+        }, (err)=>{
+          console.error(err);
+          $("turnoverState").textContent = "Xato";
+          toast("Turnover o‘qishda xato: "+(err?.message||err),"error");
+        });
+      }catch(e){
+        console.error(e);
+        toast("Turnover xato: "+(e?.message||e),"error");
+      }
+    }
+
+    function renderTurnover(){
+      const tbody = $("turnoverTbody");
+      if(!tbody) return;
+
+      const q = String($("turnoverSearch")?.value||"").trim().toLowerCase();
+      const type = String($("turnoverType")?.value||"all");
+      const status = String($("turnoverStatus")?.value||"all");
+      const from = $("turnoverFrom")?.value ? new Date($("turnoverFrom").value+"T00:00:00") : null;
+      const to   = $("turnoverTo")?.value   ? new Date($("turnoverTo").value+"T23:59:59") : null;
+
+      const filtered = (state.turnoverAll||[]).filter(o=>{
+        const ot = String(o.orderType||"checkout").toLowerCase();
+        const st = String(o.status||"").toLowerCase();
+        if(type!=="all"){
+          if(type==="topup" && ot!=="topup") return false;
+          if(type==="checkout" && ot==="topup") return false;
+        }
+        if(status!=="all" && st!==status) return false;
+
+        if(from || to){
+          const d = o.createdAt?.toDate ? o.createdAt.toDate() : (o.createdAt?.seconds ? new Date(o.createdAt.seconds*1000) : (o.createdAt ? new Date(o.createdAt) : null));
+          if(d){
+            if(from && d < from) return false;
+            if(to && d > to) return false;
+          }
+        }
+
+        if(q){
+          const hay = [
+            o.id, o.orderId, o.uid, o.omId, o.userName, o.userPhone, o.provider
+          ].map(x=>String(x||"").toLowerCase()).join(" ");
+          if(!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      // stats
+      const uids = new Set();
+      let topupPaid = 0;
+      let salesPaid = 0;
+      for(const o of filtered){
+        if(o.uid) uids.add(o.uid);
+        const amt = Number(o.totalUZS||0);
+        const st = String(o.status||"").toLowerCase();
+        const ot = String(o.orderType||"checkout").toLowerCase();
+        if(st==="paid"){
+          if(ot==="topup") topupPaid += amt;
+          else salesPaid += amt;
+        }
+      }
+      $("turnoverTopup").textContent = topupPaid.toLocaleString();
+      $("turnoverSales").textContent = salesPaid.toLocaleString();
+      $("turnoverCount").textContent = String(filtered.length);
+      $("turnoverUsers").textContent = String(uids.size);
+
+      // rows
+      tbody.innerHTML = "";
+      if(!filtered.length){
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+        return;
+      }
+
+      for(const o of filtered){
+        const ot = String(o.orderType||"checkout").toLowerCase();
+        const st = String(o.status||"").toLowerCase();
+        const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
+        const when = escapeHtml(formatTS(o.createdAt));
+        const sum = Number(o.totalUZS||0).toLocaleString();
+        tbody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
+            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.omId?`<span class="muted">/ ${escapeHtml(o.omId)}</span>`:""}</div></td>
+            <td>${escapeHtml(ot==="topup"?"topup":"checkout")}</td>
+            <td>${pill}</td>
+            <td>${escapeHtml(o.provider||"")}</td>
+            <td><b>${sum}</b> so'm</td>
+            <td>${when}</td>
+          </tr>
+        `);
+      }
+    }
 
     async function fetchProducts(){
       try{
@@ -737,19 +868,7 @@
       }
     }
 
-    
-    // ----- Product fulfillment pill (stock/cargo) -----
-    function renderFulfillmentPill(p){
-      const t = String(p?.pType || p?.productType || p?.fulfillmentType || "stock").toLowerCase();
-      if(t === "cargo"){
-        const minD = Number(p?.pMinDays ?? p?.minDays ?? 0);
-        const maxD = Number(p?.pMaxDays ?? p?.maxDays ?? 0);
-        const daysTxt = (minD || maxD) ? ` <span class="muted">(${minD||""}${(minD&&maxD)?"-":""}${maxD||""} kun)</span>` : "";
-        return `<span class="pill cargo"><i class="fas fa-truck"></i> cargo</span>${daysTxt}`;
-      }
-      return `<span class="pill stock"><i class="fas fa-box"></i> stock</span>`;
-    }
-function renderTable(list=null){
+    function renderTable(list=null){
       const data = list || state.products;
       const body = $("productsTableBody");
       body.innerHTML="";
@@ -760,7 +879,7 @@ function renderTable(list=null){
       data.forEach(p=>{
         const tr = document.createElement("tr");
         tr.style.cursor="pointer";
-        tr.dataset.oid = o.id || "";
+        tr.dataset.pid = p.id || "";
         const old = p.oldPrice>0?`<span class="old-price">${formatPrice(p.oldPrice)}</span>`:"";
         const tags = (p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("") || `<span style="color:var(--gray)">-</span>`;
         const colors = (p.colors||[]).slice(0,3).map(c=>`<span class="color-preview" style="background:${esc(c.hex)}" title="${esc(c.name)}"></span>`).join("") || `<span style="color:var(--gray)">-</span>`;
@@ -1536,118 +1655,7 @@ function renderTable(list=null){
       }
     }
 
-    
-
-    /* =================== TURNOVER (hisob aylanmasi) =================== */
-    let turnoverUnsub = null;
-    let turnoverCache = [];
-
-    function subscribeTurnover(){
-      if(!db) return;
-      try{ turnoverUnsub?.(); }catch(e){}
-      $("turnoverState").textContent = "Yuklanmoqda...";
-      const qy = query(collection(db, "orders"), orderBy("createdAt","desc"), limit(500));
-      turnoverUnsub = onSnapshot(qy, (snap)=>{
-        turnoverCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-        applyTurnoverFilters();
-      }, (err)=>{
-        console.warn("turnover subscribe error", err);
-        $("turnoverState").textContent = "Xatolik (index / rules)";
-        applyTurnoverFilters();
-      });
-    }
-
-    function applyTurnoverFilters(){
-      const q = ($("turnoverSearch")?.value || "").trim().toLowerCase();
-      const type = ($("turnoverType")?.value || "").trim().toLowerCase();
-      const st = ($("turnoverStatus")?.value || "").trim();
-      const fromV = $("turnoverFrom")?.value;
-      const toV = $("turnoverTo")?.value;
-
-      const fromD = fromV ? new Date(fromV+"T00:00:00") : null;
-      const toD = toV ? new Date(toV+"T23:59:59") : null;
-
-      const out = (turnoverCache||[]).filter(o=>{
-        const ot = String(o.orderType||"").toLowerCase();
-        if(type && ot !== type) return false;
-        if(st && String(o.status||"pending") !== st) return false;
-
-        if(q){
-          const uid = String(o.uid||"").toLowerCase();
-          const omid = String(o.omId||o.userOmId||"").toLowerCase();
-          const phone = String(o.phone||o.userPhone||"").toLowerCase();
-          const name = String(o.name||o.userName||"").toLowerCase();
-          const blob = [o.id, uid, omid, phone, name].filter(Boolean).join(" ").toLowerCase();
-          if(!blob.includes(q)) return false;
-        }
-
-        if(fromD || toD){
-          const d = toDate(o.createdAt);
-          if(!d) return false;
-          if(fromD && d < fromD) return false;
-          if(toD && d > toD) return false;
-        }
-        return true;
-      });
-
-      renderTurnover(out);
-    }
-
-    function renderTurnover(list){
-      const arr = Array.isArray(list) ? list : [];
-      $("turnoverState").textContent = arr.length ? `${arr.length} ta tranzaksiya` : "—";
-
-      // summary cards (paid only)
-      let topupSum = 0, salesSum = 0;
-      const users = new Set();
-      for(const o of arr){
-        if(o?.uid) users.add(String(o.uid));
-        const status = String(o.status||"pending");
-        const sum = Number(o.totalUZS||o.amountUZS||0);
-        const ot = String(o.orderType||"").toLowerCase();
-        if(status === "paid"){
-          if(ot === "topup") topupSum += sum;
-          if(ot === "checkout") salesSum += sum;
-        }
-      }
-      $("turnoverTopup").textContent = topupSum.toLocaleString();
-      $("turnoverSales").textContent = salesSum.toLocaleString();
-      $("turnoverCount").textContent = arr.length;
-      $("turnoverUsers").textContent = users.size;
-
-      const tbody = $("turnoverTbody");
-      if(!tbody) return;
-      tbody.innerHTML = "";
-      if(!arr.length){
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--gray)">Tranzaksiya yo‘q</td></tr>`;
-        return;
-      }
-      for(const o of arr){
-        const uid = String(o.uid||"");
-        const omid = String(o.omId||o.userOmId||"");
-        const who = (uid && omid) ? `${uid} / ${omid}` : (uid || omid || "—");
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td><code>${escapeHtml(o.id||"")}</code></td>
-          <td class="truncate" style="max-width:220px">${escapeHtml(who)}</td>
-          <td>${escapeHtml(String(o.orderType||""))}</td>
-          <td>${statusPill(o.status)}</td>
-          <td>${escapeHtml(String(o.provider||""))}</td>
-          <td><b>${Number(o.totalUZS||o.amountUZS||0).toLocaleString()}</b> so'm</td>
-          <td>${escapeHtml(formatTS(o.createdAt))}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-    }
-
-    if($("turnoverRefresh")){
-      $("turnoverRefresh").addEventListener("click", ()=> subscribeTurnover());
-    }
-    ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{
-      $(id)?.addEventListener("input", ()=> applyTurnoverFilters());
-      $(id)?.addEventListener("change", ()=> applyTurnoverFilters());
-    });
-// Status update (admin)
+    // Status update (admin)
     $("ordersTbody")?.addEventListener("change", async (e)=>{
       const sel = e.target;
       if(!(sel && sel.classList && sel.classList.contains("statusSel"))) return;
