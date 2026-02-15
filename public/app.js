@@ -1210,10 +1210,7 @@ for(const b of adminBadges.slice(0,3)){
   if(/^-?\d+\s*%$/.test(t)) continue;
   badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
 }
-// Prepay badge for cargo
-if(_normPType(p)==="cargo" || p.prepayRequired===true){
-  badgeHtmlParts.push(`<div class="pbadge warn">Oldindan to‘lov</div>`);
-}
+// Prepay badge moved to cart (not shown on cards)
 
 const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
 
@@ -1944,7 +1941,7 @@ function renderPanel(mode){
       <div class="cartMeta">
         ${mode==="cart" ? `<label class="cartPick"><input type="checkbox" class="cartPickBox" data-pick="${escapeHtml(row.ci.key)}" ${cartSelected.has(row.ci.key) ? "checked" : ""} /><span></span></label>` : ""}
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
-        ${mode==="cart" ? renderVariantLine(row.ci) : ""}
+        ${mode==="cart" ? (renderVariantLine(row.ci) + (((_normPType(p)==="cargo" || p.prepayRequired===true)) ? `<div class="cartPrepay"><span class="prepayPill"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Oldindan to‘lov</span></div>` : ``)) : ""}
         <div class="cartRow">
           <div class="price">${moneyUZS(getVariantPricing(p, {color: row.ci?.color || null, size: row.ci?.size || null}).price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -2120,6 +2117,7 @@ function renderCartPage(){
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
         <div class="cartShip">${renderDeliveryBadge(p)}</div>
+        ${(_normPType(p)==="cargo" || p.prepayRequired===true) ? `<div class="cartPrepay"><span class="prepayPill"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Oldindan to‘lov</span></div>` : ``}
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
