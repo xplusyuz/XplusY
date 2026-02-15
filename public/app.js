@@ -552,7 +552,9 @@ function subscribeReviews(productId){
         stars: Number(d.stars)||0,
         text: (d.text||"").toString(),
         ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
-      });
+      }, (err)=>{
+    console.warn("reviews subscribe error", err);
+  });
     });
     renderReviewsList(list);
 
@@ -2863,8 +2865,12 @@ async function watchUserDoc(uid){
       // ensure balance exists
       const bal = Number(u.balanceUZS||0) || 0;
       setBalanceUI(bal);
+    }, (err)=>{
+      // Prevent noisy console errors when logged out or rules deny
+      console.warn("user doc subscribe error", err);
+      setBalanceUI(0);
     });
-  }catch(e){}
+}catch(e){}
 }
 
 async function createTopupOrder(amountUZS){
