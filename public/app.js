@@ -784,6 +784,7 @@ function saveLS(key, value){
 }
 
 let viewMode = "all"; // all | fav
+let selectedTag = null; // chips removed; keep for backward-compat
 let favs = new Set(loadLS(LS.favs, []));
 let cart = loadLS(LS.cart, []);
 // Cart selection (for partial checkout / later buy)
@@ -1098,11 +1099,6 @@ function applyFilterSort(){
   // Mobile nested category filter (prefix match)
   if(Array.isArray(appliedCatPath) && appliedCatPath.length>0){
     arr = arr.filter(p=>productMatchesCategory(p, appliedCatPath));
-  }
-
-  // tag category filter
-  if(selectedTag && selectedTag !== "all"){
-    arr = arr.filter(p => (p.tags || []).map(t=>String(t).toLowerCase()).includes(selectedTag));
   }
 
 
