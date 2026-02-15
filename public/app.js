@@ -2336,6 +2336,9 @@ function applyPayTypeRules(){
     const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
     const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
 
+    // Disable balance payments (client-side only; balance updates require server/admin)
+    hideOpt(balRb, true);
+
     // helper to hide the whole option row
     const hideOpt = (rb, hide)=>{
       if(!rb) return;
@@ -2351,10 +2354,10 @@ function applyPayTypeRules(){
     // hideOpt(paymeRb, hasPrepay);
 
     if(hasPrepay){
-      // force balance
-      if(balRb) balRb.checked = true;
+      // force payme (prepay)
+      if(paymeRb) paymeRb.checked = true;
       const note = document.getElementById("payRuleNote");
-      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov tavsiya etiladi.";
+      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov: PAYME.";
     } else {
       const note = document.getElementById("payRuleNote");
       if(note) note.textContent = "";
@@ -2381,7 +2384,7 @@ async function createOrderFromCheckout(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
   }
 
   const address = (els.shipAddress?.value || "").trim();
@@ -2391,20 +2394,20 @@ async function createOrderFromCheckout(){
   }
 
   let payType = getPayType(); // cash | payme | balance
-  if(hasPrepay && payType !== "balance"){
-    toast("Keltirib berish mahsulotlari: faqat BALANS orqali to‘lanadi.");
+  if(hasPrepay && payType !== "payme"){
+    toast("Keltirib berish mahsulotlari: faqat PAYME orqali to‘lanadi.");
     // auto-select balance
-    const rb = document.querySelector("input[name=paytype][value=balance]");
+    const rb = document.querySelector("input[name=paytype][value=payme]");
     if(rb) rb.checked = true;
-    payType = "balance";
+    payType = "payme";
   }
   const orderId = String(Date.now()); // digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
   const payload = {
     orderId,
-    provider: payType === 'payme' ? 'payme' : (payType==='balance' ? 'balance' : 'cash'),
-    status: payType === 'payme' ? 'pending_payment' : (payType==='balance' ? 'paid' : 'pending_cash'),
+    provider: payType === 'payme' ? 'payme' : 'cash',
+    status: payType === 'payme' ? 'pending_payment' : 'pending_cash',
     items: built.items,
     totalUZS: built.totalUZS,
     amountTiyin: payType === "payme" ? amountTiyin : null,
@@ -2416,12 +2419,7 @@ async function createOrderFromCheckout(){
   };
 
   try{
-    if(payType === "balance"){
-      // Pay from balance atomically (deduct + create paid order)
-      await payWithBalance(built, payload.shipping);
-    } else {
-      await createOrderDoc(payload);
-    }
+    await createOrderDoc(payload);
     removePurchasedFromCart(built.sel);
     updateBadges();
     renderCartPage();
@@ -2442,7 +2440,7 @@ async function createOrderFromCheckout(){
     const b64 = btoa(unescape(encodeURIComponent(params)));
     window.location.href = `https://checkout.paycom.uz/${b64}`;
   }else{
-    toast(payType === "balance" ? "Balansdan to‘landi" : "Buyurtmangiz qabul qilindi");
+    toast("Buyurtmangiz qabul qilindi");
     goTab("profile");
   }
 }
@@ -2986,7 +2984,7 @@ async function startPaymeCheckout(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
   }
 
   if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
@@ -3028,7 +3026,7 @@ async function shareOrderTelegram(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
   }
 
   const orderId = String(Date.now());
@@ -3249,8 +3247,7 @@ async function syncUser(user){
       name,
       phone,
       omId,
-      balanceUZS: (typeof u.balanceUZS === "number" ? u.balanceUZS : 0),
-      updatedAt: serverTimestamp(),
+updatedAt: serverTimestamp(),
       ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
     }, { merge:true });
 
