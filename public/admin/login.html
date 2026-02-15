@@ -23,23 +23,29 @@
   <div class="card">
     <div class="hd">
       <h1>OrzuMall Admin</h1>
-      <p>Bu sahifa to‘liq yopiq. Faqat <code>sohibjonmath@gmail.com</code> gmail orqali kirish mumkin.</p>
+      <p>Bu sahifa <b>to‘liq yopiq</b>. Faqat <code>sohibjonmath@gmail.com</code> gmail orqali kirish mumkin.</p>
     </div>
     <div class="bd">
       <button id="btn" class="btn">Google orqali kirish</button>
       <div id="err" class="error"></div>
-      <div class="mini">Agar boshqa gmail bilan kirilsa — tizim avtomatik chiqib ketadi.</div>
+      <div class="mini">Boshqa gmail tanlansa — avtomatik chiqib ketadi.</div>
     </div>
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-    const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.firebasestorage.app", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
     const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+    let cfg = null;
+    try { cfg = JSON.parse(localStorage.getItem("FIREBASE_CONFIG")||"null"); } catch(e){}
 
-    const app = initializeApp(firebaseConfig);
+    if (!cfg) {
+      document.getElementById("err").style.display="block";
+      document.getElementById("err").textContent="Firebase config topilmadi. Panelga bir marta kirib ko‘ring yoki panel faylini yangilang.";
+    }
+
+    const app = initializeApp(cfg);
     const auth = getAuth(app);
 
     const btn = document.getElementById("btn");
@@ -49,6 +55,15 @@
       err.style.display = "block";
       err.textContent = msg;
     }
+
+    onAuthStateChanged(auth, async (user)=>{
+      if (user && user.email && user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
+        location.replace("./panel.html");
+      }
+      if (user && (!user.email || user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase())) {
+        try { await signOut(auth); } catch(e){}
+      }
+    });
 
     btn.addEventListener("click", async () => {
       err.style.display = "none";
@@ -60,7 +75,7 @@
         provider.setCustomParameters({ prompt: "select_account" });
         const res = await signInWithPopup(auth, provider);
 
-        if (!res?.user?.email || res.user.email !== ADMIN_EMAIL) {
+        if (!res?.user?.email || res.user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase()) {
           await signOut(auth);
           showError("Ruxsat yo‘q. Faqat admin gmail ishlaydi.");
           btn.disabled = false;
@@ -68,7 +83,7 @@
           return;
         }
 
-        location.href = "./panel.html";
+        location.replace("./panel.html");
       } catch (e) {
         console.error(e);
         showError("Kirishda xatolik: " + (e?.message || e));
