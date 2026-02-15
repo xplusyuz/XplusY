@@ -177,6 +177,7 @@ let currentUser = null;
 let userBalanceUZS = 0;
 let unsubUserDoc = null;
 let isEditing = false;
+let profileCache = null; // /users/{uid} cached
 
 // Normalize price / createdAt for reliable client-side sorting
 function parseUZS(value){
@@ -2382,6 +2383,10 @@ function applyPayTypeRules(){
       if(row) row.style.display = hide ? "none" : "";
       rb.disabled = !!hide;
     };
+
+    // Disable balance payments (client-side only; balance updates require server/admin)
+    hideOpt(balRb, true);
+
 
     // For cargo/prepay: hide cash (and payme if you want only balance)
     hideOpt(cashRb, hasPrepay);
