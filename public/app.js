@@ -2658,7 +2658,7 @@ function buildSelectedItems(){
   return { ok:true, reason:"", sel:_selCart, items, totalUZS };
 }
 
-async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin, shipping}){
+async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin, shipping, orderType="checkout"}){
   if(!currentUser) throw new Error("no_user");
 
   // pull richer user fields for order + telegram
@@ -2694,6 +2694,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     amountTiyin: amountTiyin ?? null,
     provider,
     shipping: shipping || null,
+    orderType,
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
@@ -2713,6 +2714,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     amountTiyin: amountTiyin ?? null,
     provider,
     shipping: shipping || null,
+    orderType,
     createdAt: serverTimestamp(),
     source: "web",
   }, { merge: true });
@@ -2777,8 +2779,7 @@ async function createTopupOrder(amountUZS){
   const orderId = String(Date.now());
   const amountTiyin = Math.round(amt * 100);
 
-  // reuse createOrderDoc but with orderType
-  const payload = {
+  await createOrderDoc({
     orderId,
     provider: 'payme',
     status: 'pending_payment',
@@ -2787,13 +2788,7 @@ async function createTopupOrder(amountUZS){
     amountTiyin,
     shipping: null,
     orderType: 'topup'
-  };
-
-  // write orderType into orders + user/orders too
-  await createOrderDoc({ ...payload });
-  // patch orderType field (createOrderDoc doesn't currently include it) via merge
-  await setDoc(doc(db,'orders',orderId), { orderType:'topup' }, {merge:true});
-  await setDoc(doc(db,'users',currentUser.uid,'orders',orderId), { orderType:'topup' }, {merge:true});
+  });
 
   return { orderId, amountTiyin };
 }
