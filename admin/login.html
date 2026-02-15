@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OrzuMall Admin — Kirish</title>
+  <style>
+    :root{--bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--border:rgba(255,255,255,.10);--gold:#D4AF37;}
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1100px 600px at 20% -10%, rgba(212,175,55,.16), transparent 60%),var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    .card{width:min(520px,92vw);border:1px solid var(--border);background:rgba(15,23,42,.75);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+    .hd{padding:18px 18px 10px 18px;border-bottom:1px solid var(--border);background:rgba(17,28,51,.20)}
+    h1{margin:0;font-size:16px;letter-spacing:.2px}
+    p{margin:8px 0 0 0;color:var(--muted);font-size:13px;line-height:1.5}
+    .bd{padding:18px}
+    .btn{width:100%;padding:12px 14px;border-radius:16px;border:1px solid rgba(212,175,55,.55);background:rgba(212,175,55,.12);color:var(--text);cursor:pointer;font-weight:700}
+    .btn:hover{background:rgba(212,175,55,.16)}
+    .mini{margin-top:12px;font-size:12px;color:var(--muted)}
+    .error{margin-top:12px;font-size:12px;color:#fca5a5;display:none}
+    code{color:var(--gold)}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="hd">
+      <h1>OrzuMall Admin</h1>
+      <p>Bu sahifa to‘liq yopiq. Faqat <code>sohibjonmath@gmail.com</code> gmail orqali kirish mumkin.</p>
+    </div>
+    <div class="bd">
+      <button id="btn" class="btn">Google orqali kirish</button>
+      <div id="err" class="error"></div>
+      <div class="mini">Agar boshqa gmail bilan kirilsa — tizim avtomatik chiqib ketadi.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    const firebaseConfig = {"apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM", "authDomain": "xplusy-760fa.firebaseapp.com", "projectId": "xplusy-760fa", "storageBucket": "xplusy-760fa.firebasestorage.app", "messagingSenderId": "992512966017", "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80", "measurementId": "G-459PLJ7P7L"};
+    const ADMIN_EMAIL = "sohibjonmath@gmail.com";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const btn = document.getElementById("btn");
+    const err = document.getElementById("err");
+
+    function showError(msg) {
+      err.style.display = "block";
+      err.textContent = msg;
+    }
+
+    btn.addEventListener("click", async () => {
+      err.style.display = "none";
+      btn.disabled = true;
+      btn.textContent = "Kutilmoqda...";
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        const res = await signInWithPopup(auth, provider);
+
+        if (!res?.user?.email || res.user.email !== ADMIN_EMAIL) {
+          await signOut(auth);
+          showError("Ruxsat yo‘q. Faqat admin gmail ishlaydi.");
+          btn.disabled = false;
+          btn.textContent = "Google orqali kirish";
+          return;
+        }
+
+        location.href = "./panel.html";
+      } catch (e) {
+        console.error(e);
+        showError("Kirishda xatolik: " + (e?.message || e));
+        btn.disabled = false;
+        btn.textContent = "Google orqali kirish";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == "sohibjonmath@gmail.com";
+    }
+
+    // PRODUCTS: read for all, write for admin only
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ORDERS: admin only (recommended)
+    match /orders/{orderId} {
+      allow read, write: if isAdmin();
+    }
+
+    // USERS: user can read/write own doc; admin can read all (optional)
+    match /users/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // CONFIGS: admin only
+    match /configs/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // default: fully closed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
