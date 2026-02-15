@@ -995,6 +995,48 @@ function renderTagBar(){
     chips.push(`<button class="tagChip ${selectedTag===tag?"active":""}" data-tag="${tag}">${titleTag(tag)} <span class="count">${count}</span></button>`);
   }
   els.tagBar.innerHTML = chips.join("");
+
+function setupTagMore(){
+  const bar = els.tagBar;
+  if(!bar) return;
+
+  // remove old button
+  const old = bar.querySelector("#tagMoreBtn");
+  if(old) old.remove();
+
+  // only desktop needs compact/expand
+  if(window.innerWidth < 900) {
+    bar.classList.remove("tagExpanded");
+    return;
+  }
+
+  const chips = Array.from(bar.querySelectorAll(".tagChip"));
+  if(chips.length <= 10){
+    bar.classList.remove("tagExpanded");
+    return;
+  }
+
+  // Add "Ko‘proq / Kamroq" toggle
+  const btn = document.createElement("button");
+  btn.id = "tagMoreBtn";
+  btn.className = "tagChip";
+  btn.type = "button";
+  btn.textContent = bar.classList.contains("tagExpanded") ? "Kamroq" : "Ko‘proq";
+  btn.addEventListener("click", (e)=>{
+    e.preventDefault();
+    bar.classList.toggle("tagExpanded");
+    btn.textContent = bar.classList.contains("tagExpanded") ? "Kamroq" : "Ko‘proq";
+  });
+  bar.appendChild(btn);
+}
+
+// Recalculate on resize
+window.addEventListener("resize", ()=>{
+  // debounce lightly
+  clearTimeout(window.__tagMoreT);
+  window.__tagMoreT = setTimeout(()=>setupTagMore(), 120);
+});
+
 }
 
 function setSelectedTag(tag){
