@@ -2,26 +2,38 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    /* ========= CONSTANTS ========= */
+    // Phone auth bo'lsa ham admin bo‘lishi uchun UID qo‘shib qo‘ying
+    function adminUids() {
+      return [
+        // Firebase Console -> Authentication -> Users -> UID
+        // "XXXXXXXXXXXXXXX"
+      ];
+    }
+
+    function adminEmails() {
+      return [
+        "sohibjonmath@gmail.com"
+      ];
+    }
+
     /* ========= HELPERS ========= */
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
 
-    function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
-    }
-
+    // Email bo‘lmasa ham (phone auth) UID orqali admin taniladi
     function isAdmin() {
-      return signedIn()
-        && request.auth.token.email in ["sohibjonmath@gmail.com"];
+      return signedIn() && (
+        (request.auth.token.email != null && request.auth.token.email in adminEmails())
+        || (request.auth.uid in adminUids())
+      );
     }
 
-    function isInt(x) { return x is int; }
     function isNum(x) { return x is int || x is float; }
 
-    // user hujjati (balans tekshirish uchun)
-    function myUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // createdAt serverTimestamp() bo'lsa, write vaqtida request.time ga teng bo'ladi
+    function isServerTime(v) {
+      return v is timestamp && v == request.time;
     }
 
     /* ========= PRODUCTS ========= */
@@ -38,7 +50,6 @@ service cloud.firestore {
           && request.resource.data.stars >= 1
           && request.resource.data.stars <= 5;
 
-        // user faqat o'z review'sini tahrirlaydi (uid o'zgarmasin)
         allow update: if signedIn()
           && resource.data.uid == request.auth.uid
           && request.resource.data.uid == resource.data.uid;
@@ -48,29 +59,26 @@ service cloud.firestore {
       }
     }
 
-    /* aggregate / collectionGroup reviews */
+    // collectionGroup reviews o‘qish
     match /{path=**}/reviews/{reviewId} {
       allow read: if true;
     }
 
     /* ========= USERS ========= */
     match /users/{uid} {
-      // admin ko‘rsa ham bo‘ladi (xohlasangiz olib tashlaymiz)
+      // user o‘zi + admin o‘qiydi
       allow read: if isOwner(uid) || isAdmin();
 
-      // user hujjatini faqat o‘zi yaratadi (balanceUZS yozolmaydi)
+      // user faqat o‘zi yaratadi (balanceUZS / admin flag yo‘q)
       allow create: if isOwner(uid)
         && !('balanceUZS' in request.resource.data)
         && !('isAdmin' in request.resource.data)
         && !('role' in request.resource.data);
 
-      // user update: balansga tegmaydi, numericId/OMID'ga tegmaydi
+      // user update: balansga tegmaydi, admin flag/role yozmaydi, omId/numericId o‘zgarmaydi
       allow update: if isOwner(uid)
-        // balanceUZS ni user o'zgartira olmaydi
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['balanceUZS']))
-        // admin flag/role ham user yozolmaydi
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['isAdmin','role']))
-        // OM id / numericId o'zgarmasin (agar ishlatsangiz)
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId','omId']));
 
       allow delete: if isAdmin();
@@ -79,11 +87,16 @@ service cloud.firestore {
         allow read, create, update, delete: if isOwner(uid);
       }
 
-      // agar siz /users/{uid}/orders saqlayotgan bo‘lsangiz
+      match /cart/{cid} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      // user subcollection orders (profil tarix uchun)
       match /orders/{orderId} {
-        allow read, create: if isOwner(uid);
-        // user faqat “cancel” kabi yengil update qilsin (xohlasangiz)
-        allow update: if isOwner(uid) || isAdmin();
+        allow create: if isOwner(uid) && request.resource.data.uid == uid && request.resource.data.createdAt is timestamp;
+        allow read: if isOwner(uid) || isAdmin();
+        // user update (ixtiyoriy): faqat o'z orderiga "cancelRequested" kabi yengil flag
+        allow update: if isAdmin() || (isOwner(uid) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['cancelRequested']));
         allow delete: if isAdmin();
       }
     }
@@ -97,7 +110,7 @@ service cloud.firestore {
         && request.resource.data.orderType in ['checkout','topup']
         && request.resource.data.createdAt is timestamp;
 
-      // READ: admin yoki egasi
+      // READ: admin hammasini ko‘radi, user o‘zini
       allow read: if isAdmin()
         || (signedIn() && resource.data.uid == request.auth.uid);
 
@@ -107,8 +120,7 @@ service cloud.firestore {
 
     /* ========= EVENTS / ANALYTICS ========= */
     match /events/{eventId} {
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow read: if isAdmin();
       allow update, delete: if false;
     }

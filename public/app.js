@@ -1566,6 +1566,9 @@ function renderOrders(orders){
 }
 
 function subscribeOrders(uid){
+  if(!uid) return;
+  if(!currentUser) return;
+
   if(!uid || !db || !els.ordersList) return;
   try{ ordersUnsub?.(); }catch(e){}
 
@@ -1588,7 +1591,7 @@ function subscribeOrders(uid){
 
 els.ordersReload?.addEventListener("click", ()=>{
   if(!currentUser?.uid){ toast("Avval kirish qiling."); return; }
-  subscribeOrders(currentUser.uid);
+  try{ subscribeOrders(currentUser.uid); }catch(e){}
   toast("Buyurtmalar yangilanmoqda...");
 });
 
@@ -1626,7 +1629,7 @@ function showView(tab){
   if(tab === "fav") renderFavPage();
   if(tab === "cart") renderCartPage();
   if(tab === "profile") {
-    if(currentUser?.uid) subscribeOrders(currentUser.uid);
+    if(currentUser?.uid) try{ subscribeOrders(currentUser.uid); }catch(e){}
   }
 }
 
@@ -2857,6 +2860,8 @@ function setBalanceUI(n){
 }
 
 async function watchUserDoc(uid){
+  if(!uid || !currentUser){ try{ setBalanceUI(0); }catch(_){}; return; }
+
   try{
     unsubUserDoc && unsubUserDoc();
     const uref = doc(db,'users',uid);
