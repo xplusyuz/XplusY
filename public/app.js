@@ -3798,3 +3798,107 @@ function ensureProfileSocialLinks(){
 
 window.addEventListener('popstate', ensureProfileSocialLinks);
 window.addEventListener('hashchange', ensureProfileSocialLinks);
+
+
+/* === _OM_SOCIAL_INJECT_V2: robust social links injection on profile route === */
+(function(){
+  function isProfile(){
+    const p=(location.pathname||"").toLowerCase();
+    const h=(location.hash||"").toLowerCase();
+    return p.includes("/profile") || h.includes("profile");
+  }
+  function inject(){
+    try{
+      if(!isProfile()) return;
+      if(document.getElementById("socialCard")) return;
+
+      const balanceCard = document.getElementById("balanceCard") || document.querySelector('[data-card="balance"], .balanceCard, #balance');
+      const wrap = (balanceCard && balanceCard.parentElement) || document.querySelector(".pageWrap") || document.querySelector("main") || document.body;
+      if(!wrap) return;
+
+      const card = document.createElement("div");
+      card.className = "card softCard";
+      card.id = "socialCard";
+      card.innerHTML = `
+        <div class="cardHead">
+          <div class="cardTitle">
+            <i class="fa-solid fa-share-nodes"></i>
+            <span>Ijtimoiy tarmoqlar</span>
+          </div>
+        </div>
+        <div class="socialGrid">
+          <a class="socialBtn tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+            <span class="txt"><span class="name">OrzuMall Search</span><span class="sub">@OrzuMallSearch_bot</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+          <a class="socialBtn tg2" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+            <span class="txt"><span class="name">OrzuMall Bot</span><span class="sub">@OrzuMallUZ_bot</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+          <a class="socialBtn ig" href="https://instagram.com/" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-brands fa-instagram"></i></span>
+            <span class="txt"><span class="name">Instagram</span><span class="sub">@OrzuMall.uz</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+          <a class="socialBtn tt" href="https://tiktok.com/" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-brands fa-tiktok"></i></span>
+            <span class="txt"><span class="name">TikTok</span><span class="sub">@OrzuMall.uz</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+          <a class="socialBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-brands fa-youtube"></i></span>
+            <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+          <a class="socialBtn web" href="https://xplusy.netlify.app/" target="_blank" rel="noopener">
+            <span class="ico"><i class="fa-solid fa-globe"></i></span>
+            <span class="txt"><span class="name">Sayt</span><span class="sub">OrzuMall.uz</span></span>
+            <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+          </a>
+        </div>
+        <div class="mutedTip"><i class="fa-solid fa-circle-info"></i><span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span></div>
+      `;
+
+      if(balanceCard && balanceCard.parentElement){
+        balanceCard.parentElement.insertBefore(card, balanceCard);
+      }else{
+        const profileGrid = document.querySelector(".profileGrid") || document.querySelector("#profileForm");
+        if(profileGrid && profileGrid.parentElement){
+          profileGrid.parentElement.insertBefore(card, profileGrid.nextSibling);
+        }else{
+          wrap.insertBefore(card, wrap.firstChild);
+        }
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    if(!isProfile()) return;
+    let tries=0;
+    const t=setInterval(()=>{
+      tries++; inject();
+      if(document.getElementById("socialCard") || tries>40) clearInterval(t);
+    }, 120);
+
+    try{
+      const mo=new MutationObserver(()=>inject());
+      mo.observe(document.body,{childList:true,subtree:true});
+      setTimeout(()=>{try{mo.disconnect()}catch(e){}},10000);
+    }catch(e){}
+  }
+
+  document.addEventListener("DOMContentLoaded", run);
+  window.addEventListener("hashchange", run);
+  window.addEventListener("popstate", run);
+  // in case SPA calls history.pushState
+  const _ps = history.pushState;
+  history.pushState = function(){
+    _ps.apply(this, arguments);
+    setTimeout(run, 0);
+  };
+  // initial
+  setTimeout(run, 0);
+})();
+
