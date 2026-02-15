@@ -721,137 +721,6 @@
       if(o.imagesByColor && typeof o.imagesByColor !== "object") delete o.imagesByColor;
       return o;
     }
-    // Fulfillment pill (Mahsulot turi: stock / cargo)
-    function renderFulfillmentPill(p){
-      try{
-        const t = String(p?.pType || p?.fulfillment || p?.fulfillmentType || p?.deliveryType || "stock").toLowerCase();
-        if(t === "cargo" || t === "keltirib" || t === "keltirib_beramiz" || t === "bring"){
-          const dmin = p?.deliveryMinDays;
-          const dmax = p?.deliveryMaxDays;
-          const hint = (dmin||dmax) ? ` (${dmin||""}${(dmin&&dmax)?"-":""}${dmax||""} kun)` : "";
-          return `<span class="pill cargo"><i class="fas fa-truck"></i> Keltirib beramiz${hint}</span>`;
-        }
-        return `<span class="pill stock"><i class="fas fa-box"></i> O‘zimizda</span>`;
-      }catch(e){
-        return `<span class="pill stock"><i class="fas fa-box"></i> O‘zimizda</span>`;
-      }
-    }
-
-    // ======= Turnover (Hisob aylanmasi) =======
-    let unsubTurnover = null;
-    state.turnoverAll = [];
-
-    function toDateOnly(ts){
-      try{
-        if(!ts) return null;
-        const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds*1000) : new Date(ts));
-        if(isNaN(d.getTime())) return null;
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }catch(e){ return null; }
-    }
-
-    function subscribeTurnover(){
-      try{
-        if(unsubTurnover) { unsubTurnover(); unsubTurnover = null; }
-        if(!db){ toast("DB yo‘q","error"); return; }
-        $("turnoverState").textContent = "Yuklanmoqda…";
-        const qy = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
-        unsubTurnover = onSnapshot(qy, (snap)=>{
-          state.turnoverAll = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-          $("turnoverState").textContent = `Loaded: ${state.turnoverAll.length}`;
-          renderTurnover();
-        }, (err)=>{
-          console.error(err);
-          $("turnoverState").textContent = "Xato";
-          toast("Turnover o‘qishda xato: "+(err?.message||err),"error");
-        });
-      }catch(e){
-        console.error(e);
-        toast("Turnover xato: "+(e?.message||e),"error");
-      }
-    }
-
-    function renderTurnover(){
-      const tbody = $("turnoverTbody");
-      if(!tbody) return;
-
-      const q = String($("turnoverSearch")?.value||"").trim().toLowerCase();
-      const type = String($("turnoverType")?.value||"all");
-      const status = String($("turnoverStatus")?.value||"all");
-      const from = $("turnoverFrom")?.value ? new Date($("turnoverFrom").value+"T00:00:00") : null;
-      const to   = $("turnoverTo")?.value   ? new Date($("turnoverTo").value+"T23:59:59") : null;
-
-      const filtered = (state.turnoverAll||[]).filter(o=>{
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        const st = String(o.status||"").toLowerCase();
-        if(type!=="all"){
-          if(type==="topup" && ot!=="topup") return false;
-          if(type==="checkout" && ot==="topup") return false;
-        }
-        if(status!=="all" && st!==status) return false;
-
-        if(from || to){
-          const d = o.createdAt?.toDate ? o.createdAt.toDate() : (o.createdAt?.seconds ? new Date(o.createdAt.seconds*1000) : (o.createdAt ? new Date(o.createdAt) : null));
-          if(d){
-            if(from && d < from) return false;
-            if(to && d > to) return false;
-          }
-        }
-
-        if(q){
-          const hay = [
-            o.id, o.orderId, o.uid, o.omId, o.userName, o.userPhone, o.provider
-          ].map(x=>String(x||"").toLowerCase()).join(" ");
-          if(!hay.includes(q)) return false;
-        }
-        return true;
-      });
-
-      // stats
-      const uids = new Set();
-      let topupPaid = 0;
-      let salesPaid = 0;
-      for(const o of filtered){
-        if(o.uid) uids.add(o.uid);
-        const amt = Number(o.totalUZS||0);
-        const st = String(o.status||"").toLowerCase();
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        if(st==="paid"){
-          if(ot==="topup") topupPaid += amt;
-          else salesPaid += amt;
-        }
-      }
-      $("turnoverTopup").textContent = topupPaid.toLocaleString();
-      $("turnoverSales").textContent = salesPaid.toLocaleString();
-      $("turnoverCount").textContent = String(filtered.length);
-      $("turnoverUsers").textContent = String(uids.size);
-
-      // rows
-      tbody.innerHTML = "";
-      if(!filtered.length){
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
-        return;
-      }
-
-      for(const o of filtered){
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        const st = String(o.status||"").toLowerCase();
-        const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
-        const when = escapeHtml(formatTS(o.createdAt));
-        const sum = Number(o.totalUZS||0).toLocaleString();
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
-            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.omId?`<span class="muted">/ ${escapeHtml(o.omId)}</span>`:""}</div></td>
-            <td>${escapeHtml(ot==="topup"?"topup":"checkout")}</td>
-            <td>${pill}</td>
-            <td>${escapeHtml(o.provider||"")}</td>
-            <td><b>${sum}</b> so'm</td>
-            <td>${when}</td>
-          </tr>
-        `);
-      }
-    }
 
     async function fetchProducts(){
       try{
@@ -868,7 +737,136 @@
       }
     }
 
-    function renderTable(list=null){
+    
+    // ---- Product fulfillment pill (O'zimizda / Keltirib beramiz) ----
+    function renderFulfillmentPill(p){
+      try{
+        const type = (p && (p.pType || p.fulfillmentType || p.stockType || "")).toString().toLowerCase();
+        const isCargo = type === "cargo" || type === "keltirib" || type === "keltirib_beramiz";
+        const label = isCargo ? "Keltirib beramiz" : "O‘zimizda";
+        const cls = isCargo ? "warning" : "success";
+        const hint = isCargo
+          ? ((p.deliveryMinDays||p.deliveryMaxDays) ? ` (${Number(p.deliveryMinDays||"")}–${Number(p.deliveryMaxDays||"")} kun)` : "")
+          : "";
+        return `<span class="pill ${cls}">${label}${hint}</span>`;
+      }catch(e){
+        return `<span class="pill success">O‘zimizda</span>`;
+      }
+    }
+
+    // ---- Turnover (Hisob aylanmasi) ----
+    let turnoverUnsub = null;
+    let turnoverCache = [];
+
+    function ensureEl(id){ try{ return $(id); }catch(e){ return null; } }
+
+    function subscribeTurnover(){
+      const user = auth.currentUser;
+      if(!isAdmin(user)){ toast("Admin emas","error"); return; }
+      if(turnoverUnsub) { try{ turnoverUnsub(); }catch(e){} turnoverUnsub=null; }
+
+      const col = collection(db,"orders");
+      // last ~500 orders, newest first
+      const qy = query(col, orderBy("createdAt","desc"), limit(500));
+      turnoverUnsub = onSnapshot(qy, (snap)=>{
+        turnoverCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        renderTurnover();
+      }, (err)=>{
+        console.error(err);
+        toast("Aylanma o'qishda xato: "+(err?.message||err),"error");
+      });
+    }
+
+    function parseDateInput(v){
+      if(!v) return null;
+      // v = YYYY-MM-DD
+      const d = new Date(v+"T00:00:00");
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function getOrderTime(o){
+      const t = o?.createdAt;
+      if(!t) return null;
+      // Firestore Timestamp
+      if(typeof t?.toDate === "function") return t.toDate();
+      // ISO string
+      const d = new Date(t);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function renderTurnover(){
+      const tbody = ensureEl("turnoverTbody");
+      if(!tbody) return;
+
+      const q = (ensureEl("turnoverSearch")?.value || "").toLowerCase().trim();
+      const typeF = (ensureEl("turnoverType")?.value || "all").toLowerCase();
+      const statusF = (ensureEl("turnoverStatus")?.value || "all").toLowerCase();
+      const from = parseDateInput(ensureEl("turnoverFrom")?.value || "");
+      const to = parseDateInput(ensureEl("turnoverTo")?.value || "");
+      if(to) to.setHours(23,59,59,999);
+
+      let rows = turnoverCache.slice();
+
+      // filters
+      rows = rows.filter(o=>{
+        const id = String(o.id||"");
+        const uid = String(o.uid||"");
+        const om = String(o.omId||"");
+        const provider = String(o.provider||"");
+        const ot = String(o.orderType||"checkout").toLowerCase();
+        const st = String(o.status||"pending").toLowerCase();
+        const tm = getOrderTime(o);
+
+        if(q){
+          const blob = (id+" "+uid+" "+om+" "+provider+" "+ot+" "+st).toLowerCase();
+          if(!blob.includes(q)) return false;
+        }
+        if(typeF !== "all" && ot !== typeF) return false;
+        if(statusF !== "all" && st !== statusF) return false;
+        if(from && tm && tm < from) return false;
+        if(to && tm && tm > to) return false;
+        if((from || to) && !tm) return false;
+        return true;
+      });
+
+      // stats
+      const paid = rows.filter(o=>String(o.status||"").toLowerCase()==="paid");
+      const topupSum = paid.filter(o=>String(o.orderType||"").toLowerCase()==="topup")
+        .reduce((s,o)=>s+Number(o.totalUZS||0),0);
+      const checkoutSum = paid.filter(o=>String(o.orderType||"checkout").toLowerCase()==="checkout")
+        .reduce((s,o)=>s+Number(o.totalUZS||0),0);
+
+      const elTopup = ensureEl("turnoverTopup"); if(elTopup) elTopup.textContent = topupSum.toLocaleString();
+      const elCount = ensureEl("turnoverCount"); if(elCount) elCount.textContent = rows.length.toLocaleString();
+      const elCheckout = ensureEl("turnoverCheckout"); if(elCheckout) elCheckout.textContent = checkoutSum.toLocaleString();
+
+      // table
+      tbody.innerHTML = "";
+      if(!rows.length){
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--gray)">Ma'lumot yo‘q</td></tr>`;
+        return;
+      }
+      for(const o of rows){
+        const ot = String(o.orderType||"checkout");
+        const st = String(o.status||"pending");
+        const tm = getOrderTime(o);
+        const when = tm ? tm.toLocaleString() : "—";
+        const who = `${escapeHtml(o.uid||"")}${o.omId?`<div style="font-size:.85rem;color:var(--gray)">${escapeHtml(o.omId)}</div>`:""}`;
+        tbody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td><code>${escapeHtml(o.id||"")}</code></td>
+            <td style="max-width:220px"><div class="truncate">${who}</div></td>
+            <td>${escapeHtml(ot)}</td>
+            <td>${escapeHtml(st)}</td>
+            <td>${escapeHtml(o.provider||"")}</td>
+            <td><b>${Number(o.totalUZS||0).toLocaleString()}</b> so'm</td>
+            <td>${escapeHtml(when)}</td>
+          </tr>
+        `);
+      }
+    }
+
+function renderTable(list=null){
       const data = list || state.products;
       const body = $("productsTableBody");
       body.innerHTML="";
@@ -879,7 +877,7 @@
       data.forEach(p=>{
         const tr = document.createElement("tr");
         tr.style.cursor="pointer";
-        tr.dataset.pid = p.id || "";
+        tr.dataset.oid = o.id || "";
         const old = p.oldPrice>0?`<span class="old-price">${formatPrice(p.oldPrice)}</span>`:"";
         const tags = (p.tags||[]).slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join("") || `<span style="color:var(--gray)">-</span>`;
         const colors = (p.colors||[]).slice(0,3).map(c=>`<span class="color-preview" style="background:${esc(c.hex)}" title="${esc(c.name)}"></span>`).join("") || `<span style="color:var(--gray)">-</span>`;
@@ -1358,8 +1356,8 @@
       $("saveSettingsBtn").addEventListener("click",saveAdminSettings);
       $("recalcStatsBtn").addEventListener("click",()=>{ renderStats(); renderStatsPanels(); toast("Hisoblandi"); });
 
-      if($("turnoverRefresh")) $("turnoverRefresh").addEventListener("click",()=>subscribeTurnover());
-      ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{ const el=$(id); if(el){ el.addEventListener("input",renderTurnover); el.addEventListener("change",renderTurnover);} });
+      if(0 0"turnoverRefresh")) 0 0"turnoverRefresh").addEventListener("click",()=>subscribeTurnover());
+      ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{ const el=0 0id); if(el){ el.addEventListener("input",renderTurnover); el.addEventListener("change",renderTurnover);} });
 
       window.addEventListener("click",(e)=>{
         if(e.target===$("productModal")){ closeModal("productModal"); resetForm(); }
