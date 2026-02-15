@@ -156,57 +156,13 @@
 
         <button class="cta" id="goApp"><i class="fa-solid fa-house" style="margin-right:8px"></i> Ilovaga qaytish</button>
       </div>
-    <div class="card" style="margin-top:16px">
-      <div class="header">
-        <div class="userrow" style="gap:12px">
-          <div class="avatar" aria-hidden="true" style="background:rgba(46,139,87,.12);color:var(--primary)">
-            <i class="fa-solid fa-wallet"></i>
-          </div>
-          <div style="min-width:0">
-            <div class="name" style="font-size:18px">Balans</div>
-            <div class="sub" style="margin-top:4px">Keltirib berish (cargo) mahsulotlari uchun oldindan to‘lov — balans orqali.</div>
-          </div>
-        </div>
-      </div>
-      <div class="body">
-        <div class="field" style="align-items:flex-start">
-          <i class="fa-solid fa-coins"></i>
-          <div class="k">Joriy balans</div>
-          <div class="v" id="balProfile" style="font-weight:800">0 so‘m</div>
-        </div>
-
-        <div class="field" style="align-items:flex-start">
-          <i class="fa-solid fa-circle-plus"></i>
-          <div class="k">Depozit</div>
-          <div class="v" style="width:100%">
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
-              <input id="topupAmount" inputmode="numeric" placeholder="Masalan: 100000" style="flex:1; min-width:180px; padding:12px 14px; border:1px solid var(--border); border-radius:14px; font-size:14px; outline:none">
-              <button class="cta" id="topupBtn" style="width:auto; padding:12px 14px">
-                <i class="fa-solid fa-credit-card" style="margin-right:8px"></i> Payme bilan to‘ldirish
-              </button>
-            </div>
-            <div id="topupHint" style="margin-top:8px; color:var(--muted); font-size:12px">Minimal: 1000 so‘m</div>
-          </div>
-        </div>
-
-        <div class="field" style="align-items:flex-start">
-          <i class="fa-solid fa-shield-halved"></i>
-          <div class="k">Eslatma</div>
-          <div class="v" style="color:var(--muted); font-size:13px; line-height:1.4">
-            Payme orqali to‘lovdan keyin balans avtomatik yangilanadi (1–2 daqiqa ichida). Agar kechiksa — sahifani yangilang.
-          </div>
-        </div>
-      </div>
-    </div>
-
     </div>
   </div>
 
   <script type="module">
     import { auth, db } from "./firebase-config.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-    import "./payme-config.js";
-    import { doc, getDoc, setDoc, onSnapshot,
+    import { doc, getDoc, setDoc,
     serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
     const $ = (s)=>document.querySelector(s);
@@ -221,49 +177,6 @@
     }
 
     
-
-    // ===== Wallet helpers =====
-    function setBalanceUI(n){
-      const el = document.getElementById("balProfile");
-      if(el) el.textContent = (Number(n||0)||0).toLocaleString("uz-UZ") + " so'm";
-    }
-
-    function createTopupLink(orderId, amountTiyin){
-      const mid = window.PAYME_MERCHANT_ID || "";
-      const lang = window.PAYME_LANG || "uz";
-      if(!mid) throw new Error("payme_merchant_missing");
-      const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}&topup=1`;
-      const params = `m=${mid};ac.order_id=${orderId};a=${amountTiyin};l=${lang};c=${encodeURIComponent(returnUrl)}`;
-      const b64 = btoa(unescape(encodeURIComponent(params)));
-      return `https://checkout.paycom.uz/${b64}`;
-    }
-
-    async function createTopupOrder(uid, amountUZS){
-      const amt = Number(amountUZS||0);
-      if(!Number.isFinite(amt) || amt<=0) throw new Error("bad_amount");
-      const orderId = String(Date.now());
-      const amountTiyin = Math.round(amt*100);
-
-      // Minimal order doc to be processed by Payme verify (Cloud Functions)
-      const payload = {
-        orderId,
-        uid,
-        provider: "payme",
-        status: "pending_payment",
-        items: [],
-        totalUZS: amt,
-        amountTiyin,
-        shipping: null,
-        orderType: "topup",
-        createdAt: serverTimestamp(),
-        source: "web_profile"
-      };
-
-      await setDoc(doc(db,"orders",orderId), payload, { merge:true });
-      await setDoc(doc(db,"users",uid,"orders",orderId), payload, { merge:true });
-
-      return { orderId, amountTiyin };
-    }
 function uidToOmId(uid){
       let h = 0;
       const s = String(uid||"");
@@ -296,8 +209,6 @@ function uidToOmId(uid){
         return;
       }
       const userRef = doc(db,"users",user.uid);
-      // realtime balance
-      onSnapshot(userRef, (us)=>{ const u=us.exists()? (us.data()||{}):{}; setBalanceUI(u.balanceUZS||0); });
       const snap = await getDoc(userRef);
       const phone = snap.exists() ? (snap.data().phone||"") : "";
       const name = snap.exists() ? (snap.data().name||"") : (user.displayName||"User");
@@ -311,33 +222,6 @@ function uidToOmId(uid){
       $("#omId").textContent = "ID: " + ensured.omId;
       $("#phone").textContent = ensured.phone || "";
       $("#createdAt").textContent = fmtDate(snap.exists()? snap.data().createdAt : null);
-    });
-
-    // Topup button
-    $("#topupBtn")?.addEventListener("click", async ()=>{
-      const hint = document.getElementById("topupHint");
-      try{
-        const amt = Number(document.getElementById("topupAmount")?.value||0);
-        if(!amt || amt<1000){
-          if(hint) hint.textContent = "Minimal: 1000 so\x27m";
-          return;
-        }
-        if(hint) hint.textContent = "Payme ochilmoqda...";
-        const user = auth.currentUser;
-        if(!user) throw new Error("no_user");
-        const {orderId, amountTiyin} = await createTopupOrder(user.uid, amt);
-        const url = createTopupLink(orderId, amountTiyin);
-        window.location.href = url;
-      }catch(e){
-        console.warn(e);
-        if(String(e?.message||e).includes("payme_merchant_missing")){
-          if(hint) hint.textContent = "PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js)";
-          alert("PAYME_MERCHANT_ID sozlanmagan. public/payme-config.js faylida kiriting.");
-        }else{
-          if(hint) hint.textContent = "Xato. Qayta urinib ko\x27ring.";
-          alert("Depozit yaratilmadi. Qayta urinib ko\x27ring.");
-        }
-      }
     });
 
     $("#logoutBtn").addEventListener("click", async ()=>{
