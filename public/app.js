@@ -3454,3 +3454,103 @@ document.addEventListener('click', (e)=>{
     startTopupPayme();
   }
 });
+
+
+/* === Not Found modal wiring === */
+(function initNotFoundRequest(){
+  const modal = document.getElementById("nfModal");
+  const openBtn = document.getElementById("nfOpenBtn");
+  const closeBtn = document.getElementById("nfCloseBtn");
+  const botLink = document.getElementById("nfBotLink");
+  const openBotBtn = document.getElementById("nfOpenBotBtn");
+  const nameEl = document.getElementById("nfName");
+  const catEl = document.getElementById("nfCat");
+  const budgetEl = document.getElementById("nfBudget");
+  const imgEl = document.getElementById("nfImg");
+  const descEl = document.getElementById("nfDesc");
+  const tplBox = document.getElementById("nfTemplateBox");
+  const copyBtn = document.getElementById("nfCopyBtn");
+  const prevWrap = document.getElementById("nfPreviewWrap");
+  const prevImg = document.getElementById("nfPreview");
+
+  if(!modal || !openBtn || !closeBtn || !tplBox) return;
+
+  const BOT_URL = (botLink && botLink.getAttribute("href")) ? botLink.getAttribute("href") : "https://t.me/OrzuMallUZ_bot";
+  if(openBotBtn) openBotBtn.href = BOT_URL;
+
+  function buildTemplate(){
+    const name = (nameEl?.value || "").trim();
+    const cat = (catEl?.value || "").trim();
+    const budget = (budgetEl?.value || "").trim();
+    const desc = (descEl?.value || "").trim();
+
+    const lines = [];
+    lines.push("🧾 *ORZUMALL — Topib berish so‘rovi*");
+    if(name) lines.push("🔎 Nomi: " + name);
+    if(cat) lines.push("🗂 Kategoriya: " + cat);
+    if(budget) lines.push("💰 Byudjet: " + budget);
+    if(desc) lines.push("📝 Izoh: " + desc);
+    lines.push("📍 Yetkazish manzili: (shahar/tuman yozing)");
+    lines.push("☎️ Aloqa: (telefon raqam)");
+    lines.push("");
+    lines.push("📸 Rasmni ham shu xabardan keyin alohida yuboring.");
+    return lines.join("\n");
+  }
+
+  function refresh(){
+    tplBox.textContent = buildTemplate();
+  }
+
+  function open(){
+    modal.hidden = false;
+    document.body.style.overflow = "hidden";
+    refresh();
+    setTimeout(()=> nameEl?.focus?.(), 50);
+  }
+  function close(){
+    modal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  openBtn.addEventListener("click", open);
+  closeBtn.addEventListener("click", close);
+  modal.addEventListener("click", (e)=>{
+    if(e.target === modal) close();
+  });
+  window.addEventListener("keydown", (e)=>{
+    if(!modal.hidden && e.key === "Escape") close();
+  });
+
+  [nameEl, catEl, budgetEl, descEl].forEach(el=>{
+    if(!el) return;
+    el.addEventListener("input", refresh);
+  });
+
+  if(imgEl && prevWrap && prevImg){
+    imgEl.addEventListener("change", ()=>{
+      const f = imgEl.files && imgEl.files[0];
+      if(!f){ prevWrap.hidden = true; prevImg.src = ""; return; }
+      const url = URL.createObjectURL(f);
+      prevImg.src = url;
+      prevWrap.hidden = false;
+    });
+  }
+
+  if(copyBtn){
+    copyBtn.addEventListener("click", async ()=>{
+      try{
+        await navigator.clipboard.writeText(buildTemplate());
+        toast && toast("Matn nusxa olindi ✅");
+      }catch(e){
+        // fallback
+        const ta = document.createElement("textarea");
+        ta.value = buildTemplate();
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        toast && toast("Matn nusxa olindi ✅");
+      }
+    });
+  }
+})();
