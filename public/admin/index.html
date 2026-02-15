@@ -158,6 +158,8 @@
   .pill.paid{background:#dcfce7;color:#166534}
   .pill.delivered{background:#ede9fe;color:#5b21b6}
   .pill.cancelled{background:#fee2e2;color:#991b1b}
+  .pill.stock{background:#dcfce7;color:#166534}
+  .pill.cargo{background:#fff4e6;color:#b45309}
   .modal-content.wide{max-width:980px}
 
   </style>
@@ -170,6 +172,7 @@
       <ul class="nav-menu">
         <li class="nav-item"><a href="#" class="nav-link active" data-view="products"><i class="fas fa-box"></i><span>Mahsulotlar</span></a></li>
 <li class="nav-item"><a href="#" class="nav-link" data-view="orders"><i class="fas fa-receipt"></i><span>Buyurtmalar</span></a></li>
+<li class="nav-item"><a href="#" class="nav-link" data-view="turnover"><i class="fas fa-wallet"></i><span>Hisob aylanmasi</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" data-view="stats"><i class="fas fa-chart-bar"></i><span>Statistika</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" data-view="settings"><i class="fas fa-cog"></i><span>Sozlamalar</span></a></li>
         <li class="nav-item"><a href="#" class="nav-link" id="exportJsonNav"><i class="fas fa-download"></i><span>Export JSON</span></a></li>
@@ -221,7 +224,7 @@
           <table id="productsTable">
             <thead>
               <tr>
-                <th>ID</th><th>Nomi</th><th>Narxi</th><th>Teglar</th><th>Ranglar</th><th>O'lchamlar</th><th>Popular</th><th>Harakatlar</th>
+                <th>ID</th><th>Nomi</th><th>Narxi</th><th>Turi</th><th>Teglar</th><th>Ranglar</th><th>O'lchamlar</th><th>Popular</th><th>Harakatlar</th>
               </tr>
             </thead>
             <tbody id="productsTableBody"></tbody>
@@ -302,7 +305,80 @@
         </div>
       </div>
 
-      <div class="card hidden" id="statsView">
+            <div class="card hidden" id="turnoverView">
+        <div class="card-header">
+          <h3><i class="fas fa-wallet"></i> Hisob aylanmasi tarixi</h3>
+          <div class="right-actions">
+            <span class="muted" id="turnoverState">—</span>
+            <button class="btn btn-light btn-sm" id="turnoverRefresh"><i class="fas fa-sync-alt"></i> Yangilash</button>
+          </div>
+        </div>
+
+        <div class="card-body pad">
+          <div class="stats-cards" style="margin-bottom:16px">
+            <div class="stat-card"><div class="stat-icon price"><i class="fas fa-circle-plus"></i></div><div class="stat-info"><h3 id="turnoverTopup">0</h3><p>Topup (paid) jami</p></div></div>
+            <div class="stat-card"><div class="stat-icon total"><i class="fas fa-bag-shopping"></i></div><div class="stat-info"><h3 id="turnoverSales">0</h3><p>Checkout (paid) jami</p></div></div>
+            <div class="stat-card"><div class="stat-icon popular"><i class="fas fa-receipt"></i></div><div class="stat-info"><h3 id="turnoverCount">0</h3><p>Tranzaksiya soni</p></div></div>
+            <div class="stat-card"><div class="stat-icon tags"><i class="fas fa-users"></i></div><div class="stat-info"><h3 id="turnoverUsers">0</h3><p>Unique user</p></div></div>
+          </div>
+
+          <div class="form-row" style="margin-bottom:10px">
+            <div class="form-group" style="min-width:240px">
+              <label>Qidiruv</label>
+              <input id="turnoverSearch" class="form-control" placeholder="Order ID / UID / OMID / ism / telefon">
+            </div>
+            <div class="form-group" style="min-width:180px">
+              <label>Tur</label>
+              <select id="turnoverType" class="form-control">
+                <option value="">Hammasi</option>
+                <option value="topup">Topup</option>
+                <option value="checkout">Checkout</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:170px">
+              <label>Status</label>
+              <select id="turnoverStatus" class="form-control">
+                <option value="">Hammasi</option>
+                <option value="paid">paid</option>
+                <option value="pending_payment">pending_payment</option>
+                <option value="pending">pending</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (dan)</label>
+              <input id="turnoverFrom" type="date" class="form-control">
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (gacha)</label>
+              <input id="turnoverTo" type="date" class="form-control">
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table id="turnoverTable">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>UID / OMID</th>
+                  <th>Tur</th>
+                  <th>Status</th>
+                  <th>Provider</th>
+                  <th>Summa</th>
+                  <th>Vaqt</th>
+                </tr>
+              </thead>
+              <tbody id="turnoverTbody"></tbody>
+            </table>
+          </div>
+
+          <div class="muted" style="margin-top:10px">
+            * Bu bo2018lim /orders kolleksiyasidan o2018qib, topup va checkout aylanmasini ko2018rsatadi.
+          </div>
+        </div>
+      </div>
+
+<div class="card hidden" id="statsView">
         <div class="card-header"><h3>Statistika</h3><div class="right-actions"><button class="btn btn-light btn-sm" id="recalcStatsBtn"><i class="fas fa-bolt"></i> Qayta hisoblash</button></div></div>
         <div class="card-body pad"><div class="grid2">
           <div class="mini-card"><div class="mini-title">Top 10 (popular)</div><div id="topPopularList" class="mini-list"></div></div>
@@ -399,7 +475,28 @@
           </div>
 
           <div class="form-section">
-            <h4><i class="fas fa-tags"></i> Teglar</h4>
+            <h4><i class="fas fa-truck"></i> Yetkazib berish turi</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mahsulot turi</label>
+                <select id="pType" class="form-control">
+                  <option value="stock">O2018zimizda (omborda bor)</option>
+                  <option value="cargo">Keltirib beramiz (cargo)</option>
+                </select>
+                <div class="form-text">"Keltirib beramiz" bo2018lsa, min/max kun va prepay avtomatik yoqiladi.</div>
+              </div>
+              <div class="form-group">
+                <label>Min kun</label>
+                <input id="pMinDays" type="number" class="form-control" min="0" placeholder="15">
+              </div>
+              <div class="form-group">
+                <label>Max kun</label>
+                <input id="pMaxDays" type="number" class="form-control" min="0" placeholder="30">
+              </div>
+            </div>
+          </div>
+
+          ></i> Teglar</h4>
             <div class="form-group"><label>Vergul bilan</label><input id="tagsInput" class="form-control" placeholder="telefon, premium"></div>
             <div id="tagsPreview" class="tags-container"></div>
           </div>
@@ -662,6 +759,7 @@
           <td><span class="product-id">${esc(p.id)}</span></td>
           <td><div class="product-name" title="${esc(p.name||"")}">${esc(p.name||"")}</div>${p.subtitle?`<div style="font-size:.85rem;color:var(--gray);margin-top:5px">${esc(p.subtitle)}</div>`:""}</td>
           <td class="price-cell">${formatPrice(p.price)} ${old}<div style="font-size:.85rem;color:var(--gray)">${esc(p.currency||"UZS")}</div></td>
+          <td>${renderFulfillmentPill(p)}</td>
           <td><div class="tags-container">${tags}</div></td>
           <td>${colors}</td>
           <td>${sizes}</td>
@@ -697,7 +795,7 @@
     }
 
     function setView(view){
-      const views = ["products","stats","settings","orders"];
+      const views = ["products","stats","settings","orders","turnover"];
       views.forEach(v=>{
         const el = document.getElementById(v+"View");
         if(el) el.classList.toggle("hidden", view!==v);
@@ -707,6 +805,7 @@
       });
       if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
       if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} }
+      if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
     }
 
     function renderStatsPanels(){
@@ -732,6 +831,9 @@
       $("variantsContainer").innerHTML='<p class="form-text">Variant narx qo\'yilsa ishlaydi.</p>';
       addColor(); addSize(); addImage();
       $("imagesByColorInput").value="";
+      if(document.getElementById("pType")) document.getElementById("pType").value="stock";
+      if(document.getElementById("pMinDays")) document.getElementById("pMinDays").value="";
+      if(document.getElementById("pMaxDays")) document.getElementById("pMaxDays").value="";
     }
     function updateTagsPreview(){
       const tags = ($("tagsInput").value||"").split(",").map(s=>s.trim()).filter(Boolean);
@@ -958,6 +1060,10 @@
       $("variantsContainer").innerHTML='<p class="form-text">Variant narx qo\'yilsa ishlaydi.</p>';
       (p.variants||[]).forEach(v=>addVariant(v));
 
+            if(document.getElementById("pType")) document.getElementById("pType").value = (p.fulfillmentType||"stock");
+      if(document.getElementById("pMinDays")) document.getElementById("pMinDays").value = (p.deliveryMinDays ?? ( (p.fulfillmentType==="cargo")?15:"" ));
+      if(document.getElementById("pMaxDays")) document.getElementById("pMaxDays").value = (p.deliveryMaxDays ?? ( (p.fulfillmentType==="cargo")?30:"" ));
+
       openModal("productModal");
     }
 
@@ -1120,6 +1226,9 @@
 
       $("saveSettingsBtn").addEventListener("click",saveAdminSettings);
       $("recalcStatsBtn").addEventListener("click",()=>{ renderStats(); renderStatsPanels(); toast("Hisoblandi"); });
+
+      if(0 0"turnoverRefresh")) 0 0"turnoverRefresh").addEventListener("click",()=>subscribeTurnover());
+      ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{ const el=0 0id); if(el){ el.addEventListener("input",renderTurnover); el.addEventListener("change",renderTurnover);} });
 
       window.addEventListener("click",(e)=>{
         if(e.target===$("productModal")){ closeModal("productModal"); resetForm(); }
