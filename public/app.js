@@ -849,6 +849,68 @@ function parsePrice(v){
   const n = parseInt(digits.slice(0, 12), 10);
   return Number.isFinite(n) ? n : 0;
 }
+
+// ===================== DELIVERY / BADGES =====================
+function getFulfillmentType(p){
+  const t = (p?.pType || p?.fulfillmentType || p?.type || "stock").toString().toLowerCase();
+  return (t === "cargo" || t === "keltirib" || t === "deliver" || t === "import") ? "cargo" : "stock";
+}
+
+function getDeliveryInfo(p){
+  const type = getFulfillmentType(p);
+  const min = (p?.deliveryMinDays ?? p?.deliverMinDays ?? (type === "cargo" ? 7 : 1));
+  const max = (p?.deliveryMaxDays ?? p?.deliverMaxDays ?? (type === "cargo" ? 14 : 7));
+  const minN = (typeof min === "number") ? min : parseInt(min, 10);
+  const maxN = (typeof max === "number") ? max : parseInt(max, 10);
+  return {
+    type,
+    min: Number.isFinite(minN) ? minN : (type === "cargo" ? 7 : 1),
+    max: Number.isFinite(maxN) ? maxN : (type === "cargo" ? 14 : 7),
+  };
+}
+
+function deliveryLineText(p){
+  const d = getDeliveryInfo(p);
+  const rng = `${d.min}–${d.max} kun`;
+  return d.type === "cargo" ? `Keltirib beramiz (${rng})` : `O‘zimizda (${rng})`;
+}
+
+function badgeHTML(kind, label, icon){
+  const ic = icon ? `<i class="fa-solid ${icon}" aria-hidden="true"></i>` : "";
+  return `<span class="badge ${kind}">${ic}<span>${escapeHtml(label)}</span></span>`;
+}
+
+function renderCardBadges(p){
+  const d = getDeliveryInfo(p);
+
+  const badges = [];
+  badges.push(badgeHTML(d.type, deliveryLineText(p), d.type === "cargo" ? "fa-truck-fast" : "fa-box"));
+
+  // Prepay badge for cargo (optional)
+  if(d.type === "cargo"){
+    badges.push(badgeHTML("prepay", "Oldindan to‘lov", "fa-circle-exclamation"));
+  }
+
+  // Discount badge
+  const price = Number(p.price || 0);
+  const oldP = Number(p.oldPrice || 0);
+  if(oldP && price && oldP > price){
+    const pct = Math.round(((oldP - price) / oldP) * 100);
+    const txt = (pct >= 5 && pct <= 90) ? `Chegirma -${pct}%` : "Chegirma";
+    badges.push(badgeHTML("discount", txt, "fa-tag"));
+  }
+
+  // Top badge (simple heuristic)
+  const r = Number(p.rating || 0);
+  const rc = Number(p.reviewsCount || p.reviews || 0);
+  if(r >= 4.7 && rc >= 50){
+    badges.push(badgeHTML("top", "Top", "fa-fire"));
+  }
+
+  return `<div class="pbadges">${badges.join("")}</div>`;
+}
+// =============================================================
+
 function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
 // Variant pricing support
@@ -1161,17 +1223,6 @@ function escapeHtml(str){
   return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
 
-function deliveryLine(p){
-  const raw = (p.fulfillmentType ?? p.pType ?? p.type ?? "").toString().toLowerCase();
-  const isCargo = (raw === "cargo" || raw === "keltirib" || raw === "keltirib_beramiz" || raw === "import");
-  const min = Number(p.deliveryMinDays ?? p.deliveryMin ?? p.shipMinDays ?? (isCargo ? 15 : 1));
-  const max = Number(p.deliveryMaxDays ?? p.deliveryMax ?? p.shipMaxDays ?? (isCargo ? 30 : 7));
-  const label = isCargo ? "Keltirib beramiz" : "Bizda bor";
-  const range = (Number.isFinite(min) && Number.isFinite(max)) ? `${min}–${max} kun` : (isCargo ? "15–30 kun" : "1–7 kun");
-  return `${label}: ${range}`;
-}
-
-
 function render(arr){
   els.grid.innerHTML = "";
   els.empty.hidden = arr.length !== 0;
@@ -1205,7 +1256,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        <div class="pship">${deliveryLine(p)}</div>
+        ${renderCardBadges(p)}
 
         
 
@@ -2079,7 +2130,7 @@ function renderCartPage(){
         </label>
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
-        <div class="muted tiny">${(p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun")}</div>
+        <div class="muted tiny">${deliveryLineText(p)}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
