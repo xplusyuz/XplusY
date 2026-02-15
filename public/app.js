@@ -288,6 +288,8 @@ const els = {
   checkoutClose: document.getElementById("checkoutClose"),
   checkoutSubmit: document.getElementById("checkoutSubmit"),
   shipAddress: document.getElementById("shipAddress"),
+  shipPhone: document.getElementById("shipPhone"),
+  useProfilePhone: document.getElementById("useProfilePhone"),
   useMyLocation: document.getElementById("useMyLocation"),
   shipLiveBtn: document.getElementById("shipLiveBtn"),
   shipFullBtn: document.getElementById("shipFullBtn"),
@@ -298,6 +300,7 @@ const els = {
 
   profileEditBtn: document.getElementById("profileEditBtn"),
   profileSave: document.getElementById("profileSave"),
+  profileClose: document.getElementById("profileClose"),
   profileLogout: document.getElementById("profileLogout"),
   profileName: document.getElementById("profileName"),
   profileOmId: document.getElementById("profileOmId"),
@@ -2421,10 +2424,7 @@ async function createOrderFromCheckout(){
   }
 
   const address = (els.shipAddress?.value || "").trim();
-  if(!address && !shipLatLng){
-    toast("Manzil kiriting yoki xaritadan belgilang.");
-    return;
-  }
+  // Address is optional: user may place order without address
 
   let payType = getPayType(); // cash | payme | balance
   if(hasPrepay && payType !== "payme"){
@@ -2445,6 +2445,7 @@ async function createOrderFromCheckout(){
     totalUZS: built.totalUZS,
     amountTiyin: payType === "payme" ? amountTiyin : null,
     shipping: {
+      phone: (els.shipPhone?.value || (profileCache?.phone || profileCache?.phoneNumber || "") || "").toString().trim() || null,
       addressText: address || null,
       lat: shipLatLng?.lat ?? null,
       lng: shipLatLng?.lng ?? null
@@ -2800,6 +2801,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    profileCache = u;
     userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
     userPhone = (u.phone || "").toString();
     omId = (u.omId || makeOmId(currentUser.uid)).toString();
@@ -2898,9 +2900,17 @@ async function watchUserDoc(uid){
     const uref = doc(db,'users',uid);
     unsubUserDoc = onSnapshot(uref, (snap)=>{
       const u = snap.exists() ? (snap.data()||{}) : {};
+      profileCache = u;
       // ensure balance exists
       const bal = Number(u.balanceUZS||0) || 0;
       setBalanceUI(bal);
+      // autofill phone from profile
+      try{
+        const ph = (u.phone || u.phoneNumber || u.tel || '').toString();
+        if(els.useProfilePhone?.checked && els.shipPhone){
+          if(ph) els.shipPhone.value = ph;
+        }
+      }catch(e){}
     }, (err)=>{
       // Prevent noisy console errors when logged out or rules deny
       console.warn("user doc subscribe error", err);
@@ -3249,7 +3259,7 @@ function setEditing(on){
 }
 
 function openProfile(){ goTab("profile"); }
-function closeProfile(){ goTab("home"); }
+function closeProfile(){ if(window.__omProfile && window.__omProfile.isProfileComplete && !window.__omProfile.isProfileComplete()){ toast('Avval profilni to‘ldiring.'); return; } goTab("home"); }
 
 window.__omProfile = (function(){
   let regionData = null;
@@ -3364,7 +3374,8 @@ updatedAt: serverTimestamp(),
     watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
-    isCompleted = !!saved?.completedAt;
+    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post));
+    isCompleted = fsDone || !!saved?.profileCompleted || !!saved?.completedAt;
 
     // phone: auto fill from auth only if empty or first time
     const autoPhone = computePhone(user);
@@ -3381,6 +3392,24 @@ updatedAt: serverTimestamp(),
 
     // start in view mode; editing only via ✏️
     setEditing(false);
+
+    // Enforce mandatory profile completion
+    if(!isCompleted){
+      // open profile and force edit mode
+      openProfile();
+      setEditing(true);
+      toast && toast("Profil ma'lumotlarini to‘ldiring (majburiy)");      
+      // hide close/back actions while incomplete
+      try{
+        if(els.profileEditBtn) els.profileEditBtn.hidden = true;
+        if(els.profileClose) els.profileClose.hidden = true;
+      }catch(e){}
+    }else{
+      try{
+        if(els.profileEditBtn) els.profileEditBtn.hidden = false;
+        if(els.profileClose) els.profileClose.hidden = false;
+      }catch(e){}
+    }
   }
 
   async function open(){
@@ -3401,6 +3430,11 @@ updatedAt: serverTimestamp(),
     const district = els.pfDistrict?.value || "";
     const post = els.pfPost?.value || "";
 
+    // Profile ma'lumotlari majburiy
+    if(!phone){
+      alert("Iltimos, telefon raqamingizni kiriting.");
+      return;
+    }
     if(!region || !district || !post){
       alert("Iltimos, viloyat, tuman va pochta indeksini tanlang.");
       return;
@@ -3411,10 +3445,24 @@ updatedAt: serverTimestamp(),
       region,
       district,
       post,
-      completedAt: new Date().toISOString()
+      profileCompleted: true,
+      updatedAt: new Date().toISOString()
     };
 
+    // Local cache
     writeProfile(currentUser.uid, payload);
+
+    // Firestore'ga yozish (users/{uid})
+    (async ()=>{
+      try{
+        await setDoc(doc(db, "users", currentUser.uid), payload, { merge: true });
+        profileCache = { ...(profileCache||{}), ...payload };
+      }catch(err){
+        console.warn("save profile firestore error", err);
+        // offline bo'lsa ham localda qoladi
+      }
+    })();
+
     isCompleted = true;
     setEditing(false);
     closeProfile();
@@ -3459,7 +3507,7 @@ document.addEventListener("keydown", (e)=>{
     populatePosts(els.pfRegion.value, els.pfDistrict.value, "");
   });
 
-  return { open, syncUser };
+  return { open, syncUser, isProfileComplete: ()=>!!isCompleted };
 })();
 
 let __appStarted = false;
@@ -3468,6 +3516,8 @@ onAuthStateChanged(auth, async (user)=>{
   if(!user) return; // setUserUI redirects to /login.html
   if(__appStarted) return;
   __appStarted = true;
+
+  if(window.__omProfile?.syncUser) await window.__omProfile.syncUser(user);
 
   await loadProducts();
   updateBadges();
@@ -3658,3 +3708,12 @@ document.addEventListener('click', (e)=>{
     });
   }
 })();
+
+
+// Checkout phone: use profile phone toggle
+els.useProfilePhone?.addEventListener("change", ()=>{
+  const ph = (profileCache?.phone || profileCache?.phoneNumber || profileCache?.tel || "").toString();
+  if(els.useProfilePhone.checked){
+    if(els.shipPhone) els.shipPhone.value = ph || "";
+  }
+});
