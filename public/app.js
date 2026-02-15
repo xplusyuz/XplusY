@@ -227,6 +227,7 @@ const els = {
   avatarBtn: document.getElementById("avatarBtn"),
   grid: document.getElementById("grid"),
   empty: document.getElementById("empty"),
+  productsCount: document.getElementById("productsCount"),
   q: document.getElementById("q"),
   sort: document.getElementById("sort"),authCard: document.getElementById("authCard"),
 
@@ -1175,6 +1176,10 @@ function discountPct(price, oldPrice){
 
 function render(arr){
   els.grid.innerHTML = "";
+  if (els.productsCount) {
+    const n = Array.isArray(arr) ? arr.length : 0;
+    els.productsCount.textContent = `${n} ta`;
+  }
   els.empty.hidden = arr.length !== 0;
 
   for(const p of arr){
