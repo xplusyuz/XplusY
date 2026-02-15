@@ -289,6 +289,9 @@ const els = {
   checkoutSubmit: document.getElementById("checkoutSubmit"),
   shipAddress: document.getElementById("shipAddress"),
   useMyLocation: document.getElementById("useMyLocation"),
+  shipLiveBtn: document.getElementById("shipLiveBtn"),
+  shipFullBtn: document.getElementById("shipFullBtn"),
+  shipExitFullBtn: document.getElementById("shipExitFullBtn"),
   shipCoordsText: document.getElementById("shipCoordsText"),
 
   // profile page
@@ -2194,6 +2197,8 @@ let shipLatLng = null;       // {lat,lng}
 let shipGeocoder = null;     // google.maps.Geocoder
 let shipAutocomplete = null; // google.maps.places.Autocomplete
 let shipMapInited = false;
+let shipWatchId = null;
+let shipIsFull = false;
 
 let _gmapsPromise = null;
 function loadGoogleMapsOnce(){
@@ -2214,6 +2219,17 @@ function loadGoogleMapsOnce(){
   });
   return _gmapsPromise;
 }
+
+
+function _shipResizeMap(){
+  try{
+    if(shipMap && window.google && google.maps){
+      google.maps.event.trigger(shipMap, "resize");
+      if(shipLatLng) shipMap.setCenter(shipLatLng);
+    }
+  }catch(e){}
+}
+
 
 async function reverseGeocodeShip(lat, lng){
   try{
@@ -2307,13 +2323,30 @@ function openCheckout(){
   // init map after visible so Leaflet sizes correctly
   setTimeout(()=>{
     initShipMapOnce();
-    try{ shipMap && shipMap.invalidateSize(); }catch(e){}
+    try{ _shipResizeMap(); }catch(e){}
   }, 60);
 }
 
 function closeCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = true;
+
+  // stop live location when checkout closed
+  if(shipWatchId != null && navigator.geolocation){
+    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
+    shipWatchId = null;
+    _setLiveBtnOn(false);
+  }
+
+  // exit fullscreen if needed
+  const wrap = document.querySelector(".mapWrap");
+  if(wrap && wrap.classList.contains("isFull")){
+    wrap.classList.remove("isFull");
+    if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
+    if(els.shipFullBtn) els.shipFullBtn.hidden = false;
+    document.body.style.overflow = "";
+    shipIsFull = false;
+  }
 }
 
 function getPayType(){
@@ -3086,6 +3119,77 @@ els.useMyLocation?.addEventListener("click", ()=>{
   }, ()=>{
     toast("Lokatsiyani olishga ruxsat berilmadi.");
   }, { enableHighAccuracy: true, timeout: 8000 });
+
+
+els.shipFullBtn?.addEventListener("click", ()=>{
+  const wrap = document.querySelector(".mapWrap");
+  if(!wrap) return;
+  shipIsFull = true;
+  wrap.classList.add("isFull");
+  // show exit button, hide expand
+  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = false;
+  if(els.shipFullBtn) els.shipFullBtn.hidden = true;
+  document.body.style.overflow = "hidden";
+  setTimeout(_shipResizeMap, 120);
+});
+
+els.shipExitFullBtn?.addEventListener("click", ()=>{
+  const wrap = document.querySelector(".mapWrap");
+  if(!wrap) return;
+  shipIsFull = false;
+  wrap.classList.remove("isFull");
+  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
+  if(els.shipFullBtn) els.shipFullBtn.hidden = false;
+  document.body.style.overflow = "";
+  setTimeout(_shipResizeMap, 120);
+});
+
+function _setLiveBtnOn(on){
+  if(!els.shipLiveBtn) return;
+  els.shipLiveBtn.classList.toggle("active", !!on);
+  els.shipLiveBtn.innerHTML = on
+    ? '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli: ON'
+    : '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli';
+}
+
+els.shipLiveBtn?.addEventListener("click", ()=>{
+  if(!navigator.geolocation){
+    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
+    return;
+  }
+  // toggle
+  if(shipWatchId != null){
+    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
+    shipWatchId = null;
+    _setLiveBtnOn(false);
+    toast("Jonli lokatsiya: OFF");
+    return;
+  }
+  initShipMapOnce();
+  _setLiveBtnOn(true);
+  toast("Jonli lokatsiya: ON");
+  shipWatchId = navigator.geolocation.watchPosition((pos)=>{
+    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    try{
+      if(shipMap && window.google && google.maps){
+        shipMap.setCenter(shipLatLng);
+        shipMap.setZoom(17);
+        if(shipMarker) shipMarker.setPosition(shipLatLng);
+      }
+    }catch(e){}
+    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
+    // address is optional; reverse geocode occasionally to reduce quota
+    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
+  }, (err)=>{
+    console.warn("watchPosition error", err);
+    toast("Lokatsiya ruxsati berilmadi yoki topilmadi.");
+    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
+    shipWatchId = null;
+    _setLiveBtnOn(false);
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
+});
+
+
 });
 
 
