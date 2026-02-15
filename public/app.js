@@ -334,7 +334,6 @@ const els = {
   qvRating: document.getElementById("qvRating"),
   qvTags: document.getElementById("qvTags"),
   qvBadge: document.getElementById("qvBadge"),
-  qvBadgesBottom: document.getElementById("qvBadgesBottom"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
   imgPrev: document.getElementById("imgPrev"),
@@ -1161,6 +1160,28 @@ function renderOptions(p){
 function escapeHtml(str){
   return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
+function _normPType(p){
+  const t = (p?.pType || p?.fulfillmentType || p?.type || "stock");
+  return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
+}
+function getDeliveryInfo(p){
+  const type = _normPType(p);
+  const min = (p?.deliveryMinDays ?? p?.deliveryMin ?? (type==="cargo" ? 7 : 1));
+  const max = (p?.deliveryMaxDays ?? p?.deliveryMax ?? (type==="cargo" ? 14 : 7));
+  return { type, min, max };
+}
+function renderDeliveryBadge(p){
+  const d = getDeliveryInfo(p);
+  const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
+  const label = d.type === "cargo" ? "Keltirib beramiz" : "Bizda bor";
+  return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
+}
+function discountPct(price, oldPrice){
+  const p = Number(price||0), o = Number(oldPrice||0);
+  if(!o || o <= p) return 0;
+  return Math.round((1 - (p/o)) * 100);
+}
+
 
 function render(arr){
   els.grid.innerHTML = "";
@@ -1175,6 +1196,27 @@ function render(arr){
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
+const prCard = getVariantPricing(p, sel);
+const dp = discountPct(prCard.price, prCard.oldPrice);
+// Admin badges: badges[] (preferred) or badge string (legacy)
+const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
+const badgeHtmlParts = [];
+
+if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
+// show up to 3 admin badges (skip if looks like a percent discount we already show)
+for(const b of adminBadges.slice(0,3)){
+  const t = String(b||"").trim();
+  if(!t) continue;
+  if(/^-?\d+\s*%$/.test(t)) continue;
+  badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
+}
+// Prepay badge for cargo
+if(_normPType(p)==="cargo" || p.prepayRequired===true){
+  badgeHtmlParts.push(`<div class="pbadge warn">Oldindan to‘lov</div>`);
+}
+
+const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
+
     const st = getStats(p.id);
     const showAvg = st.count ? st.avg : 0;
     const showCount = st.count ? st.count : 0;
@@ -1182,7 +1224,7 @@ function render(arr){
     card.innerHTML = `
       <div class="pmedia">
         <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
-        ${p.badge ? `<div class="pbadge">${escapeHtml(p.badge)}</div>` : ``}
+        ${badgeHTML}
         <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
       </div>
 
@@ -1195,7 +1237,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        <div class="pship">${p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun"}</div>
+        <div class="pship">${renderDeliveryBadge(p)}</div>
 
         
 
@@ -1722,24 +1764,8 @@ function renderViewer(){
   }
   if(els.qvBadge){
     const b = (viewer.badge||"").toString().trim();
-    const isPrepay = /oldindan|oldindan\s+to['’`]?lov|avans|prepay/i.test(b);
-
-    // Default: hide bottom badges container (if exists)
-    if(els.qvBadgesBottom){
-      els.qvBadgesBottom.style.display = "none";
-      els.qvBadgesBottom.innerHTML = "";
-    }
-
-    if(b && isPrepay && els.qvBadgesBottom){
-      // Prepay badge -> move to the bottom (below actions)
-      els.qvBadgesBottom.innerHTML = `<span class="qvBadge">${escapeHtml(b)}</span>`;
-      els.qvBadgesBottom.style.display = "";
-      els.qvBadge.style.display = "none";
-    }else{
-      // Other badges (e.g. discount) stay near the price
-      els.qvBadge.textContent = b;
-      els.qvBadge.style.display = b ? "" : "none";
-    }
+    els.qvBadge.textContent = b;
+    els.qvBadge.style.display = b ? "" : "none";
   }
   if(els.qvTags){
     const tagsArr = Array.isArray(viewer.tags) ? viewer.tags : [];
@@ -1818,6 +1844,14 @@ function closeImageViewer(){
   cleanupReviewSubscriptions();
   hideOverlay(els.imgViewer);
 }
+
+function closeImgViewer(){
+  // backward compatible alias (some handlers still call this)
+  return closeImageViewer();
+}
+window.closeImgViewer = closeImgViewer;
+window.closeImageViewer = closeImageViewer;
+
 
 function stepViewer(dir){
   const n = viewer.images?.length || 0;
@@ -2085,7 +2119,7 @@ function renderCartPage(){
         </label>
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
-        <div class="muted tiny">${(p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun")}</div>
+        <div class="cartShip">${renderDeliveryBadge(p)}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -2142,6 +2176,8 @@ function renderCartPage(){
     els.cartSelectAllPage.checked = all;
     els.cartSelectAllPage.indeterminate = !all && cartSelected.size>0;
   }
+  // apply payment option rules based on cart items
+  if(typeof applyPayTypeRules==='function') applyPayTypeRules();
 }
 
 
@@ -2281,6 +2317,52 @@ function getPayType(){
   const r = document.querySelector('input[name="paytype"]:checked');
   return r ? r.value : "cash";
 }
+
+
+function applyPayTypeRules(){
+  try{
+    // determine if any selected item requires prepay (cargo)
+    const built = (typeof buildSelectedItems === "function") ? buildSelectedItems() : null;
+    const items = built && built.ok ? built.items : [];
+    const hasPrepay = items.some(it=>it.prepayRequired) || cart.some(ci=>{
+      const p = products.find(x=>x.id===ci.id);
+      return p && (_normPType(p)==="cargo" || p.prepayRequired===true);
+    });
+
+    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
+    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
+    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
+
+    // helper to hide the whole option row
+    const hideOpt = (rb, hide)=>{
+      if(!rb) return;
+      const row = rb.closest("label") || rb.closest(".payOption") || rb.parentElement;
+      if(row) row.style.display = hide ? "none" : "";
+      rb.disabled = !!hide;
+    };
+
+    // For cargo/prepay: hide cash (and payme if you want only balance)
+    hideOpt(cashRb, hasPrepay);
+    // Keep payme visible unless you enforce balance-only
+    // If you want STRICT: uncomment next line
+    // hideOpt(paymeRb, hasPrepay);
+
+    if(hasPrepay){
+      // force balance
+      if(balRb) balRb.checked = true;
+      const note = document.getElementById("payRuleNote");
+      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov tavsiya etiladi.";
+    } else {
+      const note = document.getElementById("payRuleNote");
+      if(note) note.textContent = "";
+    }
+  }catch(e){
+    // never break page
+    console.warn("applyPayTypeRules failed:", e);
+  }
+}
+window.applyPayTypeRules = applyPayTypeRules;
+
 
 async function createOrderFromCheckout(){
   if(!currentUser){
