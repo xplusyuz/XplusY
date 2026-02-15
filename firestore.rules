@@ -2,100 +2,121 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn() && (request.auth.token.email == 'sohibjonmath@gmail.com');
+    /* ========= HELPERS ========= */
+    function signedIn() {
+      return request.auth != null;
     }
-    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
 
-    // ---------- PRODUCTS (public read, admin write) ----------
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email in ["sohibjonmath@gmail.com"];
+    }
+
+    function isInt(x) { return x is int; }
+    function isNum(x) { return x is int || x is float; }
+
+    // user hujjati (balans tekshirish uchun)
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /* ========= PRODUCTS ========= */
     match /products/{productId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
-    }
 
-    // ---------- USERS ----------
-    match /users/{uid} {
-      // User can read/update own profile; admin can read for support/admin UI
-      allow read: if isSelf(uid) || isAdmin();
-      allow create, update: if isSelf(uid);
-      allow delete: if false;
+      match /reviews/{reviewId} {
+        allow read: if true;
 
-      // Favorites + Cart are per-user
-      match /favorites/{pid} { allow read, write: if isSelf(uid); }
-      match /cart/{pid} { allow read, write: if isSelf(uid); }
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.stars is int
+          && request.resource.data.stars >= 1
+          && request.resource.data.stars <= 5;
 
-      // Orders subcollection (NO composite index needed for reading)
-      match /orders/{orderId} {
-        allow create: if isSelf(uid)
-          && request.resource.data.uid == uid
-          && request.resource.data.status in ['pending_payment','pending_cash','paid','pending']
-          && request.resource.data.provider in ['payme','cash','balance']
-          && request.resource.data.totalUZS is number
-          && request.resource.data.totalUZS > 0
-          && request.resource.data.items is list
-          && (request.resource.data.items.size() > 0 || request.resource.data.orderType == 'topup')
-          && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt == request.time);
+        // user faqat o'z review'sini tahrirlaydi (uid o'zgarmasin)
+        allow update: if signedIn()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid;
 
-        allow read: if isSelf(uid) || isAdmin();
-        allow update: if isAdmin();   // (optional) admin can mirror status updates
-        allow delete: if false;
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.uid == request.auth.uid);
       }
     }
 
-    // ---------- EVENTS (optional analytics) ----------
-    match /events/{eventId} {
+    /* aggregate / collectionGroup reviews */
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if true;
+    }
+
+    /* ========= USERS ========= */
+    match /users/{uid} {
+      // admin ko‘rsa ham bo‘ladi (xohlasangiz olib tashlaymiz)
+      allow read: if isOwner(uid) || isAdmin();
+
+      // user hujjatini faqat o‘zi yaratadi (balanceUZS yozolmaydi)
+      allow create: if isOwner(uid)
+        && !('balanceUZS' in request.resource.data)
+        && !('isAdmin' in request.resource.data)
+        && !('role' in request.resource.data);
+
+      // user update: balansga tegmaydi, numericId/OMID'ga tegmaydi
+      allow update: if isOwner(uid)
+        // balanceUZS ni user o'zgartira olmaydi
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['balanceUZS']))
+        // admin flag/role ham user yozolmaydi
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['isAdmin','role']))
+        // OM id / numericId o'zgarmasin (agar ishlatsangiz)
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId','omId']));
+
+      allow delete: if isAdmin();
+
+      match /favorites/{favId} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      // agar siz /users/{uid}/orders saqlayotgan bo‘lsangiz
+      match /orders/{orderId} {
+        allow read, create: if isOwner(uid);
+        // user faqat “cancel” kabi yengil update qilsin (xohlasangiz)
+        allow update: if isOwner(uid) || isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    /* ========= GLOBAL ORDERS ========= */
+    match /orders/{orderId} {
+
+      // CREATE: checkout yoki topup
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.type in ['view','favorite','add_to_cart']
-        && request.resource.data.productId is string
-        && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt == request.time);
+        && request.resource.data.orderType in ['checkout','topup']
+        && request.resource.data.createdAt is timestamp;
+
+      // READ: admin yoki egasi
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+
+      // UPDATE/DELETE: faqat admin
+      allow update, delete: if isAdmin();
+    }
+
+    /* ========= EVENTS / ANALYTICS ========= */
+    match /events/{eventId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
       allow read: if isAdmin();
       allow update, delete: if false;
     }
 
-    // ---------- GLOBAL ORDERS (admin dashboard + user create) ----------
-    match /orders/{orderId} {
-      // User creates an order record (admin dashboard reads from here)
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status in ['pending_payment','pending_cash','paid','pending']
-        && request.resource.data.provider in ['payme','cash','balance']
-        && request.resource.data.totalUZS is number
-        && request.resource.data.totalUZS > 0
-        && request.resource.data.items is list
-          && (request.resource.data.items.size() > 0 || request.resource.data.orderType == 'topup')
-        && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt == request.time);
-
-      // Admin can read all; user can read only own
-      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-
-      // Only admin updates (payment/delivery statuses)
-      allow update: if isAdmin();
-      allow delete: if false;
-    }
-
-    
-    // ---------- META COUNTERS (OM ID auto-increment) ----------
-    match /meta/{docId} {
-      allow read: if signedIn();
-      allow create: if signedIn()
-        && docId == "counters"
-        && request.resource.data.omCounter is number
-        && request.resource.data.omCounter == 1;
-      allow update: if signedIn()
-        && docId == "counters"
-        && request.resource.data.omCounter is number
-        && (
-          // allow first-time creation via update if doc exists
-          (resource.data.omCounter is number && request.resource.data.omCounter == resource.data.omCounter + 1)
-        );
-      allow delete: if false;
-    }
-
-// ---------- CONFIGS (admin-only) ----------
+    /* ========= CONFIGS ========= */
     match /configs/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }
