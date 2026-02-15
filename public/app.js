@@ -984,6 +984,9 @@ function titleTag(t){
 }
 
 function renderTagBar(){
+  // chips disabled (using Categories page instead)
+  if(els.tagBar){ els.tagBar.innerHTML=""; }
+  return;
   if(!els.tagBar) return;
   const entries = Array.from(tagCounts.entries())
     .sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
