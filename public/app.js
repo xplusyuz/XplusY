@@ -161,7 +161,8 @@ function toast(message, type="info"){
       el.style.transform = "translateY(0)";
     });
     const ttl = type === "error" ? 3800 : 2600;
-    setTimeout(()=>{
+    applyPayTypeRules();
+  setTimeout(()=>{
       el.style.opacity = "0";
       el.style.transform = "translateY(8px)";
       setTimeout(()=> el.remove(), 220);
@@ -392,7 +393,8 @@ function hideOverlay(el){
   if(!el) return;
   el.classList.remove("isOpen");
   // keep in DOM briefly for exit animation
-  window.setTimeout(()=>{ el.hidden = true; _syncModalBody(); }, 190);
+  window.applyPayTypeRules();
+  setTimeout(()=>{ el.hidden = true; _syncModalBody(); }, 190);
 }
 
 // === Desktop horizontal scroll helpers (PC: wheel + drag) ===
@@ -451,7 +453,8 @@ function enhanceHScroll(el){
   const finish = ()=>{
     if(moved){
       el.dataset.justDragged = "1";
-      setTimeout(()=>{ delete el.dataset.justDragged; }, 140);
+      applyPayTypeRules();
+  setTimeout(()=>{ delete el.dataset.justDragged; }, 140);
     }
     down = false;
     moved = false;
@@ -711,6 +714,108 @@ function normImages(p, sel){
   return [];
 }
 
+
+/* ===== Delivery + Badges (pType/fulfillmentType unified) ===== */
+function getFulfillmentType(p){
+  const t = (p?.pType || p?.fulfillmentType || p?.fulfillment || p?.deliveryType || "stock");
+  return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
+}
+function getDeliveryInfo(p){
+  const type = getFulfillmentType(p);
+  const min = Number(p?.deliveryMinDays ?? (type==="cargo"?15:1));
+  const max = Number(p?.deliveryMaxDays ?? (type==="cargo"?30:7));
+  return { type, min, max, prepayRequired: !!(p?.prepayRequired ?? (type==="cargo")) };
+}
+function normalizeBadges(p){
+  const out = [];
+  const add = (x)=>{
+    if(!x) return;
+    const s = String(x).trim();
+    if(!s) return;
+    if(!out.some(v=>v.toLowerCase()===s.toLowerCase())) out.push(s);
+  };
+  if(Array.isArray(p?.badges)) p.badges.forEach(add);
+  if(p?.badge) add(p.badge);
+  return out;
+}
+function renderBadgePills(p){
+  const pills = [];
+  const pr = getVariantPricing(p, getSel(p));
+  const price = Number(pr?.price ?? p?.price ?? 0);
+  const old = Number(pr?.oldPrice ?? p?.oldPrice ?? 0);
+  if(old > price && price > 0){
+    const pct = Math.round(((old - price) / old) * 100);
+    if(pct >= 1) pills.push({ kind:"discount", text:`-${pct}%` });
+  }
+  // admin-managed badges
+  for(const b of normalizeBadges(p)){
+    pills.push({ kind:"custom", text:b });
+  }
+  // prepay badge (cargo)
+  const d = getDeliveryInfo(p);
+  if(d.prepayRequired) pills.push({ kind:"prepay", text:"Oldindan to‘lov" });
+  return pills.slice(0,4);
+}
+function renderBadgesHtml(p){
+  const pills = renderBadgePills(p);
+  if(!pills.length) return "";
+  return `<div class="pbadges">` + pills.map(b=>{
+    const cls = b.kind;
+    return `<span class="pbadge ${cls}">${escapeHtml(b.text)}</span>`;
+  }).join("") + `</div>`;
+}
+function renderDeliveryBadge(p){
+  const d = getDeliveryInfo(p);
+  const label = (d.type==="cargo")
+    ? `Keltirib beramiz (${d.min}–${d.max} kun)`
+    : `Bizda bor (${d.min}–${d.max} kun)`;
+  const icon = (d.type==="cargo") ? "fa-truck-fast" : "fa-box";
+  return `<div class="pshipBadge ${d.type}"><i class="fa-solid ${icon}" aria-hidden="true"></i> ${escapeHtml(label)}</div>`;
+}
+/* ===== Checkout pay rules ===== */
+function selectedProductsMeta(){
+  const sel = selectedCartItems();
+  const list = (sel.length ? sel : cart).map(ci=>{
+    const p = products.find(x=>x.id===ci.id);
+    return p ? {p, ci} : null;
+  }).filter(Boolean);
+  const hasCargo = list.some(x=>getFulfillmentType(x.p)==="cargo");
+  const hasPrepay = list.some(x=>getDeliveryInfo(x.p).prepayRequired);
+  return { hasCargo, hasPrepay };
+}
+function applyPayTypeRules(){
+  const meta = selectedProductsMeta();
+  const cash = document.querySelector('input[name="paytype"][value="cash"]');
+  const payme = document.querySelector('input[name="paytype"][value="payme"]');
+  const balance = document.querySelector('input[name="paytype"][value="balance"]');
+  const cashLabel = cash ? cash.closest("label") : null;
+  const paymeLabel = payme ? payme.closest("label") : null;
+  const note = document.getElementById("payRuleNote");
+
+  if(cashLabel){
+    // 1) cargo bo'lsa naqd ko'rinmasin
+    cashLabel.style.display = meta.hasCargo ? "none" : "";
+    if(meta.hasCargo && cash && cash.checked){
+      // default to payme if allowed else balance
+      if(payme && !meta.hasPrepay){ payme.checked = true; }
+      else if(balance){ balance.checked = true; }
+    }
+  }
+  if(payme){
+    // 2) prepay bo'lsa payme ham bo'lmasin (faqat balans)
+    const disablePayme = meta.hasPrepay;
+    payme.disabled = disablePayme;
+    if(paymeLabel) paymeLabel.style.opacity = disablePayme ? "0.5" : "";
+    if(disablePayme && payme.checked && balance) balance.checked = true;
+  }
+  if(note){
+    if(meta.hasPrepay) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS.";
+    else if(meta.hasCargo) note.textContent = "ℹ️ Keltirib berish mahsulotlari bor: naqd to‘lov mavjud emas.";
+    else note.textContent = "";
+  }
+}
+
+
 function getCurrentImage(p, sel){
   const imgs = normImages(p, sel);
   if(!imgs.length) return "";
@@ -813,6 +918,7 @@ function allCartSelected(){
 
 function selectedCartItems(){
   syncCartSelected(true);
+  applyPayTypeRules();
   return cart.filter(ci=>cartSelected.has(ci.key));
 }
 
@@ -849,68 +955,6 @@ function parsePrice(v){
   const n = parseInt(digits.slice(0, 12), 10);
   return Number.isFinite(n) ? n : 0;
 }
-
-// ===================== DELIVERY / BADGES =====================
-function getFulfillmentType(p){
-  const t = (p?.pType || p?.fulfillmentType || p?.type || "stock").toString().toLowerCase();
-  return (t === "cargo" || t === "keltirib" || t === "deliver" || t === "import") ? "cargo" : "stock";
-}
-
-function getDeliveryInfo(p){
-  const type = getFulfillmentType(p);
-  const min = (p?.deliveryMinDays ?? p?.deliverMinDays ?? (type === "cargo" ? 7 : 1));
-  const max = (p?.deliveryMaxDays ?? p?.deliverMaxDays ?? (type === "cargo" ? 14 : 7));
-  const minN = (typeof min === "number") ? min : parseInt(min, 10);
-  const maxN = (typeof max === "number") ? max : parseInt(max, 10);
-  return {
-    type,
-    min: Number.isFinite(minN) ? minN : (type === "cargo" ? 7 : 1),
-    max: Number.isFinite(maxN) ? maxN : (type === "cargo" ? 14 : 7),
-  };
-}
-
-function deliveryLineText(p){
-  const d = getDeliveryInfo(p);
-  const rng = `${d.min}–${d.max} kun`;
-  return d.type === "cargo" ? `Keltirib beramiz (${rng})` : `O‘zimizda (${rng})`;
-}
-
-function badgeHTML(kind, label, icon){
-  const ic = icon ? `<i class="fa-solid ${icon}" aria-hidden="true"></i>` : "";
-  return `<span class="badge ${kind}">${ic}<span>${escapeHtml(label)}</span></span>`;
-}
-
-function renderCardBadges(p){
-  const d = getDeliveryInfo(p);
-
-  const badges = [];
-  badges.push(badgeHTML(d.type, deliveryLineText(p), d.type === "cargo" ? "fa-truck-fast" : "fa-box"));
-
-  // Prepay badge for cargo (optional)
-  if(d.type === "cargo"){
-    badges.push(badgeHTML("prepay", "Oldindan to‘lov", "fa-circle-exclamation"));
-  }
-
-  // Discount badge
-  const price = Number(p.price || 0);
-  const oldP = Number(p.oldPrice || 0);
-  if(oldP && price && oldP > price){
-    const pct = Math.round(((oldP - price) / oldP) * 100);
-    const txt = (pct >= 5 && pct <= 90) ? `Chegirma -${pct}%` : "Chegirma";
-    badges.push(badgeHTML("discount", txt, "fa-tag"));
-  }
-
-  // Top badge (simple heuristic)
-  const r = Number(p.rating || 0);
-  const rc = Number(p.reviewsCount || p.reviews || 0);
-  if(r >= 4.7 && rc >= 50){
-    badges.push(badgeHTML("top", "Top", "fa-fire"));
-  }
-
-  return `<div class="pbadges">${badges.join("")}</div>`;
-}
-// =============================================================
-
 function norm(s){ return (s ?? "").toString().toLowerCase().trim(); }
 
 // Variant pricing support
@@ -1243,7 +1287,7 @@ function render(arr){
     card.innerHTML = `
       <div class="pmedia">
         <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
-        ${p.badge ? `<div class="pbadge">${escapeHtml(p.badge)}</div>` : ``}
+        ${renderBadgesHtml(p)}
         <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
       </div>
 
@@ -1256,7 +1300,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        ${renderCardBadges(p)}
+        ${renderDeliveryBadge(p)}
 
         
 
@@ -1751,7 +1795,8 @@ function closePanel(){
 
   // wait animation then hide
   const t = 240;
-  window.setTimeout(()=>{
+  window.applyPayTypeRules();
+  setTimeout(()=>{
     els.overlay.hidden = true;
     els.sidePanel.hidden = true;
   }, t);
@@ -1923,6 +1968,7 @@ function renderPanel(mode){
   els.panelList.innerHTML = "";
   const list = [];
   if(mode === "cart") syncCartSelected(true);
+  applyPayTypeRules();
 
   if(mode === "fav"){
     for(const id of favs){
@@ -2102,6 +2148,7 @@ function renderCartPage(){
   if(!els.cartPageList || !els.cartPageEmpty) return;
   els.cartPageList.innerHTML = "";
   syncCartSelected(true);
+  applyPayTypeRules();
 
   const list = [];
   for(const ci of cart){
@@ -2130,7 +2177,7 @@ function renderCartPage(){
         </label>
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
-        <div class="muted tiny">${deliveryLineText(p)}</div>
+        ${renderDeliveryBadge(p)}
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -2311,6 +2358,7 @@ function openCheckout(){
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // init map after visible so Leaflet sizes correctly
+  applyPayTypeRules();
   setTimeout(()=>{
     initShipMapOnce();
     try{ shipMap && shipMap.invalidateSize(); }catch(e){}
@@ -2709,10 +2757,10 @@ function buildSelectedItems(){
       size: ci.size || null,
       qty: Number(ci.qty||1),
       priceUZS: Number(pr.price||0),
-      fulfillmentType: (p?.fulfillmentType || "stock"),
-      deliveryMinDays: Number(p?.deliveryMinDays ?? (p?.fulfillmentType==="cargo"?15:1)),
-      deliveryMaxDays: Number(p?.deliveryMaxDays ?? (p?.fulfillmentType==="cargo"?30:7)),
-      prepayRequired: !!(p?.prepayRequired ?? (p?.fulfillmentType==="cargo")),
+      fulfillmentType: getFulfillmentType(p),
+      deliveryMinDays: getDeliveryInfo(p).min,
+      deliveryMaxDays: getDeliveryInfo(p).max,
+      prepayRequired: getDeliveryInfo(p).prepayRequired,
     };
   });
   const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
@@ -3394,7 +3442,8 @@ document.addEventListener("DOMContentLoaded", initMobileBottomBar);
     if(!(e.target && e.target.id==="q")) return;
     const {toolsTop, q, sort} = getEls();
     if(!toolsTop || !q) return;
-    setTimeout(()=>{
+    applyPayTypeRules();
+  setTimeout(()=>{
       if(sort && document.activeElement === sort) return;
       closeIfEmpty(toolsTop, q);
     }, 120);
