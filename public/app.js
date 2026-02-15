@@ -11,6 +11,8 @@ function tgAdminEnabled(){
     && window.TG_ADMIN.botToken.trim().length > 10
     && typeof window.TG_ADMIN.chatId === "string"
     && window.TG_ADMIN.chatId.trim().length > 2;
+  ensureProfileSocialLinks();
+
 }
 function tgUserEnabled(){
   const t = (window.TG_USER && typeof window.TG_USER.botToken === "string") ? window.TG_USER.botToken.trim() : "";
@@ -3704,3 +3706,95 @@ els.useProfilePhone?.addEventListener("change", ()=>{
     if(els.shipPhone) els.shipPhone.value = ph || "";
   }
 });
+
+/* ===== Profile: Social links card (injected via JS to avoid template overwrites) ===== */
+function ensureProfileSocialLinks(){
+  try{
+    if(!location.pathname.includes("/profile")) return;
+    if(document.getElementById("socialCard")) return;
+
+    const balanceCard = document.getElementById("balanceCard");
+    if(!balanceCard) return;
+
+    const wrap = balanceCard.parentElement; // usually inside .pageWrap
+    const card = document.createElement("div");
+    card.className = "card softCard";
+    card.id = "socialCard";
+    card.innerHTML = `
+      <div class="cardHead">
+        <div class="cardTitle">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>Ijtimoiy tarmoqlar</span>
+        </div>
+      </div>
+
+      <div class="socialGrid">
+        <a class="socialBtn tg" href="https://t.me/OrzuMallSearch_bot" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+          <span class="txt">
+            <span class="name">OrzuMall Search</span>
+            <span class="sub">@OrzuMallSearch_bot</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+
+        <a class="socialBtn tg2" href="https://t.me/OrzuMallUZ_bot" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-telegram"></i></span>
+          <span class="txt">
+            <span class="name">OrzuMall Bot</span>
+            <span class="sub">@OrzuMallUZ_bot</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+
+        <a class="socialBtn ig" href="https://instagram.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-instagram"></i></span>
+          <span class="txt">
+            <span class="name">Instagram</span>
+            <span class="sub">@OrzuMall.uz</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+
+        <a class="socialBtn tt" href="https://tiktok.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-tiktok"></i></span>
+          <span class="txt">
+            <span class="name">TikTok</span>
+            <span class="sub">@OrzuMall.uz</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+
+        <a class="socialBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-brands fa-youtube"></i></span>
+          <span class="txt">
+            <span class="name">YouTube</span>
+            <span class="sub">OrzuMall</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+
+        <a class="socialBtn web" href="https://xplusy.netlify.app/" target="_blank" rel="noopener">
+          <span class="ico"><i class="fa-solid fa-globe"></i></span>
+          <span class="txt">
+            <span class="name">Sayt</span>
+            <span class="sub">OrzuMall.uz</span>
+          </span>
+          <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
+        </a>
+      </div>
+
+      <div class="mutedTip">
+        <i class="fa-solid fa-circle-info"></i>
+        <span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span>
+      </div>
+    `;
+    wrap.insertBefore(card, balanceCard); // show above balance
+  }catch(e){
+    // no-op
+  }
+}
+
+
+window.addEventListener('popstate', ensureProfileSocialLinks);
+window.addEventListener('hashchange', ensureProfileSocialLinks);
