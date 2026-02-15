@@ -1700,7 +1700,18 @@ function handleHash(){
   showView(tab);
 }
 
+
 window.addEventListener("hashchange", handleHash);
+
+(function(){
+  const btn = document.getElementById("pcCatBtn");
+  if(btn){
+    btn.addEventListener("click", ()=>{
+      try{ goTab("categories"); }catch(e){ location.hash="#categories"; }
+    });
+  }
+})();
+;
 
 // bottom bar clicks (delegation)
 els.navBar?.addEventListener("click", (e)=>{
