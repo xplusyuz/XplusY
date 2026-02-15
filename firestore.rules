@@ -29,12 +29,12 @@ service cloud.firestore {
       match /orders/{orderId} {
         allow create: if isSelf(uid)
           && request.resource.data.uid == uid
-          && request.resource.data.status in ['pending_payment','created','shared_telegram','pending']
-          && request.resource.data.provider in ['payme','telegram','manual']
+          && request.resource.data.status in ['pending_payment','pending_cash','paid','pending']
+          && request.resource.data.provider in ['payme','cash','balance']
           && request.resource.data.totalUZS is number
           && request.resource.data.totalUZS > 0
           && request.resource.data.items is list
-          && request.resource.data.items.size() > 0
+          && (request.resource.data.items.size() > 0 || request.resource.data.orderType == 'topup')
           && request.resource.data.createdAt is timestamp;
 
         allow read: if isSelf(uid) || isAdmin();
@@ -59,12 +59,12 @@ service cloud.firestore {
       // User creates an order record (admin dashboard reads from here)
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status in ['pending_payment','created','shared_telegram','pending']
-        && request.resource.data.provider in ['payme','telegram','manual']
+        && request.resource.data.status in ['pending_payment','pending_cash','paid','pending']
+        && request.resource.data.provider in ['payme','cash','balance']
         && request.resource.data.totalUZS is number
         && request.resource.data.totalUZS > 0
         && request.resource.data.items is list
-        && request.resource.data.items.size() > 0
+          && (request.resource.data.items.size() > 0 || request.resource.data.orderType == 'topup')
         && request.resource.data.createdAt is timestamp;
 
       // Admin can read all; user can read only own

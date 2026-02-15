@@ -118,10 +118,10 @@ app.post("/payme", async (req, res) => {
     if(method === "CheckPerformTransaction"){
       const amount = Number(params?.amount || 0);
       const orderObj = await getOrderByAccount(params?.account);
-      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); citeturn1view2
+      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); 
       const order = orderObj.data;
       const expected = uzsToTiyin(order.totalUZS);
-      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); citeturn1view2
+      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); 
       if(String(order.status||"") === "paid") return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Order already paid") });
       return res.status(200).json({ id: rpcId, result: { allow: true } });
     }
@@ -184,14 +184,14 @@ app.post("/payme", async (req, res) => {
       const paymeId = String(params?.id || "");
       const txRef = db.doc(`payme_transactions/${paymeId}`);
       const txSnap = await txRef.get();
-      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); citeturn1view3
+      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); 
       const tx = txSnap.data() || {};
 
       if(tx.state === STATE_PERFORMED){
         return res.status(200).json({ id: rpcId, result: { transaction: tx.transaction || paymeId, perform_time: tx.perform_time || tx.performTime || Date.now(), state: STATE_PERFORMED } });
       }
       if(tx.state !== STATE_CREATED){
-        return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Cannot perform transaction") }); citeturn1view3
+        return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Cannot perform transaction") }); 
       }
 
       const orderRef = db.doc(`orders/${tx.orderId}`);
@@ -221,6 +221,23 @@ app.post("/payme", async (req, res) => {
           payme: { ...(order.payme||{}), id: paymeId, state: STATE_PERFORMED, perform_time },
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge:true });
+
+        // If this is a BALANCE TOPUP order, credit user's wallet
+        if(String(order.orderType||"") === "topup" && order.uid){
+          const uref = db.doc(`users/${order.uid}`);
+          const usnap = await t.get(uref);
+          const udata = usnap.exists ? (usnap.data()||{}) : {};
+          const bal = Number(udata.balanceUZS||0) || 0;
+          const add = Number(order.totalUZS||0) || 0;
+          t.set(uref, {
+            balanceUZS: bal + add,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge:true });
+
+          t.set(orderRef, {
+            creditedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge:true });
+        }
       });
 
       // Server-side Telegram notify on PAID (best practice)

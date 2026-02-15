@@ -174,6 +174,8 @@ function toast(message, type="info"){
 
 
 let currentUser = null;
+let userBalanceUZS = 0;
+let unsubUserDoc = null;
 let isEditing = false;
 
 // Normalize price / createdAt for reliable client-side sorting
@@ -1192,7 +1194,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-
+        <div class="pship">${p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun"}</div>
 
         
 
@@ -2066,6 +2068,7 @@ function renderCartPage(){
         </label>
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
+        <div class="muted tiny">${(p.fulfillmentType==='cargo' ? "Keltirib berish: 15–30 kun" : "Bizda bor: 1–7 kun")}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -2273,20 +2276,33 @@ async function createOrderFromCheckout(){
   const built = buildSelectedItems();
   if(!built.ok){ toast(built.reason); return; }
 
+  const hasPrepay = built.items.some(it=>it.prepayRequired);
+  const note = document.getElementById("payRuleNote");
+  if(note){
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+  }
+
   const address = (els.shipAddress?.value || "").trim();
   if(!address && !shipLatLng){
     toast("Manzil kiriting yoki xaritadan belgilang.");
     return;
   }
 
-  const payType = getPayType(); // cash | payme
+  let payType = getPayType(); // cash | payme | balance
+  if(hasPrepay && payType !== "balance"){
+    toast("Keltirib berish mahsulotlari: faqat BALANS orqali to‘lanadi.");
+    // auto-select balance
+    const rb = document.querySelector("input[name=paytype][value=balance]");
+    if(rb) rb.checked = true;
+    payType = "balance";
+  }
   const orderId = String(Date.now()); // digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
   const payload = {
     orderId,
-    provider: payType === "payme" ? "payme" : "cash",
-    status: payType === "payme" ? "pending_payment" : "pending_cash",
+    provider: payType === 'payme' ? 'payme' : (payType==='balance' ? 'balance' : 'cash'),
+    status: payType === 'payme' ? 'pending_payment' : (payType==='balance' ? 'paid' : 'pending_cash'),
     items: built.items,
     totalUZS: built.totalUZS,
     amountTiyin: payType === "payme" ? amountTiyin : null,
@@ -2298,7 +2314,12 @@ async function createOrderFromCheckout(){
   };
 
   try{
-    await createOrderDoc(payload);
+    if(payType === "balance"){
+      // Pay from balance atomically (deduct + create paid order)
+      await payWithBalance(built, payload.shipping);
+    } else {
+      await createOrderDoc(payload);
+    }
     removePurchasedFromCart(built.sel);
     updateBadges();
     renderCartPage();
@@ -2319,7 +2340,7 @@ async function createOrderFromCheckout(){
     const b64 = btoa(unescape(encodeURIComponent(params)));
     window.location.href = `https://checkout.paycom.uz/${b64}`;
   }else{
-    toast("Buyurtmangiz qabul qilindi");
+    toast(payType === "balance" ? "Balansdan to‘landi" : "Buyurtmangiz qabul qilindi");
     goTab("profile");
   }
 }
@@ -2339,6 +2360,10 @@ async function loadProducts(){
         const created = (data.createdAt ?? data.created_at ?? data.created);
         return {
           id: String(data.id || d.id),
+          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
           ...data,
           _docId: d.id,
           _price: parseUZS(price),
@@ -2622,6 +2647,10 @@ function buildSelectedItems(){
       size: ci.size || null,
       qty: Number(ci.qty||1),
       priceUZS: Number(pr.price||0),
+      fulfillmentType: (p?.fulfillmentType || "stock"),
+      deliveryMinDays: Number(p?.deliveryMinDays ?? (p?.fulfillmentType==="cargo"?15:1)),
+      deliveryMaxDays: Number(p?.deliveryMaxDays ?? (p?.fulfillmentType==="cargo"?30:7)),
+      prepayRequired: !!(p?.prepayRequired ?? (p?.fulfillmentType==="cargo")),
     };
   });
   const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
@@ -2713,6 +2742,133 @@ function removePurchasedFromCart(sel){
   updateCartSelectUI();
 }
 
+
+
+/* =========================
+   Balance (Wallet) + TopUp
+========================= */
+function setBalanceUI(n){
+  userBalanceUZS = Number(n||0) || 0;
+  const b1 = document.getElementById('balInline');
+  if(b1) b1.textContent = userBalanceUZS.toLocaleString();
+  const b2 = document.getElementById('balProfile');
+  if(b2) b2.textContent = userBalanceUZS.toLocaleString() + " so'm";
+}
+
+async function watchUserDoc(uid){
+  try{
+    unsubUserDoc && unsubUserDoc();
+    const uref = doc(db,'users',uid);
+    unsubUserDoc = onSnapshot(uref, (snap)=>{
+      const u = snap.exists() ? (snap.data()||{}) : {};
+      // ensure balance exists
+      const bal = Number(u.balanceUZS||0) || 0;
+      setBalanceUI(bal);
+    });
+  }catch(e){}
+}
+
+async function createTopupOrder(amountUZS){
+  if(!currentUser) throw new Error('no_user');
+  const amt = Number(amountUZS||0);
+  if(!Number.isFinite(amt) || amt<=0) throw new Error('bad_amount');
+
+  // create "order" of type topup so Payme verify (functions) can credit balance
+  const orderId = String(Date.now());
+  const amountTiyin = Math.round(amt * 100);
+
+  // reuse createOrderDoc but with orderType
+  const payload = {
+    orderId,
+    provider: 'payme',
+    status: 'pending_payment',
+    items: [],
+    totalUZS: amt,
+    amountTiyin,
+    shipping: null,
+    orderType: 'topup'
+  };
+
+  // write orderType into orders + user/orders too
+  await createOrderDoc({ ...payload });
+  // patch orderType field (createOrderDoc doesn't currently include it) via merge
+  await setDoc(doc(db,'orders',orderId), { orderType:'topup' }, {merge:true});
+  await setDoc(doc(db,'users',currentUser.uid,'orders',orderId), { orderType:'topup' }, {merge:true});
+
+  return { orderId, amountTiyin };
+}
+
+async function startTopupPayme(){
+  if(!currentUser){ toast('Avval kirish qiling.'); return; }
+  const inp = document.getElementById('topupAmount');
+  const hint = document.getElementById('topupHint');
+  const amt = Number(inp?.value||0);
+  if(!amt || amt<1000){
+    if(hint) hint.textContent = "Minimal: 1000 so'm";
+    toast("Minimal: 1000 so'm");
+    return;
+  }
+  if(hint) hint.textContent = "Payme ochilmoqda...";
+
+  try{
+    const {orderId, amountTiyin} = await createTopupOrder(amt);
+    if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes('YOUR_')){
+      toast('PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).');
+      return;
+    }
+    const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}&topup=1`;
+    const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+    const b64 = btoa(unescape(encodeURIComponent(params)));
+    window.location.href = `https://checkout.paycom.uz/${b64}`;
+  }catch(e){
+    console.warn(e);
+    if(hint) hint.textContent = "Xato. Qayta urinib ko'ring.";
+    toast("Balans to'ldirish yaratilmadi.");
+  }
+}
+
+async function payWithBalance(built, shipping){
+  if(!currentUser) throw new Error('no_user');
+  const total = Number(built.totalUZS||0);
+  const uid = currentUser.uid;
+  const orderId = String(Date.now());
+
+  await runTransaction(db, async (t)=>{
+    const uref = doc(db,'users',uid);
+    const us = await t.get(uref);
+    const u = us.exists() ? (us.data()||{}) : {};
+    const bal = Number(u.balanceUZS||0) || 0;
+    if(bal < total) throw new Error('no_balance');
+
+    // deduct balance
+    t.set(uref, { balanceUZS: bal - total, updatedAt: serverTimestamp() }, {merge:true});
+
+    // order doc
+    const oref = doc(db,'orders',orderId);
+    const uo = doc(db,'users',uid,'orders',orderId);
+    const base = {
+      orderId,
+      uid,
+      omId: u.omId || null,
+      userName: u.name || null,
+      userPhone: u.phone || null,
+      userTgChatId: (u.telegramChatId||u.tgChatId||null),
+      status: 'paid',
+      provider: 'balance',
+      items: built.items,
+      totalUZS: total,
+      shipping: shipping || null,
+      createdAt: serverTimestamp(),
+      paidAt: serverTimestamp(),
+      source: 'web',
+      payFromBalance: true
+    };
+    t.set(oref, base, {merge:true});
+    t.set(uo, base, {merge:true});
+  });
+
+  return orderId;
+}
 async function startPaymeCheckout(){
   if(!currentUser){
     toast("Avval kirish qiling (Telefon raqam + parol).");
@@ -2723,6 +2879,12 @@ async function startPaymeCheckout(){
 
   const built = buildSelectedItems();
   if(!built.ok){ toast(built.reason); return; }
+
+  const hasPrepay = built.items.some(it=>it.prepayRequired);
+  const note = document.getElementById("payRuleNote");
+  if(note){
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+  }
 
   if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).includes("YOUR_")){
     toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js).");
@@ -2759,6 +2921,12 @@ async function shareOrderTelegram(){
   if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
   const built = buildSelectedItems();
   if(!built.ok){ toast(built.reason); return; }
+
+  const hasPrepay = built.items.some(it=>it.prepayRequired);
+  const note = document.getElementById("payRuleNote");
+  if(note){
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS." : "";
+  }
 
   const orderId = String(Date.now());
   try{
@@ -2881,6 +3049,8 @@ function closeProfile(){ goTab("home"); }
 window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
+let userBalanceUZS = 0;
+let unsubUserDoc = null;
   let isEditing = false;
   let isCompleted = false;
 
@@ -2976,6 +3146,7 @@ async function syncUser(user){
       name,
       phone,
       omId,
+      balanceUZS: (typeof u.balanceUZS === "number" ? u.balanceUZS : 0),
       updatedAt: serverTimestamp(),
       ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
     }, { merge:true });
@@ -2984,6 +3155,9 @@ async function syncUser(user){
 
 
     renderHeader(user, meta);
+
+    // realtime balance updates
+    watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
     isCompleted = !!saved?.completedAt;
@@ -3170,3 +3344,13 @@ document.addEventListener("DOMContentLoaded", initMobileBottomBar);
   });
 })();
 
+
+
+// Wallet topup button
+document.addEventListener('click', (e)=>{
+  const t = e.target;
+  if(t && (t.id==='topupBtn' || t.closest('#topupBtn'))){
+    e.preventDefault();
+    startTopupPayme();
+  }
+});
