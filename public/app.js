@@ -161,8 +161,7 @@ function toast(message, type="info"){
       el.style.transform = "translateY(0)";
     });
     const ttl = type === "error" ? 3800 : 2600;
-    applyPayTypeRules();
-  setTimeout(()=>{
+    setTimeout(()=>{
       el.style.opacity = "0";
       el.style.transform = "translateY(8px)";
       setTimeout(()=> el.remove(), 220);
@@ -393,8 +392,7 @@ function hideOverlay(el){
   if(!el) return;
   el.classList.remove("isOpen");
   // keep in DOM briefly for exit animation
-  window.applyPayTypeRules();
-  setTimeout(()=>{ el.hidden = true; _syncModalBody(); }, 190);
+  window.setTimeout(()=>{ el.hidden = true; _syncModalBody(); }, 190);
 }
 
 // === Desktop horizontal scroll helpers (PC: wheel + drag) ===
@@ -453,8 +451,7 @@ function enhanceHScroll(el){
   const finish = ()=>{
     if(moved){
       el.dataset.justDragged = "1";
-      applyPayTypeRules();
-  setTimeout(()=>{ delete el.dataset.justDragged; }, 140);
+      setTimeout(()=>{ delete el.dataset.justDragged; }, 140);
     }
     down = false;
     moved = false;
@@ -714,108 +711,6 @@ function normImages(p, sel){
   return [];
 }
 
-
-/* ===== Delivery + Badges (pType/fulfillmentType unified) ===== */
-function getFulfillmentType(p){
-  const t = (p?.pType || p?.fulfillmentType || p?.fulfillment || p?.deliveryType || "stock");
-  return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
-}
-function getDeliveryInfo(p){
-  const type = getFulfillmentType(p);
-  const min = Number(p?.deliveryMinDays ?? (type==="cargo"?15:1));
-  const max = Number(p?.deliveryMaxDays ?? (type==="cargo"?30:7));
-  return { type, min, max, prepayRequired: !!(p?.prepayRequired ?? (type==="cargo")) };
-}
-function normalizeBadges(p){
-  const out = [];
-  const add = (x)=>{
-    if(!x) return;
-    const s = String(x).trim();
-    if(!s) return;
-    if(!out.some(v=>v.toLowerCase()===s.toLowerCase())) out.push(s);
-  };
-  if(Array.isArray(p?.badges)) p.badges.forEach(add);
-  if(p?.badge) add(p.badge);
-  return out;
-}
-function renderBadgePills(p){
-  const pills = [];
-  const pr = getVariantPricing(p, getSel(p));
-  const price = Number(pr?.price ?? p?.price ?? 0);
-  const old = Number(pr?.oldPrice ?? p?.oldPrice ?? 0);
-  if(old > price && price > 0){
-    const pct = Math.round(((old - price) / old) * 100);
-    if(pct >= 1) pills.push({ kind:"discount", text:`-${pct}%` });
-  }
-  // admin-managed badges
-  for(const b of normalizeBadges(p)){
-    pills.push({ kind:"custom", text:b });
-  }
-  // prepay badge (cargo)
-  const d = getDeliveryInfo(p);
-  if(d.prepayRequired) pills.push({ kind:"prepay", text:"Oldindan to‘lov" });
-  return pills.slice(0,4);
-}
-function renderBadgesHtml(p){
-  const pills = renderBadgePills(p);
-  if(!pills.length) return "";
-  return `<div class="pbadges">` + pills.map(b=>{
-    const cls = b.kind;
-    return `<span class="pbadge ${cls}">${escapeHtml(b.text)}</span>`;
-  }).join("") + `</div>`;
-}
-function renderDeliveryBadge(p){
-  const d = getDeliveryInfo(p);
-  const label = (d.type==="cargo")
-    ? `Keltirib beramiz (${d.min}–${d.max} kun)`
-    : `Bizda bor (${d.min}–${d.max} kun)`;
-  const icon = (d.type==="cargo") ? "fa-truck-fast" : "fa-box";
-  return `<div class="pshipBadge ${d.type}"><i class="fa-solid ${icon}" aria-hidden="true"></i> ${escapeHtml(label)}</div>`;
-}
-/* ===== Checkout pay rules ===== */
-function selectedProductsMeta(){
-  const sel = selectedCartItems();
-  const list = (sel.length ? sel : cart).map(ci=>{
-    const p = products.find(x=>x.id===ci.id);
-    return p ? {p, ci} : null;
-  }).filter(Boolean);
-  const hasCargo = list.some(x=>getFulfillmentType(x.p)==="cargo");
-  const hasPrepay = list.some(x=>getDeliveryInfo(x.p).prepayRequired);
-  return { hasCargo, hasPrepay };
-}
-function applyPayTypeRules(){
-  const meta = selectedProductsMeta();
-  const cash = document.querySelector('input[name="paytype"][value="cash"]');
-  const payme = document.querySelector('input[name="paytype"][value="payme"]');
-  const balance = document.querySelector('input[name="paytype"][value="balance"]');
-  const cashLabel = cash ? cash.closest("label") : null;
-  const paymeLabel = payme ? payme.closest("label") : null;
-  const note = document.getElementById("payRuleNote");
-
-  if(cashLabel){
-    // 1) cargo bo'lsa naqd ko'rinmasin
-    cashLabel.style.display = meta.hasCargo ? "none" : "";
-    if(meta.hasCargo && cash && cash.checked){
-      // default to payme if allowed else balance
-      if(payme && !meta.hasPrepay){ payme.checked = true; }
-      else if(balance){ balance.checked = true; }
-    }
-  }
-  if(payme){
-    // 2) prepay bo'lsa payme ham bo'lmasin (faqat balans)
-    const disablePayme = meta.hasPrepay;
-    payme.disabled = disablePayme;
-    if(paymeLabel) paymeLabel.style.opacity = disablePayme ? "0.5" : "";
-    if(disablePayme && payme.checked && balance) balance.checked = true;
-  }
-  if(note){
-    if(meta.hasPrepay) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: faqat BALANS.";
-    else if(meta.hasCargo) note.textContent = "ℹ️ Keltirib berish mahsulotlari bor: naqd to‘lov mavjud emas.";
-    else note.textContent = "";
-  }
-}
-
-
 function getCurrentImage(p, sel){
   const imgs = normImages(p, sel);
   if(!imgs.length) return "";
@@ -918,7 +813,6 @@ function allCartSelected(){
 
 function selectedCartItems(){
   syncCartSelected(true);
-  applyPayTypeRules();
   return cart.filter(ci=>cartSelected.has(ci.key));
 }
 
@@ -1266,6 +1160,28 @@ function renderOptions(p){
 function escapeHtml(str){
   return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
+function _normPType(p){
+  const t = (p?.pType || p?.fulfillmentType || p?.type || "stock");
+  return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
+}
+function getDeliveryInfo(p){
+  const type = _normPType(p);
+  const min = (p?.deliveryMinDays ?? p?.deliveryMin ?? (type==="cargo" ? 7 : 1));
+  const max = (p?.deliveryMaxDays ?? p?.deliveryMax ?? (type==="cargo" ? 14 : 7));
+  return { type, min, max };
+}
+function renderDeliveryBadge(p){
+  const d = getDeliveryInfo(p);
+  const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
+  const label = d.type === "cargo" ? "Keltirib beramiz" : "Bizda bor";
+  return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
+}
+function discountPct(price, oldPrice){
+  const p = Number(price||0), o = Number(oldPrice||0);
+  if(!o || o <= p) return 0;
+  return Math.round((1 - (p/o)) * 100);
+}
+
 
 function render(arr){
   els.grid.innerHTML = "";
@@ -1280,6 +1196,27 @@ function render(arr){
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
+const prCard = getVariantPricing(p, sel);
+const dp = discountPct(prCard.price, prCard.oldPrice);
+// Admin badges: badges[] (preferred) or badge string (legacy)
+const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
+const badgeHtmlParts = [];
+
+if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
+// show up to 3 admin badges (skip if looks like a percent discount we already show)
+for(const b of adminBadges.slice(0,3)){
+  const t = String(b||"").trim();
+  if(!t) continue;
+  if(/^-?\d+\s*%$/.test(t)) continue;
+  badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
+}
+// Prepay badge for cargo
+if(_normPType(p)==="cargo" || p.prepayRequired===true){
+  badgeHtmlParts.push(`<div class="pbadge warn">Oldindan to‘lov</div>`);
+}
+
+const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
+
     const st = getStats(p.id);
     const showAvg = st.count ? st.avg : 0;
     const showCount = st.count ? st.count : 0;
@@ -1287,7 +1224,7 @@ function render(arr){
     card.innerHTML = `
       <div class="pmedia">
         <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
-        ${renderBadgesHtml(p)}
+        ${badgeHTML}
         <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
       </div>
 
@@ -1300,7 +1237,7 @@ function render(arr){
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        ${renderDeliveryBadge(p)}
+        <div class="pship">${renderDeliveryBadge(p)}</div>
 
         
 
@@ -1795,8 +1732,7 @@ function closePanel(){
 
   // wait animation then hide
   const t = 240;
-  window.applyPayTypeRules();
-  setTimeout(()=>{
+  window.setTimeout(()=>{
     els.overlay.hidden = true;
     els.sidePanel.hidden = true;
   }, t);
@@ -1909,6 +1845,14 @@ function closeImageViewer(){
   hideOverlay(els.imgViewer);
 }
 
+function closeImgViewer(){
+  // backward compatible alias (some handlers still call this)
+  return closeImageViewer();
+}
+window.closeImgViewer = closeImgViewer;
+window.closeImageViewer = closeImageViewer;
+
+
 function stepViewer(dir){
   const n = viewer.images?.length || 0;
   if(n <= 1) return;
@@ -1968,7 +1912,6 @@ function renderPanel(mode){
   els.panelList.innerHTML = "";
   const list = [];
   if(mode === "cart") syncCartSelected(true);
-  applyPayTypeRules();
 
   if(mode === "fav"){
     for(const id of favs){
@@ -2148,7 +2091,6 @@ function renderCartPage(){
   if(!els.cartPageList || !els.cartPageEmpty) return;
   els.cartPageList.innerHTML = "";
   syncCartSelected(true);
-  applyPayTypeRules();
 
   const list = [];
   for(const ci of cart){
@@ -2177,7 +2119,7 @@ function renderCartPage(){
         </label>
         <div class="cartTitle">${p.name||"Nomsiz"}</div>
         ${renderVariantLine(ci)}
-        ${renderDeliveryBadge(p)}
+        <div class="cartShip">${renderDeliveryBadge(p)}</div>
         <div class="cartRow">
           <div class="price">${moneyUZS(vp.price||0)}</div>
           <button class="removeBtn" title="O‘chirish"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
@@ -2234,6 +2176,8 @@ function renderCartPage(){
     els.cartSelectAllPage.checked = all;
     els.cartSelectAllPage.indeterminate = !all && cartSelected.size>0;
   }
+  // apply payment option rules based on cart items
+  if(typeof applyPayTypeRules==='function') applyPayTypeRules();
 }
 
 
@@ -2358,7 +2302,6 @@ function openCheckout(){
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // init map after visible so Leaflet sizes correctly
-  applyPayTypeRules();
   setTimeout(()=>{
     initShipMapOnce();
     try{ shipMap && shipMap.invalidateSize(); }catch(e){}
@@ -2374,6 +2317,52 @@ function getPayType(){
   const r = document.querySelector('input[name="paytype"]:checked');
   return r ? r.value : "cash";
 }
+
+
+function applyPayTypeRules(){
+  try{
+    // determine if any selected item requires prepay (cargo)
+    const built = (typeof buildSelectedItems === "function") ? buildSelectedItems() : null;
+    const items = built && built.ok ? built.items : [];
+    const hasPrepay = items.some(it=>it.prepayRequired) || cart.some(ci=>{
+      const p = products.find(x=>x.id===ci.id);
+      return p && (_normPType(p)==="cargo" || p.prepayRequired===true);
+    });
+
+    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
+    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
+    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
+
+    // helper to hide the whole option row
+    const hideOpt = (rb, hide)=>{
+      if(!rb) return;
+      const row = rb.closest("label") || rb.closest(".payOption") || rb.parentElement;
+      if(row) row.style.display = hide ? "none" : "";
+      rb.disabled = !!hide;
+    };
+
+    // For cargo/prepay: hide cash (and payme if you want only balance)
+    hideOpt(cashRb, hasPrepay);
+    // Keep payme visible unless you enforce balance-only
+    // If you want STRICT: uncomment next line
+    // hideOpt(paymeRb, hasPrepay);
+
+    if(hasPrepay){
+      // force balance
+      if(balRb) balRb.checked = true;
+      const note = document.getElementById("payRuleNote");
+      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov tavsiya etiladi.";
+    } else {
+      const note = document.getElementById("payRuleNote");
+      if(note) note.textContent = "";
+    }
+  }catch(e){
+    // never break page
+    console.warn("applyPayTypeRules failed:", e);
+  }
+}
+window.applyPayTypeRules = applyPayTypeRules;
+
 
 async function createOrderFromCheckout(){
   if(!currentUser){
@@ -2757,10 +2746,10 @@ function buildSelectedItems(){
       size: ci.size || null,
       qty: Number(ci.qty||1),
       priceUZS: Number(pr.price||0),
-      fulfillmentType: getFulfillmentType(p),
-      deliveryMinDays: getDeliveryInfo(p).min,
-      deliveryMaxDays: getDeliveryInfo(p).max,
-      prepayRequired: getDeliveryInfo(p).prepayRequired,
+      fulfillmentType: (p?.fulfillmentType || "stock"),
+      deliveryMinDays: Number(p?.deliveryMinDays ?? (p?.fulfillmentType==="cargo"?15:1)),
+      deliveryMaxDays: Number(p?.deliveryMaxDays ?? (p?.fulfillmentType==="cargo"?30:7)),
+      prepayRequired: !!(p?.prepayRequired ?? (p?.fulfillmentType==="cargo")),
     };
   });
   const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
@@ -3442,8 +3431,7 @@ document.addEventListener("DOMContentLoaded", initMobileBottomBar);
     if(!(e.target && e.target.id==="q")) return;
     const {toolsTop, q, sort} = getEls();
     if(!toolsTop || !q) return;
-    applyPayTypeRules();
-  setTimeout(()=>{
+    setTimeout(()=>{
       if(sort && document.activeElement === sort) return;
       closeIfEmpty(toolsTop, q);
     }, 120);
