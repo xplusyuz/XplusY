@@ -18,38 +18,34 @@ const admin = require("firebase-admin");
 function initFirebase() {
   if (admin.apps.length) return;
 
-  // Recommended: store service account as Base64 to avoid multiline/env escaping issues on Netlify.
+  // Netlify ENV:
+  // - FIREBASE_SERVICE_ACCOUNT (JSON one-line)
+  // Optional:
+  // - FIREBASE_SERVICE_ACCOUNT_B64 (base64(JSON))
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
 
   let sa;
-
   try {
-    if (b64 && b64.trim()) {
-      const jsonText = Buffer.from(b64.trim(), "base64").toString("utf8");
+    if (b64 && String(b64).trim()) {
+      const jsonText = Buffer.from(String(b64).trim(), "base64").toString("utf8");
       sa = JSON.parse(jsonText);
-    } else if (raw && raw.trim()) {
-      // First try normal JSON.parse
+    } else if (raw && String(raw).trim()) {
+      const txt = String(raw).trim();
       try {
-        sa = JSON.parse(raw);
-      } catch (e) {
-        // If Netlify/UI inserted real newlines, repair by escaping them
-        const repaired = raw.replace(/?
-/g, "\n");
-        sa = JSON.parse(repaired);
+        sa = JSON.parse(txt);
+      } catch (_) {
+        // if pasted with real line breaks, normalize them
+        sa = JSON.parse(txt.replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
       }
     } else {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT(_B64) env missing");
+      throw new Error("FIREBASE_SERVICE_ACCOUNT env missing");
     }
   } catch (e) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT invalid: " + (e.message || e));
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT invalid JSON: " + (e && e.message ? e.message : String(e))
+    );
   }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(sa),
-  });
-}
-  catch (e) { throw new Error("FIREBASE_SERVICE_ACCOUNT invalid JSON"); }
 
   admin.initializeApp({ credential: admin.credential.cert(sa) });
 }
@@ -83,9 +79,19 @@ function parseBody(event) {
   if (typeof event.body === "object") return event.body;
   if (typeof event.body !== "string") return null;
 
-  try { return JSON.parse(event.body); } catch (_) {}
+  // Netlify sometimes passes the raw body as base64.
+  let text = event.body;
+  if (event.isBase64Encoded) {
+    try {
+      text = Buffer.from(event.body, "base64").toString("utf8");
+    } catch (_) {
+      text = event.body;
+    }
+  }
+
+  try { return JSON.parse(text); } catch (_) {}
   // fallback: urlencoded json
-  try { return JSON.parse(decodeURIComponent(event.body)); } catch (_) {}
+  try { return JSON.parse(decodeURIComponent(text)); } catch (_) {}
   return null;
 }
 
