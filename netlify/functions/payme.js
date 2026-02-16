@@ -1,343 +1,466 @@
 /**
  * Netlify Function: /.netlify/functions/payme
- * Payme/Paycom Merchant API (JSON-RPC)
+ * Payme/Paycom Merchant API (JSON-RPC) — PRODUCTION-GRADE
  *
- * ✅ Sandbox/Test: set PAYME_KEY + KASSA_ID + FIREBASE_SERVICE_ACCOUNT (JSON)
- * ✅ Production: just replace PAYME_KEY (and if needed KASSA_ID) in Netlify env vars.
+ * ✅ Fixes 502/SyntaxError by never throwing on bad JSON; always returns JSON-RPC response.
+ * ✅ Supports: CheckPerformTransaction, CreateTransaction, PerformTransaction,
+ *            CancelTransaction, CheckTransaction, GetStatement
+ * ✅ Stores transactions in Firestore: payme_transactions/{txId}
+ * ✅ Validates order existence in Firestore: orders/{orderId} (with optional fallback by field "omId")
  *
- * Endpoint URL you give Payme: https://YOUR-SITE/.netlify/functions/payme
+ * ENV required (Netlify → Site settings → Environment variables):
+ * - PAYME_KEY: sandbox test_key or production key
+ * - FIREBASE_SERVICE_ACCOUNT: Firebase service account JSON (ONE LINE string)
+ *
+ * ORDER schema (minimal):
+ * - orders/{orderId}
+ *   - amountTiyin (preferred int) OR amount (UZS number)
+ *   - status: "pending" | "paid" | "canceled" (optional)
+ *   - type: "order" | "topup" (optional)
+ *   - uid/userId (optional, only for topup auto-balance increment)
+ *
+ * USER schema (optional, if type === "topup"):
+ * - users/{uid}
+ *   - balanceTiyin (int)
  */
 
 const admin = require("firebase-admin");
 
-let _inited = false;
-function initAdmin(){
-  if(_inited) return;
-  const sa = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if(sa){
-    admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(sa)),
-    });
-  }else{
-    // If you deploy in an environment with default credentials (rare on Netlify), this may work.
-    admin.initializeApp();
-  }
-  _inited = true;
-}
-
-function json(statusCode, obj){
+/** ---------- helpers ---------- */
+function jsonResponse(payload) {
   return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-    },
-    body: JSON.stringify(obj),
+    statusCode: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(payload),
   };
 }
 
-// Basic Auth: "Paycom:KEY"  (Payme docs)
-function authOk(headers){
-  const key = (process.env.PAYME_KEY || "").toString().trim();
-  const auth = (headers.authorization || headers.Authorization || "").toString();
-  if(!key) return { ok:false, err:"PAYME_KEY env not set" };
-  if(!auth.startsWith("Basic ")) return { ok:false, err:"Missing Basic auth" };
-  const b64 = auth.slice(6).trim();
-  let decoded = "";
-  try{ decoded = Buffer.from(b64, "base64").toString("utf8"); }catch(e){}
-  // Accept both "Paycom:key" and "paycom:key"
-  const ok = decoded === `Paycom:${key}` || decoded === `paycom:${key}`;
-  return ok ? { ok:true } : { ok:false, err:"Invalid Basic auth" };
+function paymeError(code, message, data = null, id = null) {
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code,
+      message: { uz: message, ru: message, en: message },
+      data,
+    },
+  };
 }
 
-// Payme error helper (JSON-RPC)
-function rpcError(id, code, message, data){
-  const err = { code, message };
-  if(data !== undefined) err.data = data;
-  return { jsonrpc: "2.0", id: id ?? null, error: err };
-}
-function rpcResult(id, result){
-  return { jsonrpc: "2.0", id: id ?? null, result };
+function paymeResult(result, id = null) {
+  return { jsonrpc: "2.0", id, result };
 }
 
-function nowMs(){ return Date.now(); }
+function toNumberSafe(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+}
 
-// Payme states: 1-created, 2-performed, -1-canceled after create, -2-canceled after perform
-// Reason codes are per Payme docs (we store as-is)
-async function getOrder(db, orderId){
-  const ref = db.collection("orders").doc(String(orderId));
+function nowMs() {
+  return Date.now();
+}
+
+function parseBodySafe(event) {
+  if (!event) return null;
+
+  // Some environments might already parse JSON
+  if (typeof event.body === "object" && event.body !== null) return event.body;
+
+  const raw = event.body;
+  if (raw == null) return null;
+  if (typeof raw !== "string") return null;
+
+  // try raw JSON
+  try {
+    return JSON.parse(raw);
+  } catch (_) {}
+
+  // try URI-decoded JSON (sometimes comes encoded)
+  try {
+    const decoded = decodeURIComponent(raw);
+    return JSON.parse(decoded);
+  } catch (_) {}
+
+  return null;
+}
+
+function extractAuthKey(headers) {
+  const h = {};
+  for (const [k, v] of Object.entries(headers || {})) h[k.toLowerCase()] = v;
+
+  // Payme usually: Authorization: Basic base64("Paycom:<key>")
+  const auth = h["authorization"];
+  if (auth && typeof auth === "string" && auth.toLowerCase().startsWith("basic ")) {
+    const b64 = auth.slice(6).trim();
+    try {
+      const decoded = Buffer.from(b64, "base64").toString("utf8");
+      const parts = decoded.split(":");
+      if (parts.length >= 2) {
+        const user = parts[0];
+        const key = parts.slice(1).join(":");
+        return { user, key };
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: X-Auth
+  const xAuth = h["x-auth"];
+  if (xAuth && typeof xAuth === "string") return { user: "X-Auth", key: xAuth };
+
+  return null;
+}
+
+function normalizeAccount(params) {
+  const acc = (params && params.account) || {};
+  // Support multiple possible keys (sandbox UI / legacy)
+  const orderId =
+    acc.order_id ||
+    acc.orderId ||
+    acc.orders_id ||
+    acc.ordersId ||
+    acc.omId ||
+    acc.omID ||
+    null;
+
+  return { orderId: orderId != null ? String(orderId) : null, raw: acc };
+}
+
+function initFirebase() {
+  if (admin.apps.length) return;
+
+  const saRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!saRaw) throw new Error("FIREBASE_SERVICE_ACCOUNT env is missing");
+
+  let sa;
+  try {
+    sa = JSON.parse(saRaw);
+  } catch (e) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(sa),
+  });
+}
+
+async function getOrderById(db, orderId) {
+  const ref = db.collection("orders").doc(orderId);
   const snap = await ref.get();
-  if(!snap.exists) return { exists:false, ref, data:null };
-  return { exists:true, ref, data: snap.data() || {} };
+  if (snap.exists) return { ref, snap };
+
+  // Optional fallback: if you store order id as field (omId)
+  const q = await db.collection("orders").where("omId", "==", orderId).limit(1).get();
+  if (!q.empty) {
+    const doc = q.docs[0];
+    return { ref: doc.ref, snap: doc };
+  }
+  return null;
 }
 
+function expectedAmountTiyin(orderSnap) {
+  const d = orderSnap.data() || {};
+
+  const aT = toNumberSafe(d.amountTiyin);
+  if (aT != null) return Math.round(aT);
+
+  const a = toNumberSafe(d.amount);
+  if (a != null) return Math.round(a * 100);
+
+  return null; // not enforce if missing
+}
+
+function clampStatementRange(from, to) {
+  const f = toNumberSafe(from);
+  const t = toNumberSafe(to);
+  if (f == null || t == null) return null;
+
+  // Safety: max 31 days
+  const maxRange = 31 * 24 * 60 * 60 * 1000;
+  if (t - f > maxRange) return { from: t - maxRange, to: t };
+  return { from: f, to: t };
+}
+
+/** ---------- handler ---------- */
 exports.handler = async (event) => {
-  // Preflight
-  if(event.httpMethod === "OPTIONS"){
-    return json(200, { ok:true });
-  }
-  if(event.httpMethod !== "POST"){
-    return json(405, { error: "Method Not Allowed" });
-  }
+  const PAYME_KEY = process.env.PAYME_KEY;
 
-  // Auth check
-  const a = authOk(event.headers || {});
-  if(!a.ok){
-    return json(200, rpcError(null, -32504, "Unauthorized", a.err));
+  const body = parseBodySafe(event);
+  if (!body || typeof body !== "object") {
+    // JSON parse error (do NOT crash -> avoid 502)
+    return jsonResponse(paymeError(-32700, "Invalid JSON", "parse_error", null));
   }
 
-  let payload;
-  try{
-    payload = JSON.parse(event.body || "{}");
-  }catch(e){
-    return json(200, rpcError(null, -32700, "Parse error"));
+  const id = body.id ?? null;
+  const method = body.method;
+  const params = body.params || {};
+
+  // Auth
+  if (!PAYME_KEY) {
+    return jsonResponse(paymeError(-32400, "Server env PAYME_KEY missing", "server_config", id));
   }
 
-  const { id, method, params } = payload || {};
-  if(!method){
-    return json(200, rpcError(id, -32600, "Invalid Request"));
+  const auth = extractAuthKey(event.headers || {});
+  if (!auth || !auth.key || auth.key !== PAYME_KEY) {
+    return jsonResponse(paymeError(-32504, "Unauthorized", "auth", id));
   }
 
-  initAdmin();
-  const db = admin.firestore();
+  // Firebase
+  let db;
+  try {
+    initFirebase();
+    db = admin.firestore();
+  } catch (e) {
+    return jsonResponse(paymeError(-32400, "Internal server error", String(e.message || e), id));
+  }
 
-  try{
-    // ===== CheckPerformTransaction =====
-    if(method === "CheckPerformTransaction"){
-      const amount = Number(params?.amount || 0); // tiyin
-      const orderId = params?.account?.order_id ?? params?.account?.orderId ?? params?.account?.id;
-      if(!orderId) return json(200, rpcError(id, -31050, "Order ID required"));
+  try {
+    switch (method) {
+      case "CheckPerformTransaction": {
+        const amount = toNumberSafe(params.amount);
+        const { orderId } = normalizeAccount(params);
 
-      const ord = await getOrder(db, orderId);
-      if(!ord.exists) return json(200, rpcError(id, -31050, "Order not found"));
+        if (!orderId) return jsonResponse(paymeError(-31050, "Account not found", "order_id", id));
+        if (amount == null || amount <= 0) return jsonResponse(paymeError(-31001, "Invalid amount", "amount", id));
 
-      const expected = Number(ord.data.amountTiyin || Math.round(Number(ord.data.totalUZS||0) * 100) || 0);
-      if(expected <= 0) return json(200, rpcError(id, -31050, "Order amount missing"));
-      if(amount !== expected){
-        return json(200, rpcError(id, -31001, "Incorrect amount", { expected, got: amount }));
-      }
+        const found = await getOrderById(db, orderId);
+        if (!found) return jsonResponse(paymeError(-31050, "Account not found", "order", id));
 
-      // Allow only if not already paid/canceled
-      const st = (ord.data.status || "").toString();
-      const paySt = (ord.data.payment?.status || "").toString();
-      if(st === "paid" || paySt === "paid"){
-        return json(200, rpcError(id, -31050, "Already paid"));
-      }
-      if(st.includes("cancel")){
-        return json(200, rpcError(id, -31050, "Order canceled"));
-      }
-
-      return json(200, rpcResult(id, { allow: true }));
-    }
-
-    // Common: transactionId and orderId
-    if(["CreateTransaction","PerformTransaction","CancelTransaction","CheckTransaction"].includes(method)){
-      const transactionId = String(params?.id || "");
-      if(!transactionId) return json(200, rpcError(id, -31003, "Transaction ID required"));
-      const txRef = db.collection("payme_transactions").doc(transactionId);
-
-      // ===== CreateTransaction =====
-      if(method === "CreateTransaction"){
-        const amount = Number(params?.amount || 0);
-        const orderId = params?.account?.order_id ?? params?.account?.orderId ?? params?.account?.id;
-        if(!orderId) return json(200, rpcError(id, -31050, "Order ID required"));
-
-        const ord = await getOrder(db, orderId);
-        if(!ord.exists) return json(200, rpcError(id, -31050, "Order not found"));
-
-        const expected = Number(ord.data.amountTiyin || Math.round(Number(ord.data.totalUZS||0) * 100) || 0);
-        if(amount !== expected){
-          return json(200, rpcError(id, -31001, "Incorrect amount", { expected, got: amount }));
+        const exp = expectedAmountTiyin(found.snap);
+        if (exp != null && Math.round(amount) !== exp) {
+          return jsonResponse(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
         }
 
-        const existing = await txRef.get();
-        if(existing.exists){
-          const tx = existing.data() || {};
-          // If already created/performed, return same
-          return json(200, rpcResult(id, {
-            create_time: tx.create_time,
-            perform_time: tx.perform_time || 0,
-            cancel_time: tx.cancel_time || 0,
-            transaction: transactionId,
-            state: tx.state,
-            reason: tx.reason ?? null
-          }));
+        const status = (found.snap.data() || {}).status;
+        if (status === "paid") {
+          return jsonResponse(paymeError(-31050, "Account not found", "already_paid", id));
         }
 
-        const create_time = nowMs();
-        await txRef.set({
-          transaction: transactionId,
-          order_id: String(orderId),
-          amount,
-          state: 1,
-          reason: null,
-          create_time,
-          perform_time: 0,
-          cancel_time: 0,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        return jsonResponse(paymeResult({ allow: true }, id));
+      }
+
+      case "CreateTransaction": {
+        const amount = toNumberSafe(params.amount);
+        const { orderId, raw } = normalizeAccount(params);
+        const time = toNumberSafe(params.time);
+        const txId = params.id != null ? String(params.id) : null;
+
+        if (!orderId) return jsonResponse(paymeError(-31050, "Account not found", "order_id", id));
+        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
+        if (amount == null || amount <= 0) return jsonResponse(paymeError(-31001, "Invalid amount", "amount", id));
+        if (time == null) return jsonResponse(paymeError(-31099, "Time missing", "time", id));
+
+        const found = await getOrderById(db, orderId);
+        if (!found) return jsonResponse(paymeError(-31050, "Account not found", "order", id));
+
+        const exp = expectedAmountTiyin(found.snap);
+        if (exp != null && Math.round(amount) !== exp) {
+          return jsonResponse(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
+        }
+
+        const txRef = db.collection("payme_transactions").doc(txId);
+        const txSnap = await txRef.get();
+
+        if (txSnap.exists) {
+          const tx = txSnap.data() || {};
+          if (tx.state === 1) {
+            return jsonResponse(paymeResult({ create_time: tx.createTime, transaction: txId, state: 1 }, id));
+          }
+          if (tx.state === 2) {
+            return jsonResponse(
+              paymeResult({ create_time: tx.createTime, perform_time: tx.performTime, transaction: txId, state: 2 }, id)
+            );
+          }
+          if (tx.state < 0) {
+            return jsonResponse(paymeError(-31008, "Transaction cancelled", "cancelled", id));
+          }
+        }
+
+        const createTime = nowMs();
+        await txRef.set(
+          {
+            transactionId: txId,
+            orderId,
+            amount: Math.round(amount),
+            state: 1,
+            time: Math.round(time),
+            createTime,
+            account: raw,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        return jsonResponse(paymeResult({ create_time: createTime, transaction: txId, state: 1 }, id));
+      }
+
+      case "PerformTransaction": {
+        const txId = params.id != null ? String(params.id) : null;
+        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
+
+        const txRef = db.collection("payme_transactions").doc(txId);
+        const txSnap = await txRef.get();
+        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+
+        const tx = txSnap.data() || {};
+
+        if (tx.state === 2) {
+          return jsonResponse(paymeResult({ transaction: txId, perform_time: tx.performTime, state: 2 }, id));
+        }
+        if (tx.state < 0) {
+          return jsonResponse(paymeError(-31008, "Transaction cancelled", "cancelled", id));
+        }
+
+        const performTime = nowMs();
+
+        await db.runTransaction(async (t) => {
+          const orderFound = await getOrderById(db, tx.orderId);
+          if (!orderFound) throw new Error("order_not_found");
+
+          const orderSnap = await t.get(orderFound.ref);
+          const order = orderSnap.data() || {};
+
+          // Update order once
+          if (order.status !== "paid") {
+            t.set(orderFound.ref, { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+            // Optional balance topup
+            const type = order.type;
+            const uid = order.uid || order.userId;
+            if (type === "topup" && uid) {
+              t.set(
+                db.collection("users").doc(String(uid)),
+                {
+                  balanceTiyin: admin.firestore.FieldValue.increment(tx.amount),
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+          }
+
+          t.set(
+            txRef,
+            {
+              state: 2,
+              performTime,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
         });
 
-        // Mark order as pending payment (safe)
-        await ord.ref.set({
-          status: ord.data.status || "pending_payment",
-          provider: "payme",
-          payment: {
-            ...(ord.data.payment || {}),
-            status: "created",
-            transaction: transactionId,
-            amountTiyin: amount,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge:true });
-
-        return json(200, rpcResult(id, {
-          create_time,
-          perform_time: 0,
-          cancel_time: 0,
-          transaction: transactionId,
-          state: 1
-        }));
+        return jsonResponse(paymeResult({ transaction: txId, perform_time: performTime, state: 2 }, id));
       }
 
-      // ===== PerformTransaction =====
-      if(method === "PerformTransaction"){
-        const snap = await txRef.get();
-        if(!snap.exists) return json(200, rpcError(id, -31003, "Transaction not found"));
-        const tx = snap.data() || {};
-        if(tx.state === 2){
-          return json(200, rpcResult(id, {
-            transaction: transactionId,
-            perform_time: tx.perform_time,
-            state: 2
-          }));
-        }
-        if(tx.state < 0){
-          return json(200, rpcError(id, -31008, "Transaction canceled"));
-        }
-        const perform_time = nowMs();
-        await txRef.set({
-          state: 2,
-          perform_time,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge:true });
+      case "CancelTransaction": {
+        const txId = params.id != null ? String(params.id) : null;
+        const reason = params.reason != null ? params.reason : null;
+        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
 
-        // Update order: PAID
-        const ord = await getOrder(db, tx.order_id);
-        if(ord.exists){
-          await ord.ref.set({
-            status: "paid",
-            payment: {
-              ...(ord.data.payment || {}),
-              status: "paid",
-              transaction: transactionId,
-              paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        const txRef = db.collection("payme_transactions").doc(txId);
+        const txSnap = await txRef.get();
+        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+
+        const tx = txSnap.data() || {};
+        if (tx.state < 0) {
+          return jsonResponse(paymeResult({ transaction: txId, cancel_time: tx.cancelTime, state: tx.state }, id));
+        }
+
+        const cancelTime = nowMs();
+        const newState = tx.state === 2 ? -2 : -1;
+
+        await db.runTransaction(async (t) => {
+          const orderFound = await getOrderById(db, tx.orderId);
+          if (orderFound) {
+            const orderSnap = await t.get(orderFound.ref);
+            const order = orderSnap.data() || {};
+
+            if (newState === -1) {
+              if (order.status !== "paid") {
+                t.set(orderFound.ref, { status: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+              }
+            } else {
+              t.set(
+                orderFound.ref,
+                { paymeReversalRequested: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+                { merge: true }
+              );
+            }
+          }
+
+          t.set(
+            txRef,
+            {
+              state: newState,
+              cancelTime,
+              reason,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             },
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge:true });
-        }
+            { merge: true }
+          );
+        });
 
-        return json(200, rpcResult(id, {
-          transaction: transactionId,
-          perform_time,
-          state: 2
-        }));
+        return jsonResponse(paymeResult({ transaction: txId, cancel_time: cancelTime, state: newState }, id));
       }
 
-      // ===== CancelTransaction =====
-      if(method === "CancelTransaction"){
-        const reason = params?.reason ?? null;
-        const snap = await txRef.get();
-        if(!snap.exists) return json(200, rpcError(id, -31003, "Transaction not found"));
-        const tx = snap.data() || {};
-        if(tx.state < 0){
-          return json(200, rpcResult(id, {
-            transaction: transactionId,
-            cancel_time: tx.cancel_time,
-            state: tx.state
-          }));
-        }
-        const cancel_time = nowMs();
-        const newState = (tx.state === 2) ? -2 : -1;
-        await txRef.set({
-          state: newState,
-          reason,
-          cancel_time,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge:true });
+      case "CheckTransaction": {
+        const txId = params.id != null ? String(params.id) : null;
+        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
 
-        const ord = await getOrder(db, tx.order_id);
-        if(ord.exists){
-          await ord.ref.set({
-            status: "canceled",
-            payment: {
-              ...(ord.data.payment || {}),
-              status: "canceled",
-              transaction: transactionId,
-              canceledAt: admin.firestore.FieldValue.serverTimestamp(),
-              reason: reason ?? null
+        const txSnap = await db.collection("payme_transactions").doc(txId).get();
+        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+
+        const tx = txSnap.data() || {};
+        return jsonResponse(
+          paymeResult(
+            {
+              create_time: tx.createTime || 0,
+              perform_time: tx.performTime || 0,
+              cancel_time: tx.cancelTime || 0,
+              transaction: txId,
+              state: tx.state,
+              reason: tx.reason ?? null,
             },
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          }, { merge:true });
-        }
-
-        return json(200, rpcResult(id, {
-          transaction: transactionId,
-          cancel_time,
-          state: newState
-        }));
+            id
+          )
+        );
       }
 
-      // ===== CheckTransaction =====
-      if(method === "CheckTransaction"){
-        const snap = await txRef.get();
-        if(!snap.exists) return json(200, rpcError(id, -31003, "Transaction not found"));
-        const tx = snap.data() || {};
-        return json(200, rpcResult(id, {
-          create_time: tx.create_time,
-          perform_time: tx.perform_time || 0,
-          cancel_time: tx.cancel_time || 0,
-          transaction: transactionId,
-          state: tx.state,
-          reason: tx.reason ?? null
-        }));
+      case "GetStatement": {
+        const range = clampStatementRange(params.from, params.to);
+        if (!range) return jsonResponse(paymeError(-31099, "Invalid range", "from/to", id));
+
+        const q = await db
+          .collection("payme_transactions")
+          .where("createTime", ">=", range.from)
+          .where("createTime", "<=", range.to)
+          .limit(500)
+          .get();
+
+        const transactions = q.docs.map((d) => {
+          const tx = d.data() || {};
+          return {
+            id: tx.transactionId || d.id,
+            time: tx.time || tx.createTime || 0,
+            amount: tx.amount || 0,
+            account: tx.account || {},
+            create_time: tx.createTime || 0,
+            perform_time: tx.performTime || 0,
+            cancel_time: tx.cancelTime || 0,
+            transaction: tx.transactionId || d.id,
+            state: tx.state,
+            reason: tx.reason ?? null,
+          };
+        });
+
+        return jsonResponse(paymeResult({ transactions }, id));
       }
-    }
 
-    // ===== GetStatement =====
-    if(method === "GetStatement"){
-      const from = Number(params?.from || 0);
-      const to = Number(params?.to || 0);
-      if(!from || !to) return json(200, rpcError(id, -32602, "from/to required"));
-      const q = await db.collection("payme_transactions")
-        .where("create_time", ">=", from)
-        .where("create_time", "<=", to)
-        .get();
-      const transactions = q.docs.map(d=>{
-        const tx = d.data()||{};
-        return {
-          id: tx.transaction,
-          time: tx.create_time,
-          amount: tx.amount,
-          account: { order_id: tx.order_id },
-          create_time: tx.create_time,
-          perform_time: tx.perform_time || 0,
-          cancel_time: tx.cancel_time || 0,
-          transaction: tx.transaction,
-          state: tx.state,
-          reason: tx.reason ?? null
-        };
-      });
-      return json(200, rpcResult(id, { transactions }));
+      default:
+        return jsonResponse(paymeError(-32601, "Method not found", String(method), id));
     }
-
-    // Unknown method
-    return json(200, rpcError(id, -32601, "Method not found"));
-  }catch(e){
-    console.error("payme fn error", e);
-    return json(200, rpcError(payload?.id ?? null, -32000, "Server error", e?.message || String(e)));
+  } catch (e) {
+    return jsonResponse(paymeError(-32400, "Internal server error", String(e.message || e), id));
   }
 };
