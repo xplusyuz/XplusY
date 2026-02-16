@@ -31,4 +31,4 @@ Keyinchalik faqat Netlify envdagi:
 - `PAYME_KEY` ni production keyga almashtirasiz.
 
 Agar checkout domeni ham o‘zgarsa, `public/payme-config.js` dagi `PAYME_CHECKOUT_BASE` ni
-`https://checkout.paycom.uz` ga qaytaring.
+`https://checkout.test.paycom.uz` ga qaytaring.

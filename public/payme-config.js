@@ -2,13 +2,13 @@
 // OrzuMall Payme konfiguratsiyasi (ES Module)
 // SAFE: merchant_id frontendda ochiq bo‘lishi mumkin (Payme checkout link uchun).
 
-export const PAYME_MERCHANT_ID = "697ba4c920e090490061e8c1";
+export const PAYME_MERCHANT_ID = "6992f957364df48c3ebc0a21";
 
 // til (Payme checkout odatda uz/ru/en)
 export const PAYME_LANG = "uz";
 
 // Payme checkout base
-export const PAYME_CHECKOUT_BASE = "https://checkout.paycom.uz";
+export const PAYME_CHECKOUT_BASE = "https://checkout.test.paycom.uz";
 
 // Siz Payme kabinetda "account" sifatida qaysi field ishlatayotgan bo‘lsangiz
 export const PAYME_ACCOUNT_FIELD = "order_id";
