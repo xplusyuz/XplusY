@@ -114,9 +114,21 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (signedIn() && resource.data.uid == request.auth.uid);
 
-      // UPDATE/DELETE: faqat admin
-      allow update, delete: if isAdmin();
-    }
+      // UPDATE:
+// - admin hamma narsani o‘zgartira oladi
+// - user faqat o‘z orderida "cancelRequested" yoki payme return flaglarini yozishi mumkin (verify emas)
+allow update: if isAdmin()
+  || (signedIn()
+      && resource.data.uid == request.auth.uid
+      && request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['cancelRequested','payment','updatedAt'])
+      // payment ichida faqat status/returnedAt kabilar (client isboti emas)
+      && (!('payment' in request.resource.data) || request.resource.data.payment.diff(resource.data.payment).changedKeys().hasOnly(['status','returnedAt']))
+     );
+
+// DELETE: faqat admin
+allow delete: if isAdmin();
+}
 
     /* ========= EVENTS / ANALYTICS ========= */
     match /events/{eventId} {

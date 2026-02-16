@@ -53,7 +53,7 @@
 
   <script type="module">
     import { db } from "./firebase-config.js";
-    import { doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+    import { doc, onSnapshot, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
     const qs = new URLSearchParams(location.search);
     const orderId = qs.get("order_id") || "";
@@ -88,7 +88,31 @@
       elOrder.textContent = "Order: " + orderId;
       const ref = doc(db, "orders", String(orderId));
 
-      // realtime
+      
+
+      // client-side return flag (verify emas)
+      try{
+        await updateDoc(ref, {
+          payment: { ...( (await getDoc(ref)).data()?.payment || {} ), status: "user_returned", returnedAt: serverTimestamp() },
+          updatedAt: serverTimestamp()
+        });
+      }catch(e){
+        // ignore if rules deny or offline
+        console.warn("return flag update skipped", e?.message||e);
+      }
+
+      const cancelBtn = document.getElementById("cancelBtn");
+      cancelBtn?.addEventListener("click", async ()=>{
+        try{
+          await updateDoc(ref, { cancelRequested: true, updatedAt: serverTimestamp() });
+          alert("Bekor qilish so‘rovi yuborildi.");
+        }catch(e){
+          console.warn(e);
+          alert("Bekor qilish yozilmadi. (Ruxsat yoki internet muammosi)");
+        }
+      });
+
+// realtime
       onSnapshot(ref, (snap)=>{
         if(!snap.exists()){
           setStatus("pending");
