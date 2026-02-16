@@ -174,6 +174,9 @@ function toast(message, type="info"){
   }
 }
 
+// Backward-compat: some blocks call showToast()
+function showToast(message, type="info"){ return toast(message, type); }
+
 
 let currentUser = null;
 let userBalanceUZS = 0;
@@ -2947,8 +2950,10 @@ async function startTopupPayme(){
   if(hint) hint.textContent = "Payme ochilmoqda...";
 
   try{
-    await createTopupOrder(amt);
-    toast("Balans to'ldirish vaqtincha o'chirilgan. Faqat buyurtma to'lovi (Variant A) ishlaydi.");
+    const { orderId, amountTiyin } = await createTopupOrder(amt);
+    // API-only: checkout redirect yo‘q. To‘lov Payme’dan kelganda server balansni oshiradi.
+    if(hint) hint.textContent = `Depozit yaratildi: ${orderId}. Test: Payme sandbox’da account.order_id=${orderId}, amount=${amountTiyin}`;
+    toast(`Depozit yaratildi: ${orderId}`);
     return;
   }catch(e){
     console.warn(e);

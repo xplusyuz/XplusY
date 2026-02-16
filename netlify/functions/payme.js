@@ -263,7 +263,26 @@ exports.handler = async (event) => {
           const order = orderSnap.data() || {};
 
           if (order.status !== "paid") {
-            t.set(found.ref, { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+            const paidPatch = { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp() };
+            // 1) mark global order paid
+            t.set(found.ref, paidPatch, { merge: true });
+
+            // 2) also mark user subcollection order paid (profile history)
+            const ouid = (order.uid || order.userId || null);
+            if (ouid) {
+              const userOrderRef = db.collection("users").doc(String(ouid)).collection("orders").doc(String(found.ref.id));
+              t.set(userOrderRef, paidPatch, { merge: true });
+            }
+
+            // 3) TOPUP/DEPOSIT: credit balance (UZS) when orderType == "topup"
+            const ot = (order.orderType || order.type || "").toString().toLowerCase();
+            if (ouid && (ot === "topup" || ot === "deposit")) {
+              const addUZS = Number(order.totalUZS ?? Math.floor((tx.amount || 0) / 100)) || 0;
+              if (addUZS > 0) {
+                const userRef = db.collection("users").doc(String(ouid));
+                t.set(userRef, { balanceUZS: admin.firestore.FieldValue.increment(addUZS), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+              }
+            }
           }
 
           t.set(txRef, { state: 2, performTime, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
