@@ -15,18 +15,44 @@
 
 const admin = require("firebase-admin");
 
+const admin = require("firebase-admin");
+
 function initFirebase() {
   if (admin.apps.length) return;
 
+  // 1) Prefer base64 (recommended)
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+
+  // 2) Fallback to raw JSON
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT env missing");
 
   let sa;
-  try { sa = JSON.parse(raw); }
-  catch (e) { throw new Error("FIREBASE_SERVICE_ACCOUNT invalid JSON"); }
 
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
+  try {
+    if (b64 && b64.trim()) {
+      const jsonText = Buffer.from(b64.trim(), "base64").toString("utf8");
+      sa = JSON.parse(jsonText);
+    } else if (raw && raw.trim()) {
+      // Try normal parse
+      try {
+        sa = JSON.parse(raw);
+      } catch (e) {
+        // Try repairing: if Netlify inserted real newlines, escape them
+        const repaired = raw.replace(/\r?\n/g, "\\n");
+        sa = JSON.parse(repaired);
+      }
+    } else {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT(_B64) env is missing");
+    }
+  } catch (e) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT invalid: " + (e.message || e));
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(sa),
+  });
 }
+
 
 function resp(payload) {
   return {
