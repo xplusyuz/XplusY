@@ -11,12 +11,22 @@ app.use(cors({ origin: true }));
 app.use(express.json({ type: "*/*" })); // Payme sends text/json
 
 // ===== Config =====
-// Use firebase functions config OR env vars (set in Cloud Functions)
-function getCfg(key, def=""){ return (process.env[key] || def).toString().trim(); }
-const PAYME_LOGIN = getCfg("PAYME_LOGIN");
-const PAYME_KEY   = getCfg("PAYME_KEY"); // password/key
-const TG_BOT_TOKEN = getCfg("TG_BOT_TOKEN");
-const TG_ADMIN_CHAT_ID = getCfg("TG_ADMIN_CHAT_ID");
+// Prefer Firebase Functions config (firebase functions:config:set ...) and fall back to env vars
+function cfg(path, envKey, def=""){
+  try{
+    const parts = path.split(".");
+    let cur = functions.config();
+    for(const p of parts){ cur = (cur||{})[p]; }
+    if(cur !== undefined && cur !== null && String(cur).trim() !== "") return String(cur).trim();
+  }catch(e){}
+  const v = process.env[envKey];
+  return (v !== undefined && v !== null && String(v).trim() !== "") ? String(v).trim() : def;
+}
+
+const PAYME_LOGIN = cfg("payme.login", "PAYME_LOGIN");
+const PAYME_KEY   = cfg("payme.key",   "PAYME_KEY");
+const TG_BOT_TOKEN = cfg("telegram.token", "TG_BOT_TOKEN");
+const TG_ADMIN_CHAT_ID = cfg("telegram.admin_chat_id", "TG_ADMIN_CHAT_ID");
 
 function basicAuthOk(req){
   const hdr = (req.headers.authorization || "").toString();
@@ -100,14 +110,14 @@ async function upsertPaymeTx(paymeId, patch){
   return { ref, data: snap.data() || {} };
 }
 
-app.post("/payme", async (req, res) => {
-  // Per protocol: always HTTP 200 (even on errors) citeturn1view0
+app.post("/, async (req, res) => {
+  // Per protocol: always HTTP 200 (even on errors) 
   try{
     if(!PAYME_LOGIN || !PAYME_KEY){
       return res.status(200).json(rpcError(ERR_SYSTEM, "PAYME credentials not configured"));
     }
     if(!basicAuthOk(req)){
-      // insufficient privileges citeturn4view0
+      // insufficient privileges 
       return res.status(200).json(rpcError(ERR_INSUFFICIENT_PRIV, "Insufficient privileges"));
     }
 
@@ -118,10 +128,10 @@ app.post("/payme", async (req, res) => {
     if(method === "CheckPerformTransaction"){
       const amount = Number(params?.amount || 0);
       const orderObj = await getOrderByAccount(params?.account);
-      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); citeturn1view2
+      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); 
       const order = orderObj.data;
       const expected = uzsToTiyin(order.totalUZS);
-      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); citeturn1view2
+      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); 
       if(String(order.status||"") === "paid") return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Order already paid") });
       return res.status(200).json({ id: rpcId, result: { allow: true } });
     }
@@ -133,11 +143,11 @@ app.post("/payme", async (req, res) => {
       const time = Number(params?.time || 0);
 
       const orderObj = await getOrderByAccount(params?.account);
-      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); citeturn1view1
+      if(!orderObj) return res.status(200).json({ id: rpcId, ...rpcError(ERR_ORDER_NOT_FOUND, "Order not found", "account.order_id") }); 
       const order = orderObj.data;
 
       const expected = uzsToTiyin(order.totalUZS);
-      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); citeturn1view1
+      if(amount !== expected) return res.status(200).json({ id: rpcId, ...rpcError(ERR_INVALID_AMOUNT, "Invalid amount") }); 
 
       // Create or return existing tx
       const txSnap = await db.doc(`payme_transactions/${paymeId}`).get();
@@ -154,7 +164,7 @@ app.post("/payme", async (req, res) => {
         });
       }
 
-      // Store tx in Firestore (permanent storage recommended) citeturn1view1
+      // Store tx in Firestore (permanent storage recommended) 
       const create_time = Date.now();
       await upsertPaymeTx(paymeId, {
         transaction: paymeId,
@@ -184,14 +194,14 @@ app.post("/payme", async (req, res) => {
       const paymeId = String(params?.id || "");
       const txRef = db.doc(`payme_transactions/${paymeId}`);
       const txSnap = await txRef.get();
-      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); citeturn1view3
+      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); 
       const tx = txSnap.data() || {};
 
       if(tx.state === STATE_PERFORMED){
         return res.status(200).json({ id: rpcId, result: { transaction: tx.transaction || paymeId, perform_time: tx.perform_time || tx.performTime || Date.now(), state: STATE_PERFORMED } });
       }
       if(tx.state !== STATE_CREATED){
-        return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Cannot perform transaction") }); citeturn1view3
+        return res.status(200).json({ id: rpcId, ...rpcError(ERR_CANNOT_PERFORM, "Cannot perform transaction") }); 
       }
 
       const orderRef = db.doc(`orders/${tx.orderId}`);
@@ -236,7 +246,7 @@ app.post("/payme", async (req, res) => {
 
       const txRef = db.doc(`payme_transactions/${paymeId}`);
       const txSnap = await txRef.get();
-      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); citeturn0search8
+      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); 
       const tx = txSnap.data() || {};
 
       if(tx.state === STATE_CANCELLED || tx.state === STATE_CANCELLED_AFTER_PERFORM){
@@ -264,7 +274,7 @@ app.post("/payme", async (req, res) => {
     if(method === "CheckTransaction"){
       const paymeId = String(params?.id || "");
       const txSnap = await db.doc(`payme_transactions/${paymeId}`).get();
-      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); citeturn0search5
+      if(!txSnap.exists) return res.status(200).json({ id: rpcId, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }); 
       const tx = txSnap.data() || {};
       return res.status(200).json({
         id: rpcId,
@@ -292,4 +302,4 @@ app.post("/payme", async (req, res) => {
   }
 });
 
-exports.paymeMerchantApi = functions.region("asia-northeast1").https.onRequest(app);
+exports.payme = functions.region("us-central1").https.onRequest(app);
