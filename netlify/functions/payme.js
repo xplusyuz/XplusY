@@ -35,8 +35,21 @@ function initFirebase() {
       try {
         sa = JSON.parse(txt);
       } catch (_) {
-        // if pasted with real line breaks, normalize them
-        sa = JSON.parse(txt.replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
+        // If pasted with real line breaks, normalize them
+        try {
+          sa = JSON.parse(txt.replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
+        } catch (e2) {
+          // Some users store the service account as BASE64 in the same env var.
+          // Detect & decode base64 then parse JSON.
+          const compact = txt.replace(/\s+/g, "");
+          const looksB64 = /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 100;
+          if (looksB64) {
+            const jsonText2 = Buffer.from(compact, "base64").toString("utf8");
+            sa = JSON.parse(jsonText2);
+          } else {
+            throw e2;
+          }
+        }
       }
     } else {
       throw new Error("FIREBASE_SERVICE_ACCOUNT env missing");
