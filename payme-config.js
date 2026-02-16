@@ -7,11 +7,8 @@ export const PAYME_MERCHANT_ID = "6992f957364df48c3ebc0a21";
 // til (Payme checkout odatda uz/ru/en)
 export const PAYME_LANG = "uz";
 
-// PAYME_MODE: "test" | "prod"
-export const PAYME_MODE = "test";
-
 // Payme checkout base
-export const PAYME_CHECKOUT_BASE = (PAYME_MODE === "test") ? "https://checkout.test.paycom.uz" : "https://checkout.paycom.uz";
+export const PAYME_CHECKOUT_BASE = "https://checkout.test.paycom.uz";
 
 // Siz Payme kabinetda "account" sifatida qaysi field ishlatayotgan bo‘lsangiz
 export const PAYME_ACCOUNT_FIELD = "order_id";

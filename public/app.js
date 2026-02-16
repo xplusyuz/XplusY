@@ -97,7 +97,7 @@ function tgOrderStatusHTML(o){
 
 
 import { auth, db } from "./firebase-config.js";
-import { PAYME_MERCHANT_ID, PAYME_LANG } from "./payme-config.js";
+import { PAYME_MERCHANT_ID, PAYME_LANG, PAYME_CHECKOUT_BASE } from "./payme-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -2476,7 +2476,7 @@ async function createOrderFromCheckout(){
     const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
     const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
     const b64 = btoa(unescape(encodeURIComponent(params)));
-    window.location.href = `https://checkout.paycom.uz/${b64}`;
+    window.location.href = `${PAYME_CHECKOUT_BASE}/${b64}`;
   }else{
     toast("Buyurtmangiz qabul qilindi");
     goTab("profile");
@@ -2959,7 +2959,7 @@ async function startTopupPayme(){
     const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}&topup=1`;
     const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
     const b64 = btoa(unescape(encodeURIComponent(params)));
-    window.location.href = `https://checkout.paycom.uz/${b64}`;
+    window.location.href = `${PAYME_CHECKOUT_BASE}/${b64}`;
   }catch(e){
     console.warn(e);
     if(hint) hint.textContent = "Xato. Qayta urinib ko'ring.";
@@ -3054,7 +3054,7 @@ async function startPaymeCheckout(){
   const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
   const params = `m=${PAYME_MERCHANT_ID};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
   const b64 = btoa(unescape(encodeURIComponent(params)));
-  window.location.href = `https://checkout.paycom.uz/${b64}`;
+  window.location.href = `${PAYME_CHECKOUT_BASE}/${b64}`;
 }
 
 async function shareOrderTelegram(){
