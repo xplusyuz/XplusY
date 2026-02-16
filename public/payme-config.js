@@ -1,32 +1,14 @@
 // public/payme-config.js
-// OrzuMall Payme konfiguratsiyasi (ES Module)
+// OrzuMall Payme konfiguratsiyasi — API-only (Checkout ishlatilmaydi)
+// Bu rejimda faqat: KASSA_ID + PAYME_KEY (server env) kerak bo'ladi.
 //
-// ⚠️ MUHIM:
-// - Merchant API (Netlify function) uchun: PAYME_KEY (ENV) ishlatiladi.
-// - Checkout (redirect) uchun esa Payme kabinetdan olingan *WEB-KASSA / CHECKOUT MERCHANT ID* kerak.
-//   Bu ID odatda KASSA ID (merchant api uchun berilgan) bilan BIR XIL EMAS.
-//
-// Quyidagi CHECKOUT_MERCHANT_ID ni Payme kabinetdan olib shu yerga qo‘ying.
+// Eslatma: Checkout/web-kassa (redirect) ishlatmoqchi bo'lsangiz, alohida Web-kassa/Checkout Merchant ID kerak bo'ladi.
+// Siz hozir "faqat kassa id + key" deb tanlagansiz, shuning uchun checkout link generatsiya YO'Q.
 
-export const PAYME_CHECKOUT_MERCHANT_ID = "PASTE_CHECKOUT_MERCHANT_ID_HERE";
-
-// til (Payme checkout odatda uz/ru/en)
+export const PAYME_MODE = "api-only";
 export const PAYME_LANG = "uz";
 
-// Payme checkout base (sandbox uchun)
-export const PAYME_CHECKOUT_BASE = "https://checkout.test.paycom.uz";
+// Faqat ma'lumot uchun (Payme kabinetdagi kassa ID)
+export const PAYME_KASSA_ID = "6992f957364df48c3ebc0a21";
 
-// Payme "account" field nomi (standard: order_id)
-export const PAYME_ACCOUNT_FIELD = "order_id";
-
-// Checkout URL generator
-export function createPaymeCheckoutUrl(orderId, amountUzs, returnUrl) {
-  if (!PAYME_CHECKOUT_MERCHANT_ID || PAYME_CHECKOUT_MERCHANT_ID.startsWith("PASTE_")) {
-    throw new Error("PAYME_CHECKOUT_MERCHANT_ID sozlanmagan (payme-config.js)");
-  }
-  const amountTiyin = Math.round(Number(amountUzs) * 100);
-  const cPart = returnUrl ? `;c=${encodeURIComponent(returnUrl)}` : "";
-  const payload = `m=${PAYME_CHECKOUT_MERCHANT_ID};ac.${PAYME_ACCOUNT_FIELD}=${orderId};a=${amountTiyin};l=${PAYME_LANG}${cPart}`;
-  const encoded = btoa(unescape(encodeURIComponent(payload)));
-  return `${PAYME_CHECKOUT_BASE}/${encoded}`;
-}
+// PAYME_KEY frontendga qo'yilmaydi. PAYME_KEY faqat Netlify ENV ichida bo'ladi.

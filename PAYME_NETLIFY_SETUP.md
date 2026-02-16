@@ -1,53 +1,46 @@
-# OrzuMall — Payme (Sandbox) — Netlify Functions (PRO)
+# OrzuMall — Payme (Sandbox) Netlify Functions
 
-## 1) Payme kabinetga beriladigan endpoint URL
+## 1) Payme endpoint URL (kabinetga beriladigan)
 **Endpoint URL:**
 `https://YOUR-NETLIFY-DOMAIN/.netlify/functions/payme`
 
 Masalan:
 `https://xplusy.netlify.app/.netlify/functions/payme`
 
-> Shu endpoint Payme'ning Merchant API (JSON-RPC) chaqiruvlari uchun.
-
----
-
 ## 2) Netlify Environment Variables (shart)
 Netlify → Site settings → Environment variables:
 
-- `PAYME_KEY` = **sandbox/test key** (siz bergan test_key)
-- `FIREBASE_SERVICE_ACCOUNT` = Firebase service account JSON (bitta qatorda / one-line)
+- `PAYME_KEY` = **sandbox/test key** (siz bergan)
+- `KASSA_ID` = `6992f957364df48c3ebc0a21` (ixtiyoriy, hozir bu functionda shart emas)
+- `FIREBASE_SERVICE_ACCOUNT` = Firebase Service Account JSON (bitta qatorda)
 
-⚠️ `FIREBASE_SERVICE_ACCOUNT` ni bitta qatorda qilish uchun JSON minify qiling (yoki VS Code’da formatni olib tashlang).
+**FIREBASE_SERVICE_ACCOUNT** ni olish:
+Firebase Console → Project settings → Service accounts → Generate new private key → JSON fayl.
+Shu JSON kontentini Netlify env ga qo‘ying.
 
----
+## 3) Firestore kolleksiyalar
+- `orders/{orderId}`  (frontend yaratadi)
+- `payme_transactions/{transactionId}` (function yaratadi)
 
-## 3) Checkout (redirect sahifa) haqida MUHIM
-Checkout (brauzerda to‘lov sahifasi ochilishi) uchun `public/payme-config.js` ichida:
+Payme `PerformTransaction` bo‘lsa:
+- `orders/{orderId}.status = "paid"`
+- `orders/{orderId}.payment.status = "paid"`
 
-- `PAYME_CHECKOUT_MERCHANT_ID` — Payme kabinetdan olingan **WEB-KASSA / CHECKOUT MERCHANT ID**
+## 4) Sandbox → Production almashtirish
+Keyinchalik faqat Netlify envdagi:
+- `PAYME_KEY` ni production keyga almashtirasiz.
 
-⚠️ Bu ID **KASSA ID** (merchant api) bilan ko‘pincha bir xil bo‘lmaydi.
-Agar noto‘g‘ri ID qo‘ysangiz checkout sahifada:
-**“Поставщик не найден или заблокирован”** chiqadi.
+Agar checkout domeni ham o‘zgarsa, `public/payme-config.js` dagi `PAYME_CHECKOUT_BASE` ni
+`https://checkout.test.paycom.uz` ga qaytaring.
 
-Sandbox uchun checkout domen:
-`https://checkout.test.paycom.uz`
 
----
+## API-only (Checkout EMAS) rejimi
+- Siz faqat KASSA_ID + PAYME_KEY bilan ishlashni tanladingiz.
+- Checkout/web-kassa ID kerak emas.
+- Sayt checkout redirect qilmaydi. To‘lov Payme tomondan tasdiqlanganda (PerformTransaction) order 'paid' bo‘ladi.
+- Sandbox’da Paycom tester orqali CreateTransaction/PerformTransaction yuborib test qilasiz.
 
-## 4) Firestore (minimal) talab
-`orders/{orderId}` hujjat bo‘lishi kerak.
-
-Tavsiya:
-- `amountTiyin` (int, tiyin) yoki `amount` (UZS)
-- `status` ("pending" | "paid" | "canceled")
-
-Transactionlar:
-- `payme_transactions/{txId}` ga yoziladi.
-
----
-
-## 5) Balans (ixtiyoriy)
-Agar order doc’da `type: "topup"` va `uid` bo‘lsa,
-`PerformTransaction` paytida:
-`users/{uid}.balanceTiyin` avtomatik oshiriladi.
+### Netlify ENV
+- PAYME_KEY = (test_key yoki prod_key)
+- FIREBASE_SERVICE_ACCOUNT = service account JSON (one-line)
+- (ixtiyoriy) PAYME_ALLOW_NO_AUTH=1 (faqat sandbox tester Authorization yubormasa)

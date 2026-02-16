@@ -1,33 +1,34 @@
 /**
  * Netlify Function: /.netlify/functions/payme
- * Payme/Paycom Merchant API (JSON-RPC) — PRODUCTION-GRADE
+ * OrzuMall Payme (Paycom) Merchant API — API-only (Checkout EMAS)
  *
- * ✅ Fixes 502/SyntaxError by never throwing on bad JSON; always returns JSON-RPC response.
- * ✅ Supports: CheckPerformTransaction, CreateTransaction, PerformTransaction,
- *            CancelTransaction, CheckTransaction, GetStatement
- * ✅ Stores transactions in Firestore: payme_transactions/{txId}
- * ✅ Validates order existence in Firestore: orders/{orderId} (with optional fallback by field "omId")
+ * ✅ Faqat KASSA_ID + KEY bilan ishlaydi (Checkout/Web-kassa talab qilinmaydi).
+ * ✅ Payme serveri shu endpointga JSON-RPC yuboradi.
+ * ✅ Sandbox tester orqali Create/Perform/Cancel test qilsa bo‘ladi.
  *
- * ENV required (Netlify → Site settings → Environment variables):
- * - PAYME_KEY: sandbox test_key or production key
- * - FIREBASE_SERVICE_ACCOUNT: Firebase service account JSON (ONE LINE string)
- *
- * ORDER schema (minimal):
- * - orders/{orderId}
- *   - amountTiyin (preferred int) OR amount (UZS number)
- *   - status: "pending" | "paid" | "canceled" (optional)
- *   - type: "order" | "topup" (optional)
- *   - uid/userId (optional, only for topup auto-balance increment)
- *
- * USER schema (optional, if type === "topup"):
- * - users/{uid}
- *   - balanceTiyin (int)
+ * ENV:
+ * - PAYME_KEY  (test_key yoki prod_key)
+ * - FIREBASE_SERVICE_ACCOUNT (JSON, one-line)
+ * Optional:
+ * - PAYME_ALLOW_NO_AUTH=1  (faqat sandbox testlarda Authorization kelmasa ham qabul qilish uchun)
  */
 
 const admin = require("firebase-admin");
 
-/** ---------- helpers ---------- */
-function jsonResponse(payload) {
+function initFirebase() {
+  if (admin.apps.length) return;
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT env missing");
+
+  let sa;
+  try { sa = JSON.parse(raw); }
+  catch (e) { throw new Error("FIREBASE_SERVICE_ACCOUNT invalid JSON"); }
+
+  admin.initializeApp({ credential: admin.credential.cert(sa) });
+}
+
+function resp(payload) {
   return {
     statusCode: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -35,121 +36,96 @@ function jsonResponse(payload) {
   };
 }
 
-function paymeError(code, message, data = null, id = null) {
+function paymeResult(result, id) {
+  return { jsonrpc: "2.0", id: id ?? null, result };
+}
+
+function paymeError(code, message, data, id) {
   return {
     jsonrpc: "2.0",
-    id,
+    id: id ?? null,
     error: {
       code,
       message: { uz: message, ru: message, en: message },
-      data,
+      data: data ?? null,
     },
   };
 }
 
-function paymeResult(result, id = null) {
-  return { jsonrpc: "2.0", id, result };
-}
+function parseBody(event) {
+  if (!event || event.body == null) return null;
+  if (typeof event.body === "object") return event.body;
+  if (typeof event.body !== "string") return null;
 
-function toNumberSafe(v) {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  try { return JSON.parse(event.body); } catch (_) {}
+  // fallback: urlencoded json
+  try { return JSON.parse(decodeURIComponent(event.body)); } catch (_) {}
   return null;
 }
 
-function nowMs() {
-  return Date.now();
-}
-
-function parseBodySafe(event) {
-  if (!event) return null;
-
-  // Some environments might already parse JSON
-  if (typeof event.body === "object" && event.body !== null) return event.body;
-
-  const raw = event.body;
-  if (raw == null) return null;
-  if (typeof raw !== "string") return null;
-
-  // try raw JSON
-  try {
-    return JSON.parse(raw);
-  } catch (_) {}
-
-  // try URI-decoded JSON (sometimes comes encoded)
-  try {
-    const decoded = decodeURIComponent(raw);
-    return JSON.parse(decoded);
-  } catch (_) {}
-
-  return null;
-}
-
-function extractAuthKey(headers) {
+// Payme odatda Authorization: Basic base64("Paycom:<KEY>")
+function extractKey(headers = {}) {
   const h = {};
-  for (const [k, v] of Object.entries(headers || {})) h[k.toLowerCase()] = v;
+  for (const [k, v] of Object.entries(headers)) h[String(k).toLowerCase()] = v;
 
-  // Payme usually: Authorization: Basic base64("Paycom:<key>")
   const auth = h["authorization"];
   if (auth && typeof auth === "string" && auth.toLowerCase().startsWith("basic ")) {
     const b64 = auth.slice(6).trim();
     try {
       const decoded = Buffer.from(b64, "base64").toString("utf8");
-      const parts = decoded.split(":");
-      if (parts.length >= 2) {
-        const user = parts[0];
-        const key = parts.slice(1).join(":");
-        return { user, key };
-      }
+      const idx = decoded.indexOf(":");
+      if (idx !== -1) return decoded.slice(idx + 1);
     } catch (_) {}
   }
 
-  // Fallback: X-Auth
-  const xAuth = h["x-auth"];
-  if (xAuth && typeof xAuth === "string") return { user: "X-Auth", key: xAuth };
+  // Some tools send X-Auth
+  const x = h["x-auth"];
+  if (typeof x === "string" && x.trim()) return x.trim();
 
   return null;
 }
 
 function normalizeAccount(params) {
   const acc = (params && params.account) || {};
-  // Support multiple possible keys (sandbox UI / legacy)
+  // Support different keys used in various UIs
   const orderId =
-    acc.order_id ||
-    acc.orderId ||
-    acc.orders_id ||
-    acc.ordersId ||
-    acc.omId ||
-    acc.omID ||
+    acc.order_id ??
+    acc.orderId ??
+    acc.orders_id ??
+    acc.ordersId ??
+    acc.omId ??
+    acc.omID ??
     null;
 
-  return { orderId: orderId != null ? String(orderId) : null, raw: acc };
+  return {
+    orderId: orderId != null ? String(orderId) : null,
+    raw: acc,
+  };
 }
 
-function initFirebase() {
-  if (admin.apps.length) return;
-
-  const saRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!saRaw) throw new Error("FIREBASE_SERVICE_ACCOUNT env is missing");
-
-  let sa;
-  try {
-    sa = JSON.parse(saRaw);
-  } catch (e) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert(sa),
-  });
+function toNum(v) {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return null;
 }
 
-async function getOrderById(db, orderId) {
+function expectedAmountTiyin(orderSnap) {
+  const d = orderSnap.data() || {};
+  const aT = toNum(d.amountTiyin);
+  if (aT != null) return Math.round(aT);
+  const a = toNum(d.amount); // UZS
+  if (a != null) return Math.round(a * 100);
+  const total = toNum(d.totalUZS);
+  if (total != null) return Math.round(total * 100);
+  return null; // do not enforce if not provided
+}
+
+async function getOrder(db, orderId) {
   const ref = db.collection("orders").doc(orderId);
   const snap = await ref.get();
   if (snap.exists) return { ref, snap };
 
-  // Optional fallback: if you store order id as field (omId)
+  // optional fallback by field
   const q = await db.collection("orders").where("omId", "==", orderId).limit(1).get();
   if (!q.empty) {
     const doc = q.docs[0];
@@ -158,37 +134,10 @@ async function getOrderById(db, orderId) {
   return null;
 }
 
-function expectedAmountTiyin(orderSnap) {
-  const d = orderSnap.data() || {};
-
-  const aT = toNumberSafe(d.amountTiyin);
-  if (aT != null) return Math.round(aT);
-
-  const a = toNumberSafe(d.amount);
-  if (a != null) return Math.round(a * 100);
-
-  return null; // not enforce if missing
-}
-
-function clampStatementRange(from, to) {
-  const f = toNumberSafe(from);
-  const t = toNumberSafe(to);
-  if (f == null || t == null) return null;
-
-  // Safety: max 31 days
-  const maxRange = 31 * 24 * 60 * 60 * 1000;
-  if (t - f > maxRange) return { from: t - maxRange, to: t };
-  return { from: f, to: t };
-}
-
-/** ---------- handler ---------- */
 exports.handler = async (event) => {
-  const PAYME_KEY = process.env.PAYME_KEY;
-
-  const body = parseBodySafe(event);
+  const body = parseBody(event);
   if (!body || typeof body !== "object") {
-    // JSON parse error (do NOT crash -> avoid 502)
-    return jsonResponse(paymeError(-32700, "Invalid JSON", "parse_error", null));
+    return resp(paymeError(-32700, "Invalid JSON", "parse_error", null));
   }
 
   const id = body.id ?? null;
@@ -196,66 +145,62 @@ exports.handler = async (event) => {
   const params = body.params || {};
 
   // Auth
-  if (!PAYME_KEY) {
-    return jsonResponse(paymeError(-32400, "Server env PAYME_KEY missing", "server_config", id));
+  const serverKey = process.env.PAYME_KEY;
+  const allowNoAuth = String(process.env.PAYME_ALLOW_NO_AUTH || "") === "1";
+  const reqKey = extractKey(event.headers || {});
+  if (!serverKey) return resp(paymeError(-32400, "Server PAYME_KEY missing", "server_config", id));
+
+  if (!allowNoAuth) {
+    if (!reqKey || reqKey !== serverKey) {
+      return resp(paymeError(-32504, "Unauthorized", "auth", id));
+    }
   }
 
-  const auth = extractAuthKey(event.headers || {});
-  if (!auth || !auth.key || auth.key !== PAYME_KEY) {
-    return jsonResponse(paymeError(-32504, "Unauthorized", "auth", id));
-  }
-
-  // Firebase
-  let db;
   try {
     initFirebase();
-    db = admin.firestore();
-  } catch (e) {
-    return jsonResponse(paymeError(-32400, "Internal server error", String(e.message || e), id));
-  }
+    const db = admin.firestore();
 
-  try {
     switch (method) {
       case "CheckPerformTransaction": {
-        const amount = toNumberSafe(params.amount);
+        const amount = toNum(params.amount);
         const { orderId } = normalizeAccount(params);
 
-        if (!orderId) return jsonResponse(paymeError(-31050, "Account not found", "order_id", id));
-        if (amount == null || amount <= 0) return jsonResponse(paymeError(-31001, "Invalid amount", "amount", id));
+        if (!orderId) return resp(paymeError(-31050, "Account not found", "order_id", id));
+        if (amount == null || amount <= 0) return resp(paymeError(-31001, "Invalid amount", "amount", id));
 
-        const found = await getOrderById(db, orderId);
-        if (!found) return jsonResponse(paymeError(-31050, "Account not found", "order", id));
+        const found = await getOrder(db, orderId);
+        if (!found) return resp(paymeError(-31050, "Account not found", "order", id));
 
         const exp = expectedAmountTiyin(found.snap);
         if (exp != null && Math.round(amount) !== exp) {
-          return jsonResponse(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
+          return resp(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
         }
 
         const status = (found.snap.data() || {}).status;
         if (status === "paid") {
-          return jsonResponse(paymeError(-31050, "Account not found", "already_paid", id));
+          return resp(paymeError(-31050, "Account not found", "already_paid", id));
         }
 
-        return jsonResponse(paymeResult({ allow: true }, id));
+        return resp(paymeResult({ allow: true }, id));
       }
 
       case "CreateTransaction": {
-        const amount = toNumberSafe(params.amount);
+        const amount = toNum(params.amount);
         const { orderId, raw } = normalizeAccount(params);
-        const time = toNumberSafe(params.time);
+        const time = toNum(params.time);
         const txId = params.id != null ? String(params.id) : null;
 
-        if (!orderId) return jsonResponse(paymeError(-31050, "Account not found", "order_id", id));
-        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
-        if (amount == null || amount <= 0) return jsonResponse(paymeError(-31001, "Invalid amount", "amount", id));
-        if (time == null) return jsonResponse(paymeError(-31099, "Time missing", "time", id));
+        if (!orderId) return resp(paymeError(-31050, "Account not found", "order_id", id));
+        if (!txId) return resp(paymeError(-31099, "Transaction id missing", "id", id));
+        if (amount == null || amount <= 0) return resp(paymeError(-31001, "Invalid amount", "amount", id));
+        if (time == null) return resp(paymeError(-31099, "Time missing", "time", id));
 
-        const found = await getOrderById(db, orderId);
-        if (!found) return jsonResponse(paymeError(-31050, "Account not found", "order", id));
+        const found = await getOrder(db, orderId);
+        if (!found) return resp(paymeError(-31050, "Account not found", "order", id));
 
         const exp = expectedAmountTiyin(found.snap);
         if (exp != null && Math.round(amount) !== exp) {
-          return jsonResponse(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
+          return resp(paymeError(-31001, "Invalid amount", "amount_mismatch", id));
         }
 
         const txRef = db.collection("payme_transactions").doc(txId);
@@ -264,19 +209,17 @@ exports.handler = async (event) => {
         if (txSnap.exists) {
           const tx = txSnap.data() || {};
           if (tx.state === 1) {
-            return jsonResponse(paymeResult({ create_time: tx.createTime, transaction: txId, state: 1 }, id));
+            return resp(paymeResult({ create_time: tx.createTime || 0, transaction: txId, state: 1 }, id));
           }
           if (tx.state === 2) {
-            return jsonResponse(
-              paymeResult({ create_time: tx.createTime, perform_time: tx.performTime, transaction: txId, state: 2 }, id)
-            );
+            return resp(paymeResult({ create_time: tx.createTime || 0, perform_time: tx.performTime || 0, transaction: txId, state: 2 }, id));
           }
           if (tx.state < 0) {
-            return jsonResponse(paymeError(-31008, "Transaction cancelled", "cancelled", id));
+            return resp(paymeError(-31008, "Transaction cancelled", "cancelled", id));
           }
         }
 
-        const createTime = nowMs();
+        const createTime = Date.now();
         await txRef.set(
           {
             transactionId: txId,
@@ -291,128 +234,88 @@ exports.handler = async (event) => {
           { merge: true }
         );
 
-        return jsonResponse(paymeResult({ create_time: createTime, transaction: txId, state: 1 }, id));
+        await found.ref.set({ status: "pending_payment", updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+        return resp(paymeResult({ create_time: createTime, transaction: txId, state: 1 }, id));
       }
 
       case "PerformTransaction": {
         const txId = params.id != null ? String(params.id) : null;
-        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
+        if (!txId) return resp(paymeError(-31099, "Transaction id missing", "id", id));
 
         const txRef = db.collection("payme_transactions").doc(txId);
         const txSnap = await txRef.get();
-        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+        if (!txSnap.exists) return resp(paymeError(-31003, "Transaction not found", "transaction", id));
 
         const tx = txSnap.data() || {};
-
         if (tx.state === 2) {
-          return jsonResponse(paymeResult({ transaction: txId, perform_time: tx.performTime, state: 2 }, id));
+          return resp(paymeResult({ transaction: txId, perform_time: tx.performTime || 0, state: 2 }, id));
         }
-        if (tx.state < 0) {
-          return jsonResponse(paymeError(-31008, "Transaction cancelled", "cancelled", id));
-        }
+        if (tx.state < 0) return resp(paymeError(-31008, "Transaction cancelled", "cancelled", id));
 
-        const performTime = nowMs();
+        const performTime = Date.now();
 
         await db.runTransaction(async (t) => {
-          const orderFound = await getOrderById(db, tx.orderId);
-          if (!orderFound) throw new Error("order_not_found");
+          const found = await getOrder(db, tx.orderId);
+          if (!found) throw new Error("order_not_found");
 
-          const orderSnap = await t.get(orderFound.ref);
+          const orderSnap = await t.get(found.ref);
           const order = orderSnap.data() || {};
 
-          // Update order once
           if (order.status !== "paid") {
-            t.set(orderFound.ref, { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-
-            // Optional balance topup
-            const type = order.type;
-            const uid = order.uid || order.userId;
-            if (type === "topup" && uid) {
-              t.set(
-                db.collection("users").doc(String(uid)),
-                {
-                  balanceTiyin: admin.firestore.FieldValue.increment(tx.amount),
-                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                },
-                { merge: true }
-              );
-            }
+            t.set(found.ref, { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
           }
 
-          t.set(
-            txRef,
-            {
-              state: 2,
-              performTime,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
+          t.set(txRef, { state: 2, performTime, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         });
 
-        return jsonResponse(paymeResult({ transaction: txId, perform_time: performTime, state: 2 }, id));
+        return resp(paymeResult({ transaction: txId, perform_time: performTime, state: 2 }, id));
       }
 
       case "CancelTransaction": {
         const txId = params.id != null ? String(params.id) : null;
         const reason = params.reason != null ? params.reason : null;
-        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
+        if (!txId) return resp(paymeError(-31099, "Transaction id missing", "id", id));
 
         const txRef = db.collection("payme_transactions").doc(txId);
         const txSnap = await txRef.get();
-        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+        if (!txSnap.exists) return resp(paymeError(-31003, "Transaction not found", "transaction", id));
 
         const tx = txSnap.data() || {};
         if (tx.state < 0) {
-          return jsonResponse(paymeResult({ transaction: txId, cancel_time: tx.cancelTime, state: tx.state }, id));
+          return resp(paymeResult({ transaction: txId, cancel_time: tx.cancelTime || 0, state: tx.state }, id));
         }
 
-        const cancelTime = nowMs();
+        const cancelTime = Date.now();
         const newState = tx.state === 2 ? -2 : -1;
 
         await db.runTransaction(async (t) => {
-          const orderFound = await getOrderById(db, tx.orderId);
-          if (orderFound) {
-            const orderSnap = await t.get(orderFound.ref);
-            const order = orderSnap.data() || {};
-
-            if (newState === -1) {
-              if (order.status !== "paid") {
-                t.set(orderFound.ref, { status: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-              }
-            } else {
-              t.set(
-                orderFound.ref,
-                { paymeReversalRequested: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
-                { merge: true }
-              );
+          const found = await getOrder(db, tx.orderId);
+          if (found) {
+            const os = await t.get(found.ref);
+            const od = os.data() || {};
+            if (newState === -1 && od.status !== "paid") {
+              t.set(found.ref, { status: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+            } else if (newState === -2) {
+              t.set(found.ref, { paymeReversalRequested: true }, { merge: true });
             }
           }
-
-          t.set(
-            txRef,
-            {
-              state: newState,
-              cancelTime,
-              reason,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
+          t.set(txRef, { state: newState, cancelTime, reason, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         });
 
-        return jsonResponse(paymeResult({ transaction: txId, cancel_time: cancelTime, state: newState }, id));
+        return resp(paymeResult({ transaction: txId, cancel_time: cancelTime, state: newState }, id));
       }
 
       case "CheckTransaction": {
         const txId = params.id != null ? String(params.id) : null;
-        if (!txId) return jsonResponse(paymeError(-31099, "Transaction id missing", "id", id));
+        if (!txId) return resp(paymeError(-31099, "Transaction id missing", "id", id));
 
-        const txSnap = await db.collection("payme_transactions").doc(txId).get();
-        if (!txSnap.exists) return jsonResponse(paymeError(-31003, "Transaction not found", "transaction", id));
+        const txRef = db.collection("payme_transactions").doc(txId);
+        const txSnap = await txRef.get();
+        if (!txSnap.exists) return resp(paymeError(-31003, "Transaction not found", "transaction", id));
 
         const tx = txSnap.data() || {};
-        return jsonResponse(
+        return resp(
           paymeResult(
             {
               create_time: tx.createTime || 0,
@@ -427,40 +330,10 @@ exports.handler = async (event) => {
         );
       }
 
-      case "GetStatement": {
-        const range = clampStatementRange(params.from, params.to);
-        if (!range) return jsonResponse(paymeError(-31099, "Invalid range", "from/to", id));
-
-        const q = await db
-          .collection("payme_transactions")
-          .where("createTime", ">=", range.from)
-          .where("createTime", "<=", range.to)
-          .limit(500)
-          .get();
-
-        const transactions = q.docs.map((d) => {
-          const tx = d.data() || {};
-          return {
-            id: tx.transactionId || d.id,
-            time: tx.time || tx.createTime || 0,
-            amount: tx.amount || 0,
-            account: tx.account || {},
-            create_time: tx.createTime || 0,
-            perform_time: tx.performTime || 0,
-            cancel_time: tx.cancelTime || 0,
-            transaction: tx.transactionId || d.id,
-            state: tx.state,
-            reason: tx.reason ?? null,
-          };
-        });
-
-        return jsonResponse(paymeResult({ transactions }, id));
-      }
-
       default:
-        return jsonResponse(paymeError(-32601, "Method not found", String(method), id));
+        return resp(paymeError(-32601, "Method not found", String(method), id));
     }
   } catch (e) {
-    return jsonResponse(paymeError(-32400, "Internal server error", String(e.message || e), id));
+    return resp(paymeError(-32400, "Internal server error", String(e.message || e), id));
   }
 };

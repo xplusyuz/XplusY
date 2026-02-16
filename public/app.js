@@ -97,7 +97,7 @@ function tgOrderStatusHTML(o){
 
 
 import { auth, db } from "./firebase-config.js";
-import { createPaymeCheckoutUrl } from "./payme-config.js";
+import { PAYME_MODE, PAYME_LANG, PAYME_KASSA_ID } from "./payme-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -2469,6 +2469,557 @@ async function createOrderFromCheckout(){
   }
 
   if(payType === "payme"){
+    // ✅ API-only rejim: checkout redirect YO'Q.
+    // To'lov Payme tomondan amalga oshirilganda, Payme serveri /.netlify/functions/payme ga PerformTransaction yuboradi.
+    // Shunda order status = 'paid' bo'ladi.
+    toast("Payme orqali to'lov: buyurtma yaratildi. To'lov tasdiqlangach 'To'landi' bo'ladi.");
+    goTab("profile");
+  }else{
+    toast("Buyurtmangiz qabul qilindi");
+    goTab("profile");
+  }}
+
+let unsubProducts = null;
+
+async function loadProducts(){
+  // Firestore is the single source of truth (no products.json fallback).
+  try{
+    const colRef = collection(db, "products");
+    const qy = query(colRef, orderBy("popularScore", "desc"));
+    unsubProducts && unsubProducts();
+    unsubProducts = onSnapshot(qy, (snap)=>{
+      const arr = snap.docs.map(d=> {
+        const data = d.data() || {};
+        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+        const created = (data.createdAt ?? data.created_at ?? data.created);
+        return {
+          id: String(data.id || d.id),
+          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+          ...data,
+          _docId: d.id,
+          _price: parseUZS(price),
+          _created: toMillis(created),
+        };
+      });
+      products = arr;
+      buildTagCounts();
+buildCategoryTree();
+      applyFilterSort();
+      if(activeTab==="categories") renderCategoriesPage();
+
+      // If empty, show a helpful hint for setup
+      if(arr.length === 0){
+        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+      }
+    }, (err)=>{
+      console.warn("Firestore products error", err);
+      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
+      products = [];
+      applyFilterSort();
+    });
+  }catch(e){
+    console.warn("Firestore products init failed", e);
+    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
+    products = [];
+    applyFilterSort();
+  }
+}
+
+/* ================== PHONE + PASSWORD AUTH ================== */
+function normPhone(raw){
+  const s = String(raw||"").trim().replace(/[\s\-\(\)]/g,"");
+  if(!s) return "";
+  let p = s;
+  if(p.startsWith("00")) p = "+" + p.slice(2);
+  if(!p.startsWith("+")) p = "+" + p;
+  // allow only + and digits
+  p = "+" + p.replace(/[^0-9]/g,"");
+  // Uzbekistan typical length +998XXXXXXXXX (13 chars)
+  if(!/^\+\d{7,15}$/.test(p)) return "";
+  return p;
+}
+function phoneToEmail(phone){
+  // deterministic pseudo-email for Firebase Auth email/password
+  const digits = String(phone||"").replace(/[^0-9]/g,"");
+  return `p${digits}@orzumall.phone`;
+}
+function showAuthNotice(el, msg, kind="info"){
+  if(!el) return;
+  el.style.display = "";
+  el.textContent = String(msg||"");
+  el.classList.remove("isError","isOk");
+  if(kind==="error") el.classList.add("isError");
+  if(kind==="ok") el.classList.add("isOk");
+}
+function clearAuthNotices(){
+  if(els.authNotice){ els.authNotice.style.display="none"; els.authNotice.textContent=""; els.authNotice.classList.remove("isError","isOk"); }
+  if(els.authNotice2){ els.authNotice2.style.display="none"; els.authNotice2.textContent=""; els.authNotice2.classList.remove("isError","isOk"); }
+}
+function setAuthTab(tab){
+  const isLogin = tab === "login";
+  if(els.tabLogin) els.tabLogin.classList.toggle("isActive", isLogin);
+  if(els.tabSignup) els.tabSignup.classList.toggle("isActive", !isLogin);
+  if(els.tabLogin) els.tabLogin.setAttribute("aria-selected", isLogin ? "true":"false");
+  if(els.tabSignup) els.tabSignup.setAttribute("aria-selected", !isLogin ? "true":"false");
+  if(els.loginForm) els.loginForm.style.display = isLogin ? "" : "none";
+  if(els.signupForm) els.signupForm.style.display = !isLogin ? "" : "none";
+  clearAuthNotices();
+}
+function wireEyeButtons(){
+  document.querySelectorAll("[data-eye]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const id = btn.getAttribute("data-eye");
+      const inp = document.getElementById(id);
+      if(!inp) return;
+      inp.type = (inp.type === "password") ? "text" : "password";
+    });
+  });
+}
+/* ================== /PHONE + PASSWORD AUTH ================== */
+
+function setUserUI(user){
+  currentUser = user || null;
+  const authCard = els.authCard || document.getElementById("authCard");
+
+  document.body.classList.toggle("signed-in", !!user);
+
+  if(!user){
+    // Require login: redirect to dedicated login page
+    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+    location.replace(`/login.html?next=${next}`);
+    return;
+  }
+
+  if(authCard) authCard.style.display = "none";
+
+  // Avatar: always use Font Awesome profile icon (no image / initials)
+  if(els.avatarIcon) els.avatarIcon.style.display = "grid";
+  if(els.avatarBtn) els.avatarBtn.disabled = false;
+
+  // keep profile modal header in sync
+  if(window.__omProfile) window.__omProfile.syncUser(user);
+}
+
+els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
+
+
+els.q.addEventListener("input", applyFilterSort);
+els.sort.addEventListener("change", applyFilterSort);
+
+
+
+// panel & views
+// Favorites should open like cart (drawer), not just filter the grid.
+els.favViewBtn?.addEventListener("click", ()=> goTab("fav"));
+els.cartBtn?.addEventListener("click", ()=> goTab("cart"));
+els.panelClose?.addEventListener("click", closePanel);
+els.overlay?.addEventListener("click", closePanel);
+// cart select all
+els.selectAllBox?.addEventListener("change", ()=>{
+  if((els.panelTitle?.textContent || "").trim() !== "Savatcha") return;
+  if(els.selectAllBox.checked){
+    cartSelected = new Set(cart.map(x=>x.key));
+  } else {
+    cartSelected = new Set();
+  }
+  updateCartSelectUI();
+  renderPanel("cart");
+});
+
+
+// variant modal events
+els.vClose?.addEventListener("click", closeVariantModal);
+els.vCancel?.addEventListener("click", closeVariantModal);
+els.vOverlay?.addEventListener("click", (e)=>{
+  // click on the dim area closes; click inside card does not
+  if(e.target === els.vOverlay) closeVariantModal();
+});
+els.vMinus?.addEventListener("click", ()=>{
+  vState.qty = Math.max(1, (vState.qty||1) - 1);
+  if(els.vQty) els.vQty.textContent = String(vState.qty);
+});
+els.vPlus?.addEventListener("click", ()=>{
+  vState.qty = Math.min(99, (vState.qty||1) + 1);
+  if(els.vQty) els.vQty.textContent = String(vState.qty);
+});
+els.vConfirm?.addEventListener("click", ()=>{
+  const p = vState.product;
+  if(!p) return;
+  if(!validateVariantSelection()) return;
+  const sel = normalizeSelectionForProduct(p, vState.sel);
+  addToCart(p.id, vState.qty || 1, sel);
+  updateBadges();
+  closeVariantModal();
+  if(vState.openCartAfter) openPanel("cart");
+});
+
+// image viewer events
+els.imgViewerClose?.addEventListener("click", closeImageViewer);
+els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
+els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
+els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
+
+// reviews (viewer)
+els.revSend?.addEventListener("click", async ()=>{
+  const productId = viewer.productId;
+  if(!productId) return;
+
+  const user = auth.currentUser;
+  if(!user){
+    alert("Sharh qoldirish uchun avval kirish qiling.");
+    return;
+  }
+
+  const stars = Math.max(1, Math.min(5, Number(draftStars)||5));
+  const text = (els.revText?.value || "").trim().slice(0, 400);
+
+  // Rasm yuklash olib tashlandi
+  if(text.length < 2){
+    alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
+    return;
+  }
+
+  els.revSend.disabled = true;
+  const oldLabel = els.revSend.textContent;
+  els.revSend.textContent = "Yuborilmoqda...";
+
+  try{
+    const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
+    const revRef = doc(db, "products", productId, "reviews", user.uid);
+
+    await runTransaction(db, async (tx) => {
+      const revSnap = await tx.get(revRef);
+      const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
+      const createdAt = prev.createdAt ? prev.createdAt : serverTimestamp();
+
+      tx.set(revRef, {
+        uid: user.uid,
+        authorName,
+        stars,
+        text,
+        updatedAt: serverTimestamp(),
+        createdAt
+      }, { merge: true });
+    });
+
+    if(els.revText) els.revText.value = "";
+
+    // Real stats: Firestore aggregate orqali yangilab qo‘yamiz
+    await refreshStats(productId, true);
+
+    applyFilterSort();
+  }catch(err){
+    console.error(err);
+    alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
+  }finally{
+    els.revSend.disabled = false;
+    els.revSend.textContent = oldLabel;
+  }
+});
+
+// viewer actions
+els.viewerCart?.addEventListener("click", ()=>{
+  const p = products.find(x=>x.id===viewer.productId);
+  if(!p) return;
+  handleAddToCart(p, { openCartAfter: false });
+});
+els.viewerBuy?.addEventListener("click", ()=>{
+  const p = products.find(x=>x.id===viewer.productId);
+  if(!p) return;
+  handleAddToCart(p, { openCartAfter: false });
+});
+window.addEventListener("keydown", (e)=>{
+  if(vState.open && e.key === "Escape"){
+    closeVariantModal();
+    return;
+  }
+  if(!viewer.open) return;
+  if(e.key === "Escape") closeImageViewer();
+  if(e.key === "ArrowLeft") stepViewer(-1);
+  if(e.key === "ArrowRight") stepViewer(+1);
+});
+els.clearBtn?.addEventListener("click", ()=>{
+  if(els.panelTitle.textContent.includes("Sevimli")){
+    favs = new Set();
+    saveLS(LS.favs, []);
+  } else {
+    const sel = new Set(selectedCartItems().map(x=>x.key));
+    if(sel.size === 0){
+      toast("Hech narsa tanlanmagan.");
+      return;
+    }
+    cart = cart.filter(x=>!sel.has(x.key));
+    saveLS(LS.cart, cart);
+    cartSelected = new Set(cart.map(x=>x.key));
+  }
+  updateBadges();
+  renderPanel(els.panelTitle.textContent.includes("Sevimli") ? "fav" : "cart");
+  updateCartSelectUI();
+  if(viewMode === "fav") applyFilterSort();
+});
+function buildSelectedItems(){
+  const _selCart = selectedCartItems();
+  if(_selCart.length === 0) return { ok:false, reason:"Hech narsa tanlanmagan.", sel:[], items:[], totalUZS:0 };
+  const items = _selCart.map(ci=>{
+    const p = products.find(x=>x.id===ci.id);
+    const pr = p ? getVariantPricing(p, {color: ci.color||null, size: ci.size||null}) : {price:0};
+    return {
+      productId: ci.id,
+      name: p?.name || "",
+      color: ci.color || null,
+      size: ci.size || null,
+      qty: Number(ci.qty||1),
+      priceUZS: Number(pr.price||0),
+      fulfillmentType: (p?.fulfillmentType || "stock"),
+      deliveryMinDays: Number(p?.deliveryMinDays ?? (p?.fulfillmentType==="cargo"?15:1)),
+      deliveryMaxDays: Number(p?.deliveryMaxDays ?? (p?.fulfillmentType==="cargo"?30:7)),
+      prepayRequired: !!(p?.prepayRequired ?? (p?.fulfillmentType==="cargo")),
+    };
+  });
+  const totalUZS = items.reduce((s,it)=> s + (it.priceUZS||0) * (it.qty||0), 0);
+  if(!Number.isFinite(totalUZS) || totalUZS <= 0) return { ok:false, reason:"Jami summa noto‘g‘ri.", sel:_selCart, items, totalUZS:0 };
+  return { ok:true, reason:"", sel:_selCart, items, totalUZS };
+}
+
+async function createOrderDoc({orderId, provider, status, items, totalUZS, amountTiyin, shipping, orderType="checkout"}){
+  if(!currentUser) throw new Error("no_user");
+
+  // pull richer user fields for order + telegram
+  const userRef = doc(db, "users", currentUser.uid);
+  let userName = null, userPhone = null, omId = null, userTgChatId = null;
+  try{
+    const uSnap = await getDoc(userRef);
+    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    profileCache = u;
+    userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
+    userPhone = (u.phone || "").toString();
+    omId = (u.omId || makeOmId(currentUser.uid)).toString();
+    userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
+  }catch(_e){
+    userName = (currentUser.displayName || currentUser.email || "User").toString();
+    userPhone = "";
+    omId = makeOmId(currentUser.uid);
+    userTgChatId = null;
+  }
+
+  const orderRef = doc(db, "orders", orderId);
+
+  // write order (main)
+  await setDoc(orderRef, {
+    orderId,
+    uid: currentUser.uid,
+    omId,
+    userName,
+    userPhone,
+    userTgChatId,
+    status,
+    items,
+    totalUZS,
+    amountTiyin: amountTiyin ?? null,
+    provider,
+    shipping: shipping || null,
+    orderType,
+    createdAt: serverTimestamp(),
+    source: "web",
+  }, { merge: true });
+
+  // also store under user subcollection to avoid composite index for profile history
+  const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
+  await setDoc(userOrderRef, {
+    orderId,
+    uid: currentUser.uid,
+    omId,
+    userName,
+    userPhone,
+    userTgChatId,
+    status,
+    items,
+    totalUZS,
+    amountTiyin: amountTiyin ?? null,
+    provider,
+    shipping: shipping || null,
+    orderType,
+    createdAt: serverTimestamp(),
+    source: "web",
+  }, { merge: true });
+  // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
+  try{
+    window.__tgSentOrders = window.__tgSentOrders || new Set();
+    if(!window.__tgSentOrders.has(orderId)){
+      window.__tgSentOrders.add(orderId);
+      const payload = { orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null };
+      const html = tgOrderCreatedHTML(payload);
+      tgSendAdminHTML(html);
+      if(userTgChatId){
+        tgSendUserHTML(userTgChatId, html);
+      }
+    }
+  }catch(_e){}
+}
+
+function removePurchasedFromCart(sel){
+  const purchased = new Set((sel||[]).map(x=>x.key));
+  cart = cart.filter(x=>!purchased.has(x.key));
+  saveLS(LS.cart, cart);
+  cartSelected = new Set(cart.map(x=>x.key));
+  updateBadges();
+  renderCartPage?.();
+  renderPanel?.("cart");
+  updateCartSelectUI();
+}
+
+
+
+/* =========================
+   Balance (Wallet) + TopUp
+========================= */
+function setBalanceUI(n){
+  userBalanceUZS = Number(n||0) || 0;
+  const b1 = document.getElementById('balInline');
+  if(b1) b1.textContent = userBalanceUZS.toLocaleString();
+  const b2 = document.getElementById('balProfile');
+  if(b2) b2.textContent = userBalanceUZS.toLocaleString() + " so'm";
+}
+
+async function watchUserDoc(uid){
+  if(!uid || !currentUser){ try{ setBalanceUI(0); }catch(_){}; return; }
+
+  try{
+    unsubUserDoc && unsubUserDoc();
+    const uref = doc(db,'users',uid);
+    unsubUserDoc = onSnapshot(uref, (snap)=>{
+      const u = snap.exists() ? (snap.data()||{}) : {};
+      profileCache = u;
+      // ensure balance exists
+      const bal = Number(u.balanceUZS||0) || 0;
+      setBalanceUI(bal);
+      // autofill phone from profile
+      try{
+        const ph = (u.phone || u.phoneNumber || u.tel || '').toString();
+        if(els.useProfilePhone?.checked && els.shipPhone){
+          if(ph) els.shipPhone.value = ph;
+        }
+      }catch(e){}
+    }, (err)=>{
+      // Prevent noisy console errors when logged out or rules deny
+      console.warn("user doc subscribe error", err);
+      setBalanceUI(0);
+    });
+}catch(e){}
+}
+
+async function createTopupOrder(amountUZS){
+  if(!currentUser) throw new Error('no_user');
+  const amt = Number(amountUZS||0);
+  if(!Number.isFinite(amt) || amt<=0) throw new Error('bad_amount');
+
+  // create "order" of type topup so Payme verify (functions) can credit balance
+  const orderId = String(Date.now());
+  const amountTiyin = Math.round(amt * 100);
+
+  await createOrderDoc({
+    orderId,
+    provider: 'payme',
+    status: 'pending_payment',
+    items: [],
+    totalUZS: amt,
+    amountTiyin,
+    shipping: null,
+    orderType: 'topup'
+  });
+
+  return { orderId, amountTiyin };
+}
+
+async function startTopupPayme(){
+  if(!currentUser){ toast('Avval kirish qiling.'); return; }
+  const inp = document.getElementById('topupAmount');
+  const hint = document.getElementById('topupHint');
+  const amt = Number(inp?.value||0);
+  if(!amt || amt<1000){
+    if(hint) hint.textContent = "Minimal: 1000 so'm";
+    toast("Minimal: 1000 so'm");
+    return;
+  }
+  if(hint) hint.textContent = "Payme ochilmoqda...";
+
+  try{
+    await createTopupOrder(amt);
+    toast("Balans to'ldirish vaqtincha o'chirilgan. Faqat buyurtma to'lovi (Variant A) ishlaydi.");
+    return;
+  }catch(e){
+    console.warn(e);
+    if(hint) hint.textContent = "Xato. Qayta urinib ko'ring.";
+    toast("Balans to'ldirish yaratilmadi.");
+  }
+}
+
+async function payWithBalance(built, shipping){
+  if(!currentUser) throw new Error('no_user');
+  const total = Number(built.totalUZS||0);
+  const uid = currentUser.uid;
+  const orderId = String(Date.now());
+
+  await runTransaction(db, async (t)=>{
+    const uref = doc(db,'users',uid);
+    const us = await t.get(uref);
+    const u = us.exists() ? (us.data()||{}) : {};
+    const bal = Number(u.balanceUZS||0) || 0;
+    if(bal < total) throw new Error('no_balance');
+
+    // deduct balance
+    t.set(uref, { balanceUZS: bal - total, updatedAt: serverTimestamp() }, {merge:true});
+
+    // order doc
+    const oref = doc(db,'orders',orderId);
+    const uo = doc(db,'users',uid,'orders',orderId);
+    const base = {
+      orderId,
+      uid,
+      omId: u.omId || null,
+      userName: u.name || null,
+      userPhone: u.phone || null,
+      userTgChatId: (u.telegramChatId||u.tgChatId||null),
+      status: 'paid',
+      provider: 'balance',
+      items: built.items,
+      totalUZS: total,
+      shipping: shipping || null,
+      createdAt: serverTimestamp(),
+      paidAt: serverTimestamp(),
+      source: 'web',
+      payFromBalance: true
+    };
+    t.set(oref, base, {merge:true});
+    t.set(uo, base, {merge:true});
+  });
+
+  return orderId;
+}
+async function startPaymeCheckout(){
+  if(!currentUser){
+    toast("Avval kirish qiling (Telefon raqam + parol).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+
+  const built = buildSelectedItems();
+  if(!built.ok){ toast(built.reason); return; }
+
+  const hasPrepay = built.items.some(it=>it.prepayRequired);
+  const note = document.getElementById("payRuleNote");
+  if(note){
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
+  }
+
+  if(!undefined || String(undefined).includes("YOUR_")){
+    toast("undefined sozlanmagan (public/payme-config.js).");
+    return;
+  }
 
   // Payme amount is in tiyin
   const amountTiyin = Math.round(built.totalUZS * 100);
@@ -2491,15 +3042,9 @@ async function createOrderFromCheckout(){
   }
 
   const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
-
-  let checkoutUrl;
-  try{
-    checkoutUrl = createPaymeCheckoutUrl(orderId, built.totalUZS, returnUrl);
-  }catch(e){
-    toast(e?.message || "Payme sozlamalari noto‘g‘ri (payme-config.js).");
-    return;
-  }
-  window.location.href = checkoutUrl;
+  const params = `m=${undefined};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
+  const b64 = btoa(unescape(encodeURIComponent(params)));
+  window.location.href = `${undefined}/${b64}`;
 }
 
 async function shareOrderTelegram(){
