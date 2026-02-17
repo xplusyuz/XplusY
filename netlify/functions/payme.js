@@ -1,415 +1,312 @@
-/* netlify/functions/payme.js */
+// netlify/functions/payme.js
 const admin = require("firebase-admin");
 
-function getFirestore() {
-  if (!admin.apps.length) {
-    const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
-    if (!b64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
-
-    const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-    admin.initializeApp({ credential: admin.credential.cert(json) });
-  }
-  return admin.firestore();
+function initFirebase() {
+  if (admin.apps.length) return;
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+  if (!b64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
+  const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+  admin.initializeApp({ credential: admin.credential.cert(json) });
 }
+function db() { initFirebase(); return admin.firestore(); }
 
-function paymeError(code, message, data = null) {
-  return {
-    error: { code, message: { ru: message, uz: message, en: message }, data },
-  };
+function rpcError(code, message, data = null) {
+  return { error: { code, message: { ru: message, uz: message, en: message }, data } };
 }
+function rpcOk(result) { return { result }; }
 
-function ok(result) {
-  return { result };
-}
-
-function parseAuth(header) {
-  // Payme: Basic base64("Paycom:<key>")
-  if (!header || !header.startsWith("Basic ")) return null;
-  const b64 = header.slice(6).trim();
+function parseAuth(h) {
+  if (!h || !h.startsWith("Basic ")) return null;
+  const b64 = h.slice(6).trim();
   let decoded = "";
-  try {
-    decoded = Buffer.from(b64, "base64").toString("utf8");
-  } catch {
-    return null;
-  }
-  // decoded = "Paycom:test_key"
-  const idx = decoded.indexOf(":");
-  if (idx < 0) return null;
-  return { user: decoded.slice(0, idx), pass: decoded.slice(idx + 1) };
+  try { decoded = Buffer.from(b64, "base64").toString("utf8"); } catch { return null; }
+  const i = decoded.indexOf(":");
+  if (i < 0) return null;
+  return { user: decoded.slice(0, i), pass: decoded.slice(i + 1) };
 }
 
-function nowMs() {
-  return Date.now();
-}
+const ERR_AUTH = -32504;
+const ERR_METHOD = -32601;
+const ERR_PARAMS = -32602;
 
-function isInt(n) {
-  return Number.isInteger(n);
-}
+const ERR_CANNOT_PERFORM = -31050;
+const ERR_TX_NOT_FOUND = -31003;
+const ERR_TX_EXISTS = -31051;
+const ERR_COULD_NOT_PERFORM = -31008;
 
-// Payme states: 1=created, 2=performed, -1=canceled
 const STATE_CREATED = 1;
 const STATE_PERFORMED = 2;
 const STATE_CANCELED = -1;
 
-// Payme standard errors (amaliyotda ishlatiladiganlar)
-const ERR_AUTH = -32504;          // Unauthorized
-const ERR_RPC = -32600;           // Invalid Request
-const ERR_METHOD = -32601;        // Method not found
-const ERR_INVALID_PARAMS = -32602;// Invalid params
+const TIMEOUT_MS = 12 * 60 * 1000; // 12 min
 
-// Biznes errorlari (ko‘p integratsiyada ishlatiladi)
-const ERR_CANNOT_PERFORM = -31050;   // Transaction cannot be performed
-const ERR_TRANSACTION_NOT_FOUND = -31003;
-const ERR_TRANSACTION_ALREADY_EXISTS = -31051;
-const ERR_COULD_NOT_PERFORM = -31008;
+const now = () => Date.now();
+const isInt = (n) => Number.isInteger(n);
 
-const PAYME_TIMEOUT_MS = 12 * 60 * 1000; // 12 daqiqa (ko‘pincha 12 min)
-function isExpired(create_time) {
-  return nowMs() - create_time > PAYME_TIMEOUT_MS;
+function getTopupId(params) {
+  const acc = params?.account;
+  return acc?.order_id || acc?.topup_id || acc?.topupId || acc?.orderId || null;
 }
-
-// Sizning biznes: orderId yoki topupId
-function getAccountOrderId(params) {
-  // Payme odatda params.account.order_id yuboradi (siz xohlagan nom)
-  const acc = params && params.account;
-  if (!acc) return null;
-  return acc.order_id || acc.orderId || acc.topup_id || acc.topupId || null;
-}
-
-// Amount: Payme tiyin yuboradi (UZS*100)
-function normalizeAmount(params) {
-  const a = params && params.amount;
-  return a;
-}
+function getAmount(params) { return params?.amount; }
 
 exports.handler = async (event) => {
   try {
-    // Only POST
-    if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: "Method Not Allowed" };
-    }
+    if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method Not Allowed" };
 
-    // Auth check
+    // --- AUTH ---
     const auth = parseAuth(event.headers.authorization || event.headers.Authorization);
     const env = (process.env.PAYME_ENV || "test").toLowerCase();
     const expectedKey = env === "prod" ? process.env.PAYME_PROD_KEY : process.env.PAYME_TEST_KEY;
-
     if (!auth || auth.user !== "Paycom" || auth.pass !== expectedKey) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify(paymeError(ERR_AUTH, "Неверная авторизация")),
-      };
+      return { statusCode: 200, body: JSON.stringify(rpcError(ERR_AUTH, "Неверная авторизация")) };
     }
 
-    // Parse JSON-RPC
+    // --- JSON-RPC ---
     let body;
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch {
-      return { statusCode: 200, body: JSON.stringify(paymeError(ERR_RPC, "Invalid JSON")) };
-    }
+    try { body = JSON.parse(event.body || "{}"); }
+    catch { return { statusCode: 200, body: JSON.stringify(rpcError(-32600, "Invalid JSON")) }; }
 
-    const { method, params, id } = body || {};
-    if (!method || typeof method !== "string") {
-      return { statusCode: 200, body: JSON.stringify(paymeError(ERR_RPC, "Invalid Request")) };
-    }
+    const { method, params, id } = body;
+    if (!method) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(-32600, "Invalid Request") }) };
 
-    const db = getFirestore();
+    const firestore = db();
 
-    // Helper: load order/topup
-    async function loadBusinessDoc(orderId) {
-      // Sizda orderlar bo‘lishi mumkin:
-      // /orders/{orderId}
-      // yoki balans topup: /topups/{orderId}
-      // Hozir order sifatida tekshiramiz, topup bo‘lsa keyin moslab olasiz.
-      const ref = db.collection("orders").doc(orderId);
+    async function loadTopup(topupId) {
+      const ref = firestore.collection("topups").doc(String(topupId));
       const snap = await ref.get();
-      if (snap.exists) return { type: "order", ref, data: snap.data() };
-
-      const ref2 = db.collection("topups").doc(orderId);
-      const snap2 = await ref2.get();
-      if (snap2.exists) return { type: "topup", ref: ref2, data: snap2.data() };
-
-      return null;
+      if (!snap.exists) return null;
+      return { ref, data: snap.data() };
     }
 
-    // ==== METHODS ====
+    async function loadTx(txId) {
+      const ref = firestore.collection("payme_tx").doc(String(txId));
+      const snap = await ref.get();
+      if (!snap.exists) return null;
+      return { ref, data: snap.data() };
+    }
 
-    // 1) CheckPerformTransaction
+    // ---------------- CheckPerformTransaction ----------------
     if (method === "CheckPerformTransaction") {
-      const orderId = getAccountOrderId(params);
-      const amount = normalizeAmount(params);
+      const topupId = getTopupId(params);
+      const amount = getAmount(params);
 
-      if (!orderId || !isInt(amount) || amount <= 0) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
+      if (!topupId || !isInt(amount) || amount <= 0) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
       }
 
-      const doc = await loadBusinessDoc(orderId);
-      if (!doc) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Order not found", "order_id") }) };
+      const topup = await loadTopup(topupId);
+      if (!topup) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Topup not found", "order_id") }) };
+
+      if (topup.data.status === "paid") {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Already paid", "status") }) };
       }
 
-      // ✅ Biznes qoidasi: order allaqachon paid bo‘lsa — qayta to‘lab bo‘lmaydi
-      if (doc.data.status === "paid") {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Already paid", "status") }) };
+      if (!isInt(topup.data.amountTiyin) || topup.data.amountTiyin !== amount) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
       }
 
-      // ✅ Amount check (MUHIM!)
-      // Sizning orderda amountUZS yoki amountTiyin bo‘lishi mumkin.
-      // Tavsiya: orders.amountTiyin saqlang.
-      const expected = doc.data.amountTiyin ?? (isInt(doc.data.amountUZS) ? doc.data.amountUZS * 100 : null);
-      if (!isInt(expected)) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Order amount missing", "amount") }) };
-      }
-      if (amount !== expected) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
-      }
-
-      return { statusCode: 200, body: JSON.stringify({ id, ...ok({ allow: true }) }) };
+      return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ allow: true }) }) };
     }
 
-    // 2) CreateTransaction
+    // ---------------- CreateTransaction ----------------
     if (method === "CreateTransaction") {
-      const orderId = getAccountOrderId(params);
-      const amount = normalizeAmount(params);
-      const transactionId = params && params.id;
-      const create_time = params && params.time; // Payme ms
+      const topupId = getTopupId(params);
+      const amount = getAmount(params);
+      const paymeTxId = params?.id;
+      const create_time = params?.time;
 
-      if (!orderId || !transactionId || !isInt(amount) || amount <= 0 || !isInt(create_time)) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
+      if (!topupId || !paymeTxId || !isInt(amount) || amount <= 0 || !isInt(create_time)) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
       }
 
-      // order check
-      const doc = await loadBusinessDoc(orderId);
-      if (!doc) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Order not found", "order_id") }) };
-      }
-      if (doc.data.status === "paid") {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Already paid", "status") }) };
+      const topup = await loadTopup(topupId);
+      if (!topup) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Topup not found", "order_id") }) };
+
+      if (topup.data.status === "paid") {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Already paid", "status") }) };
       }
 
-      const expected = doc.data.amountTiyin ?? (isInt(doc.data.amountUZS) ? doc.data.amountUZS * 100 : null);
-      if (!isInt(expected) || amount !== expected) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
+      if (!isInt(topup.data.amountTiyin) || topup.data.amountTiyin !== amount) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
       }
 
-      const txRef = db.collection("payme_tx").doc(String(transactionId));
+      const txRef = firestore.collection("payme_tx").doc(String(paymeTxId));
       const txSnap = await txRef.get();
 
-      // Idempotency: Agar tx bor bo‘lsa, holatiga qarab qaytaradi
       if (txSnap.exists) {
         const tx = txSnap.data();
-        // expired bo‘lsa yaratishga ruxsat yo‘q (Payme’da odatda cancel qaytadi)
-        if (tx.state === STATE_CREATED && isExpired(tx.create_time)) {
-          return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Transaction expired", "time") }) };
+        // boshqa topup uchun bo‘lsa xato
+        if (tx.topupId !== String(topupId) || tx.amount !== amount) {
+          return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_TX_EXISTS, "Transaction already exists") }) };
         }
-
-        // Agar boshqa orderga tegishli bo‘lsa – xato
-        if (tx.orderId !== orderId || tx.amount !== amount) {
-          return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_TRANSACTION_ALREADY_EXISTS, "Transaction already exists") }) };
+        // expired
+        if (tx.state === STATE_CREATED && now() - tx.create_time > TIMEOUT_MS) {
+          return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Transaction expired", "time") }) };
         }
-
-        return {
-          statusCode: 200,
-          body: JSON.stringify({
-            id,
-            ...ok({
-              create_time: tx.create_time,
-              transaction: String(tx.id),
-              state: tx.state,
-            }),
-          }),
-        };
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ create_time: tx.create_time, transaction: String(tx.id), state: tx.state }) }) };
       }
 
-      // Create new tx
-      await db.runTransaction(async (t) => {
-        const txSnap2 = await t.get(txRef);
-        if (txSnap2.exists) return;
-
-        // order statusni "pending_payment" qilish (ixtiyoriy)
-        if (doc.data.status !== "pending_payment") {
-          t.set(doc.ref, { status: "pending_payment", paymePendingAt: nowMs() }, { merge: true });
-        }
+      await firestore.runTransaction(async (t) => {
+        const fresh = await t.get(txRef);
+        if (fresh.exists) return;
 
         t.set(txRef, {
-          id: String(transactionId),
-          orderId,
-          uid: doc.data.uid || null,
+          id: String(paymeTxId),
+          topupId: String(topupId),
+          uid: topup.data.uid || null,
           amount,
           state: STATE_CREATED,
           create_time,
           perform_time: 0,
           cancel_time: 0,
           reason: 0,
-          merchantTransId: orderId,
         });
+
+        // topupni pending bo‘lib tursin
+        if (topup.data.status !== "pending") {
+          t.set(topup.ref, { status: "pending" }, { merge: true });
+        }
       });
 
       return {
         statusCode: 200,
-        body: JSON.stringify({
-          id,
-          ...ok({
-            create_time,
-            transaction: String(transactionId),
-            state: STATE_CREATED,
-          }),
-        }),
+        body: JSON.stringify({ id, ...rpcOk({ create_time, transaction: String(paymeTxId), state: STATE_CREATED }) }),
       };
     }
 
-    // 3) PerformTransaction  (ASOSIY VERIFY)
+    // ---------------- PerformTransaction (VERIFY) ----------------
     if (method === "PerformTransaction") {
-      const transactionId = params && params.id;
-      if (!transactionId) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
+      const paymeTxId = params?.id;
+      if (!paymeTxId) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
+
+      const tx = await loadTx(paymeTxId);
+      if (!tx) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }) };
+
+      // idempotent
+      if (tx.data.state === STATE_PERFORMED) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transaction: String(tx.data.id), perform_time: tx.data.perform_time, state: tx.data.state }) }) };
+      }
+      if (tx.data.state === STATE_CANCELED) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_COULD_NOT_PERFORM, "Transaction canceled") }) };
+      }
+      if (now() - tx.data.create_time > TIMEOUT_MS) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Transaction expired", "time") }) };
       }
 
-      const txRef = db.collection("payme_tx").doc(String(transactionId));
-      const txSnap = await txRef.get();
-      if (!txSnap.exists) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_TRANSACTION_NOT_FOUND, "Transaction not found") }) };
-      }
+      const topup = await loadTopup(tx.data.topupId);
+      if (!topup) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Topup not found", "order_id") }) };
 
-      const tx = txSnap.data();
-
-      // Allaqachon performed bo‘lsa — idempotent qaytaradi
-      if (tx.state === STATE_PERFORMED) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...ok({ transaction: String(tx.id), perform_time: tx.perform_time, state: tx.state }) }) };
-      }
-
-      // canceled bo‘lsa — perform bo‘lmaydi
-      if (tx.state === STATE_CANCELED) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_COULD_NOT_PERFORM, "Transaction canceled") }) };
-      }
-
-      // expired
-      if (tx.state === STATE_CREATED && isExpired(tx.create_time)) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Transaction expired", "time") }) };
-      }
-
-      // Order/topup tekshirish
-      const doc = await loadBusinessDoc(tx.orderId);
-      if (!doc) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Order not found", "order_id") }) };
+      if (topup.data.status === "paid") {
+        // agar topup paid bo‘lsa ham tx ni performed qilib qaytaramiz (idempotentga yaqin)
+        const pt = tx.data.perform_time || now();
+        if (tx.data.state !== STATE_PERFORMED) {
+          await tx.ref.set({ state: STATE_PERFORMED, perform_time: pt }, { merge: true });
+        }
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transaction: String(paymeTxId), perform_time: pt, state: STATE_PERFORMED }) }) };
       }
 
       // amount must match
-      const expected = doc.data.amountTiyin ?? (isInt(doc.data.amountUZS) ? doc.data.amountUZS * 100 : null);
-      if (!isInt(expected) || expected !== tx.amount) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
+      if (!isInt(topup.data.amountTiyin) || topup.data.amountTiyin !== tx.data.amount) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_CANNOT_PERFORM, "Invalid amount", "amount") }) };
       }
 
-      // Transactional perform: tx=performed + order=paid (yoki topup=done) — atomik
-      const performTime = nowMs();
+      const performTime = now();
 
-      await db.runTransaction(async (t) => {
-        const freshTx = await t.get(txRef);
-        if (!freshTx.exists) throw new Error("tx missing");
+      // ATOMIK: topup=paid + user balance += amount + tx performed
+      await firestore.runTransaction(async (t) => {
+        const freshTx = await t.get(tx.ref);
         const cur = freshTx.data();
-
-        if (cur.state === STATE_PERFORMED) return; // idempotent
+        if (cur.state === STATE_PERFORMED) return;
         if (cur.state === STATE_CANCELED) throw new Error("canceled");
-        if (isExpired(cur.create_time)) throw new Error("expired");
+        if (now() - cur.create_time > TIMEOUT_MS) throw new Error("expired");
 
-        // order paid qilish
-        t.set(doc.ref, { status: "paid", paidAt: performTime, paymeTransactionId: String(transactionId) }, { merge: true });
+        const topupRef = topup.ref;
+        const topupSnap = await t.get(topupRef);
+        if (!topupSnap.exists) throw new Error("topup missing");
+        const top = topupSnap.data();
 
-        // (Agar topup bo‘lsa) user balance oshirishni shu yerda qiling:
-        // if (doc.type === "topup") { ... t.update(userRef, { balanceTiyin: admin.firestore.FieldValue.increment(cur.amount) }) }
-
-        t.set(txRef, { state: STATE_PERFORMED, perform_time: performTime }, { merge: true });
-      });
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ id, ...ok({ transaction: String(transactionId), perform_time: performTime, state: STATE_PERFORMED }) }),
-      };
-    }
-
-    // 4) CancelTransaction
-    if (method === "CancelTransaction") {
-      const transactionId = params && params.id;
-      const reason = params && params.reason;
-
-      if (!transactionId || !isInt(reason)) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
-      }
-
-      const txRef = db.collection("payme_tx").doc(String(transactionId));
-      const txSnap = await txRef.get();
-      if (!txSnap.exists) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_TRANSACTION_NOT_FOUND, "Transaction not found") }) };
-      }
-      const tx = txSnap.data();
-
-      // allaqachon canceled
-      if (tx.state === STATE_CANCELED) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...ok({ transaction: String(tx.id), cancel_time: tx.cancel_time, state: tx.state }) }) };
-      }
-
-      const cancelTime = nowMs();
-
-      await db.runTransaction(async (t) => {
-        const freshTx = await t.get(txRef);
-        const cur = freshTx.data();
-
-        // performed bo‘lsa ham cancel bo‘lishi mumkin (biznes qoidaga bog‘liq),
-        // lekin orderni ham canceled qilish kerak. Siz xohlasangiz performedni cancel qilishni bloklashingiz ham mumkin.
-        const doc = await loadBusinessDoc(cur.orderId);
-
-        if (doc) {
-          // Agar paid bo‘lsa va siz refund logikasiz bekor qilishni xohlamasangiz, shu yerda xatoga qaytaring.
-          // Hozir esa order statusini canceled qilamiz:
-          t.set(doc.ref, { status: "canceled", canceledAt: cancelTime, cancelReason: reason }, { merge: true });
+        if (top.status === "paid") {
+          t.set(tx.ref, { state: STATE_PERFORMED, perform_time: top.paidAt ? performTime : performTime }, { merge: true });
+          return;
         }
 
-        t.set(txRef, { state: STATE_CANCELED, cancel_time: cancelTime, reason }, { merge: true });
+        // user balance increment
+        const userRef = firestore.collection("users").doc(String(top.uid));
+        t.set(userRef, { balanceTiyin: admin.firestore.FieldValue.increment(cur.amount) }, { merge: true });
+
+        // mark paid
+        t.set(topupRef, { status: "paid", paidAt: admin.firestore.FieldValue.serverTimestamp(), paymeTransactionId: String(paymeTxId) }, { merge: true });
+
+        // mark tx performed
+        t.set(tx.ref, { state: STATE_PERFORMED, perform_time: performTime }, { merge: true });
       });
 
-      return { statusCode: 200, body: JSON.stringify({ id, ...ok({ transaction: String(transactionId), cancel_time: cancelTime, state: STATE_CANCELED }) }) };
+      return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transaction: String(paymeTxId), perform_time: performTime, state: STATE_PERFORMED }) }) };
     }
 
-    // 5) CheckTransaction
+    // ---------------- CancelTransaction ----------------
+    if (method === "CancelTransaction") {
+      const paymeTxId = params?.id;
+      const reason = params?.reason;
+      if (!paymeTxId || !isInt(reason)) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
+
+      const tx = await loadTx(paymeTxId);
+      if (!tx) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }) };
+
+      if (tx.data.state === STATE_CANCELED) {
+        return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transaction: String(paymeTxId), cancel_time: tx.data.cancel_time, state: tx.data.state }) }) };
+      }
+
+      const cancelTime = now();
+
+      await db().runTransaction(async (t) => {
+        const fresh = await t.get(tx.ref);
+        const cur = fresh.data();
+
+        const topup = await loadTopup(cur.topupId);
+
+        // paid bo‘lsa refund siyosatga bog‘liq — hozir topupni cancel qilmaymiz
+        if (topup && topup.data.status !== "paid") {
+          t.set(topup.ref, { status: "canceled", canceledAt: admin.firestore.FieldValue.serverTimestamp(), cancelReason: reason }, { merge: true });
+        }
+
+        t.set(tx.ref, { state: STATE_CANCELED, cancel_time: cancelTime, reason }, { merge: true });
+      });
+
+      return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transaction: String(paymeTxId), cancel_time: cancelTime, state: STATE_CANCELED }) }) };
+    }
+
+    // ---------------- CheckTransaction ----------------
     if (method === "CheckTransaction") {
-      const transactionId = params && params.id;
-      if (!transactionId) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
-      }
+      const paymeTxId = params?.id;
+      if (!paymeTxId) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
 
-      const txSnap = await db.collection("payme_tx").doc(String(transactionId)).get();
-      if (!txSnap.exists) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_TRANSACTION_NOT_FOUND, "Transaction not found") }) };
-      }
-      const tx = txSnap.data();
+      const tx = await loadTx(paymeTxId);
+      if (!tx) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_TX_NOT_FOUND, "Transaction not found") }) };
 
+      const txx = tx.data;
       return {
         statusCode: 200,
         body: JSON.stringify({
           id,
-          ...ok({
-            create_time: tx.create_time,
-            perform_time: tx.perform_time || 0,
-            cancel_time: tx.cancel_time || 0,
-            transaction: String(tx.id),
-            state: tx.state,
-            reason: tx.reason || 0,
+          ...rpcOk({
+            create_time: txx.create_time,
+            perform_time: txx.perform_time || 0,
+            cancel_time: txx.cancel_time || 0,
+            transaction: String(txx.id),
+            state: txx.state,
+            reason: txx.reason || 0,
           }),
         }),
       };
     }
 
-    // 6) GetStatement
+    // ---------------- GetStatement ----------------
     if (method === "GetStatement") {
-      const from = params && params.from;
-      const to = params && params.to;
-      if (!isInt(from) || !isInt(to)) {
-        return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_INVALID_PARAMS, "Invalid params") }) };
-      }
+      const from = params?.from, to = params?.to;
+      if (!isInt(from) || !isInt(to)) return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_PARAMS, "Invalid params") }) };
 
-      // Firestore query (create_time range)
-      const snap = await db
+      const snap = await db()
         .collection("payme_tx")
         .where("create_time", ">=", from)
         .where("create_time", "<=", to)
@@ -421,7 +318,7 @@ exports.handler = async (event) => {
           id: String(tx.id),
           time: tx.create_time,
           amount: tx.amount,
-          account: { order_id: tx.orderId },
+          account: { order_id: tx.topupId },
           create_time: tx.create_time,
           perform_time: tx.perform_time || 0,
           cancel_time: tx.cancel_time || 0,
@@ -431,13 +328,13 @@ exports.handler = async (event) => {
         };
       });
 
-      return { statusCode: 200, body: JSON.stringify({ id, ...ok({ transactions }) }) };
+      return { statusCode: 200, body: JSON.stringify({ id, ...rpcOk({ transactions }) }) };
     }
 
     // Unknown method
-    return { statusCode: 200, body: JSON.stringify({ id, ...paymeError(ERR_METHOD, "Method not found") }) };
+    return { statusCode: 200, body: JSON.stringify({ id, ...rpcError(ERR_METHOD, "Method not found") }) };
+
   } catch (e) {
-    // Fail-safe: Payme JSON-RPC doim JSON qaytarishi kerak
-    return { statusCode: 200, body: JSON.stringify(paymeError(-32400, "Internal error", String(e && e.message ? e.message : e))) };
+    return { statusCode: 200, body: JSON.stringify(rpcError(-32400, "Internal error", String(e?.message || e))) };
   }
 };
