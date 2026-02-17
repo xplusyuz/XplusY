@@ -6,9 +6,7 @@
  *
  * ENV (Netlify → Site settings → Environment variables):
  *   - PAYME_KEY  : merchant key (test or prod). Used as BasicAuth password for "Paycom:<PAYME_KEY>"
- *   - FIREBASE_SERVICE_ACCOUNT : service account JSON (one-line JSON)
- *       OR
- *   - FIREBASE_SERVICE_ACCOUNT_B64 : base64(service account JSON)
+ *   - FIREBASE_SERVICE_ACCOUNT_B64 : base64(service account JSON) (1-line, no spaces)
  *
  * Firestore:
  *   - orders/{orderId}  must exist for payment
@@ -91,22 +89,39 @@ function asInt(x) {
 
 function msNow() { return Date.now(); }
 
-function initAdminOnce() {
-  if (admin.apps && admin.apps.length) return;
+function initFirebase() {
+  // Prevent double init in serverless
+  if (admin.apps && admin.apps.length) return admin;
 
-  const jsonStr =
-    process.env.FIREBASE_SERVICE_ACCOUNT ||
-    (process.env.FIREBASE_SERVICE_ACCOUNT_B64
-      ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, "base64").toString("utf8")
-      : "");
+  // We ONLY trust the base64 variant to avoid JSON/newline issues in Netlify env UI
+  const rawB64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64 || "";
+  if (!rawB64) {
+    throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
+  }
 
-  if (!jsonStr) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT_B64");
+  // Netlify UI / copy-paste can insert whitespace/newlines — strip them
+  const b64 = String(rawB64).replace(/\s+/g, "");
 
-  let sa;
-  try { sa = JSON.parse(jsonStr); } catch { throw new Error("Invalid FIREBASE_SERVICE_ACCOUNT JSON"); }
+  let serviceAccount;
+  try {
+    const jsonString = Buffer.from(b64, "base64").toString("utf8");
+    serviceAccount = JSON.parse(jsonString);
+  } catch (err) {
+    console.error("Service account decode/parse failed:", err && err.message ? err.message : err);
+    throw new Error("Invalid FIREBASE_SERVICE_ACCOUNT JSON");
+  }
 
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
+  try {
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  } catch (err) {
+    // If this happens after a warm start with a partial init, surface it clearly
+    console.error("firebase-admin initializeApp failed:", err && err.message ? err.message : err);
+    throw err;
+  }
+
+  return admin;
 }
+
 
 async function getOrderExpectedAmountTiyin(db, orderId) {
   const ref = db.collection(ORDERS_COLL).doc(orderId);
@@ -184,8 +199,7 @@ exports.handler = async (event) => {
       return ok({ jsonrpc: "2.0", id, ...errorObj(-32504, "unauthorized", "Avtorizatsiya xato", "Неверная авторизация", "Unauthorized") });
     }
 
-    initAdminOnce();
-    const db = admin.firestore();
+    const db = initFirebase().firestore();
 
     const method = req.method;
     const params = req.params || {};
