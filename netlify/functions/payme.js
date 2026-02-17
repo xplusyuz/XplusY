@@ -184,28 +184,6 @@ function txResultFromData(d) {
 }
 
 exports.handler = async (event) => {
-  // Lightweight diagnostics (safe to open in browser)
-  if ((event.httpMethod || "").toUpperCase() === "GET") {
-    const rawB64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64 || "";
-    const b64 = String(rawB64).replace(/\s+/g, "");
-    const info = { ok: true, hasB64: !!rawB64, b64Len: b64.length };
-    try {
-      const jsonString = Buffer.from(b64, "base64").toString("utf8");
-      const sa = JSON.parse(jsonString);
-      info.parsed = true;
-      info.project_id = sa.project_id || null;
-      info.client_email = sa.client_email ? String(sa.client_email).replace(/^[^@]+/, "***") : null;
-    } catch (e) {
-      info.parsed = false;
-      info.error = String(e && e.message ? e.message : e);
-    }
-    return {
-      statusCode: 200,
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify(info),
-    };
-  }
-
   const req = parseBody(event);
   const id = (req && (req.id ?? null)) ?? null;
 
