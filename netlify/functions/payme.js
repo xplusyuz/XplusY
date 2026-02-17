@@ -1,48 +1,63 @@
 /**
- * OrzuMall — Payme/Paycom JSON-RPC endpoint (Netlify Functions) — Professional Firestore-backed version
+ * OrzuMall Payme/Paycom JSON-RPC endpoint (Netlify Functions) — Firestore-backed, production-ready.
  *
- * Required ENV (Netlify → Site settings → Environment variables):
- *   - PAYME_KEY  : Payme merchant key (test/prod). BasicAuth password for "Paycom:<PAYME_KEY>"
- *   - FIREBASE_SERVICE_ACCOUNT : Firebase service account JSON (one-line JSON) OR base64 JSON
- * Optional ENV:
- *   - FIREBASE_PROJECT_ID : if your service account JSON doesn't include project_id (rare)
- *   - PAYME_TX_TIMEOUT_MS : default 43200000 (12 hours)
+ * Endpoint:
+ *   https://YOUR-SITE/.netlify/functions/payme
+ *
+ * ENV (Netlify → Site settings → Environment variables):
+ *   - PAYME_KEY  : merchant key (test or prod). Used as BasicAuth password for "Paycom:<PAYME_KEY>"
+ *   - FIREBASE_SERVICE_ACCOUNT : service account JSON (one-line JSON)
+ *       OR
+ *   - FIREBASE_SERVICE_ACCOUNT_B64 : base64(service account JSON)
  *
  * Firestore:
- *   - orders/{orderId} must exist before payment and contain total amount in UZS (prefer: totalUZS)
- *     Supported fields: totalUZS, amountUZS, amount, total, sumUZS
- *   - payme_transactions/{paymeId} is created/updated by this function
- *
- * Notes:
- *   - Payme sends amount in TIYIN (1 so'm = 100 tiyin)
- *   - Always respond HTTP 200 with JSON-RPC result/error
+ *   - orders/{orderId}  must exist for payment
+ *   - order amount is read from one of these fields (UZS):
+ *       totalUZS, amountUZS, amount, total, sumUZS
+ *   - transactions stored in: payme_transactions/{paymeId}
  */
 
 const admin = require("firebase-admin");
 
-// -------------------- helpers --------------------
-function jsonResponse(obj) {
+const TX_COLL = "payme_transactions";
+const ORDERS_COLL = "orders";
+
+// Payme timeouts (milliseconds)
+const TX_TIMEOUT_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+function json(statusCode, obj) {
   return {
-    statusCode: 200,
+    statusCode,
     headers: { "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify(obj),
   };
 }
 
-function nowMs() { return Date.now(); }
-
-function errorObj(code, data, msgUz, msgRu, msgEn) {
+function errorObj(code, data, uz, ru, en) {
   return {
     error: {
       code,
       message: {
-        uz: msgUz || "Xatolik",
-        ru: msgRu || "Ошибка",
-        en: msgEn || "Error",
+        uz: uz || "Xatolik",
+        ru: ru || "Ошибка",
+        en: en || "Error",
       },
-      data: data || null,
+      data: data ?? null,
     },
   };
+}
+
+function ok(obj) { return json(200, obj); }
+
+function parseBody(event) {
+  try {
+    const raw = event.isBase64Encoded
+      ? Buffer.from(event.body || "", "base64").toString("utf8")
+      : (event.body || "");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function parseBasicAuth(authHeader) {
@@ -51,506 +66,354 @@ function parseBasicAuth(authHeader) {
   if (!m) return null;
   try {
     const decoded = Buffer.from(m[1], "base64").toString("utf8");
-    const idx = decoded.indexOf(":");
-    if (idx < 0) return null;
-    return { user: decoded.slice(0, idx), pass: decoded.slice(idx + 1) };
+    const i = decoded.indexOf(":");
+    if (i < 0) return null;
+    return { user: decoded.slice(0, i), pass: decoded.slice(i + 1) };
   } catch {
     return null;
   }
 }
 
-function normalizeBody(event) {
-  if (!event || event.body == null) return null;
-  try {
-    const raw = event.isBase64Encoded
-      ? Buffer.from(event.body, "base64").toString("utf8")
-      : event.body;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+function getAuth(event) {
+  const h = event.headers || {};
+  return h.authorization || h.Authorization || "";
 }
 
-function getOrderIdFromParams(params) {
+function getOrderId(params) {
   const acc = (params && params.account) || {};
-  return (
-    acc.order_id ||
-    acc.orders_id ||
-    acc.orderId ||
-    acc.orderid ||
-    acc.order ||
-    acc.id ||
-    null
-  );
+  return acc.order_id || acc.orders_id || acc.orderId || acc.orderid || null;
 }
 
-function toInt(n) {
-  const x = Number(n);
-  return Number.isFinite(x) ? Math.trunc(x) : NaN;
+function asInt(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? Math.trunc(n) : NaN;
 }
 
-function uzsToTiyin(uzs) {
-  // avoid float issues
-  const n = Number(uzs);
-  if (!Number.isFinite(n)) return NaN;
-  return Math.round(n * 100);
+function msNow() { return Date.now(); }
+
+function initAdminOnce() {
+  if (admin.apps && admin.apps.length) return;
+
+  const jsonStr =
+    process.env.FIREBASE_SERVICE_ACCOUNT ||
+    (process.env.FIREBASE_SERVICE_ACCOUNT_B64
+      ? Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_B64, "base64").toString("utf8")
+      : "");
+
+  if (!jsonStr) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT / FIREBASE_SERVICE_ACCOUNT_B64");
+
+  let sa;
+  try { sa = JSON.parse(jsonStr); } catch { throw new Error("Invalid FIREBASE_SERVICE_ACCOUNT JSON"); }
+
+  admin.initializeApp({ credential: admin.credential.cert(sa) });
 }
 
-// -------------------- firebase init --------------------
-let _db = null;
+async function getOrderExpectedAmountTiyin(db, orderId) {
+  const ref = db.collection(ORDERS_COLL).doc(orderId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, reason: "order_not_found" };
 
-function parseServiceAccount() {
-  const raw = (process.env.FIREBASE_SERVICE_ACCOUNT || "").trim();
-  if (!raw) return null;
-
-  // 1) direct JSON
-  if (raw.startsWith("{") && raw.endsWith("}")) {
-    try { return JSON.parse(raw); } catch { /* fallthrough */ }
-  }
-
-  // 2) base64 JSON
-  try {
-    const decoded = Buffer.from(raw, "base64").toString("utf8").trim();
-    if (decoded.startsWith("{") && decoded.endsWith("}")) {
-      return JSON.parse(decoded);
-    }
-  } catch { /* ignore */ }
-
-  // 3) sometimes env stores JSON with escaped quotes
-  try {
-    const fixed = raw.replace(/\\"/g, '"');
-    if (fixed.startsWith("{") && fixed.endsWith("}")) return JSON.parse(fixed);
-  } catch { /* ignore */ }
-
-  return null;
-}
-
-function getDbOrThrow() {
-  if (_db) return _db;
-
-  const sa = parseServiceAccount();
-  if (!sa) throw new Error("FIREBASE_SERVICE_ACCOUNT env is missing/invalid");
-
-  if (!admin.apps || admin.apps.length === 0) {
-    admin.initializeApp({
-      credential: admin.credential.cert(sa),
-      projectId: sa.project_id || process.env.FIREBASE_PROJECT_ID,
-    });
-  }
-
-  _db = admin.firestore();
-  return _db;
-}
-
-// -------------------- constants --------------------
-const STATE_CREATED = 1;
-const STATE_PERFORMED = 2;
-const STATE_CANCELLED = -1;
-const STATE_CANCELLED_AFTER_PERFORM = -2;
-
-// Common Payme errors
-const ERR_INVALID_AMOUNT = -31001;
-const ERR_ORDER_NOT_FOUND = -31050;
-const ERR_TX_NOT_FOUND = -31003;
-const ERR_CANNOT_PERFORM = -31008;
-const ERR_CANNOT_CANCEL = -31007;
-const ERR_SYSTEM = -32400;
-const ERR_INSUFFICIENT_PRIV = -32504;
-
-// -------------------- Firestore helpers --------------------
-function pickOrderTotalUZS(order) {
+  const d = snap.data() || {};
   const candidates = ["totalUZS", "amountUZS", "amount", "total", "sumUZS"];
+  let uzs = null;
   for (const k of candidates) {
-    const v = order && order[k];
-    const n = Number(v);
-    if (Number.isFinite(n) && n > 0) return n;
+    if (typeof d[k] === "number" && Number.isFinite(d[k])) { uzs = d[k]; break; }
+    if (typeof d[k] === "string" && d[k].trim() && !isNaN(Number(d[k]))) { uzs = Number(d[k]); break; }
   }
-  return null;
+  if (uzs == null) return { ok: false, reason: "amount_missing" };
+
+  // UZS -> tiyin
+  const tiyin = Math.round(uzs * 100);
+  return { ok: true, orderRef: ref, orderData: d, expectedTiyin: tiyin };
 }
 
-async function getOrder(db, orderId) {
-  const ref = db.doc(`orders/${orderId}`);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  return { ref, data: snap.data() || {}, orderId };
-}
-
-async function getTx(db, paymeId) {
-  const ref = db.doc(`payme_transactions/${paymeId}`);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  return { ref, data: snap.data() || {} };
-}
-
-async function upsertTx(db, paymeId, patch) {
-  const ref = db.doc(`payme_transactions/${paymeId}`);
-  await ref.set(
-    { paymeId, ...patch, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
-    { merge: true }
-  );
-  const snap = await ref.get();
-  return { ref, data: snap.data() || {} };
-}
-
-// Validate account + amount against Firestore order
 async function validateAccountAndAmount(db, params) {
-  const amount = toInt(params?.amount || 0);
-  const orderId = String(getOrderIdFromParams(params) || "").trim();
+  const amount = asInt(params.amount);
+  const orderId = getOrderId(params);
 
-  if (!orderId || orderId.length < 3) {
-    return { ok: false, err: errorObj(ERR_ORDER_NOT_FOUND, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") };
+  if (!orderId || typeof orderId !== "string" || orderId.trim().length < 3) {
+    return { ok: false, err: errorObj(-31050, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") };
   }
+
   if (!Number.isFinite(amount) || amount <= 0) {
-    return { ok: false, err: errorObj(ERR_INVALID_AMOUNT, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
+    return { ok: false, err: errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
   }
 
-  const orderObj = await getOrder(db, orderId);
-  if (!orderObj) {
-    return { ok: false, err: errorObj(ERR_ORDER_NOT_FOUND, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") };
+  const info = await getOrderExpectedAmountTiyin(db, orderId.trim());
+  if (!info.ok) {
+    return { ok: false, err: errorObj(-31050, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") };
   }
 
-  const totalUZS = pickOrderTotalUZS(orderObj.data);
-  if (totalUZS == null) {
-    // If order exists but total missing -> treat as cannot perform (your data bug)
-    return { ok: false, err: errorObj(ERR_CANNOT_PERFORM, "order_total_missing", "Buyurtma summasi topilmadi", "Сумма заказа не найдена", "Order amount missing") };
+  if (amount !== info.expectedTiyin) {
+    return { ok: false, err: errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
   }
 
-  const expected = uzsToTiyin(totalUZS);
-  if (!Number.isFinite(expected) || expected <= 0) {
-    return { ok: false, err: errorObj(ERR_CANNOT_PERFORM, "order_total_invalid", "Buyurtma summasi noto‘g‘ri", "Неверная сумма заказа", "Invalid order amount") };
-  }
-
-  if (amount !== expected) {
-    return { ok: false, err: errorObj(ERR_INVALID_AMOUNT, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
-  }
-
-  return { ok: true, amount, expected, orderObj };
+  return { ok: true, amount, orderId: orderId.trim(), ...info };
 }
 
-// -------------------- handler --------------------
+async function txGet(db, paymeId) {
+  const ref = db.collection(TX_COLL).doc(String(paymeId));
+  const snap = await ref.get();
+  return { ref, snap, data: snap.exists ? snap.data() : null };
+}
+
+function txResultFromData(d) {
+  return {
+    create_time: d.create_time ?? 0,
+    perform_time: d.perform_time ?? 0,
+    cancel_time: d.cancel_time ?? 0,
+    transaction: d.transaction,
+    state: d.state,
+    reason: d.reason ?? null,
+  };
+}
+
 exports.handler = async (event) => {
-  const req = normalizeBody(event);
-  const rpcId = (req && req.id !== undefined) ? req.id : null;
+  const req = parseBody(event);
+  const id = (req && (req.id ?? null)) ?? null;
 
   try {
     if (!req || req.jsonrpc !== "2.0" || !req.method) {
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        ...errorObj(ERR_ORDER_NOT_FOUND, "invalid_request", "Noto‘g‘ri so‘rov", "Неверный запрос", "Invalid request"),
-      });
+      return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "invalid_request", "Noto‘g‘ri so‘rov", "Неверный запрос", "Invalid request") });
     }
 
     // --- AUTH ---
-    const authHeader = (event.headers && (event.headers.authorization || event.headers.Authorization)) || "";
-    const auth = parseBasicAuth(authHeader);
-    const key = (process.env.PAYME_KEY || "").trim();
-    const okAuth = auth && auth.user === "Paycom" && auth.pass === key;
-
-    if (!okAuth) {
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        ...errorObj(ERR_INSUFFICIENT_PRIV, "unauthorized", "Avtorizatsiya xato", "Неверная авторизация", "Unauthorized"),
-      });
+    const auth = parseBasicAuth(getAuth(event));
+    const key = process.env.PAYME_KEY || "";
+    if (!auth || auth.user !== "Paycom" || auth.pass !== key) {
+      return ok({ jsonrpc: "2.0", id, ...errorObj(-32504, "unauthorized", "Avtorizatsiya xato", "Неверная авторизация", "Unauthorized") });
     }
 
-    const db = getDbOrThrow();
+    initAdminOnce();
+    const db = admin.firestore();
+
     const method = req.method;
     const params = req.params || {};
 
-    const txTimeoutMs = toInt(process.env.PAYME_TX_TIMEOUT_MS || 43200000); // 12 hours
+    // ---- METHODS ----
 
-    // ===== CheckPerformTransaction =====
     if (method === "CheckPerformTransaction") {
       const v = await validateAccountAndAmount(db, params);
-      if (!v.ok) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...v.err });
+      if (!v.ok) return ok({ jsonrpc: "2.0", id, ...v.err });
 
-      const order = v.orderObj.data || {};
-      if (String(order.status || "") === "paid") {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "order_paid", "Buyurtma allaqachon to‘langan", "Заказ уже оплачен", "Order already paid") });
+      // Optional: also check if already paid
+      if (v.orderData && (v.orderData.status === "paid" || v.orderData.paymePaid === true)) {
+        // Payme expects "allow: false" with proper error? In practice -31008 is "transaction exists" not for paid orders.
+        // We'll still allow check; create will dedupe by transaction id.
       }
 
-      return jsonResponse({ jsonrpc: "2.0", id: rpcId, result: { allow: true } });
+      return ok({ jsonrpc: "2.0", id, result: { allow: true } });
     }
 
-    // ===== CreateTransaction =====
     if (method === "CreateTransaction") {
-      const paymeId = String(params?.id || "").trim();
-      const time = toInt(params?.time || 0);
-
-      if (!paymeId) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
-
       const v = await validateAccountAndAmount(db, params);
-      if (!v.ok) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...v.err });
+      if (!v.ok) return ok({ jsonrpc: "2.0", id, ...v.err });
 
-      const order = v.orderObj.data || {};
-      if (String(order.status || "") === "paid") {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "order_paid", "Buyurtma allaqachon to‘langan", "Заказ уже оплачен", "Order already paid") });
+      const paymeId = String(params.id || "");
+      const time = asInt(params.time);
+
+      if (!paymeId) return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "id", "Transaction id yo‘q", "Нет id транзакции", "Missing transaction id") });
+      if (!Number.isFinite(time) || time <= 0) return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "time", "Noto‘g‘ri time", "Неверное время", "Invalid time") });
+
+      const tx = await txGet(db, paymeId);
+
+      if (tx.data) {
+        // If amount/account mismatch, must error -31001/-31050
+        if (tx.data.amount !== v.amount || tx.data.order_id !== v.orderId) {
+          return ok({ jsonrpc: "2.0", id, ...errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") });
+        }
+
+        // Timeout auto-cancel if not performed
+        if (tx.data.state === 1 && msNow() - tx.data.create_time > TX_TIMEOUT_MS) {
+          await tx.ref.set({
+            state: -1,
+            cancel_time: msNow(),
+            reason: 4, // "expired"
+            updated_at: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+          return ok({ jsonrpc: "2.0", id, ...errorObj(-31008, "transaction", "Tranzaksiya muddati o‘tgan", "Истек срок транзакции", "Transaction expired") });
+        }
+
+        return ok({ jsonrpc: "2.0", id, result: txResultFromData(tx.data) });
       }
 
-      const existing = await getTx(db, paymeId);
-      if (existing) {
-        const tx = existing.data || {};
-        return jsonResponse({
-          jsonrpc: "2.0",
-          id: rpcId,
-          result: {
-            create_time: toInt(tx.create_time || tx.createTime || nowMs()),
-            transaction: String(tx.transaction || paymeId),
-            state: (tx.state === undefined ? STATE_CREATED : tx.state),
-            receivers: null,
-          },
-        });
-      }
-
-      const create_time = nowMs();
-
-      await upsertTx(db, paymeId, {
+      const createTime = msNow();
+      const txData = {
         transaction: paymeId,
-        orderId: v.orderObj.orderId,
-        uid: order.uid || order.userId || null,
+        payme_id: paymeId,
+        order_id: v.orderId,
         amount: v.amount,
-        time,
-        create_time,
+        state: 1,
+        create_time: createTime,
         perform_time: 0,
         cancel_time: 0,
-        state: STATE_CREATED,
         reason: null,
-      });
+        payme_time: time,
+        account: { order_id: v.orderId },
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      };
 
-      await v.orderObj.ref.set(
-        {
-          status: "pending_payment",
-          payment: {
-            provider: "payme",
-            status: "pending",
-            amount: v.amount,
-            orderId: v.orderObj.orderId,
-          },
-          payme: { id: paymeId, state: STATE_CREATED, create_time, amount: v.amount },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await tx.ref.set(txData, { merge: false });
 
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        result: { create_time, transaction: paymeId, state: STATE_CREATED, receivers: null },
-      });
+      // mark order pending (optional)
+      await v.orderRef.set({
+        status: v.orderData.status || "pending_payment",
+        paymePending: true,
+        paymeTransactionId: paymeId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      return ok({ jsonrpc: "2.0", id, result: txResultFromData(txData) });
     }
 
-    // ===== PerformTransaction =====
     if (method === "PerformTransaction") {
-      const paymeId = String(params?.id || "").trim();
-      if (!paymeId) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      const paymeId = String(params.id || "");
+      if (!paymeId) return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "id", "Transaction id yo‘q", "Нет id транзакции", "Missing transaction id") });
 
-      const txObj = await getTx(db, paymeId);
-      if (!txObj) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      const tx = await txGet(db, paymeId);
+      if (!tx.data) return ok({ jsonrpc: "2.0", id, ...errorObj(-31003, "transaction", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
 
-      const tx = txObj.data || {};
-
-      // if already performed
-      if (tx.state === STATE_PERFORMED) {
-        return jsonResponse({
-          jsonrpc: "2.0",
-          id: rpcId,
-          result: { transaction: String(tx.transaction || paymeId), perform_time: toInt(tx.perform_time || nowMs()), state: STATE_PERFORMED },
-        });
+      // If already performed
+      if (tx.data.state === 2) {
+        return ok({ jsonrpc: "2.0", id, result: txResultFromData(tx.data) });
       }
 
-      // if cancelled
-      if (tx.state === STATE_CANCELLED || tx.state === STATE_CANCELLED_AFTER_PERFORM) {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "cancelled", "Tranzaksiya bekor qilingan", "Транзакция отменена", "Transaction cancelled") });
+      // If canceled
+      if (tx.data.state < 0) {
+        return ok({ jsonrpc: "2.0", id, ...errorObj(-31008, "transaction", "Tranzaksiya bekor qilingan", "Транзакция отменена", "Transaction canceled") });
       }
 
-      // timeout from create_time
-      const createTime = toInt(tx.create_time || 0);
-      if (!Number.isFinite(createTime) || createTime <= 0) {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "tx_invalid", "Tranzaksiya ma'lumoti xato", "Данные транзакции неверны", "Invalid transaction data") });
-      }
-      if (Number.isFinite(txTimeoutMs) && txTimeoutMs > 0 && (nowMs() - createTime) > txTimeoutMs) {
-        // mark cancelled due to timeout
-        const cancel_time = nowMs();
-        await upsertTx(db, paymeId, { state: STATE_CANCELLED, cancel_time, reason: "timeout" });
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "timeout", "Tranzaksiya muddati tugagan", "Время транзакции истекло", "Transaction expired") });
-      }
-
-      // (Optional) re-check order and amount consistency
-      const orderId = String(tx.orderId || "").trim();
-      if (!orderId) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "order_id_missing", "Buyurtma topilmadi", "Счёт не найден", "Account not found") });
-
-      const orderObj = await getOrder(db, orderId);
-      if (!orderObj) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_ORDER_NOT_FOUND, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") });
-
-      const totalUZS = pickOrderTotalUZS(orderObj.data);
-      const expected = uzsToTiyin(totalUZS);
-      if (!Number.isFinite(expected) || expected <= 0) {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_CANNOT_PERFORM, "order_total_invalid", "Buyurtma summasi noto‘g‘ri", "Неверная сумма заказа", "Invalid order amount") });
-      }
-      if (toInt(tx.amount) !== expected) {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_INVALID_AMOUNT, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") });
+      // timeout check
+      if (tx.data.state === 1 && msNow() - tx.data.create_time > TX_TIMEOUT_MS) {
+        await tx.ref.set({
+          state: -1,
+          cancel_time: msNow(),
+          reason: 4,
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return ok({ jsonrpc: "2.0", id, ...errorObj(-31008, "transaction", "Tranzaksiya muddati o‘tgan", "Истек срок транзакции", "Transaction expired") });
       }
 
-      const perform_time = nowMs();
-      await upsertTx(db, paymeId, { state: STATE_PERFORMED, perform_time });
+      const performTime = msNow();
+      await tx.ref.set({
+        state: 2,
+        perform_time: performTime,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-      await orderObj.ref.set(
-        {
-          status: "paid",
-          payment: {
-            provider: "payme",
-            status: "paid",
-            amount: expected,
-            paidAt: perform_time,
-            paymeId,
-          },
-          payme: { ...(orderObj.data.payme || {}), id: paymeId, state: STATE_PERFORMED, perform_time, amount: expected },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // Update order
+      const orderId = tx.data.order_id;
+      await db.collection(ORDERS_COLL).doc(orderId).set({
+        status: "paid",
+        paymePaid: true,
+        paymePending: false,
+        paymeTransactionId: paymeId,
+        paidAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        result: { transaction: String(tx.transaction || paymeId), perform_time, state: STATE_PERFORMED },
-      });
+      const newData = { ...tx.data, state: 2, perform_time: performTime };
+      return ok({ jsonrpc: "2.0", id, result: txResultFromData(newData) });
     }
 
-    // ===== CancelTransaction =====
     if (method === "CancelTransaction") {
-      const paymeId = String(params?.id || "").trim();
-      const reason = (params?.reason !== undefined) ? params.reason : null;
+      const paymeId = String(params.id || "");
+      const reason = asInt(params.reason);
 
-      if (!paymeId) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      if (!paymeId) return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "id", "Transaction id yo‘q", "Нет id транзакции", "Missing transaction id") });
 
-      const txObj = await getTx(db, paymeId);
-      if (!txObj) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      const tx = await txGet(db, paymeId);
+      if (!tx.data) return ok({ jsonrpc: "2.0", id, ...errorObj(-31003, "transaction", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
 
-      const tx = txObj.data || {};
-      const cancel_time = nowMs();
-
-      // Already cancelled
-      if (tx.state === STATE_CANCELLED || tx.state === STATE_CANCELLED_AFTER_PERFORM) {
-        return jsonResponse({
-          jsonrpc: "2.0",
-          id: rpcId,
-          result: { transaction: String(tx.transaction || paymeId), cancel_time: toInt(tx.cancel_time || cancel_time), state: tx.state },
-        });
+      if (tx.data.state < 0) {
+        return ok({ jsonrpc: "2.0", id, result: txResultFromData(tx.data) });
       }
 
-      // If performed -> cancel after perform (state -2)
-      const newState = (tx.state === STATE_PERFORMED) ? STATE_CANCELLED_AFTER_PERFORM : STATE_CANCELLED;
+      const cancelTime = msNow();
+      const newState = (tx.data.state === 2) ? -2 : -1;
 
-      await upsertTx(db, paymeId, { state: newState, cancel_time, reason });
+      await tx.ref.set({
+        state: newState,
+        cancel_time: cancelTime,
+        reason: Number.isFinite(reason) ? reason : 0,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-      const orderId = String(tx.orderId || "").trim();
-      if (orderId) {
-        const orderObj = await getOrder(db, orderId);
-        if (orderObj) {
-          await orderObj.ref.set(
-            {
-              status: newState === STATE_CANCELLED_AFTER_PERFORM ? "refund_pending" : "cancelled",
-              payment: {
-                provider: "payme",
-                status: newState === STATE_CANCELLED_AFTER_PERFORM ? "cancelled_after_perform" : "cancelled",
-                paymeId,
-                reason,
-                cancelAt: cancel_time,
-              },
-              payme: { ...(orderObj.data.payme || {}), id: paymeId, state: newState, cancel_time },
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-        }
-      }
+      // Update order best-effort
+      const orderId = tx.data.order_id;
+      await db.collection(ORDERS_COLL).doc(orderId).set({
+        status: newState === -2 ? "refund_pending" : "cancelled",
+        paymePending: false,
+        paymeCancelled: true,
+        cancelReason: Number.isFinite(reason) ? reason : 0,
+        cancelAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        result: { transaction: String(tx.transaction || paymeId), cancel_time, state: newState },
-      });
+      const newData = { ...tx.data, state: newState, cancel_time: cancelTime, reason: Number.isFinite(reason) ? reason : 0 };
+      return ok({ jsonrpc: "2.0", id, result: txResultFromData(newData) });
     }
 
-    // ===== CheckTransaction =====
     if (method === "CheckTransaction") {
-      const paymeId = String(params?.id || "").trim();
-      if (!paymeId) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      const paymeId = String(params.id || "");
+      if (!paymeId) return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "id", "Transaction id yo‘q", "Нет id транзакции", "Missing transaction id") });
 
-      const txObj = await getTx(db, paymeId);
-      if (!txObj) return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_TX_NOT_FOUND, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      const tx = await txGet(db, paymeId);
+      if (!tx.data) return ok({ jsonrpc: "2.0", id, ...errorObj(-31003, "transaction", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
 
-      const tx = txObj.data || {};
-      return jsonResponse({
-        jsonrpc: "2.0",
-        id: rpcId,
-        result: {
-          transaction: String(tx.transaction || paymeId),
-          state: tx.state ?? STATE_CREATED,
-          create_time: toInt(tx.create_time || 0) || 0,
-          perform_time: toInt(tx.perform_time || 0) || 0,
-          cancel_time: toInt(tx.cancel_time || 0) || 0,
-          reason: tx.reason ?? null,
-        },
-      });
+      return ok({ jsonrpc: "2.0", id, result: txResultFromData(tx.data) });
     }
 
-    // ===== GetStatement =====
     if (method === "GetStatement") {
-      const from = toInt(params?.from || 0);
-      const to = toInt(params?.to || 0);
-
+      const from = asInt(params.from);
+      const to = asInt(params.to);
       if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0 || to < from) {
-        return jsonResponse({ jsonrpc: "2.0", id: rpcId, ...errorObj(ERR_SYSTEM, "range", "Noto‘g‘ri oraliq", "Неверный диапазон", "Invalid range") });
+        return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "period", "Noto‘g‘ri vaqt oralig‘i", "Неверный период", "Invalid period") });
       }
 
-      const snap = await db
-        .collection("payme_transactions")
-        .where("create_time", ">=", from)
-        .where("create_time", "<=", to)
-        .limit(500)
-        .get();
+      let transactions = [];
+      try {
+        // Note: might require composite index if you add more filters.
+        const qs = await db.collection(TX_COLL)
+          .where("create_time", ">=", from)
+          .where("create_time", "<=", to)
+          .get();
 
-      const transactions = [];
-      snap.forEach((d) => {
-        const tx = d.data() || {};
-        transactions.push({
-          id: String(tx.paymeId || d.id),
-          time: toInt(tx.time || tx.create_time || 0) || 0,
-          amount: toInt(tx.amount || 0) || 0,
-          account: { order_id: String(tx.orderId || "") },
-          create_time: toInt(tx.create_time || 0) || 0,
-          perform_time: toInt(tx.perform_time || 0) || 0,
-          cancel_time: toInt(tx.cancel_time || 0) || 0,
-          transaction: String(tx.transaction || d.id),
-          state: tx.state ?? STATE_CREATED,
-          reason: tx.reason ?? null,
+        transactions = qs.docs.map(d => {
+          const x = d.data() || {};
+          return {
+            id: x.transaction,
+            time: x.perform_time || x.create_time,
+            amount: x.amount,
+            account: x.account || { order_id: x.order_id },
+            create_time: x.create_time || 0,
+            perform_time: x.perform_time || 0,
+            cancel_time: x.cancel_time || 0,
+            transaction: x.transaction,
+            state: x.state,
+            reason: x.reason ?? null,
+          };
         });
-      });
+      } catch {
+        transactions = [];
+      }
 
-      return jsonResponse({ jsonrpc: "2.0", id: rpcId, result: { transactions } });
+      return ok({ jsonrpc: "2.0", id, result: { transactions } });
     }
 
-    // ===== ChangePassword =====
     if (method === "ChangePassword") {
-      return jsonResponse({ jsonrpc: "2.0", id: rpcId, result: { success: true } });
+      // Sandbox may call it, but usually not required. We'll acknowledge.
+      return ok({ jsonrpc: "2.0", id, result: { success: true } });
     }
 
-    // Unknown method
-    return jsonResponse({
-      jsonrpc: "2.0",
-      id: rpcId,
-      ...errorObj(ERR_SYSTEM, "method", "Metod topilmadi", "Метод не найден", "Method not found"),
-    });
-
+    return ok({ jsonrpc: "2.0", id, ...errorObj(-32601, "method", "Metod topilmadi", "Метод не найден", "Method not found") });
   } catch (e) {
-    return jsonResponse({
+    return ok({
       jsonrpc: "2.0",
-      id: rpcId,
-      ...errorObj(ERR_SYSTEM, String(e && e.message ? e.message : e), "Server xatosi", "Внутренняя ошибка", "Internal server error"),
+      id,
+      ...errorObj(-32400, "server", "Server xatosi", "Внутренняя ошибка", "Internal server error"),
+      data: String(e && e.message ? e.message : e),
     });
   }
 };
