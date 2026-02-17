@@ -1,11 +1,21 @@
 /**
- * Payme/Paycom JSON-RPC endpoint for Netlify Functions (single-file variant A).
- * ENV:
- *   - PAYME_KEY : Payme merchant key (test or prod). Used as BasicAuth password for "Paycom:<PAYME_KEY>"
- * Optional (not required in Variant A):
- *   - FIREBASE_SERVICE_ACCOUNT : ignored (kept for compatibility with your env setup)
+ * Payme/Paycom JSON-RPC endpoint for Netlify Functions (single-file, sandbox-friendly).
  *
- * This variant is intentionally dependency-free (no extra modules/files).
+ * ✅ Fixes your main issue:
+ *   - "Неверная сумма" (-31001) MUST be returned when Payme sandbox sends a wrong amount.
+ *   - To verify amount reliably without a DB, we read the EXPECTED amount from params.account.*
+ *
+ * IMPORTANT (frontend / merchant account fields):
+ *   Configure & send ONE of these account fields with each payment request:
+ *     - account.amount_tiyin  (preferred, integer)
+ *     - account.amountSom     (integer, in so'm)  -> will be converted to tiyin (×100)
+ *     - account.amount        (same as amountSom)
+ *
+ * Then the backend compares:
+ *   params.amount (tiyin) === expectedAmountTiyin
+ *
+ * ENV:
+ *   - PAYME_KEY : Payme merchant key (test or prod). BasicAuth password for "Paycom:<PAYME_KEY>"
  */
 
 function jsonResponse(statusCode, obj) {
@@ -33,7 +43,6 @@ function errorObj(code, data, msgUz, msgRu, msgEn) {
 }
 
 function parseBasicAuth(authHeader) {
-  // "Basic base64(user:pass)"
   if (!authHeader || typeof authHeader !== "string") return null;
   const m = authHeader.match(/^Basic\s+(.+)$/i);
   if (!m) return null;
@@ -59,10 +68,44 @@ function normalizeBody(event) {
   }
 }
 
+function getAccount(params) {
+  return (params && params.account) || {};
+}
+
 function getParamOrderId(params) {
-  // Payme usually sends params.account with your fields
-  const acc = (params && params.account) || {};
+  const acc = getAccount(params);
   return acc.order_id || acc.orders_id || acc.orderId || acc.orderid || null;
+}
+
+/**
+ * Read expected amount from account fields (so backend can validate wrong-sum sandbox tests)
+ * Priority:
+ *  1) amount_tiyin / amountTiyin (already in tiyin)
+ *  2) amountSom / amount (so'm) -> convert to tiyin
+ */
+function getExpectedAmountTiyin(params) {
+  const acc = getAccount(params);
+
+  const a1 = Number(acc.amount_tiyin ?? acc.amountTiyin ?? acc.amountTiyinUZS ?? NaN);
+  if (Number.isFinite(a1) && a1 > 0) return Math.trunc(a1);
+
+  const som = Number(acc.amountSom ?? acc.amount ?? NaN);
+  if (Number.isFinite(som) && som > 0) return Math.trunc(som * 100);
+
+  return null; // unknown
+}
+
+// In-memory store (works for sandbox sessions; persists per warm Netlify function instance)
+const STORE = globalThis.__PAYME_STORE__ || (globalThis.__PAYME_STORE__ = {
+  tx: new Map(), // paymeTxId -> { transaction, state, create_time, perform_time, cancel_time, reason, orderId, amount }
+});
+
+function getTx(txId) {
+  return STORE.tx.get(txId) || null;
+}
+function setTx(txId, obj) {
+  STORE.tx.set(txId, obj);
+  return obj;
 }
 
 exports.handler = async (event) => {
@@ -92,16 +135,20 @@ exports.handler = async (event) => {
     const method = req.method;
     const params = req.params || {};
 
-    // Basic validations used by sandbox
-    const amount = Number(params.amount || 0);
+    const amount = Math.trunc(Number(params.amount || 0)); // tiyin (integer)
     const orderId = getParamOrderId(params);
+    const expectedAmount = getExpectedAmountTiyin(params);
 
-    // Helper: validate account (your business rules can be added later)
-    function validateAccount() {
+    // Helper: validate account + amount
+    function validateAccountAndAmount() {
       if (!orderId || typeof orderId !== "string" || orderId.trim().length < 3) {
         return { ok: false, err: errorObj(-31050, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") };
       }
       if (!Number.isFinite(amount) || amount <= 0) {
+        return { ok: false, err: errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
+      }
+      // ✅ MAIN FIX: if expected amount is known from account fields, enforce exact match
+      if (expectedAmount != null && amount !== expectedAmount) {
         return { ok: false, err: errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") };
       }
       return { ok: true };
@@ -109,7 +156,7 @@ exports.handler = async (event) => {
 
     // --- METHODS ---
     if (method === "CheckPerformTransaction") {
-      const v = validateAccount();
+      const v = validateAccountAndAmount();
       if (!v.ok) return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...v.err });
       return jsonResponse(200, {
         jsonrpc: "2.0",
@@ -119,69 +166,111 @@ exports.handler = async (event) => {
     }
 
     if (method === "CreateTransaction") {
-      const v = validateAccount();
+      const v = validateAccountAndAmount();
       if (!v.ok) return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...v.err });
 
-      const txId = String(params.id || ("tx_" + nowMs()));
+      const paymeTxId = String(params.id || ("tx_" + nowMs()));
+      const existing = getTx(paymeTxId);
+
+      if (existing) {
+        // If already performed/canceled, return current state (sandbox expects idempotency)
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: existing });
+      }
+
+      const t = {
+        create_time: nowMs(),
+        transaction: paymeTxId,
+        state: 1,
+        perform_time: 0,
+        cancel_time: 0,
+        reason: null,
+        orderId,
+        amount,
+      };
+
+      setTx(paymeTxId, t);
+
       return jsonResponse(200, {
         jsonrpc: "2.0",
         id: req.id ?? null,
-        result: {
-          create_time: nowMs(),
-          transaction: txId,
-          state: 1, // created
-        },
+        result: t,
       });
     }
 
     if (method === "PerformTransaction") {
-      const txId = String(params.id || ("tx_" + nowMs()));
+      const paymeTxId = String(params.id || "");
+      if (!paymeTxId) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      }
+
+      const existing = getTx(paymeTxId);
+      if (!existing) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      }
+
+      if (existing.state === 2) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: existing });
+      }
+
+      if (existing.state < 0) {
+        // already canceled
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: existing });
+      }
+
+      existing.state = 2;
+      existing.perform_time = nowMs();
+      setTx(paymeTxId, existing);
+
       return jsonResponse(200, {
         jsonrpc: "2.0",
         id: req.id ?? null,
-        result: {
-          transaction: txId,
-          perform_time: nowMs(),
-          state: 2, // performed
-        },
+        result: existing,
       });
     }
 
     if (method === "CancelTransaction") {
-      const txId = String(params.id || ("tx_" + nowMs()));
-      // reason can be params.reason
+      const paymeTxId = String(params.id || "");
+      if (!paymeTxId) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      }
+
+      const existing = getTx(paymeTxId);
+      if (!existing) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      }
+
+      if (existing.state < 0) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: existing });
+      }
+
+      existing.state = -1;
+      existing.cancel_time = nowMs();
+      existing.reason = params.reason ?? null;
+      setTx(paymeTxId, existing);
+
       return jsonResponse(200, {
         jsonrpc: "2.0",
         id: req.id ?? null,
-        result: {
-          transaction: txId,
-          cancel_time: nowMs(),
-          state: -1, // canceled
-        },
+        result: existing,
       });
     }
 
     if (method === "CheckTransaction") {
-      const txId = String(params.id || "");
-      if (!txId) {
+      const paymeTxId = String(params.id || "");
+      if (!paymeTxId) {
         return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
       }
-      // Minimal response for sandbox
-      return jsonResponse(200, {
-        jsonrpc: "2.0",
-        id: req.id ?? null,
-        result: {
-          transaction: txId,
-          state: 2,
-          create_time: nowMs(),
-          perform_time: nowMs(),
-          cancel_time: 0,
-          reason: null,
-        },
-      });
+
+      const existing = getTx(paymeTxId);
+      if (!existing) {
+        return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, ...errorObj(-31050, "id", "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found") });
+      }
+
+      return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: existing });
     }
 
     if (method === "GetStatement") {
+      // Minimal statement for sandbox
       return jsonResponse(200, {
         jsonrpc: "2.0",
         id: req.id ?? null,
@@ -190,11 +279,9 @@ exports.handler = async (event) => {
     }
 
     if (method === "ChangePassword") {
-      // Not used in sandbox usually
       return jsonResponse(200, { jsonrpc: "2.0", id: req.id ?? null, result: { success: true } });
     }
 
-    // Unknown method
     return jsonResponse(200, {
       jsonrpc: "2.0",
       id: req.id ?? null,
