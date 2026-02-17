@@ -1,22 +1,14 @@
-// payme-config.js
-// OrzuMall Payme konfiguratsiyasi (ES Module)
-// SAFE: merchant_id frontendda ochiq bo‘lishi mumkin (Payme checkout link uchun).
+// public/payme-config.js
+// OrzuMall Payme konfiguratsiyasi — API-only (Checkout ishlatilmaydi)
+// Bu rejimda faqat: KASSA_ID + PAYME_KEY (server env) kerak bo'ladi.
+//
+// Eslatma: Checkout/web-kassa (redirect) ishlatmoqchi bo'lsangiz, alohida Web-kassa/Checkout Merchant ID kerak bo'ladi.
+// Siz hozir "faqat kassa id + key" deb tanlagansiz, shuning uchun checkout link generatsiya YO'Q.
 
-export const PAYME_MERCHANT_ID = "6992f957364df48c3ebc0a21";
-
-// til (Payme checkout odatda uz/ru/en)
+export const PAYME_MODE = "api-only";
 export const PAYME_LANG = "uz";
 
-// Payme checkout base
-export const PAYME_CHECKOUT_BASE = "https://checkout.test.paycom.uz";
+// Faqat ma'lumot uchun (Payme kabinetdagi kassa ID)
+export const PAYME_KASSA_ID = "6992f957364df48c3ebc0a21";
 
-// Siz Payme kabinetda "account" sifatida qaysi field ishlatayotgan bo‘lsangiz
-export const PAYME_ACCOUNT_FIELD = "order_id";
-
-// Checkout URL generator
-export function createPaymeCheckoutUrl(orderId, amountUzs) {
-  const amountTiyin = Math.round(Number(amountUzs) * 100);
-  const payload = `m=${PAYME_MERCHANT_ID};ac.${PAYME_ACCOUNT_FIELD}=${orderId};a=${amountTiyin}`;
-  const encoded = btoa(unescape(encodeURIComponent(payload)));
-  return `${PAYME_CHECKOUT_BASE}/${encoded}`;
-}
+// PAYME_KEY frontendga qo'yilmaydi. PAYME_KEY faqat Netlify ENV ichida bo'ladi.
