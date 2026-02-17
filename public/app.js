@@ -2919,9 +2919,45 @@ async function createTopupOrder(amountUZS){
   const amt = Number(amountUZS||0);
   if(!Number.isFinite(amt) || amt<=0) throw new Error('bad_amount');
 
+  const amountTiyin = Math.round(amt * 100);
+
+  // ✅ PRO: pending topup bo‘lsa qayta ishlatamiz (har bosishda yangi order emas)
+  // users/{uid}/orders subcollection composite indexsiz tez ishlaydi
+  const userOrdersCol = collection(db, "users", currentUser.uid, "orders");
+  let pendingSnap = null;
+  try{
+    const q = query(
+      userOrdersCol,
+      where("orderType", "==", "topup"),
+      where("status", "==", "pending_payment"),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    );
+    pendingSnap = await getDocs(q);
+  }catch(_e){
+    pendingSnap = null;
+  }
+
+  if(pendingSnap && !pendingSnap.empty){
+    const d = pendingSnap.docs[0];
+    const o = d.data() || {};
+    const existingAmount = Number(o.amountTiyin || 0);
+    const orderId = String(o.orderId || d.id);
+
+    // Agar amount mos bo‘lsa — shu pendingni ishlatamiz
+    if(existingAmount === amountTiyin){
+      return { orderId, amountTiyin };
+    }
+
+    // Mos bo‘lmasa — eski pendingni bekor qilamiz (toza tarix uchun)
+    try{
+      await setDoc(doc(db, "orders", orderId), { status: "canceled", canceledAt: serverTimestamp(), cancelReason: "replaced_by_new_topup" }, { merge: true });
+      await setDoc(doc(db, "users", currentUser.uid, "orders", orderId), { status: "canceled", canceledAt: serverTimestamp(), cancelReason: "replaced_by_new_topup" }, { merge: true });
+    }catch(_e){}
+  }
+
   // create "order" of type topup so Payme verify (functions) can credit balance
   const orderId = String(Date.now());
-  const amountTiyin = Math.round(amt * 100);
 
   await createOrderDoc({
     orderId,
