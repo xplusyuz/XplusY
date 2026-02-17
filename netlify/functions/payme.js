@@ -8,12 +8,10 @@
  * This variant is intentionally dependency-free (no extra modules/files).
  */
 
-
-const PAYME_VERSION = "PAYME_FN_VERSION=2026-02-17-v3";
 function jsonResponse(statusCode, obj) {
   return {
     statusCode,
-    headers: { "content-type": "application/json; charset=utf-8", "x-payme-version": PAYME_VERSION },
+    headers: { "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify(obj),
   };
 }
@@ -21,17 +19,18 @@ function jsonResponse(statusCode, obj) {
 function nowMs() { return Date.now(); }
 
 function errorObj(code, data, msgUz, msgRu, msgEn) {
-  // Payme Sandbox UI expects error.message to be a STRING. If it's an object -> shows "[object Object]".
-  const message = String(msgRu || msgUz || msgEn || "Ошибка");
   return {
     error: {
       code,
-      message,
+      message: {
+        uz: msgUz || "Xatolik",
+        ru: msgRu || "Ошибка",
+        en: msgEn || "Error",
+      },
       data: data || null,
     },
   };
 }
-
 
 function parseBasicAuth(authHeader) {
   // "Basic base64(user:pass)"
@@ -67,8 +66,6 @@ function getParamOrderId(params) {
 }
 
 exports.handler = async (event) => {
-  console.log(PAYME_VERSION);
-
   try {
     const req = normalizeBody(event);
     if (!req || req.jsonrpc !== "2.0" || !req.method) {

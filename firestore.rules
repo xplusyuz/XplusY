@@ -1,0 +1,146 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ========= CONSTANTS ========= */
+    // Phone auth bo'lsa ham admin bo‘lishi uchun UID qo‘shib qo‘ying
+    function adminUids() {
+      return [
+        // Firebase Console -> Authentication -> Users -> UID
+        // "XXXXXXXXXXXXXXX"
+      ];
+    }
+
+    function adminEmails() {
+      return [
+        "sohibjonmath@gmail.com"
+      ];
+    }
+
+    /* ========= HELPERS ========= */
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Email bo‘lmasa ham (phone auth) UID orqali admin taniladi
+    function isAdmin() {
+      return signedIn() && (
+        (request.auth.token.email != null && request.auth.token.email in adminEmails())
+        || (request.auth.uid in adminUids())
+      );
+    }
+
+    function isNum(x) { return x is int || x is float; }
+
+    // createdAt serverTimestamp() bo'lsa, write vaqtida request.time ga teng bo'ladi
+    function isServerTime(v) {
+      return v is timestamp && v == request.time;
+    }
+
+    /* ========= PRODUCTS ========= */
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.stars is int
+          && request.resource.data.stars >= 1
+          && request.resource.data.stars <= 5;
+
+        allow update: if signedIn()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.uid == resource.data.uid;
+
+        allow delete: if isAdmin()
+          || (signedIn() && resource.data.uid == request.auth.uid);
+      }
+    }
+
+    // collectionGroup reviews o‘qish
+    match /{path=**}/reviews/{reviewId} {
+      allow read: if true;
+    }
+
+    /* ========= USERS ========= */
+    match /users/{uid} {
+      // user o‘zi + admin o‘qiydi
+      allow read: if isOwner(uid) || isAdmin();
+
+      // user faqat o‘zi yaratadi (balanceUZS / admin flag yo‘q)
+      allow create: if isOwner(uid)
+        && !('balanceUZS' in request.resource.data)
+        && !('isAdmin' in request.resource.data)
+        && !('role' in request.resource.data);
+
+      // user update: balansga tegmaydi, admin flag/role yozmaydi, omId/numericId o‘zgarmaydi
+      allow update: if isOwner(uid)
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['balanceUZS']))
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['isAdmin','role']))
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId','omId']));
+
+      allow delete: if isAdmin();
+
+      match /favorites/{favId} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      match /cart/{cid} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+
+      // user subcollection orders (profil tarix uchun)
+      match /orders/{orderId} {
+        allow create: if isOwner(uid) && request.resource.data.uid == uid && request.resource.data.createdAt is timestamp;
+        allow read: if isOwner(uid) || isAdmin();
+        // user update (ixtiyoriy): faqat o'z orderiga "cancelRequested" kabi yengil flag
+        allow update: if isAdmin() || (isOwner(uid) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['cancelRequested']));
+        allow delete: if isAdmin();
+      }
+    }
+
+    /* ========= GLOBAL ORDERS ========= */
+    match /orders/{orderId} {
+
+      // CREATE: checkout yoki topup
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.orderType in ['checkout','topup']
+        && request.resource.data.createdAt is timestamp;
+
+      // READ: admin hammasini ko‘radi, user o‘zini
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+
+      // UPDATE:
+// - admin hamma narsani o‘zgartira oladi
+// - user faqat o‘z orderida "cancelRequested" yoki payme return flaglarini yozishi mumkin (verify emas)
+allow update: if isAdmin()
+  || (signedIn()
+      && resource.data.uid == request.auth.uid
+      && request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['cancelRequested','payment','updatedAt'])
+      // payment ichida faqat status/returnedAt kabilar (client isboti emas)
+      && (!('payment' in request.resource.data) || request.resource.data.payment.diff(resource.data.payment).changedKeys().hasOnly(['status','returnedAt']))
+     );
+
+// DELETE: faqat admin
+allow delete: if isAdmin();
+}
+
+    /* ========= EVENTS / ANALYTICS ========= */
+    match /events/{eventId} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    /* ========= CONFIGS ========= */
+    match /configs/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
