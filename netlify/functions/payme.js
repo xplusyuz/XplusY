@@ -15,7 +15,9 @@
  *   - transactions stored in: payme_transactions/{paymeId}
  */
 
-const admin = require("firebase-admin");
+// Lazy-load firebase-admin *after* auth passes.
+// This prevents negative-auth sandbox tests from failing if runtime/deps are misconfigured.
+let admin = null;
 
 const TX_COLL = "payme_transactions";
 const ORDERS_COLL = "orders";
@@ -90,6 +92,10 @@ function asInt(x) {
 function msNow() { return Date.now(); }
 
 function initFirebase() {
+  if (!admin) {
+    // eslint-disable-next-line global-require
+    admin = require("firebase-admin");
+  }
   // Prevent double init in serverless
   if (admin.apps && admin.apps.length) return admin;
 
@@ -188,10 +194,7 @@ exports.handler = async (event) => {
   if ((event.httpMethod || "").toUpperCase() === "GET") {
     return json(405, { ok: false, error: "Method Not Allowed" });
   }
-<<<<<<< HEAD
   let id = null;
-=======
->>>>>>> f07929ee75a533e2ab61a51f4503785342cb9aeb
   try {
     // Parse JSON-RPC request safely (sandbox can send malformed bodies in negative tests)
     const req = parseBody(event);
