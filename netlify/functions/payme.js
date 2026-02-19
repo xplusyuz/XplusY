@@ -184,31 +184,10 @@ function txResultFromData(d) {
 }
 
 exports.handler = async (event) => {
-  // Lightweight diagnostics (safe to open in browser)
+  // GET is not allowed (avoid leaking environment/service-account hints)
   if ((event.httpMethod || "").toUpperCase() === "GET") {
-    const rawB64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64 || "";
-    const b64 = String(rawB64).replace(/\s+/g, "");
-    const info = { ok: true, hasB64: !!rawB64, b64Len: b64.length };
-    try {
-      const jsonString = Buffer.from(b64, "base64").toString("utf8");
-      const sa = JSON.parse(jsonString);
-      info.parsed = true;
-      info.project_id = sa.project_id || null;
-      info.client_email = sa.client_email ? String(sa.client_email).replace(/^[^@]+/, "***") : null;
-    } catch (e) {
-      info.parsed = false;
-      info.error = String(e && e.message ? e.message : e);
-    }
-    return {
-      statusCode: 200,
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify(info),
-    };
+    return json(405, { ok: false, error: "Method Not Allowed" });
   }
-
-  const req = parseBody(event);
-  const id = (req && (req.id ?? null)) ?? null;
-
   try {
     if (!req || req.jsonrpc !== "2.0" || !req.method) {
       return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "invalid_request", "Noto‘g‘ri so‘rov", "Неверный запрос", "Invalid request") });
@@ -331,23 +310,101 @@ exports.handler = async (event) => {
         return ok({ jsonrpc: "2.0", id, ...errorObj(-31008, "transaction", "Tranzaksiya muddati o‘tgan", "Истек срок транзакции", "Transaction expired") });
       }
 
-      const performTime = msNow();
-      await tx.ref.set({
-        state: 2,
-        perform_time: performTime,
-        updated_at: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
-
-      // Update order
+      // Validate order exists and amount still matches
       const orderId = tx.data.order_id;
-      await db.collection(ORDERS_COLL).doc(orderId).set({
-        status: "paid",
-        paymePaid: true,
-        paymePending: false,
-        paymeTransactionId: paymeId,
-        paidAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+      const info = await getOrderExpectedAmountTiyin(db, orderId);
+      if (!info.ok) {
+        return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "order_id", "Buyurtma topilmadi", "Счёт не найден", "Account not found") });
+      }
+      if (tx.data.amount !== info.expectedTiyin) {
+        return ok({ jsonrpc: "2.0", id, ...errorObj(-31001, "amount", "Noto‘g‘ri summa", "Неверная сумма", "Incorrect amount") });
+      }
+
+      const performTime = msNow();
+
+      // Atomic perform: tx + order + user order + (optional) balance topup credit
+      await db.runTransaction(async (t) => {
+        const txRef = db.collection(TX_COLL).doc(paymeId);
+        const orderRef = db.collection(ORDERS_COLL).doc(orderId);
+
+        const [txSnap, orderSnap] = await Promise.all([t.get(txRef), t.get(orderRef)]);
+        if (!txSnap.exists) throw new Error("tx_missing");
+        if (!orderSnap.exists) throw new Error("order_missing");
+
+        const txd = txSnap.data() || {};
+        const od = orderSnap.data() || {};
+
+        // idempotency
+        if (txd.state === 2) return;
+
+        // prevent performing canceled tx
+        if (txd.state < 0) throw new Error("tx_canceled");
+
+        // Update tx
+        t.set(txRef, {
+          state: 2,
+          perform_time: performTime,
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // Update main order
+        t.set(orderRef, {
+          status: "paid",
+          paymePaid: true,
+          paymePending: false,
+          paymeTransactionId: paymeId,
+          paidAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const uid = (od.uid || "").toString();
+        const orderType = (od.orderType || "checkout").toString();
+
+        // Update user's order mirror (best-effort; only if uid exists)
+        if (uid && uid.length > 6) {
+          const userOrderRef = db.collection("users").doc(uid).collection("orders").doc(orderId);
+          t.set(userOrderRef, {
+            status: "paid",
+            paymePaid: true,
+            paymePending: false,
+            paymeTransactionId: paymeId,
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+
+          // TOPUP: credit balance once
+          if (orderType === "topup") {
+            const alreadyCredited = od.topupCredited === true || od.balanceCredited === true;
+            if (!alreadyCredited) {
+              const candidates = ["totalUZS", "amountUZS", "amount", "total", "sumUZS"];
+              let uzs = null;
+              for (const k of candidates) {
+                if (typeof od[k] === "number" && Number.isFinite(od[k])) { uzs = od[k]; break; }
+                if (typeof od[k] === "string" && od[k].trim() && !isNaN(Number(od[k]))) { uzs = Number(od[k]); break; }
+              }
+              if (uzs != null && Number.isFinite(uzs) && uzs > 0) {
+                const userRef = db.collection("users").doc(uid);
+                t.set(userRef, {
+                  balanceUZS: admin.firestore.FieldValue.increment(uzs),
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+
+                t.set(orderRef, {
+                  topupCredited: true,
+                  balanceCredited: true,
+                  creditedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+
+                t.set(userOrderRef, {
+                  topupCredited: true,
+                  balanceCredited: true,
+                  creditedAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true });
+              }
+            }
+          }
+        }
+      });
 
       const newData = { ...tx.data, state: 2, perform_time: performTime };
       return ok({ jsonrpc: "2.0", id, result: txResultFromData(newData) });

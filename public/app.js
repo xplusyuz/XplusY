@@ -7,48 +7,28 @@
 function tgAdminEnabled(){
   return typeof window !== "undefined"
     && window.TG_ADMIN
-    && typeof window.TG_ADMIN.botToken === "string"
-    && window.TG_ADMIN.botToken.trim().length > 10
-    && typeof window.TG_ADMIN.chatId === "string"
-    && window.TG_ADMIN.chatId.trim().length > 2;
-  ensureProfileSocialLinks();
-
+    && window.TG_ADMIN.enabled === true;
 }
 function tgUserEnabled(){
-  const t = (window.TG_USER && typeof window.TG_USER.botToken === "string") ? window.TG_USER.botToken.trim() : "";
-  const fallback = tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "";
-  return (t.length > 10) || (fallback.length > 10);
+  return typeof window !== "undefined"
+    && window.TG_USER
+    && window.TG_USER.enabled === true;
 }
-function tgEscape(s){ return String(s??"").replace(/[<>&]/g, c=>({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c])); }
 
-function tgSend(token, chatId, htmlText){
+async function tgNotifyOrderCreated(orderId){
   try{
-    const t = String(token||"").trim();
-    const c = String(chatId||"").trim();
-    if(t.length < 10 || c.length < 2) return;
-    const base = `https://api.telegram.org/bot${t}/sendMessage`;
-    const url = base
-      + `?chat_id=${encodeURIComponent(c)}`
-      + `&text=${encodeURIComponent(htmlText)}`
-      + `&parse_mode=HTML`
-      + `&disable_web_page_preview=true`;
-    const img = new Image();
-    img.src = url;
+    if(!currentUser) return;
+    if(!tgAdminEnabled() && !tgUserEnabled()) return;
+    const idToken = await currentUser.getIdToken();
+    await fetch("/.netlify/functions/telegram", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "authorization": "Bearer " + idToken
+      },
+      body: JSON.stringify({ event: "order_created", orderId: String(orderId||"") })
+    });
   }catch(e){}
-}
-
-function tgSendAdminHTML(htmlText){
-  if(!tgAdminEnabled()) return;
-  tgSend(window.TG_ADMIN.botToken, window.TG_ADMIN.chatId, htmlText);
-}
-
-function tgSendUserHTML(chatId, htmlText){
-  if(!tgUserEnabled()) return;
-  const token = (window.TG_USER && window.TG_USER.botToken && window.TG_USER.botToken.trim().length > 10)
-    ? window.TG_USER.botToken.trim()
-    : (tgAdminEnabled() ? window.TG_ADMIN.botToken.trim() : "");
-  if(!token) return;
-  tgSend(token, chatId, htmlText);
 }
 
 function tgOrderCreatedHTML(o){
@@ -2853,12 +2833,8 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     window.__tgSentOrders = window.__tgSentOrders || new Set();
     if(!window.__tgSentOrders.has(orderId)){
       window.__tgSentOrders.add(orderId);
-      const payload = { orderId, uid: currentUser.uid, omId, userName, userPhone, provider, totalUZS, items, shipping: shipping || null };
-      const html = tgOrderCreatedHTML(payload);
-      tgSendAdminHTML(html);
-      if(userTgChatId){
-        tgSendUserHTML(userTgChatId, html);
-      }
+      // server-side Telegram notify (secure: no bot token in client)
+      tgNotifyOrderCreated(orderId);
     }
   }catch(_e){}
 }
