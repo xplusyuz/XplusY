@@ -188,7 +188,10 @@ exports.handler = async (event) => {
   if ((event.httpMethod || "").toUpperCase() === "GET") {
     return json(405, { ok: false, error: "Method Not Allowed" });
   }
+<<<<<<< HEAD
   let id = null;
+=======
+>>>>>>> f07929ee75a533e2ab61a51f4503785342cb9aeb
   try {
     // Parse JSON-RPC request safely (sandbox can send malformed bodies in negative tests)
     const req = parseBody(event);
