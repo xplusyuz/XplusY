@@ -50,7 +50,7 @@ function tgOrderCreatedHTML(o){
     `<b>🛒 Yangi buyurtma!</b>`,
     `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
     o.uid ? `UID: <code>${tgEscape(o.uid)}</code>` : "",
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    (o.numericId!=null || o.omId) ? `User ID: <b>${tgEscape(String(o.numericId ?? o.omId))}</b>` : "",
     o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
     o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
     `To'lov: <b>${pay}</b>`,
@@ -68,7 +68,7 @@ function tgOrderStatusHTML(o){
   return [
     `<b>📦 Buyurtma statusi yangilandi</b>`,
     `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    (o.numericId!=null || o.omId) ? `User ID: <b>${tgEscape(String(o.numericId ?? o.omId))}</b>` : "",
     `Yangi status: <b>${st}</b>`,
     o.provider ? `To'lov: <b>${tgEscape(o.provider)}</b>` : "",
     `Summa: <b>${sum}</b> so'm`
@@ -77,7 +77,14 @@ function tgOrderStatusHTML(o){
 
 
 import { auth, db } from "./firebase-config.js";
-import { PAYME_MODE, PAYME_LANG, PAYME_KASSA_ID } from "./payme-config.js";
+import {
+  PAYME_MODE,
+  PAYME_LANG,
+  PAYME_MERCHANT_ID,
+  PAYME_CHECKOUT_URL,
+  PAYME_ACCOUNT_FIELD,
+  PAYME_DESCRIPTION
+} from "./payme-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -2772,19 +2779,19 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
   // pull richer user fields for order + telegram
   const userRef = doc(db, "users", currentUser.uid);
-  let userName = null, userPhone = null, omId = null, userTgChatId = null;
+  let userName = null, userPhone = null, numericId = null, userTgChatId = null;
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
     profileCache = u;
     userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
     userPhone = (u.phone || "").toString();
-    omId = (u.omId || makeOmId(currentUser.uid)).toString();
+    numericId = (u.numericId != null ? Number(u.numericId) : null);
     userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
   }catch(_e){
     userName = (currentUser.displayName || currentUser.email || "User").toString();
     userPhone = "";
-    omId = makeOmId(currentUser.uid);
+    numericId = null;
     userTgChatId = null;
   }
 
@@ -2794,7 +2801,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   await setDoc(orderRef, {
     orderId,
     uid: currentUser.uid,
-    omId,
+    numericId,
     userName,
     userPhone,
     userTgChatId,
@@ -2814,7 +2821,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   await setDoc(userOrderRef, {
     orderId,
     uid: currentUser.uid,
-    omId,
+    numericId,
     userName,
     userPhone,
     userTgChatId,
@@ -2960,7 +2967,7 @@ async function payWithBalance(built, shipping){
     const base = {
       orderId,
       uid,
-      omId: u.omId || null,
+      numericId: (u.numericId != null ? Number(u.numericId) : null),
       userName: u.name || null,
       userPhone: u.phone || null,
       userTgChatId: (u.telegramChatId||u.tgChatId||null),
@@ -2997,8 +3004,16 @@ async function startPaymeCheckout(){
     note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
   }
 
-  if(!undefined || String(undefined).includes("YOUR_")){
-    toast("undefined sozlanmagan (public/payme-config.js).");
+  if(PAYME_MODE !== "form"){
+    toast("Payme rejimi noto‘g‘ri sozlangan (PAYME_MODE). 'form' bo‘lishi kerak.");
+    return;
+  }
+  if(!PAYME_MERCHANT_ID || String(PAYME_MERCHANT_ID).length < 8){
+    toast("PAYME_MERCHANT_ID sozlanmagan (public/payme-config.js). ");
+    return;
+  }
+  if(!PAYME_CHECKOUT_URL || !String(PAYME_CHECKOUT_URL).startsWith("http")){
+    toast("PAYME_CHECKOUT_URL sozlanmagan (public/payme-config.js). ");
     return;
   }
 
@@ -3023,9 +3038,43 @@ async function startPaymeCheckout(){
   }
 
   const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
-  const params = `m=${undefined};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
-  const b64 = btoa(unescape(encodeURIComponent(params)));
-  window.location.href = `${undefined}/${b64}`;
+  submitPaymeForm({
+    merchantId: PAYME_MERCHANT_ID,
+    checkoutUrl: PAYME_CHECKOUT_URL,
+    amountTiyin,
+    accountField: PAYME_ACCOUNT_FIELD || "order_id",
+    accountValue: orderId,
+    lang: PAYME_LANG || "ru",
+    callback: returnUrl,
+    description: (PAYME_DESCRIPTION && (PAYME_DESCRIPTION[PAYME_LANG] || PAYME_DESCRIPTION.ru)) || "",
+  });
+}
+
+function submitPaymeForm({ merchantId, checkoutUrl, amountTiyin, accountField, accountValue, lang, callback, description }){
+  // Paycom docs: POST form to https://test.paycom.uz (sandbox) yoki https://checkout.paycom.uz (prod)
+  // Required: merchant, amount (tiyin), account[field]
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = String(checkoutUrl);
+  form.style.display = "none";
+
+  const add = (name, value) => {
+    const inp = document.createElement("input");
+    inp.type = "hidden";
+    inp.name = name;
+    inp.value = String(value ?? "");
+    form.appendChild(inp);
+  };
+
+  add("merchant", merchantId);
+  add("amount", Math.round(Number(amountTiyin || 0)));
+  add(`account[${accountField}]`, accountValue);
+  if(lang) add("lang", lang);
+  if(callback) add("callback", callback);
+  if(description) add("description", description);
+
+  document.body.appendChild(form);
+  form.submit();
 }
 
 async function shareOrderTelegram(){
@@ -3254,7 +3303,7 @@ let unsubUserDoc = null;
 
   function renderHeader(user, meta){
     const name = (meta?.name || user?.displayName || user?.email || user?.phoneNumber || "User").toString();
-    const omId = (meta?.omId || "").toString();
+    const omId = (meta?.numericId != null ? String(meta.numericId) : (meta?.omId || "").toString());
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
     if(els.profileName) els.profileName.textContent = name;
@@ -3297,15 +3346,35 @@ let unsubUserDoc = null;
   }
 
   
-  function makeOmId(uid){
-    // Deterministic 6-digit OM ID derived from uid (no Firestore meta/counters needed)
-    let h = 0;
-    for(let i=0;i<uid.length;i++){
-      h = ((h << 5) - h) + uid.charCodeAt(i);
-      h |= 0; // 32-bit
-    }
-    const num = Math.abs(h) % 1000000;
-    return "OM" + String(num).padStart(6, "0");
+  async function getOrAssignNumericId(uid){
+    // Ketma-ket ID: 1000, 1001, 1002...
+    // Firestore: /meta/counters { nextUserId: 1001 }  -> birinchi userga 1000 beriladi.
+    const userRef = doc(db, "users", uid);
+    const countersRef = doc(db, "meta", "counters");
+
+    const assigned = await runTransaction(db, async (tx) => {
+      const uSnap = await tx.get(userRef);
+      const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+      if(u.numericId != null) return Number(u.numericId);
+
+      const cSnap = await tx.get(countersRef);
+      let id;
+      if(!cSnap.exists()){
+        // start
+        id = 1000;
+        tx.set(countersRef, { nextUserId: 1001 });
+      } else {
+        const next = Number((cSnap.data() || {}).nextUserId);
+        id = Number.isFinite(next) && next >= 1000 ? next : 1000;
+        tx.update(countersRef, { nextUserId: id + 1 });
+      }
+
+      // numericId faqat bir marta yoziladi
+      tx.set(userRef, { numericId: id, updatedAt: serverTimestamp(), ...(uSnap.exists()?{}:{createdAt: serverTimestamp()}) }, { merge: true });
+      return id;
+    });
+
+    return assigned;
   }
 
 async function syncUser(user){
@@ -3314,7 +3383,7 @@ async function syncUser(user){
 
     await ensureRegionLoaded();
 
-    // Ensure user has OMXXXXXX and store basic user doc in Firestore (no meta/counters)
+    // Ensure user has numericId (1000+) and store basic user doc in Firestore
     const userRef = doc(db, "users", user.uid);
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
@@ -3322,17 +3391,17 @@ async function syncUser(user){
     const name = (u.name || user.displayName || user.email || "User").toString();
     const phone = (u.phone || "").toString();
 
-    const omId = (u.omId || makeOmId(user.uid)).toString();
+    const numericId = (u.numericId != null) ? Number(u.numericId) : await getOrAssignNumericId(user.uid);
 
     await setDoc(userRef, {
       name,
       phone,
-      omId,
-updatedAt: serverTimestamp(),
+      numericId,
+      updatedAt: serverTimestamp(),
       ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
     }, { merge:true });
 
-    const meta = { name, omId, phone };
+    const meta = { name, numericId, phone };
 
 
     renderHeader(user, meta);
