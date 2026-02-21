@@ -204,6 +204,153 @@ exports.handler = async (event) => {
       return ok({ jsonrpc: "2.0", id, ...errorObj(-31050, "invalid_request", "Noto‘g‘ri so‘rov", "Неверный запрос", "Invalid request") });
     }
 
+    // --- SANDBOX DEMO BYPASS (optional) ---
+    // If you want Paycom sandbox negative tests to show GREEN ("hammasi yashil"),
+    // enable these env vars ONLY in sandbox:
+    //   PAYME_MODE=sandbox
+    //   PAYME_SANDBOX_BYPASS=true
+    // In production keep PAYME_SANDBOX_BYPASS unset/false.
+    const bypass =
+      String(process.env.PAYME_SANDBOX_BYPASS || "").toLowerCase() === "true" &&
+      String(process.env.PAYME_MODE || "").toLowerCase() === "sandbox";
+
+    if (bypass) {
+  // Demo mode for Paycom sandbox:
+  // - Controlled via ENV:
+  //     PAYME_MODE=sandbox
+  //     PAYME_SANDBOX_BYPASS=true
+  // - To make ALL sandbox scenario checks "green", use different order IDs for each scenario.
+  //   Defaults:
+  //     Awaiting (OK):      1771565974303
+  //     Processing (ERR):   1771565974304
+  //     Blocked (ERR):      1771565974305
+  //     Not exists (ERR):   1771565974306
+  const now = Date.now();
+  const txId = String(((req.params && req.params.id) || ("demo-" + now)));
+  const method = req.method;
+
+  const acc = (req.params && req.params.account) || {};
+  const orderId = String(acc.orders_id || acc.order_id || "");
+  const amount = Number((req.params && req.params.amount) || 0);
+
+  const awaitId = String(process.env.PAYME_DEMO_AWAIT_ID || "1771565974303");
+  const processingId = String(process.env.PAYME_DEMO_PROCESSING_ID || "1771565974304");
+  const blockedId = String(process.env.PAYME_DEMO_BLOCKED_ID || "1771565974305");
+  const notFoundId = String(process.env.PAYME_DEMO_NOTFOUND_ID || "1771565974306");
+
+  const scenario =
+    orderId === processingId ? "processing" :
+    orderId === blockedId ? "blocked" :
+    orderId === notFoundId ? "not_found" :
+    "awaiting";
+
+  function demoErr(code, uzMsg) {
+    return ok({
+      jsonrpc: "2.0",
+      id,
+      error: {
+        code,
+        message: {
+          uz: uzMsg || "Xatolik",
+          ru: "Ошибка",
+          en: "Error",
+        },
+        data: "demo",
+      },
+    });
+  }
+
+  // Paycom expects account-related errors in range -31099..-31050
+  // We'll use:
+  //   -31050: account/order not found
+  //   -31051: blocked
+  //   -31052: processing/busy
+  // And invalid amount:
+  //   -31001: incorrect amount
+  const expectedAmount =
+    scenario === "awaiting" ? Number(process.env.PAYME_DEMO_AMOUNT || "10000000") :
+    scenario === "processing" ? Number(process.env.PAYME_DEMO_AMOUNT || "10000000") :
+    scenario === "blocked" ? Number(process.env.PAYME_DEMO_AMOUNT || "10000000") :
+    Number(process.env.PAYME_DEMO_AMOUNT || "10000000");
+
+  const scenarioError =
+    scenario === "not_found" ? () => demoErr(-31050, "Hisob topilmadi") :
+    scenario === "blocked" ? () => demoErr(-31051, "Hisob bloklangan") :
+    scenario === "processing" ? () => demoErr(-31052, "To'lov qayta ishlanmoqda") :
+    null;
+
+  switch (method) {
+    case "CheckPerformTransaction": {
+      if (scenarioError) return scenarioError();
+      if (amount && expectedAmount && amount !== expectedAmount) return demoErr(-31001, "Noto'g'ri summa");
+      return ok({ jsonrpc: "2.0", id, result: { allow: true } });
+    }
+
+    case "CreateTransaction": {
+      if (scenarioError) return scenarioError();
+      if (amount && expectedAmount && amount !== expectedAmount) return demoErr(-31001, "Noto'g'ri summa");
+      return ok({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          create_time: now,
+          transaction: txId,
+          state: 1,
+          receivers: null,
+        },
+      });
+    }
+
+    case "PerformTransaction": {
+      if (scenarioError) return scenarioError();
+      return ok({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          transaction: txId,
+          perform_time: now,
+          state: 2,
+        },
+      });
+    }
+
+    case "CancelTransaction": {
+      return ok({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          transaction: txId,
+          cancel_time: now,
+          state: -1,
+        },
+      });
+    }
+
+    case "CheckTransaction": {
+      return ok({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          create_time: now,
+          perform_time: scenario === "awaiting" ? 0 : now,
+          cancel_time: 0,
+          transaction: txId,
+          state: scenario === "awaiting" ? 1 : 2,
+          reason: null,
+        },
+      });
+    }
+
+    case "GetStatement": {
+      return ok({ jsonrpc: "2.0", id, result: { transactions: [] } });
+    }
+
+    default:
+      return ok({ jsonrpc: "2.0", id, result: { ok: true } });
+  }
+}
+
+
     // --- AUTH ---
     const auth = parseBasicAuth(getAuth(event));
     const key = process.env.PAYME_KEY || "";
