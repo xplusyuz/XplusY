@@ -98,12 +98,17 @@ exports.handler = async (event) => {
     return json(200, { ok: true, note: "Payme JSON-RPC endpoint. POST only." });
   }
 
+  const body = parseBody(event);
+
+  // Paycom/Payme sandbox expects JSON-RPC error with HTTP 200 (not 401).
   if (!authValid(event.headers || {})) {
-    // Payme expects 200 with JSON-RPC error sometimes, but 401 is also acceptable.
-    return json(401, { ok: false, error: "Unauthorized" }, { "www-authenticate": "Basic" });
+    return json(200, {
+      jsonrpc: "2.0",
+      id: body && typeof body.id !== "undefined" ? body.id : null,
+      error: { code: -32504, message: "Unauthorized" }
+    }, { "Content-Type": "application/json" });
   }
 
-  const body = parseBody(event);
   if (!body || !body.method) {
     return json(200, err(body?.id ?? null, -32600, MSG.INTERNAL, "bad_request"));
   }
