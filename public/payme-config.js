@@ -1,29 +1,22 @@
 // public/payme-config.js
-// OrzuMall Payme konfiguratsiyasi — "billingsiz" (Form generator / Checkout page)
-// Bu rejimda foydalanuvchi Payme Checkout sahifasiga yuboriladi (server-side verify YO'Q).
-// To'lovni tasdiqlash (paid) odatda admin tomonidan qo'lda qilinadi.
+// OrzuMall Payme konfiguratsiyasi — Billing + Verify (avtomatik balans)
+// Frontend faqat checkout'ga yo'naltiradi; tekshiruv va balans oshirish server (Netlify Function) orqali bo'ladi.
+//
+// ENV (Netlify):
+//  - PAYME_KEY
+//  - FIREBASE_SERVICE_ACCOUNT_B64
+//
+// Payme Sandbox checkout base: https://checkout.test.paycom.uz
+// Production checkout base:     https://checkout.paycom.uz
 
-// UI logikasi uchun
-export const PAYME_MODE = "form";
+export const PAYME_MODE = "billing-verify";
+export const PAYME_LANG = "uz";
 
-// ru | uz | en
-export const PAYME_LANG = "ru";
+// Payme kabinetdagi kassa/merchant id (checkout param: merchant)
+export const PAYME_KASSA_ID = "6992f957364df48c3ebc0a21";
 
-// Merchant ID (ID веб-кассы) — Payme Business -> Web-kassa -> Developer params
-// Screenshotdagi merchant: 699981188dbbeda52ae0ec5d
-export const PAYME_MERCHANT_ID = "699981188dbbeda52ae0ec5d";
+// Checkout base (sandbox)
+export const PAYME_CHECKOUT_BASE = "https://checkout.test.paycom.uz";
 
-// Checkout URL
-// Sandbox: https://test.paycom.uz
-// Prod:    https://checkout.paycom.uz
-export const PAYME_CHECKOUT_URL = "https://test.paycom.uz";
-
-// Siz Payme Business'da rekvizit sifatida: order_id (Buyurtma raqami) qo'shgansiz.
-export const PAYME_ACCOUNT_FIELD = "order_id";
-
-// Ixtiyoriy: to'lov tavsifi
-export const PAYME_DESCRIPTION = {
-  ru: "Оплата заказа OrzuMall",
-  uz: "OrzuMall buyurtma to‘lovi",
-  en: "OrzuMall order payment"
-};
+// Rekvizit nomi (Payme kabinetda qo'yilgan)
+export const PAYME_ACCOUNT_KEY = "user_id";

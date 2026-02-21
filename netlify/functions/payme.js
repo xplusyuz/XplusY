@@ -1,17 +1,49 @@
-// Netlify Function: Payme Sandbox "HAMMASI YASHIL" demo handler
-// No external deps. Safe for sandbox testing only.
-// Enable with env: PAYME_GREEN_DEMO=true (recommended), or PAYME_SANDBOX_BYPASS=true.
+/**
+ * Netlify Function: Payme Billing + Verify (automatic balance top-up)
+ *
+ * Requirements (ENV):
+ *  - PAYME_KEY                         (merchant API key/password)
+ *  - FIREBASE_SERVICE_ACCOUNT_B64      (base64 JSON service account)
+ *
+ * Optional (ENV):
+ *  - PAYME_MIN_TOPUP_UZS               (default 1000)
+ *
+ * Account fields:
+ *  - account.user_id  => numeric user id (1000+)
+ */
+const admin = require("firebase-admin");
 
-function json(body, statusCode = 200, headers = {}) {
+function json(statusCode, obj, headers = {}) {
   return {
     statusCode,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
-      ...headers
+      ...headers,
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(obj),
   };
+}
+
+function initFirebase() {
+  if (admin.apps && admin.apps.length) return admin;
+  const rawB64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64 || "";
+  if (!rawB64) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT_B64");
+  const b64 = String(rawB64).replace(/\s+/g, "");
+  const jsonString = Buffer.from(b64, "base64").toString("utf8");
+  const serviceAccount = JSON.parse(jsonString);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+  return admin;
+}
+
+function parseBody(event) {
+  try {
+    return JSON.parse(event.body || "{}");
+  } catch {
+    return null;
+  }
 }
 
 function parseBasicAuth(authHeader) {
@@ -23,187 +55,256 @@ function parseBasicAuth(authHeader) {
     const idx = decoded.indexOf(":");
     if (idx < 0) return { user: decoded, pass: "" };
     return { user: decoded.slice(0, idx), pass: decoded.slice(idx + 1) };
-  } catch (e) {
+  } catch {
     return null;
   }
 }
 
 function authValid(headers) {
-  // In real mode you'd check PAYME_KEY. For "green demo" we can still validate when key is set.
-  const bypass = (process.env.PAYME_SANDBOX_BYPASS || "").toLowerCase() === "true";
-  if (bypass) return true;
-
   const key = process.env.PAYME_KEY;
-  if (!key) {
-    // If key not configured, treat as invalid to avoid accidental "green" in prod.
-    return false;
-  }
+  if (!key) return false;
   const parsed = parseBasicAuth(headers.authorization || headers.Authorization);
   if (!parsed) return false;
-  // Payme merchant API typically uses "Paycom" as login. Some docs show "Paycom", some "Payme".
-  const userOk = (parsed.user || "").toLowerCase() === "paycom" || (parsed.user || "").toLowerCase() === "payme";
+  const login = (parsed.user || "").toLowerCase();
+  const userOk = login === "paycom" || login === "payme";
   return userOk && parsed.pass === key;
-}
-
-function err(id, code, messageObj, data = null) {
-  const out = { jsonrpc: "2.0", id, error: { code, message: messageObj } };
-  if (data !== null) out.error.data = data;
-  return out;
 }
 
 function ok(id, result) {
   return { jsonrpc: "2.0", id, result };
 }
 
-// Payme error message helpers (short & safe)
+function err(id, code, message, data = null) {
+  const out = { jsonrpc: "2.0", id, error: { code, message } };
+  if (data !== null) out.error.data = data;
+  return out;
+}
+
 const MSG = {
-  ru: "Ошибка",
-  uz: "Xatolik",
-  en: "Error"
+  ACCOUNT_NOT_FOUND: { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" },
+  INVALID_AMOUNT: { uz: "Noto‘g‘ri summa", ru: "Неверная сумма", en: "Invalid amount" },
+  TX_NOT_FOUND: { uz: "Tranzaksiya topilmadi", ru: "Транзакция не найдена", en: "Transaction not found" },
+  CANNOT_CANCEL: { uz: "Bekor qilib bo‘lmaydi", ru: "Нельзя отменить", en: "Cannot cancel" },
+  INTERNAL: { uz: "Server xatosi", ru: "Внутренняя ошибка", en: "Internal error" },
 };
 
-function nowMs() { return Date.now(); }
-
-function getBody(event) {
-  if (!event || !event.body) return null;
-  try { return JSON.parse(event.body); } catch (e) { return null; }
+function asInt(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : NaN;
 }
 
 exports.handler = async (event) => {
-  // Only POST supported for JSON-RPC
   if (event.httpMethod !== "POST") {
-    return json({ ok: true, note: "Payme JSON-RPC endpoint. POST only." }, 200);
+    return json(200, { ok: true, note: "Payme JSON-RPC endpoint. POST only." });
   }
 
-  const greenDemo = (process.env.PAYME_GREEN_DEMO || "").toLowerCase() === "true";
-  const payload = getBody(event) || {};
-  const id = payload.id ?? null;
-  const method = payload.method;
-  const params = payload.params || {};
-
-  // Determine test intent from inputs (Paycom sandbox negative tests send characteristic payloads)
-  const amount = Number(params.amount);
-  const account = params.account || {};
-  const ordersId = account.orders_id || account.order_id || account.orderId || null;
-  const omId = account.omID || account.omId || account.omid || null;
-
-  // GREEN DEMO scenario mapping (so Paycom UI "statuses" can be tested by changing orders_id):
-  // Use special order IDs:
-  //   ...01 -> awaiting (allow)
-  //   ...02 -> processing (account busy) -> -31099..-31050 band (we use -31099)
-  //   ...03 -> blocked/paid/canceled -> band (we use -31051)
-  //   ...04 -> not found -> -31050
-  const oidStr = ordersId ? String(ordersId) : "";
-  const scenarioSuffix = oidStr.slice(-2);
-  const scenario =
-    scenarioSuffix === "02" ? "processing" :
-    scenarioSuffix === "03" ? "blocked" :
-    scenarioSuffix === "04" ? "not_found" :
-    scenarioSuffix === "01" ? "awaiting" :
-    null;
-
-  const isAuthOk = authValid(event.headers || {});
-  const accountMissing = !ordersId || !omId;           // for account tests
-  const amountClearlyInvalid = Number.isFinite(amount) && amount === 1; // Paycom invalid-amount test uses 1
-  const amountMissing = !(Number.isFinite(amount)) || amount <= 0;
-
-  // In GREEN DEMO mode, we return exactly what Paycom test pages expect.
-  // If not in green demo, behave like strict mode (unauthorized if auth invalid).
-  if (!greenDemo && !isAuthOk) {
-    // Unauthorized per Payme spec: -32504
-    return json(err(id, -32504, { uz: "Avtorizatsiya xatosi", ru: "Неверная авторизация", en: "Unauthorized" }));
+  if (!authValid(event.headers || {})) {
+    // Payme expects 200 with JSON-RPC error sometimes, but 401 is also acceptable.
+    return json(401, { ok: false, error: "Unauthorized" }, { "www-authenticate": "Basic" });
   }
 
-  // In green demo we still want invalid-authorization test to be GREEN: it expects auth error.
-  if (greenDemo && !isAuthOk) {
-    return json(err(id, -32504, { uz: "Avtorizatsiya xatosi", ru: "Неверная авторизация", en: "Unauthorized" }));
+  const body = parseBody(event);
+  if (!body || !body.method) {
+    return json(200, err(body?.id ?? null, -32600, MSG.INTERNAL, "bad_request"));
   }
 
-  // Helper to return account-related errors in required band -31099..-31050
-  const accountErr = (code = -31050, msg = { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" }) => json(err(id, code, msg));
+  const { id, method, params } = body;
+  const account = (params && params.account) || {};
+  const userIdRaw = account.user_id ?? account.userId ?? null;
+  const userNumericId = String(userIdRaw || "").trim();
+  const amountTiyin = asInt(params?.amount);
+  const minTopup = asInt(process.env.PAYME_MIN_TOPUP_UZS || "1000");
+  const minTiyin = Number.isFinite(minTopup) ? minTopup * 100 : 1000 * 100;
 
-  // Helper for invalid amount: -31001
-  const amountErr = () => json(err(id, -31001, { uz: "Summa noto‘g‘ri", ru: "Неверная сумма", en: "Invalid amount" }));
+  try {
+    initFirebase();
+    const db = admin.firestore();
 
-  // For Paycom sandbox pages:
-  // - invalid-account: sends missing/invalid account (often empty object) -> we must return -31050..-31099
-  // - invalid-amount: sends amount=1 -> must return -31001
-  // - normal pages: allow true / state transitions
+    // Helpers
+    const getUidByNumericId = async (numericId) => {
+      const ref = db.collection("users_by_numeric").doc(String(numericId));
+      const snap = await ref.get();
+      if (!snap.exists) return null;
+      const d = snap.data() || {};
+      return d.uid || null;
+    };
 
-  switch (method) {
-    case "CheckPerformTransaction": {
-      if (greenDemo && scenario === "processing") return accountErr(-31099, { uz: "Hisob band", ru: "Счет занят другой транзакцией", en: "Account is busy" });
-      if (greenDemo && scenario === "blocked") return accountErr(-31051, { uz: "Hisob bloklangan", ru: "Счет заблокирован", en: "Account is blocked" });
-      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
-      if (accountMissing) return accountErr();
-      if (amountMissing) return amountErr();
-      if (amountClearlyInvalid) return amountErr();
-      // In green demo, any other amount passes.
-      return json(ok(id, { allow: true }));
+    const txRefByPaymeId = (paymeId) => db.collection("payme_transactions").doc(String(paymeId));
+
+    // Payme method handlers
+    switch (method) {
+      case "CheckPerformTransaction": {
+        if (!userNumericId) return json(200, err(id, -31050, MSG.ACCOUNT_NOT_FOUND));
+        if (!Number.isFinite(amountTiyin) || amountTiyin < minTiyin) return json(200, err(id, -31001, MSG.INVALID_AMOUNT));
+
+        const uid = await getUidByNumericId(userNumericId);
+        if (!uid) return json(200, err(id, -31050, MSG.ACCOUNT_NOT_FOUND));
+
+        return json(200, ok(id, { allow: true }));
+      }
+
+      case "CreateTransaction": {
+        const paymeId = String(params?.id || "").trim();
+        const time = asInt(params?.time);
+
+        if (!paymeId) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+        if (!userNumericId) return json(200, err(id, -31050, MSG.ACCOUNT_NOT_FOUND));
+        if (!Number.isFinite(amountTiyin) || amountTiyin < minTiyin) return json(200, err(id, -31001, MSG.INVALID_AMOUNT));
+
+        const uid = await getUidByNumericId(userNumericId);
+        if (!uid) return json(200, err(id, -31050, MSG.ACCOUNT_NOT_FOUND));
+
+        const ref = txRefByPaymeId(paymeId);
+        const snap = await ref.get();
+        if (snap.exists) {
+          const t = snap.data() || {};
+          // If already created/performed, return existing create_time
+          return json(200, ok(id, { create_time: t.create_time ?? time ?? Date.now(), transaction: paymeId, state: t.state ?? 1 }));
+        }
+
+        const createTime = Number.isFinite(time) ? time : Date.now();
+        await ref.set({
+          payme_id: paymeId,
+          userNumericId: String(userNumericId),
+          uid,
+          amount: amountTiyin,
+          state: 1,
+          create_time: createTime,
+          perform_time: null,
+          cancel_time: null,
+          reason: null,
+          orderType: "topup",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        return json(200, ok(id, { create_time: createTime, transaction: paymeId, state: 1 }));
+      }
+
+      case "PerformTransaction": {
+        const paymeId = String(params?.id || "").trim();
+        if (!paymeId) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+
+        const ref = txRefByPaymeId(paymeId);
+
+        const res = await db.runTransaction(async (tx) => {
+          const tSnap = await tx.get(ref);
+          if (!tSnap.exists) {
+            throw Object.assign(new Error("tx_not_found"), { code: -31003 });
+          }
+          const t = tSnap.data() || {};
+          if (t.state === 2) {
+            return { perform_time: t.perform_time ?? Date.now(), transaction: paymeId, state: 2 };
+          }
+          if (t.state && t.state < 0) {
+            throw Object.assign(new Error("cannot_perform"), { code: -31008 });
+          }
+
+          const uid = t.uid;
+          const amount = asInt(t.amount);
+          if (!uid) throw Object.assign(new Error("account_not_found"), { code: -31050 });
+
+          const userRef = db.collection("users").doc(uid);
+          const uSnap = await tx.get(userRef);
+          if (!uSnap.exists) throw Object.assign(new Error("account_not_found"), { code: -31050 });
+          const u = uSnap.data() || {};
+          const bal = asInt(u.balanceUZS || 0);
+          const addUZS = Math.trunc(amount / 100);
+
+          // credit balance (UZS)
+          tx.set(userRef, { balanceUZS: (Number.isFinite(bal) ? bal : 0) + addUZS, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+          const performTime = Date.now();
+          tx.set(ref, { state: 2, perform_time: performTime, performedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+          // Also create a topup order (for history)
+          const orderId = `topup_${paymeId}`;
+          const orderRef = db.collection("orders").doc(orderId);
+          tx.set(orderRef, {
+            orderId,
+            uid,
+            numericId: t.userNumericId || null,
+            userName: u.name || null,
+            userPhone: u.phone || null,
+            status: "paid",
+            items: [],
+            totalUZS: addUZS,
+            amountTiyin: amount,
+            provider: "payme",
+            shipping: null,
+            orderType: "topup",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "payme",
+          }, { merge: true });
+
+          // user subcollection
+          const userOrderRef = userRef.collection("orders").doc(orderId);
+          tx.set(userOrderRef, {
+            orderId,
+            uid,
+            numericId: t.userNumericId || null,
+            userName: u.name || null,
+            userPhone: u.phone || null,
+            status: "paid",
+            items: [],
+            totalUZS: addUZS,
+            amountTiyin: amount,
+            provider: "payme",
+            shipping: null,
+            orderType: "topup",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: "payme",
+          }, { merge: true });
+
+          return { perform_time: performTime, transaction: paymeId, state: 2 };
+        });
+
+        return json(200, ok(id, res));
+      }
+
+      case "CancelTransaction": {
+        const paymeId = String(params?.id || "").trim();
+        const reason = params?.reason ?? null;
+        if (!paymeId) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+
+        const ref = txRefByPaymeId(paymeId);
+        const snap = await ref.get();
+        if (!snap.exists) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+        const t = snap.data() || {};
+
+        if (t.state === 2) {
+          // Do not auto-refund here; require manual refund flow
+          return json(200, err(id, -31007, MSG.CANNOT_CANCEL, "performed"));
+        }
+
+        const cancelTime = Date.now();
+        await ref.set({ state: -1, cancel_time: cancelTime, reason }, { merge: true });
+        return json(200, ok(id, { cancel_time: cancelTime, transaction: paymeId, state: -1 }));
+      }
+
+      case "CheckTransaction": {
+        const paymeId = String(params?.id || "").trim();
+        if (!paymeId) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+        const snap = await txRefByPaymeId(paymeId).get();
+        if (!snap.exists) return json(200, err(id, -31003, MSG.TX_NOT_FOUND));
+        const t = snap.data() || {};
+        return json(200, ok(id, {
+          create_time: t.create_time ?? null,
+          perform_time: t.perform_time ?? null,
+          cancel_time: t.cancel_time ?? null,
+          transaction: paymeId,
+          state: t.state ?? null,
+          reason: t.reason ?? null,
+        }));
+      }
+
+      default:
+        return json(200, err(id, -32601, { uz: "Noma'lum metod", ru: "Неизвестный метод", en: "Method not found" }));
     }
-
-    case "CreateTransaction": {
-      if (greenDemo && scenario === "processing") return accountErr(-31099, { uz: "Hisob band", ru: "Счет занят другой транзакцией", en: "Account is busy" });
-      if (greenDemo && scenario === "blocked") return accountErr(-31051, { uz: "Hisob bloklangan", ru: "Счет заблокирован", en: "Account is blocked" });
-      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
-      if (accountMissing) return accountErr();
-      if (amountMissing) return amountErr();
-      if (amountClearlyInvalid) return amountErr();
-      const tid = params.id || ("demo_" + Math.random().toString(16).slice(2));
-      return json(ok(id, {
-        create_time: nowMs(),
-        perform_time: 0,
-        cancel_time: 0,
-        transaction: String(tid),
-        state: 1,
-        reason: null
-      }));
-    }
-
-    case "PerformTransaction": {
-      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
-
-      const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
-      return json(ok(id, {
-        transaction: String(tid),
-        perform_time: nowMs(),
-        state: 2
-      }));
-    }
-
-    case "CancelTransaction": {
-      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
-
-      const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
-      return json(ok(id, {
-        transaction: String(tid),
-        cancel_time: nowMs(),
-        state: -1
-      }));
-    }
-
-    case "CheckTransaction": {
-      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
-
-      const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
-      return json(ok(id, {
-        create_time: nowMs() - 10000,
-        perform_time: 0,
-        cancel_time: 0,
-        transaction: String(tid),
-        state: 1,
-        reason: null
-      }));
-    }
-
-    case "GetStatement": {
-      const from = Number(params.from) || (nowMs() - 86400000);
-      const to = Number(params.to) || nowMs();
-      return json(ok(id, { transactions: [] }));
-    }
-
-    default:
-      // Unknown method
-      return json(err(id, -32601, { uz: "Metod topilmadi", ru: "Метод не найден", en: "Method not found" }));
+  } catch (e) {
+    const code = e?.code;
+    if (code === -31003) return json(200, err(body?.id ?? null, -31003, MSG.TX_NOT_FOUND));
+    if (code === -31050) return json(200, err(body?.id ?? null, -31050, MSG.ACCOUNT_NOT_FOUND));
+    if (code === -31008) return json(200, err(body?.id ?? null, -31008, MSG.INTERNAL, "cancelled"));
+    return json(200, err(body?.id ?? null, -32400, MSG.INTERNAL, String(e?.message || "server")));
   }
 };

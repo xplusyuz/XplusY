@@ -75,18 +75,11 @@ service cloud.firestore {
         && !('isAdmin' in request.resource.data)
         && !('role' in request.resource.data);
 
-      // user update: balansga tegmaydi, admin flag/role yozmaydi.
-      // numericId faqat 1-marta (agar oldin yo'q bo'lsa) yozilishiga ruxsat.
+      // user update: balansga tegmaydi, admin flag/role yozmaydi, omId/numericId o‘zgarmaydi
       allow update: if isOwner(uid)
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['balanceUZS']))
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['isAdmin','role']))
-        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['omId']))
-        && (
-          // numericId o'zgarmasin
-          !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId']))
-          // yoki numericId oldin bo'lmagan bo'lsa, bir marta qo'shishga ruxsat
-          || !('numericId' in resource.data)
-        );
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId','omId']));
 
       allow delete: if isAdmin();
 
@@ -106,27 +99,6 @@ service cloud.firestore {
         allow update: if isAdmin() || (isOwner(uid) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['cancelRequested']));
         allow delete: if isAdmin();
       }
-    }
-
-    /* ========= META COUNTERS (numericId) ========= */
-    // /meta/counters => { nextUserId: 1001 }
-    // Birinchi userga 1000 beriladi.
-    match /meta/counters {
-      allow read: if isAdmin();
-
-      // Birinchi marta yaratish (start): nextUserId = 1001
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['nextUserId'])
-        && request.resource.data.nextUserId is int
-        && request.resource.data.nextUserId == 1001;
-
-      // Keyingi yangilash: faqat +1
-      allow update: if signedIn()
-        && request.resource.data.keys().hasOnly(['nextUserId'])
-        && request.resource.data.nextUserId is int
-        && request.resource.data.nextUserId == resource.data.nextUserId + 1;
-
-      allow delete: if isAdmin();
     }
 
     /* ========= GLOBAL ORDERS ========= */

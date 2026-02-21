@@ -75,18 +75,11 @@ service cloud.firestore {
         && !('isAdmin' in request.resource.data)
         && !('role' in request.resource.data);
 
-      // user update: balansga tegmaydi, admin flag/role yozmaydi.
-      // numericId faqat 1-marta (agar oldin yo'q bo'lsa) yozilishiga ruxsat.
+      // user update: balansga tegmaydi, admin flag/role yozmaydi, omId/numericId o‘zgarmaydi
       allow update: if isOwner(uid)
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['balanceUZS']))
         && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['isAdmin','role']))
-        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['omId']))
-        && (
-          // numericId o'zgarmasin
-          !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId']))
-          // yoki numericId oldin bo'lmagan bo'lsa, bir marta qo'shishga ruxsat
-          || !('numericId' in resource.data)
-        );
+        && !(request.resource.data.diff(resource.data).changedKeys().hasAny(['numericId','omId']));
 
       allow delete: if isAdmin();
 
@@ -100,33 +93,12 @@ service cloud.firestore {
 
       // user subcollection orders (profil tarix uchun)
       match /orders/{orderId} {
-        allow create: if isOwner(uid) && request.resource.data.uid == uid && request.resource.data.createdAt is timestamp;
+        allow create: if isOwner(uid) && request.resource.data.uid == uid ;
         allow read: if isOwner(uid) || isAdmin();
         // user update (ixtiyoriy): faqat o'z orderiga "cancelRequested" kabi yengil flag
         allow update: if isAdmin() || (isOwner(uid) && request.resource.data.diff(resource.data).changedKeys().hasOnly(['cancelRequested']));
         allow delete: if isAdmin();
       }
-    }
-
-    /* ========= META COUNTERS (numericId) ========= */
-    // /meta/counters => { nextUserId: 1001 }
-    // Birinchi userga 1000 beriladi.
-    match /meta/counters {
-      allow read: if isAdmin();
-
-      // Birinchi marta yaratish (start): nextUserId = 1001
-      allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['nextUserId'])
-        && request.resource.data.nextUserId is int
-        && request.resource.data.nextUserId == 1001;
-
-      // Keyingi yangilash: faqat +1
-      allow update: if signedIn()
-        && request.resource.data.keys().hasOnly(['nextUserId'])
-        && request.resource.data.nextUserId is int
-        && request.resource.data.nextUserId == resource.data.nextUserId + 1;
-
-      allow delete: if isAdmin();
     }
 
     /* ========= GLOBAL ORDERS ========= */
@@ -136,7 +108,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.orderType in ['checkout','topup']
-        && request.resource.data.createdAt is timestamp;
+        ;
 
       // READ: admin hammasini ko‘radi, user o‘zini
       allow read: if isAdmin()
@@ -169,6 +141,42 @@ allow delete: if isAdmin();
     match /configs/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    /* ========= USER ID COUNTER ========= */
+    // counters doc lives at /meta/counters
+    match /meta/counters {
+      allow read: if false;
+
+      // Allow create only if setting a starting counter >=1000
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['nextUserId'])
+        && request.resource.data.nextUserId is int
+        && request.resource.data.nextUserId >= 1000;
+
+      // Allow update only as +1 increment of nextUserId
+      allow update: if signedIn()
+        && request.resource.data.keys().hasOnly(['nextUserId'])
+        && request.resource.data.nextUserId is int
+        && resource.data.nextUserId is int
+        && request.resource.data.nextUserId == resource.data.nextUserId + 1;
+
+      allow delete: if false;
+    }
+
+    /* ========= USER ID MAPPING ========= */
+    match /users_by_numeric/{numericId} {
+      // mapping is used by server (admin SDK). Keep private.
+      allow read: if isAdmin();
+      // user can create mapping for self only
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    /* ========= PAYME TRANSACTIONS ========= */
+    match /payme_transactions/{txId} {
+      // written by server (admin SDK). Clients should not access.
+      allow read, write: if isAdmin();
     }
   }
 }
