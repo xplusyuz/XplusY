@@ -234,7 +234,6 @@
         </div>
       </div>
 
-      <div class="card hidden" 
       <div class="card hidden" id="ordersView">
         <div class="card-header">
           <h3>Buyurtmalar</h3>
@@ -305,7 +304,69 @@
           <h3>Buyurtmalar yo‘q</h3>
           <p>Hozircha buyurtmalar kelmagan.</p>
         </div>
+      <!-- Payme transactions (admin) -->
+<div class="card" id="paymeTxCard" style="margin-top:16px">
+  <div class="card-header">
+    <h3><i class="fas fa-credit-card"></i> Payme tranzaksiyalar</h3>
+    <div class="right-actions">
+      <span class="muted" id="paymeTxState">—</span>
+      <button class="btn btn-light btn-sm" id="paymeTxRefresh"><i class="fas fa-sync-alt"></i> Yangilash</button>
+    </div>
+  </div>
+
+  <div class="card-body pad">
+    <div class="form-row" style="margin-bottom:10px">
+      <div class="form-group" style="min-width:260px">
+        <label>Qidiruv</label>
+        <input id="paymeTxSearch" class="form-control" placeholder="payme id / userNumericId / uid">
       </div>
+      <div class="form-group" style="min-width:170px">
+        <label>State</label>
+        <select id="paymeTxStateSel" class="form-control">
+          <option value="">Hammasi</option>
+          <option value="1">1 (created)</option>
+          <option value="2">2 (performed)</option>
+          <option value="-1">-1 (cancelled)</option>
+        </select>
+      </div>
+      <div class="form-group" style="min-width:160px">
+        <label>Sana (dan)</label>
+        <input id="paymeTxFrom" type="date" class="form-control">
+      </div>
+      <div class="form-group" style="min-width:160px">
+        <label>Sana (gacha)</label>
+        <input id="paymeTxTo" type="date" class="form-control">
+      </div>
+      <div class="form-group" style="min-width:120px;align-self:flex-end">
+        <button class="btn btn-light btn-sm" id="paymeTxClear"><i class="fas fa-eraser"></i> Tozalash</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table" id="paymeTxTable">
+        <thead>
+          <tr>
+            <th>Payme ID</th>
+            <th>UserNumericId</th>
+            <th>UID</th>
+            <th>Summa</th>
+            <th>State</th>
+            <th>Create</th>
+            <th>Perform</th>
+            <th>Cancel</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody id="paymeTxTbody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="paymeTxEmpty" style="display:none">
+      <i class="fas fa-credit-card"></i>
+      <h3>Tranzaksiya yo‘q</h3>
+      <p>Hozircha Payme tranzaksiyalar topilmadi.</p>
+    </div>
+  </div>
+</div></div>
 
             <div class="card hidden" id="turnoverView">
         <div class="card-header">
@@ -920,7 +981,7 @@
         a.classList.toggle("active", a.dataset.view===view);
       });
       if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
-      if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} }
+      if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} try{ subscribePaymeTx(); }catch(e){} }
       if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
     }
 
@@ -1756,6 +1817,140 @@
       const o = ordersById.get(oid);
       openOrderModal(o);
     });
+
+
+
+// ===== Payme Transactions (Admin) =====
+let paymeTxUnsub = null;
+let paymeTxCache = [];
+
+function paymeTxToDate(tx){
+  // Prefer createdAt (Firestore TS), else create_time (ms)
+  return toDate(tx.createdAt) || (Number.isFinite(Number(tx.create_time)) ? new Date(Number(tx.create_time)) : null);
+}
+
+function paymeStatePill(st){
+  const n = Number(st);
+  if(n === 2) return `<span class="pill paid"><i class="fas fa-check-circle"></i> 2 (performed)</span>`;
+  if(n === 1) return `<span class="pill pending"><i class="fas fa-hourglass-half"></i> 1 (created)</span>`;
+  if(n === -1) return `<span class="pill cancelled"><i class="fas fa-ban"></i> -1 (cancelled)</span>`;
+  return `<span class="pill pending"><i class="fas fa-circle"></i> ${escapeHtml(String(st??""))}</span>`;
+}
+
+function paymeMsToStr(ms){
+  const n = Number(ms);
+  if(!Number.isFinite(n) || !n) return "—";
+  const d = new Date(n);
+  return isNaN(+d) ? "—" : d.toLocaleString();
+}
+
+function renderPaymeTx(list){
+  const tbody = $("paymeTxTbody");
+  const empty = $("paymeTxEmpty");
+  if(!tbody) return;
+
+  const arr = Array.isArray(list) ? list : [];
+  tbody.innerHTML = "";
+  empty.style.display = arr.length ? "none" : "block";
+  $("paymeTxState").textContent = arr.length ? `${arr.length} ta` : "—";
+
+  if(!arr.length) return;
+
+  for(const t of arr){
+    const tr = document.createElement("tr");
+    const paymeId = t.payme_id || t.id || "";
+    const uid = t.uid || "";
+    const userNumericId = t.userNumericId || t.numericId || "";
+    const sumUZS = Math.trunc(Number(t.amount||0) / 100);
+    tr.innerHTML = `
+      <td><code>${escapeHtml(paymeId)}</code></td>
+      <td>${escapeHtml(String(userNumericId||""))}</td>
+      <td style="max-width:220px"><div class="truncate">${escapeHtml(String(uid||""))}</div></td>
+      <td><b>${Number(sumUZS||0).toLocaleString()}</b> so'm</td>
+      <td>${paymeStatePill(t.state)}</td>
+      <td>${paymeMsToStr(t.create_time)}</td>
+      <td>${paymeMsToStr(t.perform_time)}</td>
+      <td>${paymeMsToStr(t.cancel_time)}</td>
+      <td>${escapeHtml(String(t.reason??"—"))}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function applyPaymeTxFilters(){
+  const q = ($("paymeTxSearch")?.value || "").trim().toLowerCase();
+  const st = ($("paymeTxStateSel")?.value || "").trim();
+  const fromV = $("paymeTxFrom")?.value;
+  const toV = $("paymeTxTo")?.value;
+  const fromD = fromV ? new Date(fromV+"T00:00:00") : null;
+  const toD   = toV ? new Date(toV+"T23:59:59") : null;
+
+  const out = (paymeTxCache||[]).filter(t=>{
+    if(st && String(t.state) !== String(st)) return false;
+    if(q){
+      const blob = [
+        t.id, t.payme_id, t.uid, t.userNumericId, t.numericId, t.reason
+      ].map(x=>String(x||"").toLowerCase()).join(" ");
+      if(!blob.includes(q)) return false;
+    }
+    if(fromD || toD){
+      const d = paymeTxToDate(t);
+      if(!d) return false;
+      if(fromD && d < fromD) return false;
+      if(toD && d > toD) return false;
+    }
+    return true;
+  });
+
+  renderPaymeTx(out);
+}
+
+function subscribePaymeTx(){
+  if(!db) return;
+  try{ paymeTxUnsub?.(); }catch(e){}
+  $("paymeTxState").textContent = "Yuklanmoqda...";
+  // Prefer createdAt (serverTimestamp), fallback to create_time
+  let qy = query(collection(db, "payme_transactions"), orderBy("createdAt", "desc"), limit(300));
+  paymeTxUnsub = onSnapshot(qy, (snap)=>{
+    paymeTxCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    applyPaymeTxFilters();
+  }, async (err)=>{
+    console.warn("payme tx subscribe error (createdAt orderBy)", err);
+    try{
+      // Fallback: orderBy create_time (ms)
+      qy = query(collection(db, "payme_transactions"), orderBy("create_time", "desc"), limit(300));
+      paymeTxUnsub = onSnapshot(qy, (snap)=>{
+        paymeTxCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        applyPaymeTxFilters();
+      }, (err2)=>{
+        console.warn("payme tx subscribe error (create_time orderBy)", err2);
+        $("paymeTxState").textContent = "Xatolik (index / rules)";
+        applyPaymeTxFilters();
+      });
+    }catch(e2){
+      $("paymeTxState").textContent = "Xatolik (index / rules)";
+      applyPaymeTxFilters();
+    }
+  });
+}
+
+// Payme TX UI hooks
+if($("paymeTxRefresh")){
+  $("paymeTxRefresh").addEventListener("click", ()=> subscribePaymeTx());
+}
+["paymeTxSearch","paymeTxStateSel","paymeTxFrom","paymeTxTo"].forEach(id=>{
+  const el = $(id);
+  if(!el) return;
+  el.addEventListener("input", applyPaymeTxFilters);
+  el.addEventListener("change", applyPaymeTxFilters);
+});
+$("paymeTxClear")?.addEventListener("click", ()=>{
+  setIfExists("paymeTxSearch","");
+  setIfExists("paymeTxStateSel","");
+  setIfExists("paymeTxFrom","");
+  setIfExists("paymeTxTo","");
+  applyPaymeTxFilters();
+});
 
     // close order modal
     ["closeOrderModalBtn","closeOrderModalBtn2"].forEach(id=>{
