@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<title>Payme JSON Import</title>
+<style>
+body { font-family: Arial; background:#f4f6f9; padding:40px; }
+.box {
+  max-width:600px;
+  margin:auto;
+  background:#fff;
+  padding:30px;
+  border-radius:12px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.08);
+}
+button {
+  background:#2E8B57;
+  color:white;
+  border:none;
+  padding:10px 20px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.log {
+  margin-top:20px;
+  background:#000;
+  color:#0f0;
+  padding:15px;
+  height:200px;
+  overflow:auto;
+  font-size:13px;
+}
+</style>
+</head>
+<body>
+
+<div class="box">
+  <h2>Payme Transactions JSON Import</h2>
+  <input type="file" id="fileInput" accept=".json"><br><br>
+  <button onclick="importJSON()">Firebase'ga Yuklash</button>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "API_KEY",
+  authDomain: "PROJECT.firebaseapp.com",
+  projectId: "PROJECT_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const logBox = document.getElementById("log");
+
+function log(msg){
+  logBox.innerHTML += msg + "<br>";
+}
+
+window.importJSON = async function(){
+
+  const file = document.getElementById("fileInput").files[0];
+  if(!file){
+    alert("JSON fayl tanlang");
+    return;
+  }
+
+  const text = await file.text();
+  const data = JSON.parse(text);
+
+  const batch = writeBatch(db);
+  const colRef = collection(db, "payme_transactions");
+
+  let count = 0;
+
+  for(const id in data){
+    const docRef = doc(colRef, id);
+    batch.set(docRef, data[id]);
+    log("Qo'shildi: " + id);
+    count++;
+  }
+
+  await batch.commit();
+
+  log("<br><b>Yakunlandi. " + count + " ta hujjat yuklandi.</b>");
+}
+
+</script>
+
+</body>
+</html>
