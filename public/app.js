@@ -3360,9 +3360,41 @@ let unsubUserDoc = null;
     return regionData;
   }
 
-  
-      const num = Math.abs(h) % 1000000;
-    return "OM" + String(num).padStart(6, "0");
+  // Assign sequential numericId starting from 1000 (no OM prefix).
+  async function ensureNumericId(user, userRef, existing){
+    const ex = existing?.numericId;
+    if(typeof ex === "number" && Number.isFinite(ex) && ex >= 1000) return ex;
+    if(typeof ex === "string" && /^\d+$/.test(ex) && parseInt(ex,10) >= 1000) return parseInt(ex,10);
+
+    const assigned = await runTransaction(db, async (tx)=>{
+      const counterRef = doc(db, "meta", "counters");
+      const cSnap = await tx.get(counterRef);
+      let next = 1000;
+      if(cSnap.exists()){
+        const d = cSnap.data() || {};
+        const v = d.nextUserId;
+        if(typeof v === "number" && Number.isFinite(v)) next = v;
+        else if(typeof v === "string" && /^\d+$/.test(v)) next = parseInt(v,10);
+      }
+      if(next < 1000) next = 1000;
+      const id = next;
+
+      // Reserve next id
+      tx.set(counterRef, { nextUserId: id + 1 }, { merge: true });
+
+      // Map numericId -> uid (fast lookup for payments)
+      const mapRef = doc(db, "users_by_numeric", String(id));
+      tx.set(mapRef, { uid: user.uid }, { merge: false });
+
+      // Persist numericId on user doc (once)
+      const base = { numericId: id, updatedAt: serverTimestamp() };
+      if(!(existing && ("createdAt" in existing))) base.createdAt = serverTimestamp();
+      tx.set(userRef, base, { merge: true });
+
+      return id;
+    });
+
+    return assigned;
   }
 
 async function syncUser(user){
@@ -3371,7 +3403,7 @@ async function syncUser(user){
 
     await ensureRegionLoaded();
 
-    // Ensure user has OMXXXXXX and store basic user doc in Firestore (no meta/counters)
+    // Ensure user has sequential numericId (1000+) and store basic user doc in Firestore
     const userRef = doc(db, "users", user.uid);
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
@@ -3379,7 +3411,7 @@ async function syncUser(user){
     const name = (u.name || user.displayName || user.email || "User").toString();
     const phone = (u.phone || "").toString();
 
-    const numericId = (u.numericId || makeOmId(user.uid)).toString();
+    const numericId = await ensureNumericId(user, userRef, u);
 
     await setDoc(userRef, {
       name,
