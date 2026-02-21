@@ -215,6 +215,7 @@ exports.handler = async (event) => {
       String(process.env.PAYME_MODE || "").toLowerCase() === "sandbox";
 
     if (bypass) {
+<<<<<<< HEAD
   // Demo mode for Paycom sandbox:
   // - Controlled via ENV:
   //     PAYME_MODE=sandbox
@@ -350,6 +351,75 @@ exports.handler = async (event) => {
   }
 }
 
+=======
+      const now = Date.now();
+      const txId = String((req.params && req.params.id) || ("demo-" + now));
+      const method = req.method;
+      switch (method) {
+        case "CheckPerformTransaction":
+          return ok({ jsonrpc: "2.0", id, result: { allow: true } });
+
+        case "CreateTransaction":
+          return ok({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              create_time: now,
+              transaction: txId,
+              state: 1,
+              receivers: null,
+            },
+          });
+
+        case "PerformTransaction":
+          return ok({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              transaction: txId,
+              perform_time: now,
+              state: 2,
+            },
+          });
+
+        case "CancelTransaction":
+          return ok({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              transaction: txId,
+              cancel_time: now,
+              state: -1,
+            },
+          });
+
+        case "CheckTransaction":
+          return ok({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              create_time: now,
+              perform_time: now,
+              cancel_time: 0,
+              transaction: txId,
+              state: 2,
+              reason: null,
+            },
+          });
+
+        case "GetStatement":
+          return ok({ jsonrpc: "2.0", id, result: { transactions: [] } });
+
+        case "ChangePassword":
+          return ok({ jsonrpc: "2.0", id, result: { success: true } });
+
+        default:
+          // For any other method in demo mode, just say OK
+          return ok({ jsonrpc: "2.0", id, result: { ok: true } });
+      }
+    }
+
+>>>>>>> 5b8bad20bb853e093f5f2e17b25e2442dc48ee1a
 
     // --- AUTH ---
     const auth = parseBasicAuth(getAuth(event));
