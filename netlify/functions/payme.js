@@ -98,21 +98,24 @@ exports.handler = async (event) => {
     return json(200, { ok: true, note: "Payme JSON-RPC endpoint. POST only." });
   }
 
+  const body = parseBody(event);
+
+  // Paycom/Payme sandbox expects JSON-RPC error with HTTP 200 (not 401).
   if (!authValid(event.headers || {})) {
-    // Payme expects 200 with JSON-RPC error sometimes, but 401 is also acceptable.
-    return json(401, { ok: false, error: "Unauthorized" }, { "www-authenticate": "Basic" });
+    return json(200, {
+      jsonrpc: "2.0",
+      id: body && typeof body.id !== "undefined" ? body.id : null,
+      error: { code: -32504, message: "Unauthorized" }
+    }, { "Content-Type": "application/json" });
   }
 
-  const body = parseBody(event);
   if (!body || !body.method) {
     return json(200, err(body?.id ?? null, -32600, MSG.INTERNAL, "bad_request"));
   }
 
   const { id, method, params } = body;
   const account = (params && params.account) || {};
-  const accountKey = (process.env.PAYME_ACCOUNT_KEY || "user_id").trim();
-  const userIdRaw = (accountKey && account[accountKey] != null ? account[accountKey] : null)
-    ?? account.user_id ?? account.userId ?? account.order_id ?? account.orderId ?? account.uid ?? account.id ?? null;
+  const userIdRaw = account.user_id ?? account.userId ?? null;
   const userNumericId = String(userIdRaw || "").trim();
   const amountTiyin = asInt(params?.amount);
   const minTopup = asInt(process.env.PAYME_MIN_TOPUP_UZS || "1000");
