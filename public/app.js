@@ -291,6 +291,8 @@ const els = {
   profileName: document.getElementById("profileName"),
   profileNumericId: document.getElementById("profileNumericId"),
   profileAvatar: document.getElementById("profileAvatar"),
+  pfFirstName: document.getElementById("pfFirstName"),
+  pfLastName: document.getElementById("pfLastName"),
   pfPhone: document.getElementById("pfPhone"),
   pfRegion: document.getElementById("pfRegion"),
   pfDistrict: document.getElementById("pfDistrict"),
@@ -2888,10 +2890,13 @@ function removePurchasedFromCart(sel){
 ========================= */
 function setBalanceUI(n){
   userBalanceUZS = Number(n||0) || 0;
+  const fmt = userBalanceUZS.toLocaleString();
   const b1 = document.getElementById('balInline');
-  if(b1) b1.textContent = userBalanceUZS.toLocaleString();
+  if(b1) b1.textContent = fmt;
   const b2 = document.getElementById('balProfile');
-  if(b2) b2.textContent = userBalanceUZS.toLocaleString() + " so'm";
+  if(b2) b2.textContent = fmt + " so'm";
+  const b3 = document.getElementById('balHeader');
+  if(b3) b3.textContent = fmt;
 }
 
 async function watchUserDoc(uid){
@@ -3408,20 +3413,50 @@ async function syncUser(user){
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
 
-    const name = (u.name || user.displayName || user.email || "User").toString();
-    const phone = (u.phone || "").toString();
+    const displayName = (user.displayName || "").toString();
+    const fallbackName = (user.email || user.phoneNumber || "User").toString();
+
+    const firstFromDoc = (u.firstName || "").toString().trim();
+    const lastFromDoc = (u.lastName || "").toString().trim();
+
+    const nameFromDoc = (u.name || "").toString().trim();
+    const baseName = nameFromDoc || displayName || fallbackName;
+
+    // If we have "First Last" in displayName, split it
+    const parts = String(displayName || nameFromDoc || "").trim().split(/\s+/).filter(Boolean);
+    const firstGuess = parts[0] || firstFromDoc || "";
+    const lastGuess = parts.slice(1).join(" ") || lastFromDoc || "";
+
+    const phone = (u.phone || user.phoneNumber || "").toString();
 
     const numericId = await ensureNumericId(user, userRef, u);
 
-    await setDoc(userRef, {
-      name,
-      phone,
-      numericId,
-updatedAt: serverTimestamp(),
-      ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge:true });
+    // Write only if something actually changed (Firestore writes = money)
+    const updates = {};
+    if(!uSnap.exists()){
+      updates.createdAt = serverTimestamp();
+    }
+    if((u.numericId == null) || Number(u.numericId) !== Number(numericId)){
+      updates.numericId = numericId;
+    }
+    if(!u.phone && phone){
+      updates.phone = phone;
+    }
+    // name fields
+    if(!firstFromDoc && firstGuess) updates.firstName = firstGuess;
+    if(!lastFromDoc && lastGuess) updates.lastName = lastGuess;
+    const fullName = ((firstFromDoc||firstGuess) + " " + (lastFromDoc||lastGuess)).trim() || baseName;
+    if(!nameFromDoc && fullName) updates.name = fullName;
 
-    const meta = { name, numericId, phone };
+    // init balance once
+    if(u.balanceUZS == null) updates.balanceUZS = 0;
+
+    if(Object.keys(updates).length){
+      updates.updatedAt = serverTimestamp();
+      await setDoc(userRef, updates, { merge:true });
+    }
+
+    const meta = { name: fullName, numericId, phone };
 
 
     renderHeader(user, meta);
@@ -3430,20 +3465,29 @@ updatedAt: serverTimestamp(),
     watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
-    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post));
+    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name)));
     isCompleted = fsDone || !!saved?.profileCompleted || !!saved?.completedAt;
+
+    // name fields
+    if(els.pfFirstName){
+      els.pfFirstName.value = saved?.firstName || u.firstName || (u.name ? String(u.name).split(" ")[0] : "") || "";
+    }
+    if(els.pfLastName){
+      const fromU = u.lastName || (u.name ? String(u.name).split(" ").slice(1).join(" ") : "");
+      els.pfLastName.value = saved?.lastName || fromU || "";
+    }
 
     // phone: auto fill from auth only if empty or first time
     const autoPhone = computePhone(user);
     if(els.pfPhone){
-      els.pfPhone.value = saved?.phone || autoPhone || "";
+      els.pfPhone.value = saved?.phone || u.phone || autoPhone || "";
       // If saved exists but phone empty, still keep autoPhone visible (user can edit only via pencil)
     }
 
     if(els.pfRegion){
-      els.pfRegion.value = saved?.region || "";
-      populateDistricts(saved?.region || "", saved?.district || "");
-      if(els.pfPost) els.pfPost.value = saved?.post || "";
+      els.pfRegion.value = saved?.region || u.region || "";
+      populateDistricts(saved?.region || u.region || "", saved?.district || u.district || "");
+      if(els.pfPost) els.pfPost.value = saved?.post || u.post || "";
     }
 
     // start in view mode; editing only via ✏️
@@ -3481,12 +3525,18 @@ updatedAt: serverTimestamp(),
 
   function save(){
     if(!currentUser) return;
+    const firstName = (els.pfFirstName?.value || "").trim();
+    const lastName = (els.pfLastName?.value || "").trim();
     const phone = (els.pfPhone?.value || "").trim();
     const region = els.pfRegion?.value || "";
     const district = els.pfDistrict?.value || "";
     const post = els.pfPost?.value || "";
 
     // Profile ma'lumotlari majburiy
+    if(!firstName || !lastName){
+      alert("Iltimos, ism va familiyangizni kiriting.");
+      return;
+    }
     if(!phone){
       alert("Iltimos, telefon raqamingizni kiriting.");
       return;
@@ -3497,6 +3547,9 @@ updatedAt: serverTimestamp(),
     }
 
     const payload = {
+      firstName,
+      lastName,
+      name: (firstName + " " + lastName).trim(),
       phone,
       region,
       district,
@@ -3529,6 +3582,14 @@ updatedAt: serverTimestamp(),
     els.avatarBtn.addEventListener("click", (e)=>{
       e.preventDefault();
       if(document.body.classList.contains("signed-in")) open();
+    });
+  }
+  if(document.getElementById("balHeaderBtn")){
+    document.getElementById("balHeaderBtn").addEventListener("click", (e)=>{
+      e.preventDefault();
+      // open profile modal to show wallet/topup area
+      try{ if(document.body.classList.contains("signed-in")) open(); }catch(_){}
+      try{ toast("Balans: " + userBalanceUZS.toLocaleString() + " so'm"); }catch(_){}
     });
   }
   if(els.heroAuthJump){

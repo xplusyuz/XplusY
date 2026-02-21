@@ -247,79 +247,59 @@
         return new Intl.DateTimeFormat("uz-UZ",{dateStyle:"medium",timeStyle:"short"}).format(d);
       }catch{ return "—"; }
     }
+    async function ensureUserDoc(uid, phoneFromAuth, nameFromAuth){
+      const userRef = doc(db, "users", uid);
 
-    
-    async function ensureUserDoc(uid, phone, name){
-  const userRef = doc(db, "users", uid);
+      const res = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        const u = snap.exists() ? (snap.data() || {}) : {};
 
-  // Ensure numericId (1000+) is assigned exactly once via a counter doc (meta/counters)
-  const assignedNumericId = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(userRef);
-    const existing = snap.exists() ? (snap.data() || {}) : {};
-    if (existing.numericId && Number.isFinite(Number(existing.numericId))) {
-      // still update name/phone below outside tx
-      return Number(existing.numericId);
+        // assign numericId once
+        let numericId = Number(u.numericId);
+        if(!Number.isFinite(numericId)){
+          const counterRef = doc(db, "meta", "counters");
+          const cSnap = await tx.get(counterRef);
+          let next = 1000;
+          if (cSnap.exists()) {
+            const d = cSnap.data() || {};
+            if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
+            else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter);
+          }
+          numericId = next;
+          tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
+          tx.set(userRef, {
+            numericId,
+            ...(snap.exists() ? {} : { createdAt: serverTimestamp() }),
+          }, { merge: true });
+          const mapRef = doc(db, "users_by_numeric", String(numericId));
+          tx.set(mapRef, { uid }, { merge: true });
+        }
+
+        const phone = (u.phone || phoneFromAuth || "").toString();
+        const name = (u.name || nameFromAuth || "User").toString();
+
+        const updates = {};
+        if(u.balanceUZS == null) updates.balanceUZS = 0;
+        if(!u.phone && phone) updates.phone = phone;
+        if(!u.name && name) updates.name = name;
+        if(Object.keys(updates).length){
+          updates.updatedAt = serverTimestamp();
+          tx.set(userRef, updates, { merge:true });
+        }
+
+        return { numericId, phone, name };
+      });
+
+      return res;
     }
 
-    const counterRef = doc(db, "meta", "counters");
-    const cSnap = await tx.get(counterRef);
-
-    let next = 1000;
-    if (cSnap.exists()) {
-      const d = cSnap.data() || {};
-      if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
-      else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter); // legacy
-    }
-
-    const numericId = next;
-
-    // advance counter
-    tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
-
-    // set user numericId
-    tx.set(userRef, {
-      numericId,
-      updatedAt: serverTimestamp(),
-      ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge: true });
-
-    // mapping for server-side lookup: users_by_numeric/{numericId} -> { uid }
-    const mapRef = doc(db, "users_by_numeric", String(numericId));
-    tx.set(mapRef, { uid }, { merge: true });
-
-    return numericId;
-  });
-
-  // Update profile fields (not sensitive)
-  const snap2 = await getDoc(userRef);
-  const existing2 = snap2.exists() ? (snap2.data()||{}) : {};
-
-  await setDoc(userRef, {
-    phone: phone || existing2.phone || "",
-    name: name || existing2.name || "",
-    numericId: assignedNumericId,
-    updatedAt: serverTimestamp(),
-    ...(snap2.exists() ? {} : { createdAt: serverTimestamp() })
-  }, { merge:true });
-
-  return {
-    numericId: assignedNumericId,
-    name: (name || existing2.name || "User"),
-    phone: (phone || existing2.phone || "")
-  };
-}
 
     onAuthStateChanged(auth, async (user)=>{
       if(!user){
         location.replace("login.html?next=" + encodeURIComponent("index.html#profile"));
         return;
       }
-      const userRef = doc(db,"users",user.uid);
-      const snap = await getDoc(userRef);
-      const phone = snap.exists() ? (snap.data().phone||"") : "";
-      const name = snap.exists() ? (snap.data().name||"") : (user.displayName||"User");
-
-      const ensured = await ensureUserDoc(user.uid, phone, name);
+      const ensured = await ensureUserDoc(user.uid, user.phoneNumber || "", user.displayName || user.email || "User");
 
       $("#name").textContent = ensured.name || "User";
       // Avatar: always show profile icon (no initials)
