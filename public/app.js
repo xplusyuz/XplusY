@@ -3429,14 +3429,20 @@ async function syncUser(user){
 
     const phone = (u.phone || user.phoneNumber || "").toString();
 
-    const numericId = await ensureNumericId(user, userRef, u);
+    let numericId = null;
+    try{
+      numericId = await ensureNumericId(user, userRef, u);
+    }catch(e){
+      console.warn("numericId assignment skipped (no permission / offline)", e);
+      numericId = u?.numericId ?? null;
+    }
 
     // Write only if something actually changed (Firestore writes = money)
     const updates = {};
     if(!uSnap.exists()){
       updates.createdAt = serverTimestamp();
     }
-    if((u.numericId == null) || Number(u.numericId) !== Number(numericId)){
+    if(numericId != null && ((u.numericId == null) || Number(u.numericId) !== Number(numericId))){
       updates.numericId = numericId;
     }
     if(!u.phone && phone){
