@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>OrzuMall Admin — Kirish</title>
   <style>
-    :root{--bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--border:rgba(255,255,255,.10);--gold:#D4AF37;}
-    *{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1100px 600px at 20% -10%, rgba(212,175,55,.16), transparent 60%),var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    .card{width:min(520px,92vw);border:1px solid var(--border);background:rgba(15,23,42,.75);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
-    .hd{padding:18px 18px 10px 18px;border-bottom:1px solid var(--border);background:rgba(17,28,51,.20)}
+    :root{--bg:#0b1220;--panel:#0f172a;--text:#e5e7eb;--muted:#94a3b8;--border:rgba(255,255,255,.10);--gold:#D4AF37;--green:#2E8B57;}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1100px 600px at 20% -10%, rgba(212,175,55,.16), transparent 60%),var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    .card{width:min(560px,92vw);border:1px solid var(--border);background:rgba(15,23,42,.75);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+    .hd{padding:18px 18px 10px;border-bottom:1px solid var(--border);background:rgba(17,28,51,.20)}
     h1{margin:0;font-size:16px;letter-spacing:.2px}
-    p{margin:8px 0 0 0;color:var(--muted);font-size:13px;line-height:1.5}
+    p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.5}
     .bd{padding:18px}
-    .btn{width:100%;padding:12px 14px;border-radius:16px;border:1px solid rgba(212,175,55,.55);background:rgba(212,175,55,.12);color:var(--text);cursor:pointer;font-weight:700}
-    .btn:hover{background:rgba(212,175,55,.16)}
+    .btn{width:100%;padding:12px 14px;border-radius:16px;border:1px solid rgba(46,139,87,.55);background:rgba(46,139,87,.18);color:var(--text);cursor:pointer;font-weight:800}
+    .btn:hover{background:rgba(46,139,87,.26)}
     .mini{margin-top:12px;font-size:12px;color:var(--muted)}
     .error{margin-top:12px;font-size:12px;color:#fca5a5;display:none}
     code{color:var(--gold)}
@@ -32,13 +33,12 @@
     </div>
   </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-    const ADMIN_EMAIL = "sohibjonmath@gmail.com";
-    // Firebase config (hardcoded) — loop bo‘lmasligi uchun panel bilan 1 xil
-    const cfg = {
+  const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
+  const FIREBASE_CONFIG = {
   "apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
   "authDomain": "xplusy-760fa.firebaseapp.com",
   "databaseURL": "https://xplusy-760fa-default-rtdb.firebaseio.com",
@@ -48,54 +48,43 @@
   "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80",
   "measurementId": "G-459PLJ7P7L"
 };
-    const app = initializeApp(cfg);
-    const auth = getAuth(app);
 
-    setPersistence(auth, browserLocalPersistence).catch(()=>{});
+  const app = initializeApp(FIREBASE_CONFIG);
+  const auth = getAuth(app);
+  setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
-    const btn = document.getElementById("btn");
-    const err = document.getElementById("err");
+  const btn = document.getElementById("btn");
+  const err = document.getElementById("err");
+  const isAdminEmail = (email)=> !!email && ADMIN_EMAILS.includes(String(email).toLowerCase().trim());
 
-    function showError(msg) {
-      err.style.display = "block";
-      err.textContent = msg;
+  function showError(msg){ err.style.display="block"; err.textContent=msg; }
+
+  onAuthStateChanged(auth, async (user)=>{
+    if (user?.email && isAdminEmail(user.email)) location.replace("./panel.html");
+    if (user && !isAdminEmail(user.email)) { try{await signOut(auth);}catch(e){} }
+  });
+
+  btn.addEventListener("click", async ()=>{
+    err.style.display="none";
+    btn.disabled=true; btn.textContent="Kutilmoqda...";
+    try{
+      await setPersistence(auth, browserLocalPersistence);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt:"select_account" });
+      const res = await signInWithPopup(auth, provider);
+      if(!isAdminEmail(res?.user?.email)){
+        await signOut(auth);
+        showError("Ruxsat yo‘q. Faqat admin gmail ishlaydi.");
+        btn.disabled=false; btn.textContent="Google orqali kirish";
+        return;
+      }
+      location.replace("./panel.html");
+    }catch(e){
+      console.error(e);
+      showError("Kirishda xatolik: " + (e?.message||e));
+      btn.disabled=false; btn.textContent="Google orqali kirish";
     }
-
-    onAuthStateChanged(auth, async (user)=>{
-      if (user && user.email && user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
-        location.replace("./panel.html");
-      }
-      if (user && (!user.email || user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase())) {
-        try { await signOut(auth); } catch(e){}
-      }
-    });
-
-    btn.addEventListener("click", async () => {
-      err.style.display = "none";
-      btn.disabled = true;
-      btn.textContent = "Kutilmoqda...";
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
-        const res = await signInWithPopup(auth, provider);
-
-        if (!res?.user?.email || res.user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase()) {
-          await signOut(auth);
-          showError("Ruxsat yo‘q. Faqat admin gmail ishlaydi.");
-          btn.disabled = false;
-          btn.textContent = "Google orqali kirish";
-          return;
-        }
-
-        location.replace("./panel.html");
-      } catch (e) {
-        console.error(e);
-        showError("Kirishda xatolik: " + (e?.message || e));
-        btn.disabled = false;
-        btn.textContent = "Google orqali kirish";
-      }
-    });
-  </script>
+  });
+</script>
 </body>
 </html>
