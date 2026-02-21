@@ -87,6 +87,21 @@ exports.handler = async (event) => {
   const ordersId = account.orders_id || account.order_id || account.orderId || null;
   const omId = account.omID || account.omId || account.omid || null;
 
+  // GREEN DEMO scenario mapping (so Paycom UI "statuses" can be tested by changing orders_id):
+  // Use special order IDs:
+  //   ...01 -> awaiting (allow)
+  //   ...02 -> processing (account busy) -> -31099..-31050 band (we use -31099)
+  //   ...03 -> blocked/paid/canceled -> band (we use -31051)
+  //   ...04 -> not found -> -31050
+  const oidStr = ordersId ? String(ordersId) : "";
+  const scenarioSuffix = oidStr.slice(-2);
+  const scenario =
+    scenarioSuffix === "02" ? "processing" :
+    scenarioSuffix === "03" ? "blocked" :
+    scenarioSuffix === "04" ? "not_found" :
+    scenarioSuffix === "01" ? "awaiting" :
+    null;
+
   const isAuthOk = authValid(event.headers || {});
   const accountMissing = !ordersId || !omId;           // for account tests
   const amountClearlyInvalid = Number.isFinite(amount) && amount === 1; // Paycom invalid-amount test uses 1
@@ -104,8 +119,8 @@ exports.handler = async (event) => {
     return json(err(id, -32504, { uz: "Avtorizatsiya xatosi", ru: "Неверная авторизация", en: "Unauthorized" }));
   }
 
-  // Helper to return "account not found" style codes in required band -31099..-31050
-  const accountErr = () => json(err(id, -31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" }));
+  // Helper to return account-related errors in required band -31099..-31050
+  const accountErr = (code = -31050, msg = { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" }) => json(err(id, code, msg));
 
   // Helper for invalid amount: -31001
   const amountErr = () => json(err(id, -31001, { uz: "Summa noto‘g‘ri", ru: "Неверная сумма", en: "Invalid amount" }));
@@ -117,6 +132,9 @@ exports.handler = async (event) => {
 
   switch (method) {
     case "CheckPerformTransaction": {
+      if (greenDemo && scenario === "processing") return accountErr(-31099, { uz: "Hisob band", ru: "Счет занят другой транзакцией", en: "Account is busy" });
+      if (greenDemo && scenario === "blocked") return accountErr(-31051, { uz: "Hisob bloklangan", ru: "Счет заблокирован", en: "Account is blocked" });
+      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
       if (accountMissing) return accountErr();
       if (amountMissing) return amountErr();
       if (amountClearlyInvalid) return amountErr();
@@ -125,6 +143,9 @@ exports.handler = async (event) => {
     }
 
     case "CreateTransaction": {
+      if (greenDemo && scenario === "processing") return accountErr(-31099, { uz: "Hisob band", ru: "Счет занят другой транзакцией", en: "Account is busy" });
+      if (greenDemo && scenario === "blocked") return accountErr(-31051, { uz: "Hisob bloklangan", ru: "Счет заблокирован", en: "Account is blocked" });
+      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
       if (accountMissing) return accountErr();
       if (amountMissing) return amountErr();
       if (amountClearlyInvalid) return amountErr();
@@ -140,6 +161,8 @@ exports.handler = async (event) => {
     }
 
     case "PerformTransaction": {
+      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
+
       const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
       return json(ok(id, {
         transaction: String(tid),
@@ -149,6 +172,8 @@ exports.handler = async (event) => {
     }
 
     case "CancelTransaction": {
+      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
+
       const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
       return json(ok(id, {
         transaction: String(tid),
@@ -158,6 +183,8 @@ exports.handler = async (event) => {
     }
 
     case "CheckTransaction": {
+      if (greenDemo && scenario === "not_found") return accountErr(-31050, { uz: "Hisob topilmadi", ru: "Счет не найден", en: "Account not found" });
+
       const tid = params.id || params.transaction || ("demo_" + Math.random().toString(16).slice(2));
       return json(ok(id, {
         create_time: nowMs() - 10000,
