@@ -2897,6 +2897,12 @@ function setBalanceUI(n){
   if(b2) b2.textContent = fmt + " so'm";
   const b3 = document.getElementById('balHeader');
   if(b3) b3.textContent = fmt;
+  // pulse header chip on update
+  try{
+    const chip = document.getElementById('balHeaderBtn');
+    if(chip){ chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
+  }catch(_){ }
+
 }
 
 async function watchUserDoc(uid){
@@ -3297,6 +3303,22 @@ function setEditing(on){
 function openProfile(){ goTab("profile"); }
 function closeProfile(){ if(window.__omProfile && window.__omProfile.isProfileComplete && !window.__omProfile.isProfileComplete()){ toast('Avval profilni to‘ldiring.'); return; } goTab("home"); }
 
+function openTopupFocus(){
+  try{ openProfile(); }catch(_){ try{ goTab("profile"); }catch(__){} }
+  // wait for view render then scroll+focus
+  setTimeout(()=>{
+    try{
+      const inp = document.getElementById("topupAmount");
+      if(inp){
+        inp.scrollIntoView({behavior:"smooth", block:"center"});
+        inp.focus();
+      }
+    }catch(_){}
+  }, 220);
+}
+
+
+
 window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
@@ -3590,7 +3612,17 @@ async function syncUser(user){
       if(document.body.classList.contains("signed-in")) open();
     });
   }
-  if(document.getElementById("balHeaderBtn")){
+  
+  const __balPlus = document.getElementById("balTopupQuick");
+  if(__balPlus){
+    __balPlus.addEventListener("click", (e)=>{
+      e.preventDefault();
+      if(!document.body.classList.contains("signed-in")){ toast("Avval kirish qiling."); return; }
+      openTopupFocus();
+    });
+  }
+
+if(document.getElementById("balHeaderBtn")){
     document.getElementById("balHeaderBtn").addEventListener("click", (e)=>{
       e.preventDefault();
       // open profile modal to show wallet/topup area
