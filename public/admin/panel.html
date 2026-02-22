@@ -55,6 +55,8 @@
     .btn{padding:10px 18px;border-radius:var(--border-radius);border:none;cursor:pointer;font-weight:700;display:inline-flex;align-items:center;gap:8px;transition:var(--transition)}
     .btn-primary{background:var(--primary);color:#fff}
     .btn-primary:hover{background:var(--primary-dark)}
+    .btn-secondary{background:var(--secondary);color:#fff}
+    .btn-secondary:hover{filter:brightness(1.05)}
     .btn-light{background:var(--gray-light);color:var(--dark)}
     .btn-sm{padding:6px 12px;font-size:.85rem}
 
@@ -410,9 +412,10 @@
     </div>
   </div>
 </div>
-></div>
+</div>
+      </div>
 
-            <div class="card hidden" id="turnoverView">
+      <div class="card hidden" id="turnoverView">
         <div class="card-header">
           <h3><i class="fas fa-wallet"></i> Hisob aylanmasi tarixi</h3>
           <div class="right-actions">
@@ -1043,18 +1046,47 @@
     }
 
     function setView(view){
-      const views = ["products","stats","settings","orders","turnover"];
-      views.forEach(v=>{
-        const el = document.getElementById(v+"View");
-        if(el) el.classList.toggle("hidden", view!==v);
-      });
-      document.querySelectorAll(".nav-link[data-view]").forEach(a=>{
-        a.classList.toggle("active", a.dataset.view===view);
-      });
-      if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
-      if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} try{ subscribePaymeTx(); }catch(e){} }
-      if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
-    }
+  const views = ["products","stats","settings","orders","turnover"];
+  views.forEach(v=>{
+    const el = document.getElementById(v+"View");
+    if(el) el.classList.toggle("hidden", view!==v);
+  });
+  document.querySelectorAll(".nav-link[data-view]").forEach(a=>{
+    a.classList.toggle("active", a.dataset.view===view);
+  });
+
+  // Header UX: avoid confusion (show only relevant tools)
+  const h2 = document.querySelector(".header h2");
+  const searchBox = document.querySelector(".search-box");
+  const importBtn = $("importJsonBtn");
+  const addBtn = $("addProductBtn");
+  const viewJsonBtn = $("viewJsonBtn");
+
+  const headerMap = {
+    products:  { icon:"fa-box-open",  title:"Mahsulotlar boshqaruvi", tools:true  },
+    orders:    { icon:"fa-receipt",   title:"Buyurtmalar",           tools:false },
+    turnover:  { icon:"fa-wallet",    title:"Hisob aylanmasi",       tools:false },
+    stats:     { icon:"fa-chart-bar", title:"Statistika",            tools:false },
+    settings:  { icon:"fa-gear",      title:"Sozlamalar",            tools:false }
+  };
+  const cfg = headerMap[view] || headerMap.products;
+
+  if(h2){
+    h2.innerHTML = `<i class="fas ${cfg.icon}"></i> ${esc(cfg.title)}`;
+  }
+  if(searchBox) searchBox.style.display = cfg.tools ? "" : "none";
+  if(importBtn) importBtn.style.display = cfg.tools ? "" : "none";
+  if(addBtn) addBtn.style.display = cfg.tools ? "" : "none";
+  if(viewJsonBtn) viewJsonBtn.style.display = cfg.tools ? "" : "none";
+
+  // View-specific loaders
+  if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
+  if(view==="orders"){
+    try{ subscribeOrdersAdmin(); }catch(e){}
+    try{ subscribePaymeTx(); }catch(e){}
+  }
+  if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
+}
 
     function renderStatsPanels(){
       const top = [...state.products].sort((a,b)=>Number(b.popularScore||0)-Number(a.popularScore||0)).slice(0,10);
