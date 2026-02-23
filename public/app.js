@@ -2984,8 +2984,8 @@ async function startTopupPayme(){
     return;
   }
 
-  const amountTiyin = Math.round(amt * 100);
-  const callback = `${location.origin}/payme_return.html`;
+  const { orderId, amountTiyin } = await createTopupOrder(amt);
+  const callback = `${location.origin}/payme_return.html?orderId=${encodeURIComponent(orderId)}`;
 
   if(hint) hint.textContent = "Payme ochilmoqda...";
 
@@ -3007,6 +3007,8 @@ async function startTopupPayme(){
   add("lang", PAYME_LANG || "uz");
   add("callback", callback);
   add(`account[${PAYME_ACCOUNT_KEY}]`, String(numericId));
+  // unique check/bill per attempt (Payme support requirement)
+  add(`account[order_id]`, String(orderId));
 
   document.body.appendChild(form);
   form.submit();
