@@ -356,7 +356,48 @@
     </div>
   </div>
 
-  <div class="paymeTxFilters">
+  <div 
+    <!-- Payme: Yangi test chek yaratish -->
+    <div class="card" style="margin:14px 0 16px 0">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between">
+        <div style="min-width:220px;flex:1">
+          <div style="font-weight:800;margin-bottom:8px"><i class="fas fa-receipt"></i> Yangi test chek (Payme)</div>
+          <div style="font-size:.92rem;opacity:.85;line-height:1.35">
+            Payme support talabi: <b>har test uchun alohida chek</b>. Bu tugma sizga yangi <b>order_id (numericId)</b> yaratib beradi.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;justify-content:flex-end">
+          <div class="form-group" style="margin:0;min-width:180px">
+            <label style="margin-bottom:6px">Summa (UZS)</label>
+            <input id="testCheckAmount" class="form-control" type="number" min="100" step="100" placeholder="Masalan: 250000">
+          </div>
+
+          <div class="form-group" style="margin:0;min-width:170px">
+            <label style="margin-bottom:6px">Turi</label>
+            <select id="testCheckKind" class="form-control">
+              <option value="topup">Balans to‘ldirish (topup)</option>
+              <option value="checkout">Buyurtma (checkout)</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin:0;min-width:220px">
+            <label style="margin-bottom:6px">UID (ixtiyoriy)</label>
+            <input id="testCheckUid" class="form-control" type="text" placeholder="Bo‘sh qoldirsangiz: currentUser.uid">
+          </div>
+
+          <div class="form-group" style="margin:0">
+            <button class="btn btn-primary" id="createTestCheckBtn" title="Yangi chek yaratish">
+              <i class="fas fa-plus-circle"></i> Chek yaratish
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="testCheckResult" style="margin-top:12px;display:none;padding:10px 12px;border-radius:10px;background:rgba(46,139,87,.12);border:1px solid rgba(46,139,87,.25)"></div>
+    </div>
+
+class="paymeTxFilters">
     <div class="form-group" style="margin:0">
       <label style="margin-bottom:6px">Qidiruv</label>
       <input id="paymeTxSearch" class="form-control" placeholder="payme id / numericId / uid">
@@ -725,7 +766,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
       getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc,
-      writeBatch, query, orderBy, serverTimestamp, onSnapshot, limit
+      writeBatch, query, orderBy, serverTimestamp, onSnapshot, limit, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
     import { GoogleAuthProvider, browserLocalPersistence, getAuth, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
     import {
@@ -2118,6 +2159,94 @@ $("paymeTxClear")?.addEventListener("click", ()=>{
       $(id)?.addEventListener("click", ()=> closeModal("orderModal"));
     });
 
+
+document.addEventListener("DOMContentLoaded", () => {
+  try { bindCreateTestCheck(); } catch(e) { console.warn("bindCreateTestCheck error", e); }
+});
+
+// ===============================
+// Payme: Yangi test chek yaratish
+// ===============================
+function formatUZS(n){
+  try { return new Intl.NumberFormat("uz-UZ").format(n); } catch(e){ return String(n); }
+}
+
+function bindCreateTestCheck(){
+  const btn = document.getElementById("createTestCheckBtn");
+  if(!btn) return;
+
+  btn.addEventListener("click", async ()=>{
+    const amountUZS = Number(document.getElementById("testCheckAmount")?.value || 0);
+    const kind = String(document.getElementById("testCheckKind")?.value || "topup");
+    const uidInput = String(document.getElementById("testCheckUid")?.value || "").trim();
+
+    if(!amountUZS || amountUZS < 100){
+      alert("Summa kiriting (kamida 100 so‘m).");
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Yaratilmoqda...';
+
+    try{
+      const countersRef = doc(db, "meta", "counters");
+      const nextNumericId = await runTransaction(db, async (tx)=>{
+        const snap = await tx.get(countersRef);
+        let cur = 1000;
+        if(snap.exists()){
+          const d = snap.data() || {};
+          if(typeof d.orderNumeric === "number") cur = d.orderNumeric;
+        }else{
+          tx.set(countersRef, { orderNumeric: 1000, updatedAt: serverTimestamp() }, { merge:true });
+        }
+        const next = cur + 1;
+        tx.set(countersRef, { orderNumeric: next, updatedAt: serverTimestamp() }, { merge:true });
+        return next;
+      });
+
+      const orderId = String(nextNumericId); // Payme account.order_id uchun eng qulay
+      const uid = uidInput || (window.currentUser?.uid || "admin_test");
+      const amountTiyin = Math.round(amountUZS * 100);
+
+      const orderRef = doc(db, "orders", orderId);
+      await setDoc(orderRef, {
+        numericId: nextNumericId,
+        uid,
+        kind,
+        amountUZS,
+        amountTiyin,
+        status: "pending_payment",
+        createdAt: serverTimestamp(),
+        source: "admin_test_creator"
+      }, { merge: false });
+
+      const box = document.getElementById("testCheckResult");
+      if(box){
+        box.style.display = "block";
+        box.innerHTML =
+          '<div style="font-weight:800;margin-bottom:6px">✅ Chek yaratildi</div>' +
+          '<div style="display:flex;gap:18px;flex-wrap:wrap">' +
+            '<div><div style="opacity:.7;font-size:.85rem">order_id (Payme)</div><div style="font-weight:800;font-size:1.05rem">' + orderId + '</div></div>' +
+            '<div><div style="opacity:.7;font-size:.85rem">Summa</div><div style="font-weight:800">' + formatUZS(amountUZS) + ' so‘m</div><div style="opacity:.7;font-size:.85rem">' + formatUZS(amountTiyin) + ' tiyin</div></div>' +
+            '<div><div style="opacity:.7;font-size:.85rem">Turi</div><div style="font-weight:800">' + kind + '</div></div>' +
+            '<div><div style="opacity:.7;font-size:.85rem">UID</div><div style="font-weight:800;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + uid + '</div></div>' +
+          '</div>' +
+          '<div style="margin-top:10px;opacity:.85;font-size:.9rem">Payme kabinetda test qilishda <b>account.order_id</b> ga shu qiymatni bering.</div>';
+      }
+
+      // Clear amount for next
+      const a = document.getElementById("testCheckAmount");
+      if(a) a.value = "";
+
+    }catch(err){
+      console.error("create test check error", err);
+      alert("Chek yaratishda xato: " + (err?.message || err));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-plus-circle"></i> Chek yaratish';
+    }
+  });
+}
 </script>
 
 <script>
