@@ -2477,7 +2477,7 @@ async function createOrderFromCheckout(){
 
   toast("Buyurtmangiz qabul qilindi");
   goTab("profile");
-}}
+}
 
 let unsubProducts = null;
 
