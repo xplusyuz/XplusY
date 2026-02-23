@@ -76,8 +76,8 @@ function tgOrderStatusHTML(o){
 }
 
 
-import { auth, db } from "./firebase-config.js";
-import { PAYME_MODE, PAYME_LANG, PAYME_KASSA_ID, PAYME_CHECKOUT_BASE, PAYME_ACCOUNT_KEY } from "./payme-config.js";
+import { auth, db, storage } from "./firebase-config.js";
+import { CARDPAY } from "./cardpay-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -101,6 +101,12 @@ import {
   count,
   addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+import {
+  ref as sRef,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
 
 /* =========================
    Toast helper
@@ -2353,13 +2359,6 @@ function applyPayTypeRules(){
       return p && (_normPType(p)==="cargo" || p.prepayRequired===true);
     });
 
-    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
-    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
-    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
-
-    // Disable balance payments (client-side only; balance updates require server/admin)
-    hideOpt(balRb, true);
-
     // helper to hide the whole option row
     const hideOpt = (rb, hide)=>{
       if(!rb) return;
@@ -2368,23 +2367,22 @@ function applyPayTypeRules(){
       rb.disabled = !!hide;
     };
 
-    // Disable balance payments (client-side only; balance updates require server/admin)
-    hideOpt(balRb, true);
+    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
+    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
 
+    // Payme removed -> hide payme option if exists in markup
+    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
+    hideOpt(paymeRb, true);
 
-    // For cargo/prepay: hide cash (and payme if you want only balance)
+    // For cargo/prepay: only BALANCE allowed
     hideOpt(cashRb, hasPrepay);
-    // Keep payme visible unless you enforce balance-only
-    // If you want STRICT: uncomment next line
-    // hideOpt(paymeRb, hasPrepay);
+    hideOpt(balRb, false);
 
+    const note = document.getElementById("payRuleNote");
     if(hasPrepay){
-      // force payme (prepay)
-      if(paymeRb) paymeRb.checked = true;
-      const note = document.getElementById("payRuleNote");
-      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov: PAYME.";
+      if(balRb) balRb.checked = true;
+      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov: BALANS.";
     } else {
-      const note = document.getElementById("payRuleNote");
       if(note) note.textContent = "";
     }
   }catch(e){
@@ -2409,16 +2407,15 @@ async function createOrderFromCheckout(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
   const address = (els.shipAddress?.value || "").trim();
   // Address is optional: user may place order without address
 
-  let payType = getPayType(); // cash | payme | balance
-  if(hasPrepay && payType !== "payme"){
-    toast("Keltirib berish mahsulotlari: faqat PAYME orqali to‘lanadi.");
-    // auto-select balance
+  let payType = getPayType(); // cash | balance
+  if(hasPrepay && payType !== "balance"){
+    toast("Keltirib berish mahsulotlari: faqat BALANS orqali to‘lanadi.");
     const rb = document.querySelector("input[name=paytype][value=balance]");
     if(rb) rb.checked = true;
     payType = "balance";
@@ -2478,16 +2475,9 @@ async function createOrderFromCheckout(){
     toast("Buyurtma yaratilmadi. Qayta urinib ko‘ring.");
   }
 
-  if(payType === "payme"){
-    // ✅ API-only rejim: checkout redirect YO'Q.
-    // To'lov Payme tomondan amalga oshirilganda, Payme serveri /.netlify/functions/payme ga PerformTransaction yuboradi.
-    // Shunda order status = 'paid' bo'ladi.
-    toast("Payme orqali to'lov: buyurtma yaratildi. To'lov tasdiqlangach 'To'landi' bo'ladi.");
-    goTab("profile");
-  }else{
-    toast("Buyurtmangiz qabul qilindi");
-    goTab("profile");
-  }}
+  toast("Buyurtmangiz qabul qilindi");
+  goTab("profile");
+}}
 
 let unsubProducts = null;
 
@@ -2932,86 +2922,144 @@ async function watchUserDoc(uid){
 }catch(e){}
 }
 
-async function createTopupOrder(amountUZS){
-  if(!currentUser) throw new Error('no_user');
-  const amt = Number(amountUZS||0);
-  if(!Number.isFinite(amt) || amt<=0) throw new Error('bad_amount');
+// ===== Manual Card Topup (Admin approve) =====
+function openTopupModal(prefillAmount){
+  const modal = document.getElementById('topupModal');
+  if(!modal) return;
+  if(!document.body.classList.contains('signed-in')){ toast("Avval kirish qiling."); return; }
 
-  // create "order" of type topup so Payme verify (functions) can credit balance
-  const orderId = String(Date.now());
-  const amountTiyin = Math.round(amt * 100);
+  const step1 = document.getElementById('topupStep1');
+  const step2 = document.getElementById('topupStep2');
+  if(step1) step1.hidden = false;
+  if(step2) step2.hidden = true;
 
-  await createOrderDoc({
-    orderId,
-    provider: 'payme',
-    status: 'pending_payment',
-    items: [],
-    totalUZS: amt,
-    amountTiyin,
-    shipping: null,
-    orderType: 'topup'
-  });
+  const amtIn = document.getElementById('payerAmount');
+  const tAmt = document.getElementById('topupAmount');
+  const v = prefillAmount != null ? prefillAmount : (tAmt ? Number(tAmt.value||0) : 0);
+  if(amtIn) amtIn.value = v ? String(v) : "";
 
-  return { orderId, amountTiyin };
+  // prefill from profile
+  try{
+    const full = (profileCache?.name || "").trim();
+    if(full && (!document.getElementById('payerFirst')?.value && !document.getElementById('payerLast')?.value)){
+      const parts = full.split(/\s+/).filter(Boolean);
+      if(parts.length>=1) document.getElementById('payerFirst').value = parts[0];
+      if(parts.length>=2) document.getElementById('payerLast').value = parts.slice(1).join(' ');
+    }
+  }catch(_){ }
+
+  modal.hidden = false;
+  document.body.style.overflow = 'hidden';
 }
 
-async function startTopupPayme(){
-  if(!currentUser){ toast('Avval kirish qiling.'); return; }
+function closeTopupModal(){
+  const modal = document.getElementById('topupModal');
+  if(!modal) return;
+  modal.hidden = true;
+  document.body.style.overflow = '';
+}
 
-  const inp = document.getElementById('topupAmount');
-  const hint = document.getElementById('topupHint');
-  const amt = Number(inp?.value||0);
+function normCard(s){
+  return String(s||'').replace(/[^0-9]/g,'').trim();
+}
 
-  if(!amt || amt<1000){
-    if(hint) hint.textContent = "Minimal: 1000 so'm";
-    toast("Minimal: 1000 so'm");
-    return;
-  }
+async function goTopupStep2(){
+  const hint = document.getElementById('topupHint2');
+  if(hint) hint.textContent = "Chekni yuklang va yuboring.";
 
-  // Get user's numericId (1000+)
+  const card = normCard(document.getElementById('payerCard')?.value);
+  const amt = Number(String(document.getElementById('payerAmount')?.value||'').replace(/[^0-9]/g,''));
+  const first = (document.getElementById('payerFirst')?.value||'').trim();
+  const last  = (document.getElementById('payerLast')?.value||'').trim();
+
+  if(!card || card.length < 12){ toast("Karta raqamini to'g'ri kiriting."); return; }
+  if(!amt || amt < 1000){ toast("Minimal: 1000 so'm"); return; }
+  if(!first || !last){ toast("Ism va familiyani kiriting."); return; }
+
+  // show admin card info
+  const nEl = document.getElementById('adminCardNumber');
+  const hEl = document.getElementById('adminCardHolder');
+  const noteEl = document.getElementById('cardpayNote');
+  const cAmt = document.getElementById('confirmAmount');
+  if(noteEl) noteEl.textContent = (CARDPAY?.note || "");
+  if(hEl) hEl.textContent = CARDPAY?.adminCardHolder || "Karta egasi";
+  if(nEl) nEl.textContent = CARDPAY?.adminCardNumber || "Karta raqami";
+  if(cAmt) cAmt.textContent = amt.toLocaleString() + " so'm";
+
+  const step1 = document.getElementById('topupStep1');
+  const step2 = document.getElementById('topupStep2');
+  if(step1) step1.hidden = true;
+  if(step2) step2.hidden = false;
+}
+
+async function submitTopupRequest(){
+  if(!currentUser) throw new Error('no_user');
+  if(!CARDPAY || CARDPAY.enabled !== true){ toast("CardPay sozlanmagan."); return; }
+  if(String(CARDPAY.adminCardNumber||'').includes('YOUR_')){ toast("Admin karta raqami sozlanmagan (public/cardpay-config.js).", 'error'); return; }
+
+  const hint = document.getElementById('topupHint2');
+  const file = document.getElementById('receiptFile')?.files?.[0] || null;
+  if(!file){ toast("Chek faylini yuklang."); return; }
+
+  const payerCard = normCard(document.getElementById('payerCard')?.value);
+  const amountUZS = Number(String(document.getElementById('payerAmount')?.value||'').replace(/[^0-9]/g,''));
+  const payerFirst = (document.getElementById('payerFirst')?.value||'').trim();
+  const payerLast  = (document.getElementById('payerLast')?.value||'').trim();
+
+  if(!payerCard || payerCard.length < 12) { toast("Karta raqamini to'g'ri kiriting."); return; }
+  if(!amountUZS || amountUZS < 1000) { toast("Minimal: 1000 so'm"); return; }
+  if(!payerFirst || !payerLast) { toast("Ism va familiyani kiriting."); return; }
+
+  // numericId for admin convenience
   let numericId = profileCache?.numericId ?? null;
   if(!numericId){
     try{
-      const uSnap = await getDoc(doc(db, "users", currentUser.uid));
+      const uSnap = await getDoc(doc(db, 'users', currentUser.uid));
       const u = uSnap.exists() ? (uSnap.data()||{}) : {};
       numericId = u.numericId ?? null;
       profileCache = u;
-    }catch(e){}
-  }
-  if(!numericId){
-    toast("User ID topilmadi. Qayta kirib ko'ring.");
-    if(hint) hint.textContent = "User ID topilmadi";
-    return;
+    }catch(_e){}
   }
 
-  const { orderId, amountTiyin } = await createTopupOrder(amt);
-  const callback = `${location.origin}/payme_return.html?orderId=${encodeURIComponent(orderId)}`;
+  const reqId = String(Date.now()) + "_" + Math.random().toString(16).slice(2);
+  const path = `receipts/topups/${currentUser.uid}/${reqId}_${file.name}`;
 
-  if(hint) hint.textContent = "Payme ochilmoqda...";
+  try{
+    if(hint) hint.textContent = "Chek yuklanmoqda...";
 
-  // POST redirect to Payme checkout
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = `${PAYME_CHECKOUT_BASE}/${PAYME_KASSA_ID}`;
-  form.style.display = "none";
+    const storageRef = sRef(storage, path);
+    await uploadBytes(storageRef, file, { contentType: file.type || 'application/octet-stream' });
+    const receiptUrl = await getDownloadURL(storageRef);
 
-  const add = (name, value) => {
-    const i = document.createElement("input");
-    i.type = "hidden";
-    i.name = name;
-    i.value = String(value);
-    form.appendChild(i);
-  };
+    if(hint) hint.textContent = "So'rov yuborilmoqda...";
 
-  add("amount", amountTiyin);
-  add("lang", PAYME_LANG || "uz");
-  add("callback", callback);
-  add(`account[${PAYME_ACCOUNT_KEY}]`, String(numericId));
-  // unique check/bill per attempt (Payme support requirement)
-  add(`account[order_id]`, String(orderId));
+    await setDoc(doc(db, 'topup_requests', reqId), {
+      uid: currentUser.uid,
+      numericId: (numericId != null ? String(numericId) : null),
+      payerFirst,
+      payerLast,
+      payerCardLast4: payerCard.slice(-4),
+      payerCardMasked: payerCard.length >= 12 ? (payerCard.slice(0,4) + " **** **** " + payerCard.slice(-4)) : payerCard,
+      amountUZS: amountUZS,
+      status: 'pending',
+      adminCardNumber: String(CARDPAY.adminCardNumber||'').replace(/\s+/g,' ').trim(),
+      adminCardHolder: String(CARDPAY.adminCardHolder||'').trim(),
+      receiptUrl,
+      receiptPath: path,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      source: 'web'
+    }, { merge: true });
 
-  document.body.appendChild(form);
-  form.submit();
+    toast("So'rov yuborildi. Admin tasdiqlasa balansingiz yangilanadi.");
+    closeTopupModal();
+    // clear
+    try{ document.getElementById('receiptFile').value = ""; }catch(_){ }
+  }catch(e){
+    console.warn('topup submit failed', e);
+    toast("Xatolik. Qayta urinib ko'ring.", 'error');
+    if(hint) hint.textContent = "Xatolik. Qayta urinib ko'ring.";
+  }
 }
 
 
@@ -3057,53 +3105,7 @@ async function payWithBalance(built, shipping){
 
   return orderId;
 }
-async function startPaymeCheckout(){
-  if(!currentUser){
-    toast("Avval kirish qiling (Telefon raqam + parol).");
-    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
-    return;
-  }
-  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
-
-  const built = buildSelectedItems();
-  if(!built.ok){ toast(built.reason); return; }
-
-  const hasPrepay = built.items.some(it=>it.prepayRequired);
-  const note = document.getElementById("payRuleNote");
-  if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
-  }
-
-  if(!undefined || String(undefined).includes("YOUR_")){
-    toast("undefined sozlanmagan (public/payme-config.js).");
-    return;
-  }
-
-  // Payme amount is in tiyin
-  const amountTiyin = Math.round(built.totalUZS * 100);
-  const orderId = String(Date.now()); // digits-only
-
-  try{
-    await createOrderDoc({
-      orderId,
-      provider: "payme",
-      status: "pending_payment",
-      items: built.items,
-      totalUZS: built.totalUZS,
-      amountTiyin,
-    });
-    removePurchasedFromCart(built.sel);
-  }catch(e){
-    console.warn("order create failed", e);
-    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
-    return;
-  }
-
-  const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
-  const params = `m=${undefined};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
-  const b64 = btoa(unescape(encodeURIComponent(params)));
-  window.location.href = `${undefined}/${b64}`;
-}
+// (Payme removed) Cart button now opens standard checkout modal
 
 async function shareOrderTelegram(){
   if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
@@ -3113,7 +3115,7 @@ async function shareOrderTelegram(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
   const orderId = String(Date.now());
@@ -3140,8 +3142,14 @@ async function shareOrderTelegram(){
   window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
 }
 
-els.paymeBtn?.addEventListener("click", startPaymeCheckout);
-els.paymeBtnPage?.addEventListener("click", startPaymeCheckout);
+els.paymeBtn?.addEventListener("click", ()=>{
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  openCheckout();
+});
+els.paymeBtnPage?.addEventListener("click", ()=>{
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  openCheckout();
+});
 els.tgShareBtn?.addEventListener("click", shareOrderTelegram);
 els.tgShareBtnPage?.addEventListener("click", shareOrderTelegram);
 
@@ -3762,8 +3770,31 @@ document.addEventListener('click', (e)=>{
   const t = e.target;
   if(t && (t.id==='topupBtn' || t.closest('#topupBtn'))){
     e.preventDefault();
-    startTopupPayme();
+    openTopupModal();
   }
+});
+
+// Topup modal actions
+document.addEventListener('click', (e)=>{
+  const x = e.target;
+  if(!x) return;
+  if(x.id==='topupClose' || x.id==='topupCancel1') return void closeTopupModal();
+  if(x.id==='topupNext') return void goTopupStep2();
+  if(x.id==='topupBack'){
+    const s1 = document.getElementById('topupStep1');
+    const s2 = document.getElementById('topupStep2');
+    if(s1) s1.hidden = false;
+    if(s2) s2.hidden = true;
+    return;
+  }
+  if(x.id==='topupSubmit') return void submitTopupRequest();
+});
+
+// Close modal on overlay click
+document.addEventListener('click', (e)=>{
+  const modal = document.getElementById('topupModal');
+  if(!modal || modal.hidden) return;
+  if(e.target === modal) closeTopupModal();
 });
 
 

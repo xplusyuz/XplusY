@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn(){ return request.auth != null; }
+
+    function isAdmin(){
+      return signedIn() && request.auth.token.email in [
+        "sohibjonmath@gmail.com"
+      ];
+    }
+
+    function isOwner(uid){
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // USERS
+    match /users/{uid} {
+      allow read: if signedIn();
+
+      // create own doc
+      allow create: if isOwner(uid);
+
+      // user can update own profile but NOT balanceUZS
+      allow update: if isOwner(uid)
+        && !("balanceUZS" in request.resource.data.diff(resource.data).changedKeys());
+
+      // admin can update anything (including balanceUZS)
+      allow update: if isAdmin();
+    }
+
+    // PRODUCTS / ORDERS etc: keep existing behavior (fallback)
+    match /{document=**} {
+      // default deny
+      allow read, write: if false;
+    }
+
+    // TOPUP REQUESTS
+    match /topup_requests/{id} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == resource.data.uid);
+
+      // User creates own request
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amountUZS is number
+        && request.resource.data.amountUZS >= 1000
+        && request.resource.data.receiptUrl is string
+        && request.resource.data.payerFirst is string
+        && request.resource.data.payerLast is string;
+
+      // User cannot update (admin only)
+      allow update, delete: if isAdmin();
+    }
+
+    // ORDERS
+    match /orders/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+  }
+}
