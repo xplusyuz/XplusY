@@ -2949,12 +2949,17 @@ function openTopupModal(prefillAmount){
   }catch(_){ }
 
   modal.hidden = false;
+  // Use the global modal styles (.modalOverlay/.modalCard)
+  try{ modal.classList.add('isOpen'); }catch(_){ }
+  try{ document.body.classList.add('modalOpen'); }catch(_){ }
   document.body.style.overflow = 'hidden';
 }
 
 function closeTopupModal(){
   const modal = document.getElementById('topupModal');
   if(!modal) return;
+  try{ modal.classList.remove('isOpen'); }catch(_){ }
+  try{ document.body.classList.remove('modalOpen'); }catch(_){ }
   modal.hidden = true;
   document.body.style.overflow = '';
 }
