@@ -260,7 +260,7 @@
                 <option value="pending_payment">pending_payment</option>
                 <option value="paid">paid</option>
                 <option value="delivered">delivered</option>
-                <option value="cancelled">cancelled</option>
+                <option value="rejected">rad etildi</option>
               </select>
             </div>
             <div class="form-group" style="min-width:170px">
@@ -332,7 +332,7 @@
                 <option value="">Hammasi</option>
                 <option value="pending">pending</option>
                 <option value="approved">approved</option>
-                <option value="cancelled">cancelled</option>
+                <option value="rejected">rad etildi</option>
               </select>
             </div>
             <div class="form-group" style="min-width:160px">
@@ -378,7 +378,7 @@
 
         <div class="card" id="turnoverHistoryCard">
         <div class="card-header">
-          <h3><i class="fas fa-wallet"></i> Hisob aylanmasi tarixi</h3>
+          <h3><i class="fas fa-wallet"></i> Hisobni to‘ldirish mablag‘lar tarixi</h3>
           <div class="right-actions">
             <span class="muted" id="turnoverState">—</span>
             <button class="btn btn-light btn-sm" id="turnoverRefresh"><i class="fas fa-sync-alt"></i> Yangilash</button>
@@ -387,8 +387,8 @@
 
         <div class="card-body pad">
           <div class="stats-cards" style="margin-bottom:16px">
-            <div class="stat-card"><div class="stat-icon price"><i class="fas fa-circle-plus"></i></div><div class="stat-info"><h3 id="turnoverTopup">0</h3><p>Topup (paid) jami</p></div></div>
-            <div class="stat-card"><div class="stat-icon total"><i class="fas fa-bag-shopping"></i></div><div class="stat-info"><h3 id="turnoverSales">0</h3><p>Checkout (paid) jami</p></div></div>
+            <div class="stat-card"><div class="stat-icon price"><i class="fas fa-circle-plus"></i></div><div class="stat-info"><h3 id="turnoverTopup">0</h3><p>Tasdiqlangan jami</p></div></div>
+            <div class="stat-card" style="display:none"><div class="stat-icon total"><i class="fas fa-bag-shopping"></i></div><div class="stat-info"><h3 id="turnoverSales">0</h3><p>Checkout (paid) jami</p></div></div>
             <div class="stat-card"><div class="stat-icon popular"><i class="fas fa-receipt"></i></div><div class="stat-info"><h3 id="turnoverCount">0</h3><p>Tranzaksiya soni</p></div></div>
             <div class="stat-card"><div class="stat-icon tags"><i class="fas fa-users"></i></div><div class="stat-info"><h3 id="turnoverUsers">0</h3><p>Unique user</p></div></div>
           </div>
@@ -400,20 +400,17 @@
             </div>
             <div class="form-group" style="min-width:180px">
               <label>Tur</label>
-              <select id="turnoverType" class="form-control">
-                <option value="">Hammasi</option>
-                <option value="topup">Topup</option>
-                <option value="checkout">Checkout</option>
+              <select id="turnoverType" class="form-control" disabled>
+                <option value="topup" selected>Topup</option>
               </select>
             </div>
             <div class="form-group" style="min-width:170px">
               <label>Status</label>
               <select id="turnoverStatus" class="form-control">
-                <option value="">Hammasi</option>
-                <option value="paid">paid</option>
-                <option value="pending_payment">pending_payment</option>
-                <option value="pending">pending</option>
-                <option value="cancelled">cancelled</option>
+                <option value="all">Hammasi</option>
+                <option value="approved">Tasdiqlandi</option>
+                <option value="rejected">Rad etildi</option>
+                <option value="pending">Kutilmoqda</option>
               </select>
             </div>
             <div class="form-group" style="min-width:160px">
@@ -445,7 +442,7 @@
           </div>
 
           <div class="muted" style="margin-top:10px">
-            * Bu bo2018lim /orders kolleksiyasidan o2018qib, topup va checkout aylanmasini ko2018rsatadi.
+            * Bu bo‘lim faqat /topup_requests kolleksiyasidagi hisob to‘ldirish tarixini ko‘rsatadi.
           </div>
         </div>
       
@@ -816,208 +813,164 @@
       }
     }
 
-    // ======= Turnover (Hisob aylanmasi) =======
-    let unsubTurnoverOrders = null;
-    let unsubTurnoverTopups = null;
-    state.turnoverOrders = [];
-    state.turnoverTopups = [];
-    state.turnoverAll = [];
+    // ======= Turnover (Hisob to‘ldirish tarixi) =======
+let unsubTurnoverTopups = null;
+state.turnoverTopups = [];
+state.turnoverAll = [];
 
-    function toDateOnly(ts){
-      try{
-        if(!ts) return null;
-        const d = ts.toDate ? ts.toDate() : (ts.seconds ? new Date(ts.seconds*1000) : new Date(ts));
-        if(isNaN(d.getTime())) return null;
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      }catch(e){ return null; }
-    }
+function subscribeTurnover(){
+  try{
+    try{ unsubTurnoverTopups && unsubTurnoverTopups(); }catch(_e){}
+    unsubTurnoverTopups = null;
 
-    function subscribeTurnover(){
-      try{
-        // unsubscribe previous
-        try{ unsubTurnoverOrders && unsubTurnoverOrders(); }catch(_e){}
-        try{ unsubTurnoverTopups && unsubTurnoverTopups(); }catch(_e){}
-        unsubTurnoverOrders = null;
-        unsubTurnoverTopups = null;
+    if(!db){ toast("DB yo‘q","error"); return; }
+    $("turnoverState").textContent = "Yuklanmoqda…";
 
-        if(!db){ toast("DB yo‘q","error"); return; }
-        $("turnoverState").textContent = "Yuklanmoqda…";
+    // Faqat manual topups (topup_requests)
+    const qTopups = query(collection(db,"topup_requests"), orderBy("createdAt","desc"), limit(500));
+    unsubTurnoverTopups = onSnapshot(qTopups, (snap)=>{
+      state.turnoverTopups = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"topup_requests" }));
+      mergeTurnoverSources();
+    }, (err)=>{
+      console.error(err);
+      $("turnoverState").textContent = "Xato (topup_requests)";
+      toast("Topup so‘rovlari o‘qishda xato: "+(err?.message||err),"error");
+    });
 
-        // 1) Checkout/Sales orders
-        const qOrders = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
-        unsubTurnoverOrders = onSnapshot(qOrders, (snap)=>{
-          state.turnoverOrders = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"orders" }));
-          mergeTurnoverSources();
-        }, (err)=>{
-          console.error(err);
-          $("turnoverState").textContent = "Xato (orders)";
-          toast("Orders o‘qishda xato: "+(err?.message||err),"error");
-        });
+  }catch(e){
+    console.error(e);
+    toast("Turnover xato: "+(e?.message||e),"error");
+  }
+}
 
-        // 2) Manual topups (topup_requests)
-        const qTopups = query(collection(db,"topup_requests"), orderBy("createdAt","desc"), limit(500));
-        unsubTurnoverTopups = onSnapshot(qTopups, (snap)=>{
-          state.turnoverTopups = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"topup_requests" }));
-          mergeTurnoverSources();
-        }, (err)=>{
-          console.error(err);
-          // Don't block UI if topup rules/index missing
-          $("turnoverState").textContent = "Xato (topup_requests)";
-          toast("Topup so‘rovlari o‘qishda xato: "+(err?.message||err),"error");
-        });
+function mergeTurnoverSources(){
+  const topups = (state.turnoverTopups||[]).map(r=>{
+    const st0 = String(r.status || "pending").toLowerCase();
+    let st = "pending";
+    if(st0==="approved" || st0==="success" || st0==="paid") st = "approved";
+    else if(st0==="rejected" || st0==="canceled" || st0==="cancelled" || st0==="canceled_by_admin" || st0==="cancelled_by_admin") st = "rejected";
+    else st = "pending";
 
-      }catch(e){
-        console.error(e);
-        toast("Turnover xato: "+(e?.message||e),"error");
+    const createdAt = r.createdAt || r.created_at || r.time || null;
+
+    return {
+      id: r.id,
+      orderId: r.id,
+      uid: r.uid || r.userUid || null,
+      numericId: r.numericId || r.userNumericId || null,
+      userName: r.userName || r.name || null,
+      userPhone: r.userPhone || r.phone || null,
+      orderType: "topup",
+      status: st,
+      totalUZS: Number(r.amountUZS || r.totalUZS || r.amount || 0),
+      createdAt,
+      __src: "topup_requests"
+    };
+  });
+
+  const merged = [...topups].sort((a,b)=>{
+    const da = (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds*1000 : (a.createdAt ? new Date(a.createdAt).getTime():0))) || 0;
+    const dbt = (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds*1000 : (b.createdAt ? new Date(b.createdAt).getTime():0))) || 0;
+    return dbt - da;
+  });
+
+  state.turnoverAll = merged;
+  $("turnoverState").textContent = `Loaded: ${merged.length}`;
+  renderTurnover();
+}
+
+function statusLabel(st){
+  const s = String(st||"pending").toLowerCase();
+  if(s==="approved") return "Tasdiqlandi";
+  if(s==="rejected") return "Rad etildi";
+  return "Kutilmoqda";
+}
+
+function statusClass(st){
+  const s = String(st||"pending").toLowerCase();
+  if(s==="approved") return "paid";
+  if(s==="rejected") return "cancelled";
+  return "pending";
+}
+
+function renderTurnover(){
+  const tbody = $("turnoverTbody");
+  if(!tbody) return;
+
+  const q = String($("turnoverSearch")?.value||"").trim().toLowerCase();
+  const status = String($("turnoverStatus")?.value||"all");
+  const from = $("turnoverFrom")?.value ? new Date($("turnoverFrom").value+"T00:00:00") : null;
+  const to   = $("turnoverTo")?.value   ? new Date($("turnoverTo").value+"T23:59:59") : null;
+
+  const filtered = (state.turnoverAll||[]).filter(o=>{
+    const st = String(o.status||"pending").toLowerCase();
+    if(status!=="all" && st!==status) return false;
+
+    if(from || to){
+      const d = o.createdAt?.toDate ? o.createdAt.toDate() : (o.createdAt?.seconds ? new Date(o.createdAt.seconds*1000) : (o.createdAt ? new Date(o.createdAt) : null));
+      if(d){
+        if(from && d < from) return false;
+        if(to && d > to) return false;
       }
     }
 
-    function mergeTurnoverSources(){
-      // normalize orders + topup_requests into one list for rendering
-      const orders = (state.turnoverOrders||[]).map(o=>{
-        const createdAt = o.createdAt || o.created_at || o.time || null;
-        return {
-          ...o,
-          orderId: o.orderId || o.id,
-          uid: o.uid || o.userUid || o.user_id || null,
-          numericId: o.numericId || o.userNumericId || o.numeric_id || null,
-          userName: o.userName || o.name || null,
-          userPhone: o.userPhone || o.phone || null,
-          provider: o.provider || (o.orderType==="topup" ? "manual" : "checkout"),
-          orderType: (o.orderType || "checkout"),
-          status: (o.status || "pending_payment"),
-          totalUZS: Number(o.totalUZS || o.amountUZS || o.amount || 0),
-          createdAt
-        };
-      });
-
-      const topups = (state.turnoverTopups||[]).map(r=>{
-        const st0 = String(r.status || "pending").toLowerCase();
-        // map manual topup statuses to common ledger statuses
-        let st = st0;
-        if(st0==="approved" || st0==="success") st = "paid";
-        else if(st0==="rejected" || st0==="canceled" || st0==="cancelled" || st0==="canceled_by_admin") st = "cancelled";
-        else if(st0==="pending" || st0==="waiting") st = "pending";
-        const createdAt = r.createdAt || r.created_at || r.time || null;
-        return {
-          id: r.id,
-          orderId: r.id,
-          uid: r.uid || r.userUid || null,
-          numericId: r.numericId || null,
-          userName: r.userName || null,
-          userPhone: r.userPhone || null,
-          provider: "manual",
-          orderType: "topup",
-          status: st,
-          totalUZS: Number(r.amountUZS || r.totalUZS || 0),
-          createdAt
-        };
-      });
-
-      const merged = [...topups, ...orders].sort((a,b)=>{
-        const da = (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds*1000 : (a.createdAt ? new Date(a.createdAt).getTime():0))) || 0;
-        const dbt = (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds*1000 : (b.createdAt ? new Date(b.createdAt).getTime():0))) || 0;
-        return dbt - da;
-      });
-
-      state.turnoverAll = merged;
-
-      const loaded = merged.length;
-      $("turnoverState").textContent = `Loaded: ${loaded}`;
-      renderTurnover();
+    if(q){
+      const hay = [o.id, o.orderId, o.uid, o.numericId, o.userName, o.userPhone].map(x=>String(x||"").toLowerCase()).join(" ");
+      if(!hay.includes(q)) return false;
     }
+    return true;
+  });
 
-    function renderTurnover(){
-      const tbody = $("turnoverTbody");
-      if(!tbody) return;
+  // stats
+  const uids = new Set();
+  let approvedSum = 0;
+  for(const o of filtered){
+    if(o.uid) uids.add(o.uid);
+    const amt = Number(o.totalUZS||0);
+    const st = String(o.status||"pending").toLowerCase();
+    if(st==="approved") approvedSum += amt;
+  }
+  $("turnoverTopup").textContent = approvedSum.toLocaleString();
+  $("turnoverSales").textContent = "0";
+  $("turnoverCount").textContent = String(filtered.length);
+  $("turnoverUsers").textContent = String(uids.size);
 
-      const q = String($("turnoverSearch")?.value||"").trim().toLowerCase();
-      const type = String($("turnoverType")?.value||"all");
-      const status = String($("turnoverStatus")?.value||"all");
-      const from = $("turnoverFrom")?.value ? new Date($("turnoverFrom").value+"T00:00:00") : null;
-      const to   = $("turnoverTo")?.value   ? new Date($("turnoverTo").value+"T23:59:59") : null;
+  // rows
+  tbody.innerHTML = "";
+  if(!filtered.length){
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+    return;
+  }
 
-      const filtered = (state.turnoverAll||[]).filter(o=>{
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        const st = String(o.status||"").toLowerCase();
-        if(type!=="all"){
-          if(type==="topup" && ot!=="topup") return false;
-          if(type==="checkout" && ot==="topup") return false;
-        }
-        if(status!=="all" && st!==status) return false;
+  for(const o of filtered){
+    const st = String(o.status||"pending").toLowerCase();
+    const pill = `<span class="pill ${escapeHtml(statusClass(st))}">${escapeHtml(statusLabel(st))}</span>`;
+    const when = escapeHtml(formatTS(o.createdAt));
+    const sum = Number(o.totalUZS||0).toLocaleString();
+    const canAct = (st==="pending");
+    const actions = canAct ? `
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
+        <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
+      </div>
+    ` : `<span class="muted">—</span>`;
 
-        if(from || to){
-          const d = o.createdAt?.toDate ? o.createdAt.toDate() : (o.createdAt?.seconds ? new Date(o.createdAt.seconds*1000) : (o.createdAt ? new Date(o.createdAt) : null));
-          if(d){
-            if(from && d < from) return false;
-            if(to && d > to) return false;
-          }
-        }
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
+        <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.numericId?`<span class="muted">/ ${escapeHtml(o.numericId)}</span>`:""}</div></td>
+        <td>topup</td>
+        <td>${pill}</td>
+        <td>manual</td>
+        <td><b>${sum}</b> so'm</td>
+        <td>${when}</td>
+        <td>${actions}</td>
+      </tr>
+    `);
+  }
+}
 
-        if(q){
-          const hay = [
-            o.id, o.orderId, o.uid, o.numericId, o.userName, o.userPhone, o.provider
-          ].map(x=>String(x||"").toLowerCase()).join(" ");
-          if(!hay.includes(q)) return false;
-        }
-        return true;
-      });
-
-      // stats
-      const uids = new Set();
-      let topupPaid = 0;
-      let salesPaid = 0;
-      for(const o of filtered){
-        if(o.uid) uids.add(o.uid);
-        const amt = Number(o.totalUZS||0);
-        const st = String(o.status||"").toLowerCase();
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        if(st==="paid"){
-          if(ot==="topup") topupPaid += amt;
-          else salesPaid += amt;
-        }
-      }
-      $("turnoverTopup").textContent = topupPaid.toLocaleString();
-      $("turnoverSales").textContent = salesPaid.toLocaleString();
-      $("turnoverCount").textContent = String(filtered.length);
-      $("turnoverUsers").textContent = String(uids.size);
-
-      // rows
-      tbody.innerHTML = "";
-      if(!filtered.length){
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
-        return;
-      }
-
-      for(const o of filtered){
-        const ot = String(o.orderType||"checkout").toLowerCase();
-        const st = String(o.status||"").toLowerCase();
-        const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
-        const when = escapeHtml(formatTS(o.createdAt));
-        const sum = Number(o.totalUZS||0).toLocaleString();
-        const canAct = (o.__src==="topup_requests") && (st==="pending");
-        const actions = canAct ? `
-          <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
-            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
-          </div>
-        ` : `<span class="muted">—</span>`;
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
-            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.numericId?`<span class="muted">/ ${escapeHtml(o.numericId)}</span>`:""}</div></td>
-            <td>${escapeHtml(ot==="topup"?"topup":"checkout")}</td>
-            <td>${pill}</td>
-            <td>${escapeHtml(o.provider||"")}</td>
-            <td><b>${sum}</b> so'm</td>
-            <td>${when}</td>
-            <td>${actions}</td>
-          </tr>
-        `);
-      }
-    }
-
-    async function fetchProducts(){
+async function fetchProducts(){
       try{
         $("syncState").textContent="Yuklanmoqda...";
         const snap = await getDocs(query(collection(db,"products"), orderBy("createdAt","desc")));
@@ -1987,9 +1940,10 @@ function topupTimeStr(ts){
 function topupBadge(status){
   const st = String(status||'pending');
   const map = {
-    pending: ['#0369a1','pending'],
-    approved: ['#15803d','approved'],
-    cancelled: ['#b91c1c','cancelled']
+    pending: ['#0369a1','kutilmoqda'],
+    approved: ['#15803d','tasdiqlandi'],
+    rejected: ['#b91c1c','rad etildi'],
+    cancelled: ['#b91c1c','rad etildi']
   };
   const v = map[st] || ['#475569', st];
   return `<span class="badge" style="background:${v[0]}10;color:${v[0]};border:1px solid ${v[0]}30">${escapeHtml(v[1])}</span>`;
@@ -2038,7 +1992,11 @@ function applyTopupReqFilters(){
   const to = toV ? new Date(toV+'T23:59:59').getTime() : null;
 
   const out = (topupReqCache||[]).filter(r=>{
-    if(st && String(r.status||'') !== st) return false;
+    if(st){
+      const rs = String(r.status||'');
+      if(st==='rejected'){ if(!(rs==='rejected' || rs==='cancelled')) return false; }
+      else { if(rs !== st) return false; }
+    }
     if(q){
       const hay = `${r.id||''} ${r.uid||''} ${r.numericId||''} ${r.payerCardLast4||''}`.toLowerCase();
       if(!hay.includes(q)) return false;
@@ -2104,9 +2062,11 @@ async function cancelTopup(id){
     const r = rs.data() || {};
     if(String(r.status||'pending') !== 'pending') throw new Error('already_done');
     tx.set(reqRef, {
-      status:'cancelled',
+      status:'rejected',
       adminNote: (note||'').trim(),
+      rejectedAt: serverTimestamp(),
       cancelledAt: serverTimestamp(),
+      rejectedBy: (currentUser?.email || null),
       cancelledBy: (currentUser?.email || null),
       updatedAt: serverTimestamp()
     }, { merge:true });
