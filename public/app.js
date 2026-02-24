@@ -308,6 +308,17 @@ const els = {
   ordersReload: document.getElementById("ordersReload"),
   ordersList: document.getElementById("ordersList"),
   ordersEmpty: document.getElementById("ordersEmpty"),
+  ordersToggle: document.getElementById("ordersToggle"),
+  ordersBody: document.getElementById("ordersBody"),
+  ordersChevron: document.getElementById("ordersChevron"),
+
+  // money history (profile page)
+  moneyHistoryToggle: document.getElementById("moneyHistoryToggle"),
+  moneyHistoryBody: document.getElementById("moneyHistoryBody"),
+  moneyHistoryList: document.getElementById("moneyHistoryList"),
+  moneyHistoryEmpty: document.getElementById("moneyHistoryEmpty"),
+  moneyHistoryCount: document.getElementById("moneyHistoryCount"),
+  moneyHistoryChevron: document.getElementById("moneyHistoryChevron"),
   panelTitle: document.getElementById("panelTitle"),
   panelClose: document.getElementById("panelClose"),
   panelList: document.getElementById("panelList"),
@@ -1549,6 +1560,172 @@ function renderOrders(orders){
   }
 }
 
+
+/* =========================
+   Money history (profile)
+========================= */
+let moneyUnsubTopups = null;
+let moneyUnsubOrders = null;
+
+function normalizeMoneyItems({ topups=[], orders=[] }){
+  const out = [];
+  for(const t of topups){
+    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
+    const st = (t.status||"pending").toString();
+    const amt = Number(t.amountUZS||0) || 0;
+    out.push({
+      kind: "topup",
+      direction: "in",
+      amountUZS: amt,
+      status: st,
+      note: (t.adminNote||""),
+      ts,
+      id: t.id || ""
+    });
+  }
+  for(const o of orders){
+    if((o.provider||"") !== "balance") continue;
+    const ts = o.createdAt || null;
+    const st = (o.status||"").toString();
+    const amt = Number(o.totalUZS||0) || 0;
+    out.push({
+      kind: "order",
+      direction: "out",
+      amountUZS: amt,
+      status: st,
+      orderId: o.orderId || o.id || "",
+      ts,
+      id: o.id || ""
+    });
+  }
+  out.sort((a,b)=>{
+    const ta = (a.ts?.toDate ? +a.ts.toDate() : (a.ts ? +new Date(a.ts) : 0));
+    const tb = (b.ts?.toDate ? +b.ts.toDate() : (b.ts ? +new Date(b.ts) : 0));
+    return tb - ta;
+  });
+  return out;
+}
+
+function renderMoneyHistory(items){
+  if(!els.moneyHistoryList || !els.moneyHistoryEmpty) return;
+  const arr = Array.isArray(items) ? items : [];
+  els.moneyHistoryList.innerHTML = "";
+  els.moneyHistoryEmpty.hidden = arr.length !== 0;
+  if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
+
+  for(const it of arr){
+    const isIn = it.direction === "in";
+    const amt = moneyUZS(Number(it.amountUZS||0));
+    const when = fmtDate(it.ts);
+    const st = (it.status||"").toString();
+
+    let title = "";
+    if(it.kind === "topup") title = "Balans to‘ldirish";
+    else title = "Balansdan to‘lov";
+
+    const left = document.createElement("div");
+    left.style.minWidth = "0";
+    left.innerHTML = `
+      <div class="orderId">${title}${it.kind==="order" && it.orderId ? " (#"+String(it.orderId).slice(-6)+")" : ""}</div>
+      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
+      ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
+    `.trim();
+
+    const right = document.createElement("div");
+    right.className = "orderTotal";
+    right.textContent = (isIn ? "+ " : "- ") + amt;
+
+    const row = document.createElement("div");
+    row.className = "orderItem";
+    row.style.display = "flex";
+    row.style.alignItems = "flex-start";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "12px";
+    row.appendChild(left);
+    row.appendChild(right);
+
+    els.moneyHistoryList.appendChild(row);
+  }
+}
+
+function statusLabel(st, kind){
+  if(kind === "topup"){
+    if(st === "approved") return "Tasdiqlangan";
+    if(st === "canceled" || st === "cancelled") return "Bekor qilingan";
+    if(st === "pending") return "Kutilmoqda";
+    return st;
+  }
+  // orders
+  if(st === "paid") return "To‘langan";
+  if(st === "pending") return "Kutilmoqda";
+  if(st === "canceled") return "Bekor";
+  return st;
+}
+
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function subscribeMoneyHistory(uid){
+  if(!uid || !db) return;
+  try{ moneyUnsubTopups?.(); }catch(e){}
+  try{ moneyUnsubOrders?.(); }catch(e){}
+
+  let topupsArr = [];
+  let ordersArr = [];
+
+  function merge(){
+    const items = normalizeMoneyItems({ topups: topupsArr, orders: ordersArr });
+    renderMoneyHistory(items);
+  }
+
+  // Topups: only this user
+  try{
+    const qTop = query(
+      collection(db, "topup_requests"),
+      where("uid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
+      topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      merge();
+    }, (err)=>{
+      console.error(err);
+      topupsArr = [];
+      merge();
+    });
+  }catch(e){
+    console.error(e);
+  }
+
+  // Orders: read own orders and filter provider=balance
+  try{
+    const qOrd = query(
+      collection(db, "orders"),
+      where("uid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    moneyUnsubOrders = onSnapshot(qOrd, (snap)=>{
+      ordersArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      merge();
+    }, (err)=>{
+      console.error(err);
+      ordersArr = [];
+      merge();
+    });
+  }catch(e){
+    console.error(e);
+  }
+}
+
+
 function subscribeOrders(uid){
   if(!uid) return;
   if(!currentUser) return;
@@ -1575,11 +1752,51 @@ function subscribeOrders(uid){
   });
 }
 
-els.ordersReload?.addEventListener("click", ()=>{
+els.ordersReload?.addEventListener("click", (e)=>{
+  // avoid collapsing when tapping reload
+  try{ e?.stopPropagation?.(); }catch(_){}
   if(!currentUser?.uid){ toast("Avval kirish qiling."); return; }
   try{ subscribeOrders(currentUser.uid); }catch(e){}
-  toast("Buyurtmalar yangilanmoqda...");
+  try{ subscribeMoneyHistory(currentUser.uid); }catch(e){}
+  toast("Yangilanmoqda...");
 });
+
+function setCollapsed(cardEl, bodyEl, on){
+  if(!cardEl || !bodyEl) return;
+  bodyEl.hidden = !!on;
+  cardEl.classList.toggle("collapsed", !!on);
+  const top = cardEl.querySelector(".collapsibleTop");
+  if(top) top.setAttribute("aria-expanded", String(!on));
+}
+
+function toggleCollapsed(cardEl, bodyEl){
+  if(!cardEl || !bodyEl) return;
+  const now = !!bodyEl.hidden;
+  setCollapsed(cardEl, bodyEl, !now ? true : false);
+}
+
+// Collapsible cards on profile view
+(function(){
+  const ordersCard = document.getElementById("ordersHistoryCard");
+  const moneyCard = document.getElementById("moneyHistoryCard");
+
+  const ordersTop = document.getElementById("ordersToggle");
+  const ordersBody = document.getElementById("ordersBody");
+  const moneyTop  = document.getElementById("moneyHistoryToggle");
+  const moneyBody = document.getElementById("moneyHistoryBody");
+
+  function bind(topEl, cardEl, bodyEl){
+    if(!topEl || !cardEl || !bodyEl) return;
+    topEl.addEventListener("click", ()=> toggleCollapsed(cardEl, bodyEl));
+    topEl.addEventListener("keydown", (ev)=>{
+      if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggleCollapsed(cardEl, bodyEl); }
+    });
+  }
+
+  bind(ordersTop, ordersCard, ordersBody);
+  bind(moneyTop,  moneyCard,  moneyBody);
+})();
+
 
 
 /* ===== Mobile SPA Router (Android-like pages) ===== */
@@ -1615,7 +1832,10 @@ function showView(tab){
   if(tab === "fav") renderFavPage();
   if(tab === "cart") renderCartPage();
   if(tab === "profile") {
-    if(currentUser?.uid) try{ subscribeOrders(currentUser.uid); }catch(e){}
+    if(currentUser?.uid){
+      try{ subscribeOrders(currentUser.uid); }catch(e){}
+      try{ subscribeMoneyHistory(currentUser.uid); }catch(e){}
+    }
   }
 
   try{ ensureProfileSocialLinks(); }catch(e){}
