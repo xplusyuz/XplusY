@@ -2,7 +2,7 @@
  * Secure Telegram notifications (Netlify Function)
  *
  * ENV:
- *  - TELEGRAM_BOT_TOKEN
+ *  - ORDER_BOT_TOKEN (preferred) or TELEGRAM_BOT_TOKEN or TG_BOT_TOKEN
  *  - TELEGRAM_ADMIN_CHAT_ID
  *  - FIREBASE_SERVICE_ACCOUNT_B64
  */
@@ -126,9 +126,9 @@ exports.handler = async (event) => {
     const uid = decoded && decoded.uid ? String(decoded.uid) : "";
     if(!uid) return json(401, { ok:false, error:"invalid_token" });
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || "";
-    const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
-    if(botToken.trim().length < 10 || adminChatId.trim().length < 3){
+    const botToken = (process.env.ORDER_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || "").trim();
+    const adminChatId = (process.env.TELEGRAM_ADMIN_CHAT_ID || "").trim();
+    if(botToken.length < 10 || adminChatId.length < 3){
       return json(500, { ok:false, error:"telegram_env_missing" });
     }
 
@@ -153,12 +153,12 @@ exports.handler = async (event) => {
     const html = buildOrderCreatedHTML({ ...o, orderId });
 
     // Send admin notification
-    await sendTelegram(botToken.trim(), adminChatId.trim(), html);
+    await sendTelegram(botToken, adminChatId.trim(), html);
 
     // Optional: send user notification if their chat id exists in profile/order
     const userChatId = String(o.userTgChatId || o.telegramChatId || o.tgChatId || "").trim();
     if(userChatId.length >= 3){
-      try{ await sendTelegram(botToken.trim(), userChatId, html); }catch(_e){}
+      try{ await sendTelegram(botToken, userChatId, html); }catch(_e){}
     }
 
     return json(200, { ok:true });
