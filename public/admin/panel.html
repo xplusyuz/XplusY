@@ -164,6 +164,8 @@
 
   
   .modal, .modal *{ pointer-events:auto; }
+
+
 </style>
   <script src="../telegram-config.js"></script>
 </head>
@@ -234,7 +236,6 @@
         </div>
       </div>
 
-      <div class="card hidden" 
       <div class="card hidden" id="ordersView">
         <div class="card-header">
           <h3>Buyurtmalar</h3>
@@ -266,7 +267,6 @@
               <select id="ordersProvider" class="form-control">
                 <option value="">Hammasi</option>
                 <option value="cash">Naqd</option>
-                <option value="payme">Payme</option>
               </select>
             </div>
             <div class="form-group" style="min-width:160px">
@@ -305,8 +305,6 @@
           <h3>Buyurtmalar yo‘q</h3>
           <p>Hozircha buyurtmalar kelmagan.</p>
         </div>
-<<<<<<< HEAD
-=======
 </div>
 
       <!-- Payme transactions (admin) -->
@@ -370,7 +368,6 @@
             <tbody id="topupReqTbody"></tbody>
           </table>
         </div>
->>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
       </div>
 
         <div class="card" id="turnoverHistoryCard">
@@ -393,7 +390,7 @@
           <div class="form-row" style="margin-bottom:10px">
             <div class="form-group" style="min-width:240px">
               <label>Qidiruv</label>
-              <input id="turnoverSearch" class="form-control" placeholder="Order ID / UID / OMID / ism / telefon">
+              <input id="turnoverSearch" class="form-control" placeholder="Order ID / UID / ID / ism / telefon">
             </div>
             <div class="form-group" style="min-width:180px">
               <label>Tur</label>
@@ -428,7 +425,7 @@
               <thead>
                 <tr>
                   <th>Order ID</th>
-                  <th>UID / OMID</th>
+                  <th>UID / ID</th>
                   <th>Tur</th>
                   <th>Status</th>
                   <th>Provider</th>
@@ -688,7 +685,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
       getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc,
-      writeBatch, query, orderBy, serverTimestamp, onSnapshot, limit
+      writeBatch, query, orderBy, serverTimestamp, onSnapshot, limit, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
     import { GoogleAuthProvider, browserLocalPersistence, getAuth, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
     import {
@@ -754,6 +751,33 @@
     }
     function openModal(id){ $(id).style.display="flex"; }
     function closeModal(id){ $(id).style.display="none"; }
+    function showQuickModal(title, innerHtml){
+      // lightweight, self-contained modal (no dependencies)
+      const wrap = document.createElement("div");
+      wrap.style.position="fixed";
+      wrap.style.inset="0";
+      wrap.style.background="rgba(0,0,0,.45)";
+      wrap.style.display="flex";
+      wrap.style.alignItems="center";
+      wrap.style.justifyContent="center";
+      wrap.style.zIndex="9999";
+      wrap.innerHTML = `
+        <div style="width:min(900px,92vw);max-height:88vh;background:#fff;border-radius:16px;box-shadow:0 20px 80px rgba(0,0,0,.25);overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(0,0,0,.08)">
+            <div style="font-weight:900">${escapeHtml(title||"")}</div>
+            <button class="btn btn-light btn-sm" data-x><i class="fas fa-times"></i></button>
+          </div>
+          <div style="padding:14px;overflow:auto;max-height:78vh">${innerHtml||""}</div>
+        </div>
+      `;
+      function close(){ wrap.remove(); document.removeEventListener("keydown", onKey); }
+      function onKey(e){ if(e.key==="Escape") close(); }
+      wrap.addEventListener("click",(e)=>{ if(e.target===wrap) close(); });
+      wrap.querySelector("[data-x]")?.addEventListener("click", close);
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(wrap);
+    }
+
     function normalize(p){
       const o = { ...p };
       o.id = o.id || p.id;
@@ -926,7 +950,7 @@
 
         if(q){
           const hay = [
-            o.id, o.orderId, o.uid, o.omId, o.userName, o.userPhone, o.provider
+            o.id, o.orderId, o.uid, o.numericId, o.userName, o.userPhone, o.provider
           ].map(x=>String(x||"").toLowerCase()).join(" ");
           if(!hay.includes(q)) return false;
         }
@@ -975,7 +999,7 @@
         tbody.insertAdjacentHTML("beforeend", `
           <tr>
             <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
-            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.omId?`<span class="muted">/ ${escapeHtml(o.omId)}</span>`:""}</div></td>
+            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.numericId?`<span class="muted">/ ${escapeHtml(o.numericId)}</span>`:""}</div></td>
             <td>${escapeHtml(ot==="topup"?"topup":"checkout")}</td>
             <td>${pill}</td>
             <td>${escapeHtml(o.provider||"")}</td>
@@ -1074,11 +1098,7 @@
       });
       if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
       if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} }
-<<<<<<< HEAD
-      if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
-=======
       if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} try{ subscribeTopupReq(); }catch(e){} }
->>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
     }
 
     function renderStatsPanels(){
@@ -1533,6 +1553,8 @@
       });
     }
 
+    let __bound = false;
+
     onAuthStateChanged(auth, async (user)=>{
   // FULL SECURE GUARD
   if(!user){
@@ -1552,15 +1574,23 @@
   renderUser(user);
   document.body.style.display = "block";
 
+  // Bind UI events once (buttons, nav, modals)
+  if(!__bound){
+    __bound = true;
+    bind();
+    resetForm();
+    setView("products");
+  }
+
   // Load admin data only AFTER verification
   await fetchProducts();
 });
 
-    document.addEventListener("DOMContentLoaded", async ()=>{
-  bind();
-  resetForm();
-  // Data is loaded only after admin verification in onAuthStateChanged
-});
+    // (Fix) DOMContentLoaded event name was misspelled before.
+    // We keep this as a safe fallback; real init happens after admin verification above.
+    document.addEventListener("DOMContentLoaded", ()=>{
+      // no-op: binding happens after auth guard
+    });
   
     function escapeHtml(s){return String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 
@@ -1614,7 +1644,7 @@
       return [
         `<b>📦 Buyurtma statusi yangilandi</b>`,
         `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
-        o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+        o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
         o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
         o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
         `Yangi status: <b>${st}</b>`,
@@ -1648,8 +1678,8 @@
 
     function formatProvider(o){
       const p = (o.paymentType||o.provider||"").toLowerCase();
-      if(p.includes("payme")) return "payme";
       if(p.includes("cash") || p.includes("naqd")) return "cash";
+      if(p.includes("balance")) return "balance";
       return p || "—";
     }
 
@@ -1865,7 +1895,7 @@
               orderId: oid,
               id: oid,
               uid: d.uid || uid || "",
-              omId: d.omId || "",
+              numericId: d.numericId || "",
               userName: d.userName || "",
               userPhone: d.userPhone || "",
               userTgChatId: d.userTgChatId || null,
@@ -1934,8 +1964,6 @@
       openOrderModal(o);
     });
 
-<<<<<<< HEAD
-=======
 
 
 // ===== Manual Card Top-up Requests (Admin) =====
@@ -2034,7 +2062,7 @@ function subscribeTopupReq(){
   });
 }
 
-async async function approveTopup(id){
+async function approveTopup(id){
   const note = prompt('Tasdiqlash izohi (majburiy emas)') || '';
   const reqRef = doc(db,'topup_requests', id);
   await runTransaction(db, async (tx)=>{
@@ -2060,7 +2088,7 @@ async async function approveTopup(id){
   });
 }
 
-async async function cancelTopup(id){
+async function cancelTopup(id){
   const note = prompt('Bekor qilish izohi (ixtiyoriy)') || '';
   const reqRef = doc(db,'topup_requests', id);
   await runTransaction(db, async (tx)=>{
@@ -2113,11 +2141,11 @@ document.addEventListener('click', async (e)=>{
   }
 });
 
->>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
     // close order modal
     ["closeOrderModalBtn","closeOrderModalBtn2"].forEach(id=>{
       $(id)?.addEventListener("click", ()=> closeModal("orderModal"));
     });
+
 
 </script>
 

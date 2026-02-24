@@ -50,7 +50,7 @@ function tgOrderCreatedHTML(o){
     `<b>🛒 Yangi buyurtma!</b>`,
     `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
     o.uid ? `UID: <code>${tgEscape(o.uid)}</code>` : "",
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
     o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
     o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
     `To'lov: <b>${pay}</b>`,
@@ -68,7 +68,7 @@ function tgOrderStatusHTML(o){
   return [
     `<b>📦 Buyurtma statusi yangilandi</b>`,
     `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
-    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
+    o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
     `Yangi status: <b>${st}</b>`,
     o.provider ? `To'lov: <b>${tgEscape(o.provider)}</b>` : "",
     `Summa: <b>${sum}</b> so'm`
@@ -76,8 +76,8 @@ function tgOrderStatusHTML(o){
 }
 
 
-import { auth, db } from "./firebase-config.js";
-import { PAYME_MODE, PAYME_LANG, PAYME_KASSA_ID } from "./payme-config.js";
+import { auth, db, storage } from "./firebase-config.js";
+import { CARDPAY } from "./cardpay-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -101,6 +101,12 @@ import {
   count,
   addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+import {
+  ref as sRef,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
 
 /* =========================
    Toast helper
@@ -289,8 +295,10 @@ const els = {
   profileClose: document.getElementById("profileClose"),
   profileLogout: document.getElementById("profileLogout"),
   profileName: document.getElementById("profileName"),
-  profileOmId: document.getElementById("profileOmId"),
+  profileNumericId: document.getElementById("profileNumericId"),
   profileAvatar: document.getElementById("profileAvatar"),
+  pfFirstName: document.getElementById("pfFirstName"),
+  pfLastName: document.getElementById("pfLastName"),
   pfPhone: document.getElementById("pfPhone"),
   pfRegion: document.getElementById("pfRegion"),
   pfDistrict: document.getElementById("pfDistrict"),
@@ -2351,13 +2359,6 @@ function applyPayTypeRules(){
       return p && (_normPType(p)==="cargo" || p.prepayRequired===true);
     });
 
-    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
-    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
-    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
-
-    // Disable balance payments (client-side only; balance updates require server/admin)
-    hideOpt(balRb, true);
-
     // helper to hide the whole option row
     const hideOpt = (rb, hide)=>{
       if(!rb) return;
@@ -2366,23 +2367,22 @@ function applyPayTypeRules(){
       rb.disabled = !!hide;
     };
 
-    // Disable balance payments (client-side only; balance updates require server/admin)
-    hideOpt(balRb, true);
+    const cashRb = document.querySelector('input[name="paytype"][value="cash"]');
+    const balRb  = document.querySelector('input[name="paytype"][value="balance"]');
 
+    // Payme removed -> hide payme option if exists in markup
+    const paymeRb = document.querySelector('input[name="paytype"][value="payme"]');
+    hideOpt(paymeRb, true);
 
-    // For cargo/prepay: hide cash (and payme if you want only balance)
+    // For cargo/prepay: only BALANCE allowed
     hideOpt(cashRb, hasPrepay);
-    // Keep payme visible unless you enforce balance-only
-    // If you want STRICT: uncomment next line
-    // hideOpt(paymeRb, hasPrepay);
+    hideOpt(balRb, false);
 
+    const note = document.getElementById("payRuleNote");
     if(hasPrepay){
-      // force payme (prepay)
-      if(paymeRb) paymeRb.checked = true;
-      const note = document.getElementById("payRuleNote");
-      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov: PAYME.";
+      if(balRb) balRb.checked = true;
+      if(note) note.textContent = "⚠️ Keltirib berish mahsulotlari uchun naqd to‘lov yo‘q. Oldindan to‘lov: BALANS.";
     } else {
-      const note = document.getElementById("payRuleNote");
       if(note) note.textContent = "";
     }
   }catch(e){
@@ -2407,30 +2407,29 @@ async function createOrderFromCheckout(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
   const address = (els.shipAddress?.value || "").trim();
   // Address is optional: user may place order without address
 
-  let payType = getPayType(); // cash | payme | balance
-  if(hasPrepay && payType !== "payme"){
-    toast("Keltirib berish mahsulotlari: faqat PAYME orqali to‘lanadi.");
-    // auto-select balance
-    const rb = document.querySelector("input[name=paytype][value=payme]");
+  let payType = getPayType(); // cash | balance
+  if(hasPrepay && payType !== "balance"){
+    toast("Keltirib berish mahsulotlari: faqat BALANS orqali to‘lanadi.");
+    const rb = document.querySelector("input[name=paytype][value=balance]");
     if(rb) rb.checked = true;
-    payType = "payme";
+    payType = "balance";
   }
   const orderId = String(Date.now()); // digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
   const payload = {
     orderId,
-    provider: payType === 'payme' ? 'payme' : 'cash',
-    status: payType === 'payme' ? 'pending_payment' : 'pending_cash',
+    provider: payType === 'balance' ? 'balance' : 'cash',
+    status: payType === 'balance' ? 'paid' : 'pending_cash',
     items: built.items,
     totalUZS: built.totalUZS,
-    amountTiyin: payType === "payme" ? amountTiyin : null,
+    amountTiyin: null,
     shipping: {
       phone: (els.shipPhone?.value || (profileCache?.phone || profileCache?.phoneNumber || "") || "").toString().trim() || null,
       addressText: address || null,
@@ -2439,28 +2438,46 @@ async function createOrderFromCheckout(){
     }
   };
 
-  try{
-    await createOrderDoc(payload);
+    try{
+    if(payload.provider === "balance"){
+      // Secure balance payment via Netlify Function (admin SDK)
+      const token = await currentUser.getIdToken();
+      const resp = await fetch("/.netlify/functions/balancePay", {
+        method: "POST",
+        headers: {
+          "content-type":"application/json",
+          "authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          items: payload.items,
+          totalUZS: payload.totalUZS,
+          shipping: payload.shipping
+        })
+      });
+      const out = await resp.json().catch(()=>({}));
+      if(!resp.ok || !out.ok){
+        if(out && out.error === "insufficient_balance"){
+          toast("Balans yetarli emas.");
+          return;
+        }
+        throw new Error(out?.error || "balance_pay_failed");
+      }
+    } else {
+      await createOrderDoc(payload);
+    }
+
     removePurchasedFromCart(built.sel);
     updateBadges();
     renderCartPage();
     closeCheckout();
   }catch(e){
     console.warn("checkout order create failed", e);
-    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
-    return;
+    toast("Buyurtma yaratilmadi. Qayta urinib ko‘ring.");
   }
 
-  if(payType === "payme"){
-    // ✅ API-only rejim: checkout redirect YO'Q.
-    // To'lov Payme tomondan amalga oshirilganda, Payme serveri /.netlify/functions/payme ga PerformTransaction yuboradi.
-    // Shunda order status = 'paid' bo'ladi.
-    toast("Payme orqali to'lov: buyurtma yaratildi. To'lov tasdiqlangach 'To'landi' bo'ladi.");
-    goTab("profile");
-  }else{
-    toast("Buyurtmangiz qabul qilindi");
-    goTab("profile");
-  }}
+  toast("Buyurtmangiz qabul qilindi");
+  goTab("profile");
+}
 
 let unsubProducts = null;
 
@@ -2772,49 +2789,31 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
   // pull richer user fields for order + telegram
   const userRef = doc(db, "users", currentUser.uid);
-  let userName = null, userPhone = null, omId = null, userTgChatId = null;
+  let userName = null, userPhone = null, numericId = null, userTgChatId = null;
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
     profileCache = u;
     userName = (u.name || currentUser.displayName || currentUser.email || "User").toString();
     userPhone = (u.phone || "").toString();
-    omId = (u.omId || makeOmId(currentUser.uid)).toString();
+    numericId = (u.numericId != null ? String(u.numericId) : null);
     userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
   }catch(_e){
     userName = (currentUser.displayName || currentUser.email || "User").toString();
     userPhone = "";
-    omId = makeOmId(currentUser.uid);
+    numericId = null;
     userTgChatId = null;
   }
 
   const orderRef = doc(db, "orders", orderId);
 
-  // write order (main)
-  await setDoc(orderRef, {
-    orderId,
-    uid: currentUser.uid,
-    omId,
-    userName,
-    userPhone,
-    userTgChatId,
-    status,
-    items,
-    totalUZS,
-    amountTiyin: amountTiyin ?? null,
-    provider,
-    shipping: shipping || null,
-    orderType,
-    createdAt: serverTimestamp(),
-    source: "web",
-  }, { merge: true });
-
   // also store under user subcollection to avoid composite index for profile history
   const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
-  await setDoc(userOrderRef, {
+
+  const baseOrder = {
     orderId,
     uid: currentUser.uid,
-    omId,
+    numericId,
     userName,
     userPhone,
     userTgChatId,
@@ -2827,7 +2826,31 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     orderType,
     createdAt: serverTimestamp(),
     source: "web",
-  }, { merge: true });
+  };
+
+  // BALANCE checkout: atomically deduct balance and mark as paid
+  if (provider === "balance" && orderType === "checkout") {
+    await runTransaction(db, async (tx) => {
+      const uSnap = await tx.get(userRef);
+      const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+      const bal = Number(u.balanceUZS || 0);
+      const need = Number(totalUZS || 0);
+
+      if (!Number.isFinite(bal) || bal < need) {
+        throw new Error("insufficient_balance");
+      }
+
+      tx.set(userRef, { balanceUZS: bal - need, updatedAt: serverTimestamp() }, { merge: true });
+
+      const paidOrder = { ...baseOrder, status: "paid", provider: "balance", amountTiyin: null };
+      tx.set(orderRef, paidOrder, { merge: true });
+      tx.set(userOrderRef, paidOrder, { merge: true });
+    });
+  } else {
+    // cash checkout or topup/payme orders
+    await setDoc(orderRef, baseOrder, { merge: true });
+    await setDoc(userOrderRef, baseOrder, { merge: true });
+  }
   // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
   try{
     window.__tgSentOrders = window.__tgSentOrders || new Set();
@@ -2857,10 +2880,19 @@ function removePurchasedFromCart(sel){
 ========================= */
 function setBalanceUI(n){
   userBalanceUZS = Number(n||0) || 0;
+  const fmt = userBalanceUZS.toLocaleString();
   const b1 = document.getElementById('balInline');
-  if(b1) b1.textContent = userBalanceUZS.toLocaleString();
+  if(b1) b1.textContent = fmt;
   const b2 = document.getElementById('balProfile');
-  if(b2) b2.textContent = userBalanceUZS.toLocaleString() + " so'm";
+  if(b2) b2.textContent = fmt + " so'm";
+  const b3 = document.getElementById('balHeader');
+  if(b3) b3.textContent = fmt;
+  // pulse header chip on update
+  try{
+    const chip = document.getElementById('balHeaderBtn');
+    if(chip){ chip.classList.remove('pulse'); void chip.offsetWidth; chip.classList.add('pulse'); }
+  }catch(_){ }
+
 }
 
 async function watchUserDoc(uid){
@@ -2890,9 +2922,6 @@ async function watchUserDoc(uid){
 }catch(e){}
 }
 
-<<<<<<< HEAD
-async function createTopupOrder(amountUZS){
-=======
 // ===== Manual Card Topup (Admin approve) =====
 function openTopupModal(prefillAmount){
   const modal = document.getElementById('topupModal');
@@ -2981,29 +3010,19 @@ async function goTopupStep2(){
 }
 
 async function submitTopupRequest(){
->>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
   if(!currentUser) throw new Error('no_user');
-  const amt = Number(amountUZS||0);
-  if(!Number.isFinite(amt) || amt<=0) throw new Error('bad_amount');
+  if(!CARDPAY || CARDPAY.enabled !== true){ toast("CardPay sozlanmagan."); return; }
+  if(String(CARDPAY.adminCardNumber||'').includes('YOUR_')){ toast("Admin karta raqami sozlanmagan (public/cardpay-config.js).", 'error'); return; }
 
-  // create "order" of type topup so Payme verify (functions) can credit balance
-  const orderId = String(Date.now());
-  const amountTiyin = Math.round(amt * 100);
+  const hint = document.getElementById('topupHint2');
+  const file = document.getElementById('receiptFile')?.files?.[0] || null;
+  if(!file){ toast("Chek faylini yuklang."); return; }
 
-  await createOrderDoc({
-    orderId,
-    provider: 'payme',
-    status: 'pending_payment',
-    items: [],
-    totalUZS: amt,
-    amountTiyin,
-    shipping: null,
-    orderType: 'topup'
-  });
+  const payerCard = normCard(document.getElementById('payerCard')?.value);
+  const amountUZS = Number(String(document.getElementById('payerAmount')?.value||'').replace(/[^0-9]/g,''));
+  const payerFirst = (document.getElementById('payerFirst')?.value||'').trim();
+  const payerLast  = (document.getElementById('payerLast')?.value||'').trim();
 
-<<<<<<< HEAD
-  return { orderId, amountTiyin };
-=======
   if(!payerCard || payerCard.length < 12) { toast("Karta raqamini to'g'ri kiriting."); return; }
   if(!amountUZS || amountUZS < 1000) { toast("Minimal: 1000 so'm"); return; }
   if(!payerFirst || !payerLast) { toast("Ism va familiyani kiriting."); return; }
@@ -3096,33 +3115,8 @@ async function submitTopupRequest(){
     toast("Xatolik. Qayta urinib ko'ring.", 'error');
     if(hint) hint.textContent = "Xatolik. Qayta urinib ko'ring.";
   }
->>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
 }
 
-async function startTopupPayme(){
-  if(!currentUser){ toast('Avval kirish qiling.'); return; }
-  const inp = document.getElementById('topupAmount');
-  const hint = document.getElementById('topupHint');
-  const amt = Number(inp?.value||0);
-  if(!amt || amt<1000){
-    if(hint) hint.textContent = "Minimal: 1000 so'm";
-    toast("Minimal: 1000 so'm");
-    return;
-  }
-  if(hint) hint.textContent = "Payme ochilmoqda...";
-
-  try{
-    const { orderId, amountTiyin } = await createTopupOrder(amt);
-    // API-only: checkout redirect yo‘q. To‘lov Payme’dan kelganda server balansni oshiradi.
-    if(hint) hint.textContent = `Depozit yaratildi: ${orderId}. Test: Payme sandbox’da account.order_id=${orderId}, amount=${amountTiyin}`;
-    toast(`Depozit yaratildi: ${orderId}`);
-    return;
-  }catch(e){
-    console.warn(e);
-    if(hint) hint.textContent = "Xato. Qayta urinib ko'ring.";
-    toast("Balans to'ldirish yaratilmadi.");
-  }
-}
 
 async function payWithBalance(built, shipping){
   if(!currentUser) throw new Error('no_user');
@@ -3146,7 +3140,7 @@ async function payWithBalance(built, shipping){
     const base = {
       orderId,
       uid,
-      omId: u.omId || null,
+      numericId: (u.numericId != null ? String(u.numericId) : null),
       userName: u.name || null,
       userPhone: u.phone || null,
       userTgChatId: (u.telegramChatId||u.tgChatId||null),
@@ -3166,53 +3160,7 @@ async function payWithBalance(built, shipping){
 
   return orderId;
 }
-async function startPaymeCheckout(){
-  if(!currentUser){
-    toast("Avval kirish qiling (Telefon raqam + parol).");
-    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
-    return;
-  }
-  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
-
-  const built = buildSelectedItems();
-  if(!built.ok){ toast(built.reason); return; }
-
-  const hasPrepay = built.items.some(it=>it.prepayRequired);
-  const note = document.getElementById("payRuleNote");
-  if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
-  }
-
-  if(!undefined || String(undefined).includes("YOUR_")){
-    toast("undefined sozlanmagan (public/payme-config.js).");
-    return;
-  }
-
-  // Payme amount is in tiyin
-  const amountTiyin = Math.round(built.totalUZS * 100);
-  const orderId = String(Date.now()); // digits-only
-
-  try{
-    await createOrderDoc({
-      orderId,
-      provider: "payme",
-      status: "pending_payment",
-      items: built.items,
-      totalUZS: built.totalUZS,
-      amountTiyin,
-    });
-    removePurchasedFromCart(built.sel);
-  }catch(e){
-    console.warn("order create failed", e);
-    toast("Buyurtma yaratilmadi. Qayta urinib ko'ring.");
-    return;
-  }
-
-  const returnUrl = `${location.origin}/payme_return.html?order_id=${encodeURIComponent(orderId)}`;
-  const params = `m=${undefined};ac.order_id=${orderId};a=${amountTiyin};l=${PAYME_LANG};c=${encodeURIComponent(returnUrl)}`;
-  const b64 = btoa(unescape(encodeURIComponent(params)));
-  window.location.href = `${undefined}/${b64}`;
-}
+// (Payme removed) Cart button now opens standard checkout modal
 
 async function shareOrderTelegram(){
   if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
@@ -3222,7 +3170,7 @@ async function shareOrderTelegram(){
   const hasPrepay = built.items.some(it=>it.prepayRequired);
   const note = document.getElementById("payRuleNote");
   if(note){
-    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: PAYME." : "";
+    note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
   const orderId = String(Date.now());
@@ -3249,8 +3197,14 @@ async function shareOrderTelegram(){
   window.open(`https://t.me/share/url?url=&text=${msg}`, "_blank");
 }
 
-els.paymeBtn?.addEventListener("click", startPaymeCheckout);
-els.paymeBtnPage?.addEventListener("click", startPaymeCheckout);
+els.paymeBtn?.addEventListener("click", ()=>{
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  openCheckout();
+});
+els.paymeBtnPage?.addEventListener("click", ()=>{
+  if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
+  openCheckout();
+});
 els.tgShareBtn?.addEventListener("click", shareOrderTelegram);
 els.tgShareBtnPage?.addEventListener("click", shareOrderTelegram);
 
@@ -3414,6 +3368,22 @@ function setEditing(on){
 function openProfile(){ goTab("profile"); }
 function closeProfile(){ if(window.__omProfile && window.__omProfile.isProfileComplete && !window.__omProfile.isProfileComplete()){ toast('Avval profilni to‘ldiring.'); return; } goTab("home"); }
 
+function openTopupFocus(){
+  try{ openProfile(); }catch(_){ try{ goTab("profile"); }catch(__){} }
+  // wait for view render then scroll+focus
+  setTimeout(()=>{
+    try{
+      const inp = document.getElementById("topupAmount");
+      if(inp){
+        inp.scrollIntoView({behavior:"smooth", block:"center"});
+        inp.focus();
+      }
+    }catch(_){}
+  }, 220);
+}
+
+
+
 window.__omProfile = (function(){
   let regionData = null;
   let currentUser = null;
@@ -3440,11 +3410,11 @@ let unsubUserDoc = null;
 
   function renderHeader(user, meta){
     const name = (meta?.name || user?.displayName || user?.email || user?.phoneNumber || "User").toString();
-    const omId = (meta?.omId || "").toString();
+    const numericId = (meta?.numericId || "").toString();
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
     if(els.profileName) els.profileName.textContent = name;
-    if(els.profileOmId) els.profileOmId.textContent = omId ? `ID: ${omId}` : "—";
+    if(els.profileNumericId) els.profileNumericId.textContent = numericId ? `ID: ${numericId}` : "—";
 
     if(els.profileAvatar){
       const photo = user.photoURL;
@@ -3482,16 +3452,41 @@ let unsubUserDoc = null;
     return regionData;
   }
 
-  
-  function makeOmId(uid){
-    // Deterministic 6-digit OM ID derived from uid (no Firestore meta/counters needed)
-    let h = 0;
-    for(let i=0;i<uid.length;i++){
-      h = ((h << 5) - h) + uid.charCodeAt(i);
-      h |= 0; // 32-bit
-    }
-    const num = Math.abs(h) % 1000000;
-    return "OM" + String(num).padStart(6, "0");
+  // Assign sequential numericId starting from 1000 (no OM prefix).
+  async function ensureNumericId(user, userRef, existing){
+    const ex = existing?.numericId;
+    if(typeof ex === "number" && Number.isFinite(ex) && ex >= 1000) return ex;
+    if(typeof ex === "string" && /^\d+$/.test(ex) && parseInt(ex,10) >= 1000) return parseInt(ex,10);
+
+    const assigned = await runTransaction(db, async (tx)=>{
+      const counterRef = doc(db, "meta", "counters");
+      const cSnap = await tx.get(counterRef);
+      let next = 1000;
+      if(cSnap.exists()){
+        const d = cSnap.data() || {};
+        const v = d.nextUserId;
+        if(typeof v === "number" && Number.isFinite(v)) next = v;
+        else if(typeof v === "string" && /^\d+$/.test(v)) next = parseInt(v,10);
+      }
+      if(next < 1000) next = 1000;
+      const id = next;
+
+      // Reserve next id
+      tx.set(counterRef, { nextUserId: id + 1 }, { merge: true });
+
+      // Map numericId -> uid (fast lookup for payments)
+      const mapRef = doc(db, "users_by_numeric", String(id));
+      tx.set(mapRef, { uid: user.uid }, { merge: false });
+
+      // Persist numericId on user doc (once)
+      const base = { numericId: id, updatedAt: serverTimestamp() };
+      if(!(existing && ("createdAt" in existing))) base.createdAt = serverTimestamp();
+      tx.set(userRef, base, { merge: true });
+
+      return id;
+    });
+
+    return assigned;
   }
 
 async function syncUser(user){
@@ -3500,25 +3495,61 @@ async function syncUser(user){
 
     await ensureRegionLoaded();
 
-    // Ensure user has OMXXXXXX and store basic user doc in Firestore (no meta/counters)
+    // Ensure user has sequential numericId (1000+) and store basic user doc in Firestore
     const userRef = doc(db, "users", user.uid);
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
 
-    const name = (u.name || user.displayName || user.email || "User").toString();
-    const phone = (u.phone || "").toString();
+    const displayName = (user.displayName || "").toString();
+    const fallbackName = (user.email || user.phoneNumber || "User").toString();
 
-    const omId = (u.omId || makeOmId(user.uid)).toString();
+    const firstFromDoc = (u.firstName || "").toString().trim();
+    const lastFromDoc = (u.lastName || "").toString().trim();
 
-    await setDoc(userRef, {
-      name,
-      phone,
-      omId,
-updatedAt: serverTimestamp(),
-      ...(uSnap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge:true });
+    const nameFromDoc = (u.name || "").toString().trim();
+    const baseName = nameFromDoc || displayName || fallbackName;
 
-    const meta = { name, omId, phone };
+    // If we have "First Last" in displayName, split it
+    const parts = String(displayName || nameFromDoc || "").trim().split(/\s+/).filter(Boolean);
+    const firstGuess = parts[0] || firstFromDoc || "";
+    const lastGuess = parts.slice(1).join(" ") || lastFromDoc || "";
+
+    const phone = (u.phone || user.phoneNumber || "").toString();
+
+    let numericId = null;
+    try{
+      numericId = await ensureNumericId(user, userRef, u);
+    }catch(e){
+      console.warn("numericId assignment skipped (no permission / offline)", e);
+      numericId = u?.numericId ?? null;
+    }
+
+    // Write only if something actually changed (Firestore writes = money)
+    const updates = {};
+    if(!uSnap.exists()){
+      updates.createdAt = serverTimestamp();
+    }
+    if(numericId != null && ((u.numericId == null) || Number(u.numericId) !== Number(numericId))){
+      updates.numericId = numericId;
+    }
+    if(!u.phone && phone){
+      updates.phone = phone;
+    }
+    // name fields
+    if(!firstFromDoc && firstGuess) updates.firstName = firstGuess;
+    if(!lastFromDoc && lastGuess) updates.lastName = lastGuess;
+    const fullName = ((firstFromDoc||firstGuess) + " " + (lastFromDoc||lastGuess)).trim() || baseName;
+    if(!nameFromDoc && fullName) updates.name = fullName;
+
+    // init balance once
+    if(u.balanceUZS == null) updates.balanceUZS = 0;
+
+    if(Object.keys(updates).length){
+      updates.updatedAt = serverTimestamp();
+      await setDoc(userRef, updates, { merge:true });
+    }
+
+    const meta = { name: fullName, numericId, phone };
 
 
     renderHeader(user, meta);
@@ -3527,20 +3558,29 @@ updatedAt: serverTimestamp(),
     watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
-    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post));
+    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name)));
     isCompleted = fsDone || !!saved?.profileCompleted || !!saved?.completedAt;
+
+    // name fields
+    if(els.pfFirstName){
+      els.pfFirstName.value = saved?.firstName || u.firstName || (u.name ? String(u.name).split(" ")[0] : "") || "";
+    }
+    if(els.pfLastName){
+      const fromU = u.lastName || (u.name ? String(u.name).split(" ").slice(1).join(" ") : "");
+      els.pfLastName.value = saved?.lastName || fromU || "";
+    }
 
     // phone: auto fill from auth only if empty or first time
     const autoPhone = computePhone(user);
     if(els.pfPhone){
-      els.pfPhone.value = saved?.phone || autoPhone || "";
+      els.pfPhone.value = saved?.phone || u.phone || autoPhone || "";
       // If saved exists but phone empty, still keep autoPhone visible (user can edit only via pencil)
     }
 
     if(els.pfRegion){
-      els.pfRegion.value = saved?.region || "";
-      populateDistricts(saved?.region || "", saved?.district || "");
-      if(els.pfPost) els.pfPost.value = saved?.post || "";
+      els.pfRegion.value = saved?.region || u.region || "";
+      populateDistricts(saved?.region || u.region || "", saved?.district || u.district || "");
+      if(els.pfPost) els.pfPost.value = saved?.post || u.post || "";
     }
 
     // start in view mode; editing only via ✏️
@@ -3578,12 +3618,18 @@ updatedAt: serverTimestamp(),
 
   function save(){
     if(!currentUser) return;
+    const firstName = (els.pfFirstName?.value || "").trim();
+    const lastName = (els.pfLastName?.value || "").trim();
     const phone = (els.pfPhone?.value || "").trim();
     const region = els.pfRegion?.value || "";
     const district = els.pfDistrict?.value || "";
     const post = els.pfPost?.value || "";
 
     // Profile ma'lumotlari majburiy
+    if(!firstName || !lastName){
+      alert("Iltimos, ism va familiyangizni kiriting.");
+      return;
+    }
     if(!phone){
       alert("Iltimos, telefon raqamingizni kiriting.");
       return;
@@ -3594,6 +3640,9 @@ updatedAt: serverTimestamp(),
     }
 
     const payload = {
+      firstName,
+      lastName,
+      name: (firstName + " " + lastName).trim(),
       phone,
       region,
       district,
@@ -3626,6 +3675,24 @@ updatedAt: serverTimestamp(),
     els.avatarBtn.addEventListener("click", (e)=>{
       e.preventDefault();
       if(document.body.classList.contains("signed-in")) open();
+    });
+  }
+  
+  const __balPlus = document.getElementById("balTopupQuick");
+  if(__balPlus){
+    __balPlus.addEventListener("click", (e)=>{
+      e.preventDefault();
+      if(!document.body.classList.contains("signed-in")){ toast("Avval kirish qiling."); return; }
+      openTopupFocus();
+    });
+  }
+
+if(document.getElementById("balHeaderBtn")){
+    document.getElementById("balHeaderBtn").addEventListener("click", (e)=>{
+      e.preventDefault();
+      // open profile modal to show wallet/topup area
+      try{ if(document.body.classList.contains("signed-in")) open(); }catch(_){}
+      try{ toast("Balans: " + userBalanceUZS.toLocaleString() + " so'm"); }catch(_){}
     });
   }
   if(els.heroAuthJump){
@@ -3758,8 +3825,31 @@ document.addEventListener('click', (e)=>{
   const t = e.target;
   if(t && (t.id==='topupBtn' || t.closest('#topupBtn'))){
     e.preventDefault();
-    startTopupPayme();
+    openTopupModal();
   }
+});
+
+// Topup modal actions
+document.addEventListener('click', (e)=>{
+  const x = e.target;
+  if(!x) return;
+  if(x.id==='topupClose' || x.id==='topupCancel1') return void closeTopupModal();
+  if(x.id==='topupNext') return void goTopupStep2();
+  if(x.id==='topupBack'){
+    const s1 = document.getElementById('topupStep1');
+    const s2 = document.getElementById('topupStep2');
+    if(s1) s1.hidden = false;
+    if(s2) s2.hidden = true;
+    return;
+  }
+  if(x.id==='topupSubmit') return void submitTopupRequest();
+});
+
+// Close modal on overlay click
+document.addEventListener('click', (e)=>{
+  const modal = document.getElementById('topupModal');
+  if(!modal || modal.hidden) return;
+  if(e.target === modal) closeTopupModal();
 });
 
 
