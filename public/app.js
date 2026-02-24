@@ -1561,7 +1561,8 @@ function renderOrders(orders){
 /* =========================
    Money history (profile) — TOPUP ONLY
 ========================= */
-let moneyUnsubTopups = null;
+let moneyUnsubTopupsUid = null;
+let moneyUnsubTopupsEmail = null;
 
 function normalizeTopupItems(topups=[]){
   const out = [];
@@ -1645,27 +1646,68 @@ function escapeHtml(s){
 }
 
 function subscribeMoneyHistory(uid){
-  if(!uid || !db) return;
-  try{ moneyUnsubTopups?.(); }catch(e){}
+  if(!db) return;
 
-  // Topups: only this user
-  try{
-    const qTop = query(
-      collection(db, "topup_requests"),
-      where("uid", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
-    moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
-      const topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-      const items = normalizeTopupItems(topupsArr);
-      renderMoneyHistory(items);
-    }, (err)=>{
-      console.error(err);
-      renderMoneyHistory([]);
-    });
-  }catch(e){
-    console.error(e);
+  const email = (currentUser && currentUser.email) ? String(currentUser.email) : "";
+  const cache = { uid: [], email: [] };
+
+  function mergeAndRender(){
+    const map = new Map();
+    for(const it of (cache.uid||[])) map.set(it.id, it);
+    for(const it of (cache.email||[])) map.set(it.id, it);
+    const merged = Array.from(map.values());
+    const items = normalizeTopupItems(merged);
+    renderMoneyHistory(items);
+  }
+
+  try{ moneyUnsubTopupsUid?.(); }catch(e){}
+  try{ moneyUnsubTopupsEmail?.(); }catch(e){}
+  moneyUnsubTopupsUid = null;
+  moneyUnsubTopupsEmail = null;
+
+  // 1) Prefer uid-linked docs (new schema)
+  if(uid){
+    try{
+      const qUid = query(
+        collection(db, "topup_requests"),
+        where("uid", "==", uid),
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
+      moneyUnsubTopupsUid = onSnapshot(qUid, (snap)=>{
+        cache.uid = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        mergeAndRender();
+      }, (err)=>{
+        console.error(err);
+        cache.uid = [];
+        mergeAndRender();
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  // 2) Backward compatibility: older docs stored payerFirst as email (phone auth)
+  if(email){
+    try{
+      const qEmail = query(
+        collection(db, "topup_requests"),
+        where("payerFirst", "==", email),
+        orderBy("createdAt", "desc"),
+        limit(50)
+      );
+      moneyUnsubTopupsEmail = onSnapshot(qEmail, (snap)=>{
+        cache.email = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        mergeAndRender();
+      }, (err)=>{
+        console.error(err);
+        cache.email = [];
+        mergeAndRender();
+      });
+    }catch(e){ console.error(e); }
+  }
+
+  // If neither uid nor email, show empty
+  if(!uid && !email){
+    renderMoneyHistory([]);
   }
 }
 
