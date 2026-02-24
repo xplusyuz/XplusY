@@ -305,9 +305,75 @@
           <h3>Buyurtmalar yo‘q</h3>
           <p>Hozircha buyurtmalar kelmagan.</p>
         </div>
+<<<<<<< HEAD
+=======
+</div>
+
+      <!-- Payme transactions (admin) -->
+
+      <!-- Manual card top-up requests -->
+      
+
+            <div class="hidden" id="turnoverView">
+<div class="card" id="topupReqCard" style="margin:14px 0 0 0">
+        <div class="card-header">
+          <h3><i class="fas fa-wallet"></i> Balans to‘ldirish so‘rovlari</h3>
+          <div class="right-actions">
+            <span class="muted" id="topupReqState">—</span>
+            <button class="btn btn-light btn-sm" id="topupReqRefresh"><i class="fas fa-sync-alt"></i> Yangilash</button>
+          </div>
+        </div>
+
+        <div class="card-body pad">
+          <div class="form-row" style="margin-bottom:0">
+            <div class="form-group" style="min-width:240px">
+              <label>Qidiruv</label>
+              <input id="topupReqSearch" class="form-control" placeholder="ID / UID / numericId / karta oxiri">
+            </div>
+            <div class="form-group" style="min-width:180px">
+              <label>Status</label>
+              <select id="topupReqStatus" class="form-control">
+                <option value="">Hammasi</option>
+                <option value="pending">pending</option>
+                <option value="approved">approved</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (dan)</label>
+              <input id="topupReqFrom" type="date" class="form-control">
+            </div>
+            <div class="form-group" style="min-width:160px">
+              <label>Sana (gacha)</label>
+              <input id="topupReqTo" type="date" class="form-control">
+            </div>
+            <div class="form-group" style="margin:0;display:flex;align-items:flex-end;justify-content:flex-end">
+              <button class="btn btn-light btn-sm" id="topupReqClear"><i class="fas fa-eraser"></i> Tozalash</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="topupReqTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Summa</th>
+                <th>Karta</th>
+                <th>Status</th>
+                <th>Chek</th>
+                <th>Vaqt</th>
+                <th>Harakatlar</th>
+              </tr>
+            </thead>
+            <tbody id="topupReqTbody"></tbody>
+          </table>
+        </div>
+>>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
       </div>
 
-            <div class="card hidden" id="turnoverView">
+        <div class="card" id="turnoverHistoryCard">
         <div class="card-header">
           <h3><i class="fas fa-wallet"></i> Hisob aylanmasi tarixi</h3>
           <div class="right-actions">
@@ -368,6 +434,7 @@
                   <th>Provider</th>
                   <th>Summa</th>
                   <th>Vaqt</th>
+                  <th>Harakatlar</th>
                 </tr>
               </thead>
               <tbody id="turnoverTbody"></tbody>
@@ -378,7 +445,8 @@
             * Bu bo2018lim /orders kolleksiyasidan o2018qib, topup va checkout aylanmasini ko2018rsatadi.
           </div>
         </div>
-      </div>
+      
+        </div>
 
 <div class="card hidden" id="statsView">
         <div class="card-header"><h3>Statistika</h3><div class="right-actions"><button class="btn btn-light btn-sm" id="recalcStatsBtn"><i class="fas fa-bolt"></i> Qayta hisoblash</button></div></div>
@@ -719,7 +787,10 @@
     }
 
     // ======= Turnover (Hisob aylanmasi) =======
-    let unsubTurnover = null;
+    let unsubTurnoverOrders = null;
+    let unsubTurnoverTopups = null;
+    state.turnoverOrders = [];
+    state.turnoverTopups = [];
     state.turnoverAll = [];
 
     function toDateOnly(ts){
@@ -733,23 +804,97 @@
 
     function subscribeTurnover(){
       try{
-        if(unsubTurnover) { unsubTurnover(); unsubTurnover = null; }
+        // unsubscribe previous
+        try{ unsubTurnoverOrders && unsubTurnoverOrders(); }catch(_e){}
+        try{ unsubTurnoverTopups && unsubTurnoverTopups(); }catch(_e){}
+        unsubTurnoverOrders = null;
+        unsubTurnoverTopups = null;
+
         if(!db){ toast("DB yo‘q","error"); return; }
         $("turnoverState").textContent = "Yuklanmoqda…";
-        const qy = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
-        unsubTurnover = onSnapshot(qy, (snap)=>{
-          state.turnoverAll = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-          $("turnoverState").textContent = `Loaded: ${state.turnoverAll.length}`;
-          renderTurnover();
+
+        // 1) Checkout/Sales orders
+        const qOrders = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
+        unsubTurnoverOrders = onSnapshot(qOrders, (snap)=>{
+          state.turnoverOrders = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"orders" }));
+          mergeTurnoverSources();
         }, (err)=>{
           console.error(err);
-          $("turnoverState").textContent = "Xato";
-          toast("Turnover o‘qishda xato: "+(err?.message||err),"error");
+          $("turnoverState").textContent = "Xato (orders)";
+          toast("Orders o‘qishda xato: "+(err?.message||err),"error");
         });
+
+        // 2) Manual topups (topup_requests)
+        const qTopups = query(collection(db,"topup_requests"), orderBy("createdAt","desc"), limit(500));
+        unsubTurnoverTopups = onSnapshot(qTopups, (snap)=>{
+          state.turnoverTopups = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"topup_requests" }));
+          mergeTurnoverSources();
+        }, (err)=>{
+          console.error(err);
+          // Don't block UI if topup rules/index missing
+          $("turnoverState").textContent = "Xato (topup_requests)";
+          toast("Topup so‘rovlari o‘qishda xato: "+(err?.message||err),"error");
+        });
+
       }catch(e){
         console.error(e);
         toast("Turnover xato: "+(e?.message||e),"error");
       }
+    }
+
+    function mergeTurnoverSources(){
+      // normalize orders + topup_requests into one list for rendering
+      const orders = (state.turnoverOrders||[]).map(o=>{
+        const createdAt = o.createdAt || o.created_at || o.time || null;
+        return {
+          ...o,
+          orderId: o.orderId || o.id,
+          uid: o.uid || o.userUid || o.user_id || null,
+          numericId: o.numericId || o.userNumericId || o.numeric_id || null,
+          userName: o.userName || o.name || null,
+          userPhone: o.userPhone || o.phone || null,
+          provider: o.provider || (o.orderType==="topup" ? "manual" : "checkout"),
+          orderType: (o.orderType || "checkout"),
+          status: (o.status || "pending_payment"),
+          totalUZS: Number(o.totalUZS || o.amountUZS || o.amount || 0),
+          createdAt
+        };
+      });
+
+      const topups = (state.turnoverTopups||[]).map(r=>{
+        const st0 = String(r.status || "pending").toLowerCase();
+        // map manual topup statuses to common ledger statuses
+        let st = st0;
+        if(st0==="approved" || st0==="success") st = "paid";
+        else if(st0==="rejected" || st0==="canceled" || st0==="cancelled" || st0==="canceled_by_admin") st = "cancelled";
+        else if(st0==="pending" || st0==="waiting") st = "pending";
+        const createdAt = r.createdAt || r.created_at || r.time || null;
+        return {
+          id: r.id,
+          orderId: r.id,
+          uid: r.uid || r.userUid || null,
+          numericId: r.numericId || null,
+          userName: r.userName || null,
+          userPhone: r.userPhone || null,
+          provider: "manual",
+          orderType: "topup",
+          status: st,
+          totalUZS: Number(r.amountUZS || r.totalUZS || 0),
+          createdAt
+        };
+      });
+
+      const merged = [...topups, ...orders].sort((a,b)=>{
+        const da = (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds*1000 : (a.createdAt ? new Date(a.createdAt).getTime():0))) || 0;
+        const dbt = (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds*1000 : (b.createdAt ? new Date(b.createdAt).getTime():0))) || 0;
+        return dbt - da;
+      });
+
+      state.turnoverAll = merged;
+
+      const loaded = merged.length;
+      $("turnoverState").textContent = `Loaded: ${loaded}`;
+      renderTurnover();
     }
 
     function renderTurnover(){
@@ -810,7 +955,7 @@
       // rows
       tbody.innerHTML = "";
       if(!filtered.length){
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
         return;
       }
 
@@ -820,6 +965,13 @@
         const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
         const when = escapeHtml(formatTS(o.createdAt));
         const sum = Number(o.totalUZS||0).toLocaleString();
+        const canAct = (o.__src==="topup_requests") && (st==="pending");
+        const actions = canAct ? `
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
+          </div>
+        ` : `<span class="muted">—</span>`;
         tbody.insertAdjacentHTML("beforeend", `
           <tr>
             <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
@@ -829,6 +981,7 @@
             <td>${escapeHtml(o.provider||"")}</td>
             <td><b>${sum}</b> so'm</td>
             <td>${when}</td>
+            <td>${actions}</td>
           </tr>
         `);
       }
@@ -921,7 +1074,11 @@
       });
       if(view==="stats"){ try{ renderStatsPanels(); }catch(e){} }
       if(view==="orders"){ try{ subscribeOrdersAdmin(); }catch(e){} }
+<<<<<<< HEAD
       if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} }
+=======
+      if(view==="turnover"){ try{ subscribeTurnover(); }catch(e){} try{ subscribeTopupReq(); }catch(e){} }
+>>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
     }
 
     function renderStatsPanels(){
@@ -1346,6 +1503,29 @@
       if($("turnoverRefresh")) $("turnoverRefresh").addEventListener("click",()=>subscribeTurnover());
       ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{ const el=$(id); if(el){ el.addEventListener("input",renderTurnover); el.addEventListener("change",renderTurnover);} });
 
+      // Turnover action buttons (only for topup rows)
+      if(!window.__turnoverActionsBound && $("turnoverTbody")){
+        window.__turnoverActionsBound = true;
+        $("turnoverTbody").addEventListener("click", async (e)=>{
+          const btn = e.target.closest("button[data-act][data-id]");
+          if(!btn) return;
+          const act = btn.getAttribute("data-act");
+          const id = btn.getAttribute("data-id");
+          try{
+            btn.disabled = true;
+            if(act==="approve") await approveTopup(id);
+            else if(act==="cancel") await cancelTopup(id);
+            toast("Bajarildi", "success");
+          }catch(err){
+            console.error(err);
+            toast("Xato: "+(err?.message||err), "error");
+          }finally{
+            btn.disabled = false;
+          }
+        });
+      }
+
+
       window.addEventListener("click",(e)=>{
         if(e.target===$("productModal")){ closeModal("productModal"); resetForm(); }
         if(e.target===$("jsonModal")) closeModal("jsonModal");
@@ -1424,6 +1604,13 @@
     function tgOrderStatusHTML(o){
       const st = tgEscape(o.status||"");
       const sum = Number(o.totalUZS||0).toLocaleString();
+        const canAct = (o.__src==="topup_requests") && (st==="pending");
+        const actions = canAct ? `
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
+          </div>
+        ` : `<span class="muted">—</span>`;
       return [
         `<b>📦 Buyurtma statusi yangilandi</b>`,
         `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
@@ -1747,6 +1934,186 @@
       openOrderModal(o);
     });
 
+<<<<<<< HEAD
+=======
+
+
+// ===== Manual Card Top-up Requests (Admin) =====
+let topupReqUnsub = null;
+let topupReqCache = [];
+
+function topupTsToMs(ts){
+  try{ return ts?.toMillis ? ts.toMillis() : 0; }catch(_e){ return 0; }
+}
+function topupTimeStr(ts){
+  const ms = topupTsToMs(ts);
+  return ms ? new Date(ms).toLocaleString() : "—";
+}
+function topupBadge(status){
+  const st = String(status||'pending');
+  const map = {
+    pending: ['#0369a1','pending'],
+    approved: ['#15803d','approved'],
+    cancelled: ['#b91c1c','cancelled']
+  };
+  const v = map[st] || ['#475569', st];
+  return `<span class="badge" style="background:${v[0]}10;color:${v[0]};border:1px solid ${v[0]}30">${escapeHtml(v[1])}</span>`;
+}
+
+function renderTopupReq(list){
+  const tb = $("topupReqTbody");
+  if(!tb) return;
+  tb.innerHTML = "";
+  $("topupReqState").textContent = list.length ? `${list.length} ta` : "—";
+  for(const r of list.slice(0,300)){
+    const tr = document.createElement('tr');
+    const id = String(r.id||'');
+    const user = String(r.numericId || r.uid || '');
+    const amt = Number(r.amountUZS||0).toLocaleString() + " so'm";
+    const card = String(r.payerCardMasked || (r.payerCardLast4 ? ('**** '+r.payerCardLast4) : '—'));
+    const receipt = r.receiptUrl ? `<a href="${escapeHtml(r.receiptUrl)}" target="_blank" rel="noopener">Ochish</a>` : '—';
+    const time = topupTimeStr(r.createdAt);
+    let act = '—';
+    if(String(r.status||'pending')==='pending'){
+      act = `
+        <button class="btn btn-sm btn-success" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
+        <button class="btn btn-sm btn-danger" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
+      `;
+    }
+    tr.innerHTML = `
+      <td><code>${escapeHtml(id)}</code></td>
+      <td>${escapeHtml(user)}</td>
+      <td><b>${escapeHtml(amt)}</b></td>
+      <td>${escapeHtml(card)}</td>
+      <td>${topupBadge(r.status)}</td>
+      <td>${receipt}</td>
+      <td>${escapeHtml(time)}</td>
+      <td>${act}</td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function applyTopupReqFilters(){
+  const q = ($('topupReqSearch')?.value || '').trim().toLowerCase();
+  const st = ($('topupReqStatus')?.value || '').trim();
+  const fromV = $('topupReqFrom')?.value;
+  const toV = $('topupReqTo')?.value;
+  const from = fromV ? new Date(fromV+'T00:00:00').getTime() : null;
+  const to = toV ? new Date(toV+'T23:59:59').getTime() : null;
+
+  const out = (topupReqCache||[]).filter(r=>{
+    if(st && String(r.status||'') !== st) return false;
+    if(q){
+      const hay = `${r.id||''} ${r.uid||''} ${r.numericId||''} ${r.payerCardLast4||''}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    if(from || to){
+      const ms = topupTsToMs(r.createdAt);
+      if(ms){
+        if(from && ms < from) return false;
+        if(to && ms > to) return false;
+      }
+    }
+    return true;
+  });
+  renderTopupReq(out);
+}
+
+function subscribeTopupReq(){
+  if(!db) return;
+  try{ topupReqUnsub?.(); }catch(_e){}
+  $('topupReqState').textContent = 'Yuklanmoqda...';
+  const qy = query(collection(db,'topup_requests'), orderBy('createdAt','desc'), limit(200));
+  topupReqUnsub = onSnapshot(qy, (snap)=>{
+    topupReqCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    applyTopupReqFilters();
+  }, (err)=>{
+    console.warn('topup_requests subscribe error', err);
+    $('topupReqState').textContent = 'Xatolik (rules/index)';
+  });
+}
+
+async async function approveTopup(id){
+  const note = prompt('Tasdiqlash izohi (majburiy emas)') || '';
+  const reqRef = doc(db,'topup_requests', id);
+  await runTransaction(db, async (tx)=>{
+    const rs = await tx.get(reqRef);
+    if(!rs.exists()) throw new Error('not_found');
+    const r = rs.data() || {};
+    if(String(r.status||'pending') !== 'pending') throw new Error('already_done');
+    const uid = r.uid;
+    const amt = Number(r.amountUZS||0);
+    if(!uid || !amt) throw new Error('bad_req');
+    const uref = doc(db,'users', uid);
+    const us = await tx.get(uref);
+    const u = us.exists() ? (us.data()||{}) : {};
+    const bal = Number(u.balanceUZS||0) || 0;
+    tx.set(uref, { balanceUZS: bal + amt, updatedAt: serverTimestamp() }, { merge:true });
+    tx.set(reqRef, {
+      status:'approved',
+      adminNote: note,
+      approvedAt: serverTimestamp(),
+      approvedBy: (currentUser?.email || null),
+      updatedAt: serverTimestamp()
+    }, { merge:true });
+  });
+}
+
+async async function cancelTopup(id){
+  const note = prompt('Bekor qilish izohi (ixtiyoriy)') || '';
+  const reqRef = doc(db,'topup_requests', id);
+  await runTransaction(db, async (tx)=>{
+    const rs = await tx.get(reqRef);
+    if(!rs.exists()) throw new Error('not_found');
+    const r = rs.data() || {};
+    if(String(r.status||'pending') !== 'pending') throw new Error('already_done');
+    tx.set(reqRef, {
+      status:'cancelled',
+      adminNote: (note||'').trim(),
+      cancelledAt: serverTimestamp(),
+      cancelledBy: (currentUser?.email || null),
+      updatedAt: serverTimestamp()
+    }, { merge:true });
+  });
+}
+
+// Topup UI hooks
+$("topupReqRefresh")?.addEventListener('click', ()=> subscribeTopupReq());
+['topupReqSearch','topupReqStatus','topupReqFrom','topupReqTo'].forEach(id=>{
+  const el = $(id);
+  if(!el) return;
+  el.addEventListener('input', applyTopupReqFilters);
+  el.addEventListener('change', applyTopupReqFilters);
+});
+$("topupReqClear")?.addEventListener('click', ()=>{
+  setIfExists('topupReqSearch','');
+  setIfExists('topupReqStatus','');
+  setIfExists('topupReqFrom','');
+  setIfExists('topupReqTo','');
+  applyTopupReqFilters();
+});
+
+document.addEventListener('click', async (e)=>{
+  const btn = e.target?.closest?.('button[data-topup-act]');
+  if(!btn) return;
+  const act = btn.getAttribute('data-topup-act');
+  const id = btn.getAttribute('data-topup-id');
+  if(!act || !id) return;
+  btn.disabled = true;
+  try{
+    if(act==='approve') await approveTopup(id);
+    if(act==='cancel') await cancelTopup(id);
+    toast('OK');
+  }catch(err){
+    console.warn('topup action failed', err);
+    toast('Xatolik');
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+>>>>>>> 19aee9b0573feb32b3e808e15f94e52ec2dac3a5
     // close order modal
     ["closeOrderModalBtn","closeOrderModalBtn2"].forEach(id=>{
       $(id)?.addEventListener("click", ()=> closeModal("orderModal"));
