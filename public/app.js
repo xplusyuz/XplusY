@@ -390,12 +390,54 @@ function _anyOverlayOpen(){
 }
 function _syncModalBody(){
   const open = _anyOverlayOpen();
-  if(open){
-    document.body.classList.add("modalOpen");
-    document.documentElement.classList.add("modalOpen");
-  } else {
-    document.body.classList.remove("modalOpen");
-    document.documentElement.classList.remove("modalOpen");
+
+  // Robust scroll lock (mobile Safari friendly)
+  // - keeps the page from "jumping" after closing
+  // - prevents background scrolling while modal is open
+  try{
+    window.__omModalLock = window.__omModalLock || { locked:false, y:0 };
+    const st = window.__omModalLock;
+
+    if(open && !st.locked){
+      st.locked = true;
+      st.y = window.scrollY || window.pageYOffset || 0;
+
+      document.body.classList.add("modalOpen");
+      document.documentElement.classList.add("modalOpen");
+
+      // Hard-lock the page
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${st.y}px`;
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
+    }
+
+    if(!open && st.locked){
+      st.locked = false;
+
+      document.body.classList.remove("modalOpen");
+      document.documentElement.classList.remove("modalOpen");
+
+      // Restore
+      const y = st.y || 0;
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.width = "";
+
+      window.scrollTo(0, y);
+    }
+  }catch(e){
+    // fallback
+    if(open){
+      document.body.classList.add("modalOpen");
+      document.documentElement.classList.add("modalOpen");
+    } else {
+      document.body.classList.remove("modalOpen");
+      document.documentElement.classList.remove("modalOpen");
+    }
   }
 }
 function showOverlay(el){
@@ -2034,10 +2076,10 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
 
   // Make scroll stable across devices (some browsers need an explicit reset)
   try{
-    const panel = els.imgViewer.querySelector('.qvPanel');
-    if(panel){
-      panel.scrollTop = 0;
-      panel.style.webkitOverflowScrolling = 'touch';
+    const sc = document.getElementById('qvScrollArea') || els.imgViewer.querySelector('.qvScrollArea');
+    if(sc){
+      sc.scrollTop = 0;
+      sc.style.webkitOverflowScrolling = 'touch';
     }
   }catch(e){}
 }
