@@ -1563,6 +1563,7 @@ function renderOrders(orders){
 ========================= */
 let moneyUnsubTopupsUid = null;
 let moneyUnsubTopupsEmail = null;
+let moneyUnsubTopupsNumeric = null;
 
 function normalizeTopupItems(topups=[]){
   const out = [];
@@ -1649,12 +1650,13 @@ function subscribeMoneyHistory(uid){
   if(!db) return;
 
   const email = (currentUser && currentUser.email) ? String(currentUser.email) : "";
-  const cache = { uid: [], email: [] };
+  const cache = { uid: [], email: [], numeric: [] };
 
   function mergeAndRender(){
     const map = new Map();
     for(const it of (cache.uid||[])) map.set(it.id, it);
     for(const it of (cache.email||[])) map.set(it.id, it);
+    for(const it of (cache.numeric||[])) map.set(it.id, it);
     const merged = Array.from(map.values());
     const items = normalizeTopupItems(merged);
     renderMoneyHistory(items);
@@ -1662,48 +1664,90 @@ function subscribeMoneyHistory(uid){
 
   try{ moneyUnsubTopupsUid?.(); }catch(e){}
   try{ moneyUnsubTopupsEmail?.(); }catch(e){}
+  try{ moneyUnsubTopupsNumeric?.(); }catch(e){}
   moneyUnsubTopupsUid = null;
   moneyUnsubTopupsEmail = null;
+  moneyUnsubTopupsNumeric = null;
 
-  // 1) Prefer uid-linked docs (new schema)
+  // NOTE:
+  // We intentionally avoid orderBy(...) here to prevent composite-index requirements.
+  // We sort client-side in normalizeTopupItems().
+
+  // 1) uid-linked docs (new schema)
   if(uid){
     try{
       const qUid = query(
         collection(db, "topup_requests"),
         where("uid", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(50)
+        limit(100)
       );
       moneyUnsubTopupsUid = onSnapshot(qUid, (snap)=>{
         cache.uid = snap.docs.map(d=>({ id:d.id, ...d.data() }));
         mergeAndRender();
       }, (err)=>{
-        console.error(err);
+        console.error("topup uid subscribe error", err);
         cache.uid = [];
         mergeAndRender();
       });
     }catch(e){ console.error(e); }
   }
 
-  // 2) Backward compatibility: older docs stored payerFirst as email (phone auth)
+  // 2) Backward compatibility: some docs stored payerFirst as email (phone auth)
   if(email){
     try{
       const qEmail = query(
         collection(db, "topup_requests"),
         where("payerFirst", "==", email),
-        orderBy("createdAt", "desc"),
-        limit(50)
+        limit(100)
       );
       moneyUnsubTopupsEmail = onSnapshot(qEmail, (snap)=>{
         cache.email = snap.docs.map(d=>({ id:d.id, ...d.data() }));
         mergeAndRender();
       }, (err)=>{
-        console.error(err);
+        console.error("topup email subscribe error", err);
         cache.email = [];
         mergeAndRender();
       });
     }catch(e){ console.error(e); }
   }
+
+  // 3) Reliable match for your current data: numericId is present in topup_requests.
+  // We read user's numericId from profileCache (or from users/{uid}) and query by numericId.
+  (async ()=>{
+    if(!uid) return;
+
+    let numericId = (profileCache?.numericId != null ? String(profileCache.numericId) : "");
+    if(!numericId){
+      try{
+        const uref = doc(db, "users", uid);
+        const usnap = await getDoc(uref);
+        if(usnap.exists()){
+          const u = usnap.data() || {};
+          numericId = (u.numericId != null ? String(u.numericId) : "");
+        }
+      }catch(e){
+        // ignore
+      }
+    }
+
+    if(!numericId) { cache.numeric = []; mergeAndRender(); return; }
+
+    try{
+      const qNum = query(
+        collection(db, "topup_requests"),
+        where("numericId", "==", numericId),
+        limit(200)
+      );
+      moneyUnsubTopupsNumeric = onSnapshot(qNum, (snap)=>{
+        cache.numeric = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        mergeAndRender();
+      }, (err)=>{
+        console.error("topup numericId subscribe error", err);
+        cache.numeric = [];
+        mergeAndRender();
+      });
+    }catch(e){ console.error(e); }
+  })();
 
   // If neither uid nor email, show empty
   if(!uid && !email){
