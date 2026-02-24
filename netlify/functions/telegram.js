@@ -72,7 +72,7 @@ function buildOrderCreatedHTML(o){
     `<b>🛒 Yangi buyurtma!</b>`,
     `Buyurtma ID: <code>${tgEscape(o.orderId || o.id || "")}</code>`,
     o.uid ? `UID: <code>${tgEscape(o.uid)}</code>` : "",
-    o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
+    o.omId ? `User ID: <b>${tgEscape(o.omId)}</b>` : "",
     o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
     o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
     pay ? `To'lov: <b>${pay}</b>` : "",

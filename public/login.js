@@ -9,7 +9,6 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
-  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 let allowAutoRedirect = true;
@@ -88,64 +87,31 @@ function phoneToEmail(phone){
 }
 
 
+function uidToOmId(uid){
+  // deterministic 6-digit numeric id derived from uid
+  let h = 0;
+  const s = String(uid||"");
+  for(let i=0;i<s.length;i++){
+    h = (h * 31 + s.charCodeAt(i)) % 1000000;
+  }
+  return "OM" + String(h).padStart(6,"0");
+}
+
 async function ensureUserDoc(uid, phone, name){
   const userRef = doc(db, "users", uid);
-
-  // Ensure numericId (1000+) is assigned exactly once via a counter doc (meta/counters)
-  const assignedNumericId = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(userRef);
-    const existing = snap.exists() ? (snap.data() || {}) : {};
-    if (existing.numericId && Number.isFinite(Number(existing.numericId))) {
-      // still update name/phone below outside tx
-      return Number(existing.numericId);
-    }
-
-    const counterRef = doc(db, "meta", "counters");
-    const cSnap = await tx.get(counterRef);
-
-    let next = 1000;
-    if (cSnap.exists()) {
-      const d = cSnap.data() || {};
-      if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
-      else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter); // legacy
-    }
-
-    const numericId = next;
-
-    // advance counter
-    tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
-
-    // set user numericId
-    tx.set(userRef, {
-      numericId,
-      updatedAt: serverTimestamp(),
-      ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge: true });
-
-    // mapping for server-side lookup: users_by_numeric/{numericId} -> { uid }
-    const mapRef = doc(db, "users_by_numeric", String(numericId));
-    tx.set(mapRef, { uid }, { merge: true });
-
-    return numericId;
-  });
-
-  // Update profile fields (not sensitive)
-  const snap2 = await getDoc(userRef);
-  const existing2 = snap2.exists() ? (snap2.data()||{}) : {};
+  const snap = await getDoc(userRef);
+  const existing = snap.exists() ? (snap.data()||{}) : {};
+  const omId = existing.omId || uidToOmId(uid);
 
   await setDoc(userRef, {
-    phone: phone || existing2.phone || "",
-    name: name || existing2.name || "",
-    numericId: assignedNumericId,
+    phone: phone || existing.phone || "",
+    name: name || existing.name || "",
+    omId,
     updatedAt: serverTimestamp(),
-    ...(snap2.exists() ? {} : { createdAt: serverTimestamp() })
+    ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
   }, { merge:true });
 
-  return {
-    numericId: assignedNumericId,
-    name: (name || existing2.name || "User"),
-    phone: (phone || existing2.phone || "")
-  };
+  return { omId, name: (name || existing.name || "User"), phone: (phone || existing.phone || "") };
 }
 
 
@@ -213,7 +179,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const email = phoneToEmail(phone);
     const cred = await signInWithEmailAndPassword(auth, email, pass);
 
-    // ensure numericId exists + keep name if already known
+    // ensure omId exists + keep name if already known
     const uid = cred.user.uid;
     await ensureUserDoc(uid, phone, "");
 
@@ -254,9 +220,9 @@ els.signupForm.addEventListener("submit", async (e)=>{
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
-    const { numericId } = await ensureUserDoc(uid, phone, name);
+    const { omId } = await ensureUserDoc(uid, phone, name);
 
-    showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
+    showNotice(`Tayyor! Sizning ID: ${omId}`, "ok");
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
