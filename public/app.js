@@ -2311,14 +2311,33 @@ async function initShipMapOnce(){
 function openCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = false;
+
+  // Require completed profile before checkout
+  try{
+    if(window.__omProfile && window.__omProfile.isProfileComplete && !window.__omProfile.isProfileComplete()){
+      toast("Avval profilni to‘liq to‘ldiring (Ism, Familiya, Telefon, Viloyat, Tuman, Pochta).");
+      closeCheckout();
+      goTab("profile");
+      // auto-open edit mode
+      try{ setTimeout(()=>{ document.getElementById("profileEditBtn")?.click(); }, 120); }catch(_){ }
+      return;
+    }
+  }catch(_){}
+
+  // Checkout: only payment type (hide shipping/address/map UI)
+  try{
+    const hideIds = ["shipAddress","shipPhone","useProfilePhone","useMyLocation","shipLiveBtn","shipFullBtn","shipExitFullBtn","shipCoordsText","shipMap"];
+    hideIds.forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.closest(".field, .mapCard, .shipCard, .mapWrap, .shipMap") ? (el.closest(".field, .mapCard, .shipCard, .mapWrap, .shipMap").style.display="none") : (el.style.display="none");
+    });
+    // Also hide map wrapper if present
+    const wrap = document.querySelector(".mapWrap"); if(wrap) wrap.style.display="none";
+    const map = document.getElementById("shipMap"); if(map) map.style.display="none";
+  }catch(_){}
+
   // Scroll sheet into view
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  // init map after visible so Leaflet sizes correctly
-  setTimeout(()=>{
-    initShipMapOnce();
-    try{ _shipResizeMap(); }catch(e){}
-  }, 60);
 }
 
 function closeCheckout(){
@@ -2431,10 +2450,10 @@ async function createOrderFromCheckout(){
     totalUZS: built.totalUZS,
     amountTiyin: null,
     shipping: {
-      phone: (els.shipPhone?.value || (profileCache?.phone || profileCache?.phoneNumber || "") || "").toString().trim() || null,
-      addressText: address || null,
-      lat: shipLatLng?.lat ?? null,
-      lng: shipLatLng?.lng ?? null
+      phone: ((profileCache?.phone || profileCache?.phoneNumber || currentUser?.phoneNumber || "") || "").toString().trim() || null,
+      addressText: null,
+      lat: null,
+      lng: null
     }
   };
 
@@ -3349,6 +3368,8 @@ function setSelectOptions(sel, items, placeholder){
 }
 
 function setFieldsDisabled(disabled){
+  if(els.pfFirstName) els.pfFirstName.disabled = disabled;
+  if(els.pfLastName) els.pfLastName.disabled = disabled;
   if(els.pfPhone) els.pfPhone.disabled = disabled;
   if(els.pfRegion) els.pfRegion.disabled = disabled;
   if(els.pfDistrict) els.pfDistrict.disabled = disabled;
@@ -4161,3 +4182,32 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
 
 
 setInterval(ensureProfileSocialLinks, 1200);
+
+// Copy helper for buttons like: <button class="copyBtn" data-copy="#someId">
+document.addEventListener("click", async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest(".copyBtn[data-copy]") : null;
+  if(!btn) return;
+  const sel = btn.getAttribute("data-copy");
+  const el = sel ? document.querySelector(sel) : null;
+  const text = (el && (el.value ?? el.textContent) ? String(el.value ?? el.textContent).trim() : "");
+  if(!text) return;
+  try{
+    await navigator.clipboard.writeText(text);
+    toast && toast("Nusxa olindi ✅", "success");
+  }catch(err){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      toast && toast("Nusxa olindi ✅", "success");
+    }catch(e2){
+      toast && toast("Nusxa olishda xatolik", "error");
+    }
+  }
+});
