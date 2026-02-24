@@ -1150,6 +1150,9 @@ function renderOptions(p){
   return `<div class="optStack">${sw}${sz}</div>`;
 }
 
+function escapeHtml(str){
+  return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
 function _normPType(p){
   const t = (p?.pType || p?.fulfillmentType || p?.type || "stock");
   return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
@@ -1559,19 +1562,16 @@ function renderOrders(orders){
 
 
 /* =========================
-   Money history (profile) — TOPUP ONLY
+   Money history (profile)
 ========================= */
-let moneyUnsubTopupsUid = null;
-let moneyUnsubTopupsEmail = null;
-let moneyUnsubTopupsNumeric = null;
+let moneyUnsubTopups = null;
+let moneyUnsubOrders = null;
 
-function normalizeTopupItems(topups=[]){
+function normalizeMoneyItems({ topups=[], orders=[] }){
   const out = [];
-  for(const t of (topups||[])){
-    const ts = t.approvedAt || t.rejectedAt || t.updatedAt || t.createdAt || null;
-    const stRaw = (t.status||"pending").toString();
-    // normalize legacy spellings
-    const st = (stRaw === "cancelled" || stRaw === "canceled") ? "rejected" : stRaw;
+  for(const t of topups){
+    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
+    const st = (t.status||"pending").toString();
     const amt = Number(t.amountUZS||0) || 0;
     out.push({
       kind: "topup",
@@ -1581,6 +1581,21 @@ function normalizeTopupItems(topups=[]){
       note: (t.adminNote||""),
       ts,
       id: t.id || ""
+    });
+  }
+  for(const o of orders){
+    if((o.provider||"") !== "balance") continue;
+    const ts = o.createdAt || null;
+    const st = (o.status||"").toString();
+    const amt = Number(o.totalUZS||0) || 0;
+    out.push({
+      kind: "order",
+      direction: "out",
+      amountUZS: amt,
+      status: st,
+      orderId: o.orderId || o.id || "",
+      ts,
+      id: o.id || ""
     });
   }
   out.sort((a,b)=>{
@@ -1599,23 +1614,26 @@ function renderMoneyHistory(items){
   if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
 
   for(const it of arr){
+    const isIn = it.direction === "in";
     const amt = moneyUZS(Number(it.amountUZS||0));
     const when = fmtDate(it.ts);
     const st = (it.status||"").toString();
 
-    const title = "Balans to‘ldirish";
+    let title = "";
+    if(it.kind === "topup") title = "Balans to‘ldirish";
+    else title = "Balansdan to‘lov";
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
     left.innerHTML = `
-      <div class="orderId">${title}${it.id ? " (#"+String(it.id).slice(-6)+")" : ""}</div>
-      <div class="orderMeta">${when ? when : ""}${st ? " • "+topupStatusLabel(st) : ""}</div>
+      <div class="orderId">${title}${it.kind==="order" && it.orderId ? " (#"+String(it.orderId).slice(-6)+")" : ""}</div>
+      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
       ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
     `.trim();
 
     const right = document.createElement("div");
     right.className = "orderTotal";
-    right.textContent = "+ " + amt;
+    right.textContent = (isIn ? "+ " : "- ") + amt;
 
     const row = document.createElement("div");
     row.className = "orderItem";
@@ -1630,10 +1648,17 @@ function renderMoneyHistory(items){
   }
 }
 
-function topupStatusLabel(st){
-  if(st === "approved") return "Tasdiqlandi";
-  if(st === "rejected") return "Rad etildi";
+function statusLabel(st, kind){
+  if(kind === "topup"){
+    if(st === "approved") return "Tasdiqlangan";
+    if(st === "canceled" || st === "cancelled") return "Bekor qilingan";
+    if(st === "pending") return "Kutilmoqda";
+    return st;
+  }
+  // orders
+  if(st === "paid") return "To‘langan";
   if(st === "pending") return "Kutilmoqda";
+  if(st === "canceled") return "Bekor";
   return st;
 }
 
@@ -1647,113 +1672,59 @@ function escapeHtml(s){
 }
 
 function subscribeMoneyHistory(uid){
-  if(!db) return;
+  if(!uid || !db) return;
+  try{ moneyUnsubTopups?.(); }catch(e){}
+  try{ moneyUnsubOrders?.(); }catch(e){}
 
-  const email = (currentUser && currentUser.email) ? String(currentUser.email) : "";
-  const cache = { uid: [], email: [], numeric: [] };
+  let topupsArr = [];
+  let ordersArr = [];
 
-  function mergeAndRender(){
-    const map = new Map();
-    for(const it of (cache.uid||[])) map.set(it.id, it);
-    for(const it of (cache.email||[])) map.set(it.id, it);
-    for(const it of (cache.numeric||[])) map.set(it.id, it);
-    const merged = Array.from(map.values());
-    const items = normalizeTopupItems(merged);
+  function merge(){
+    const items = normalizeMoneyItems({ topups: topupsArr, orders: ordersArr });
     renderMoneyHistory(items);
   }
 
-  try{ moneyUnsubTopupsUid?.(); }catch(e){}
-  try{ moneyUnsubTopupsEmail?.(); }catch(e){}
-  try{ moneyUnsubTopupsNumeric?.(); }catch(e){}
-  moneyUnsubTopupsUid = null;
-  moneyUnsubTopupsEmail = null;
-  moneyUnsubTopupsNumeric = null;
-
-  // NOTE:
-  // We intentionally avoid orderBy(...) here to prevent composite-index requirements.
-  // We sort client-side in normalizeTopupItems().
-
-  // 1) uid-linked docs (new schema)
-  if(uid){
-    try{
-      const qUid = query(
-        collection(db, "topup_requests"),
-        where("uid", "==", uid),
-        limit(100)
-      );
-      moneyUnsubTopupsUid = onSnapshot(qUid, (snap)=>{
-        cache.uid = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-        mergeAndRender();
-      }, (err)=>{
-        console.error("topup uid subscribe error", err);
-        cache.uid = [];
-        mergeAndRender();
-      });
-    }catch(e){ console.error(e); }
+  // Topups: only this user
+  try{
+    const qTop = query(
+      collection(db, "topup_requests"),
+      where("uid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
+      topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      merge();
+    }, (err)=>{
+      console.error(err);
+      topupsArr = [];
+      merge();
+    });
+  }catch(e){
+    console.error(e);
   }
 
-  // 2) Backward compatibility: some docs stored payerFirst as email (phone auth)
-  if(email){
-    try{
-      const qEmail = query(
-        collection(db, "topup_requests"),
-        where("payerFirst", "==", email),
-        limit(100)
-      );
-      moneyUnsubTopupsEmail = onSnapshot(qEmail, (snap)=>{
-        cache.email = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-        mergeAndRender();
-      }, (err)=>{
-        console.error("topup email subscribe error", err);
-        cache.email = [];
-        mergeAndRender();
-      });
-    }catch(e){ console.error(e); }
-  }
-
-  // 3) Reliable match for your current data: numericId is present in topup_requests.
-  // We read user's numericId from profileCache (or from users/{uid}) and query by numericId.
-  (async ()=>{
-    if(!uid) return;
-
-    let numericId = (profileCache?.numericId != null ? String(profileCache.numericId) : "");
-    if(!numericId){
-      try{
-        const uref = doc(db, "users", uid);
-        const usnap = await getDoc(uref);
-        if(usnap.exists()){
-          const u = usnap.data() || {};
-          numericId = (u.numericId != null ? String(u.numericId) : "");
-        }
-      }catch(e){
-        // ignore
-      }
-    }
-
-    if(!numericId) { cache.numeric = []; mergeAndRender(); return; }
-
-    try{
-      const qNum = query(
-        collection(db, "topup_requests"),
-        where("numericId", "==", numericId),
-        limit(200)
-      );
-      moneyUnsubTopupsNumeric = onSnapshot(qNum, (snap)=>{
-        cache.numeric = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-        mergeAndRender();
-      }, (err)=>{
-        console.error("topup numericId subscribe error", err);
-        cache.numeric = [];
-        mergeAndRender();
-      });
-    }catch(e){ console.error(e); }
-  })();
-
-  // If neither uid nor email, show empty
-  if(!uid && !email){
-    renderMoneyHistory([]);
+  // Orders: read own orders and filter provider=balance
+  try{
+    const qOrd = query(
+      collection(db, "orders"),
+      where("uid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
+    moneyUnsubOrders = onSnapshot(qOrd, (snap)=>{
+      ordersArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      merge();
+    }, (err)=>{
+      console.error(err);
+      ordersArr = [];
+      merge();
+    });
+  }catch(e){
+    console.error(e);
   }
 }
+
 
 function subscribeOrders(uid){
   if(!uid) return;
