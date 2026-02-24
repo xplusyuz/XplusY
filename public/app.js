@@ -4161,3 +4161,32 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
 
 
 setInterval(ensureProfileSocialLinks, 1200);
+
+// Copy helper for buttons like: <button class="copyBtn" data-copy="#someId">
+document.addEventListener("click", async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest(".copyBtn[data-copy]") : null;
+  if(!btn) return;
+  const sel = btn.getAttribute("data-copy");
+  const el = sel ? document.querySelector(sel) : null;
+  const text = (el && (el.value ?? el.textContent) ? String(el.value ?? el.textContent).trim() : "");
+  if(!text) return;
+  try{
+    await navigator.clipboard.writeText(text);
+    toast && toast("Nusxa olindi ✅", "success");
+  }catch(err){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      toast && toast("Nusxa olindi ✅", "success");
+    }catch(e2){
+      toast && toast("Nusxa olishda xatolik", "error");
+    }
+  }
+});
