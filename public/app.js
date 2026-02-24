@@ -1562,9 +1562,8 @@ function renderOrders(orders){
    Money history (profile)
 ========================= */
 let moneyUnsubTopups = null;
-let moneyUnsubOrders = null;
 
-function normalizeMoneyItems({ topups=[], orders=[] }){
+function normalizeMoneyItems({ topups=[] }){
   const out = [];
   for(const t of topups){
     const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
@@ -1578,21 +1577,6 @@ function normalizeMoneyItems({ topups=[], orders=[] }){
       note: (t.adminNote||""),
       ts,
       id: t.id || ""
-    });
-  }
-  for(const o of orders){
-    if((o.provider||"") !== "balance") continue;
-    const ts = o.createdAt || null;
-    const st = (o.status||"").toString();
-    const amt = Number(o.totalUZS||0) || 0;
-    out.push({
-      kind: "order",
-      direction: "out",
-      amountUZS: amt,
-      status: st,
-      orderId: o.orderId || o.id || "",
-      ts,
-      id: o.id || ""
     });
   }
   out.sort((a,b)=>{
@@ -1616,14 +1600,12 @@ function renderMoneyHistory(items){
     const when = fmtDate(it.ts);
     const st = (it.status||"").toString();
 
-    let title = "";
-    if(it.kind === "topup") title = "Balans to‘ldirish";
-    else title = "Balansdan to‘lov";
+    const title = "Balans to‘ldirish";
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
     left.innerHTML = `
-      <div class="orderId">${title}${it.kind==="order" && it.orderId ? " (#"+String(it.orderId).slice(-6)+")" : ""}</div>
+      <div class="orderId">${title}</div>
       <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
       ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
     `.trim();
@@ -1671,13 +1653,11 @@ function escapeHtml(s){
 function subscribeMoneyHistory(uid){
   if(!uid || !db) return;
   try{ moneyUnsubTopups?.(); }catch(e){}
-  try{ moneyUnsubOrders?.(); }catch(e){}
 
   let topupsArr = [];
-  let ordersArr = [];
 
   function merge(){
-    const items = normalizeMoneyItems({ topups: topupsArr, orders: ordersArr });
+    const items = normalizeMoneyItems({ topups: topupsArr });
     renderMoneyHistory(items);
   }
 
@@ -1686,11 +1666,16 @@ function subscribeMoneyHistory(uid){
     const qTop = query(
       collection(db, "topup_requests"),
       where("uid", "==", uid),
-      orderBy("createdAt", "desc"),
       limit(50)
     );
     moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
       topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      // client-side sort to avoid composite index requirement
+      topupsArr.sort((a,b)=>{
+        const ta = (a.createdAt?.toDate ? +a.createdAt.toDate() : (a.createdAt ? +new Date(a.createdAt) : 0));
+        const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
+        return tb - ta;
+      });
       merge();
     }, (err)=>{
       console.error(err);
@@ -1701,25 +1686,8 @@ function subscribeMoneyHistory(uid){
     console.error(e);
   }
 
-  // Orders: read own orders and filter provider=balance
-  try{
-    const qOrd = query(
-      collection(db, "orders"),
-      where("uid", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
-    moneyUnsubOrders = onSnapshot(qOrd, (snap)=>{
-      ordersArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-      merge();
-    }, (err)=>{
-      console.error(err);
-      ordersArr = [];
-      merge();
-    });
-  }catch(e){
-    console.error(e);
-  }
+
+
 }
 
 
