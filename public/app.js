@@ -1510,14 +1510,22 @@ function fmtDate(ts){
 
 
 function orderStatusLabel(s){
-  const v = (s||"").toString();
+  const v = (s||"").toString().toLowerCase();
   const m = {
+    // common order statuses
     "pending":"Kutilmoqda",
     "pending_cash":"Kutilmoqda (naqd)",
     "pending_payment":"To‘lov kutilmoqda",
+    "processing":"Jarayonda",
     "paid":"To‘langan",
+    "completed":"Yakunlangan",
     "delivered":"Yetkazildi",
-    "cancelled":"Bekor qilindi"
+    "shipped":"Jo‘natildi",
+    "rejected":"Rad etilgan",
+    "declined":"Rad etilgan",
+    "canceled":"Bekor qilindi",
+    "cancelled":"Bekor qilindi",
+    "failed":"Muvaffaqiyatsiz"
   };
   return m[v] || (v ? v : "");
 }
@@ -1525,6 +1533,19 @@ function orderStatusClass(s){
   const v = (s||"").toString();
   if(!v) return "";
   return "status-"+v.replace(/[^a-z0-9_\-]/gi,"").toLowerCase();
+}
+
+
+function providerLabel(p){
+  const v = (p||"").toString().toLowerCase();
+  const m = {
+    "balance":"Balans",
+    "cash":"Naqd",
+    "card":"Karta",
+    "payme":"Payme",
+    "click":"Click"
+  };
+  return m[v] || (v ? v : "");
 }
 
 function renderOrders(orders){
@@ -1549,7 +1570,7 @@ function renderOrders(orders){
       </div>
       <div class="orderMeta">
         ${status ? `<span class="orderPill ${orderStatusClass(status)}">${escapeHtml(orderStatusLabel(status))}</span>` : ""}
-        ${provider ? `<span class="orderPill">${escapeHtml(provider)}</span>` : ""}
+        ${provider ? `<span class="orderPill">${escapeHtml(providerLabel(provider))}</span>` : ""}
         ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
       </div>
     `;
@@ -1628,18 +1649,20 @@ function renderMoneyHistory(items){
 }
 
 function statusLabel(st, kind){
+  const v = (st||"").toString().toLowerCase();
+
   if(kind === "topup"){
-    if(st === "approved") return "Tasdiqlangan";
-    if(st === "canceled" || st === "cancelled") return "Bekor qilingan";
-    if(st === "pending") return "Kutilmoqda";
-    return st;
+    if(v === "approved" || v === "success") return "Tasdiqlangan";
+    if(v === "pending" || v === "waiting") return "Kutilmoqda";
+    if(v === "rejected" || v === "declined") return "Rad etilgan";
+    if(v === "canceled" || v === "cancelled" || v === "canceled_by_admin") return "Bekor qilingan";
+    return v ? v : "";
   }
+
   // orders
-  if(st === "paid") return "To‘langan";
-  if(st === "pending") return "Kutilmoqda";
-  if(st === "canceled") return "Bekor";
-  return st;
+  return orderStatusLabel(v);
 }
+
 
 function escapeHtml(s){
   return String(s||"")
