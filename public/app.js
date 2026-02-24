@@ -2185,129 +2185,6 @@ function renderCartPage(){
 /* =========================
    Checkout (Cart -> Order)
 ========================= */
-let shipMap = null;          // google.maps.Map
-let shipMarker = null;       // google.maps.Marker
-let shipLatLng = null;       // {lat,lng}
-let shipGeocoder = null;     // google.maps.Geocoder
-let shipAutocomplete = null; // google.maps.places.Autocomplete
-let shipMapInited = false;
-let shipWatchId = null;
-let shipIsFull = false;
-
-let _gmapsPromise = null;
-function loadGoogleMapsOnce(){
-  if(_gmapsPromise) return _gmapsPromise;
-  _gmapsPromise = new Promise((resolve, reject)=>{
-    if(typeof window !== "undefined" && window.google && window.google.maps){
-      resolve(window.google.maps);
-      return;
-    }
-    const key = "AIzaSyCf8SAINzWwcTXF6GYXLCzXtkMyqc1DIl4";
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
-    s.async = true;
-    s.defer = true;
-    s.onload = ()=> resolve(window.google.maps);
-    s.onerror = ()=> reject(new Error("Google Maps yuklanmadi"));
-    document.head.appendChild(s);
-  });
-  return _gmapsPromise;
-}
-
-
-function _shipResizeMap(){
-  try{
-    if(shipMap && window.google && google.maps){
-      google.maps.event.trigger(shipMap, "resize");
-      if(shipLatLng) shipMap.setCenter(shipLatLng);
-    }
-  }catch(e){}
-}
-
-
-async function reverseGeocodeShip(lat, lng){
-  try{
-    if(!shipGeocoder) shipGeocoder = new google.maps.Geocoder();
-    const res = await shipGeocoder.geocode({ location: { lat, lng } });
-    const addr = res?.results?.[0]?.formatted_address || "";
-    if(els.shipAddress && addr) els.shipAddress.value = addr;
-    return addr;
-  }catch(e){
-    return "";
-  }
-}
-
-async function initShipMapOnce(){
-  if(shipMapInited) return;
-  const el = document.getElementById("shipMap");
-  if(!el) return;
-
-  try{
-    await loadGoogleMapsOnce();
-  }catch(e){
-    console.warn(e);
-    toast("Google Maps yuklanmadi. Internetni tekshiring.");
-    return;
-  }
-
-  shipMapInited = true;
-
-  const defaultCenter = { lat: 41.0, lng: 71.6 }; // Namangan atrofida
-  shipLatLng = shipLatLng || defaultCenter;
-
-  shipMap = new google.maps.Map(el, {
-    center: shipLatLng,
-    zoom: 13,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-  });
-
-  shipMarker = new google.maps.Marker({
-    position: shipLatLng,
-    map: shipMap,
-    draggable: true,
-  });
-
-  // Click on map
-  shipMap.addListener("click", async (e)=>{
-    shipLatLng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    shipMarker.setPosition(shipLatLng);
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  });
-
-  // Drag marker
-  shipMarker.addListener("dragend", async ()=>{
-    const p = shipMarker.getPosition();
-    shipLatLng = { lat: p.lat(), lng: p.lng() };
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  });
-
-  // Autocomplete
-  if(els.shipAddress){
-    shipAutocomplete = new google.maps.places.Autocomplete(els.shipAddress, {
-      fields: ["geometry", "formatted_address", "name"]
-    });
-    shipAutocomplete.addListener("place_changed", ()=>{
-      const place = shipAutocomplete.getPlace();
-      if(!place || !place.geometry || !place.geometry.location) return;
-      const loc = place.geometry.location;
-      shipLatLng = { lat: loc.lat(), lng: loc.lng() };
-      shipMap.panTo(shipLatLng);
-      shipMap.setZoom(16);
-      shipMarker.setPosition(shipLatLng);
-      if(place.formatted_address) els.shipAddress.value = place.formatted_address;
-      if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    });
-  }
-
-  // First display coords text
-  if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-  reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-}
-
 function openCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = false;
@@ -2324,17 +2201,6 @@ function openCheckout(){
     }
   }catch(_){}
 
-  // Checkout: only payment type (hide shipping/address/map UI)
-  try{
-    const hideIds = ["shipAddress","shipPhone","useProfilePhone","useMyLocation","shipLiveBtn","shipFullBtn","shipExitFullBtn","shipCoordsText","shipMap"];
-    hideIds.forEach(id=>{
-      const el = document.getElementById(id);
-      if(el) el.closest(".field, .mapCard, .shipCard, .mapWrap, .shipMap") ? (el.closest(".field, .mapCard, .shipCard, .mapWrap, .shipMap").style.display="none") : (el.style.display="none");
-    });
-    // Also hide map wrapper if present
-    const wrap = document.querySelector(".mapWrap"); if(wrap) wrap.style.display="none";
-    const map = document.getElementById("shipMap"); if(map) map.style.display="none";
-  }catch(_){}
 
   // Scroll sheet into view
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2343,23 +2209,6 @@ function openCheckout(){
 function closeCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = true;
-
-  // stop live location when checkout closed
-  if(shipWatchId != null && navigator.geolocation){
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-  }
-
-  // exit fullscreen if needed
-  const wrap = document.querySelector(".mapWrap");
-  if(wrap && wrap.classList.contains("isFull")){
-    wrap.classList.remove("isFull");
-    if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
-    if(els.shipFullBtn) els.shipFullBtn.hidden = false;
-    document.body.style.overflow = "";
-    shipIsFull = false;
-  }
 }
 
 function getPayType(){
@@ -2429,8 +2278,6 @@ async function createOrderFromCheckout(){
     note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
-  const address = (els.shipAddress?.value || "").trim();
-  // Address is optional: user may place order without address
 
   let payType = getPayType(); // cash | balance
   if(hasPrepay && payType !== "balance"){
@@ -2449,12 +2296,7 @@ async function createOrderFromCheckout(){
     items: built.items,
     totalUZS: built.totalUZS,
     amountTiyin: null,
-    shipping: {
-      phone: ((profileCache?.phone || profileCache?.phoneNumber || currentUser?.phoneNumber || "") || "").toString().trim() || null,
-      addressText: null,
-      lat: null,
-      lng: null
-    }
+    shipping: null
   };
 
     try{
@@ -2470,7 +2312,7 @@ async function createOrderFromCheckout(){
         body: JSON.stringify({
           items: payload.items,
           totalUZS: payload.totalUZS,
-          shipping: payload.shipping
+          shipping: null
         })
       });
       const out = await resp.json().catch(()=>({}));
@@ -3234,104 +3076,6 @@ els.orderBtnPage?.addEventListener("click", ()=>{
 });
 els.checkoutClose?.addEventListener("click", closeCheckout);
 els.checkoutSubmit?.addEventListener("click", createOrderFromCheckout);
-
-els.useMyLocation?.addEventListener("click", ()=>{
-  if(!navigator.geolocation){
-    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition((pos)=>{
-    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    initShipMapOnce();
-    try{
-      if(shipMap && window.google && google.maps){
-        shipMap.setCenter(shipLatLng);
-        shipMap.setZoom(16);
-        if(shipMarker) shipMarker.setPosition(shipLatLng);
-      }
-    }catch(e){}
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  }, ()=>{
-    toast("Lokatsiyani olishga ruxsat berilmadi.");
-  }, { enableHighAccuracy: true, timeout: 8000 });
-
-
-els.shipFullBtn?.addEventListener("click", ()=>{
-  const wrap = document.querySelector(".mapWrap");
-  if(!wrap) return;
-  shipIsFull = true;
-  wrap.classList.add("isFull");
-  // show exit button, hide expand
-  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = false;
-  if(els.shipFullBtn) els.shipFullBtn.hidden = true;
-  document.body.style.overflow = "hidden";
-  setTimeout(_shipResizeMap, 120);
-});
-
-els.shipExitFullBtn?.addEventListener("click", ()=>{
-  const wrap = document.querySelector(".mapWrap");
-  if(!wrap) return;
-  shipIsFull = false;
-  wrap.classList.remove("isFull");
-  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
-  if(els.shipFullBtn) els.shipFullBtn.hidden = false;
-  document.body.style.overflow = "";
-  setTimeout(_shipResizeMap, 120);
-});
-
-function _setLiveBtnOn(on){
-  if(!els.shipLiveBtn) return;
-  els.shipLiveBtn.classList.toggle("active", !!on);
-  els.shipLiveBtn.innerHTML = on
-    ? '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli: ON'
-    : '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli';
-}
-
-els.shipLiveBtn?.addEventListener("click", ()=>{
-  if(!navigator.geolocation){
-    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
-    return;
-  }
-  // toggle
-  if(shipWatchId != null){
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-    toast("Jonli lokatsiya: OFF");
-    return;
-  }
-  initShipMapOnce();
-  _setLiveBtnOn(true);
-  toast("Jonli lokatsiya: ON");
-  shipWatchId = navigator.geolocation.watchPosition((pos)=>{
-    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    try{
-      if(shipMap && window.google && google.maps){
-        shipMap.setCenter(shipLatLng);
-        shipMap.setZoom(17);
-        if(shipMarker) shipMarker.setPosition(shipLatLng);
-      }
-    }catch(e){}
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    // address is optional; reverse geocode occasionally to reduce quota
-    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  }, (err)=>{
-    console.warn("watchPosition error", err);
-    toast("Lokatsiya ruxsati berilmadi yoki topilmadi.");
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
-});
-
-
-});
-
-
-
-
-
 
 /* =========================
    Profile modal (one-time fill + pencil edit)
