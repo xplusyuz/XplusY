@@ -87,12 +87,14 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   collection,
   query,
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -390,54 +392,12 @@ function _anyOverlayOpen(){
 }
 function _syncModalBody(){
   const open = _anyOverlayOpen();
-
-  // Robust scroll lock (mobile Safari friendly)
-  // - keeps the page from "jumping" after closing
-  // - prevents background scrolling while modal is open
-  try{
-    window.__omModalLock = window.__omModalLock || { locked:false, y:0 };
-    const st = window.__omModalLock;
-
-    if(open && !st.locked){
-      st.locked = true;
-      st.y = window.scrollY || window.pageYOffset || 0;
-
-      document.body.classList.add("modalOpen");
-      document.documentElement.classList.add("modalOpen");
-
-      // Hard-lock the page
-      document.body.style.position = "fixed";
-      document.body.style.top = `-${st.y}px`;
-      document.body.style.left = "0";
-      document.body.style.right = "0";
-      document.body.style.width = "100%";
-    }
-
-    if(!open && st.locked){
-      st.locked = false;
-
-      document.body.classList.remove("modalOpen");
-      document.documentElement.classList.remove("modalOpen");
-
-      // Restore
-      const y = st.y || 0;
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
-      document.body.style.width = "";
-
-      window.scrollTo(0, y);
-    }
-  }catch(e){
-    // fallback
-    if(open){
-      document.body.classList.add("modalOpen");
-      document.documentElement.classList.add("modalOpen");
-    } else {
-      document.body.classList.remove("modalOpen");
-      document.documentElement.classList.remove("modalOpen");
-    }
+  if(open){
+    document.body.classList.add("modalOpen");
+    document.documentElement.classList.add("modalOpen");
+  } else {
+    document.body.classList.remove("modalOpen");
+    document.documentElement.classList.remove("modalOpen");
   }
 }
 function showOverlay(el){
@@ -532,6 +492,11 @@ function enhanceHScroll(el){
 
 let products = [];
 let tagCounts = new Map();
+
+// Product list rendering performance
+const PRODUCTS_RENDER_PAGE = 60;
+let productsVisibleCount = PRODUCTS_RENDER_PAGE;
+let lastFilteredProducts = [];
 
 const LS = {
   favs: "om_favs",
@@ -1168,6 +1133,9 @@ function applyFilterSort(){
   if(sort === "new") arr.sort((a,b)=> (b._created||0) - (a._created||0));
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
+  // Reset pagination when filter/sort changes
+  productsVisibleCount = PRODUCTS_RENDER_PAGE;
+  lastFilteredProducts = arr;
   render(arr);
 }
 
@@ -1223,13 +1191,18 @@ function discountPct(price, oldPrice){
 
 function render(arr){
   els.grid.innerHTML = "";
+  const total = Array.isArray(arr) ? arr.length : 0;
   if (els.productsCount) {
-    const n = Array.isArray(arr) ? arr.length : 0;
-    els.productsCount.textContent = `${n} ta`;
+    els.productsCount.textContent = `${total} ta`;
   }
-  els.empty.hidden = arr.length !== 0;
+  els.empty.hidden = total !== 0;
 
-  for(const p of arr){
+  // Render only a slice first (keeps mobile smooth on big catalogs)
+  const visible = Math.min(productsVisibleCount, total);
+  const slice = arr.slice(0, visible);
+  const frag = document.createDocumentFragment();
+
+  for(const p of slice){
     const card = document.createElement("div");
     card.className = "pcard";
 
@@ -1352,11 +1325,31 @@ const openQuickView = ()=>{
       handleAddToCart(p, { openCartAfter: false });
     });
 
-    els.grid.appendChild(card);
+    frag.appendChild(card);
 
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
+
+  els.grid.appendChild(frag);
+
+  // Load-more control (created once, reused)
+  let moreBtn = document.getElementById("omLoadMore");
+  if(!moreBtn){
+    moreBtn = document.createElement("button");
+    moreBtn.id = "omLoadMore";
+    moreBtn.type = "button";
+    moreBtn.className = "btn loadMoreBtn";
+    moreBtn.style.margin = "16px auto 6px";
+    moreBtn.style.display = "none";
+    moreBtn.textContent = "Yana ko‘rsatish";
+    moreBtn.addEventListener("click", ()=>{
+      productsVisibleCount += PRODUCTS_RENDER_PAGE;
+      render(lastFilteredProducts);
+    });
+    els.grid.insertAdjacentElement("afterend", moreBtn);
+  }
+  moreBtn.style.display = (visible < total) ? "block" : "none";
 }
 
 
@@ -1723,23 +1716,19 @@ function escapeHtml(s){
 
 function subscribeMoneyHistory(uid){
   if(!uid || !db) return;
+  // Performance: fetch-on-demand instead of keeping a live listener.
   try{ moneyUnsubTopups?.(); }catch(e){}
+  moneyUnsubTopups = null;
 
-  let topupsArr = [];
-
-  function merge(){
-    const items = normalizeMoneyItems({ topups: topupsArr });
-    renderMoneyHistory(items);
-  }
-
-  // Topups: only this user
-  try{
-    const qTop = query(
-      collection(db, "topup_requests"),
-      where("uid", "==", uid),
-      limit(50)
-    );
-    moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
+  (async ()=>{
+    let topupsArr = [];
+    try{
+      const qTop = query(
+        collection(db, "topup_requests"),
+        where("uid", "==", uid),
+        limit(50)
+      );
+      const snap = await getDocs(qTop);
       topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
       // client-side sort to avoid composite index requirement
       topupsArr.sort((a,b)=>{
@@ -1747,15 +1736,13 @@ function subscribeMoneyHistory(uid){
         const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
         return tb - ta;
       });
-      merge();
-    }, (err)=>{
+    }catch(err){
       console.error(err);
       topupsArr = [];
-      merge();
-    });
-  }catch(e){
-    console.error(e);
-  }
+    }
+    const items = normalizeMoneyItems({ topups: topupsArr });
+    renderMoneyHistory(items);
+  })();
 
 
 
@@ -1768,24 +1755,25 @@ function subscribeOrders(uid){
 
   if(!uid || !db || !els.ordersList) return;
   try{ ordersUnsub?.(); }catch(e){}
+  ordersUnsub = null;
 
-  // Read from top-level orders (rules allow user to read only own orders)
-  // NOTE: This query may require a composite index (uid + createdAt). If missing, Firestore will show a link to create it.
-  const qy = query(
-    collection(db, "orders"),
-    where("uid", "==", uid),
-    orderBy("createdAt", "desc"),
-    limit(20)
-  );
-
-  ordersUnsub = onSnapshot(qy, (snap)=>{
-    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
-    renderOrders(arr);
-  }, (err)=>{
-    console.warn("orders subscribe error", err);
-    // Fallback to cache if any
-    renderOrders(ordersCache);
-  });
+  // Performance: fetch-on-demand instead of keeping a live listener.
+  (async ()=>{
+    try{
+      const qy = query(
+        collection(db, "orders"),
+        where("uid", "==", uid),
+        orderBy("createdAt", "desc"),
+        limit(20)
+      );
+      const snap = await getDocs(qy);
+      const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+      renderOrders(arr);
+    }catch(err){
+      console.warn("orders fetch error", err);
+      renderOrders(ordersCache);
+    }
+  })();
 }
 
 els.ordersReload?.addEventListener("click", (e)=>{
@@ -2076,10 +2064,10 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
 
   // Make scroll stable across devices (some browsers need an explicit reset)
   try{
-    const sc = document.getElementById('qvScrollArea') || els.imgViewer.querySelector('.qvScrollArea');
-    if(sc){
-      sc.scrollTop = 0;
-      sc.style.webkitOverflowScrolling = 'touch';
+    const panel = els.imgViewer.querySelector('.qvPanel');
+    if(panel){
+      panel.scrollTop = 0;
+      panel.style.webkitOverflowScrolling = 'touch';
     }
   }catch(e){}
 }
@@ -2626,47 +2614,45 @@ async function createOrderFromCheckout(){
 let unsubProducts = null;
 
 async function loadProducts(){
-  // Firestore is the single source of truth (no products.json fallback).
+  // Performance: do NOT keep a realtime listener on the whole catalog.
+  // Fetch once (and let users refresh via reload / re-open).
   try{
     const colRef = collection(db, "products");
-    const qy = query(colRef, orderBy("popularScore", "desc"));
-    unsubProducts && unsubProducts();
-    unsubProducts = onSnapshot(qy, (snap)=>{
-      const arr = snap.docs.map(d=> {
-        const data = d.data() || {};
-        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-        const created = (data.createdAt ?? data.created_at ?? data.created);
-        return {
-          id: String(data.id || d.id),
-          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
-          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
-          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
-          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
-          ...data,
-          _docId: d.id,
-          _price: parseUZS(price),
-          _created: toMillis(created),
-        };
-      });
-      products = arr;
-      buildTagCounts();
-buildCategoryTree();
-      applyFilterSort();
-      if(activeTab==="categories") renderCategoriesPage();
+    const qy = query(colRef, orderBy("popularScore", "desc"), limit(500));
+    try{ unsubProducts && unsubProducts(); }catch(_e){}
+    unsubProducts = null;
 
-      // If empty, show a helpful hint for setup
-      if(arr.length === 0){
-        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
-      }
-    }, (err)=>{
-      console.warn("Firestore products error", err);
-      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
-      products = [];
-      applyFilterSort();
+    const snap = await getDocs(qy);
+    const arr = snap.docs.map(d=> {
+      const data = d.data() || {};
+      const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+      const created = (data.createdAt ?? data.created_at ?? data.created);
+      const isCargo = (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo);
+      return {
+        id: String(data.id || d.id),
+        fulfillmentType: (data.fulfillmentType || data.fulfillment || (isCargo ? 'cargo' : 'stock') || 'stock'),
+        deliveryMinDays: (data.deliveryMinDays ?? (isCargo ? 15 : 1)),
+        deliveryMaxDays: (data.deliveryMaxDays ?? (isCargo ? 30 : 7)),
+        prepayRequired: (data.prepayRequired ?? (isCargo ? true : false)),
+        ...data,
+        _docId: d.id,
+        _price: parseUZS(price),
+        _created: toMillis(created),
+      };
     });
+
+    products = arr;
+    buildTagCounts();
+    buildCategoryTree();
+    applyFilterSort();
+    if(activeTab==="categories") renderCategoriesPage();
+
+    if(arr.length === 0){
+      showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+    }
   }catch(e){
-    console.warn("Firestore products init failed", e);
-    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
+    console.warn("Firestore products load failed", e);
+    showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore / internet tekshiring.", "error");
     products = [];
     applyFilterSort();
   }
@@ -2750,7 +2736,17 @@ function setUserUI(user){
 els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
-els.q.addEventListener("input", applyFilterSort);
+// Debounced filtering to keep typing smooth on mobile
+function debounce(fn, wait=180){
+  let t = null;
+  return (...args)=>{
+    if(t) clearTimeout(t);
+    t = setTimeout(()=> fn(...args), wait);
+  };
+}
+
+const applyFilterSortDebounced = debounce(applyFilterSort, 180);
+els.q.addEventListener("input", applyFilterSortDebounced);
 els.sort.addEventListener("change", applyFilterSort);
 
 
