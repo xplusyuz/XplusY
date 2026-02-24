@@ -2025,6 +2025,15 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
   };
   showOverlay(els.imgViewer);
   renderViewer();
+
+  // Make scroll stable across devices (some browsers need an explicit reset)
+  try{
+    const panel = els.imgViewer.querySelector('.qvPanel');
+    if(panel){
+      panel.scrollTop = 0;
+      panel.style.webkitOverflowScrolling = 'touch';
+    }
+  }catch(e){}
 }
 
 
