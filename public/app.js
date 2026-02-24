@@ -1559,16 +1559,17 @@ function renderOrders(orders){
 
 
 /* =========================
-   Money history (profile)
+   Money history (profile) — TOPUP ONLY
 ========================= */
 let moneyUnsubTopups = null;
-let moneyUnsubOrders = null;
 
-function normalizeMoneyItems({ topups=[], orders=[] }){
+function normalizeTopupItems(topups=[]){
   const out = [];
-  for(const t of topups){
-    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
-    const st = (t.status||"pending").toString();
+  for(const t of (topups||[])){
+    const ts = t.approvedAt || t.rejectedAt || t.updatedAt || t.createdAt || null;
+    const stRaw = (t.status||"pending").toString();
+    // normalize legacy spellings
+    const st = (stRaw === "cancelled" || stRaw === "canceled") ? "rejected" : stRaw;
     const amt = Number(t.amountUZS||0) || 0;
     out.push({
       kind: "topup",
@@ -1578,21 +1579,6 @@ function normalizeMoneyItems({ topups=[], orders=[] }){
       note: (t.adminNote||""),
       ts,
       id: t.id || ""
-    });
-  }
-  for(const o of orders){
-    if((o.provider||"") !== "balance") continue;
-    const ts = o.createdAt || null;
-    const st = (o.status||"").toString();
-    const amt = Number(o.totalUZS||0) || 0;
-    out.push({
-      kind: "order",
-      direction: "out",
-      amountUZS: amt,
-      status: st,
-      orderId: o.orderId || o.id || "",
-      ts,
-      id: o.id || ""
     });
   }
   out.sort((a,b)=>{
@@ -1611,26 +1597,23 @@ function renderMoneyHistory(items){
   if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
 
   for(const it of arr){
-    const isIn = it.direction === "in";
     const amt = moneyUZS(Number(it.amountUZS||0));
     const when = fmtDate(it.ts);
     const st = (it.status||"").toString();
 
-    let title = "";
-    if(it.kind === "topup") title = "Balans to‘ldirish";
-    else title = "Balansdan to‘lov";
+    const title = "Balans to‘ldirish";
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
     left.innerHTML = `
-      <div class="orderId">${title}${it.kind==="order" && it.orderId ? " (#"+String(it.orderId).slice(-6)+")" : ""}</div>
-      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
+      <div class="orderId">${title}${it.id ? " (#"+String(it.id).slice(-6)+")" : ""}</div>
+      <div class="orderMeta">${when ? when : ""}${st ? " • "+topupStatusLabel(st) : ""}</div>
       ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
     `.trim();
 
     const right = document.createElement("div");
     right.className = "orderTotal";
-    right.textContent = (isIn ? "+ " : "- ") + amt;
+    right.textContent = "+ " + amt;
 
     const row = document.createElement("div");
     row.className = "orderItem";
@@ -1645,17 +1628,10 @@ function renderMoneyHistory(items){
   }
 }
 
-function statusLabel(st, kind){
-  if(kind === "topup"){
-    if(st === "approved") return "Tasdiqlangan";
-    if(st === "canceled" || st === "cancelled") return "Bekor qilingan";
-    if(st === "pending") return "Kutilmoqda";
-    return st;
-  }
-  // orders
-  if(st === "paid") return "To‘langan";
+function topupStatusLabel(st){
+  if(st === "approved") return "Tasdiqlandi";
+  if(st === "rejected") return "Rad etildi";
   if(st === "pending") return "Kutilmoqda";
-  if(st === "canceled") return "Bekor";
   return st;
 }
 
@@ -1671,15 +1647,6 @@ function escapeHtml(s){
 function subscribeMoneyHistory(uid){
   if(!uid || !db) return;
   try{ moneyUnsubTopups?.(); }catch(e){}
-  try{ moneyUnsubOrders?.(); }catch(e){}
-
-  let topupsArr = [];
-  let ordersArr = [];
-
-  function merge(){
-    const items = normalizeMoneyItems({ topups: topupsArr, orders: ordersArr });
-    renderMoneyHistory(items);
-  }
 
   // Topups: only this user
   try{
@@ -1690,38 +1657,17 @@ function subscribeMoneyHistory(uid){
       limit(50)
     );
     moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
-      topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-      merge();
+      const topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      const items = normalizeTopupItems(topupsArr);
+      renderMoneyHistory(items);
     }, (err)=>{
       console.error(err);
-      topupsArr = [];
-      merge();
-    });
-  }catch(e){
-    console.error(e);
-  }
-
-  // Orders: read own orders and filter provider=balance
-  try{
-    const qOrd = query(
-      collection(db, "orders"),
-      where("uid", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
-    moneyUnsubOrders = onSnapshot(qOrd, (snap)=>{
-      ordersArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-      merge();
-    }, (err)=>{
-      console.error(err);
-      ordersArr = [];
-      merge();
+      renderMoneyHistory([]);
     });
   }catch(e){
     console.error(e);
   }
 }
-
 
 function subscribeOrders(uid){
   if(!uid) return;
