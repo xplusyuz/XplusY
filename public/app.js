@@ -1556,9 +1556,11 @@ function subscribeOrders(uid){
   if(!uid || !db || !els.ordersList) return;
   try{ ordersUnsub?.(); }catch(e){}
 
-  // If security rules disallow, we fail gracefully.
+  // Read from top-level orders (rules allow user to read only own orders)
+  // NOTE: This query may require a composite index (uid + createdAt). If missing, Firestore will show a link to create it.
   const qy = query(
-    collection(db, "users", uid, "orders"),
+    collection(db, "orders"),
+    where("uid", "==", uid),
     orderBy("createdAt", "desc"),
     limit(20)
   );
@@ -2668,9 +2670,6 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
   const orderRef = doc(db, "orders", orderId);
 
-  // also store under user subcollection to avoid composite index for profile history
-  const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
-
   const baseOrder = {
     orderId,
     uid: currentUser.uid,
@@ -2705,12 +2704,10 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
       const paidOrder = { ...baseOrder, status: "paid", provider: "balance", amountTiyin: null };
       tx.set(orderRef, paidOrder, { merge: true });
-      tx.set(userOrderRef, paidOrder, { merge: true });
     });
   } else {
     // cash checkout or topup/payme orders
     await setDoc(orderRef, baseOrder, { merge: true });
-    await setDoc(userOrderRef, baseOrder, { merge: true });
   }
   // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
   try{
