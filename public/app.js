@@ -1150,9 +1150,6 @@ function renderOptions(p){
   return `<div class="optStack">${sw}${sz}</div>`;
 }
 
-function escapeHtml(str){
-  return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
-}
 function _normPType(p){
   const t = (p?.pType || p?.fulfillmentType || p?.type || "stock");
   return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
