@@ -75,6 +75,9 @@ function buildOrderCreatedHTML(o){
     o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
     o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
     o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
+    (o.region || o.shipping?.region) ? `Viloyat: <b>${tgEscape(o.region || o.shipping?.region)}</b>` : "",
+    (o.district || o.shipping?.district) ? `Tuman: <b>${tgEscape(o.district || o.shipping?.district)}</b>` : "",
+    (o.post || o.shipping?.post) ? `Pochta: <b>${tgEscape(o.post || o.shipping?.post)}</b>` : "",
     pay ? `To'lov: <b>${pay}</b>` : "",
     `Summa: <b>${sum} so'm</b>`,
     addr ? `Manzil: <i>${addr}</i>` : "",
@@ -143,11 +146,15 @@ exports.handler = async (event) => {
 
     // Deduplicate: one message per uid+orderId+event
     const logRef = db.collection("telegram_logs").doc(`${uid}_${orderId}_${ev}`);
+    let already = false;
     await db.runTransaction(async (t)=>{
       const s = await t.get(logRef);
-      if(s.exists) return;
+      if(s.exists){ already = true; return; }
       t.set(logRef, { uid, orderId, event: ev, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     });
+    if(already){
+      return json(200, { ok:true, dedup:true });
+    }
 
     // Build html server-side (ignore any client-provided html)
     const html = buildOrderCreatedHTML({ ...o, orderId });

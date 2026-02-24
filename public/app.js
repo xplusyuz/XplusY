@@ -2291,6 +2291,20 @@ async function createOrderFromCheckout(){
   const orderId = String(Date.now()); // digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
+  // Shipping/profile snapshot (viloyat/tuman/pochta) for order + Telegram
+  let shippingSnap = null;
+  try{
+    const uSnap = await getDoc(doc(db, "users", currentUser.uid));
+    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    const region = (u.region || "").toString();
+    const district = (u.district || "").toString();
+    const post = (u.post || "").toString();
+    shippingSnap = {
+      region, district, post,
+      addressText: [region, district, post].filter(Boolean).join(" / ")
+    };
+  }catch(_e){}
+
   const payload = {
     orderId,
     provider: payType === 'balance' ? 'balance' : 'cash',
@@ -2298,7 +2312,7 @@ async function createOrderFromCheckout(){
     items: built.items,
     totalUZS: built.totalUZS,
     amountTiyin: null,
-    shipping: null
+    shipping: shippingSnap
   };
 
     try{
@@ -2312,12 +2326,14 @@ async function createOrderFromCheckout(){
           "authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
+          orderId: payload.orderId,
           items: payload.items,
           totalUZS: payload.totalUZS,
-          shipping: null
+          shipping: payload.shipping || null
         })
       });
       const out = await resp.json().catch(()=>({}));
+      if(out && out.orderId) payload.orderId = String(out.orderId);
       if(!resp.ok || !out.ok){
         if(out && out.error === "insufficient_balance"){
           toast("Balans yetarli emas.");
@@ -2653,6 +2669,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   // pull richer user fields for order + telegram
   const userRef = doc(db, "users", currentUser.uid);
   let userName = null, userPhone = null, numericId = null, userTgChatId = null;
+  let firstName = null, lastName = null, region = null, district = null, post = null;
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
@@ -2661,11 +2678,17 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     userPhone = (u.phone || "").toString();
     numericId = (u.numericId != null ? String(u.numericId) : null);
     userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
+    firstName = (u.firstName || "").toString() || null;
+    lastName = (u.lastName || "").toString() || null;
+    region = (u.region || "").toString() || null;
+    district = (u.district || "").toString() || null;
+    post = (u.post || "").toString() || null;
   }catch(_e){
     userName = (currentUser.displayName || currentUser.email || "User").toString();
     userPhone = "";
     numericId = null;
     userTgChatId = null;
+    firstName = null; lastName = null; region = null; district = null; post = null;
   }
 
   const orderRef = doc(db, "orders", orderId);
@@ -2677,6 +2700,11 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     userName,
     userPhone,
     userTgChatId,
+    firstName,
+    lastName,
+    region,
+    district,
+    post,
     status,
     items,
     totalUZS,
@@ -2687,6 +2715,17 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     createdAt: serverTimestamp(),
     source: "web",
   };
+
+  // ensure shipping has full profile snapshot (viloyat/tuman/pochta)
+  if(!baseOrder.shipping){
+    const addrText = [region, district, post].filter(Boolean).join(" / ");
+    baseOrder.shipping = { region, district, post, addressText: addrText };
+  } else if(!baseOrder.shipping.addressText){
+    const r = baseOrder.shipping.region || region;
+    const d = baseOrder.shipping.district || district;
+    const p = baseOrder.shipping.post || post;
+    baseOrder.shipping.addressText = [r,d,p].filter(Boolean).join(" / ");
+  }
 
   // BALANCE checkout: atomically deduct balance and mark as paid
   if (provider === "balance" && orderType === "checkout") {
