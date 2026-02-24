@@ -5,9 +5,9 @@
 export const CARDPAY = {
   enabled: true,
   // Example: "8600 1234 5678 9012" (space bilan ham bo'ladi)
-  adminCardNumber: "9860 0409 2301 2321",
+  adminCardNumber: "YOUR_CARD_NUMBER",
   // Example: "SOHIBJON SATTOROV"
-  adminCardHolder: "SATTOROV SOHIBJON",
+  adminCardHolder: "YOUR_CARD_HOLDER",
   // Optional: bank name / note
   note: "To'lovni amalga oshirgach, chek (screenshot/PDF) ni yuklang va yuboring."
 };
