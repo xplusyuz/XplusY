@@ -389,8 +389,14 @@ function _anyOverlayOpen(){
   return [ els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
 }
 function _syncModalBody(){
-  if(_anyOverlayOpen()) document.body.classList.add("modalOpen");
-  else document.body.classList.remove("modalOpen");
+  const open = _anyOverlayOpen();
+  if(open){
+    document.body.classList.add("modalOpen");
+    document.documentElement.classList.add("modalOpen");
+  } else {
+    document.body.classList.remove("modalOpen");
+    document.documentElement.classList.remove("modalOpen");
+  }
 }
 function showOverlay(el){
   if(!el) return;
