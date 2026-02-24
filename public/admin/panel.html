@@ -431,6 +431,7 @@
                   <th>Provider</th>
                   <th>Summa</th>
                   <th>Vaqt</th>
+                  <th>Harakatlar</th>
                 </tr>
               </thead>
               <tbody id="turnoverTbody"></tbody>
@@ -978,7 +979,7 @@
       // rows
       tbody.innerHTML = "";
       if(!filtered.length){
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
         return;
       }
 
@@ -988,6 +989,13 @@
         const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
         const when = escapeHtml(formatTS(o.createdAt));
         const sum = Number(o.totalUZS||0).toLocaleString();
+        const canAct = (o.__src==="topup_requests") && (st==="pending");
+        const actions = canAct ? `
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
+          </div>
+        ` : `<span class="muted">—</span>`;
         tbody.insertAdjacentHTML("beforeend", `
           <tr>
             <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
@@ -997,6 +1005,7 @@
             <td>${escapeHtml(o.provider||"")}</td>
             <td><b>${sum}</b> so'm</td>
             <td>${when}</td>
+            <td>${actions}</td>
           </tr>
         `);
       }
@@ -1514,6 +1523,29 @@
       if($("turnoverRefresh")) $("turnoverRefresh").addEventListener("click",()=>subscribeTurnover());
       ["turnoverSearch","turnoverType","turnoverStatus","turnoverFrom","turnoverTo"].forEach(id=>{ const el=$(id); if(el){ el.addEventListener("input",renderTurnover); el.addEventListener("change",renderTurnover);} });
 
+      // Turnover action buttons (only for topup rows)
+      if(!window.__turnoverActionsBound && $("turnoverTbody")){
+        window.__turnoverActionsBound = true;
+        $("turnoverTbody").addEventListener("click", async (e)=>{
+          const btn = e.target.closest("button[data-act][data-id]");
+          if(!btn) return;
+          const act = btn.getAttribute("data-act");
+          const id = btn.getAttribute("data-id");
+          try{
+            btn.disabled = true;
+            if(act==="approve") await approveTopup(id);
+            else if(act==="cancel") await cancelTopup(id);
+            toast("Bajarildi", "success");
+          }catch(err){
+            console.error(err);
+            toast("Xato: "+(err?.message||err), "error");
+          }finally{
+            btn.disabled = false;
+          }
+        });
+      }
+
+
       window.addEventListener("click",(e)=>{
         if(e.target===$("productModal")){ closeModal("productModal"); resetForm(); }
         if(e.target===$("jsonModal")) closeModal("jsonModal");
@@ -1602,6 +1634,13 @@
     function tgOrderStatusHTML(o){
       const st = tgEscape(o.status||"");
       const sum = Number(o.totalUZS||0).toLocaleString();
+        const canAct = (o.__src==="topup_requests") && (st==="pending");
+        const actions = canAct ? `
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
+          </div>
+        ` : `<span class="muted">—</span>`;
       return [
         `<b>📦 Buyurtma statusi yangilandi</b>`,
         `Buyurtma ID: <code>${tgEscape(o.orderId||o.id||"")}</code>`,
@@ -2023,7 +2062,7 @@ function subscribeTopupReq(){
   });
 }
 
-async function approveTopup(id){
+async async function approveTopup(id){
   const note = prompt('Tasdiqlash izohi (majburiy emas)') || '';
   const reqRef = doc(db,'topup_requests', id);
   await runTransaction(db, async (tx)=>{
@@ -2049,9 +2088,8 @@ async function approveTopup(id){
   });
 }
 
-async function cancelTopup(id){
-  const note = prompt('Bekor qilish izohi (majburiy)');
-  if(!note || !note.trim()) return;
+async async function cancelTopup(id){
+  const note = prompt('Bekor qilish izohi (ixtiyoriy)') || '';
   const reqRef = doc(db,'topup_requests', id);
   await runTransaction(db, async (tx)=>{
     const rs = await tx.get(reqRef);
@@ -2060,7 +2098,7 @@ async function cancelTopup(id){
     if(String(r.status||'pending') !== 'pending') throw new Error('already_done');
     tx.set(reqRef, {
       status:'cancelled',
-      adminNote: note.trim(),
+      adminNote: (note||'').trim(),
       cancelledAt: serverTimestamp(),
       cancelledBy: (currentUser?.email || null),
       updatedAt: serverTimestamp()
