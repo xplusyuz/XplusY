@@ -810,7 +810,10 @@
     }
 
     // ======= Turnover (Hisob aylanmasi) =======
-    let unsubTurnover = null;
+    let unsubTurnoverOrders = null;
+    let unsubTurnoverTopups = null;
+    state.turnoverOrders = [];
+    state.turnoverTopups = [];
     state.turnoverAll = [];
 
     function toDateOnly(ts){
@@ -824,23 +827,97 @@
 
     function subscribeTurnover(){
       try{
-        if(unsubTurnover) { unsubTurnover(); unsubTurnover = null; }
+        // unsubscribe previous
+        try{ unsubTurnoverOrders && unsubTurnoverOrders(); }catch(_e){}
+        try{ unsubTurnoverTopups && unsubTurnoverTopups(); }catch(_e){}
+        unsubTurnoverOrders = null;
+        unsubTurnoverTopups = null;
+
         if(!db){ toast("DB yo‘q","error"); return; }
         $("turnoverState").textContent = "Yuklanmoqda…";
-        const qy = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
-        unsubTurnover = onSnapshot(qy, (snap)=>{
-          state.turnoverAll = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-          $("turnoverState").textContent = `Loaded: ${state.turnoverAll.length}`;
-          renderTurnover();
+
+        // 1) Checkout/Sales orders
+        const qOrders = query(collection(db,"orders"), orderBy("createdAt","desc"), limit(500));
+        unsubTurnoverOrders = onSnapshot(qOrders, (snap)=>{
+          state.turnoverOrders = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"orders" }));
+          mergeTurnoverSources();
         }, (err)=>{
           console.error(err);
-          $("turnoverState").textContent = "Xato";
-          toast("Turnover o‘qishda xato: "+(err?.message||err),"error");
+          $("turnoverState").textContent = "Xato (orders)";
+          toast("Orders o‘qishda xato: "+(err?.message||err),"error");
         });
+
+        // 2) Manual topups (topup_requests)
+        const qTopups = query(collection(db,"topup_requests"), orderBy("createdAt","desc"), limit(500));
+        unsubTurnoverTopups = onSnapshot(qTopups, (snap)=>{
+          state.turnoverTopups = snap.docs.map(d=>({ id:d.id, ...d.data(), __src:"topup_requests" }));
+          mergeTurnoverSources();
+        }, (err)=>{
+          console.error(err);
+          // Don't block UI if topup rules/index missing
+          $("turnoverState").textContent = "Xato (topup_requests)";
+          toast("Topup so‘rovlari o‘qishda xato: "+(err?.message||err),"error");
+        });
+
       }catch(e){
         console.error(e);
         toast("Turnover xato: "+(e?.message||e),"error");
       }
+    }
+
+    function mergeTurnoverSources(){
+      // normalize orders + topup_requests into one list for rendering
+      const orders = (state.turnoverOrders||[]).map(o=>{
+        const createdAt = o.createdAt || o.created_at || o.time || null;
+        return {
+          ...o,
+          orderId: o.orderId || o.id,
+          uid: o.uid || o.userUid || o.user_id || null,
+          numericId: o.numericId || o.userNumericId || o.numeric_id || null,
+          userName: o.userName || o.name || null,
+          userPhone: o.userPhone || o.phone || null,
+          provider: o.provider || (o.orderType==="topup" ? "manual" : "checkout"),
+          orderType: (o.orderType || "checkout"),
+          status: (o.status || "pending_payment"),
+          totalUZS: Number(o.totalUZS || o.amountUZS || o.amount || 0),
+          createdAt
+        };
+      });
+
+      const topups = (state.turnoverTopups||[]).map(r=>{
+        const st0 = String(r.status || "pending").toLowerCase();
+        // map manual topup statuses to common ledger statuses
+        let st = st0;
+        if(st0==="approved" || st0==="success") st = "paid";
+        else if(st0==="rejected" || st0==="canceled" || st0==="cancelled" || st0==="canceled_by_admin") st = "cancelled";
+        else if(st0==="pending" || st0==="waiting") st = "pending";
+        const createdAt = r.createdAt || r.created_at || r.time || null;
+        return {
+          id: r.id,
+          orderId: r.id,
+          uid: r.uid || r.userUid || null,
+          numericId: r.numericId || null,
+          userName: r.userName || null,
+          userPhone: r.userPhone || null,
+          provider: "manual",
+          orderType: "topup",
+          status: st,
+          totalUZS: Number(r.amountUZS || r.totalUZS || 0),
+          createdAt
+        };
+      });
+
+      const merged = [...topups, ...orders].sort((a,b)=>{
+        const da = (a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds*1000 : (a.createdAt ? new Date(a.createdAt).getTime():0))) || 0;
+        const dbt = (b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds*1000 : (b.createdAt ? new Date(b.createdAt).getTime():0))) || 0;
+        return dbt - da;
+      });
+
+      state.turnoverAll = merged;
+
+      const loaded = merged.length;
+      $("turnoverState").textContent = `Loaded: ${loaded}`;
+      renderTurnover();
     }
 
     function renderTurnover(){
