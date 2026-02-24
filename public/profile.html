@@ -142,7 +142,7 @@
           <div class="avatar" id="avatar" aria-hidden="true"><i class="fa-solid fa-user"></i></div>
           <div>
             <div class="name" id="name">User</div>
-            <div class="pill"><i class="fa-solid fa-id-card"></i> <span id="omId">ID: OM000000</span></div>
+            <div class="pill"><i class="fa-solid fa-id-card"></i> <span id="numericId">ID: 1000</span></div>
             <div class="sub" id="phone">—</div>
           </div>
         </div>
@@ -234,7 +234,7 @@
 <script type="module">
     import { auth, db } from "./firebase-config.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-    import { doc, getDoc, setDoc,
+    import { doc, getDoc, setDoc, runTransaction,
     serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
     const $ = (s)=>document.querySelector(s);
@@ -247,51 +247,65 @@
         return new Intl.DateTimeFormat("uz-UZ",{dateStyle:"medium",timeStyle:"short"}).format(d);
       }catch{ return "—"; }
     }
-
-    
-function uidToOmId(uid){
-      let h = 0;
-      const s = String(uid||"");
-      for(let i=0;i<s.length;i++){
-        h = (h * 31 + s.charCodeAt(i)) % 1000000;
-      }
-      return "OM" + String(h).padStart(6,"0");
-    }
-
-    async function ensureUserDoc(uid, phone, name){
+    async function ensureUserDoc(uid, phoneFromAuth, nameFromAuth){
       const userRef = doc(db, "users", uid);
-      const snap = await getDoc(userRef);
-      const existing = snap.exists() ? (snap.data()||{}) : {};
-      const omId = existing.omId || uidToOmId(uid);
 
-      await setDoc(userRef, {
-        phone: phone || existing.phone || "",
-        name: name || existing.name || "",
-        omId,
-        updatedAt: serverTimestamp(),
-        ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
-      }, { merge:true });
+      const res = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        const u = snap.exists() ? (snap.data() || {}) : {};
 
-      return { omId, name: name || existing.name || "User", phone: phone || existing.phone || "", createdAt: existing.createdAt || null };
+        // assign numericId once
+        let numericId = Number(u.numericId);
+        if(!Number.isFinite(numericId)){
+          const counterRef = doc(db, "meta", "counters");
+          const cSnap = await tx.get(counterRef);
+          let next = 1000;
+          if (cSnap.exists()) {
+            const d = cSnap.data() || {};
+            if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
+            else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter);
+          }
+          numericId = next;
+          tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
+          tx.set(userRef, {
+            numericId,
+            ...(snap.exists() ? {} : { createdAt: serverTimestamp() }),
+          }, { merge: true });
+          const mapRef = doc(db, "users_by_numeric", String(numericId));
+          tx.set(mapRef, { uid }, { merge: true });
+        }
+
+        const phone = (u.phone || phoneFromAuth || "").toString();
+        const name = (u.name || nameFromAuth || "User").toString();
+
+        const updates = {};
+        if(u.balanceUZS == null) updates.balanceUZS = 0;
+        if(!u.phone && phone) updates.phone = phone;
+        if(!u.name && name) updates.name = name;
+        if(Object.keys(updates).length){
+          updates.updatedAt = serverTimestamp();
+          tx.set(userRef, updates, { merge:true });
+        }
+
+        return { numericId, phone, name };
+      });
+
+      return res;
     }
+
 
     onAuthStateChanged(auth, async (user)=>{
       if(!user){
         location.replace("login.html?next=" + encodeURIComponent("index.html#profile"));
         return;
       }
-      const userRef = doc(db,"users",user.uid);
-      const snap = await getDoc(userRef);
-      const phone = snap.exists() ? (snap.data().phone||"") : "";
-      const name = snap.exists() ? (snap.data().name||"") : (user.displayName||"User");
-
-      const ensured = await ensureUserDoc(user.uid, phone, name);
+      const ensured = await ensureUserDoc(user.uid, user.phoneNumber || "", user.displayName || user.email || "User");
 
       $("#name").textContent = ensured.name || "User";
       // Avatar: always show profile icon (no initials)
       const av = $("#avatar");
       if(av) av.innerHTML = '<i class="fa-solid fa-user"></i>';
-      $("#omId").textContent = "ID: " + ensured.omId;
+      $("#numericId").textContent = "ID: " + ensured.numericId;
       $("#phone").textContent = ensured.phone || "";
       $("#createdAt").textContent = fmtDate(snap.exists()? snap.data().createdAt : null);
     });

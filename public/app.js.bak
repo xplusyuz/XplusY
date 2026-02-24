@@ -2477,7 +2477,7 @@ async function createOrderFromCheckout(){
 
   toast("Buyurtmangiz qabul qilindi");
   goTab("profile");
-}
+}}
 
 let unsubProducts = null;
 
@@ -2949,35 +2949,18 @@ function openTopupModal(prefillAmount){
   }catch(_){ }
 
   modal.hidden = false;
-  // Use the global modal styles (.modalOverlay/.modalCard)
-  try{ modal.classList.add('isOpen'); }catch(_){ }
-  try{ document.body.classList.add('modalOpen'); }catch(_){ }
   document.body.style.overflow = 'hidden';
 }
 
 function closeTopupModal(){
   const modal = document.getElementById('topupModal');
   if(!modal) return;
-  try{ modal.classList.remove('isOpen'); }catch(_){ }
-  try{ document.body.classList.remove('modalOpen'); }catch(_){ }
   modal.hidden = true;
   document.body.style.overflow = '';
 }
 
 function normCard(s){
   return String(s||'').replace(/[^0-9]/g,'').trim();
-}
-
-// Convert file to base64 (for Telegram upload via Netlify Function)
-async function fileToBase64(file){
-  const buf = await file.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = '';
-  const chunk = 0x8000;
-  for(let i=0;i<bytes.length;i+=chunk){
-    binary += String.fromCharCode(...bytes.subarray(i, i+chunk));
-  }
-  return btoa(binary);
 }
 
 async function goTopupStep2(){
@@ -3039,49 +3022,16 @@ async function submitTopupRequest(){
   }
 
   const reqId = String(Date.now()) + "_" + Math.random().toString(16).slice(2);
-
-  // No Firebase Storage: send file directly to Telegram via Netlify Function
-  const maxBytes = 18 * 1024 * 1024; // keep payload safe for Netlify
-  if(file.size > maxBytes){
-    toast("Fayl juda katta. 18MB dan kichik fayl yuklang.", 'error');
-    return;
-  }
+  const path = `receipts/topups/${currentUser.uid}/${reqId}_${file.name}`;
 
   try{
-    if(hint) hint.textContent = "Chek Telegram'ga yuborilmoqda...";
+    if(hint) hint.textContent = "Chek yuklanmoqda...";
 
-    const fileB64 = await fileToBase64(file);
-    const idToken = await currentUser.getIdToken();
+    const storageRef = sRef(storage, path);
+    await uploadBytes(storageRef, file, { contentType: file.type || 'application/octet-stream' });
+    const receiptUrl = await getDownloadURL(storageRef);
 
-    const resp = await fetch('/api/receipt', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'authorization': 'Bearer ' + idToken
-      },
-      body: JSON.stringify({
-        kind: 'topup_request',
-        reqId,
-        amountUZS,
-        payerFirst,
-        payerLast,
-        payerCardLast4: payerCard.slice(-4),
-        payerCardMasked: payerCard.length >= 12 ? (payerCard.slice(0,4) + " **** **** " + payerCard.slice(-4)) : payerCard,
-        adminCardNumber: String(CARDPAY.adminCardNumber||'').replace(/\s+/g,' ').trim(),
-        adminCardHolder: String(CARDPAY.adminCardHolder||'').trim(),
-        numericId: (numericId != null ? String(numericId) : null),
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        fileB64
-      })
-    });
-
-    const rj = await resp.json().catch(()=>({}));
-    if(!resp.ok || !rj.ok){
-      throw new Error(rj.error || 'telegram_send_failed');
-    }
-
-    if(hint) hint.textContent = "So'rov Firebase'ga yozilmoqda...";
+    if(hint) hint.textContent = "So'rov yuborilmoqda...";
 
     await setDoc(doc(db, 'topup_requests', reqId), {
       uid: currentUser.uid,
@@ -3094,13 +3044,8 @@ async function submitTopupRequest(){
       status: 'pending',
       adminCardNumber: String(CARDPAY.adminCardNumber||'').replace(/\s+/g,' ').trim(),
       adminCardHolder: String(CARDPAY.adminCardHolder||'').trim(),
-      receiptTelegram: {
-        ok: true,
-        messageId: rj.messageId || null,
-        fileName: file.name,
-        mimeType: file.type || null,
-        sentAt: serverTimestamp()
-      },
+      receiptUrl,
+      receiptPath: path,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       source: 'web'
