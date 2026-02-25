@@ -2627,45 +2627,49 @@ async function loadProductsPage(){
   try{
     const colRef = collection(db, "products");
 
-    // Prefer createdAt (stable paging). If your docs don't have createdAt, add it in admin.
-    let qy = null;
-    try{
-      qy = query(
-        colRef,
-        where("isActive","==",true),
-        orderBy("createdAt","desc"),
-        limit(PRODUCTS_PAGE_SIZE)
-      );
-      if(productsLast) qy = query(
-        colRef,
-        where("isActive","==",true),
-        orderBy("createdAt","desc"),
-        startAfter(productsLast),
-        limit(PRODUCTS_PAGE_SIZE)
-      );
-    }catch(e1){
-      // Fallback: popularScore
+    // Query modes (avoid composite indexes by default).
+    // Primary: updatedAt desc (most docs already have updatedAt).
+    const modes = [
+      {
+        name: "updatedAt",
+        build: (after)=> after
+          ? query(colRef, orderBy("updatedAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("updatedAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+      {
+        name: "createdAt",
+        build: (after)=> after
+          ? query(colRef, orderBy("createdAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("createdAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+      {
+        name: "popularScore",
+        build: (after)=> after
+          ? query(colRef, orderBy("popularScore","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("popularScore","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+    ];
+
+    let snap = null;
+    let lastErr = null;
+
+    for(const mode of modes){
       try{
-        qy = query(
-          colRef,
-          orderBy("popularScore","desc"),
-          limit(PRODUCTS_PAGE_SIZE)
-        );
-        if(productsLast) qy = query(
-          colRef,
-          orderBy("popularScore","desc"),
-          startAfter(productsLast),
-          limit(PRODUCTS_PAGE_SIZE)
-        );
-      }catch(e2){
-        // Last resort: no orderBy (not recommended)
-        qy = query(colRef, limit(PRODUCTS_PAGE_SIZE));
-        if(productsLast) qy = query(colRef, startAfter(productsLast), limit(PRODUCTS_PAGE_SIZE));
+        const qy = mode.build(productsLast);
+        snap = await getDocs(qy);
+        lastErr = null;
+        break;
+      }catch(e){
+        lastErr = e;
+        // If permission denied, don't keep retrying.
+        if(String(e?.code||"") === "permission-denied") break;
+        // If index required for a given mode, we'll try the next mode.
       }
     }
 
-    const snap = await getDocs(qy);
+    if(lastErr) throw lastErr;
 
+    
     if(snap.empty){
       productsDone = true;
       if(btn){
@@ -2679,8 +2683,10 @@ async function loadProductsPage(){
 
     const arr = snap.docs.map(d=> {
       const data = d.data() || {};
+      // Client-side active filter (avoid composite index): if isActive is explicitly false, skip.
+      if(("isActive" in data) && data.isActive === false) return null;
       const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-      const created = (data.createdAt ?? data.created_at ?? data.created);
+      const created = (data.createdAt ?? data.created_at ?? data.created ?? data.updatedAt ?? data.updated_at ?? data.updated);
       return {
         id: String(data.id || d.id),
         fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
@@ -2692,7 +2698,7 @@ async function loadProductsPage(){
         _price: parseUZS(price),
         _created: toMillis(created),
       };
-    });
+    }).filter(Boolean);
 
     // Append (avoid duplicates by _docId/id)
     const seen = new Set(products.map(p=>String(p._docId || p.id)));
