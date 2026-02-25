@@ -87,12 +87,14 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   collection,
   query,
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -2581,54 +2583,174 @@ async function createOrderFromCheckout(){
   goTab("profile");
 }
 
-let unsubProducts = null;
+/* =========================
+   Products: pagination (Load more + infinite scroll)
+========================= */
+let unsubProducts = null; // legacy; kept to avoid reference errors
+const PRODUCTS_PAGE_SIZE = 24;
+let productsLast = null;
+let productsLoading = false;
+let productsDone = false;
 
-async function loadProducts(){
-  // Firestore is the single source of truth (no products.json fallback).
+function resetProductsPaging(){
+  productsLast = null;
+  productsLoading = false;
+  productsDone = false;
+  products = [];
+  // UI
+  try{
+    const btn = document.getElementById("loadMoreBtn");
+    const pager = document.getElementById("productsPager");
+    if(pager) pager.hidden = false;
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Yana yuklash";
+      btn.style.display = "";
+    }
+  }catch(e){}
+}
+
+/**
+ * Loads next page from Firestore and appends into `products`.
+ * Uses createdAt desc if possible; falls back gracefully.
+ */
+async function loadProductsPage(){
+  if(productsLoading || productsDone) return;
+  productsLoading = true;
+
+  const btn = document.getElementById("loadMoreBtn");
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = "Yuklanmoqda...";
+  }
+
   try{
     const colRef = collection(db, "products");
-    const qy = query(colRef, orderBy("popularScore", "desc"));
-    unsubProducts && unsubProducts();
-    unsubProducts = onSnapshot(qy, (snap)=>{
-      const arr = snap.docs.map(d=> {
-        const data = d.data() || {};
-        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-        const created = (data.createdAt ?? data.created_at ?? data.created);
-        return {
-          id: String(data.id || d.id),
-          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
-          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
-          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
-          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
-          ...data,
-          _docId: d.id,
-          _price: parseUZS(price),
-          _created: toMillis(created),
-        };
-      });
-      products = arr;
-      buildTagCounts();
-buildCategoryTree();
-      applyFilterSort();
-      if(activeTab==="categories") renderCategoriesPage();
 
-      // If empty, show a helpful hint for setup
-      if(arr.length === 0){
-        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+    // Prefer createdAt (stable paging). If your docs don't have createdAt, add it in admin.
+    let qy = null;
+    try{
+      qy = query(
+        colRef,
+        where("isActive","==",true),
+        orderBy("createdAt","desc"),
+        limit(PRODUCTS_PAGE_SIZE)
+      );
+      if(productsLast) qy = query(
+        colRef,
+        where("isActive","==",true),
+        orderBy("createdAt","desc"),
+        startAfter(productsLast),
+        limit(PRODUCTS_PAGE_SIZE)
+      );
+    }catch(e1){
+      // Fallback: popularScore
+      try{
+        qy = query(
+          colRef,
+          orderBy("popularScore","desc"),
+          limit(PRODUCTS_PAGE_SIZE)
+        );
+        if(productsLast) qy = query(
+          colRef,
+          orderBy("popularScore","desc"),
+          startAfter(productsLast),
+          limit(PRODUCTS_PAGE_SIZE)
+        );
+      }catch(e2){
+        // Last resort: no orderBy (not recommended)
+        qy = query(colRef, limit(PRODUCTS_PAGE_SIZE));
+        if(productsLast) qy = query(colRef, startAfter(productsLast), limit(PRODUCTS_PAGE_SIZE));
       }
-    }, (err)=>{
-      console.warn("Firestore products error", err);
-      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
-      products = [];
-      applyFilterSort();
+    }
+
+    const snap = await getDocs(qy);
+
+    if(snap.empty){
+      productsDone = true;
+      if(btn){
+        btn.textContent = "Hammasi yuklandi";
+        btn.style.display = "none";
+      }
+      return;
+    }
+
+    productsLast = snap.docs[snap.docs.length - 1];
+
+    const arr = snap.docs.map(d=> {
+      const data = d.data() || {};
+      const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+      const created = (data.createdAt ?? data.created_at ?? data.created);
+      return {
+        id: String(data.id || d.id),
+        fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+        deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+        deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+        prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+        ...data,
+        _docId: d.id,
+        _price: parseUZS(price),
+        _created: toMillis(created),
+      };
     });
-  }catch(e){
-    console.warn("Firestore products init failed", e);
-    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
-    products = [];
+
+    // Append (avoid duplicates by _docId/id)
+    const seen = new Set(products.map(p=>String(p._docId || p.id)));
+    for(const p of arr){
+      const key = String(p._docId || p.id);
+      if(!seen.has(key)){
+        products.push(p);
+        seen.add(key);
+      }
+    }
+
+    buildTagCounts();
+    buildCategoryTree();
     applyFilterSort();
+    if(activeTab==="categories") renderCategoriesPage();
+
+    // If fewer than page size, we reached the end
+    if(arr.length < PRODUCTS_PAGE_SIZE){
+      productsDone = true;
+      if(btn) btn.style.display = "none";
+    }
+  }catch(err){
+    console.warn("Firestore products error", err);
+    showToast("Mahsulotlarni yuklab bo'lmadi (Firestore). Rules/Index tekshiring.", "warn");
+  }finally{
+    productsLoading = false;
+    if(btn && !productsDone){
+      btn.disabled = false;
+      btn.textContent = "Yana yuklash";
+    }
   }
 }
+
+async function loadProducts(){
+  // Reset + first page
+  resetProductsPaging();
+  await loadProductsPage();
+}
+
+// Wire up pager button + infinite scroll sentinel
+(function initProductsPager(){
+  try{
+    const btn = document.getElementById("loadMoreBtn");
+    if(btn){
+      btn.addEventListener("click", ()=> loadProductsPage());
+    }
+    const sentinel = document.getElementById("loadMoreSentinel");
+    if(sentinel && "IntersectionObserver" in window){
+      const io = new IntersectionObserver((entries)=>{
+        const e = entries[0];
+        if(e && e.isIntersecting){
+          loadProductsPage();
+        }
+      }, { root: null, rootMargin: "1200px 0px", threshold: 0.01 });
+      io.observe(sentinel);
+    }
+  }catch(e){}
+})();
 
 /* ================== PHONE + PASSWORD AUTH ================== */
 function normPhone(raw){
