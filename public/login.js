@@ -1,317 +1,200 @@
-import { auth, db } from "./firebase-config.js";
-import { onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { auth } from "./firebase-config.js";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 let allowAutoRedirect = true;
-let busy = false;
 
 const els = {
   tabLogin: document.getElementById("tabLogin"),
   tabSignup: document.getElementById("tabSignup"),
-  notice: document.getElementById("notice"),
-
   loginForm: document.getElementById("loginForm"),
+  signupForm: document.getElementById("signupForm"),
+
   loginPhone: document.getElementById("loginPhone"),
   loginPass: document.getElementById("loginPass"),
   toggleLoginPass: document.getElementById("toggleLoginPass"),
-  loginBtn: document.getElementById("loginBtn"),
 
-  signupForm: document.getElementById("signupForm"),
   signupName: document.getElementById("signupName"),
   signupPhone: document.getElementById("signupPhone"),
-  signupRegion: document.getElementById("signupRegion"),
-  signupDistrict: document.getElementById("signupDistrict"),
-  signupPost: document.getElementById("signupPost"),
   signupPass: document.getElementById("signupPass"),
-  toggleSignupPass: document.getElementById("toggleSignupPass"),
   signupPass2: document.getElementById("signupPass2"),
-  signupBtn: document.getElementById("signupBtn"),
+  toggleSignupPass: document.getElementById("toggleSignupPass"),
+
+  notice: document.getElementById("notice"),
+  forgotLink: document.getElementById("forgotLink"),
+  busy: document.getElementById("auth-loading"),
 };
 
-function showNotice(text, kind = "info") {
-  if (!els.notice) return;
-  els.notice.textContent = text || "";
-  els.notice.className = "notice " + kind;
-  els.notice.style.display = text ? "block" : "none";
+function setBusy(v){
+  if(!els.busy) return;
+  els.busy.style.display = v ? "flex" : "none";
 }
 
-function setBusy(v) {
-  busy = v;
-  if (els.loginBtn) els.loginBtn.disabled = v;
-  if (els.signupBtn) els.signupBtn.disabled = v;
+function showNotice(msg, kind="ok"){
+  if(!els.notice) return;
+  els.notice.className = "notice " + (kind==="err" ? "err" : "ok");
+  els.notice.textContent = msg;
+  els.notice.style.display = "";
+  const ms = kind === "err" ? 6500 : 3500;
+  clearTimeout(showNotice._t);
+  showNotice._t = setTimeout(()=>{ els.notice.style.display="none"; }, ms);
 }
 
-function onlyDigits(s) { return (s || "").toString().replace(/\D/g, ""); }
+// Uzbekistan phone helpers (+998XXXXXXXXX)
+function normPhone(raw){
+  let digits = String(raw||"").replace(/\D/g,"");
+  if(digits.startsWith("998")) digits = digits.slice(3);
+  digits = digits.slice(0, 9);
+  return "+998" + digits;
+}
+function isValidUzPhone(phone){
+  return /^\+998\d{9}$/.test(String(phone||""));
+}
+function attachUzPhoneMask(input){
+  if(!input) return;
+  if(!input.value) input.value = "+998";
 
-function normalizePhone(raw) {
-  const d = onlyDigits(raw);
-  if (d.length === 12 && d.startsWith("998")) return d;
-  if (d.length === 9) return "998" + d;
-  return null;
+  input.addEventListener("focus", ()=>{
+    if(!input.value) input.value = "+998";
+    if(!String(input.value).startsWith("+998")) input.value = normPhone(input.value);
+  });
+
+  input.addEventListener("input", ()=>{
+    input.value = normPhone(input.value);
+  });
+
+  input.addEventListener("keydown", (e)=>{
+    const start = input.selectionStart ?? 0;
+    const end = input.selectionEnd ?? 0;
+    if ((e.key === "Backspace" || e.key === "Delete") && start <= 4 && end <= 4) {
+      e.preventDefault();
+      input.setSelectionRange(4,4);
+    }
+  });
 }
 
-function normalizeOmId(raw) {
-  const s = (raw || "").toString().trim().toUpperCase();
-  if (!s.startsWith("OM")) return null;
-  const digits = s.replace(/\D/g, "");
-  if (!digits) return null;
-  return "OM" + digits.padStart(6, "0");
+function phoneToEmail(phone){
+  const digits = String(phone||"").replace(/[^0-9]/g,"");
+  return `p${digits}@orzumall.phone`;
 }
 
-function withTimeout(promise, ms = 12000) {
-  return Promise.race([
-    promise,
-    new Promise((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), ms)),
-  ]);
+async function ensureUserLazy({ uid, phone, name }){
+  // Firestore heavy module is loaded ONLY after auth success
+  const mod = await import("./ensure-user.js");
+  return mod.ensureUserDocFast({ uid, phone, name });
 }
 
-async function api(path, data) {
-  const res = await withTimeout(fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data || {}),
-  }), 12000);
+// Tabs
+function setMode(mode){
+  const isLogin = mode==="login";
+  if(els.tabLogin) els.tabLogin.classList.toggle("active", isLogin);
+  if(els.tabSignup) els.tabSignup.classList.toggle("active", !isLogin);
+  if(els.loginForm) els.loginForm.style.display = isLogin ? "" : "none";
+  if(els.signupForm) els.signupForm.style.display = isLogin ? "none" : "";
+}
+if(els.tabLogin) els.tabLogin.addEventListener("click", ()=>setMode("login"));
+if(els.tabSignup) els.tabSignup.addEventListener("click", ()=>setMode("signup"));
+setMode("login");
 
-  const txt = await res.text();
-  let j = null;
-  try { j = JSON.parse(txt); } catch (e) {}
+// Phone mask
+attachUzPhoneMask(els.loginPhone);
+attachUzPhoneMask(els.signupPhone);
 
-  if (!res.ok) {
-    const msg = j?.message || "Xatolik. Qayta urinib ko‘ring.";
-    const code = j?.code || ("http_" + res.status);
-    const err = new Error(msg);
-    err.code = code;
-    err.http = res.status;
-    throw err;
+// Password toggles
+if(els.toggleLoginPass && els.loginPass){
+  els.toggleLoginPass.addEventListener("click", ()=>{
+    const show = els.loginPass.type === "password";
+    els.loginPass.type = show ? "text" : "password";
+    const icon = els.toggleLoginPass.querySelector("i");
+    if(icon) icon.className = show ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+  });
+}
+if(els.toggleSignupPass && els.signupPass){
+  els.toggleSignupPass.addEventListener("click", ()=>{
+    const show = els.signupPass.type === "password";
+    els.signupPass.type = show ? "text" : "password";
+    const icon = els.toggleSignupPass.querySelector("i");
+    if(icon) icon.className = show ? "fa-solid fa-eye-slash" : "fa-solid fa-eye";
+  });
+}
+
+// Forgot password -> Telegram bot
+if(els.forgotLink){
+  els.forgotLink.addEventListener("click", (e)=>{
+    e.preventDefault();
+    showNotice("Parolni tiklash uchun @OrzuMallUZ_bot ga yozing", "ok");
+  });
+}
+
+// Auto-redirect if already logged in
+onAuthStateChanged(auth, (user)=>{
+  if(user && allowAutoRedirect){
+    location.replace("./index.html");
   }
-  return j || {};
-}
-
-function switchTab(toSignup) {
-  if (toSignup) {
-    els.tabSignup?.classList.add("active");
-    els.tabLogin?.classList.remove("active");
-    els.signupForm?.classList.remove("hidden");
-    els.loginForm?.classList.add("hidden");
-  } else {
-    els.tabLogin?.classList.add("active");
-    els.tabSignup?.classList.remove("active");
-    els.loginForm?.classList.remove("hidden");
-    els.signupForm?.classList.add("hidden");
-  }
-  showNotice("");
-}
-
-function setupPasswordToggles() {
-  if (els.toggleLoginPass) {
-    els.toggleLoginPass.addEventListener("click", () => {
-      els.loginPass.type = els.loginPass.type === "password" ? "text" : "password";
-    });
-  }
-  if (els.toggleSignupPass) {
-    els.toggleSignupPass.addEventListener("click", () => {
-      els.signupPass.type = els.signupPass.type === "password" ? "text" : "password";
-      els.signupPass2.type = els.signupPass2.type === "password" ? "text" : "password";
-    });
-  }
-}
-
-async function loadRegionJson() {
-  try {
-    const res = await fetch("./region.json", { cache: "no-store" });
-    const data = await res.json();
-    // data can be {regions:[...]} or single region object; support both
-    const regions = Array.isArray(data?.regions) ? data.regions : (Array.isArray(data) ? data : [data]).filter(Boolean);
-
-    const sel = els.signupRegion;
-    if (!sel) return;
-
-    // fill options
-    sel.innerHTML = '<option value="">Viloyatni tanlang</option>';
-    for (const r of regions) {
-      const opt = document.createElement("option");
-      opt.value = r.name || "";
-      opt.textContent = r.name || "";
-      sel.appendChild(opt);
-    }
-
-    sel.addEventListener("change", () => {
-      const r = regions.find(x => (x.name || "") === sel.value);
-      const dSel = els.signupDistrict;
-      const pSel = els.signupPost;
-
-      dSel.disabled = !r;
-      pSel.disabled = true;
-      pSel.innerHTML = '<option value="">Avval tuman/shaharni tanlang</option>';
-
-      if (!r) {
-        dSel.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
-        return;
-      }
-
-      dSel.innerHTML = '<option value="">Tumanni tanlang</option>';
-      for (const d of (r.districts || [])) {
-        const opt = document.createElement("option");
-        opt.value = d.name || "";
-        opt.textContent = d.name || "";
-        dSel.appendChild(opt);
-      }
-    });
-
-    els.signupDistrict.addEventListener("change", () => {
-      const rName = els.signupRegion.value;
-      const dName = els.signupDistrict.value;
-
-      const r = regions.find(x => (x.name || "") === rName);
-      const d = r?.districts?.find(x => (x.name || "") === dName);
-
-      const pSel = els.signupPost;
-      pSel.disabled = !d;
-      if (!d) {
-        pSel.innerHTML = '<option value="">Avval tuman/shaharni tanlang</option>';
-        return;
-      }
-
-      const posts = d.posts || [];
-      pSel.innerHTML = '<option value="">Pochta bo‘limini tanlang</option>';
-      for (const p of posts) {
-        const opt = document.createElement("option");
-        opt.value = p;
-        opt.textContent = p;
-        pSel.appendChild(opt);
-      }
-    });
-
-  } catch (e) {
-    console.warn("region.json load failed", e);
-  }
-}
-
-async function doLogin() {
-  if (busy) return;
-  showNotice("");
-  setBusy(true);
-
-  try {
-    const raw = els.loginPhone.value.trim();
-    const pass = els.loginPass.value;
-
-    const om = normalizeOmId(raw);
-    const phone = om ? null : normalizePhone(raw);
-
-    if (!om && !phone) {
-      showNotice("Telefon yoki OM ID noto‘g‘ri. Masalan: 998901234567 yoki OM000123", "error");
-      return;
-    }
-    if (!pass) {
-      showNotice("Parolni kiriting.", "error");
-      return;
-    }
-
-    const resp = await api("/.netlify/functions/auth_login", {
-      identifier: om || phone,
-      password: pass,
-    });
-
-    await signInWithCustomToken(auth, resp.token);
-
-    showNotice("Kirish muvaffaqiyatli. Yo‘naltirilmoqda...", "success");
-    // redirect handled by onAuthStateChanged
-  } catch (e) {
-    if (e.message === "TIMEOUT") {
-      showNotice("Internet sekin. Qayta urinib ko‘ring.", "error");
-    } else {
-      showNotice(e.message || "Kirishda xatolik.", "error");
-    }
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function doRegister() {
-  if (busy) return;
-  showNotice("");
-  setBusy(true);
-
-  try {
-    const name = els.signupName.value.trim();
-    const phone = normalizePhone(els.signupPhone.value);
-    const region = els.signupRegion?.value || "";
-    const district = els.signupDistrict?.value || "";
-    const post = els.signupPost?.value || "";
-    const pass = els.signupPass.value;
-    const pass2 = els.signupPass2.value;
-
-    if (!name || name.length < 2) {
-      showNotice("Ismni to‘g‘ri kiriting.", "error");
-      return;
-    }
-    if (!phone) {
-      showNotice("Telefon noto‘g‘ri. Masalan: 998901234567", "error");
-      return;
-    }
-    if (!region || !district || !post) {
-      showNotice("Profilni to‘liq to‘ldiring: viloyat, tuman, pochta.", "error");
-      return;
-    }
-    if (!pass || pass.length < 6) {
-      showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin.", "error");
-      return;
-    }
-    if (pass !== pass2) {
-      showNotice("Parollar mos emas.", "error");
-      return;
-    }
-
-    const resp = await api("/.netlify/functions/auth_register", {
-      name,
-      phone,
-      region,
-      district,
-      post,
-      password: pass,
-    });
-
-    await signInWithCustomToken(auth, resp.token);
-
-    showNotice(`Ro‘yxatdan o‘tish muvaffaqiyatli! ID: ${resp.omId}`, "success");
-  } catch (e) {
-    if (e.message === "TIMEOUT") {
-      showNotice("Internet sekin. Qayta urinib ko‘ring.", "error");
-    } else {
-      showNotice(e.message || "Ro‘yxatdan o‘tishda xatolik.", "error");
-    }
-  } finally {
-    setBusy(false);
-  }
-}
-
-function wireUi() {
-  els.tabLogin?.addEventListener("click", () => switchTab(false));
-  els.tabSignup?.addEventListener("click", () => switchTab(true));
-
-  els.loginForm?.addEventListener("submit", (ev) => { ev.preventDefault(); doLogin(); });
-  els.signupForm?.addEventListener("submit", (ev) => { ev.preventDefault(); doRegister(); });
-
-  setupPasswordToggles();
-}
-
-onAuthStateChanged(auth, async (user) => {
-  if (!user || !allowAutoRedirect) return;
-
-  // Optional: ensure profile exists (users doc). If missing, redirect to profile.
-  try {
-    const ref = doc(db, "users", user.uid);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      window.location.href = "/profile.html";
-      return;
-    }
-  } catch (e) {}
-
-  // Redirect to home
-  window.location.href = "/index.html";
 });
 
-wireUi();
-loadRegionJson();
+// Login submit
+if(els.loginForm){
+  els.loginForm.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    allowAutoRedirect = false;
+    setBusy(true);
+    try{
+      const phone = normPhone(els.loginPhone?.value || "");
+      const pass = String(els.loginPass?.value || "");
+      if(!isValidUzPhone(phone)) throw new Error("Telefon raqam noto‘g‘ri. Masalan: +998901234567");
+      if(pass.length < 4) throw new Error("Parol juda qisqa");
+
+      const email = phoneToEmail(phone);
+      const cred = await signInWithEmailAndPassword(auth, email, pass);
+
+      await ensureUserLazy({ uid: cred.user.uid, phone, name: "" });
+
+      showNotice("Kirish muvaffaqiyatli! Yo‘naltirilmoqda...", "ok");
+      location.replace("./index.html");
+    }catch(err){
+      console.error(err);
+      showNotice(err?.message || "Kirishda xato", "err");
+      allowAutoRedirect = true;
+    }finally{
+      setBusy(false);
+    }
+  });
+}
+
+// Signup submit
+if(els.signupForm){
+  els.signupForm.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    allowAutoRedirect = false;
+    setBusy(true);
+    try{
+      const name = String(els.signupName?.value || "").trim();
+      const phone = normPhone(els.signupPhone?.value || "");
+      const pass = String(els.signupPass?.value || "");
+      const pass2 = String(els.signupPass2?.value || "");
+
+      if(name.length < 2) throw new Error("Ism/Familiya juda qisqa");
+      if(!isValidUzPhone(phone)) throw new Error("Telefon raqam noto‘g‘ri. Masalan: +998901234567");
+      if(pass.length < 4) throw new Error("Parol juda qisqa");
+      if(pass !== pass2) throw new Error("Parollar mos emas");
+
+      const email = phoneToEmail(phone);
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+
+      await ensureUserLazy({ uid: cred.user.uid, phone, name });
+
+      showNotice("Ro‘yxatdan o‘tildi! Yo‘naltirilmoqda...", "ok");
+      location.replace("./index.html");
+    }catch(err){
+      console.error(err);
+      showNotice(err?.message || "Ro‘yxatdan o‘tishda xato", "err");
+      allowAutoRedirect = true;
+    }finally{
+      setBusy(false);
+    }
+  });
+}
