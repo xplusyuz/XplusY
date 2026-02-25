@@ -34,9 +34,34 @@ const els = {
   signupPass2: document.getElementById("signupPass2"),
   toggleSignupPass: document.getElementById("toggleSignupPass"),
 
+  loginBtn: document.getElementById("loginBtn"),
+  signupBtn: document.getElementById("signupBtn"),
+  loadingOverlay: document.getElementById("loadingOverlay"),
+  loadingTitle: document.getElementById("loadingTitle"),
+  loadingSub: document.getElementById("loadingSub"),
+
   notice: document.getElementById("notice"),
   forgotLink: document.getElementById("forgotLink"),
 };
+
+
+function setLoading(on, title="Yuklanmoqda…", sub="Iltimos, biroz kuting"){
+  try{
+    if(els.loadingTitle) els.loadingTitle.textContent = title;
+    if(els.loadingSub) els.loadingSub.textContent = sub;
+    if(els.loadingOverlay) els.loadingOverlay.style.display = on ? "flex" : "none";
+    // disable forms
+    const dis = !!on;
+    const nodes = [
+      els.loginPhone, els.loginPass, els.signupFirstName, els.signupLastName, els.signupPhone,
+      els.signupRegion, els.signupDistrict, els.signupPost, els.signupPass, els.signupPass2
+    ].filter(Boolean);
+    for(const n of nodes) n.disabled = dis;
+
+    if(els.loginBtn) els.loginBtn.disabled = dis;
+    if(els.signupBtn) els.signupBtn.disabled = dis;
+  }catch(_e){}
+}
 
 function showNotice(msg, kind="ok"){
   if(!els.notice) return;
@@ -249,6 +274,7 @@ if(els.forgotLink){
 // If already logged in, go to profile
 onAuthStateChanged(auth, (user)=>{
   if(user && allowAutoRedirect) {
+    setLoading(true, "Kirish…", "Profilga yo‘naltirilmoqda");
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }
@@ -274,12 +300,13 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
-    console.error(err);
+    setLoading(false);
+
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
       showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
     }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
-      showNotice("Login yoki parol xato", "err");
+      showNotice("Telefon raqam yoki parol xato", "err");
     }else if(code.includes("too-many-requests")){
       showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
     }else{
@@ -311,6 +338,8 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
+  setLoading(true, "Ro‘yxatdan o‘tish…", "Ma’lumotlar saqlanmoqda");
+
   try{
     const email = phoneToEmail(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
@@ -326,12 +355,15 @@ els.signupForm.addEventListener("submit", async (e)=>{
       post,
     });
 
+    setLoading(false);
+
     showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
-    console.error(err);
+    setLoading(false);
+
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
       showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
