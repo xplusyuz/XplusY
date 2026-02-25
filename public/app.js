@@ -1,4 +1,13 @@
 
+/* ========= PERF HELPERS ========= */
+function debounce(fn, wait=150){
+  let t=null;
+  return (...args)=>{
+    clearTimeout(t);
+    t=setTimeout(()=>fn(...args), wait);
+  };
+}
+
 /* ========= TELEGRAM ADMIN NOTIFY (NO FUNCTIONS) =========
    Sends a lightweight notification to admin chat when a new order is created.
    Uses GET (Image beacon) and/or no-cors POST to avoid CORS issues.
@@ -93,6 +102,8 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
+  getDocs,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -308,6 +319,17 @@ const els = {
   ordersReload: document.getElementById("ordersReload"),
   ordersList: document.getElementById("ordersList"),
   ordersEmpty: document.getElementById("ordersEmpty"),
+  ordersToggle: document.getElementById("ordersToggle"),
+  ordersBody: document.getElementById("ordersBody"),
+  ordersChevron: document.getElementById("ordersChevron"),
+
+  // money history (profile page)
+  moneyHistoryToggle: document.getElementById("moneyHistoryToggle"),
+  moneyHistoryBody: document.getElementById("moneyHistoryBody"),
+  moneyHistoryList: document.getElementById("moneyHistoryList"),
+  moneyHistoryEmpty: document.getElementById("moneyHistoryEmpty"),
+  moneyHistoryCount: document.getElementById("moneyHistoryCount"),
+  moneyHistoryChevron: document.getElementById("moneyHistoryChevron"),
   panelTitle: document.getElementById("panelTitle"),
   panelClose: document.getElementById("panelClose"),
   panelList: document.getElementById("panelList"),
@@ -378,8 +400,14 @@ function _anyOverlayOpen(){
   return [ els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
 }
 function _syncModalBody(){
-  if(_anyOverlayOpen()) document.body.classList.add("modalOpen");
-  else document.body.classList.remove("modalOpen");
+  const open = _anyOverlayOpen();
+  if(open){
+    document.body.classList.add("modalOpen");
+    document.documentElement.classList.add("modalOpen");
+  } else {
+    document.body.classList.remove("modalOpen");
+    document.documentElement.classList.remove("modalOpen");
+  }
 }
 function showOverlay(el){
   if(!el) return;
@@ -1139,9 +1167,6 @@ function renderOptions(p){
   return `<div class="optStack">${sw}${sz}</div>`;
 }
 
-function escapeHtml(str){
-  return String(str||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
-}
 function _normPType(p){
   const t = (p?.pType || p?.fulfillmentType || p?.type || "stock");
   return String(t).toLowerCase() === "cargo" ? "cargo" : "stock";
@@ -1165,36 +1190,112 @@ function discountPct(price, oldPrice){
 }
 
 
+// PERF: incremental render (pagination) to avoid DOM overload
+const RENDER_PAGE_SIZE = 60;
+let renderState = { arr: [], page: 0 };
+
+function ensureLoadMoreBtn(){
+  if(!els.loadMoreBtn){
+    const btn = document.createElement("button");
+    btn.className = "loadMoreBtn";
+    btn.type = "button";
+    btn.textContent = "Yana ko‘rsatish";
+    btn.hidden = true;
+    btn.addEventListener("click", ()=>{
+      // render next page
+      renderNextPage();
+      // if we still have more server-side products (for huge catalogs), fetch next batch too
+      if(!productsFullyLoaded && (renderState.page * RENDER_PAGE_SIZE) >= (products.length - RENDER_PAGE_SIZE)){
+        loadProducts(false);
+      }
+    });
+    els.grid.parentNode.appendChild(btn);
+    els.loadMoreBtn = btn;
+  }
+}
+
 function render(arr){
+  ensureLoadMoreBtn();
+  renderState.arr = Array.isArray(arr) ? arr : [];
+  renderState.page = 0;
+
   els.grid.innerHTML = "";
   if (els.productsCount) {
-    const n = Array.isArray(arr) ? arr.length : 0;
+    const n = renderState.arr.length;
     els.productsCount.textContent = `${n} ta`;
   }
-  els.empty.hidden = arr.length !== 0;
+  els.empty.hidden = renderState.arr.length !== 0;
 
-  for(const p of arr){
+  renderNextPage(true);
+}
+
+function renderNextPage(reset=false){
+  ensureLoadMoreBtn();
+  const arr = renderState.arr;
+  const from = renderState.page * RENDER_PAGE_SIZE;
+  const to = Math.min(from + RENDER_PAGE_SIZE, arr.length);
+  if(from >= arr.length){
+    els.loadMoreBtn.hidden = true;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for(let i=from; i<to; i++){
+    const p = arr[i];
     const card = document.createElement("div");
     card.className = "pcard";
 
     const isFav = favs.has(p.id);
-
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
-const prCard = getVariantPricing(p, sel);
-const dp = discountPct(prCard.price, prCard.oldPrice);
-// Admin badges: badges[] (preferred) or badge string (legacy)
-const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
-const badgeHtmlParts = [];
+    const prCard = getVariantPricing(p, sel);
+    const dp = discountPct(prCard.price, prCard.oldPrice);
+    const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
+    const badgeHtmlParts = [];
+    if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
+    for(const b of adminBadges.slice(0,3)){
+      const t = String(b||"").trim();
+      if(!t) continue;
+      if(/^-?\d+\s*%$/.test(t)) continue;
+      badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
+    }
+    const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
 
-if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
-// show up to 3 admin badges (skip if looks like a percent discount we already show)
-for(const b of adminBadges.slice(0,3)){
-  const t = String(b||"").trim();
-  if(!t) continue;
-  if(/^-?\d+\s*%$/.test(t)) continue;
-  badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
+    const st = getStats(p.id);
+    const showAvg = st.count ? st.avg : 0;
+    const showCount = st.count ? st.count : 0;
+
+    card.innerHTML = `
+      <div class="pmedia">
+        <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
+        ${badgeHTML}
+        <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli" aria-label="Sevimli" type="button">❤</button>
+      </div>
+      <div class="pbody">
+        <div class="ptitle">${escapeHtml(p.name || "")}</div>
+        <div class="prLine">
+          <div class="pprice">${formatUZS(prCard.price)}</div>
+          ${prCard.oldPrice ? `<div class="pold">${formatUZS(prCard.oldPrice)}</div>` : ""}
+        </div>
+        <div class="pmetaLine">
+          ${showAvg ? `<span class="prating">★ ${Number(showAvg).toFixed(1)}</span>` : `<span class="prating dim">★ 0.0</span>`}
+          <span class="pcount">${showCount ? `${showCount} ta` : "0 ta"}</span>
+        </div>
+        ${renderOptions(p)}
+        <button class="addBtn" type="button">Savatga</button>
+      </div>
+    `;
+
+    // attach dataset
+    card.dataset.pid = p.id;
+
+    frag.appendChild(card);
+  }
+  els.grid.appendChild(frag);
+
+  renderState.page += 1;
+  els.loadMoreBtn.hidden = (renderState.page * RENDER_PAGE_SIZE) >= arr.length;
 }
 // Prepay badge moved to cart (not shown on cards)
 
@@ -1502,14 +1603,22 @@ function fmtDate(ts){
 
 
 function orderStatusLabel(s){
-  const v = (s||"").toString();
+  const v = (s||"").toString().toLowerCase();
   const m = {
+    // common order statuses
     "pending":"Kutilmoqda",
     "pending_cash":"Kutilmoqda (naqd)",
     "pending_payment":"To‘lov kutilmoqda",
+    "processing":"Jarayonda",
     "paid":"To‘langan",
+    "completed":"Yakunlangan",
     "delivered":"Yetkazildi",
-    "cancelled":"Bekor qilindi"
+    "shipped":"Jo‘natildi",
+    "rejected":"Rad etilgan",
+    "declined":"Rad etilgan",
+    "canceled":"Bekor qilindi",
+    "cancelled":"Bekor qilindi",
+    "failed":"Muvaffaqiyatsiz"
   };
   return m[v] || (v ? v : "");
 }
@@ -1517,6 +1626,19 @@ function orderStatusClass(s){
   const v = (s||"").toString();
   if(!v) return "";
   return "status-"+v.replace(/[^a-z0-9_\-]/gi,"").toLowerCase();
+}
+
+
+function providerLabel(p){
+  const v = (p||"").toString().toLowerCase();
+  const m = {
+    "balance":"Balans",
+    "cash":"Naqd",
+    "card":"Karta",
+    "payme":"Payme",
+    "click":"Click"
+  };
+  return m[v] || (v ? v : "");
 }
 
 function renderOrders(orders){
@@ -1541,7 +1663,7 @@ function renderOrders(orders){
       </div>
       <div class="orderMeta">
         ${status ? `<span class="orderPill ${orderStatusClass(status)}">${escapeHtml(orderStatusLabel(status))}</span>` : ""}
-        ${provider ? `<span class="orderPill">${escapeHtml(provider)}</span>` : ""}
+        ${provider ? `<span class="orderPill">${escapeHtml(providerLabel(provider))}</span>` : ""}
         ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
       </div>
     `;
@@ -1549,35 +1671,204 @@ function renderOrders(orders){
   }
 }
 
-function subscribeOrders(uid){
-  if(!uid) return;
-  if(!currentUser) return;
 
-  if(!uid || !db || !els.ordersList) return;
-  try{ ordersUnsub?.(); }catch(e){}
+/* =========================
+   Money history (profile)
+========================= */
+let moneyUnsubTopups = null;
 
-  // If security rules disallow, we fail gracefully.
-  const qy = query(
-    collection(db, "users", uid, "orders"),
-    orderBy("createdAt", "desc"),
-    limit(20)
-  );
-
-  ordersUnsub = onSnapshot(qy, (snap)=>{
-    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
-    renderOrders(arr);
-  }, (err)=>{
-    console.warn("orders subscribe error", err);
-    // Fallback to cache if any
-    renderOrders(ordersCache);
+function normalizeMoneyItems({ topups=[] }){
+  const out = [];
+  for(const t of topups){
+    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
+    const st = (t.status||"pending").toString();
+    const amt = Number(t.amountUZS||0) || 0;
+    out.push({
+      kind: "topup",
+      direction: "in",
+      amountUZS: amt,
+      status: st,
+      note: (t.adminNote||""),
+      ts,
+      id: t.id || ""
+    });
+  }
+  out.sort((a,b)=>{
+    const ta = (a.ts?.toDate ? +a.ts.toDate() : (a.ts ? +new Date(a.ts) : 0));
+    const tb = (b.ts?.toDate ? +b.ts.toDate() : (b.ts ? +new Date(b.ts) : 0));
+    return tb - ta;
   });
+  return out;
 }
 
-els.ordersReload?.addEventListener("click", ()=>{
+function renderMoneyHistory(items){
+  if(!els.moneyHistoryList || !els.moneyHistoryEmpty) return;
+  const arr = Array.isArray(items) ? items : [];
+  els.moneyHistoryList.innerHTML = "";
+  els.moneyHistoryEmpty.hidden = arr.length !== 0;
+  if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
+
+  for(const it of arr){
+    const isIn = it.direction === "in";
+    const amt = moneyUZS(Number(it.amountUZS||0));
+    const when = fmtDate(it.ts);
+    const st = (it.status||"").toString();
+
+    const title = "Balans to‘ldirish";
+
+    const left = document.createElement("div");
+    left.style.minWidth = "0";
+    left.innerHTML = `
+      <div class="orderId">${title}</div>
+      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
+      ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
+    `.trim();
+
+    const right = document.createElement("div");
+    right.className = "orderTotal";
+    right.textContent = (isIn ? "+ " : "- ") + amt;
+
+    const row = document.createElement("div");
+    row.className = "orderItem";
+    row.style.display = "flex";
+    row.style.alignItems = "flex-start";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "12px";
+    row.appendChild(left);
+    row.appendChild(right);
+
+    els.moneyHistoryList.appendChild(row);
+  }
+}
+
+function statusLabel(st, kind){
+  const v = (st||"").toString().toLowerCase();
+
+  if(kind === "topup"){
+    if(v === "approved" || v === "success") return "Tasdiqlangan";
+    if(v === "pending" || v === "waiting") return "Kutilmoqda";
+    if(v === "rejected" || v === "declined") return "Rad etilgan";
+    if(v === "canceled" || v === "cancelled" || v === "canceled_by_admin") return "Bekor qilingan";
+    return v ? v : "";
+  }
+
+  // orders
+  return orderStatusLabel(v);
+}
+
+
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+async function subscribeMoneyHistory(uid){
+  if(!uid || !db) return;
+
+  let topupsArr = [];
+
+  function merge(){
+    const items = normalizeMoneyItems({ topups: topupsArr });
+    renderMoneyHistory(items);
+  }
+
+  try{
+    const qTop = query(
+      collection(db, "topup_requests"),
+      where("uid", "==", uid),
+      limit(50)
+    );
+    const snap = await getDocs(qTop);
+    topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    // client-side sort to avoid composite index requirement
+    topupsArr.sort((a,b)=>{
+      const ta = (a.createdAt?.toDate ? +a.createdAt.toDate() : (a.createdAt ? +new Date(a.createdAt) : 0));
+      const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
+      return tb - ta;
+    });
+    merge();
+  }catch(err){
+    console.error(err);
+    topupsArr = [];
+    merge();
+  }
+}
+
+
+
+async function subscribeOrders(uid){
+  if(!uid) return;
+  if(!currentUser) return;
+  if(!uid || !db || !els.ordersList) return;
+
+  // PERF: fetch once instead of realtime listener
+  try{
+    const qy = query(
+      collection(db, "orders"),
+      where("uid", "==", uid),
+      orderBy("createdAt", "desc"),
+      limit(20)
+    );
+    const snap = await getDocs(qy);
+    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+    ordersCache = arr;
+    renderOrders(arr);
+  }catch(err){
+    console.warn("orders fetch error", err);
+    renderOrders(ordersCache || []);
+  }
+}
+
+
+els.ordersReload?.addEventListener("click", (e)=>{
+  // avoid collapsing when tapping reload
+  try{ e?.stopPropagation?.(); }catch(_){}
   if(!currentUser?.uid){ toast("Avval kirish qiling."); return; }
   try{ subscribeOrders(currentUser.uid); }catch(e){}
-  toast("Buyurtmalar yangilanmoqda...");
+  try{ subscribeMoneyHistory(currentUser.uid); }catch(e){}
+  toast("Yangilanmoqda...");
 });
+
+function setCollapsed(cardEl, bodyEl, on){
+  if(!cardEl || !bodyEl) return;
+  bodyEl.hidden = !!on;
+  cardEl.classList.toggle("collapsed", !!on);
+  const top = cardEl.querySelector(".collapsibleTop");
+  if(top) top.setAttribute("aria-expanded", String(!on));
+}
+
+function toggleCollapsed(cardEl, bodyEl){
+  if(!cardEl || !bodyEl) return;
+  const now = !!bodyEl.hidden;
+  setCollapsed(cardEl, bodyEl, !now ? true : false);
+}
+
+// Collapsible cards on profile view
+(function(){
+  const ordersCard = document.getElementById("ordersHistoryCard");
+  const moneyCard = document.getElementById("moneyHistoryCard");
+
+  const ordersTop = document.getElementById("ordersToggle");
+  const ordersBody = document.getElementById("ordersBody");
+  const moneyTop  = document.getElementById("moneyHistoryToggle");
+  const moneyBody = document.getElementById("moneyHistoryBody");
+
+  function bind(topEl, cardEl, bodyEl){
+    if(!topEl || !cardEl || !bodyEl) return;
+    topEl.addEventListener("click", ()=> toggleCollapsed(cardEl, bodyEl));
+    topEl.addEventListener("keydown", (ev)=>{
+      if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggleCollapsed(cardEl, bodyEl); }
+    });
+  }
+
+  bind(ordersTop, ordersCard, ordersBody);
+  bind(moneyTop,  moneyCard,  moneyBody);
+})();
+
 
 
 /* ===== Mobile SPA Router (Android-like pages) ===== */
@@ -1613,7 +1904,10 @@ function showView(tab){
   if(tab === "fav") renderFavPage();
   if(tab === "cart") renderCartPage();
   if(tab === "profile") {
-    if(currentUser?.uid) try{ subscribeOrders(currentUser.uid); }catch(e){}
+    if(currentUser?.uid){
+      try{ subscribeOrders(currentUser.uid); }catch(e){}
+      try{ subscribeMoneyHistory(currentUser.uid); }catch(e){}
+    }
   }
 
   try{ ensureProfileSocialLinks(); }catch(e){}
@@ -1815,6 +2109,15 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
   };
   showOverlay(els.imgViewer);
   renderViewer();
+
+  // Make scroll stable across devices (some browsers need an explicit reset)
+  try{
+    const panel = els.imgViewer.querySelector('.qvPanel');
+    if(panel){
+      panel.scrollTop = 0;
+      panel.style.webkitOverflowScrolling = 'touch';
+    }
+  }catch(e){}
 }
 
 
@@ -2185,162 +2488,30 @@ function renderCartPage(){
 /* =========================
    Checkout (Cart -> Order)
 ========================= */
-let shipMap = null;          // google.maps.Map
-let shipMarker = null;       // google.maps.Marker
-let shipLatLng = null;       // {lat,lng}
-let shipGeocoder = null;     // google.maps.Geocoder
-let shipAutocomplete = null; // google.maps.places.Autocomplete
-let shipMapInited = false;
-let shipWatchId = null;
-let shipIsFull = false;
-
-let _gmapsPromise = null;
-function loadGoogleMapsOnce(){
-  if(_gmapsPromise) return _gmapsPromise;
-  _gmapsPromise = new Promise((resolve, reject)=>{
-    if(typeof window !== "undefined" && window.google && window.google.maps){
-      resolve(window.google.maps);
-      return;
-    }
-    const key = "AIzaSyCf8SAINzWwcTXF6GYXLCzXtkMyqc1DIl4";
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
-    s.async = true;
-    s.defer = true;
-    s.onload = ()=> resolve(window.google.maps);
-    s.onerror = ()=> reject(new Error("Google Maps yuklanmadi"));
-    document.head.appendChild(s);
-  });
-  return _gmapsPromise;
-}
-
-
-function _shipResizeMap(){
-  try{
-    if(shipMap && window.google && google.maps){
-      google.maps.event.trigger(shipMap, "resize");
-      if(shipLatLng) shipMap.setCenter(shipLatLng);
-    }
-  }catch(e){}
-}
-
-
-async function reverseGeocodeShip(lat, lng){
-  try{
-    if(!shipGeocoder) shipGeocoder = new google.maps.Geocoder();
-    const res = await shipGeocoder.geocode({ location: { lat, lng } });
-    const addr = res?.results?.[0]?.formatted_address || "";
-    if(els.shipAddress && addr) els.shipAddress.value = addr;
-    return addr;
-  }catch(e){
-    return "";
-  }
-}
-
-async function initShipMapOnce(){
-  if(shipMapInited) return;
-  const el = document.getElementById("shipMap");
-  if(!el) return;
-
-  try{
-    await loadGoogleMapsOnce();
-  }catch(e){
-    console.warn(e);
-    toast("Google Maps yuklanmadi. Internetni tekshiring.");
-    return;
-  }
-
-  shipMapInited = true;
-
-  const defaultCenter = { lat: 41.0, lng: 71.6 }; // Namangan atrofida
-  shipLatLng = shipLatLng || defaultCenter;
-
-  shipMap = new google.maps.Map(el, {
-    center: shipLatLng,
-    zoom: 13,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-  });
-
-  shipMarker = new google.maps.Marker({
-    position: shipLatLng,
-    map: shipMap,
-    draggable: true,
-  });
-
-  // Click on map
-  shipMap.addListener("click", async (e)=>{
-    shipLatLng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    shipMarker.setPosition(shipLatLng);
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  });
-
-  // Drag marker
-  shipMarker.addListener("dragend", async ()=>{
-    const p = shipMarker.getPosition();
-    shipLatLng = { lat: p.lat(), lng: p.lng() };
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    await reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  });
-
-  // Autocomplete
-  if(els.shipAddress){
-    shipAutocomplete = new google.maps.places.Autocomplete(els.shipAddress, {
-      fields: ["geometry", "formatted_address", "name"]
-    });
-    shipAutocomplete.addListener("place_changed", ()=>{
-      const place = shipAutocomplete.getPlace();
-      if(!place || !place.geometry || !place.geometry.location) return;
-      const loc = place.geometry.location;
-      shipLatLng = { lat: loc.lat(), lng: loc.lng() };
-      shipMap.panTo(shipLatLng);
-      shipMap.setZoom(16);
-      shipMarker.setPosition(shipLatLng);
-      if(place.formatted_address) els.shipAddress.value = place.formatted_address;
-      if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    });
-  }
-
-  // First display coords text
-  if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-  reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-}
-
 function openCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = false;
+
+  // Require completed profile before checkout
+  try{
+    if(window.__omProfile && window.__omProfile.isProfileComplete && !window.__omProfile.isProfileComplete()){
+      toast("Avval profilni to‘liq to‘ldiring (Ism, Familiya, Telefon, Viloyat, Tuman, Pochta).");
+      closeCheckout();
+      goTab("profile");
+      // auto-open edit mode
+      try{ setTimeout(()=>{ document.getElementById("profileEditBtn")?.click(); }, 120); }catch(_){ }
+      return;
+    }
+  }catch(_){}
+
+
   // Scroll sheet into view
   els.checkoutSheet.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  // init map after visible so Leaflet sizes correctly
-  setTimeout(()=>{
-    initShipMapOnce();
-    try{ _shipResizeMap(); }catch(e){}
-  }, 60);
 }
 
 function closeCheckout(){
   if(!els.checkoutSheet) return;
   els.checkoutSheet.hidden = true;
-
-  // stop live location when checkout closed
-  if(shipWatchId != null && navigator.geolocation){
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-  }
-
-  // exit fullscreen if needed
-  const wrap = document.querySelector(".mapWrap");
-  if(wrap && wrap.classList.contains("isFull")){
-    wrap.classList.remove("isFull");
-    if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
-    if(els.shipFullBtn) els.shipFullBtn.hidden = false;
-    document.body.style.overflow = "";
-    shipIsFull = false;
-  }
 }
 
 function getPayType(){
@@ -2410,8 +2581,6 @@ async function createOrderFromCheckout(){
     note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
-  const address = (els.shipAddress?.value || "").trim();
-  // Address is optional: user may place order without address
 
   let payType = getPayType(); // cash | balance
   if(hasPrepay && payType !== "balance"){
@@ -2423,6 +2592,20 @@ async function createOrderFromCheckout(){
   const orderId = String(Date.now()); // digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
+  // Shipping/profile snapshot (viloyat/tuman/pochta) for order + Telegram
+  let shippingSnap = null;
+  try{
+    const uSnap = await getDoc(doc(db, "users", currentUser.uid));
+    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    const region = (u.region || "").toString();
+    const district = (u.district || "").toString();
+    const post = (u.post || "").toString();
+    shippingSnap = {
+      region, district, post,
+      addressText: [region, district, post].filter(Boolean).join(" / ")
+    };
+  }catch(_e){}
+
   const payload = {
     orderId,
     provider: payType === 'balance' ? 'balance' : 'cash',
@@ -2430,12 +2613,7 @@ async function createOrderFromCheckout(){
     items: built.items,
     totalUZS: built.totalUZS,
     amountTiyin: null,
-    shipping: {
-      phone: (els.shipPhone?.value || (profileCache?.phone || profileCache?.phoneNumber || "") || "").toString().trim() || null,
-      addressText: address || null,
-      lat: shipLatLng?.lat ?? null,
-      lng: shipLatLng?.lng ?? null
-    }
+    shipping: shippingSnap
   };
 
     try{
@@ -2449,12 +2627,14 @@ async function createOrderFromCheckout(){
           "authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
+          orderId: payload.orderId,
           items: payload.items,
           totalUZS: payload.totalUZS,
-          shipping: payload.shipping
+          shipping: payload.shipping || null
         })
       });
       const out = await resp.json().catch(()=>({}));
+      if(out && out.orderId) payload.orderId = String(out.orderId);
       if(!resp.ok || !out.ok){
         if(out && out.error === "insufficient_balance"){
           toast("Balans yetarli emas.");
@@ -2475,56 +2655,77 @@ async function createOrderFromCheckout(){
     toast("Buyurtma yaratilmadi. Qayta urinib ko‘ring.");
   }
 
-  toast("Buyurtmangiz qabul qilindi");
-  goTab("profile");
-}
+  toast("Buyurtmangiz qabul qilindi")let unsubProducts = null; // legacy (kept for compatibility)
+let productsCursor = null;
+let productsFullyLoaded = false;
+const PRODUCTS_PAGE_FETCH = 200;
 
-let unsubProducts = null;
-
-async function loadProducts(){
-  // Firestore is the single source of truth (no products.json fallback).
+/**
+ * PERF: products are fetched in pages (getDocs + limit + startAfter),
+ * not via onSnapshot() across the whole collection.
+ */
+async function loadProducts(reset=true){
   try{
-    const colRef = collection(db, "products");
-    const qy = query(colRef, orderBy("popularScore", "desc"));
-    unsubProducts && unsubProducts();
-    unsubProducts = onSnapshot(qy, (snap)=>{
-      const arr = snap.docs.map(d=> {
-        const data = d.data() || {};
-        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-        const created = (data.createdAt ?? data.created_at ?? data.created);
-        return {
-          id: String(data.id || d.id),
-          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
-          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
-          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
-          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
-          ...data,
-          _docId: d.id,
-          _price: parseUZS(price),
-          _created: toMillis(created),
-        };
-      });
-      products = arr;
-      buildTagCounts();
-buildCategoryTree();
-      applyFilterSort();
-      if(activeTab==="categories") renderCategoriesPage();
-
-      // If empty, show a helpful hint for setup
-      if(arr.length === 0){
-        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
-      }
-    }, (err)=>{
-      console.warn("Firestore products error", err);
-      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
+    if(reset){
       products = [];
+      productsCursor = null;
+      productsFullyLoaded = false;
+    }
+    if(productsFullyLoaded) return;
+
+    const colRef = collection(db, "products");
+    const base = [orderBy("popularScore", "desc"), limit(PRODUCTS_PAGE_FETCH)];
+    const qy = productsCursor ? query(colRef, ...base, startAfter(productsCursor)) : query(colRef, ...base);
+
+    const snap = await getDocs(qy);
+    if(snap.empty){
+      productsFullyLoaded = true;
       applyFilterSort();
+      return;
+    }
+
+    const arr = snap.docs.map(d=> {
+      const data = d.data() || {};
+      const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+      const created = (data.createdAt ?? data.created_at ?? data.created);
+      return {
+        id: String(data.id || d.id),
+        fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+        deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+        deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+        prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+        ...data,
+        _docId: d.id,
+        _price: parseUZS(price),
+        _created: toMillis(created),
+      };
     });
+
+    productsCursor = snap.docs[snap.docs.length-1];
+    if(snap.docs.length < PRODUCTS_PAGE_FETCH) productsFullyLoaded = true;
+
+    // Merge (avoid duplicates)
+    const existing = new Set(products.map(p=>p.id));
+    for(const p of arr){
+      if(!existing.has(p.id)) products.push(p);
+    }
+
+    buildTagCounts();
+    buildCategoryTree();
+    applyFilterSort();
+    if(activeTab==="categories") renderCategoriesPage();
+
+    if(products.length === 0){
+      showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+    }
   }catch(e){
-    console.warn("Firestore products init failed", e);
-    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
+    console.warn("Firestore products load failed", e);
+    showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / index tekshiring.", "error");
     products = [];
     applyFilterSort();
+  }
+}
+applyFilterSort();
   }
 }
 
@@ -2606,7 +2807,7 @@ function setUserUI(user){
 els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
-els.q.addEventListener("input", applyFilterSort);
+els.q.addEventListener("input", debounce(applyFilterSort, 180));
 els.sort.addEventListener("change", applyFilterSort);
 
 
@@ -2790,6 +2991,7 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   // pull richer user fields for order + telegram
   const userRef = doc(db, "users", currentUser.uid);
   let userName = null, userPhone = null, numericId = null, userTgChatId = null;
+  let firstName = null, lastName = null, region = null, district = null, post = null;
   try{
     const uSnap = await getDoc(userRef);
     const u = uSnap.exists() ? (uSnap.data() || {}) : {};
@@ -2798,17 +3000,20 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     userPhone = (u.phone || "").toString();
     numericId = (u.numericId != null ? String(u.numericId) : null);
     userTgChatId = (u.telegramChatId || u.tgChatId || "").toString().trim() || null;
+    firstName = (u.firstName || "").toString() || null;
+    lastName = (u.lastName || "").toString() || null;
+    region = (u.region || "").toString() || null;
+    district = (u.district || "").toString() || null;
+    post = (u.post || "").toString() || null;
   }catch(_e){
     userName = (currentUser.displayName || currentUser.email || "User").toString();
     userPhone = "";
     numericId = null;
     userTgChatId = null;
+    firstName = null; lastName = null; region = null; district = null; post = null;
   }
 
   const orderRef = doc(db, "orders", orderId);
-
-  // also store under user subcollection to avoid composite index for profile history
-  const userOrderRef = doc(db, "users", currentUser.uid, "orders", orderId);
 
   const baseOrder = {
     orderId,
@@ -2817,6 +3022,11 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     userName,
     userPhone,
     userTgChatId,
+    firstName,
+    lastName,
+    region,
+    district,
+    post,
     status,
     items,
     totalUZS,
@@ -2827,6 +3037,17 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
     createdAt: serverTimestamp(),
     source: "web",
   };
+
+  // ensure shipping has full profile snapshot (viloyat/tuman/pochta)
+  if(!baseOrder.shipping){
+    const addrText = [region, district, post].filter(Boolean).join(" / ");
+    baseOrder.shipping = { region, district, post, addressText: addrText };
+  } else if(!baseOrder.shipping.addressText){
+    const r = baseOrder.shipping.region || region;
+    const d = baseOrder.shipping.district || district;
+    const p = baseOrder.shipping.post || post;
+    baseOrder.shipping.addressText = [r,d,p].filter(Boolean).join(" / ");
+  }
 
   // BALANCE checkout: atomically deduct balance and mark as paid
   if (provider === "balance" && orderType === "checkout") {
@@ -2844,12 +3065,10 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
 
       const paidOrder = { ...baseOrder, status: "paid", provider: "balance", amountTiyin: null };
       tx.set(orderRef, paidOrder, { merge: true });
-      tx.set(userOrderRef, paidOrder, { merge: true });
     });
   } else {
     // cash checkout or topup/payme orders
     await setDoc(orderRef, baseOrder, { merge: true });
-    await setDoc(userOrderRef, baseOrder, { merge: true });
   }
   // notify (create) — client-side dedupe (no extra Firestore writes; avoids permission-denied)
   try{
@@ -3216,104 +3435,6 @@ els.orderBtnPage?.addEventListener("click", ()=>{
 els.checkoutClose?.addEventListener("click", closeCheckout);
 els.checkoutSubmit?.addEventListener("click", createOrderFromCheckout);
 
-els.useMyLocation?.addEventListener("click", ()=>{
-  if(!navigator.geolocation){
-    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition((pos)=>{
-    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    initShipMapOnce();
-    try{
-      if(shipMap && window.google && google.maps){
-        shipMap.setCenter(shipLatLng);
-        shipMap.setZoom(16);
-        if(shipMarker) shipMarker.setPosition(shipLatLng);
-      }
-    }catch(e){}
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  }, ()=>{
-    toast("Lokatsiyani olishga ruxsat berilmadi.");
-  }, { enableHighAccuracy: true, timeout: 8000 });
-
-
-els.shipFullBtn?.addEventListener("click", ()=>{
-  const wrap = document.querySelector(".mapWrap");
-  if(!wrap) return;
-  shipIsFull = true;
-  wrap.classList.add("isFull");
-  // show exit button, hide expand
-  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = false;
-  if(els.shipFullBtn) els.shipFullBtn.hidden = true;
-  document.body.style.overflow = "hidden";
-  setTimeout(_shipResizeMap, 120);
-});
-
-els.shipExitFullBtn?.addEventListener("click", ()=>{
-  const wrap = document.querySelector(".mapWrap");
-  if(!wrap) return;
-  shipIsFull = false;
-  wrap.classList.remove("isFull");
-  if(els.shipExitFullBtn) els.shipExitFullBtn.hidden = true;
-  if(els.shipFullBtn) els.shipFullBtn.hidden = false;
-  document.body.style.overflow = "";
-  setTimeout(_shipResizeMap, 120);
-});
-
-function _setLiveBtnOn(on){
-  if(!els.shipLiveBtn) return;
-  els.shipLiveBtn.classList.toggle("active", !!on);
-  els.shipLiveBtn.innerHTML = on
-    ? '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli: ON'
-    : '<i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Jonli';
-}
-
-els.shipLiveBtn?.addEventListener("click", ()=>{
-  if(!navigator.geolocation){
-    toast("Geolokatsiya qo‘llab-quvvatlanmaydi.");
-    return;
-  }
-  // toggle
-  if(shipWatchId != null){
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-    toast("Jonli lokatsiya: OFF");
-    return;
-  }
-  initShipMapOnce();
-  _setLiveBtnOn(true);
-  toast("Jonli lokatsiya: ON");
-  shipWatchId = navigator.geolocation.watchPosition((pos)=>{
-    shipLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    try{
-      if(shipMap && window.google && google.maps){
-        shipMap.setCenter(shipLatLng);
-        shipMap.setZoom(17);
-        if(shipMarker) shipMarker.setPosition(shipLatLng);
-      }
-    }catch(e){}
-    if(els.shipCoordsText) els.shipCoordsText.textContent = `Tanlandi: ${shipLatLng.lat.toFixed(5)}, ${shipLatLng.lng.toFixed(5)}`;
-    // address is optional; reverse geocode occasionally to reduce quota
-    reverseGeocodeShip(shipLatLng.lat, shipLatLng.lng);
-  }, (err)=>{
-    console.warn("watchPosition error", err);
-    toast("Lokatsiya ruxsati berilmadi yoki topilmadi.");
-    try{ navigator.geolocation.clearWatch(shipWatchId); }catch(e){}
-    shipWatchId = null;
-    _setLiveBtnOn(false);
-  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
-});
-
-
-});
-
-
-
-
-
-
 /* =========================
    Profile modal (one-time fill + pencil edit)
 ========================= */
@@ -3349,6 +3470,8 @@ function setSelectOptions(sel, items, placeholder){
 }
 
 function setFieldsDisabled(disabled){
+  if(els.pfFirstName) els.pfFirstName.disabled = disabled;
+  if(els.pfLastName) els.pfLastName.disabled = disabled;
   if(els.pfPhone) els.pfPhone.disabled = disabled;
   if(els.pfRegion) els.pfRegion.disabled = disabled;
   if(els.pfDistrict) els.pfDistrict.disabled = disabled;
@@ -4161,3 +4284,32 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
 
 
 setInterval(ensureProfileSocialLinks, 1200);
+
+// Copy helper for buttons like: <button class="copyBtn" data-copy="#someId">
+document.addEventListener("click", async (e)=>{
+  const btn = e.target && e.target.closest ? e.target.closest(".copyBtn[data-copy]") : null;
+  if(!btn) return;
+  const sel = btn.getAttribute("data-copy");
+  const el = sel ? document.querySelector(sel) : null;
+  const text = (el && (el.value ?? el.textContent) ? String(el.value ?? el.textContent).trim() : "");
+  if(!text) return;
+  try{
+    await navigator.clipboard.writeText(text);
+    toast && toast("Nusxa olindi ✅", "success");
+  }catch(err){
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      toast && toast("Nusxa olindi ✅", "success");
+    }catch(e2){
+      toast && toast("Nusxa olishda xatolik", "error");
+    }
+  }
+});

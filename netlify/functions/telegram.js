@@ -2,7 +2,7 @@
  * Secure Telegram notifications (Netlify Function)
  *
  * ENV:
- *  - TELEGRAM_BOT_TOKEN
+ *  - ORDER_BOT_TOKEN (preferred) or TELEGRAM_BOT_TOKEN or TG_BOT_TOKEN
  *  - TELEGRAM_ADMIN_CHAT_ID
  *  - FIREBASE_SERVICE_ACCOUNT_B64
  */
@@ -75,6 +75,9 @@ function buildOrderCreatedHTML(o){
     o.numericId ? `User ID: <b>${tgEscape(o.numericId)}</b>` : "",
     o.userName ? `Ism: <b>${tgEscape(o.userName)}</b>` : "",
     o.userPhone ? `Tel: <b>${tgEscape(o.userPhone)}</b>` : "",
+    (o.region || o.shipping?.region) ? `Viloyat: <b>${tgEscape(o.region || o.shipping?.region)}</b>` : "",
+    (o.district || o.shipping?.district) ? `Tuman: <b>${tgEscape(o.district || o.shipping?.district)}</b>` : "",
+    (o.post || o.shipping?.post) ? `Pochta: <b>${tgEscape(o.post || o.shipping?.post)}</b>` : "",
     pay ? `To'lov: <b>${pay}</b>` : "",
     `Summa: <b>${sum} so'm</b>`,
     addr ? `Manzil: <i>${addr}</i>` : "",
@@ -126,9 +129,9 @@ exports.handler = async (event) => {
     const uid = decoded && decoded.uid ? String(decoded.uid) : "";
     if(!uid) return json(401, { ok:false, error:"invalid_token" });
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN || "";
-    const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || "";
-    if(botToken.trim().length < 10 || adminChatId.trim().length < 3){
+    const botToken = (process.env.ORDER_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || "").trim();
+    const adminChatId = (process.env.TELEGRAM_ADMIN_CHAT_ID || "").trim();
+    if(botToken.length < 10 || adminChatId.length < 3){
       return json(500, { ok:false, error:"telegram_env_missing" });
     }
 
@@ -143,22 +146,26 @@ exports.handler = async (event) => {
 
     // Deduplicate: one message per uid+orderId+event
     const logRef = db.collection("telegram_logs").doc(`${uid}_${orderId}_${ev}`);
+    let already = false;
     await db.runTransaction(async (t)=>{
       const s = await t.get(logRef);
-      if(s.exists) return;
+      if(s.exists){ already = true; return; }
       t.set(logRef, { uid, orderId, event: ev, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     });
+    if(already){
+      return json(200, { ok:true, dedup:true });
+    }
 
     // Build html server-side (ignore any client-provided html)
     const html = buildOrderCreatedHTML({ ...o, orderId });
 
     // Send admin notification
-    await sendTelegram(botToken.trim(), adminChatId.trim(), html);
+    await sendTelegram(botToken, adminChatId.trim(), html);
 
     // Optional: send user notification if their chat id exists in profile/order
     const userChatId = String(o.userTgChatId || o.telegramChatId || o.tgChatId || "").trim();
     if(userChatId.length >= 3){
-      try{ await sendTelegram(botToken.trim(), userChatId, html); }catch(_e){}
+      try{ await sendTelegram(botToken, userChatId, html); }catch(_e){}
     }
 
     return json(200, { ok:true });

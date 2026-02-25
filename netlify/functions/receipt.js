@@ -3,7 +3,7 @@
  * Netlify Function: receive base64 receipt (image/pdf) and forward to Telegram (no Firebase Storage).
  *
  * ENV:
- *  - TELEGRAM_BOT_TOKEN
+ *  - TOPUP_BOT_TOKEN (preferred) or TG_BOT_TOKEN or TELEGRAM_BOT_TOKEN
  *  - TELEGRAM_ADMIN_CHAT_ID
  * Optional auth:
  *  - FIREBASE_SERVICE_ACCOUNT_B64  (base64 of service account JSON) => verifies Authorization: Bearer <Firebase ID token>
@@ -84,8 +84,8 @@ exports.handler = async (event) => {
       return json(405, { ok:false, error:'method_not_allowed' });
     }
 
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+    const token = (process.env.TOPUP_BOT_TOKEN || process.env.TG_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    const chatId = (process.env.TELEGRAM_ADMIN_CHAT_ID || "").trim();
     if(!token || !chatId){
       return json(500, { ok:false, error:'missing_telegram_env' });
     }
