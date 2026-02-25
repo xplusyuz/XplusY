@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   fetchSignInMethodsForEmail,
+
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   doc,
@@ -13,7 +14,23 @@ import {
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
+
+function withTimeout(promise, ms = 12000){
+  return Promise.race([
+    promise,
+    new Promise((_, rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code:"TIMEOUT" })), ms))
+  ]);
+}
+
+async function precheckEmail(email){
+  // returns true if account exists
+  const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
+  return Array.isArray(methods) && methods.length > 0;
+}
+
 let allowAutoRedirect = true;
+let busyLogin = false;
+let busySignup = false;
 
 const els = {
   tabLogin: document.getElementById("tabLogin"),
@@ -87,23 +104,6 @@ function phoneToEmail(phone){
   const digits = String(phone||"").replace(/[^0-9]/g,"");
   return `p${digits}@orzumall.phone`;
 }
-
-// Promise timeout helper to prevent endless "loading"
-function withTimeout(promise, ms=10000){
-  return Promise.race([
-    promise,
-    new Promise((_, rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code:"TIMEOUT"})), ms))
-  ]);
-}
-
-// Fast precheck: is this phone already registered?
-async function phoneExists(phone){
-  const email = phoneToEmail(phone);
-  const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
-  return Array.isArray(methods) && methods.length > 0;
-}
-
-
 
 
 async function ensureUserDoc(uid, phone, name){
@@ -183,6 +183,9 @@ setMode("login");
 attachUzPhoneMask(els.loginPhone);
 attachUzPhoneMask(els.signupPhone);
 
+// Phone auto-format (+998)
+attachUzPhoneMask(els.loginPhone);
+attachUzPhoneMask(els.signupPhone);
 
 // Password toggles
 els.toggleLoginPass.addEventListener("click", ()=>{
@@ -212,12 +215,15 @@ onAuthStateChanged(auth, (user)=>{
   if(user && allowAutoRedirect) {
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
+  busyLogin = false;
   }
 });
 
 // Login
 els.loginForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
+  if(busyLogin) return;
+  busyLogin = true;
   allowAutoRedirect = false;
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
@@ -225,15 +231,15 @@ els.loginForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
   try{
-    // precheck registration to give instant feedback
-    const exists = await phoneExists(phone);
+    const email = phoneToEmail(phone);
+    const exists = await precheckEmail(email);
     if(!exists){
-      showNotice("Bu telefon raqam ro'yxatdan o'tmagan. Ro'yxatdan o'ting.", "err");
-      try{ els.tabSignup?.click(); if(els.signupPhone) els.signupPhone.value = phone; els.signupName?.focus(); }catch(_){}
+      showNotice("Bu raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘ting.", "err");
+      try{ els.tabSignup?.click(); if(els.signupPhone) els.signupPhone.value = phone; els.signupName?.focus(); }catch(_){ }
+      busyLogin = false;
       return;
     }
 
-    const email = phoneToEmail(phone);
     const cred = await signInWithEmailAndPassword(auth, email, pass);
 
     // ensure numericId exists + keep name if already known
@@ -243,7 +249,8 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
-    console.error(err);
+      busyLogin = false;
+if(!(String(err?.code||"").includes("email-already-in-use") || String(err?.code||"").includes("user-not-found") || String(err?.code||"").includes("wrong-password"))){ console.error(err); }
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
       showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
@@ -251,10 +258,6 @@ els.loginForm.addEventListener("submit", async (e)=>{
       showNotice("Login yoki parol xato", "err");
     }else if(code.includes("too-many-requests")){
       showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
-    }else if(code.includes("network-request-failed")){
-      showNotice("Internet/VPN/Adblock muammo. Qayta urinib ko‘ring.", "err");
-    }else if(code === "TIMEOUT"){
-      showNotice("Aloqa sekin. Qayta urinib ko‘ring.", "err");
     }else{
       // fallback
       showNotice("Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.", "err");
@@ -265,6 +268,8 @@ els.loginForm.addEventListener("submit", async (e)=>{
 // Signup
 els.signupForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
+  if(busySignup) return;
+  busySignup = true;
   allowAutoRedirect = false;
   const name = (els.signupName.value || "").trim();
   const phone = normPhone(els.signupPhone.value);
@@ -277,15 +282,15 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
   try{
-    // precheck: if already exists, guide user to login instead of waiting
-    const exists = await phoneExists(phone);
+    const email = phoneToEmail(phone);
+    const exists = await precheckEmail(email);
     if(exists){
-      showNotice("Bu raqam allaqachon ro'yxatdan o'tgan. Kirish bo'limidan kiring.", "err");
-      try{ els.tabLogin?.click(); if(els.loginPhone) els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){}
+      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
+      try{ els.tabLogin?.click(); if(els.loginPhone) els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){ }
+      busySignup = false;
       return;
     }
 
-    const email = phoneToEmail(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
@@ -295,8 +300,10 @@ els.signupForm.addEventListener("submit", async (e)=>{
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
+  busySignup = false;
   }catch(err){
-    console.error(err);
+      busySignup = false;
+if(!(String(err?.code||"").includes("email-already-in-use") || String(err?.code||"").includes("user-not-found") || String(err?.code||"").includes("wrong-password"))){ console.error(err); }
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
       showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
@@ -309,8 +316,6 @@ els.signupForm.addEventListener("submit", async (e)=>{
     }else{
       if(String(err?.code||"").includes("weak-password")){
       showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
-    }else if(String(err?.code||"").includes("network-request-failed")){
-      showNotice("Internet/VPN/Adblock muammo. Qayta urinib ko‘ring.", "err");
     }else if(String(err?.code||"").includes("invalid-email")){
       showNotice("Telefon raqam formati noto‘g‘ri.", "err");
     }else{
