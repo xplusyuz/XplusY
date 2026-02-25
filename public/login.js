@@ -4,8 +4,6 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   fetchSignInMethodsForEmail,
-  setPersistence,
-  browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   doc,
@@ -85,52 +83,34 @@ function attachUzPhoneMask(input){
     }
   });
 }
-
-// Faster repeat logins
-setPersistence(auth, browserLocalPersistence).catch(()=>{})
-
 function phoneToEmail(phone){
   const digits = String(phone||"").replace(/[^0-9]/g,"");
   return `p${digits}@orzumall.phone`;
 }
 
-function withTimeout(p, ms=9000){
+// Promise timeout helper to prevent endless "loading"
+function withTimeout(promise, ms=10000){
   return Promise.race([
-    p,
-    new Promise((_,rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code:"timeout" })), ms))
+    promise,
+    new Promise((_, rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code:"TIMEOUT"})), ms))
   ]);
 }
-function mapAuthError(err){
-  const code = String(err?.code||"");
-  if(code.includes("auth/network-request-failed")) return "Internet yoki VPN/Adblock muammo. Google xizmatlari bloklanmaganini tekshiring va qayta urinib ko‘ring.";
-  if(code.includes("timeout")) return "Javob juda sekin. Internetni tekshirib qayta urinib ko‘ring.";
-  if(code.includes("auth/too-many-requests")) return "Juda ko‘p urinish. 1-2 daqiqadan keyin qayta urinib ko‘ring.";
-  if(code.includes("auth/wrong-password")) return "Parol noto‘g‘ri.";
-  if(code.includes("auth/user-not-found")) return "Bu raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘ting.";
-  if(code.includes("auth/email-already-in-use")) return "Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan kiring.";
-  if(code.includes("auth/weak-password")) return "Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.";
-  if(code.includes("auth/invalid-email")) return "Telefon raqam formati noto‘g‘ri.";
-  return "Kirish/ro‘yxatdan o‘tishda xatolik. Qayta urinib ko‘ring.";
-}
-async function accountExistsByPhone(phone){
+
+// Fast precheck: is this phone already registered?
+async function phoneExists(phone){
   const email = phoneToEmail(phone);
-  try{
-    const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
-    return (methods && methods.length>0);
-  }catch(e){
-    // if network fails, surface to UI, but don't crash
-    throw e;
-  }
+  const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
+  return Array.isArray(methods) && methods.length > 0;
 }
+
+
 
 
 async function ensureUserDoc(uid, phone, name){
   const userRef = doc(db, "users", uid);
 
   // Ensure numericId (1000+) is assigned exactly once via a counter doc (meta/counters)
-  let assignedNumericId = null;
-  try{
-    assignedNumericId = await withTimeout(runTransaction(db, async (tx) => {
+  const assignedNumericId = await runTransaction(db, async (tx) => {
     const snap = await tx.get(userRef);
     const existing = snap.exists() ? (snap.data() || {}) : {};
     if (existing.numericId && Number.isFinite(Number(existing.numericId))) {
@@ -165,11 +145,7 @@ async function ensureUserDoc(uid, phone, name){
     tx.set(mapRef, { uid }, { merge: true });
 
     return numericId;
-  })), 9000);
-  }catch(e){
-    console.warn('numericId tx failed', e);
-    assignedNumericId = null;
-  }
+  });
 
   // Update profile fields (not sensitive)
   const snap2 = await getDoc(userRef);
@@ -207,9 +183,6 @@ setMode("login");
 attachUzPhoneMask(els.loginPhone);
 attachUzPhoneMask(els.signupPhone);
 
-// Phone auto-format (+998)
-attachUzPhoneMask(els.loginPhone);
-attachUzPhoneMask(els.signupPhone);
 
 // Password toggles
 els.toggleLoginPass.addEventListener("click", ()=>{
@@ -252,16 +225,16 @@ els.loginForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
   try{
-    // Fast pre-check: if not registered, avoid slow auth call
-    const email = phoneToEmail(phone);
-    const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
-    if(!methods || methods.length === 0){
-      showNotice("Bu telefon raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘tish bo‘limidan foydalaning.", "err");
+    // precheck registration to give instant feedback
+    const exists = await phoneExists(phone);
+    if(!exists){
+      showNotice("Bu telefon raqam ro'yxatdan o'tmagan. Ro'yxatdan o'ting.", "err");
       try{ els.tabSignup?.click(); if(els.signupPhone) els.signupPhone.value = phone; els.signupName?.focus(); }catch(_){}
       return;
     }
 
-    const cred = await withTimeout(signInWithEmailAndPassword(auth, email, pass), 12000);
+    const email = phoneToEmail(phone);
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
 
     // ensure numericId exists + keep name if already known
     const uid = cred.user.uid;
@@ -271,12 +244,21 @@ els.loginForm.addEventListener("submit", async (e)=>{
     location.replace(next);
   }catch(err){
     console.error(err);
-    const code = String(err?.code||"");
-    if(code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
-      showNotice("Login yoki parol xato.", "err");
-      return;
+    const code = String(err?.code || "");
+    if(code.includes("user-not-found")){
+      showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
+    }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
+      showNotice("Login yoki parol xato", "err");
+    }else if(code.includes("too-many-requests")){
+      showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
+    }else if(code.includes("network-request-failed")){
+      showNotice("Internet/VPN/Adblock muammo. Qayta urinib ko‘ring.", "err");
+    }else if(code === "TIMEOUT"){
+      showNotice("Aloqa sekin. Qayta urinib ko‘ring.", "err");
+    }else{
+      // fallback
+      showNotice("Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.", "err");
     }
-    showNotice(mapAuthError(err), "err");
   }
 });
 
@@ -295,16 +277,16 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
   try{
-    // Fast pre-check: already registered?
-    const exists = await accountExistsByPhone(phone).catch((err)=>{ throw err; });
+    // precheck: if already exists, guide user to login instead of waiting
+    const exists = await phoneExists(phone);
     if(exists){
-      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
-      try{ els.tabLogin?.click(); els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){}
+      showNotice("Bu raqam allaqachon ro'yxatdan o'tgan. Kirish bo'limidan kiring.", "err");
+      try{ els.tabLogin?.click(); if(els.loginPhone) els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){}
       return;
     }
 
     const email = phoneToEmail(phone);
-    const cred = await withTimeout(createUserWithEmailAndPassword(auth, email, pass), 12000);
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
     const { numericId } = await ensureUserDoc(uid, phone, name);
@@ -315,12 +297,25 @@ els.signupForm.addEventListener("submit", async (e)=>{
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
     console.error(err);
-    const msg = mapAuthError(err);
-    showNotice(msg, "err");
-
-    // If already registered -> switch to login automatically
+    // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
-      try{ els.tabLogin?.click(); if(els.loginPhone) els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){}
+      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
+      // auto switch to login tab
+      try{
+        els.tabLogin?.click();
+        if(els.loginPhone) els.loginPhone.value = phone;
+        els.loginPass?.focus();
+      }catch(_){}
+    }else{
+      if(String(err?.code||"").includes("weak-password")){
+      showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
+    }else if(String(err?.code||"").includes("network-request-failed")){
+      showNotice("Internet/VPN/Adblock muammo. Qayta urinib ko‘ring.", "err");
+    }else if(String(err?.code||"").includes("invalid-email")){
+      showNotice("Telefon raqam formati noto‘g‘ri.", "err");
+    }else{
+      showNotice("Ro‘yxatdan o‘tishda xatolik", "err");
+    }
     }
   }
 });
