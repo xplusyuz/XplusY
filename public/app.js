@@ -19,14 +19,7 @@ async function tgNotifyOrderCreated(orderId){
   try{
     if(!currentUser) return;
     if(!tgAdminEnabled() && !tgUserEnabled()) return;
-
-    // If Firebase Auth is disabled, we skip secure notifications.
-    // (Netlify function expects a valid Firebase ID token.)
-    if(typeof currentUser.getIdToken !== "function") return;
-
     const idToken = await currentUser.getIdToken();
-    if(!idToken) return;
-
     await fetch("/.netlify/functions/telegram", {
       method: "POST",
       headers: {
@@ -83,233 +76,14 @@ function tgOrderStatusHTML(o){
 }
 
 
-import { db, storage } from "./firebase-config.js";
+import { auth, db, storage } from "./firebase-config.js";
 import { CARDPAY } from "./cardpay-config.js";
-
-/* ========= SIMPLE JS SESSION (NO Firebase Auth) =========
-   - Site is public (no login required).
-   - Login/register only when placing order.
-   - Stores session in localStorage and uses /users/{uid} doc.
-   - NOTE: This is intentionally simple; security is "best-effort" without Auth.
-*/
-const OM_SESSION_KEY = "orzuMallSession_v1";
-
-function omLoadSession(){
-  try{ return JSON.parse(localStorage.getItem(OM_SESSION_KEY) || "null"); }catch(_){ return null; }
-}
-function omSaveSession(s){
-  try{ localStorage.setItem(OM_SESSION_KEY, JSON.stringify(s||null)); }catch(_){}
-}
-function omClearSession(){
-  try{ localStorage.removeItem(OM_SESSION_KEY); }catch(_){}
-}
-
-function omRandId(){
-  // 20 chars base36-ish
-  const a = crypto.getRandomValues(new Uint32Array(5));
-  return "om_" + Array.from(a).map(x=>x.toString(36)).join("").slice(0,20);
-}
-async function omSha256(text){
-  const enc = new TextEncoder().encode(String(text||""));
-  const buf = await crypto.subtle.digest("SHA-256", enc);
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-}
-
-async function omGetUserDoc(uid){
-  const r = await getDoc(doc(db, "users", String(uid)));
-  return r.exists() ? r.data() : null;
-}
-
-function omSessionToUser(session){
-  if(!session || !session.uid) return null;
-  // Keep compatibility with old code that expects currentUser.uid / displayName
-  return {
-    uid: String(session.uid),
-    displayName: session.name || "Foydalanuvchi",
-    phone: session.phone || "",
-    _passHash: session.passHash || "",
-    // getIdToken compatibility for old secure functions (returns empty string)
-    getIdToken: async ()=>"",
-  };
-}
-
-async function omRegister({name, phone, pass}){
-  const uid = omRandId();
-  const passHash = await omSha256(pass);
-  const cleanPhone = String(phone||"").replace(/[^0-9+]/g,"").slice(0,32);
-  const cleanName = String(name||"").trim().slice(0,80);
-
-  await setDoc(doc(db,"users",uid), {
-    uid,
-    name: cleanName,
-    phone: cleanPhone,
-    passHash,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    balanceUZS: 0,
-    lastActionAt: serverTimestamp(),
-    lastAction: "register"
-  });
-
-  const session = { uid, name: cleanName, phone: cleanPhone, passHash, createdAt: Date.now() };
-  omSaveSession(session);
-  return session;
-}
-
-async function omLogin({uid, pass}){
-  const cleanUid = String(uid||"").trim();
-  const d = await omGetUserDoc(cleanUid);
-  if(!d) throw new Error("not_found");
-  const passHash = await omSha256(pass);
-  if(String(d.passHash||"") !== passHash) throw new Error("bad_pass");
-
-  const session = { uid: cleanUid, name: d.name || "Foydalanuvchi", phone: d.phone || "", passHash, createdAt: Date.now() };
-  omSaveSession(session);
-  // touch
-  try{
-    await setDoc(doc(db,"users",cleanUid), { updatedAt: serverTimestamp(), lastActionAt: serverTimestamp(), lastAction:"login" }, { merge:true });
-  }catch(_){}
-  return session;
-}
-
-async function omUserPing(action){
-  try{
-    const s = omLoadSession();
-    if(!s?.uid) return;
-    await setDoc(doc(db,"users",s.uid), {
-      updatedAt: serverTimestamp(),
-      lastActionAt: serverTimestamp(),
-      lastAction: String(action||"ping").slice(0,40)
-    }, { merge:true });
-  }catch(_){}
-}
-
-/* Lightweight modal for login/register */
-function omEnsureAuthModal(){
-  if(document.getElementById("omAuthModal")) return;
-  const wrap = document.createElement("div");
-  wrap.id = "omAuthModal";
-  wrap.className = "modal omAuthModal";
-  wrap.innerHTML = `
-    <div class="modalBackdrop" data-close="1"></div>
-    <div class="modalCard">
-      <div class="modalHead">
-        <div class="modalTitle"><i class="fa-solid fa-user-lock"></i> Kirish / Ro‘yxatdan o‘tish</div>
-        <button class="iconBtn" data-close="1" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modalBody">
-        <div class="authTabs">
-          <button class="chip active" id="omTabReg">Ro‘yxatdan o‘tish</button>
-          <button class="chip" id="omTabLog">Kirish</button>
-        </div>
-
-        <div id="omPaneReg">
-          <div class="field"><label>Ism</label><input id="omRegName" placeholder="Ismingiz" autocomplete="name"></div>
-          <div class="field"><label>Telefon</label><input id="omRegPhone" placeholder="+998..." autocomplete="tel"></div>
-          <div class="field"><label>Parol</label><input id="omRegPass" type="password" placeholder="Parol" autocomplete="new-password"></div>
-          <div class="hint">Ro‘yxatdan o‘tgach sizga <b>ID</b> beriladi. Uni yo‘qotmang.</div>
-          <button class="btn primary" id="omBtnReg">Ro‘yxatdan o‘tish</button>
-        </div>
-
-        <div id="omPaneLog" style="display:none">
-          <div class="field"><label>ID</label><input id="omLogUid" placeholder="Masalan: om_..." autocomplete="username"></div>
-          <div class="field"><label>Parol</label><input id="omLogPass" type="password" placeholder="Parol" autocomplete="current-password"></div>
-          <button class="btn primary" id="omBtnLog">Kirish</button>
-        </div>
-
-        <div class="authNotice" id="omAuthNote"></div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(wrap);
-
-  function setTab(which){
-    const regBtn = wrap.querySelector("#omTabReg");
-    const logBtn = wrap.querySelector("#omTabLog");
-    const regPane = wrap.querySelector("#omPaneReg");
-    const logPane = wrap.querySelector("#omPaneLog");
-    regBtn.classList.toggle("active", which==="reg");
-    logBtn.classList.toggle("active", which==="log");
-    regPane.style.display = which==="reg" ? "" : "none";
-    logPane.style.display = which==="log" ? "" : "none";
-    wrap.querySelector("#omAuthNote").textContent = "";
-  }
-  wrap.addEventListener("click", (e)=>{
-    const t = e.target;
-    if(t?.dataset?.close) omCloseAuthModal();
-    if(t?.id==="omTabReg") setTab("reg");
-    if(t?.id==="omTabLog") setTab("log");
-  });
-}
-
-function omOpenAuthModal(pref="reg"){
-  omEnsureAuthModal();
-  const m = document.getElementById("omAuthModal");
-  m.classList.add("open");
-  // set preferred tab
-  try{
-    const reg = m.querySelector("#omTabReg");
-    const log = m.querySelector("#omTabLog");
-    if(pref==="log") log.click(); else reg.click();
-  }catch(_){}
-}
-function omCloseAuthModal(){
-  const m = document.getElementById("omAuthModal");
-  m?.classList.remove("open");
-}
-
-async function omRequireLogin(){
-  const s = omLoadSession();
-  if(s?.uid) return s;
-  return await new Promise((resolve, reject)=>{
-    omOpenAuthModal("reg");
-    const m = document.getElementById("omAuthModal");
-    const note = m.querySelector("#omAuthNote");
-
-    const cleanup = ()=>{
-      m.querySelector("#omBtnReg")?.replaceWith(m.querySelector("#omBtnReg").cloneNode(true));
-      m.querySelector("#omBtnLog")?.replaceWith(m.querySelector("#omBtnLog").cloneNode(true));
-    };
-
-    const regBtn = m.querySelector("#omBtnReg");
-    const logBtn = m.querySelector("#omBtnLog");
-
-    regBtn.addEventListener("click", async ()=>{
-      try{
-        note.textContent = "";
-        const name = m.querySelector("#omRegName").value;
-        const phone = m.querySelector("#omRegPhone").value;
-        const pass = m.querySelector("#omRegPass").value;
-        if(String(name||"").trim().length < 2) return note.textContent = "Ism kiriting.";
-        if(String(pass||"").length < 4) return note.textContent = "Parol kamida 4 ta belgidan iborat bo‘lsin.";
-        const session = await omRegister({name, phone, pass});
-        omCloseAuthModal();
-        toast("Ro‘yxatdan o‘tildi. ID: " + session.uid);
-        resolve(session);
-      }catch(e){
-        console.warn(e);
-        note.textContent = "Xatolik. Qayta urinib ko‘ring.";
-      }
-    }, { once:true });
-
-    logBtn.addEventListener("click", async ()=>{
-      try{
-        note.textContent = "";
-        const uid = m.querySelector("#omLogUid").value;
-        const pass = m.querySelector("#omLogPass").value;
-        if(String(uid||"").trim().length < 6) return note.textContent = "ID ni kiriting.";
-        const session = await omLogin({uid, pass});
-        omCloseAuthModal();
-        toast("Kirish muvaffaqiyatli.");
-        resolve(session);
-      }catch(e){
-        if(String(e.message||"")==="not_found") note.textContent = "Foydalanuvchi topilmadi.";
-        else if(String(e.message||"")==="bad_pass") note.textContent = "Parol noto‘g‘ri.";
-        else note.textContent = "Xatolik. Qayta urinib ko‘ring.";
-      }
-    }, { once:true });
-  });
-}
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   doc,
   getDoc,
@@ -421,7 +195,20 @@ function toMillis(ts){
 }
 
 // Lightweight interest tracking -> Firestore events (used to compute real popularity)
-async function logEvent(type, productId){ /* disabled (no extra collections) */ }
+async function logEvent(type, productId){
+  try{
+    if(!currentUser) return;
+    await addDoc(collection(db, "events"), {
+      uid: currentUser.uid,
+      type,
+      productId: String(productId),
+      createdAt: serverTimestamp(),
+      ua: navigator.userAgent || "",
+    });
+  }catch(e){
+    console.warn("logEvent failed", e);
+  }
+}
 
 
 const els = {
@@ -2701,8 +2488,9 @@ window.applyPayTypeRules = applyPayTypeRules;
 
 async function createOrderFromCheckout(){
   if(!currentUser){
-    toast("Buyurtma uchun kirish kerak.");
-    try{ const s = await omRequireLogin(); currentUser = omSessionToUser(s); setUserUI(currentUser); await subscribeUserDoc(currentUser.uid); }catch(_){ return; }
+    toast("Avval kirish qiling (Telefon raqam + parol).");
+    document.getElementById('authCard')?.scrollIntoView({behavior:'smooth'});
+    return;
   }
   if(cart.length === 0){ toast("Savatcha bo'sh."); return; }
 
@@ -2896,21 +2684,28 @@ function wireEyeButtons(){
 
 function setUserUI(user){
   currentUser = user || null;
+  const authCard = els.authCard || document.getElementById("authCard");
+
   document.body.classList.toggle("signed-in", !!user);
+
+  if(!user){
+    // Require login: redirect to dedicated login page
+    const next = encodeURIComponent(location.pathname + location.search + location.hash);
+    location.replace(`/login.html?next=${next}`);
+    return;
+  }
+
+  if(authCard) authCard.style.display = "none";
 
   // Avatar: always use Font Awesome profile icon (no image / initials)
   if(els.avatarIcon) els.avatarIcon.style.display = "grid";
   if(els.avatarBtn) els.avatarBtn.disabled = false;
 
-  // Optional: show name if element exists
-  const nm = user?.displayName ? String(user.displayName) : "Mehmon";
-  try{ document.getElementById("userNameText")?.replaceChildren(document.createTextNode(nm)); }catch(_){}
-
   // keep profile modal header in sync
-  try{ if(window.__omProfile) window.__omProfile.syncUser(user); }catch(_){}
+  if(window.__omProfile) window.__omProfile.syncUser(user);
 }
 
-els.profileLogout?.addEventListener("click", async ()=>{ omClearSession(); setUserUI(null); toast("Chiqildi."); });
+els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
 els.q.addEventListener("input", applyFilterSort);
@@ -3124,7 +2919,6 @@ async function createOrderDoc({orderId, provider, status, items, totalUZS, amoun
   const baseOrder = {
     orderId,
     uid: currentUser.uid,
-    passHash: currentUser._passHash || "",
     numericId,
     userName,
     userPhone,
@@ -3377,14 +3171,15 @@ async function submitTopupRequest(){
     if(hint) hint.textContent = "Chek Telegram'ga yuborilmoqda...";
 
     const fileB64 = await fileToBase64(file);
-    const passHash = currentUser._passHash || '';
+    const idToken = await currentUser.getIdToken();
 
     const resp = await fetch('/api/receipt', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ' + idToken
+      },
       body: JSON.stringify({
-        uid: currentUser.uid,
-        passHash: (currentUser._passHash || ''),
         kind: 'topup_request',
         reqId,
         amountUZS,
@@ -3959,20 +3754,10 @@ document.addEventListener("keydown", (e)=>{
   return { open, syncUser, isProfileComplete: ()=>!!isCompleted };
 })();
 
-document.addEventListener("DOMContentLoaded", async ()=>{
-  try{
-    const s = omLoadSession();
-    currentUser = omSessionToUser(s);
-    setUserUI(currentUser);
-    if(currentUser?.uid){ try{ await subscribeUserDoc(currentUser.uid); }catch(_){ omClearSession(); setUserUI(null); } }
-  }catch(_){
-    currentUser = null;
-    setUserUI(null);
-  }
-  await loadProducts();
-  updateBadges();
-});
-if(!user) return; // setUserUI redirects to /login.html
+let __appStarted = false;
+onAuthStateChanged(auth, async (user)=>{
+  setUserUI(user);
+  if(!user) return; // setUserUI redirects to /login.html
   if(__appStarted) return;
   __appStarted = true;
 

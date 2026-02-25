@@ -27,23 +27,6 @@ function initFirebase() {
   return admin;
 }
 
-
-async function verifyUserByPassHash(uid, passHash){
-  try{
-    initFirebase();
-    const snap = await admin.firestore().doc(`users/${String(uid||'')}`).get();
-    if(!snap.exists) return null;
-    const d = snap.data() || {};
-    if(String(d.passHash||'') && String(d.passHash) === String(passHash||'')){
-      return { uid: String(uid) };
-    }
-    return null;
-  }catch(e){
-    console.warn("verifyUserByPassHash failed", e);
-    return null;
-  }
-}
-
 function parseBody(event) {
   try {
     const raw = event.isBase64Encoded
@@ -139,22 +122,11 @@ exports.handler = async (event) => {
     }
 
     const token = getBearer(event);
+    if(!token) return json(401, { ok:false, error:"missing_token" });
 
-    let decoded = null;
-    if(token){
-      initFirebase();
-      decoded = await admin.auth().verifyIdToken(token);
-    }
-
-    if(!decoded){
-      // Fallback (no Firebase Auth): verify by uid+passHash in body
-      if(body && body.uid && body.passHash){
-        decoded = await verifyUserByPassHash(body.uid, body.passHash);
-      }
-    }
-
-    if(!decoded) return json(401, { ok:false, error:"unauthorized" });
-const uid = decoded && decoded.uid ? String(decoded.uid) : "";
+    initFirebase();
+    const decoded = await admin.auth().verifyIdToken(token);
+    const uid = decoded && decoded.uid ? String(decoded.uid) : "";
     if(!uid) return json(401, { ok:false, error:"invalid_token" });
 
     const botToken = (process.env.ORDER_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || "").trim();
