@@ -2,11 +2,11 @@ import { auth, db } from "./firebase-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   doc,
-  getDoc,
   setDoc,
   serverTimestamp,
   runTransaction,
@@ -32,7 +32,37 @@ const els = {
 
   notice: document.getElementById("notice"),
   forgotLink: document.getElementById("forgotLink"),
+
+  loginBtn: document.getElementById("loginBtn"),
+  signupBtn: document.getElementById("signupBtn"),
+  loginPhoneStatus: document.getElementById("loginPhoneStatus"),
+  signupPhoneStatus: document.getElementById("signupPhoneStatus"),
 };
+
+function setMiniStatus(el, msg, kind=""){
+  if(!el) return;
+  el.textContent = msg || "";
+  el.className = "mini" + (kind ? " "+kind : "");
+}
+
+function withTimeout(promise, ms=12000){
+  return Promise.race([
+    promise,
+    new Promise((_, rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code: "timeout" })), ms))
+  ]);
+}
+
+function mapAuthError(err){
+  const code = String(err?.code || "");
+  if(code.includes("timeout")) return "Internet sekin. Qayta urinib ko‘ring.";
+  if(code.includes("auth/network-request-failed")) return "Internet bilan muammo. Qayta urinib ko‘ring.";
+  if(code.includes("auth/too-many-requests")) return "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.";
+  if(code.includes("auth/user-not-found")) return "Bu telefon raqam ro‘yxatdan o‘tmagan.";
+  if(code.includes("auth/wrong-password") || code.includes("auth/invalid-credential") || code.includes("auth/invalid-login-credentials")) return "Login yoki parol xato.";
+  if(code.includes("auth/email-already-in-use")) return "Bu raqam allaqachon ro‘yxatdan o‘tgan.";
+  if(code.includes("auth/weak-password")) return "Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.";
+  return "Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.";
+}
 
 function showNotice(msg, kind="ok"){
   if(!els.notice) return;
@@ -91,61 +121,122 @@ function phoneToEmail(phone){
 async function ensureUserDoc(uid, phone, name){
   const userRef = doc(db, "users", uid);
 
-  // Ensure numericId (1000+) is assigned exactly once via a counter doc (meta/counters)
-  const assignedNumericId = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(userRef);
-    const existing = snap.exists() ? (snap.data() || {}) : {};
-    if (existing.numericId && Number.isFinite(Number(existing.numericId))) {
-      // still update name/phone below outside tx
-      return Number(existing.numericId);
-    }
+  // One transaction: assign numericId (once) + update profile fields + create fast lookup maps
+  try{
+    const assignedNumericId = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(userRef);
+      const existing = snap.exists() ? (snap.data() || {}) : {};
 
-    const counterRef = doc(db, "meta", "counters");
-    const cSnap = await tx.get(counterRef);
+      let numericId = Number(existing.numericId);
+      const hasNumeric = Number.isFinite(numericId) && numericId > 0;
 
-    let next = 1000;
-    if (cSnap.exists()) {
-      const d = cSnap.data() || {};
-      if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
-      else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter); // legacy
-    }
+      if(!hasNumeric){
+        const counterRef = doc(db, "meta", "counters");
+        const cSnap = await tx.get(counterRef);
 
-    const numericId = next;
+        let next = 1000;
+        if (cSnap.exists()) {
+          const d = cSnap.data() || {};
+          if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
+          else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter); // legacy
+        }
 
-    // advance counter
-    tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
+        numericId = next;
+        tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
+        tx.set(doc(db, "users_by_numeric", String(numericId)), { uid }, { merge: true });
+      }
 
-    // set user numericId
-    tx.set(userRef, {
-      numericId,
+      const phoneSafe = phone || existing.phone || "";
+      const nameSafe  = name  || existing.name  || "";
+
+      tx.set(userRef, {
+        phone: phoneSafe,
+        name: nameSafe,
+        numericId,
+        updatedAt: serverTimestamp(),
+        ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
+      }, { merge: true });
+
+      if(phoneSafe && /^\+998\d{9}$/.test(phoneSafe)){
+        tx.set(doc(db, "users_by_phone", phoneSafe), {
+          uid,
+          phone: phoneSafe,
+          updatedAt: serverTimestamp(),
+          ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
+        }, { merge: true });
+      }
+
+      return numericId;
+    });
+
+    return { numericId: assignedNumericId };
+  }catch(err){
+    // If rules block meta/users_by_numeric, don't block login.
+    // We still ensure /users/{uid} exists with phone/name.
+    console.warn("ensureUserDoc fallback", err);
+    await setDoc(userRef, {
+      phone: phone || "",
+      name: name || "",
       updatedAt: serverTimestamp(),
-      ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
+      createdAt: serverTimestamp(),
     }, { merge: true });
+    return { numericId: null };
+  }
+}
 
-    // mapping for server-side lookup: users_by_numeric/{numericId} -> { uid }
-    const mapRef = doc(db, "users_by_numeric", String(numericId));
-    tx.set(mapRef, { uid }, { merge: true });
+// ===== Fast pre-check (NO Firestore, uses Auth public method) =====
+let _checkTok = 0;
+let _checkTimer = null;
+async function precheckPhone(rawPhone, mode){
+  const phone = normPhone(rawPhone);
+  const valid = isValidUzPhone(phone);
+  const statusEl = mode === "signup" ? els.signupPhoneStatus : els.loginPhoneStatus;
+  const btn = mode === "signup" ? els.signupBtn : els.loginBtn;
 
-    return numericId;
-  });
+  if(!btn) return;
 
-  // Update profile fields (not sensitive)
-  const snap2 = await getDoc(userRef);
-  const existing2 = snap2.exists() ? (snap2.data()||{}) : {};
+  if(!valid){
+    setMiniStatus(statusEl, "Telefon formati: 90 123 45 67", "");
+    btn.disabled = true;
+    return;
+  }
 
-  await setDoc(userRef, {
-    phone: phone || existing2.phone || "",
-    name: name || existing2.name || "",
-    numericId: assignedNumericId,
-    updatedAt: serverTimestamp(),
-    ...(snap2.exists() ? {} : { createdAt: serverTimestamp() })
-  }, { merge:true });
-
-  return {
-    numericId: assignedNumericId,
-    name: (name || existing2.name || "User"),
-    phone: (phone || existing2.phone || "")
-  };
+  // Debounce
+  clearTimeout(_checkTimer);
+  const tok = ++_checkTok;
+  _checkTimer = setTimeout(async ()=>{
+    if(tok !== _checkTok) return;
+    setMiniStatus(statusEl, "Tekshirilmoqda...", "loading");
+    btn.disabled = true;
+    try{
+      const email = phoneToEmail(phone);
+      const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
+      const exists = Array.isArray(methods) && methods.length > 0;
+      if(mode === "login"){
+        if(exists){
+          setMiniStatus(statusEl, "Bu raqam ro‘yxatdan o‘tgan. Kirishingiz mumkin.", "ok");
+          btn.disabled = false;
+        }else{
+          setMiniStatus(statusEl, "Bu raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘ting.", "err");
+          btn.disabled = true;
+        }
+      }else{
+        // signup
+        if(exists){
+          setMiniStatus(statusEl, "Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan kiring.", "err");
+          btn.disabled = true;
+        }else{
+          setMiniStatus(statusEl, "Raqam bo‘sh. Ro‘yxatdan o‘tishingiz mumkin.", "ok");
+          btn.disabled = false;
+        }
+      }
+    }catch(err){
+      console.warn("precheck error", err);
+      setMiniStatus(statusEl, "Tekshiruvda xatolik. Internetni tekshiring.", "err");
+      // allow action anyway (don't block user forever)
+      btn.disabled = false;
+    }
+  }, 260);
 }
 
 
@@ -165,9 +256,20 @@ setMode("login");
 attachUzPhoneMask(els.loginPhone);
 attachUzPhoneMask(els.signupPhone);
 
-// Phone auto-format (+998)
-attachUzPhoneMask(els.loginPhone);
-attachUzPhoneMask(els.signupPhone);
+// Precheck while typing
+if(els.loginPhone){
+  els.loginBtn && (els.loginBtn.disabled = true);
+  setMiniStatus(els.loginPhoneStatus, "Telefon kiriting (90 123 45 67)");
+  els.loginPhone.addEventListener("input", ()=> precheckPhone(els.loginPhone.value, "login"));
+  // initial
+  precheckPhone(els.loginPhone.value, "login");
+}
+if(els.signupPhone){
+  els.signupBtn && (els.signupBtn.disabled = true);
+  setMiniStatus(els.signupPhoneStatus, "Telefon kiriting (90 123 45 67)");
+  els.signupPhone.addEventListener("input", ()=> precheckPhone(els.signupPhone.value, "signup"));
+  precheckPhone(els.signupPhone.value, "signup");
+}
 
 // Password toggles
 els.toggleLoginPass.addEventListener("click", ()=>{
@@ -209,30 +311,27 @@ els.loginForm.addEventListener("submit", async (e)=>{
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
+  const btn = els.loginBtn;
+  const oldHtml = btn?.innerHTML;
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:8px"></i> Kuting...'; }
+
   try{
     const email = phoneToEmail(phone);
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const cred = await withTimeout(signInWithEmailAndPassword(auth, email, pass), 12000);
 
     // ensure numericId exists + keep name if already known
     const uid = cred.user.uid;
-    await ensureUserDoc(uid, phone, "");
+    // Keep login fast: ensure doc, but don't let it hang forever
+    await withTimeout(ensureUserDoc(uid, phone, ""), 8000);
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
     console.error(err);
-    const code = String(err?.code || "");
-    if(code.includes("user-not-found")){
-      showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
-    }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
-      showNotice("Login yoki parol xato", "err");
-    }else if(code.includes("too-many-requests")){
-      showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
-    }else{
-      // fallback
-      showNotice("Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.", "err");
-    }
+    showNotice(mapAuthError(err), "err");
   }
+
+  if(btn){ btn.disabled = false; btn.innerHTML = oldHtml || btn.innerHTML; }
 });
 
 // Signup
@@ -249,12 +348,26 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
+  const btn = els.signupBtn;
+  const oldHtml = btn?.innerHTML;
+  if(btn){ btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:8px"></i> Kuting...'; }
+
   try{
+    // fast pre-check again (avoid long wait and then email-already-in-use)
+    const emailPre = phoneToEmail(phone);
+    const methods = await withTimeout(fetchSignInMethodsForEmail(auth, emailPre), 8000);
+    if(Array.isArray(methods) && methods.length > 0){
+      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
+      try{ els.tabLogin?.click(); els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){ }
+      if(btn){ btn.disabled = false; btn.innerHTML = oldHtml || btn.innerHTML; }
+      return;
+    }
+
     const email = phoneToEmail(phone);
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const cred = await withTimeout(createUserWithEmailAndPassword(auth, email, pass), 12000);
 
     const uid = cred.user.uid;
-    const { numericId } = await ensureUserDoc(uid, phone, name);
+    const { numericId } = await withTimeout(ensureUserDoc(uid, phone, name), 8000);
 
     showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
 
@@ -262,23 +375,8 @@ els.signupForm.addEventListener("submit", async (e)=>{
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
     console.error(err);
-    // common: email already in use
-    if(String(err?.code||"").includes("email-already-in-use")){
-      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
-      // auto switch to login tab
-      try{
-        els.tabLogin?.click();
-        if(els.loginPhone) els.loginPhone.value = phone;
-        els.loginPass?.focus();
-      }catch(_){}
-    }else{
-      if(String(err?.code||"").includes("weak-password")){
-      showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
-    }else if(String(err?.code||"").includes("invalid-email")){
-      showNotice("Telefon raqam formati noto‘g‘ri.", "err");
-    }else{
-      showNotice("Ro‘yxatdan o‘tishda xatolik", "err");
-    }
-    }
+    showNotice(mapAuthError(err), "err");
   }
+
+  if(btn){ btn.disabled = false; btn.innerHTML = oldHtml || btn.innerHTML; }
 });

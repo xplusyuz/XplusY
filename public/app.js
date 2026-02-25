@@ -1,13 +1,4 @@
 
-/* ========= PERF HELPERS ========= */
-function debounce(fn, wait=150){
-  let t=null;
-  return (...args)=>{
-    clearTimeout(t);
-    t=setTimeout(()=>fn(...args), wait);
-  };
-}
-
 /* ========= TELEGRAM ADMIN NOTIFY (NO FUNCTIONS) =========
    Sends a lightweight notification to admin chat when a new order is created.
    Uses GET (Image beacon) and/or no-cors POST to avoid CORS issues.
@@ -96,18 +87,12 @@ import {
 import {
   doc,
   getDoc,
-  getDocs,
   setDoc,
   collection,
   query,
   where,
   orderBy,
   limit,
-  startAfter,
-<<<<<<< HEAD
-  getDocs,
-=======
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -505,11 +490,6 @@ function enhanceHScroll(el){
 
 let products = [];
 let tagCounts = new Map();
-
-// Product list rendering performance
-const PRODUCTS_RENDER_PAGE = 60;
-let productsVisibleCount = PRODUCTS_RENDER_PAGE;
-let lastFilteredProducts = [];
 
 const LS = {
   favs: "om_favs",
@@ -1146,9 +1126,6 @@ function applyFilterSort(){
   if(sort === "new") arr.sort((a,b)=> (b._created||0) - (a._created||0));
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
-  // Reset pagination when filter/sort changes
-  productsVisibleCount = PRODUCTS_RENDER_PAGE;
-  lastFilteredProducts = arr;
   render(arr);
 }
 
@@ -1202,126 +1179,36 @@ function discountPct(price, oldPrice){
 }
 
 
-// PERF: incremental render (pagination) to avoid DOM overload
-const RENDER_PAGE_SIZE = 60;
-let renderState = { arr: [], page: 0 };
-
-function ensureLoadMoreBtn(){
-  if(!els.loadMoreBtn){
-    const btn = document.createElement("button");
-    btn.className = "loadMoreBtn";
-    btn.type = "button";
-    btn.textContent = "Yana ko‘rsatish";
-    btn.hidden = true;
-    btn.addEventListener("click", ()=>{
-      // render next page
-      renderNextPage();
-      // if we still have more server-side products (for huge catalogs), fetch next batch too
-      if(!productsFullyLoaded && (renderState.page * RENDER_PAGE_SIZE) >= (products.length - RENDER_PAGE_SIZE)){
-        loadProducts(false);
-      }
-    });
-    els.grid.parentNode.appendChild(btn);
-    els.loadMoreBtn = btn;
-  }
-}
-
 function render(arr){
-  ensureLoadMoreBtn();
-  renderState.arr = Array.isArray(arr) ? arr : [];
-  renderState.page = 0;
-
   els.grid.innerHTML = "";
-  const total = Array.isArray(arr) ? arr.length : 0;
   if (els.productsCount) {
-<<<<<<< HEAD
-    const n = renderState.arr.length;
+    const n = Array.isArray(arr) ? arr.length : 0;
     els.productsCount.textContent = `${n} ta`;
   }
-  els.empty.hidden = renderState.arr.length !== 0;
+  els.empty.hidden = arr.length !== 0;
 
-  renderNextPage(true);
-}
-
-function renderNextPage(reset=false){
-  ensureLoadMoreBtn();
-  const arr = renderState.arr;
-  const from = renderState.page * RENDER_PAGE_SIZE;
-  const to = Math.min(from + RENDER_PAGE_SIZE, arr.length);
-  if(from >= arr.length){
-    els.loadMoreBtn.hidden = true;
-    return;
-  }
-
-  const frag = document.createDocumentFragment();
-  for(let i=from; i<to; i++){
-    const p = arr[i];
-=======
-    els.productsCount.textContent = `${total} ta`;
-  }
-  els.empty.hidden = total !== 0;
-
-  // Render only a slice first (keeps mobile smooth on big catalogs)
-  const visible = Math.min(productsVisibleCount, total);
-  const slice = arr.slice(0, visible);
-  const frag = document.createDocumentFragment();
-
-  for(const p of slice){
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
+  for(const p of arr){
     const card = document.createElement("div");
     card.className = "pcard";
 
     const isFav = favs.has(p.id);
+
     const sel = getSel(p);
     const currentImg = getCurrentImage(p, sel);
 
-    const prCard = getVariantPricing(p, sel);
-    const dp = discountPct(prCard.price, prCard.oldPrice);
-    const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
-    const badgeHtmlParts = [];
-    if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
-    for(const b of adminBadges.slice(0,3)){
-      const t = String(b||"").trim();
-      if(!t) continue;
-      if(/^-?\d+\s*%$/.test(t)) continue;
-      badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
-    }
-    const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
+const prCard = getVariantPricing(p, sel);
+const dp = discountPct(prCard.price, prCard.oldPrice);
+// Admin badges: badges[] (preferred) or badge string (legacy)
+const adminBadges = Array.isArray(p.badges) ? p.badges : (p.badge ? [p.badge] : []);
+const badgeHtmlParts = [];
 
-    const st = getStats(p.id);
-    const showAvg = st.count ? st.avg : 0;
-    const showCount = st.count ? st.count : 0;
-
-    card.innerHTML = `
-      <div class="pmedia">
-        <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
-        ${badgeHTML}
-        <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli" aria-label="Sevimli" type="button">❤</button>
-      </div>
-      <div class="pbody">
-        <div class="ptitle">${escapeHtml(p.name || "")}</div>
-        <div class="prLine">
-          <div class="pprice">${formatUZS(prCard.price)}</div>
-          ${prCard.oldPrice ? `<div class="pold">${formatUZS(prCard.oldPrice)}</div>` : ""}
-        </div>
-        <div class="pmetaLine">
-          ${showAvg ? `<span class="prating">★ ${Number(showAvg).toFixed(1)}</span>` : `<span class="prating dim">★ 0.0</span>`}
-          <span class="pcount">${showCount ? `${showCount} ta` : "0 ta"}</span>
-        </div>
-        ${renderOptions(p)}
-        <button class="addBtn" type="button">Savatga</button>
-      </div>
-    `;
-
-    // attach dataset
-    card.dataset.pid = p.id;
-
-    frag.appendChild(card);
-  }
-  els.grid.appendChild(frag);
-
-  renderState.page += 1;
-  els.loadMoreBtn.hidden = (renderState.page * RENDER_PAGE_SIZE) >= arr.length;
+if(dp > 0) badgeHtmlParts.push(`<div class="pbadge discount">-${dp}%</div>`);
+// show up to 3 admin badges (skip if looks like a percent discount we already show)
+for(const b of adminBadges.slice(0,3)){
+  const t = String(b||"").trim();
+  if(!t) continue;
+  if(/^-?\d+\s*%$/.test(t)) continue;
+  badgeHtmlParts.push(`<div class="pbadge meta">${escapeHtml(t)}</div>`);
 }
 // Prepay badge moved to cart (not shown on cards)
 
@@ -1423,31 +1310,11 @@ const openQuickView = ()=>{
       handleAddToCart(p, { openCartAfter: false });
     });
 
-    frag.appendChild(card);
+    els.grid.appendChild(card);
 
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
-
-  els.grid.appendChild(frag);
-
-  // Load-more control (created once, reused)
-  let moreBtn = document.getElementById("omLoadMore");
-  if(!moreBtn){
-    moreBtn = document.createElement("button");
-    moreBtn.id = "omLoadMore";
-    moreBtn.type = "button";
-    moreBtn.className = "btn loadMoreBtn";
-    moreBtn.style.margin = "16px auto 6px";
-    moreBtn.style.display = "none";
-    moreBtn.textContent = "Yana ko‘rsatish";
-    moreBtn.addEventListener("click", ()=>{
-      productsVisibleCount += PRODUCTS_RENDER_PAGE;
-      render(lastFilteredProducts);
-    });
-    els.grid.insertAdjacentElement("afterend", moreBtn);
-  }
-  moreBtn.style.display = (visible < total) ? "block" : "none";
 }
 
 
@@ -1717,161 +1584,6 @@ function renderOrders(orders){
   }
 }
 
-<<<<<<< HEAD
-
-/* =========================
-   Money history (profile)
-========================= */
-let moneyUnsubTopups = null;
-
-function normalizeMoneyItems({ topups=[] }){
-  const out = [];
-  for(const t of topups){
-    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
-    const st = (t.status||"pending").toString();
-    const amt = Number(t.amountUZS||0) || 0;
-    out.push({
-      kind: "topup",
-      direction: "in",
-      amountUZS: amt,
-      status: st,
-      note: (t.adminNote||""),
-      ts,
-      id: t.id || ""
-    });
-  }
-  out.sort((a,b)=>{
-    const ta = (a.ts?.toDate ? +a.ts.toDate() : (a.ts ? +new Date(a.ts) : 0));
-    const tb = (b.ts?.toDate ? +b.ts.toDate() : (b.ts ? +new Date(b.ts) : 0));
-    return tb - ta;
-  });
-  return out;
-}
-
-function renderMoneyHistory(items){
-  if(!els.moneyHistoryList || !els.moneyHistoryEmpty) return;
-  const arr = Array.isArray(items) ? items : [];
-  els.moneyHistoryList.innerHTML = "";
-  els.moneyHistoryEmpty.hidden = arr.length !== 0;
-  if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
-
-  for(const it of arr){
-    const isIn = it.direction === "in";
-    const amt = moneyUZS(Number(it.amountUZS||0));
-    const when = fmtDate(it.ts);
-    const st = (it.status||"").toString();
-
-    const title = "Balans to‘ldirish";
-
-    const left = document.createElement("div");
-    left.style.minWidth = "0";
-    left.innerHTML = `
-      <div class="orderId">${title}</div>
-      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
-      ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
-    `.trim();
-
-    const right = document.createElement("div");
-    right.className = "orderTotal";
-    right.textContent = (isIn ? "+ " : "- ") + amt;
-
-    const row = document.createElement("div");
-    row.className = "orderItem";
-    row.style.display = "flex";
-    row.style.alignItems = "flex-start";
-    row.style.justifyContent = "space-between";
-    row.style.gap = "12px";
-    row.appendChild(left);
-    row.appendChild(right);
-
-    els.moneyHistoryList.appendChild(row);
-  }
-}
-
-function statusLabel(st, kind){
-  const v = (st||"").toString().toLowerCase();
-
-  if(kind === "topup"){
-    if(v === "approved" || v === "success") return "Tasdiqlangan";
-    if(v === "pending" || v === "waiting") return "Kutilmoqda";
-    if(v === "rejected" || v === "declined") return "Rad etilgan";
-    if(v === "canceled" || v === "cancelled" || v === "canceled_by_admin") return "Bekor qilingan";
-    return v ? v : "";
-  }
-
-  // orders
-  return orderStatusLabel(v);
-}
-
-
-function escapeHtml(s){
-  return String(s||"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-async function subscribeMoneyHistory(uid){
-  if(!uid || !db) return;
-
-  let topupsArr = [];
-
-  function merge(){
-    const items = normalizeMoneyItems({ topups: topupsArr });
-    renderMoneyHistory(items);
-  }
-
-  try{
-    const qTop = query(
-      collection(db, "topup_requests"),
-      where("uid", "==", uid),
-      limit(50)
-    );
-    const snap = await getDocs(qTop);
-    topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-    // client-side sort to avoid composite index requirement
-    topupsArr.sort((a,b)=>{
-      const ta = (a.createdAt?.toDate ? +a.createdAt.toDate() : (a.createdAt ? +new Date(a.createdAt) : 0));
-      const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
-      return tb - ta;
-    });
-    merge();
-  }catch(err){
-    console.error(err);
-    topupsArr = [];
-    merge();
-  }
-}
-
-
-
-async function subscribeOrders(uid){
-  if(!uid) return;
-  if(!currentUser) return;
-  if(!uid || !db || !els.ordersList) return;
-
-  // PERF: fetch once instead of realtime listener
-  try{
-    const qy = query(
-      collection(db, "orders"),
-      where("uid", "==", uid),
-      orderBy("createdAt", "desc"),
-      limit(20)
-    );
-    const snap = await getDocs(qy);
-    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
-    ordersCache = arr;
-    renderOrders(arr);
-  }catch(err){
-    console.warn("orders fetch error", err);
-    renderOrders(ordersCache || []);
-  }
-}
-
-
-=======
 
 /* =========================
    Money history (profile)
@@ -1969,19 +1681,23 @@ function escapeHtml(s){
 
 function subscribeMoneyHistory(uid){
   if(!uid || !db) return;
-  // Performance: fetch-on-demand instead of keeping a live listener.
   try{ moneyUnsubTopups?.(); }catch(e){}
-  moneyUnsubTopups = null;
 
-  (async ()=>{
-    let topupsArr = [];
-    try{
-      const qTop = query(
-        collection(db, "topup_requests"),
-        where("uid", "==", uid),
-        limit(50)
-      );
-      const snap = await getDocs(qTop);
+  let topupsArr = [];
+
+  function merge(){
+    const items = normalizeMoneyItems({ topups: topupsArr });
+    renderMoneyHistory(items);
+  }
+
+  // Topups: only this user
+  try{
+    const qTop = query(
+      collection(db, "topup_requests"),
+      where("uid", "==", uid),
+      limit(50)
+    );
+    moneyUnsubTopups = onSnapshot(qTop, (snap)=>{
       topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
       // client-side sort to avoid composite index requirement
       topupsArr.sort((a,b)=>{
@@ -1989,13 +1705,15 @@ function subscribeMoneyHistory(uid){
         const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
         return tb - ta;
       });
-    }catch(err){
+      merge();
+    }, (err)=>{
       console.error(err);
       topupsArr = [];
-    }
-    const items = normalizeMoneyItems({ topups: topupsArr });
-    renderMoneyHistory(items);
-  })();
+      merge();
+    });
+  }catch(e){
+    console.error(e);
+  }
 
 
 
@@ -2008,28 +1726,26 @@ function subscribeOrders(uid){
 
   if(!uid || !db || !els.ordersList) return;
   try{ ordersUnsub?.(); }catch(e){}
-  ordersUnsub = null;
 
-  // Performance: fetch-on-demand instead of keeping a live listener.
-  (async ()=>{
-    try{
-      const qy = query(
-        collection(db, "orders"),
-        where("uid", "==", uid),
-        orderBy("createdAt", "desc"),
-        limit(20)
-      );
-      const snap = await getDocs(qy);
-      const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
-      renderOrders(arr);
-    }catch(err){
-      console.warn("orders fetch error", err);
-      renderOrders(ordersCache);
-    }
-  })();
+  // Read from top-level orders (rules allow user to read only own orders)
+  // NOTE: This query may require a composite index (uid + createdAt). If missing, Firestore will show a link to create it.
+  const qy = query(
+    collection(db, "orders"),
+    where("uid", "==", uid),
+    orderBy("createdAt", "desc"),
+    limit(20)
+  );
+
+  ordersUnsub = onSnapshot(qy, (snap)=>{
+    const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+    renderOrders(arr);
+  }, (err)=>{
+    console.warn("orders subscribe error", err);
+    // Fallback to cache if any
+    renderOrders(ordersCache);
+  });
 }
 
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
 els.ordersReload?.addEventListener("click", (e)=>{
   // avoid collapsing when tapping reload
   try{ e?.stopPropagation?.(); }catch(_){}
@@ -2861,114 +2577,56 @@ async function createOrderFromCheckout(){
     toast("Buyurtma yaratilmadi. Qayta urinib ko‘ring.");
   }
 
-  toast("Buyurtmangiz qabul qilindi")let unsubProducts = null; // legacy (kept for compatibility)
-let productsCursor = null;
-let productsFullyLoaded = false;
-const PRODUCTS_PAGE_FETCH = 200;
+  toast("Buyurtmangiz qabul qilindi");
+  goTab("profile");
+}
 
-<<<<<<< HEAD
-/**
- * PERF: products are fetched in pages (getDocs + limit + startAfter),
- * not via onSnapshot() across the whole collection.
- */
-async function loadProducts(reset=true){
-  try{
-    if(reset){
-      products = [];
-      productsCursor = null;
-      productsFullyLoaded = false;
-    }
-    if(productsFullyLoaded) return;
-
-    const colRef = collection(db, "products");
-    const base = [orderBy("popularScore", "desc"), limit(PRODUCTS_PAGE_FETCH)];
-    const qy = productsCursor ? query(colRef, ...base, startAfter(productsCursor)) : query(colRef, ...base);
-
-    const snap = await getDocs(qy);
-    if(snap.empty){
-      productsFullyLoaded = true;
-      applyFilterSort();
-      return;
-    }
-
-=======
 let unsubProducts = null;
 
 async function loadProducts(){
-  // Performance: do NOT keep a realtime listener on the whole catalog.
-  // Fetch once (and let users refresh via reload / re-open).
+  // Firestore is the single source of truth (no products.json fallback).
   try{
     const colRef = collection(db, "products");
-    const qy = query(colRef, orderBy("popularScore", "desc"), limit(500));
-    try{ unsubProducts && unsubProducts(); }catch(_e){}
-    unsubProducts = null;
+    const qy = query(colRef, orderBy("popularScore", "desc"));
+    unsubProducts && unsubProducts();
+    unsubProducts = onSnapshot(qy, (snap)=>{
+      const arr = snap.docs.map(d=> {
+        const data = d.data() || {};
+        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+        const created = (data.createdAt ?? data.created_at ?? data.created);
+        return {
+          id: String(data.id || d.id),
+          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+          ...data,
+          _docId: d.id,
+          _price: parseUZS(price),
+          _created: toMillis(created),
+        };
+      });
+      products = arr;
+      buildTagCounts();
+buildCategoryTree();
+      applyFilterSort();
+      if(activeTab==="categories") renderCategoriesPage();
 
-    const snap = await getDocs(qy);
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
-    const arr = snap.docs.map(d=> {
-      const data = d.data() || {};
-      const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-      const created = (data.createdAt ?? data.created_at ?? data.created);
-<<<<<<< HEAD
-      return {
-        id: String(data.id || d.id),
-        fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
-        deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
-        deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
-        prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
-=======
-      const isCargo = (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo);
-      return {
-        id: String(data.id || d.id),
-        fulfillmentType: (data.fulfillmentType || data.fulfillment || (isCargo ? 'cargo' : 'stock') || 'stock'),
-        deliveryMinDays: (data.deliveryMinDays ?? (isCargo ? 15 : 1)),
-        deliveryMaxDays: (data.deliveryMaxDays ?? (isCargo ? 30 : 7)),
-        prepayRequired: (data.prepayRequired ?? (isCargo ? true : false)),
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
-        ...data,
-        _docId: d.id,
-        _price: parseUZS(price),
-        _created: toMillis(created),
-      };
+      // If empty, show a helpful hint for setup
+      if(arr.length === 0){
+        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+      }
+    }, (err)=>{
+      console.warn("Firestore products error", err);
+      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
+      products = [];
+      applyFilterSort();
     });
-
-<<<<<<< HEAD
-    productsCursor = snap.docs[snap.docs.length-1];
-    if(snap.docs.length < PRODUCTS_PAGE_FETCH) productsFullyLoaded = true;
-
-    // Merge (avoid duplicates)
-    const existing = new Set(products.map(p=>p.id));
-    for(const p of arr){
-      if(!existing.has(p.id)) products.push(p);
-    }
-
-=======
-    products = arr;
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
-    buildTagCounts();
-    buildCategoryTree();
-    applyFilterSort();
-    if(activeTab==="categories") renderCategoriesPage();
-
-<<<<<<< HEAD
-    if(products.length === 0){
-=======
-    if(arr.length === 0){
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
-      showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
-    }
   }catch(e){
-    console.warn("Firestore products load failed", e);
-<<<<<<< HEAD
-    showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / index tekshiring.", "error");
-=======
-    showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore / internet tekshiring.", "error");
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
+    console.warn("Firestore products init failed", e);
+    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
     products = [];
     applyFilterSort();
-  }
-}
-applyFilterSort();
   }
 }
 
@@ -3050,21 +2708,7 @@ function setUserUI(user){
 els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
-<<<<<<< HEAD
-els.q.addEventListener("input", debounce(applyFilterSort, 180));
-=======
-// Debounced filtering to keep typing smooth on mobile
-function debounce(fn, wait=180){
-  let t = null;
-  return (...args)=>{
-    if(t) clearTimeout(t);
-    t = setTimeout(()=> fn(...args), wait);
-  };
-}
-
-const applyFilterSortDebounced = debounce(applyFilterSort, 180);
-els.q.addEventListener("input", applyFilterSortDebounced);
->>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
+els.q.addEventListener("input", applyFilterSort);
 els.sort.addEventListener("change", applyFilterSort);
 
 
