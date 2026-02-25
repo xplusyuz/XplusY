@@ -234,7 +234,7 @@
 <script type="module">
     import { auth, db } from "./firebase-config.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-    import { doc, getDoc, setDoc, runTransaction,
+    import { doc, getDoc, setDoc,
     serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
     const $ = (s)=>document.querySelector(s);
@@ -247,50 +247,31 @@
         return new Intl.DateTimeFormat("uz-UZ",{dateStyle:"medium",timeStyle:"short"}).format(d);
       }catch{ return "—"; }
     }
+    function uidToNumericId(uid){
+      const hex = (uid || "").replace(/[^0-9a-f]/gi, "").padEnd(10, "0").slice(0, 10);
+      let n = 0;
+      try{ n = parseInt(hex, 16); }catch(_e){ n = Date.now(); }
+      return (n % 900000) + 100000;
+    }
+
     async function ensureUserDoc(uid, phoneFromAuth, nameFromAuth){
       const userRef = doc(db, "users", uid);
+      const snap = await getDoc(userRef).catch(()=>null);
+      const u = snap && snap.exists() ? (snap.data() || {}) : {};
 
-      const res = await runTransaction(db, async (tx) => {
-        const snap = await tx.get(userRef);
-        const u = snap.exists() ? (snap.data() || {}) : {};
+      const numericId = (u.numericId != null && /^\d+$/.test(String(u.numericId))) ? Number(u.numericId) : uidToNumericId(uid);
+      const phone = (u.phone || phoneFromAuth || "").toString();
+      const name = (u.name || nameFromAuth || "User").toString();
 
-        // assign numericId once
-        let numericId = Number(u.numericId);
-        if(!Number.isFinite(numericId)){
-          const counterRef = doc(db, "meta", "counters");
-          const cSnap = await tx.get(counterRef);
-          let next = 1000;
-          if (cSnap.exists()) {
-            const d = cSnap.data() || {};
-            if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
-            else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter);
-          }
-          numericId = next;
-          tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
-          tx.set(userRef, {
-            numericId,
-            ...(snap.exists() ? {} : { createdAt: serverTimestamp() }),
-          }, { merge: true });
-          const mapRef = doc(db, "users_by_numeric", String(numericId));
-          tx.set(mapRef, { uid }, { merge: true });
-        }
-
-        const phone = (u.phone || phoneFromAuth || "").toString();
-        const name = (u.name || nameFromAuth || "User").toString();
-
-        const updates = {};
-        if(u.balanceUZS == null) updates.balanceUZS = 0;
-        if(!u.phone && phone) updates.phone = phone;
-        if(!u.name && name) updates.name = name;
-        if(Object.keys(updates).length){
-          updates.updatedAt = serverTimestamp();
-          tx.set(userRef, updates, { merge:true });
-        }
-
-        return { numericId, phone, name };
-      });
-
-      return res;
+      const updates = {
+        numericId,
+        phone,
+        name,
+        updatedAt: serverTimestamp(),
+        ...(snap && snap.exists() ? {} : { createdAt: serverTimestamp(), balanceUZS: 0 })
+      };
+      await setDoc(userRef, updates, { merge:true });
+      return { numericId, phone, name, createdAt: u.createdAt || null };
     }
 
 
@@ -307,7 +288,14 @@
       if(av) av.innerHTML = '<i class="fa-solid fa-user"></i>';
       $("#numericId").textContent = "ID: " + ensured.numericId;
       $("#phone").textContent = ensured.phone || "";
-      $("#createdAt").textContent = fmtDate(snap.exists()? snap.data().createdAt : null);
+      // createdAt is stored in users/{uid}
+      try{
+        const uSnap = await getDoc(doc(db, "users", user.uid));
+        const u = uSnap.exists() ? (uSnap.data()||{}) : {};
+        $("#createdAt").textContent = fmtDate(u.createdAt || null);
+      }catch(_e){
+        $("#createdAt").textContent = "—";
+      }
     });
 
     $("#logoutBtn").addEventListener("click", async ()=>{

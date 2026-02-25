@@ -3387,7 +3387,6 @@ async function payWithBalance(built, shipping){
 
     // order doc
     const oref = doc(db,'orders',orderId);
-    const uo = doc(db,'users',uid,'orders',orderId);
     const base = {
       orderId,
       uid,
@@ -3405,8 +3404,8 @@ async function payWithBalance(built, shipping){
       source: 'web',
       payFromBalance: true
     };
+    // only one order document (global collection) — no per-user subcollection writes
     t.set(oref, base, {merge:true});
-    t.set(uo, base, {merge:true});
   });
 
   return orderId;
@@ -3643,8 +3642,9 @@ async function syncUser(user){
     // Ensure user has sequential numericId (1000+) and store basic user doc in Firestore
     const userRef = doc(db, "users", user.uid);
     let u = {};
+    let uSnap = null;
     try{
-      const uSnap = await getDoc(userRef);
+      uSnap = await getDoc(userRef);
       u = uSnap.exists() ? (uSnap.data() || {}) : {};
     }catch(e){
       // If rules temporarily block, keep UI working without console errors.
@@ -3670,14 +3670,14 @@ async function syncUser(user){
     let numericId = null;
     try{
       numericId = await ensureNumericId(user, userRef, u);
-    }catch(e){
-      console.warn("numericId assignment skipped (no permission / offline)", e);
+    }catch(_e){
+      // keep console clean
       numericId = u?.numericId ?? null;
     }
 
     // Write only if something actually changed (Firestore writes = money)
     const updates = {};
-    if(!uSnap.exists()){
+    if(!uSnap || !uSnap.exists()){
       updates.createdAt = serverTimestamp();
     }
     if(numericId != null && ((u.numericId == null) || Number(u.numericId) !== Number(numericId))){

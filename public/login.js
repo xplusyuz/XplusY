@@ -9,7 +9,6 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
-  runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 let allowAutoRedirect = true;
@@ -24,8 +23,13 @@ const els = {
   loginPass: document.getElementById("loginPass"),
   toggleLoginPass: document.getElementById("toggleLoginPass"),
 
-  signupName: document.getElementById("signupName"),
+  // signup profile fields
+  signupFirstName: document.getElementById("signupFirstName"),
+  signupLastName: document.getElementById("signupLastName"),
   signupPhone: document.getElementById("signupPhone"),
+  signupRegion: document.getElementById("signupRegion"),
+  signupDistrict: document.getElementById("signupDistrict"),
+  signupPost: document.getElementById("signupPost"),
   signupPass: document.getElementById("signupPass"),
   signupPass2: document.getElementById("signupPass2"),
   toggleSignupPass: document.getElementById("toggleSignupPass"),
@@ -88,64 +92,87 @@ function phoneToEmail(phone){
 }
 
 
-async function ensureUserDoc(uid, phone, name){
+// Stable numericId derived from UID (no meta/counters, no extra collections)
+function uidToNumericId(uid){
+  const hex = (uid || "").replace(/[^0-9a-f]/gi, "").padEnd(10, "0").slice(0, 10);
+  let n = 0;
+  try{ n = parseInt(hex, 16); }catch(_e){ n = Date.now(); }
+  return (n % 900000) + 100000; // 6 digits
+}
+
+async function ensureUserDoc(uid, payload){
   const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef).catch(()=>null);
+  const u = snap && snap.exists() ? (snap.data()||{}) : {};
 
-  // Ensure numericId (1000+) is assigned exactly once via a counter doc (meta/counters)
-  const assignedNumericId = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(userRef);
-    const existing = snap.exists() ? (snap.data() || {}) : {};
-    if (existing.numericId && Number.isFinite(Number(existing.numericId))) {
-      // still update name/phone below outside tx
-      return Number(existing.numericId);
-    }
+  const numericId = (u.numericId != null && /^\d+$/.test(String(u.numericId))) ? Number(u.numericId) : uidToNumericId(uid);
+  const firstName = (payload.firstName || u.firstName || "").trim();
+  const lastName = (payload.lastName || u.lastName || "").trim();
+  const fullName = (payload.name || u.name || (firstName + " " + lastName).trim() || "User").trim();
 
-    const counterRef = doc(db, "meta", "counters");
-    const cSnap = await tx.get(counterRef);
-
-    let next = 1000;
-    if (cSnap.exists()) {
-      const d = cSnap.data() || {};
-      if (Number.isFinite(Number(d.nextUserId))) next = Number(d.nextUserId);
-      else if (Number.isFinite(Number(d.userIdCounter))) next = Number(d.userIdCounter); // legacy
-    }
-
-    const numericId = next;
-
-    // advance counter
-    tx.set(counterRef, { nextUserId: numericId + 1 }, { merge: true });
-
-    // set user numericId
-    tx.set(userRef, {
-      numericId,
-      updatedAt: serverTimestamp(),
-      ...(snap.exists() ? {} : { createdAt: serverTimestamp() })
-    }, { merge: true });
-
-    // mapping for server-side lookup: users_by_numeric/{numericId} -> { uid }
-    const mapRef = doc(db, "users_by_numeric", String(numericId));
-    tx.set(mapRef, { uid }, { merge: true });
-
-    return numericId;
-  });
-
-  // Update profile fields (not sensitive)
-  const snap2 = await getDoc(userRef);
-  const existing2 = snap2.exists() ? (snap2.data()||{}) : {};
-
-  await setDoc(userRef, {
-    phone: phone || existing2.phone || "",
-    name: name || existing2.name || "",
-    numericId: assignedNumericId,
+  const data = {
+    numericId,
+    phone: payload.phone || u.phone || "",
+    firstName,
+    lastName,
+    name: fullName,
+    region: payload.region || u.region || "",
+    district: payload.district || u.district || "",
+    post: payload.post || u.post || "",
+    profileCompleted: true,
     updatedAt: serverTimestamp(),
-    ...(snap2.exists() ? {} : { createdAt: serverTimestamp() })
-  }, { merge:true });
-
-  return {
-    numericId: assignedNumericId,
-    name: (name || existing2.name || "User"),
-    phone: (phone || existing2.phone || "")
+    ...((snap && snap.exists()) ? {} : { createdAt: serverTimestamp(), balanceUZS: 0 }),
   };
+
+  await setDoc(userRef, data, { merge: true });
+  return { numericId, name: data.name, phone: data.phone };
+}
+
+// Region -> District -> Post loader (signup)
+let __regionData = null;
+async function loadRegionData(){
+  try{
+    const res = await fetch("./region.json?v=1", { cache: "no-store" });
+    if(!res.ok) throw new Error("region.json fetch failed");
+    return await res.json();
+  }catch(_e){
+    return { regions: [] };
+  }
+}
+function setSelectOptions(sel, items, placeholder){
+  if(!sel) return;
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = placeholder;
+  sel.appendChild(ph);
+  for(const it of (items||[])){
+    const opt = document.createElement("option");
+    opt.value = it;
+    opt.textContent = it;
+    sel.appendChild(opt);
+  }
+}
+async function ensureRegionLoaded(){
+  if(__regionData) return __regionData;
+  __regionData = await loadRegionData();
+  const regions = (__regionData.regions || []).map(r=>r.name);
+  setSelectOptions(els.signupRegion, regions, "Viloyatni tanlang");
+  setSelectOptions(els.signupDistrict, [], "Tumanni tanlang");
+  setSelectOptions(els.signupPost, [], "Pochta indeks");
+  return __regionData;
+}
+function populateDistricts(regionName){
+  const region = (__regionData?.regions || []).find(r=>r.name===regionName);
+  const districts = region ? region.districts.map(d=>d.name) : [];
+  setSelectOptions(els.signupDistrict, districts, "Tumanni tanlang");
+  setSelectOptions(els.signupPost, [], "Pochta indeks");
+}
+function populatePosts(regionName, districtName){
+  const region = (__regionData?.regions || []).find(r=>r.name===regionName);
+  const district = region ? region.districts.find(d=>d.name===districtName) : null;
+  const posts = district ? (district.posts || []) : [];
+  setSelectOptions(els.signupPost, posts, "Pochta indeks");
 }
 
 
@@ -156,10 +183,29 @@ function setMode(mode){
   els.tabSignup.classList.toggle("active", !isLogin);
   els.loginForm.style.display = isLogin ? "" : "none";
   els.signupForm.style.display = isLogin ? "none" : "";
+
+  // prepare region selects when signup is shown
+  if(!isLogin){
+    ensureRegionLoaded().then(()=>{
+      // try preserve selections
+      const r = els.signupRegion?.value || "";
+      if(r) populateDistricts(r);
+      const d = els.signupDistrict?.value || "";
+      if(r && d) populatePosts(r, d);
+    });
+  }
 }
 els.tabLogin.addEventListener("click", ()=>setMode("login"));
 els.tabSignup.addEventListener("click", ()=>setMode("signup"));
 setMode("login");
+
+// region chained selects
+els.signupRegion?.addEventListener("change", ()=>{
+  populateDistricts(els.signupRegion.value);
+});
+els.signupDistrict?.addEventListener("change", ()=>{
+  populatePosts(els.signupRegion.value, els.signupDistrict.value);
+});
 
 // Phone auto +998 formatting
 attachUzPhoneMask(els.loginPhone);
@@ -239,13 +285,21 @@ els.loginForm.addEventListener("submit", async (e)=>{
 els.signupForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   allowAutoRedirect = false;
-  const name = (els.signupName.value || "").trim();
+  const firstName = (els.signupFirstName?.value || "").trim();
+  const lastName = (els.signupLastName?.value || "").trim();
   const phone = normPhone(els.signupPhone.value);
+  const region = (els.signupRegion?.value || "").trim();
+  const district = (els.signupDistrict?.value || "").trim();
+  const post = (els.signupPost?.value || "").trim();
   const pass = els.signupPass.value || "";
   const pass2 = els.signupPass2.value || "";
 
-  if(!name) return showNotice("Ismni kiriting", "err");
+  if(!firstName) return showNotice("Ismni kiriting", "err");
+  if(!lastName) return showNotice("Familiyani kiriting", "err");
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
+  if(!region) return showNotice("Viloyatni tanlang", "err");
+  if(!district) return showNotice("Tumanni tanlang", "err");
+  if(!post) return showNotice("Pochta indeksini tanlang", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
@@ -254,7 +308,15 @@ els.signupForm.addEventListener("submit", async (e)=>{
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
-    const { numericId } = await ensureUserDoc(uid, phone, name);
+    const { numericId } = await ensureUserDoc(uid, {
+      phone,
+      firstName,
+      lastName,
+      name: (firstName + " " + lastName).trim(),
+      region,
+      district,
+      post,
+    });
 
     showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
 
