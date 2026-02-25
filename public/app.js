@@ -352,6 +352,13 @@ const els = {
   qvBadge: document.getElementById("qvBadge"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
+
+  // mini modal (info/video/reviews)
+  miniModal: document.getElementById("miniModal"),
+  miniBackdrop: document.getElementById("miniBackdrop"),
+  miniClose: document.getElementById("miniClose"),
+  miniTitle: document.getElementById("miniTitle"),
+  miniBody: document.getElementById("miniBody"),
   imgPrev: document.getElementById("imgPrev"),
   imgNext: document.getElementById("imgNext"),
   imgThumbs: document.getElementById("imgThumbs"),
@@ -1246,6 +1253,17 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
 
         <div class="pactions">
           <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+
+          <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          </button>
+          <button class="iconPill" data-act="video" title="Video" aria-label="Video">
+            <i class="fa-brands fa-youtube" aria-hidden="true"></i>
+          </button>
+          <button class="iconPill" data-act="reviews" title="Sharh" aria-label="Sharh">
+            <i class="fa-solid fa-message" aria-hidden="true"></i>
+          </button>
+
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -1309,11 +1327,28 @@ const openQuickView = ()=>{
       const t = e.target;
       if(t.closest(".favBtn")) return;
       if(t.closest('[data-act="cart"]')) return;
+      if(t.closest('[data-act="info"]')) return;
+      if(t.closest('[data-act="video"]')) return;
+      if(t.closest('[data-act="reviews"]')) return;
       openQuickView();
     });
 
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
       handleAddToCart(p, { openCartAfter: false });
+    });
+
+
+    card.querySelector('[data-act="info"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("info", p.id);
+    });
+    card.querySelector('[data-act="video"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("video", p.id);
+    });
+    card.querySelector('[data-act="reviews"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("reviews", p.id);
     });
 
     els.grid.appendChild(card);
@@ -2081,6 +2116,142 @@ function closeImgViewer(){
 }
 window.closeImgViewer = closeImgViewer;
 window.closeImageViewer = closeImageViewer;
+
+
+// ---------- Mini modal (Info / Video / Sharh) ----------
+const miniState = { open:false, kind:null, productId:null, unsub:null };
+
+function cleanupMiniSubs(){
+  try{ if(typeof miniState.unsub === "function") miniState.unsub(); }catch(e){}
+  miniState.unsub = null;
+}
+
+function parseYouTubeEmbed(url){
+  const u = String(url||"").trim();
+  if(!u) return "";
+  try{
+    // youtu.be/<id>
+    let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/watch?v=<id>
+    m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/shorts/<id>
+    m = u.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // already embed
+    if(/youtube\.com\/embed\//i.test(u)) return u;
+  }catch(e){}
+  return u; // fallback: try as-is
+}
+
+function renderMiniReviewsList(list){
+  if(!els.miniBody) return;
+  const wrap = document.createElement("div");
+  if(!list.length){
+    wrap.innerHTML = `<div class="revItem"><div class="revItemText">Hozircha sharh yo‘q.</div></div>`;
+    return wrap;
+  }
+  for(const r of list){
+    const item = document.createElement("div");
+    item.className = "revItem";
+    const s = Math.max(0, Math.min(5, Number(r.stars)||0));
+    const stars = "★".repeat(s) + "☆".repeat(5-s);
+    item.innerHTML = `
+      <div class="revItemTop">
+        <div class="revItemName">${escapeHtml(r.author||"Foydalanuvchi")}</div>
+        <div class="revItemStars">${stars}</div>
+      </div>
+      <div class="revItemText">${escapeHtml(r.text||"")}</div>
+    `;
+    wrap.appendChild(item);
+  }
+  return wrap;
+}
+
+async function openMini(kind, productId){
+  const p = (products || []).find(x=>String(x.id)===String(productId));
+  if(!p){ toast("Mahsulot topilmadi."); return; }
+
+  cleanupMiniSubs();
+  miniState.open = true;
+  miniState.kind = kind;
+  miniState.productId = String(productId);
+
+  if(!els.miniModal || !els.miniTitle || !els.miniBody) return;
+
+  const titleMap = { info:"Tavsif", video:"Video", reviews:"Sharh" };
+  els.miniTitle.textContent = titleMap[kind] || "Ma'lumot";
+  els.miniBody.innerHTML = "";
+
+  // content
+  if(kind === "info"){
+    const desc = (p.description || p.desc || "").toString().trim();
+    els.miniBody.innerHTML = `
+      <div class="miniDesc">${desc ? escapeHtml(desc) : `<span class="muted">Tavsif kiritilmagan.</span>`}</div>
+    `;
+  } else if(kind === "video"){
+    const y = (p.youtubeUrl || p.videoUrl || p.youtube || "").toString().trim();
+    if(!y){
+      els.miniBody.innerHTML = `<div class="muted">Bu mahsulot uchun video link qo‘shilmagan.</div>`;
+    } else {
+      const emb = parseYouTubeEmbed(y);
+      els.miniBody.innerHTML = `
+        <div class="miniVideo"><iframe src="${escapeHtml(emb)}" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+        <div class="muted" style="margin-top:10px; font-size:12px;">Agar video ochilmasa, link noto‘g‘ri bo‘lishi mumkin.</div>
+      `;
+    }
+  } else if(kind === "reviews"){
+    // header stats
+    try{
+      const st = await refreshStats(p.id, true);
+      const meta = document.createElement("div");
+      meta.className = "miniMeta";
+      meta.innerHTML = `
+        <div class="pill"><i class="fa-solid fa-star" aria-hidden="true"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
+        <div class="pill"><i class="fa-solid fa-message" aria-hidden="true"></i> ${st.count} ta sharh</div>
+      `;
+      els.miniBody.appendChild(meta);
+    }catch(e){}
+
+    const listWrap = document.createElement("div");
+    listWrap.innerHTML = `<div class="muted">Yuklanmoqda...</div>`;
+    els.miniBody.appendChild(listWrap);
+
+    const q = query(
+      collection(db, "products", String(p.id), "reviews"),
+      orderBy("createdAt", "desc"),
+      limit(30)
+    );
+    miniState.unsub = onSnapshot(q, (snap)=>{
+      const list = [];
+      snap.forEach((docu)=>{
+        const d = docu.data() || {};
+        list.push({
+          uid: d.uid || docu.id,
+          author: d.authorName || "Foydalanuvchi",
+          stars: Number(d.stars)||0,
+          text: (d.text||"").toString(),
+          ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
+        });
+      });
+      listWrap.innerHTML = "";
+      listWrap.appendChild(renderMiniReviewsList(list));
+    }, ()=>{});
+  }
+
+  showOverlay(els.miniModal);
+}
+
+function closeMini(){
+  miniState.open = false;
+  cleanupMiniSubs();
+  hideOverlay(els.miniModal);
+}
+
+window.openMini = openMini;
+window.closeMini = closeMini;
+
 
 
 function stepViewer(dir){
@@ -2891,6 +3062,9 @@ els.vConfirm?.addEventListener("click", ()=>{
 });
 
 // image viewer events
+els.miniClose?.addEventListener("click", closeMini);
+els.miniBackdrop?.addEventListener("click", closeMini);
+
 els.imgViewerClose?.addEventListener("click", closeImageViewer);
 els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
 els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
