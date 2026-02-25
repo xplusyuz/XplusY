@@ -4,7 +4,6 @@ import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
   fetchSignInMethodsForEmail,
-
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 import {
   doc,
@@ -14,23 +13,7 @@ import {
   runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
-
-function withTimeout(promise, ms = 12000){
-  return Promise.race([
-    promise,
-    new Promise((_, rej)=> setTimeout(()=> rej(Object.assign(new Error("TIMEOUT"), { code:"TIMEOUT" })), ms))
-  ]);
-}
-
-async function precheckEmail(email){
-  // returns true if account exists
-  const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
-  return Array.isArray(methods) && methods.length > 0;
-}
-
 let allowAutoRedirect = true;
-let busyLogin = false;
-let busySignup = false;
 
 const els = {
   tabLogin: document.getElementById("tabLogin"),
@@ -61,6 +44,37 @@ function showNotice(msg, kind="ok"){
   clearTimeout(showNotice._t);
   showNotice._t = setTimeout(()=>{ els.notice.style.display="none"; }, ms);
 }
+
+// Promise timeout helper (prevents infinite loading)
+function withTimeout(p, ms=10000){
+  return Promise.race([
+    p,
+    new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error("TIMEOUT"), { code:"timeout" })), ms))
+  ]);
+}
+
+function mapAuthErr(err){
+  const code = String(err?.code || "");
+  if(code.includes("auth/network-request-failed")) return "Internet bilan muammo. VPN/Adblock bo‘lsa o‘chirib ko‘ring.";
+  if(code.includes("auth/too-many-requests")) return "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.";
+  if(code.includes("auth/user-not-found")) return "Bu telefon raqam ro‘yxatdan o‘tmagan.";
+  if(code.includes("auth/wrong-password") || code.includes("auth/invalid-credential") || code.includes("auth/invalid-login-credentials")) return "Parol noto‘g‘ri.";
+  if(code.includes("auth/email-already-in-use")) return "Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan kiring.";
+  if(code.includes("auth/weak-password")) return "Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.";
+  if(code.includes("auth/invalid-email")) return "Telefon raqam formati noto‘g‘ri.";
+  if(code.includes("timeout")) return "Internet sekin. Qayta urinib ko‘ring.";
+  return "Xatolik yuz berdi. Qayta urinib ko‘ring.";
+}
+
+// Fast account existence check (prevents 400 red errors)
+async function phoneExists(phone){
+  const email = phoneToEmail(phone);
+  const methods = await withTimeout(fetchSignInMethodsForEmail(auth, email), 8000);
+  return Array.isArray(methods) && methods.length > 0;
+}
+
+let busy = false;
+
 
 // Uzbekistan phone helpers (+998XXXXXXXXX)
 function normPhone(raw){
@@ -179,10 +193,6 @@ els.tabLogin.addEventListener("click", ()=>setMode("login"));
 els.tabSignup.addEventListener("click", ()=>setMode("signup"));
 setMode("login");
 
-// Phone auto +998 formatting
-attachUzPhoneMask(els.loginPhone);
-attachUzPhoneMask(els.signupPhone);
-
 // Phone auto-format (+998)
 attachUzPhoneMask(els.loginPhone);
 attachUzPhoneMask(els.signupPhone);
@@ -215,32 +225,33 @@ onAuthStateChanged(auth, (user)=>{
   if(user && allowAutoRedirect) {
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
-  busyLogin = false;
   }
 });
 
 // Login
 els.loginForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
-  if(busyLogin) return;
-  busyLogin = true;
+  if(busy) return;
+  busy = true;
   allowAutoRedirect = false;
+
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
-  if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
-  if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
+  if(!isValidUzPhone(phone)) { busy=false; return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err"); }
+  if(pass.length < 6) { busy=false; return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err"); }
 
   try{
-    const email = phoneToEmail(phone);
-    const exists = await precheckEmail(email);
+    // fast check: if not exists -> don't even try signIn (faster + no red errors)
+    const exists = await phoneExists(phone);
     if(!exists){
-      showNotice("Bu raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘ting.", "err");
-      try{ els.tabSignup?.click(); if(els.signupPhone) els.signupPhone.value = phone; els.signupName?.focus(); }catch(_){ }
-      busyLogin = false;
+      busy=false;
+      showNotice("Bu telefon raqam ro‘yxatdan o‘tmagan. Ro‘yxatdan o‘ting.", "err");
+      try{ els.tabSignup?.click(); if(els.signupPhone) els.signupPhone.value = phone; els.signupName?.focus(); }catch(_){}
       return;
     }
 
-    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const email = phoneToEmail(phone);
+    const cred = await withTimeout(signInWithEmailAndPassword(auth, email, pass), 10000);
 
     // ensure numericId exists + keep name if already known
     const uid = cred.user.uid;
@@ -249,8 +260,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
-      busyLogin = false;
-if(!(String(err?.code||"").includes("email-already-in-use") || String(err?.code||"").includes("user-not-found") || String(err?.code||"").includes("wrong-password"))){ console.error(err); }
+    console.error(err);
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
       showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
@@ -268,8 +278,8 @@ if(!(String(err?.code||"").includes("email-already-in-use") || String(err?.code|
 // Signup
 els.signupForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
-  if(busySignup) return;
-  busySignup = true;
+  if(busy) return;
+  busy = true;
   allowAutoRedirect = false;
   const name = (els.signupName.value || "").trim();
   const phone = normPhone(els.signupPhone.value);
@@ -282,16 +292,16 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
   try{
-    const email = phoneToEmail(phone);
-    const exists = await precheckEmail(email);
+    const exists = await phoneExists(phone);
     if(exists){
+      busy=false;
       showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
       try{ els.tabLogin?.click(); if(els.loginPhone) els.loginPhone.value = phone; els.loginPass?.focus(); }catch(_){ }
-      busySignup = false;
       return;
     }
 
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    const email = phoneToEmail(phone);
+    const cred = await withTimeout(createUserWithEmailAndPassword(auth, email, pass), 12000);
 
     const uid = cred.user.uid;
     const { numericId } = await ensureUserDoc(uid, phone, name);
@@ -300,27 +310,10 @@ els.signupForm.addEventListener("submit", async (e)=>{
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
-  busySignup = false;
   }catch(err){
-      busySignup = false;
-if(!(String(err?.code||"").includes("email-already-in-use") || String(err?.code||"").includes("user-not-found") || String(err?.code||"").includes("wrong-password"))){ console.error(err); }
-    // common: email already in use
-    if(String(err?.code||"").includes("email-already-in-use")){
-      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
-      // auto switch to login tab
-      try{
-        els.tabLogin?.click();
-        if(els.loginPhone) els.loginPhone.value = phone;
-        els.loginPass?.focus();
-      }catch(_){}
-    }else{
-      if(String(err?.code||"").includes("weak-password")){
-      showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
-    }else if(String(err?.code||"").includes("invalid-email")){
-      showNotice("Telefon raqam formati noto‘g‘ri.", "err");
-    }else{
-      showNotice("Ro‘yxatdan o‘tishda xatolik", "err");
-    }
-    }
+    const msg = mapAuthErr(err);
+    if(msg) showNotice(msg, "err");
+  }finally{
+    busy = false;
   }
 });
