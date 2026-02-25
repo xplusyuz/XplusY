@@ -60,6 +60,29 @@ async function verifyFirebaseIdToken(idToken){
   }
 }
 
+
+async function verifyUserByPassHash(uid, passHash){
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
+  if(!b64) return null;
+  try{
+    const saJson = JSON.parse(Buffer.from(String(b64).replace(/\s+/g,''), 'base64').toString('utf8'));
+    const admin = require('firebase-admin');
+    if(!admin.apps.length){
+      admin.initializeApp({ credential: admin.credential.cert(saJson) });
+    }
+    const snap = await admin.firestore().doc(`users/${String(uid||'')}`).get();
+    if(!snap.exists) return null;
+    const d = snap.data() || {};
+    if(String(d.passHash||'') && String(d.passHash) === String(passHash||'')){
+      return { uid: String(uid) };
+    }
+    return null;
+  }catch(e){
+    console.warn('verifyUserByPassHash failed', e);
+    return null;
+  }
+}
+
 async function sendTelegramDocument({token, chatId, captionHtml, fileName, mimeType, buffer}){
   const url = `https://api.telegram.org/bot${token}/sendDocument`;
 
