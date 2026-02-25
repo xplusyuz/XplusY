@@ -9,11 +9,6 @@ import {
   getDoc,
   setDoc,
   serverTimestamp,
-  collection,
-  query,
-  where,
-  limit,
-  getDocs,
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 let allowAutoRedirect = true;
@@ -39,34 +34,9 @@ const els = {
   signupPass2: document.getElementById("signupPass2"),
   toggleSignupPass: document.getElementById("toggleSignupPass"),
 
-  loginBtn: document.getElementById("loginBtn"),
-  signupBtn: document.getElementById("signupBtn"),
-  loadingOverlay: document.getElementById("loadingOverlay"),
-  loadingTitle: document.getElementById("loadingTitle"),
-  loadingSub: document.getElementById("loadingSub"),
-
   notice: document.getElementById("notice"),
   forgotLink: document.getElementById("forgotLink"),
 };
-
-
-function setLoading(on, title="Yuklanmoqda…", sub="Iltimos, biroz kuting"){
-  try{
-    if(els.loadingTitle) els.loadingTitle.textContent = title;
-    if(els.loadingSub) els.loadingSub.textContent = sub;
-    if(els.loadingOverlay) els.loadingOverlay.style.display = on ? "flex" : "none";
-    // disable forms
-    const dis = !!on;
-    const nodes = [
-      els.loginPhone, els.loginPass, els.signupFirstName, els.signupLastName, els.signupPhone,
-      els.signupRegion, els.signupDistrict, els.signupPost, els.signupPass, els.signupPass2
-    ].filter(Boolean);
-    for(const n of nodes) n.disabled = dis;
-
-    if(els.loginBtn) els.loginBtn.disabled = dis;
-    if(els.signupBtn) els.signupBtn.disabled = dis;
-  }catch(_e){}
-}
 
 function showNotice(msg, kind="ok"){
   if(!els.notice) return;
@@ -119,19 +89,6 @@ function attachUzPhoneMask(input){
 function phoneToEmail(phone){
   const digits = String(phone||"").replace(/[^0-9]/g,"");
   return `p${digits}@orzumall.phone`;
-}
-
-
-// Firestore helper: does a user profile exist for this phone?
-async function userExistsByPhone(phone){
-  try{
-    const q = query(collection(db, "users"), where("phone", "==", phone), limit(1));
-    const snap = await getDocs(q);
-    return !snap.empty;
-  }catch(_e){
-    // if query fails (rules), fallback to trying auth
-    return true;
-  }
 }
 
 
@@ -292,7 +249,6 @@ if(els.forgotLink){
 // If already logged in, go to profile
 onAuthStateChanged(auth, (user)=>{
   if(user && allowAutoRedirect) {
-    setLoading(true, "Kirish…", "Profilga yo‘naltirilmoqda");
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }
@@ -307,15 +263,6 @@ els.loginForm.addEventListener("submit", async (e)=>{
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
-  setLoading(true, "Tekshirilmoqda…", "Telefon raqam tekshirilmoqda");
-  const exists = await userExistsByPhone(phone);
-  if(!exists){
-    setLoading(false);
-    return showNotice("Bu telefon raqam ro‘yxatdan o‘tmagan", "err");
-  }
-
-  setLoading(true, "Kirish…", "Hisobingizga kirilmoqda");
-
   try{
     const email = phoneToEmail(phone);
     const cred = await signInWithEmailAndPassword(auth, email, pass);
@@ -327,13 +274,12 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
-    setLoading(false);
-
+    console.error(err);
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
       showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
     }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
-      showNotice("Telefon raqam yoki parol xato", "err");
+      showNotice("Login yoki parol xato", "err");
     }else if(code.includes("too-many-requests")){
       showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
     }else{
@@ -365,15 +311,6 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
-  setLoading(true, "Tekshirilmoqda…", "Telefon raqam tekshirilmoqda");
-  const exists = await userExistsByPhone(phone);
-  if(exists){
-    setLoading(false);
-    return showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
-  }
-
-  setLoading(true, "Ro‘yxatdan o‘tish…", "Ma’lumotlar saqlanmoqda");
-
   try{
     const email = phoneToEmail(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
@@ -389,15 +326,12 @@ els.signupForm.addEventListener("submit", async (e)=>{
       post,
     });
 
-    setLoading(false);
-
     showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
-    setLoading(false);
-
+    console.error(err);
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
       showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
