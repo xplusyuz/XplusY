@@ -96,6 +96,7 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   collection,
   query,
@@ -103,7 +104,10 @@ import {
   orderBy,
   limit,
   startAfter,
+<<<<<<< HEAD
   getDocs,
+=======
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -501,6 +505,11 @@ function enhanceHScroll(el){
 
 let products = [];
 let tagCounts = new Map();
+
+// Product list rendering performance
+const PRODUCTS_RENDER_PAGE = 60;
+let productsVisibleCount = PRODUCTS_RENDER_PAGE;
+let lastFilteredProducts = [];
 
 const LS = {
   favs: "om_favs",
@@ -1137,6 +1146,9 @@ function applyFilterSort(){
   if(sort === "new") arr.sort((a,b)=> (b._created||0) - (a._created||0));
   if(sort === "popular") arr.sort((a,b)=>(b.popularScore||0)-(a.popularScore||0));
 
+  // Reset pagination when filter/sort changes
+  productsVisibleCount = PRODUCTS_RENDER_PAGE;
+  lastFilteredProducts = arr;
   render(arr);
 }
 
@@ -1220,7 +1232,9 @@ function render(arr){
   renderState.page = 0;
 
   els.grid.innerHTML = "";
+  const total = Array.isArray(arr) ? arr.length : 0;
   if (els.productsCount) {
+<<<<<<< HEAD
     const n = renderState.arr.length;
     els.productsCount.textContent = `${n} ta`;
   }
@@ -1242,6 +1256,18 @@ function renderNextPage(reset=false){
   const frag = document.createDocumentFragment();
   for(let i=from; i<to; i++){
     const p = arr[i];
+=======
+    els.productsCount.textContent = `${total} ta`;
+  }
+  els.empty.hidden = total !== 0;
+
+  // Render only a slice first (keeps mobile smooth on big catalogs)
+  const visible = Math.min(productsVisibleCount, total);
+  const slice = arr.slice(0, visible);
+  const frag = document.createDocumentFragment();
+
+  for(const p of slice){
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
     const card = document.createElement("div");
     card.className = "pcard";
 
@@ -1397,11 +1423,31 @@ const openQuickView = ()=>{
       handleAddToCart(p, { openCartAfter: false });
     });
 
-    els.grid.appendChild(card);
+    frag.appendChild(card);
 
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
+
+  els.grid.appendChild(frag);
+
+  // Load-more control (created once, reused)
+  let moreBtn = document.getElementById("omLoadMore");
+  if(!moreBtn){
+    moreBtn = document.createElement("button");
+    moreBtn.id = "omLoadMore";
+    moreBtn.type = "button";
+    moreBtn.className = "btn loadMoreBtn";
+    moreBtn.style.margin = "16px auto 6px";
+    moreBtn.style.display = "none";
+    moreBtn.textContent = "Yana ko‘rsatish";
+    moreBtn.addEventListener("click", ()=>{
+      productsVisibleCount += PRODUCTS_RENDER_PAGE;
+      render(lastFilteredProducts);
+    });
+    els.grid.insertAdjacentElement("afterend", moreBtn);
+  }
+  moreBtn.style.display = (visible < total) ? "block" : "none";
 }
 
 
@@ -1671,6 +1717,7 @@ function renderOrders(orders){
   }
 }
 
+<<<<<<< HEAD
 
 /* =========================
    Money history (profile)
@@ -1824,6 +1871,165 @@ async function subscribeOrders(uid){
 }
 
 
+=======
+
+/* =========================
+   Money history (profile)
+========================= */
+let moneyUnsubTopups = null;
+
+function normalizeMoneyItems({ topups=[] }){
+  const out = [];
+  for(const t of topups){
+    const ts = t.approvedAt || t.updatedAt || t.createdAt || null;
+    const st = (t.status||"pending").toString();
+    const amt = Number(t.amountUZS||0) || 0;
+    out.push({
+      kind: "topup",
+      direction: "in",
+      amountUZS: amt,
+      status: st,
+      note: (t.adminNote||""),
+      ts,
+      id: t.id || ""
+    });
+  }
+  out.sort((a,b)=>{
+    const ta = (a.ts?.toDate ? +a.ts.toDate() : (a.ts ? +new Date(a.ts) : 0));
+    const tb = (b.ts?.toDate ? +b.ts.toDate() : (b.ts ? +new Date(b.ts) : 0));
+    return tb - ta;
+  });
+  return out;
+}
+
+function renderMoneyHistory(items){
+  if(!els.moneyHistoryList || !els.moneyHistoryEmpty) return;
+  const arr = Array.isArray(items) ? items : [];
+  els.moneyHistoryList.innerHTML = "";
+  els.moneyHistoryEmpty.hidden = arr.length !== 0;
+  if(els.moneyHistoryCount) els.moneyHistoryCount.textContent = String(arr.length);
+
+  for(const it of arr){
+    const isIn = it.direction === "in";
+    const amt = moneyUZS(Number(it.amountUZS||0));
+    const when = fmtDate(it.ts);
+    const st = (it.status||"").toString();
+
+    const title = "Balans to‘ldirish";
+
+    const left = document.createElement("div");
+    left.style.minWidth = "0";
+    left.innerHTML = `
+      <div class="orderId">${title}</div>
+      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
+      ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
+    `.trim();
+
+    const right = document.createElement("div");
+    right.className = "orderTotal";
+    right.textContent = (isIn ? "+ " : "- ") + amt;
+
+    const row = document.createElement("div");
+    row.className = "orderItem";
+    row.style.display = "flex";
+    row.style.alignItems = "flex-start";
+    row.style.justifyContent = "space-between";
+    row.style.gap = "12px";
+    row.appendChild(left);
+    row.appendChild(right);
+
+    els.moneyHistoryList.appendChild(row);
+  }
+}
+
+function statusLabel(st, kind){
+  const v = (st||"").toString().toLowerCase();
+
+  if(kind === "topup"){
+    if(v === "approved" || v === "success") return "Tasdiqlangan";
+    if(v === "pending" || v === "waiting") return "Kutilmoqda";
+    if(v === "rejected" || v === "declined") return "Rad etilgan";
+    if(v === "canceled" || v === "cancelled" || v === "canceled_by_admin") return "Bekor qilingan";
+    return v ? v : "";
+  }
+
+  // orders
+  return orderStatusLabel(v);
+}
+
+
+function escapeHtml(s){
+  return String(s||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function subscribeMoneyHistory(uid){
+  if(!uid || !db) return;
+  // Performance: fetch-on-demand instead of keeping a live listener.
+  try{ moneyUnsubTopups?.(); }catch(e){}
+  moneyUnsubTopups = null;
+
+  (async ()=>{
+    let topupsArr = [];
+    try{
+      const qTop = query(
+        collection(db, "topup_requests"),
+        where("uid", "==", uid),
+        limit(50)
+      );
+      const snap = await getDocs(qTop);
+      topupsArr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+      // client-side sort to avoid composite index requirement
+      topupsArr.sort((a,b)=>{
+        const ta = (a.createdAt?.toDate ? +a.createdAt.toDate() : (a.createdAt ? +new Date(a.createdAt) : 0));
+        const tb = (b.createdAt?.toDate ? +b.createdAt.toDate() : (b.createdAt ? +new Date(b.createdAt) : 0));
+        return tb - ta;
+      });
+    }catch(err){
+      console.error(err);
+      topupsArr = [];
+    }
+    const items = normalizeMoneyItems({ topups: topupsArr });
+    renderMoneyHistory(items);
+  })();
+
+
+
+}
+
+
+function subscribeOrders(uid){
+  if(!uid) return;
+  if(!currentUser) return;
+
+  if(!uid || !db || !els.ordersList) return;
+  try{ ordersUnsub?.(); }catch(e){}
+  ordersUnsub = null;
+
+  // Performance: fetch-on-demand instead of keeping a live listener.
+  (async ()=>{
+    try{
+      const qy = query(
+        collection(db, "orders"),
+        where("uid", "==", uid),
+        orderBy("createdAt", "desc"),
+        limit(20)
+      );
+      const snap = await getDocs(qy);
+      const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+      renderOrders(arr);
+    }catch(err){
+      console.warn("orders fetch error", err);
+      renderOrders(ordersCache);
+    }
+  })();
+}
+
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
 els.ordersReload?.addEventListener("click", (e)=>{
   // avoid collapsing when tapping reload
   try{ e?.stopPropagation?.(); }catch(_){}
@@ -2660,6 +2866,7 @@ let productsCursor = null;
 let productsFullyLoaded = false;
 const PRODUCTS_PAGE_FETCH = 200;
 
+<<<<<<< HEAD
 /**
  * PERF: products are fetched in pages (getDocs + limit + startAfter),
  * not via onSnapshot() across the whole collection.
@@ -2684,16 +2891,40 @@ async function loadProducts(reset=true){
       return;
     }
 
+=======
+let unsubProducts = null;
+
+async function loadProducts(){
+  // Performance: do NOT keep a realtime listener on the whole catalog.
+  // Fetch once (and let users refresh via reload / re-open).
+  try{
+    const colRef = collection(db, "products");
+    const qy = query(colRef, orderBy("popularScore", "desc"), limit(500));
+    try{ unsubProducts && unsubProducts(); }catch(_e){}
+    unsubProducts = null;
+
+    const snap = await getDocs(qy);
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
     const arr = snap.docs.map(d=> {
       const data = d.data() || {};
       const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
       const created = (data.createdAt ?? data.created_at ?? data.created);
+<<<<<<< HEAD
       return {
         id: String(data.id || d.id),
         fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
         deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
         deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
         prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+=======
+      const isCargo = (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo);
+      return {
+        id: String(data.id || d.id),
+        fulfillmentType: (data.fulfillmentType || data.fulfillment || (isCargo ? 'cargo' : 'stock') || 'stock'),
+        deliveryMinDays: (data.deliveryMinDays ?? (isCargo ? 15 : 1)),
+        deliveryMaxDays: (data.deliveryMaxDays ?? (isCargo ? 30 : 7)),
+        prepayRequired: (data.prepayRequired ?? (isCargo ? true : false)),
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
         ...data,
         _docId: d.id,
         _price: parseUZS(price),
@@ -2701,6 +2932,7 @@ async function loadProducts(reset=true){
       };
     });
 
+<<<<<<< HEAD
     productsCursor = snap.docs[snap.docs.length-1];
     if(snap.docs.length < PRODUCTS_PAGE_FETCH) productsFullyLoaded = true;
 
@@ -2710,17 +2942,28 @@ async function loadProducts(reset=true){
       if(!existing.has(p.id)) products.push(p);
     }
 
+=======
+    products = arr;
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
     buildTagCounts();
     buildCategoryTree();
     applyFilterSort();
     if(activeTab==="categories") renderCategoriesPage();
 
+<<<<<<< HEAD
     if(products.length === 0){
+=======
+    if(arr.length === 0){
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
       showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
     }
   }catch(e){
     console.warn("Firestore products load failed", e);
+<<<<<<< HEAD
     showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / index tekshiring.", "error");
+=======
+    showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore / internet tekshiring.", "error");
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
     products = [];
     applyFilterSort();
   }
@@ -2807,7 +3050,21 @@ function setUserUI(user){
 els.profileLogout?.addEventListener("click", async ()=>{ await signOut(auth); });
 
 
+<<<<<<< HEAD
 els.q.addEventListener("input", debounce(applyFilterSort, 180));
+=======
+// Debounced filtering to keep typing smooth on mobile
+function debounce(fn, wait=180){
+  let t = null;
+  return (...args)=>{
+    if(t) clearTimeout(t);
+    t = setTimeout(()=> fn(...args), wait);
+  };
+}
+
+const applyFilterSortDebounced = debounce(applyFilterSort, 180);
+els.q.addEventListener("input", applyFilterSortDebounced);
+>>>>>>> 3d4a34094382d65479f7ecc3627e266988a9dcbb
 els.sort.addEventListener("change", applyFilterSort);
 
 
