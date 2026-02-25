@@ -3709,7 +3709,9 @@ async function syncUser(user){
     watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
-    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name)));
+    // IMPORTANT: do NOT trust profileCompleted flag alone.
+    // Consider the profile completed only when required fields actually exist.
+    const fsDone = !!(u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name));
     isCompleted = fsDone || !!saved?.profileCompleted || !!saved?.completedAt;
 
     // name fields

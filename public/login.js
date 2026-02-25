@@ -110,16 +110,24 @@ async function ensureUserDoc(uid, payload){
   const lastName = (payload.lastName || u.lastName || "").trim();
   const fullName = (payload.name || u.name || (firstName + " " + lastName).trim() || "User").trim();
 
+  const phone = (payload?.phone || u.phone || "").toString();
+  const region = (payload?.region || u.region || "").toString();
+  const district = (payload?.district || u.district || "").toString();
+  const post = (payload?.post || u.post || "").toString();
+
+  const completed = !!(firstName && lastName && phone && region && district && post);
+
   const data = {
     numericId,
-    phone: payload.phone || u.phone || "",
+    phone,
     firstName,
     lastName,
     name: fullName,
-    region: payload.region || u.region || "",
-    district: payload.district || u.district || "",
-    post: payload.post || u.post || "",
-    profileCompleted: true,
+    region,
+    district,
+    post,
+    // IMPORTANT: only mark completed when all required fields exist
+    profileCompleted: completed,
     updatedAt: serverTimestamp(),
     ...((snap && snap.exists()) ? {} : { createdAt: serverTimestamp(), balanceUZS: 0 }),
   };
@@ -261,7 +269,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
 
     // ensure numericId exists + keep name if already known
     const uid = cred.user.uid;
-    await ensureUserDoc(uid, phone, "");
+    await ensureUserDoc(uid, { phone });
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
