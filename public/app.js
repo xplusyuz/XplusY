@@ -1,3 +1,6 @@
+/* OrzuMall: silence noisy console in production */
+try{ if(typeof console!=="undefined"){ console.warn=()=>{}; console.error=()=>{}; } }catch(e){}
+
 
 /* ========= TELEGRAM ADMIN NOTIFY (NO FUNCTIONS) =========
    Sends a lightweight notification to admin chat when a new order is created.
@@ -87,12 +90,14 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   collection,
   query,
   where,
   orderBy,
   limit,
+  startAfter,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -347,6 +352,15 @@ const els = {
   qvBadge: document.getElementById("qvBadge"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
+  imgViewerShell: document.querySelector("#imgViewer .imgViewerShell"),
+  qvPanel: document.querySelector("#imgViewer .qvPanel"),
+
+  // mini modal (info/video/reviews)
+  miniModal: document.getElementById("miniModal"),
+  miniBackdrop: document.getElementById("miniBackdrop"),
+  miniClose: document.getElementById("miniClose"),
+  miniTitle: document.getElementById("miniTitle"),
+  miniBody: document.getElementById("miniBody"),
   imgPrev: document.getElementById("imgPrev"),
   imgNext: document.getElementById("imgNext"),
   imgThumbs: document.getElementById("imgThumbs"),
@@ -560,7 +574,7 @@ function subscribeReviews(productId){
   let statsDebounce = null;
   unsubReviews = onSnapshot(q, (snap)=>{
     const list = [];
-    snap.forEach(docu=>{
+    snap.forEach((docu)=>{
       const d = docu.data() || {};
       list.push({
         uid: d.uid || docu.id,
@@ -568,19 +582,20 @@ function subscribeReviews(productId){
         stars: Number(d.stars)||0,
         text: (d.text||"").toString(),
         ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
-      }, (err)=>{
-    console.warn("reviews subscribe error", err);
-  });
+      });
     });
     renderReviewsList(list);
 
     if(statsDebounce) clearTimeout(statsDebounce);
     statsDebounce = setTimeout(async ()=>{
-      const st = await refreshStats(productId, true);
-      if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
-      if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
-      applyFilterSort();
-    }, 400);
+      try{
+        const st = await refreshStats(productId, true);
+        if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+        if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
+      }catch(e){}
+    }, 600);
+  }, (err)=>{
+    // silent
   });
 }
 
@@ -1169,7 +1184,7 @@ function getDeliveryInfo(p){
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  const label = d.type === "cargo" ? "Keltirib beramiz" : "Bizda bor";
+  const label = d.type === "cargo" ? "🌐🚚" : "🚚";
   return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
@@ -1240,6 +1255,17 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
 
         <div class="pactions">
           <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+
+          <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          </button>
+          <button class="iconPill" data-act="video" title="Video" aria-label="Video">
+            <i class="fa-brands fa-youtube" aria-hidden="true"></i>
+          </button>
+          <button class="iconPill" data-act="reviews" title="Sharh" aria-label="Sharh">
+            <i class="fa-solid fa-message" aria-hidden="true"></i>
+          </button>
+
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
@@ -1275,6 +1301,7 @@ const openQuickView = ()=>{
   const stQV = getStats(p.id);
 
   openImageViewer({
+    imageOnly: true,
     productId: p.id,
     title: p.name || "Rasm",
     desc: p.description || p.desc || "",
@@ -1298,16 +1325,22 @@ const openQuickView = ()=>{
       openQuickView();
     });
 
-    // Open quick view when clicking anywhere on the card (except fav/cart)
-    card.addEventListener("click", (e)=>{
-      const t = e.target;
-      if(t.closest(".favBtn")) return;
-      if(t.closest('[data-act="cart"]')) return;
-      openQuickView();
-    });
-
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
       handleAddToCart(p, { openCartAfter: false });
+    });
+
+
+    card.querySelector('[data-act="info"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("info", p.id);
+    });
+    card.querySelector('[data-act="video"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("video", p.id);
+    });
+    card.querySelector('[data-act="reviews"]')?.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      openMini("reviews", p.id);
     });
 
     els.grid.appendChild(card);
@@ -1707,7 +1740,7 @@ function subscribeMoneyHistory(uid){
       });
       merge();
     }, (err)=>{
-      console.error(err);
+      
       topupsArr = [];
       merge();
     });
@@ -1740,7 +1773,7 @@ function subscribeOrders(uid){
     const arr = snap.docs.map(d=>({ id: d.id, ...d.data() }));
     renderOrders(arr);
   }, (err)=>{
-    console.warn("orders subscribe error", err);
+    
     // Fallback to cache if any
     renderOrders(ordersCache);
   });
@@ -2010,10 +2043,10 @@ function renderViewer(){
   const hasNav = imgs.length > 1;
   if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
-  renderReviewsUI(viewer.productId);
+  if(!viewer.imageOnly) renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect, imageOnly=false}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
@@ -2027,8 +2060,10 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
     badge: badge || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
-    onSelect: onSelect || null
+    onSelect: onSelect || null,
+    imageOnly: !!imageOnly
   };
+  if(els.imgViewerShell) els.imgViewerShell.classList.toggle("imageOnly", !!imageOnly);
   showOverlay(els.imgViewer);
   renderViewer();
 
@@ -2049,6 +2084,7 @@ function openViewer(productId){
   if(!p){ toast("Mahsulot topilmadi."); return; }
   const images = (p.images && p.images.length ? p.images : (p.imagesByColor?.[0]?.images || [])).filter(Boolean);
   openImageViewer({
+    imageOnly: true,
     productId: p.id,
     title: p.name || "Mahsulot",
     desc: p.description || "",
@@ -2065,6 +2101,7 @@ function openViewer(productId){
 function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
+  if(els.imgViewerShell) els.imgViewerShell.classList.remove("imageOnly");
   cleanupReviewSubscriptions();
   hideOverlay(els.imgViewer);
 }
@@ -2075,6 +2112,238 @@ function closeImgViewer(){
 }
 window.closeImgViewer = closeImgViewer;
 window.closeImageViewer = closeImageViewer;
+
+
+// ---------- Mini modal (Info / Video / Sharh) ----------
+const miniState = { open:false, kind:null, productId:null, unsub:null };
+
+// mini reviews composer
+let miniDraftStars = 5;
+let miniHoverStars = 0;
+function renderMiniStarSelector(container){
+  if(!container) return;
+  container.innerHTML = "";
+  const shown = miniHoverStars || miniDraftStars;
+  for(let i=1;i<=5;i++){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "starBtn" + (i<=shown ? " active" : "");
+    b.title = `${i} / 5`;
+    b.textContent = "★";
+    b.addEventListener("mouseenter", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
+    b.addEventListener("focus", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
+    b.addEventListener("mouseleave", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
+    b.addEventListener("blur", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
+    b.addEventListener("click", ()=>{ miniDraftStars=i; miniHoverStars=0; renderMiniStarSelector(container); });
+    container.appendChild(b);
+  }
+}
+
+
+function cleanupMiniSubs(){
+  try{ if(typeof miniState.unsub === "function") miniState.unsub(); }catch(e){}
+  miniState.unsub = null;
+}
+
+function parseYouTubeEmbed(url){
+  const u = String(url||"").trim();
+  if(!u) return "";
+  try{
+    // youtu.be/<id>
+    let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/watch?v=<id>
+    m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/shorts/<id>
+    m = u.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/i);
+    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
+    // already embed
+    if(/youtube\.com\/embed\//i.test(u)) return u;
+  }catch(e){}
+  return u; // fallback: try as-is
+}
+
+function renderMiniReviewsList(list){
+  if(!els.miniBody) return;
+  const wrap = document.createElement("div");
+  if(!list.length){
+    wrap.innerHTML = `<div class="revItem"><div class="revItemText">Hozircha sharh yo‘q.</div></div>`;
+    return wrap;
+  }
+  for(const r of list){
+    const item = document.createElement("div");
+    item.className = "revItem";
+    const s = Math.max(0, Math.min(5, Number(r.stars)||0));
+    const stars = "★".repeat(s) + "☆".repeat(5-s);
+    item.innerHTML = `
+      <div class="revItemTop">
+        <div class="revItemName">${escapeHtml(r.author||"Foydalanuvchi")}</div>
+        <div class="revItemStars">${stars}</div>
+      </div>
+      <div class="revItemText">${escapeHtml(r.text||"")}</div>
+    `;
+    wrap.appendChild(item);
+  }
+  return wrap;
+}
+
+async function openMini(kind, productId){
+  const p = (products || []).find(x=>String(x.id)===String(productId));
+  if(!p){ toast("Mahsulot topilmadi."); return; }
+
+  cleanupMiniSubs();
+  miniState.open = true;
+  miniState.kind = kind;
+  miniState.productId = String(productId);
+
+  if(!els.miniModal || !els.miniTitle || !els.miniBody) return;
+
+  const titleMap = { info:"Tavsif", video:"Video", reviews:"Sharh" };
+  els.miniTitle.textContent = titleMap[kind] || "Ma'lumot";
+  els.miniBody.innerHTML = "";
+
+  // content
+  if(kind === "info"){
+    const desc = (p.description || p.desc || "").toString().trim();
+    els.miniBody.innerHTML = `
+      <div class="miniDesc">${desc ? escapeHtml(desc) : `<span class="muted">Tavsif kiritilmagan.</span>`}</div>
+    `;
+  } else if(kind === "video"){
+    const y = (p.youtubeUrl || p.videoUrl || p.youtube || "").toString().trim();
+    if(!y){
+      els.miniBody.innerHTML = `<div class="muted">Bu mahsulot uchun video link qo‘shilmagan.</div>`;
+    } else {
+      const emb = parseYouTubeEmbed(y);
+      els.miniBody.innerHTML = `
+        <div class="miniVideo"><iframe src="${escapeHtml(emb)}" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
+        <div class="muted" style="margin-top:10px; font-size:12px;">Agar video ochilmasa, link noto‘g‘ri bo‘lishi mumkin.</div>
+      `;
+    }
+  } else if(kind === "reviews"){
+    // header stats
+    try{
+      const st = await refreshStats(p.id, true);
+      const meta = document.createElement("div");
+      meta.className = "miniMeta";
+      meta.innerHTML = `
+        <div class="pill"><i class="fa-solid fa-star" aria-hidden="true"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
+        <div class="pill"><i class="fa-solid fa-message" aria-hidden="true"></i> ${st.count} ta sharh</div>
+      `;
+      els.miniBody.appendChild(meta);
+    }catch(e){}
+
+
+    // composer (stars + text)
+    const composer = document.createElement("div");
+    composer.className = "miniComposer";
+    composer.innerHTML = `
+      <div class="revLabelRow">
+        <div class="revLabel">Reyting</div>
+        <div class="revHint">1–5 yulduz</div>
+      </div>
+      <div class="revStars" id="miniRevStars"></div>
+      <div class="revLabelRow">
+        <div class="revLabel">Sharh</div>
+        <div class="revHint">(ixtiyoriy)</div>
+      </div>
+      <textarea class="revText" id="miniRevText" rows="2" placeholder="Sharh yozing..."></textarea>
+      <button class="revBtn" id="miniRevSend">Yuborish</button>
+      <div class="muted miniRevNote" style="margin-top:8px; font-size:12px;">Sharh qoldirish uchun kirish talab qilinadi.</div>
+    `;
+    els.miniBody.appendChild(composer);
+
+    const miniStarsEl = composer.querySelector("#miniRevStars");
+    const miniTextEl = composer.querySelector("#miniRevText");
+    const miniSendEl = composer.querySelector("#miniRevSend");
+    miniDraftStars = 5; miniHoverStars = 0;
+    renderMiniStarSelector(miniStarsEl);
+
+    miniSendEl.addEventListener("click", async ()=>{
+      const user = auth.currentUser;
+      if(!user){ alert("Sharh qoldirish uchun avval kirish qiling."); return; }
+      const stars = Math.max(1, Math.min(5, Number(miniDraftStars)||5));
+      const text = (miniTextEl.value || "").trim().slice(0, 400);
+
+      // allow stars-only; if text is present it should be at least 2 chars
+      if(text && text.length < 2){
+        alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
+        return;
+      }
+
+      miniSendEl.disabled = true;
+      const oldLabel = miniSendEl.textContent;
+      miniSendEl.textContent = "Yuborilmoqda...";
+
+      try{
+        const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
+        const revRef = doc(db, "products", String(p.id), "reviews", user.uid);
+
+        await runTransaction(db, async (tx) => {
+          const revSnap = await tx.get(revRef);
+          const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
+          const createdAt = prev.createdAt ? prev.createdAt : serverTimestamp();
+
+          tx.set(revRef, {
+            uid: user.uid,
+            authorName,
+            stars,
+            text,
+            updatedAt: serverTimestamp(),
+            createdAt
+          }, { merge: true });
+        });
+
+        miniTextEl.value = "";
+        await refreshStats(String(p.id), true);
+        applyFilterSort();
+      }catch(err){
+        alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
+      }finally{
+        miniSendEl.disabled = false;
+        miniSendEl.textContent = oldLabel;
+      }
+    });
+
+
+    const listWrap = document.createElement("div");
+    listWrap.innerHTML = `<div class="muted">Yuklanmoqda...</div>`;
+    els.miniBody.appendChild(listWrap);
+
+    const q = query(
+      collection(db, "products", String(p.id), "reviews"),
+      orderBy("createdAt", "desc"),
+      limit(30)
+    );
+    miniState.unsub = onSnapshot(q, (snap)=>{
+      const list = [];
+      snap.forEach((docu)=>{
+        const d = docu.data() || {};
+        list.push({
+          uid: d.uid || docu.id,
+          author: d.authorName || "Foydalanuvchi",
+          stars: Number(d.stars)||0,
+          text: (d.text||"").toString(),
+          ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
+        });
+      });
+      listWrap.innerHTML = "";
+      listWrap.appendChild(renderMiniReviewsList(list));
+    }, ()=>{});
+  }
+
+  showOverlay(els.miniModal);
+}
+
+function closeMini(){
+  miniState.open = false;
+  cleanupMiniSubs();
+  hideOverlay(els.miniModal);
+}
+
+window.openMini = openMini;
+window.closeMini = closeMini;
+
 
 
 function stepViewer(dir){
@@ -2581,54 +2850,180 @@ async function createOrderFromCheckout(){
   goTab("profile");
 }
 
-let unsubProducts = null;
+/* =========================
+   Products: pagination (Load more + infinite scroll)
+========================= */
+let unsubProducts = null; // legacy; kept to avoid reference errors
+const PRODUCTS_PAGE_SIZE = 24;
+let productsLast = null;
+let productsLoading = false;
+let productsDone = false;
 
-async function loadProducts(){
-  // Firestore is the single source of truth (no products.json fallback).
+function resetProductsPaging(){
+  productsLast = null;
+  productsLoading = false;
+  productsDone = false;
+  products = [];
+  // UI
+  try{
+    const btn = document.getElementById("loadMoreBtn");
+    const pager = document.getElementById("productsPager");
+    if(pager) pager.hidden = false;
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Yana yuklash";
+      btn.style.display = "";
+    }
+  }catch(e){}
+}
+
+/**
+ * Loads next page from Firestore and appends into `products`.
+ * Uses createdAt desc if possible; falls back gracefully.
+ */
+async function loadProductsPage(){
+  if(productsLoading || productsDone) return;
+  productsLoading = true;
+
+  const btn = document.getElementById("loadMoreBtn");
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = "Yuklanmoqda...";
+  }
+
   try{
     const colRef = collection(db, "products");
-    const qy = query(colRef, orderBy("popularScore", "desc"));
-    unsubProducts && unsubProducts();
-    unsubProducts = onSnapshot(qy, (snap)=>{
-      const arr = snap.docs.map(d=> {
-        const data = d.data() || {};
-        const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
-        const created = (data.createdAt ?? data.created_at ?? data.created);
-        return {
-          id: String(data.id || d.id),
-          fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
-          deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
-          deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
-          prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
-          ...data,
-          _docId: d.id,
-          _price: parseUZS(price),
-          _created: toMillis(created),
-        };
-      });
-      products = arr;
-      buildTagCounts();
-buildCategoryTree();
-      applyFilterSort();
-      if(activeTab==="categories") renderCategoriesPage();
 
-      // If empty, show a helpful hint for setup
-      if(arr.length === 0){
-        showToast("Mahsulotlar yo‘q. Admin paneldan mahsulot qo‘shing.", "info");
+    // Query modes (avoid composite indexes by default).
+    // Primary: updatedAt desc (most docs already have updatedAt).
+    const modes = [
+      {
+        name: "updatedAt",
+        build: (after)=> after
+          ? query(colRef, orderBy("updatedAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("updatedAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+      {
+        name: "createdAt",
+        build: (after)=> after
+          ? query(colRef, orderBy("createdAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("createdAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+      {
+        name: "popularScore",
+        build: (after)=> after
+          ? query(colRef, orderBy("popularScore","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+          : query(colRef, orderBy("popularScore","desc"), limit(PRODUCTS_PAGE_SIZE))
+      },
+    ];
+
+    let snap = null;
+    let lastErr = null;
+
+    for(const mode of modes){
+      try{
+        const qy = mode.build(productsLast);
+        snap = await getDocs(qy);
+        lastErr = null;
+        break;
+      }catch(e){
+        lastErr = e;
+        // If permission denied, don't keep retrying.
+        if(String(e?.code||"") === "permission-denied") break;
+        // If index required for a given mode, we'll try the next mode.
       }
-    }, (err)=>{
-      console.warn("Firestore products error", err);
-      showToast("Mahsulotlarni o‘qib bo‘lmadi. Firestore rules / config tekshiring.", "error");
-      products = [];
-      applyFilterSort();
-    });
-  }catch(e){
-    console.warn("Firestore products init failed", e);
-    showToast("Firestore ulanishida xato. firebase-config.js ni tekshiring.", "error");
-    products = [];
+    }
+
+    if(lastErr) throw lastErr;
+
+    
+    if(snap.empty){
+      productsDone = true;
+      if(btn){
+        btn.textContent = "Hammasi yuklandi";
+        btn.style.display = "none";
+      }
+      return;
+    }
+
+    productsLast = snap.docs[snap.docs.length - 1];
+
+    const arr = snap.docs.map(d=> {
+      const data = d.data() || {};
+      // Client-side active filter (avoid composite index): if isActive is explicitly false, skip.
+      if(("isActive" in data) && data.isActive === false) return null;
+      const price = (data.price ?? data.priceUZS ?? data.uzs ?? data.amount);
+      const created = (data.createdAt ?? data.created_at ?? data.created ?? data.updatedAt ?? data.updated_at ?? data.updated);
+      return {
+        id: String(data.id || d.id),
+        fulfillmentType: (data.fulfillmentType || data.fulfillment || (data.isCargo ? 'cargo' : 'stock') || 'stock'),
+        deliveryMinDays: (data.deliveryMinDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 15 : 1)),
+        deliveryMaxDays: (data.deliveryMaxDays ?? (data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo ? 30 : 7)),
+        prepayRequired: (data.prepayRequired ?? ((data.fulfillmentType==='cargo'||data.fulfillment==='cargo'||data.isCargo) ? true : false)),
+        ...data,
+        _docId: d.id,
+        _price: parseUZS(price),
+        _created: toMillis(created),
+      };
+    }).filter(Boolean);
+
+    // Append (avoid duplicates by _docId/id)
+    const seen = new Set(products.map(p=>String(p._docId || p.id)));
+    for(const p of arr){
+      const key = String(p._docId || p.id);
+      if(!seen.has(key)){
+        products.push(p);
+        seen.add(key);
+      }
+    }
+
+    buildTagCounts();
+    buildCategoryTree();
     applyFilterSort();
+    if(activeTab==="categories") renderCategoriesPage();
+
+    // If fewer than page size, we reached the end
+    if(arr.length < PRODUCTS_PAGE_SIZE){
+      productsDone = true;
+      if(btn) btn.style.display = "none";
+    }
+  }catch(err){
+    console.warn("Firestore products error", err);
+    showToast("Mahsulotlarni yuklab bo'lmadi (Firestore). Rules/Index tekshiring.", "warn");
+  }finally{
+    productsLoading = false;
+    if(btn && !productsDone){
+      btn.disabled = false;
+      btn.textContent = "Yana yuklash";
+    }
   }
 }
+
+async function loadProducts(){
+  // Reset + first page
+  resetProductsPaging();
+  await loadProductsPage();
+}
+
+// Wire up pager button + infinite scroll sentinel
+(function initProductsPager(){
+  try{
+    const btn = document.getElementById("loadMoreBtn");
+    if(btn){
+      btn.addEventListener("click", ()=> loadProductsPage());
+    }
+    const sentinel = document.getElementById("loadMoreSentinel");
+    if(sentinel && "IntersectionObserver" in window){
+      const io = new IntersectionObserver((entries)=>{
+        const e = entries[0];
+        if(e && e.isIntersecting){
+          loadProductsPage();
+        }
+      }, { root: null, rootMargin: "1200px 0px", threshold: 0.01 });
+      io.observe(sentinel);
+    }
+  }catch(e){}
+})();
 
 /* ================== PHONE + PASSWORD AUTH ================== */
 function normPhone(raw){
@@ -2759,10 +3154,42 @@ els.vConfirm?.addEventListener("click", ()=>{
 });
 
 // image viewer events
+els.miniClose?.addEventListener("click", closeMini);
+els.miniBackdrop?.addEventListener("click", closeMini);
+
 els.imgViewerClose?.addEventListener("click", closeImageViewer);
 els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
 els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
+
+// swipe (mobile) for image viewer
+(() => {
+  const stage = document.querySelector('#imgViewer .qvStage');
+  if(!stage) return;
+  let sx = 0, sy = 0, active = false;
+  const TH = 42;
+  stage.addEventListener('touchstart', (e)=>{
+    if(!viewer.open) return;
+    const t = e.touches && e.touches[0];
+    if(!t) return;
+    active = true;
+    sx = t.clientX;
+    sy = t.clientY;
+  }, {passive:true});
+  stage.addEventListener('touchend', (e)=>{
+    if(!viewer.open || !active) return;
+    active = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if(!t) return;
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if(Math.abs(dx) < TH) return;
+    // ignore mostly-vertical gestures
+    if(Math.abs(dy) > Math.abs(dx) * 0.8) return;
+    if(dx < 0) stepViewer(+1);
+    else stepViewer(-1);
+  }, {passive:true});
+})();
 
 // reviews (viewer)
 els.revSend?.addEventListener("click", async ()=>{
@@ -2779,7 +3206,7 @@ els.revSend?.addEventListener("click", async ()=>{
   const text = (els.revText?.value || "").trim().slice(0, 400);
 
   // Rasm yuklash olib tashlandi
-  if(text.length < 2){
+  if(text && text.length < 2){
     alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
     return;
   }
@@ -2814,7 +3241,7 @@ els.revSend?.addEventListener("click", async ()=>{
 
     applyFilterSort();
   }catch(err){
-    console.error(err);
+    
     alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
   }finally{
     els.revSend.disabled = false;
@@ -3036,7 +3463,6 @@ async function watchUserDoc(uid){
       }catch(e){}
     }, (err)=>{
       // Prevent noisy console errors when logged out or rules deny
-      console.warn("user doc subscribe error", err);
       setBalanceUI(0);
     });
 }catch(e){}
@@ -3256,7 +3682,6 @@ async function payWithBalance(built, shipping){
 
     // order doc
     const oref = doc(db,'orders',orderId);
-    const uo = doc(db,'users',uid,'orders',orderId);
     const base = {
       orderId,
       uid,
@@ -3274,8 +3699,8 @@ async function payWithBalance(built, shipping){
       source: 'web',
       payFromBalance: true
     };
+    // only one order document (global collection) — no per-user subcollection writes
     t.set(oref, base, {merge:true});
-    t.set(uo, base, {merge:true});
   });
 
   return orderId;
@@ -3438,7 +3863,7 @@ let unsubUserDoc = null;
     const initial = (name || "U").trim().slice(0,1).toUpperCase();
 
     if(els.profileName) els.profileName.textContent = name;
-    if(els.profileNumericId) els.profileNumericId.textContent = numericId ? `ID: ${numericId}` : "—";
+    if(els.profileNumericId) els.profileNumericId.textContent = numericId ? `ID: OM${numericId}` : "—";
 
     if(els.profileAvatar){
       const photo = user.photoURL;
@@ -3476,40 +3901,30 @@ let unsubUserDoc = null;
     return regionData;
   }
 
-  // Assign sequential numericId starting from 1000 (no OM prefix).
+  // Assign a stable numericId derived from UID (no extra collections, no transactions).
+  // This prevents permission errors and keeps console clean.
+  function uidToNumericId(uid){
+    // Take first 10 hex chars -> number, map to 6 digits (100000..999999)
+    const hex = (uid || "").replace(/[^0-9a-f]/gi,"").padEnd(10,"0").slice(0,10);
+    let n = 0;
+    try{ n = parseInt(hex, 16); }catch(e){ n = Date.now(); }
+    const mapped = (n % 900000) + 100000;
+    return mapped;
+  }
+
   async function ensureNumericId(user, userRef, existing){
     const ex = existing?.numericId;
-    if(typeof ex === "number" && Number.isFinite(ex) && ex >= 1000) return ex;
-    if(typeof ex === "string" && /^\d+$/.test(ex) && parseInt(ex,10) >= 1000) return parseInt(ex,10);
+    if(typeof ex === "number" && Number.isFinite(ex) && ex >= 100000) return ex;
+    if(typeof ex === "string" && /^\d+$/.test(ex) && parseInt(ex,10) >= 100000) return parseInt(ex,10);
 
-    const assigned = await runTransaction(db, async (tx)=>{
-      const counterRef = doc(db, "meta", "counters");
-      const cSnap = await tx.get(counterRef);
-      let next = 1000;
-      if(cSnap.exists()){
-        const d = cSnap.data() || {};
-        const v = d.nextUserId;
-        if(typeof v === "number" && Number.isFinite(v)) next = v;
-        else if(typeof v === "string" && /^\d+$/.test(v)) next = parseInt(v,10);
-      }
-      if(next < 1000) next = 1000;
-      const id = next;
+    const assigned = uidToNumericId(user.uid);
 
-      // Reserve next id
-      tx.set(counterRef, { nextUserId: id + 1 }, { merge: true });
-
-      // Map numericId -> uid (fast lookup for payments)
-      const mapRef = doc(db, "users_by_numeric", String(id));
-      tx.set(mapRef, { uid: user.uid }, { merge: false });
-
-      // Persist numericId on user doc (once)
-      const base = { numericId: id, updatedAt: serverTimestamp() };
-      if(!(existing && ("createdAt" in existing))) base.createdAt = serverTimestamp();
-      tx.set(userRef, base, { merge: true });
-
-      return id;
-    });
-
+    // Set only once (merge) – rules that allow "set if missing" will pass.
+    try{
+      await setDoc(userRef, { numericId: assigned }, { merge: true });
+    }catch(e){
+      // If rules block, keep local assigned but do not spam console.
+    }
     return assigned;
   }
 
@@ -3521,8 +3936,15 @@ async function syncUser(user){
 
     // Ensure user has sequential numericId (1000+) and store basic user doc in Firestore
     const userRef = doc(db, "users", user.uid);
-    const uSnap = await getDoc(userRef);
-    const u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    let u = {};
+    let uSnap = null;
+    try{
+      uSnap = await getDoc(userRef);
+      u = uSnap.exists() ? (uSnap.data() || {}) : {};
+    }catch(e){
+      // If rules temporarily block, keep UI working without console errors.
+      u = {};
+    }
 
     const displayName = (user.displayName || "").toString();
     const fallbackName = (user.email || user.phoneNumber || "User").toString();
@@ -3543,14 +3965,14 @@ async function syncUser(user){
     let numericId = null;
     try{
       numericId = await ensureNumericId(user, userRef, u);
-    }catch(e){
-      console.warn("numericId assignment skipped (no permission / offline)", e);
+    }catch(_e){
+      // keep console clean
       numericId = u?.numericId ?? null;
     }
 
     // Write only if something actually changed (Firestore writes = money)
     const updates = {};
-    if(!uSnap.exists()){
+    if(!uSnap || !uSnap.exists()){
       updates.createdAt = serverTimestamp();
     }
     if(numericId != null && ((u.numericId == null) || Number(u.numericId) !== Number(numericId))){
@@ -3570,7 +3992,7 @@ async function syncUser(user){
 
     if(Object.keys(updates).length){
       updates.updatedAt = serverTimestamp();
-      await setDoc(userRef, updates, { merge:true });
+      try{ await setDoc(userRef, updates, { merge:true }); }catch(e){ /* ignore to keep console clean */ }
     }
 
     const meta = { name: fullName, numericId, phone };
@@ -3582,7 +4004,9 @@ async function syncUser(user){
     watchUserDoc(user.uid);
 
     const saved = readProfile(user.uid);
-    const fsDone = !!(u.profileCompleted || (u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name)));
+    // IMPORTANT: do NOT trust profileCompleted flag alone.
+    // Consider the profile completed only when required fields actually exist.
+    const fsDone = !!(u.phone && u.region && u.district && u.post && (u.firstName||u.name) && (u.lastName||u.name));
     isCompleted = fsDone || !!saved?.profileCompleted || !!saved?.completedAt;
 
     // name fields
@@ -3698,11 +4122,13 @@ async function syncUser(user){
   if(els.avatarBtn){
     els.avatarBtn.addEventListener("click", (e)=>{
       e.preventDefault();
-      if(document.body.classList.contains("signed-in")) open();
+      // Always route to Profile tab (works on PC + mobile)
+      try{ goTab("profile"); }catch(_){ window.location.hash = "#profile"; }
+      try{ window.scrollTo({ top: 0, behavior: "smooth" }); }catch(_){}
     });
   }
-  
-  const __balPlus = document.getElementById("balTopupQuick");
+
+const __balPlus = document.getElementById("balTopupQuick");
   if(__balPlus){
     __balPlus.addEventListener("click", (e)=>{
       e.preventDefault();

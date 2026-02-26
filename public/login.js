@@ -304,7 +304,11 @@ els.loginForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
+<<<<<<< HEAD
     if(!String(err?.code||"").startsWith("auth/")) console.error(err);
+=======
+    console.error(err);
+>>>>>>> d33760c2aae3cea368582f86aa81e63bd90ca1fd
     setBusy("login", false);
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
@@ -364,7 +368,11 @@ els.signupForm.addEventListener("submit", async (e)=>{
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
+<<<<<<< HEAD
     if(!String(err?.code||"").startsWith("auth/")) console.error(err);
+=======
+    console.error(err);
+>>>>>>> d33760c2aae3cea368582f86aa81e63bd90ca1fd
     setBusy("signup", false);
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
