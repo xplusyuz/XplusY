@@ -2261,19 +2261,29 @@ async function openMini(kind, productId){
       <div class="revStars" id="miniRevStars"></div>
       <div class="revLabelRow">
         <div class="revLabel">Sharh</div>
-        <div class="revHint">(ixtiyoriy)</div>
+        <div class="revHint"><span id="miniChar">0</span>/400</div>
       </div>
-      <textarea class="revText" id="miniRevText" rows="2" placeholder="Sharh yozing..."></textarea>
-      <button class="revBtn" id="miniRevSend">Yuborish</button>
+      <textarea class="revText" id="miniRevText" rows="3" placeholder="Qisqa va aniq yozing (masalan: sifat zo‘r, yetkazish tez)…"></textarea>
+      <button class="revBtn" id="miniRevSend"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Yuborish</button>
       <div class="muted miniRevNote" style="margin-top:8px; font-size:12px;">Sharh qoldirish uchun kirish talab qilinadi.</div>
     `;
     els.miniBody.appendChild(composer);
 
     const miniStarsEl = composer.querySelector("#miniRevStars");
     const miniTextEl = composer.querySelector("#miniRevText");
+    const miniCharEl = composer.querySelector("#miniChar");
     const miniSendEl = composer.querySelector("#miniRevSend");
     miniDraftStars = 5; miniHoverStars = 0;
     renderMiniStarSelector(miniStarsEl);
+
+    // char counter
+    const syncMiniChar = ()=>{
+      if(!miniCharEl) return;
+      const n = Math.min(400, (miniTextEl?.value || "").length);
+      miniCharEl.textContent = String(n);
+    };
+    miniTextEl?.addEventListener("input", syncMiniChar);
+    syncMiniChar();
 
     miniSendEl.addEventListener("click", async ()=>{
       const user = auth.currentUser;
