@@ -1181,12 +1181,33 @@ function getDeliveryInfo(p){
   const max = (p?.deliveryMaxDays ?? p?.deliveryMax ?? (type==="cargo" ? 14 : 7));
   return { type, min, max };
 }
+function ensureTwemoji(root){
+  try{
+    const el = root || document.body;
+    // If twemoji already loaded, just parse
+    if(window.twemoji && typeof window.twemoji.parse === "function"){
+      window.twemoji.parse(el, { folder: "svg", ext: ".svg" });
+      return;
+    }
+    // Load twemoji once (for consistent flag rendering on all devices)
+    if(document.getElementById("twemoji-script")) return;
+    const sc = document.createElement("script");
+    sc.id = "twemoji-script";
+    sc.defer = true;
+    sc.src = "https://twemoji.maxcdn.com/v/latest/twemoji.min.js";
+    sc.onload = () => {
+      try{ window.twemoji.parse(el, { folder: "svg", ext: ".svg" }); }catch(e){}
+    };
+    document.head.appendChild(sc);
+  }catch(e){}
+}
+
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  // stock = bizda bor (UZ), cargo = Xitoydan keltiriladi
+  // Use emoji flags, then twemoji will convert to images so it never shows "UZ/CN" text boxes.
   const flag = d.type === "cargo" ? "🇨🇳" : "🇺🇿";
-  return `<span class="${cls}">${flag} 🚚 (${d.min}–${d.max} kun)</span>`;
+  return `<span class="${cls}"><span class="flagEmoji">${flag}</span> <span class="truckEmoji">🚚</span> (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
   const p = Number(price||0), o = Number(oldPrice||0);
@@ -1349,6 +1370,9 @@ const openQuickView = ()=>{
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
+
+  // Parse emoji flags into consistent images (twemoji)
+  ensureTwemoji(els.grid);
 }
 
 
