@@ -352,15 +352,6 @@ const els = {
   qvBadge: document.getElementById("qvBadge"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
-  imgViewerShell: document.querySelector("#imgViewer .imgViewerShell"),
-  qvPanel: document.querySelector("#imgViewer .qvPanel"),
-
-  // mini modal (info/video/reviews)
-  miniModal: document.getElementById("miniModal"),
-  miniBackdrop: document.getElementById("miniBackdrop"),
-  miniClose: document.getElementById("miniClose"),
-  miniTitle: document.getElementById("miniTitle"),
-  miniBody: document.getElementById("miniBody"),
   imgPrev: document.getElementById("imgPrev"),
   imgNext: document.getElementById("imgNext"),
   imgThumbs: document.getElementById("imgThumbs"),
@@ -1184,7 +1175,7 @@ function getDeliveryInfo(p){
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  const label = d.type === "cargo" ? "🌐🚚" : "🚚";
+  const label = d.type === "cargo" ? "Keltirib beramiz" : "Bizda bor";
   return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
@@ -1193,6 +1184,218 @@ function discountPct(price, oldPrice){
   return Math.round((1 - (p/o)) * 100);
 }
 
+
+/* =========================
+   Card mini modals: Info / YouTube / Reviews
+========================= */
+let miniModalEls = null;
+
+function ensureMiniModal(){
+  if(miniModalEls) return miniModalEls;
+
+  const overlay = document.createElement("div");
+  overlay.className = "miniOverlay";
+  overlay.id = "miniModal";
+  overlay.hidden = true;
+  overlay.innerHTML = `
+    <div class="miniBackdrop" data-x="close"></div>
+    <div class="miniCard" role="dialog" aria-modal="true">
+      <div class="miniTop">
+        <div class="miniTitle" id="miniTitle"></div>
+        <button class="miniClose" type="button" data-x="close" aria-label="Yopish">✕</button>
+      </div>
+      <div class="miniBody" id="miniBody"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const title = overlay.querySelector("#miniTitle");
+  const body = overlay.querySelector("#miniBody");
+
+  const close = ()=>{
+    overlay.hidden = true;
+    body.innerHTML = "";
+  };
+
+  overlay.addEventListener("click", (e)=>{
+    const t = e.target;
+    if(t && t.getAttribute && t.getAttribute("data-x")==="close") close();
+  });
+
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape" && !overlay.hidden) close();
+  });
+
+  miniModalEls = { overlay, title, body, close };
+  return miniModalEls;
+}
+
+function openMiniModal(titleText, bodyHtml){
+  const m = ensureMiniModal();
+  m.title.textContent = titleText || "";
+  m.body.innerHTML = bodyHtml || "";
+  m.overlay.hidden = false;
+}
+
+function toYouTubeEmbed(url){
+  try{
+    const u = String(url||"").trim();
+    if(!u) return "";
+    // youtu.be/<id>
+    let m = u.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+    if(m) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/watch?v=<id>
+    m = u.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+    if(m) return `https://www.youtube.com/embed/${m[1]}`;
+    // youtube.com/shorts/<id>
+    m = u.match(/\/shorts\/([a-zA-Z0-9_-]{6,})/);
+    if(m) return `https://www.youtube.com/embed/${m[1]}`;
+    // embed already
+    if(u.includes("youtube.com/embed/")) return u;
+    return u;
+  }catch(e){
+    return "";
+  }
+}
+
+function openInfoModal(p){
+  const txt = (p?.description || p?.desc || "").toString().trim();
+  openMiniModal("Tavsif", txt ? `<div class="miniText">${escapeHtml(txt).replace(/\n/g,"<br/>")}</div>` : `<div class="miniEmpty">Tavsif kiritilmagan.</div>`);
+}
+
+function openYoutubeModal(p){
+  const raw = (p?.youtubeUrl || p?.youtube || p?.videoUrl || p?.video || "").toString().trim();
+  if(!raw){
+    openMiniModal("Video", `<div class="miniEmpty">Video link kiritilmagan.</div>`);
+    return;
+  }
+  const embed = toYouTubeEmbed(raw);
+  const safeLink = escapeHtml(raw);
+  openMiniModal("Video", `
+    <div class="miniVideoWrap">
+      <iframe class="miniVideo" src="${escapeHtml(embed)}" title="YouTube video" frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+    </div>
+    <a class="miniLink" href="${safeLink}" target="_blank" rel="noopener">Videoni alohida ochish</a>
+  `);
+}
+
+async function openReviewsModal(p){
+  if(!p?.id){ toast("Mahsulot topilmadi.", "error"); return; }
+  if(!currentUser){
+    openMiniModal("Sharhlar", `<div class="miniEmpty">Sharh qoldirish uchun avval kirish qiling.</div>`);
+    return;
+  }
+
+  const productId = String(p.id);
+
+  openMiniModal("Sharhlar", `
+    <div class="revBox">
+      <div class="revStars" id="miniRevStars" aria-label="Baholash"></div>
+      <textarea class="revText" id="miniRevText" rows="3" placeholder="Sharhingiz..."></textarea>
+      <div class="revBottom">
+        <button class="revSend" id="miniRevSend" type="button"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Yuborish</button>
+      </div>
+      <div class="revHint" id="miniRevHint" style="display:none"></div>
+    </div>
+    <div class="revList" id="miniRevList"></div>
+  `);
+
+  const m = ensureMiniModal();
+  const starsHost = m.body.querySelector("#miniRevStars");
+  const textEl = m.body.querySelector("#miniRevText");
+  const sendBtn = m.body.querySelector("#miniRevSend");
+  const hint = m.body.querySelector("#miniRevHint");
+  const listEl = m.body.querySelector("#miniRevList");
+
+  let stars = 5;
+
+  function renderStars(){
+    if(!starsHost) return;
+    starsHost.innerHTML = "";
+    for(let i=1;i<=5;i++){
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "starBtn" + (i<=stars ? " active" : "");
+      b.textContent = "★";
+      b.title = `${i}/5`;
+      b.addEventListener("click", ()=>{ stars = i; renderStars(); });
+      starsHost.appendChild(b);
+    }
+  }
+  renderStars();
+
+  async function loadReviews(){
+    try{
+      listEl.innerHTML = `<div class="miniEmpty">Yuklanmoqda...</div>`;
+      const qy = query(
+        collection(db, "products", productId, "reviews"),
+        orderBy("updatedAt", "desc"),
+        limit(50)
+      );
+      const snap = await getDocs(qy);
+      const rows = [];
+      snap.forEach(d=>{
+        const r = d.data() || {};
+        const nm = (r.authorName || "Foydalanuvchi").toString();
+        const st = Number(r.stars||0) || 0;
+        const tx = (r.text || "").toString();
+        rows.push({ nm, st, tx, t: toMillis(r.updatedAt||r.createdAt) });
+      });
+      if(!rows.length){
+        listEl.innerHTML = `<div class="miniEmpty">Hali sharhlar yo‘q.</div>`;
+        return;
+      }
+      listEl.innerHTML = rows.map(r=>{
+        const starsTxt = "★★★★★".slice(0, Math.max(0, Math.min(5, r.st))) + "☆☆☆☆☆".slice(0, 5-Math.max(0, Math.min(5, r.st)));
+        return `
+          <div class="revItem">
+            <div class="revHead">
+              <div class="revName">${escapeHtml(r.nm)}</div>
+              <div class="revStarsText">${starsTxt}</div>
+            </div>
+            ${r.tx ? `<div class="revBodyText">${escapeHtml(r.tx).replace(/\n/g,"<br/>")}</div>` : ``}
+          </div>
+        `;
+      }).join("");
+    }catch(err){
+      listEl.innerHTML = `<div class="miniEmpty">Sharhlarni yuklab bo‘lmadi.</div>`;
+    }
+  }
+  loadReviews();
+
+  sendBtn?.addEventListener("click", async ()=>{
+    try{
+      hint.style.display = "none";
+      sendBtn.disabled = true;
+      const authorName =
+        (profileCache?.name || profileCache?.displayName || "").toString().trim()
+        || (currentUser?.displayName || "").toString().trim()
+        || (profileCache?.phone || "").toString().trim()
+        || "Foydalanuvchi";
+      const text = (textEl.value || "").toString().trim();
+
+      await setDoc(doc(db, "products", productId, "reviews", currentUser.uid), {
+        uid: currentUser.uid,
+        authorName,
+        stars: stars,
+        text,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp()
+      }, { merge: true });
+
+      textEl.value = "";
+      toast("Sharhingiz yuborildi");
+      await loadReviews();
+    }catch(err){
+      hint.textContent = "Sharh yuborib bo‘lmadi. Keyinroq urinib ko‘ring.";
+      hint.style.display = "";
+    }finally{
+      sendBtn.disabled = false;
+    }
+  });
+}
 
 function render(arr){
   els.grid.innerHTML = "";
@@ -1254,23 +1457,16 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
-
-          <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif">
-            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-          </button>
-          <button class="iconPill" data-act="video" title="Video" aria-label="Video">
-            <i class="fa-brands fa-youtube" aria-hidden="true"></i>
-          </button>
-          <button class="iconPill" data-act="reviews" title="Sharh" aria-label="Sharh">
-            <i class="fa-solid fa-message" aria-hidden="true"></i>
-          </button>
-
-          <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
-            </svg>
-          </button>
+          <div class="piconRow">
+            <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+            <button class="iconPill" data-act="yt" title="Video" aria-label="Video"><i class="fa-brands fa-youtube" aria-hidden="true"></i></button>
+            <button class="iconPill" data-act="msg" title="Sharhlar" aria-label="Sharhlar"><i class="fa-solid fa-message" aria-hidden="true"></i></button>
+            <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -1301,7 +1497,6 @@ const openQuickView = ()=>{
   const stQV = getStats(p.id);
 
   openImageViewer({
-    imageOnly: true,
     productId: p.id,
     title: p.name || "Rasm",
     desc: p.description || p.desc || "",
@@ -1325,23 +1520,20 @@ const openQuickView = ()=>{
       openQuickView();
     });
 
+
     card.querySelector('[data-act="cart"]').addEventListener("click", ()=>{
       handleAddToCart(p, { openCartAfter: false });
     });
 
+// Card action icons (do not open viewer)
+const btnInfo = card.querySelector('[data-act="info"]');
+const btnYt = card.querySelector('[data-act="yt"]');
+const btnMsg = card.querySelector('[data-act="msg"]');
 
-    card.querySelector('[data-act="info"]')?.addEventListener("click", (e)=>{
-      e.stopPropagation();
-      openMini("info", p.id);
-    });
-    card.querySelector('[data-act="video"]')?.addEventListener("click", (e)=>{
-      e.stopPropagation();
-      openMini("video", p.id);
-    });
-    card.querySelector('[data-act="reviews"]')?.addEventListener("click", (e)=>{
-      e.stopPropagation();
-      openMini("reviews", p.id);
-    });
+btnInfo?.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); openInfoModal(p); });
+btnYt?.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); openYoutubeModal(p); });
+btnMsg?.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); openReviewsModal(p); });
+
 
     els.grid.appendChild(card);
 
@@ -2043,10 +2235,10 @@ function renderViewer(){
   const hasNav = imgs.length > 1;
   if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
-  if(!viewer.imageOnly) renderReviewsUI(viewer.productId);
+  renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect, imageOnly=false}){
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
@@ -2060,10 +2252,8 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
     badge: badge || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
-    onSelect: onSelect || null,
-    imageOnly: !!imageOnly
+    onSelect: onSelect || null
   };
-  if(els.imgViewerShell) els.imgViewerShell.classList.toggle("imageOnly", !!imageOnly);
   showOverlay(els.imgViewer);
   renderViewer();
 
@@ -2084,7 +2274,6 @@ function openViewer(productId){
   if(!p){ toast("Mahsulot topilmadi."); return; }
   const images = (p.images && p.images.length ? p.images : (p.imagesByColor?.[0]?.images || [])).filter(Boolean);
   openImageViewer({
-    imageOnly: true,
     productId: p.id,
     title: p.name || "Mahsulot",
     desc: p.description || "",
@@ -2101,7 +2290,6 @@ function openViewer(productId){
 function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
-  if(els.imgViewerShell) els.imgViewerShell.classList.remove("imageOnly");
   cleanupReviewSubscriptions();
   hideOverlay(els.imgViewer);
 }
@@ -2112,238 +2300,6 @@ function closeImgViewer(){
 }
 window.closeImgViewer = closeImgViewer;
 window.closeImageViewer = closeImageViewer;
-
-
-// ---------- Mini modal (Info / Video / Sharh) ----------
-const miniState = { open:false, kind:null, productId:null, unsub:null };
-
-// mini reviews composer
-let miniDraftStars = 5;
-let miniHoverStars = 0;
-function renderMiniStarSelector(container){
-  if(!container) return;
-  container.innerHTML = "";
-  const shown = miniHoverStars || miniDraftStars;
-  for(let i=1;i<=5;i++){
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "starBtn" + (i<=shown ? " active" : "");
-    b.title = `${i} / 5`;
-    b.textContent = "★";
-    b.addEventListener("mouseenter", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
-    b.addEventListener("focus", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
-    b.addEventListener("mouseleave", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
-    b.addEventListener("blur", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
-    b.addEventListener("click", ()=>{ miniDraftStars=i; miniHoverStars=0; renderMiniStarSelector(container); });
-    container.appendChild(b);
-  }
-}
-
-
-function cleanupMiniSubs(){
-  try{ if(typeof miniState.unsub === "function") miniState.unsub(); }catch(e){}
-  miniState.unsub = null;
-}
-
-function parseYouTubeEmbed(url){
-  const u = String(url||"").trim();
-  if(!u) return "";
-  try{
-    // youtu.be/<id>
-    let m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/i);
-    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
-    // youtube.com/watch?v=<id>
-    m = u.match(/[?&]v=([A-Za-z0-9_-]{6,})/i);
-    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
-    // youtube.com/shorts/<id>
-    m = u.match(/youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/i);
-    if(m && m[1]) return `https://www.youtube.com/embed/${m[1]}`;
-    // already embed
-    if(/youtube\.com\/embed\//i.test(u)) return u;
-  }catch(e){}
-  return u; // fallback: try as-is
-}
-
-function renderMiniReviewsList(list){
-  if(!els.miniBody) return;
-  const wrap = document.createElement("div");
-  if(!list.length){
-    wrap.innerHTML = `<div class="revItem"><div class="revItemText">Hozircha sharh yo‘q.</div></div>`;
-    return wrap;
-  }
-  for(const r of list){
-    const item = document.createElement("div");
-    item.className = "revItem";
-    const s = Math.max(0, Math.min(5, Number(r.stars)||0));
-    const stars = "★".repeat(s) + "☆".repeat(5-s);
-    item.innerHTML = `
-      <div class="revItemTop">
-        <div class="revItemName">${escapeHtml(r.author||"Foydalanuvchi")}</div>
-        <div class="revItemStars">${stars}</div>
-      </div>
-      <div class="revItemText">${escapeHtml(r.text||"")}</div>
-    `;
-    wrap.appendChild(item);
-  }
-  return wrap;
-}
-
-async function openMini(kind, productId){
-  const p = (products || []).find(x=>String(x.id)===String(productId));
-  if(!p){ toast("Mahsulot topilmadi."); return; }
-
-  cleanupMiniSubs();
-  miniState.open = true;
-  miniState.kind = kind;
-  miniState.productId = String(productId);
-
-  if(!els.miniModal || !els.miniTitle || !els.miniBody) return;
-
-  const titleMap = { info:"Tavsif", video:"Video", reviews:"Sharh" };
-  els.miniTitle.textContent = titleMap[kind] || "Ma'lumot";
-  els.miniBody.innerHTML = "";
-
-  // content
-  if(kind === "info"){
-    const desc = (p.description || p.desc || "").toString().trim();
-    els.miniBody.innerHTML = `
-      <div class="miniDesc">${desc ? escapeHtml(desc) : `<span class="muted">Tavsif kiritilmagan.</span>`}</div>
-    `;
-  } else if(kind === "video"){
-    const y = (p.youtubeUrl || p.videoUrl || p.youtube || "").toString().trim();
-    if(!y){
-      els.miniBody.innerHTML = `<div class="muted">Bu mahsulot uchun video link qo‘shilmagan.</div>`;
-    } else {
-      const emb = parseYouTubeEmbed(y);
-      els.miniBody.innerHTML = `
-        <div class="miniVideo"><iframe src="${escapeHtml(emb)}" title="YouTube video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>
-        <div class="muted" style="margin-top:10px; font-size:12px;">Agar video ochilmasa, link noto‘g‘ri bo‘lishi mumkin.</div>
-      `;
-    }
-  } else if(kind === "reviews"){
-    // header stats
-    try{
-      const st = await refreshStats(p.id, true);
-      const meta = document.createElement("div");
-      meta.className = "miniMeta";
-      meta.innerHTML = `
-        <div class="pill"><i class="fa-solid fa-star" aria-hidden="true"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
-        <div class="pill"><i class="fa-solid fa-message" aria-hidden="true"></i> ${st.count} ta sharh</div>
-      `;
-      els.miniBody.appendChild(meta);
-    }catch(e){}
-
-
-    // composer (stars + text)
-    const composer = document.createElement("div");
-    composer.className = "miniComposer";
-    composer.innerHTML = `
-      <div class="revLabelRow">
-        <div class="revLabel">Reyting</div>
-        <div class="revHint">1–5 yulduz</div>
-      </div>
-      <div class="revStars" id="miniRevStars"></div>
-      <div class="revLabelRow">
-        <div class="revLabel">Sharh</div>
-        <div class="revHint">(ixtiyoriy)</div>
-      </div>
-      <textarea class="revText" id="miniRevText" rows="2" placeholder="Sharh yozing..."></textarea>
-      <button class="revBtn" id="miniRevSend">Yuborish</button>
-      <div class="muted miniRevNote" style="margin-top:8px; font-size:12px;">Sharh qoldirish uchun kirish talab qilinadi.</div>
-    `;
-    els.miniBody.appendChild(composer);
-
-    const miniStarsEl = composer.querySelector("#miniRevStars");
-    const miniTextEl = composer.querySelector("#miniRevText");
-    const miniSendEl = composer.querySelector("#miniRevSend");
-    miniDraftStars = 5; miniHoverStars = 0;
-    renderMiniStarSelector(miniStarsEl);
-
-    miniSendEl.addEventListener("click", async ()=>{
-      const user = auth.currentUser;
-      if(!user){ alert("Sharh qoldirish uchun avval kirish qiling."); return; }
-      const stars = Math.max(1, Math.min(5, Number(miniDraftStars)||5));
-      const text = (miniTextEl.value || "").trim().slice(0, 400);
-
-      // allow stars-only; if text is present it should be at least 2 chars
-      if(text && text.length < 2){
-        alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
-        return;
-      }
-
-      miniSendEl.disabled = true;
-      const oldLabel = miniSendEl.textContent;
-      miniSendEl.textContent = "Yuborilmoqda...";
-
-      try{
-        const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
-        const revRef = doc(db, "products", String(p.id), "reviews", user.uid);
-
-        await runTransaction(db, async (tx) => {
-          const revSnap = await tx.get(revRef);
-          const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
-          const createdAt = prev.createdAt ? prev.createdAt : serverTimestamp();
-
-          tx.set(revRef, {
-            uid: user.uid,
-            authorName,
-            stars,
-            text,
-            updatedAt: serverTimestamp(),
-            createdAt
-          }, { merge: true });
-        });
-
-        miniTextEl.value = "";
-        await refreshStats(String(p.id), true);
-        applyFilterSort();
-      }catch(err){
-        alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
-      }finally{
-        miniSendEl.disabled = false;
-        miniSendEl.textContent = oldLabel;
-      }
-    });
-
-
-    const listWrap = document.createElement("div");
-    listWrap.innerHTML = `<div class="muted">Yuklanmoqda...</div>`;
-    els.miniBody.appendChild(listWrap);
-
-    const q = query(
-      collection(db, "products", String(p.id), "reviews"),
-      orderBy("createdAt", "desc"),
-      limit(30)
-    );
-    miniState.unsub = onSnapshot(q, (snap)=>{
-      const list = [];
-      snap.forEach((docu)=>{
-        const d = docu.data() || {};
-        list.push({
-          uid: d.uid || docu.id,
-          author: d.authorName || "Foydalanuvchi",
-          stars: Number(d.stars)||0,
-          text: (d.text||"").toString(),
-          ts: d.createdAt?.toMillis ? d.createdAt.toMillis() : 0
-        });
-      });
-      listWrap.innerHTML = "";
-      listWrap.appendChild(renderMiniReviewsList(list));
-    }, ()=>{});
-  }
-
-  showOverlay(els.miniModal);
-}
-
-function closeMini(){
-  miniState.open = false;
-  cleanupMiniSubs();
-  hideOverlay(els.miniModal);
-}
-
-window.openMini = openMini;
-window.closeMini = closeMini;
-
 
 
 function stepViewer(dir){
@@ -3154,42 +3110,10 @@ els.vConfirm?.addEventListener("click", ()=>{
 });
 
 // image viewer events
-els.miniClose?.addEventListener("click", closeMini);
-els.miniBackdrop?.addEventListener("click", closeMini);
-
 els.imgViewerClose?.addEventListener("click", closeImageViewer);
 els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
 els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
-
-// swipe (mobile) for image viewer
-(() => {
-  const stage = document.querySelector('#imgViewer .qvStage');
-  if(!stage) return;
-  let sx = 0, sy = 0, active = false;
-  const TH = 42;
-  stage.addEventListener('touchstart', (e)=>{
-    if(!viewer.open) return;
-    const t = e.touches && e.touches[0];
-    if(!t) return;
-    active = true;
-    sx = t.clientX;
-    sy = t.clientY;
-  }, {passive:true});
-  stage.addEventListener('touchend', (e)=>{
-    if(!viewer.open || !active) return;
-    active = false;
-    const t = e.changedTouches && e.changedTouches[0];
-    if(!t) return;
-    const dx = t.clientX - sx;
-    const dy = t.clientY - sy;
-    if(Math.abs(dx) < TH) return;
-    // ignore mostly-vertical gestures
-    if(Math.abs(dy) > Math.abs(dx) * 0.8) return;
-    if(dx < 0) stepViewer(+1);
-    else stepViewer(-1);
-  }, {passive:true});
-})();
 
 // reviews (viewer)
 els.revSend?.addEventListener("click", async ()=>{
@@ -3206,7 +3130,7 @@ els.revSend?.addEventListener("click", async ()=>{
   const text = (els.revText?.value || "").trim().slice(0, 400);
 
   // Rasm yuklash olib tashlandi
-  if(text && text.length < 2){
+  if(text.length < 2){
     alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
     return;
   }
