@@ -1181,39 +1181,33 @@ function getDeliveryInfo(p){
   const max = (p?.deliveryMaxDays ?? p?.deliveryMax ?? (type==="cargo" ? 14 : 7));
   return { type, min, max };
 }
-function ensureTwemoji(root){
-  try{
-    const el = root || document.body;
-    // If twemoji already loaded, just parse
-    if(window.twemoji && typeof window.twemoji.parse === "function"){
-      window.twemoji.parse(el, { folder: "svg", ext: ".svg" });
-      return;
-    }
-    // Load twemoji once (for consistent flag rendering on all devices)
-    if(document.getElementById("twemoji-script")) return;
-    const sc = document.createElement("script");
-    sc.id = "twemoji-script";
-    sc.defer = true;
-    sc.src = "https://twemoji.maxcdn.com/v/latest/twemoji.min.js";
-    sc.onload = () => {
-      try{ window.twemoji.parse(el, { folder: "svg", ext: ".svg" }); }catch(e){}
-    };
-    document.head.appendChild(sc);
-  }catch(e){}
-}
-
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  // Use emoji flags, then twemoji will convert to images so it never shows "UZ/CN" text boxes.
-  const flag = d.type === "cargo" ? "🇨🇳" : "🇺🇿";
-  return `<span class="${cls}"><span class="flagEmoji">${flag}</span> <span class="truckEmoji">🚚</span> (${d.min}–${d.max} kun)</span>`;
+  const flagSrc = d.type === "cargo" ? "assets/flags/cn.png" : "assets/flags/uz.png";
+  const flagAlt = d.type === "cargo" ? "CN" : "UZ";
+  // Use local PNG flags to avoid emoji font issues (UZ/CN text fallback).
+  return `<span class="${cls}"><img class="omFlag" src="${flagSrc}" alt="${flagAlt}" loading="lazy"> <span class="omTruck">🚚</span> (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
   const p = Number(price||0), o = Number(oldPrice||0);
   if(!o || o <= p) return 0;
   return Math.round((1 - (p/o)) * 100);
 }
+
+
+// Inject minimal CSS for PNG flags (safe even if styles.css differs)
+(function(){
+  try{
+    const id="om_flag_css";
+    if(document.getElementById(id)) return;
+    const st=document.createElement("style");
+    st.id=id;
+    st.textContent=`.shipBadge{display:inline-flex;align-items:center;gap:6px}.shipBadge .omFlag{width:16px;height:16px;border-radius:999px;flex:0 0 16px;object-fit:cover;box-shadow:0 0 0 1px rgba(0,0,0,.06) inset}.shipBadge .omTruck{line-height:1}@media(max-width:520px){.shipBadge{gap:5px}.shipBadge .omFlag{width:14px;height:14px;flex-basis:14px}}`;
+    document.head.appendChild(st);
+  }catch(e){}
+})();
+
 
 
 function render(arr){
@@ -1370,9 +1364,6 @@ const openQuickView = ()=>{
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
-
-  // Parse emoji flags into consistent images (twemoji)
-  ensureTwemoji(els.grid);
 }
 
 
