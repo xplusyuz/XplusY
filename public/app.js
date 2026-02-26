@@ -1489,35 +1489,24 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
     const imgEl = card.querySelector(".pimg");
 
     
-const openQuickView = ()=>{
+// Image click: NO modal/viewer. Just open the image itself (native zoom in new tab)
+const openImageOnly = ()=>{
   const selNow = getSel(p);
   const imgs = getImagesFor(p, selNow);
   if(!imgs.length) return;
-
-  const stQV = getStats(p.id);
-
-  openImageViewer({
-    productId: p.id,
-    title: p.name || "Rasm",
-    desc: p.description || p.desc || "",
-    pricing: getVariantPricing(p, selNow),
-    rating: Number(stQV.avg || 0),
-    reviewsCount: Number(stQV.count || 0),
-    tags: Array.isArray(p.tags) ? p.tags : [],
-    badge: p.badge || "",
-    images: imgs,
-    startIndex: selNow.imgIdx || 0,
-    onSelect: (i)=>{
-      setImageIndex(p, i);
-      setCardImage(imgEl, p, getSel(p));
-    }
-  });
+  const i = Number(selNow?.imgIdx || 0);
+  const raw = imgs[Math.max(0, Math.min(i, imgs.length - 1))];
+  if(!raw) return;
+  const url = (()=>{ try{ return new URL(raw, location.href).href; }catch(_){ return raw; }})();
+  // Prefer a new tab so user can pinch/zoom freely on mobile.
+  try{ window.open(url, "_blank", "noopener,noreferrer"); }
+  catch(_){ location.href = url; }
 };
 
-    // Open fullscreen viewer on image click
     imgEl.addEventListener("click", (e)=>{
+      e.preventDefault();
       e.stopPropagation();
-      openQuickView();
+      openImageOnly();
     });
 
 
