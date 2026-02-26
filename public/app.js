@@ -400,7 +400,7 @@ const els = {
 
 // ---- Modal helpers (world-class, animated, accessibility-friendly) ----
 function _anyOverlayOpen(){
-  return [ els.vOverlay, els.imgViewer].some(el=>el && !el.hidden);
+  return [ els.vOverlay, els.imgViewer, els.miniModal].some(el=>el && !el.hidden);
 }
 function _syncModalBody(){
   const open = _anyOverlayOpen();
