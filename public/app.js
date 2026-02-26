@@ -352,6 +352,8 @@ const els = {
   qvBadge: document.getElementById("qvBadge"),
   imgViewerImg: document.getElementById("imgViewerImg"),
   imgViewerClose: document.getElementById("imgViewerClose"),
+  imgViewerShell: document.querySelector("#imgViewer .imgViewerShell"),
+  qvPanel: document.querySelector("#imgViewer .qvPanel"),
 
   // mini modal (info/video/reviews)
   miniModal: document.getElementById("miniModal"),
@@ -1299,6 +1301,7 @@ const openQuickView = ()=>{
   const stQV = getStats(p.id);
 
   openImageViewer({
+    imageOnly: true,
     productId: p.id,
     title: p.name || "Rasm",
     desc: p.description || p.desc || "",
@@ -1319,17 +1322,6 @@ const openQuickView = ()=>{
     // Open fullscreen viewer on image click
     imgEl.addEventListener("click", (e)=>{
       e.stopPropagation();
-      openQuickView();
-    });
-
-    // Open quick view when clicking anywhere on the card (except fav/cart)
-    card.addEventListener("click", (e)=>{
-      const t = e.target;
-      if(t.closest(".favBtn")) return;
-      if(t.closest('[data-act="cart"]')) return;
-      if(t.closest('[data-act="info"]')) return;
-      if(t.closest('[data-act="video"]')) return;
-      if(t.closest('[data-act="reviews"]')) return;
       openQuickView();
     });
 
@@ -2051,10 +2043,10 @@ function renderViewer(){
   const hasNav = imgs.length > 1;
   if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
-  renderReviewsUI(viewer.productId);
+  if(!viewer.imageOnly) renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect, imageOnly=false}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
@@ -2068,8 +2060,10 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
     badge: badge || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
-    onSelect: onSelect || null
+    onSelect: onSelect || null,
+    imageOnly: !!imageOnly
   };
+  if(els.imgViewerShell) els.imgViewerShell.classList.toggle("imageOnly", !!imageOnly);
   showOverlay(els.imgViewer);
   renderViewer();
 
@@ -2090,6 +2084,7 @@ function openViewer(productId){
   if(!p){ toast("Mahsulot topilmadi."); return; }
   const images = (p.images && p.images.length ? p.images : (p.imagesByColor?.[0]?.images || [])).filter(Boolean);
   openImageViewer({
+    imageOnly: true,
     productId: p.id,
     title: p.name || "Mahsulot",
     desc: p.description || "",
@@ -2106,6 +2101,7 @@ function openViewer(productId){
 function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
+  if(els.imgViewerShell) els.imgViewerShell.classList.remove("imageOnly");
   cleanupReviewSubscriptions();
   hideOverlay(els.imgViewer);
 }
@@ -2120,6 +2116,29 @@ window.closeImageViewer = closeImageViewer;
 
 // ---------- Mini modal (Info / Video / Sharh) ----------
 const miniState = { open:false, kind:null, productId:null, unsub:null };
+
+// mini reviews composer
+let miniDraftStars = 5;
+let miniHoverStars = 0;
+function renderMiniStarSelector(container){
+  if(!container) return;
+  container.innerHTML = "";
+  const shown = miniHoverStars || miniDraftStars;
+  for(let i=1;i<=5;i++){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "starBtn" + (i<=shown ? " active" : "");
+    b.title = `${i} / 5`;
+    b.textContent = "★";
+    b.addEventListener("mouseenter", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
+    b.addEventListener("focus", ()=>{ miniHoverStars=i; renderMiniStarSelector(container); });
+    b.addEventListener("mouseleave", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
+    b.addEventListener("blur", ()=>{ miniHoverStars=0; renderMiniStarSelector(container); });
+    b.addEventListener("click", ()=>{ miniDraftStars=i; miniHoverStars=0; renderMiniStarSelector(container); });
+    container.appendChild(b);
+  }
+}
+
 
 function cleanupMiniSubs(){
   try{ if(typeof miniState.unsub === "function") miniState.unsub(); }catch(e){}
@@ -2213,6 +2232,79 @@ async function openMini(kind, productId){
       `;
       els.miniBody.appendChild(meta);
     }catch(e){}
+
+
+    // composer (stars + text)
+    const composer = document.createElement("div");
+    composer.className = "miniComposer";
+    composer.innerHTML = `
+      <div class="revLabelRow">
+        <div class="revLabel">Reyting</div>
+        <div class="revHint">1–5 yulduz</div>
+      </div>
+      <div class="revStars" id="miniRevStars"></div>
+      <div class="revLabelRow">
+        <div class="revLabel">Sharh</div>
+        <div class="revHint">(ixtiyoriy)</div>
+      </div>
+      <textarea class="revText" id="miniRevText" rows="2" placeholder="Sharh yozing..."></textarea>
+      <button class="revBtn" id="miniRevSend">Yuborish</button>
+      <div class="muted miniRevNote" style="margin-top:8px; font-size:12px;">Sharh qoldirish uchun kirish talab qilinadi.</div>
+    `;
+    els.miniBody.appendChild(composer);
+
+    const miniStarsEl = composer.querySelector("#miniRevStars");
+    const miniTextEl = composer.querySelector("#miniRevText");
+    const miniSendEl = composer.querySelector("#miniRevSend");
+    miniDraftStars = 5; miniHoverStars = 0;
+    renderMiniStarSelector(miniStarsEl);
+
+    miniSendEl.addEventListener("click", async ()=>{
+      const user = auth.currentUser;
+      if(!user){ alert("Sharh qoldirish uchun avval kirish qiling."); return; }
+      const stars = Math.max(1, Math.min(5, Number(miniDraftStars)||5));
+      const text = (miniTextEl.value || "").trim().slice(0, 400);
+
+      // allow stars-only; if text is present it should be at least 2 chars
+      if(text && text.length < 2){
+        alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
+        return;
+      }
+
+      miniSendEl.disabled = true;
+      const oldLabel = miniSendEl.textContent;
+      miniSendEl.textContent = "Yuborilmoqda...";
+
+      try{
+        const authorName = (user.displayName || user.email || "Foydalanuvchi").toString();
+        const revRef = doc(db, "products", String(p.id), "reviews", user.uid);
+
+        await runTransaction(db, async (tx) => {
+          const revSnap = await tx.get(revRef);
+          const prev = revSnap.exists() ? (revSnap.data() || {}) : {};
+          const createdAt = prev.createdAt ? prev.createdAt : serverTimestamp();
+
+          tx.set(revRef, {
+            uid: user.uid,
+            authorName,
+            stars,
+            text,
+            updatedAt: serverTimestamp(),
+            createdAt
+          }, { merge: true });
+        });
+
+        miniTextEl.value = "";
+        await refreshStats(String(p.id), true);
+        applyFilterSort();
+      }catch(err){
+        alert("Sharh yuborishda xatolik. Keyinroq urinib ko‘ring.");
+      }finally{
+        miniSendEl.disabled = false;
+        miniSendEl.textContent = oldLabel;
+      }
+    });
+
 
     const listWrap = document.createElement("div");
     listWrap.innerHTML = `<div class="muted">Yuklanmoqda...</div>`;
@@ -3085,7 +3177,7 @@ els.revSend?.addEventListener("click", async ()=>{
   const text = (els.revText?.value || "").trim().slice(0, 400);
 
   // Rasm yuklash olib tashlandi
-  if(text.length < 2){
+  if(text && text.length < 2){
     alert("Sharh matni kamida 2 ta belgidan iborat bo‘lsin.");
     return;
   }
