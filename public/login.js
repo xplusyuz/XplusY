@@ -95,7 +95,7 @@ function showNotice(msg, kind="ok"){
   if(!els.notice) return;
   els.notice.className = "notice " + (kind==="err" ? "err" : "ok");
   els.notice.textContent = msg;
-  els.notice.style.display = "block";
+  els.notice.style.display = "";
   const ms = kind === "err" ? 6500 : 3500;
   clearTimeout(showNotice._t);
   showNotice._t = setTimeout(()=>{ els.notice.style.display="none"; }, ms);

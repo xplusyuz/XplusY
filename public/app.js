@@ -1184,30 +1184,14 @@ function getDeliveryInfo(p){
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  const flagSrc = d.type === "cargo" ? "assets/flags/cn.png" : "assets/flags/uz.png";
-  const flagAlt = d.type === "cargo" ? "CN" : "UZ";
-  // Use local PNG flags to avoid emoji font issues (UZ/CN text fallback).
-  return `<span class="${cls}"><img class="omFlag" src="${flagSrc}" alt="${flagAlt}" loading="lazy"> <span class="omTruck">🚚</span> (${d.min}–${d.max} kun)</span>`;
+  const label = d.type === "cargo" ? "🌐🚚" : "🚚";
+  return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
   const p = Number(price||0), o = Number(oldPrice||0);
   if(!o || o <= p) return 0;
   return Math.round((1 - (p/o)) * 100);
 }
-
-
-// Inject minimal CSS for PNG flags (safe even if styles.css differs)
-(function(){
-  try{
-    const id="om_flag_css";
-    if(document.getElementById(id)) return;
-    const st=document.createElement("style");
-    st.id=id;
-    st.textContent=`.shipBadge{display:inline-flex;align-items:center;gap:6px}.shipBadge .omFlag{width:16px;height:16px;border-radius:999px;flex:0 0 16px;object-fit:cover;box-shadow:0 0 0 1px rgba(0,0,0,.06) inset}.shipBadge .omTruck{line-height:1}@media(max-width:520px){.shipBadge{gap:5px}.shipBadge .omFlag{width:14px;height:14px;flex-basis:14px}}`;
-    document.head.appendChild(st);
-  }catch(e){}
-})();
-
 
 
 function render(arr){
