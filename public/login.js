@@ -36,34 +36,59 @@ const els = {
 
   notice: document.getElementById("notice"),
   forgotLink: document.getElementById("forgotLink"),
-  splash: document.getElementById("splash"),
-  loginBtn: document.getElementById("loginBtn"),
-  signupBtn: document.getElementById("signupBtn"),
 };
 
-function setSplash(on){
-  const el = els.splash;
-  if(!el) return;
-  el.classList.toggle("show", !!on);
-  el.setAttribute("aria-hidden", on ? "false" : "true");
+
+const splashEl = document.getElementById("splash");
+const splashTextEl = document.getElementById("splashText");
+function showSplash(text="Kuting..."){
+  if(!splashEl) return;
+  if(splashTextEl) splashTextEl.textContent = text;
+  splashEl.style.display = "flex";
+  splashEl.setAttribute("aria-hidden","false");
+}
+function hideSplash(){
+  if(!splashEl) return;
+  splashEl.style.display = "none";
+  splashEl.setAttribute("aria-hidden","true");
+}
+function setBusy(isBusy){
+  // disable inputs/buttons to prevent double submit
+  try{
+    document.querySelectorAll("button, input, select, textarea").forEach(el=>{
+      if(el.closest("#splash")) return;
+      if(isBusy){
+        el.dataset._wasDisabled = el.disabled ? "1" : "0";
+        el.disabled = true;
+      }else{
+        if(el.dataset._wasDisabled === "0") el.disabled = false;
+        delete el.dataset._wasDisabled;
+      }
+    });
+  }catch(_){}
 }
 
-function setBusy(kind, on){
-  setSplash(on);
-  const btn = kind === "signup" ? els.signupBtn : els.loginBtn;
-  const form = kind === "signup" ? els.signupForm : els.loginForm;
-  if(btn){
-    btn.disabled = !!on;
-    btn.style.opacity = on ? "0.8" : "";
-    btn.style.cursor = on ? "progress" : "";
+function authMessageFromCode(code){
+  code = String(code||"");
+  if(code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found")){
+    return "Telefon raqam yoki parol noto‘g‘ri.";
   }
-  if(form){
-    // prevent double submit
-    for(const inp of form.querySelectorAll("input,select,button")){
-      if(inp === btn) continue;
-      inp.disabled = !!on;
-    }
+  if(code.includes("too-many-requests")){
+    return "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.";
   }
+  if(code.includes("network-request-failed")){
+    return "Internet ulanishingizni tekshiring va qayta urinib ko‘ring.";
+  }
+  if(code.includes("email-already-in-use")){
+    return "Bu telefon raqam bilan akkaunt allaqachon mavjud. “Kirish”dan foydalaning.";
+  }
+  if(code.includes("weak-password")){
+    return "Parol juda sodda. Kamida 6 ta belgidan iborat bo‘lsin.";
+  }
+  if(code.includes("invalid-email")){
+    return "Telefon raqam noto‘g‘ri formatda.";
+  }
+  return "Xatolik yuz berdi. Qayta urinib ko‘ring.";
 }
 
 function showNotice(msg, kind="ok"){
@@ -286,41 +311,30 @@ onAuthStateChanged(auth, (user)=>{
 els.loginForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   allowAutoRedirect = false;
+
   const phone = normPhone(els.loginPhone.value);
   const pass = els.loginPass.value || "";
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
-  setBusy("login", true);
+  setBusy(true);
+  showSplash("Kuting...");
 
   try{
     const email = phoneToEmail(phone);
     const cred = await signInWithEmailAndPassword(auth, email, pass);
 
-    // ensure numericId exists + keep name if already known
     const uid = cred.user.uid;
     await ensureUserDoc(uid, { phone });
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
     location.replace(next);
   }catch(err){
-<<<<<<< HEAD
-    if(!String(err?.code||"").startsWith("auth/")) console.error(err);
-=======
-    console.error(err);
->>>>>>> d33760c2aae3cea368582f86aa81e63bd90ca1fd
-    setBusy("login", false);
-    const code = String(err?.code || "");
-    if(code.includes("user-not-found")){
-      showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
-    }else if(code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")){
-      showNotice("Login yoki parol xato", "err");
-    }else if(code.includes("too-many-requests")){
-      showNotice("Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", "err");
-    }else{
-      // fallback
-      showNotice("Kirishda xatolik yuz berdi. Qayta urinib ko‘ring.", "err");
-    }
+    // Auth xatolarini faqat UI orqali ko‘rsatamiz (console'ga chiqarmaymiz)
+    showNotice(authMessageFromCode(err?.code), "err");
+  }finally{
+    hideSplash();
+    setBusy(false);
   }
 });
 
@@ -328,69 +342,41 @@ els.loginForm.addEventListener("submit", async (e)=>{
 els.signupForm.addEventListener("submit", async (e)=>{
   e.preventDefault();
   allowAutoRedirect = false;
+
   const firstName = (els.signupFirstName?.value || "").trim();
-  const lastName = (els.signupLastName?.value || "").trim();
-  const phone = normPhone(els.signupPhone.value);
-  const region = (els.signupRegion?.value || "").trim();
-  const district = (els.signupDistrict?.value || "").trim();
-  const post = (els.signupPost?.value || "").trim();
-  const pass = els.signupPass.value || "";
-  const pass2 = els.signupPass2.value || "";
+  const lastName  = (els.signupLastName?.value || "").trim();
+  const phone     = normPhone(els.signupPhone.value);
+  const region    = (els.signupRegion?.value || "").trim();
+  const district  = (els.signupDistrict?.value || "").trim();
+  const post      = (els.signupPost?.value || "").trim();
+  const pass      = els.signupPass.value || "";
+  const pass2     = els.signupPass2.value || "";
 
   if(!firstName) return showNotice("Ismni kiriting", "err");
-  if(!lastName) return showNotice("Familiyani kiriting", "err");
+  if(!lastName)  return showNotice("Familiyani kiriting", "err");
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
-  if(!region) return showNotice("Viloyatni tanlang", "err");
-  if(!district) return showNotice("Tumanni tanlang", "err");
-  if(!post) return showNotice("Pochta indeksini tanlang", "err");
+  if(!region)    return showNotice("Viloyatni tanlang", "err");
+  if(!district)  return showNotice("Tumanni tanlang", "err");
+  if(!post)      return showNotice("Pochta indeksini tanlang", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
-  setBusy("signup", true);
+  setBusy(true);
+  showSplash("Kuting...");
 
   try{
     const email = phoneToEmail(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
 
     const uid = cred.user.uid;
-    const { numericId } = await ensureUserDoc(uid, {
-      phone,
-      firstName,
-      lastName,
-      name: (firstName + " " + lastName).trim(),
-      region,
-      district,
-      post,
-    });
-
-    showNotice(`Tayyor! Sizning ID: ${numericId}`, "ok");
+    await ensureUserDoc(uid, { phone, firstName, lastName, region, district, post });
 
     const next = new URLSearchParams(location.search).get("next") || "index.html#profile";
-    setTimeout(()=> location.replace(next), 350);
+    location.replace(next);
   }catch(err){
-<<<<<<< HEAD
-    if(!String(err?.code||"").startsWith("auth/")) console.error(err);
-=======
-    console.error(err);
->>>>>>> d33760c2aae3cea368582f86aa81e63bd90ca1fd
-    setBusy("signup", false);
-    // common: email already in use
-    if(String(err?.code||"").includes("email-already-in-use")){
-      showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
-      // auto switch to login tab
-      try{
-        els.tabLogin?.click();
-        if(els.loginPhone) els.loginPhone.value = phone;
-        els.loginPass?.focus();
-      }catch(_){}
-    }else{
-      if(String(err?.code||"").includes("weak-password")){
-      showNotice("Parol juda oddiy. Kamida 6 ta belgi bo‘lsin.", "err");
-    }else if(String(err?.code||"").includes("invalid-email")){
-      showNotice("Telefon raqam formati noto‘g‘ri.", "err");
-    }else{
-      showNotice("Ro‘yxatdan o‘tishda xatolik", "err");
-    }
-    }
+    showNotice(authMessageFromCode(err?.code), "err");
+  }finally{
+    hideSplash();
+    setBusy(false);
   }
 });
