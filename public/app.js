@@ -1184,7 +1184,7 @@ function getDeliveryInfo(p){
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  const label = d.type === "cargo" ? "🌐" : "🇺🇿";
+  const label = d.type === "cargo" ? "🌐🚚" : "🚚";
   return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
