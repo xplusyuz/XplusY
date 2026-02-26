@@ -36,7 +36,35 @@ const els = {
 
   notice: document.getElementById("notice"),
   forgotLink: document.getElementById("forgotLink"),
+  splash: document.getElementById("splash"),
+  loginBtn: document.getElementById("loginBtn"),
+  signupBtn: document.getElementById("signupBtn"),
 };
+
+function setSplash(on){
+  const el = els.splash;
+  if(!el) return;
+  el.classList.toggle("show", !!on);
+  el.setAttribute("aria-hidden", on ? "false" : "true");
+}
+
+function setBusy(kind, on){
+  setSplash(on);
+  const btn = kind === "signup" ? els.signupBtn : els.loginBtn;
+  const form = kind === "signup" ? els.signupForm : els.loginForm;
+  if(btn){
+    btn.disabled = !!on;
+    btn.style.opacity = on ? "0.8" : "";
+    btn.style.cursor = on ? "progress" : "";
+  }
+  if(form){
+    // prevent double submit
+    for(const inp of form.querySelectorAll("input,select,button")){
+      if(inp === btn) continue;
+      inp.disabled = !!on;
+    }
+  }
+}
 
 function showNotice(msg, kind="ok"){
   if(!els.notice) return;
@@ -263,6 +291,8 @@ els.loginForm.addEventListener("submit", async (e)=>{
   if(!isValidUzPhone(phone)) return showNotice("Telefon raqam noto‘g‘ri. Masalan: +998901234567", "err");
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
 
+  setBusy("login", true);
+
   try{
     const email = phoneToEmail(phone);
     const cred = await signInWithEmailAndPassword(auth, email, pass);
@@ -275,6 +305,7 @@ els.loginForm.addEventListener("submit", async (e)=>{
     location.replace(next);
   }catch(err){
     console.error(err);
+    setBusy("login", false);
     const code = String(err?.code || "");
     if(code.includes("user-not-found")){
       showNotice("Bu telefon raqam ro'yxatdan o'tmagan", "err");
@@ -311,6 +342,8 @@ els.signupForm.addEventListener("submit", async (e)=>{
   if(pass.length < 6) return showNotice("Parol kamida 6 ta belgidan iborat bo‘lsin", "err");
   if(pass !== pass2) return showNotice("Parollar mos emas", "err");
 
+  setBusy("signup", true);
+
   try{
     const email = phoneToEmail(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
@@ -332,6 +365,7 @@ els.signupForm.addEventListener("submit", async (e)=>{
     setTimeout(()=> location.replace(next), 350);
   }catch(err){
     console.error(err);
+    setBusy("signup", false);
     // common: email already in use
     if(String(err?.code||"").includes("email-already-in-use")){
       showNotice("Bu raqam allaqachon ro‘yxatdan o‘tgan. Kirish bo‘limidan parol bilan kiring.", "err");
