@@ -2009,6 +2009,20 @@ function renderViewer(){
   const imgs = viewer.images || [];
   const idx = clampIdx(viewer.idx || 0, imgs.length);
   viewer.idx = idx;
+  // IMAGE ONLY HARD HIDE
+  if(viewer.imageOnly){
+    try{
+      // remove any accidental text/meta
+      if(els.imgViewerName) els.imgViewerName.textContent = "";
+      if(els.imgViewerDesc) els.imgViewerDesc.textContent = "";
+      if(els.qvPrice) els.qvPrice.textContent = "";
+      if(els.qvOldPrice) els.qvOldPrice.textContent = "";
+      if(els.qvRating){ els.qvRating.textContent = ""; els.qvRating.style.display = "none"; }
+      if(els.qvBadge){ els.qvBadge.textContent = ""; els.qvBadge.style.display = "none"; }
+      if(els.qvTags){ els.qvTags.innerHTML = ""; els.qvTags.style.display = "none"; }
+    }catch(e){}
+  }
+
   // Header title
   if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
 
