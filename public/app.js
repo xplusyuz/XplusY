@@ -4656,3 +4656,23 @@ document.addEventListener("click", async (e)=>{
     }
   }
 });
+
+
+// === IMAGE ONLY MODAL LOGIC ===
+document.addEventListener("click", function(e) {
+  const img = e.target.closest("img");
+  if (!img || !img.src) return;
+
+  // Only for product images (adjust selector if needed)
+  if (!img.classList.contains("product-image")) return;
+
+  const modal = document.createElement("div");
+  modal.className = "image-modal";
+  modal.innerHTML = `
+    <span class="image-modal-close">&times;</span>
+    <img src="${img.src}" alt="preview">
+  `;
+
+  modal.addEventListener("click", () => modal.remove());
+  document.body.appendChild(modal);
+});
