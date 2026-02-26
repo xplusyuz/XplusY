@@ -4658,21 +4658,144 @@ document.addEventListener("click", async (e)=>{
 });
 
 
-// === IMAGE ONLY MODAL LOGIC ===
-document.addEventListener("click", function(e) {
-  const img = e.target.closest("img");
-  if (!img || !img.src) return;
 
-  // Only for product images (adjust selector if needed)
-  if (!img.classList.contains("product-image")) return;
 
-  const modal = document.createElement("div");
-  modal.className = "image-modal";
-  modal.innerHTML = `
-    <span class="image-modal-close">&times;</span>
-    <img src="${img.src}" alt="preview">
-  `;
+// === SWIPE GALLERY VIEWER LOGIC ===
+(function () {
+  function uniq(arr) {
+    const out = [];
+    const seen = new Set();
+    for (const x of arr) {
+      const k = String(x || "").trim();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(k);
+    }
+    return out;
+  }
 
-  modal.addEventListener("click", () => modal.remove());
-  document.body.appendChild(modal);
-});
+  function collectGallery(clickedImg) {
+    // Try to gather multiple images for the same product/card.
+    // 1) If nearest card has multiple .product-image imgs -> use them
+    // 2) Else if clicked image has data-images='["url1","url2"]' -> use them
+    // 3) Fallback to only clicked src
+    const card = clickedImg.closest(".product-card, .product, .card, li, .item") || clickedImg.parentElement;
+    let urls = [];
+    if (card) {
+      urls = Array.from(card.querySelectorAll("img.product-image"))
+        .map(i => i.currentSrc || i.src);
+    }
+
+    const data = clickedImg.getAttribute("data-images");
+    if (data) {
+      try {
+        const arr = JSON.parse(data);
+        if (Array.isArray(arr)) urls = urls.concat(arr);
+      } catch (_) {}
+    }
+
+    urls = uniq(urls);
+    if (!urls.length) urls = [clickedImg.currentSrc || clickedImg.src];
+    return urls;
+  }
+
+  function openViewer(urls, startIndex) {
+    let idx = Math.max(0, Math.min(startIndex || 0, urls.length - 1));
+
+    const viewer = document.createElement("div");
+    viewer.className = "image-viewer";
+    viewer.innerHTML = `
+      <div class="close-btn" aria-label="Close"><i class="fas fa-times"></i></div>
+      ${urls.length > 1 ? `<div class="nav-btn left" aria-label="Prev"><i class="fas fa-chevron-left"></i></div>
+      <div class="nav-btn right" aria-label="Next"><i class="fas fa-chevron-right"></i></div>` : ``}
+      <img class="viewer-img" src="${urls[idx]}" alt="preview">
+      ${urls.length > 1 ? `<div class="dots">${urls.map((_, i) => `<span class="dot ${i===idx?'active':''}"></span>`).join("")}</div>` : ``}
+    `;
+
+    const imgEl = viewer.querySelector("img.viewer-img");
+    const closeBtn = viewer.querySelector(".close-btn");
+    const leftBtn = viewer.querySelector(".nav-btn.left");
+    const rightBtn = viewer.querySelector(".nav-btn.right");
+    const dots = viewer.querySelectorAll(".dot");
+
+    function render() {
+      imgEl.src = urls[idx];
+      dots.forEach((d, i) => d.classList.toggle("active", i === idx));
+      // Preload neighbors
+      const p1 = new Image(); p1.src = urls[(idx + 1) % urls.length];
+      const p2 = new Image(); p2.src = urls[(idx - 1 + urls.length) % urls.length];
+    }
+
+    function next() {
+      if (urls.length <= 1) return;
+      idx = (idx + 1) % urls.length;
+      render();
+    }
+    function prev() {
+      if (urls.length <= 1) return;
+      idx = (idx - 1 + urls.length) % urls.length;
+      render();
+    }
+
+    function close() {
+      document.removeEventListener("keydown", onKey);
+      viewer.remove();
+    }
+
+    function onKey(e) {
+      if (e.key === "Escape") close();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") prev();
+    }
+
+    // Close on background click
+    viewer.addEventListener("click", close);
+    closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+
+    if (leftBtn) leftBtn.addEventListener("click", (e) => { e.stopPropagation(); prev(); });
+    if (rightBtn) rightBtn.addEventListener("click", (e) => { e.stopPropagation(); next(); });
+
+    // Touch swipe
+    let sx = 0, sy = 0, dx = 0, dy = 0, active = false;
+    const TH = 50;
+    viewer.addEventListener("touchstart", (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      active = true;
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+      dx = dy = 0;
+    }, { passive: true });
+
+    viewer.addEventListener("touchmove", (e) => {
+      if (!active || !e.touches || e.touches.length !== 1) return;
+      dx = e.touches[0].clientX - sx;
+      dy = e.touches[0].clientY - sy;
+    }, { passive: true });
+
+    viewer.addEventListener("touchend", () => {
+      if (!active) return;
+      active = false;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > TH) {
+        // horizontal swipe
+        if (dx < 0) next(); else prev();
+      }
+    });
+
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(viewer);
+  }
+
+  document.addEventListener("click", function (e) {
+    const img = e.target.closest("img.product-image");
+    if (!img) return;
+
+    // Prevent any existing product modal click handler from taking over (best effort)
+    e.preventDefault();
+    e.stopPropagation();
+
+    const urls = collectGallery(img);
+    const current = img.currentSrc || img.src;
+    const startIndex = Math.max(0, urls.indexOf(current));
+    openViewer(urls, startIndex);
+  }, true); // capture to intercept early
+})();
