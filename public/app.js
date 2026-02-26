@@ -1491,16 +1491,34 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
     
 // Image click: NO modal/viewer. Just open the image itself (native zoom in new tab)
 const openImageOnly = ()=>{
+  // Open premium gallery lightbox (no navigation, no product modal)
   const selNow = getSel(p);
-  const imgs = getImagesFor(p, selNow);
+  const imgs = getImagesFor(p, selNow).filter(Boolean);
   if(!imgs.length) return;
-  const i = Number(selNow?.imgIdx || 0);
-  const raw = imgs[Math.max(0, Math.min(i, imgs.length - 1))];
-  if(!raw) return;
-  const url = (()=>{ try{ return new URL(raw, location.href).href; }catch(_){ return raw; }})();
-  // Prefer a new tab so user can pinch/zoom freely on mobile.
-  try{ window.open(url, "_blank", "noopener,noreferrer"); }
-  catch(_){ location.href = url; }
+  const i = Math.max(0, Math.min(Number(selNow?.imgIdx || 0), imgs.length - 1));
+
+  openImageViewer({
+    productId: p.id,
+    title: p.name || "Rasm",
+    desc: "",
+    pricing: null,
+    rating: 0,
+    reviewsCount: 0,
+    tags: [],
+    badge: "",
+    images: imgs,
+    startIndex: i,
+    imageOnly: true,
+    onSelect: (idx)=>{
+      try{
+        const s = getSel(p);
+        s.imgIdx = idx;
+        selected.set(p.id, s);
+        // update card image instantly
+        try{ imgEl.src = imgs[idx] || imgEl.src; }catch(_){ }
+      }catch(_){ }
+    }
+  });
 };
 
     imgEl.addEventListener("click", (e)=>{
@@ -2177,6 +2195,13 @@ function renderViewer(){
   // Header title
   if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
 
+  // Image-only mode: hide non-image UI
+  try{
+    const io = !!viewer.imageOnly;
+    const panel = els.imgViewer.querySelector('.qvPanel');
+    if(panel) panel.style.display = io ? 'none' : '';
+  }catch(e){}
+
   // Price + meta (optional)
   const pr = viewer.pricing || null;
   if(els.qvPrice) els.qvPrice.textContent = pr ? moneyUZS(pr.price||0) : "";
@@ -2205,7 +2230,11 @@ function renderViewer(){
   // Description
   if(els.imgViewerDesc) els.imgViewerDesc.textContent = viewer.desc || "";
 
+  // animate + reset zoom on image change
+  try{ els.imgViewerImg.classList.add('viewerImgFade'); setTimeout(()=>els.imgViewerImg.classList.remove('viewerImgFade'), 180); }catch(e){}
   els.imgViewerImg.src = imgs[idx] || "";
+  try{ bindZoomHandlers(); }catch(e){}
+  try{ resetZoom(); }catch(e){}
 
   // thumbs
   els.imgThumbs.innerHTML = "";
@@ -2224,10 +2253,11 @@ function renderViewer(){
   const hasNav = imgs.length > 1;
   if(els.imgPrev) els.imgPrev.style.display = hasNav ? "" : "none";
   if(els.imgNext) els.imgNext.style.display = hasNav ? "" : "none";
-  renderReviewsUI(viewer.productId);
+  if(!viewer.imageOnly) renderReviewsUI(viewer.productId);
 }
 
-function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect}){
+
+function openImageViewer({productId, title, desc, pricing, rating, reviewsCount, tags, badge, images, startIndex=0, onSelect, imageOnly=false}){
   if(!els.imgViewer) return;
   viewer = {
     open: true,
@@ -2241,9 +2271,11 @@ function openImageViewer({productId, title, desc, pricing, rating, reviewsCount,
     badge: badge || "",
     images: (images||[]).filter(Boolean),
     idx: startIndex || 0,
-    onSelect: onSelect || null
+    onSelect: onSelect || null,
+    imageOnly: !!imageOnly
   };
   showOverlay(els.imgViewer);
+  try{ els.imgViewer.classList.toggle('imageOnly', !!viewer.imageOnly); }catch(e){}
   renderViewer();
 
   // Make scroll stable across devices (some browsers need an explicit reset)
@@ -2280,6 +2312,7 @@ function closeImageViewer(){
   if(!els.imgViewer) return;
   viewer.open = false;
   cleanupReviewSubscriptions();
+  try{ resetZoom(); }catch(e){}
   hideOverlay(els.imgViewer);
 }
 
@@ -2298,6 +2331,194 @@ function stepViewer(dir){
   renderViewer();
   viewer.onSelect?.(viewer.idx);
 }
+
+
+// ---------- Zoom / pinch / double-tap for image viewer (image-only friendly) ----------
+let __zoom = {
+  scale: 1,
+  tx: 0,
+  ty: 0,
+  dragging: false,
+  startX: 0,
+  startY: 0,
+  startTx: 0,
+  startTy: 0,
+  pinch: false,
+  pinchDist: 0,
+  pinchScale: 1,
+  lastTap: 0,
+  swipeX: 0,
+  swipeY: 0,
+  swipeActive: false
+};
+
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+function applyZoom(){
+  if(!els.imgViewerImg) return;
+  const s = clamp(__zoom.scale, 1, 4);
+  __zoom.scale = s;
+  // when scale == 1, reset translate smoothly
+  if(s === 1){ __zoom.tx = 0; __zoom.ty = 0; }
+  els.imgViewerImg.style.transform = `translate3d(${__zoom.tx}px, ${__zoom.ty}px, 0) scale(${s})`;
+  els.imgViewerImg.classList.toggle("isZoomed", s > 1.001);
+}
+
+function resetZoom(){
+  __zoom.scale = 1;
+  __zoom.tx = 0;
+  __zoom.ty = 0;
+  __zoom.dragging = false;
+  __zoom.pinch = false;
+  __zoom.swipeActive = false;
+  applyZoom();
+}
+
+function toggleZoomAtPoint(clientX, clientY){
+  if(!els.imgViewerImg) return;
+  const rect = els.imgViewerImg.getBoundingClientRect();
+  const cx = clientX - (rect.left + rect.width/2);
+  const cy = clientY - (rect.top + rect.height/2);
+
+  if(__zoom.scale <= 1.001){
+    __zoom.scale = 2.5;
+    __zoom.tx = clamp(-cx, -rect.width, rect.width);
+    __zoom.ty = clamp(-cy, -rect.height, rect.height);
+  }else{
+    __zoom.scale = 1;
+    __zoom.tx = 0;
+    __zoom.ty = 0;
+  }
+  applyZoom();
+}
+
+let __zoomBound = false;
+function bindZoomHandlers(){
+  if(__zoomBound || !els.imgViewerImg) return;
+  __zoomBound = true;
+
+  // desktop double click
+  els.imgViewerImg.addEventListener("dblclick", (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    toggleZoomAtPoint(e.clientX, e.clientY);
+  });
+
+  // mouse drag pan
+  els.imgViewerImg.addEventListener("mousedown", (e)=>{
+    if(__zoom.scale <= 1.001) return;
+    e.preventDefault();
+    __zoom.dragging = true;
+    __zoom.startX = e.clientX;
+    __zoom.startY = e.clientY;
+    __zoom.startTx = __zoom.tx;
+    __zoom.startTy = __zoom.ty;
+  });
+  window.addEventListener("mousemove", (e)=>{
+    if(!__zoom.dragging) return;
+    __zoom.tx = __zoom.startTx + (e.clientX - __zoom.startX);
+    __zoom.ty = __zoom.startTy + (e.clientY - __zoom.startY);
+    applyZoom();
+  });
+  window.addEventListener("mouseup", ()=>{ __zoom.dragging = false; });
+
+  // touch: swipe / pinch / double tap / pan
+  els.imgViewerImg.addEventListener("touchstart", (e)=>{
+    if(!viewer?.open) return;
+    if(e.touches.length === 1){
+      const t = e.touches[0];
+      const now = Date.now();
+      // double tap
+      if(now - (__zoom.lastTap||0) < 280){
+        e.preventDefault();
+        toggleZoomAtPoint(t.clientX, t.clientY);
+        __zoom.lastTap = 0;
+        return;
+      }
+      __zoom.lastTap = now;
+
+      __zoom.startX = t.clientX;
+      __zoom.startY = t.clientY;
+      __zoom.startTx = __zoom.tx;
+      __zoom.startTy = __zoom.ty;
+      __zoom.dragging = (__zoom.scale > 1.001);
+      __zoom.swipeX = t.clientX;
+      __zoom.swipeY = t.clientY;
+      __zoom.swipeActive = (__zoom.scale <= 1.001);
+    }else if(e.touches.length === 2){
+      __zoom.pinch = true;
+      __zoom.dragging = false;
+      const a = e.touches[0], b = e.touches[1];
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      __zoom.pinchDist = Math.hypot(dx, dy);
+      __zoom.pinchScale = __zoom.scale;
+    }
+  }, {passive:false});
+
+  els.imgViewerImg.addEventListener("touchmove", (e)=>{
+    if(!viewer?.open) return;
+    if(e.touches.length === 2 && __zoom.pinch){
+      e.preventDefault();
+      const a = e.touches[0], b = e.touches[1];
+      const dx = a.clientX - b.clientX;
+      const dy = a.clientY - b.clientY;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nextScale = clamp(__zoom.pinchScale * (dist / (__zoom.pinchDist || dist)), 1, 4);
+      __zoom.scale = nextScale;
+      applyZoom();
+      return;
+    }
+    if(e.touches.length !== 1) return;
+    const t = e.touches[0];
+
+    if(__zoom.dragging && __zoom.scale > 1.001){
+      e.preventDefault();
+      __zoom.tx = __zoom.startTx + (t.clientX - __zoom.startX);
+      __zoom.ty = __zoom.startTy + (t.clientY - __zoom.startY);
+      applyZoom();
+      return;
+    }
+
+    // swipe navigate when not zoomed
+    if(__zoom.swipeActive && __zoom.scale <= 1.001){
+      const dx = t.clientX - __zoom.swipeX;
+      const dy = t.clientY - __zoom.swipeY;
+      if(Math.abs(dx) > 14 || Math.abs(dy) > 14){
+        // lock horizontal swipe
+        if(Math.abs(dx) > Math.abs(dy)){
+          e.preventDefault();
+        }
+      }
+    }
+  }, {passive:false});
+
+  els.imgViewerImg.addEventListener("touchend", (e)=>{
+    if(!viewer?.open) return;
+    if(__zoom.pinch){
+      __zoom.pinch = false;
+      // If user pinched back to ~1, reset translate
+      if(__zoom.scale <= 1.05){ __zoom.scale = 1; resetZoom(); }
+      return;
+    }
+    if(e.changedTouches && e.changedTouches.length){
+      const t = e.changedTouches[0];
+      const dx = t.clientX - __zoom.swipeX;
+      const dy = t.clientY - __zoom.swipeY;
+
+      if(__zoom.scale <= 1.001){
+        // horizontal swipe to change image
+        if(Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy)){
+          if(dx < 0) stepViewer(+1);
+          else stepViewer(-1);
+        }
+      }
+    }
+    __zoom.dragging = false;
+    __zoom.swipeActive = false;
+  }, {passive:true});
+}
+
 
 // ---------- Reviews UI (in fullscreen viewer) ----------
 let draftStars = 5;
