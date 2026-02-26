@@ -1,19 +1,3 @@
-
-// === INLINE SVG ICONS (FA fallback / primary) ===
-function svgIcon(name){
-  const common = 'aria-hidden="true" focusable="false"';
-  switch(name){
-    case "info": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M11 9h2V7h-2v2Zm0 8h2v-6h-2v6Zm1-15C6.93 2 3 5.93 3 11s3.93 9 9 9 9-3.93 9-9-3.93-9-9-9Zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7Z"/></svg>`;
-    case "youtube": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M21.58 7.19a2.75 2.75 0 0 0-1.94-1.95C17.9 4.75 12 4.75 12 4.75s-5.9 0-7.64.49A2.75 2.75 0 0 0 2.42 7.2 28.6 28.6 0 0 0 2 12a28.6 28.6 0 0 0 .42 4.8 2.75 2.75 0 0 0 1.94 1.95c1.74.5 7.64.5 7.64.5s5.9 0 7.64-.5a2.75 2.75 0 0 0 1.94-1.95A28.6 28.6 0 0 0 22 12a28.6 28.6 0 0 0-.42-4.81ZM10 15.5v-7l6 3.5-6 3.5Z"/></svg>`;
-    case "chat": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Zm0 14H5.17L4 17.17V4h16v12Z"/></svg>`;
-    case "star": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27Z"/></svg>`;
-    case "x": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.29 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.29-6.31 1.42 1.42Z"/></svg>`;
-    case "chevL": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>`;
-    case "chevR": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="m8.59 16.59 1.41 1.41 6-6-6-6-1.41 1.41L13.17 12z"/></svg>`;
-    default: return '';
-  }
-}
-
 /* OrzuMall: silence noisy console in production */
 try{ if(typeof console!=="undefined"){ console.warn=()=>{}; console.error=()=>{}; } }catch(e){}
 
@@ -578,7 +562,7 @@ function subscribeReviews(productId){
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
-    if(els.revScore) els.revScore.innerHTML = `${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
     if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
@@ -606,7 +590,7 @@ function subscribeReviews(productId){
     statsDebounce = setTimeout(async ()=>{
       try{
         const st = await refreshStats(productId, true);
-        if(els.revScore) els.revScore.innerHTML = `${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+        if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
         if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
       }catch(e){}
     }, 600);
@@ -1286,19 +1270,19 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? `${svgIcon("star")} ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
 
-          <button class="iconPill" data-act="info" data-pid="${p.id}" title="Tavsif" aria-label="Tavsif">
-            ${svgIcon("info")}
+          <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
           </button>
-          <button class="iconPill" data-act="video" data-pid="${p.id}" title="Video" aria-label="Video">
-            ${svgIcon("youtube")}
+          <button class="iconPill" data-act="video" title="Video" aria-label="Video">
+            <i class="fa-brands fa-youtube" aria-hidden="true"></i>
           </button>
-          <button class="iconPill" data-act="reviews" data-pid="${p.id}" title="Sharh" aria-label="Sharh">
-            ${svgIcon("chat")}
+          <button class="iconPill" data-act="reviews" title="Sharh" aria-label="Sharh">
+            <i class="fa-solid fa-message" aria-hidden="true"></i>
           </button>
 
-          <button class="iconPill primary" data-act="cart" data-pid="${p.id}" title="Savatchaga" aria-label="Savatchaga">
+          <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2Zm10 0c-1.1 0-1.99.9-1.99 2S15.9 22 17 22s2-.9 2-2-.9-2-2-2ZM7.17 14h9.66c.75 0 1.4-.41 1.74-1.03L21 6H6.21L5.27 4H2v2h2l3.6 7.59-1.35 2.44C5.52 17.37 6.48 19 8 19h12v-2H8l1.17-3Z"/>
             </svg>
@@ -2025,20 +2009,6 @@ function renderViewer(){
   const imgs = viewer.images || [];
   const idx = clampIdx(viewer.idx || 0, imgs.length);
   viewer.idx = idx;
-  // IMAGE ONLY HARD HIDE
-  if(viewer.imageOnly){
-    try{
-      // remove any accidental text/meta
-      if(els.imgViewerName) els.imgViewerName.textContent = "";
-      if(els.imgViewerDesc) els.imgViewerDesc.textContent = "";
-      if(els.qvPrice) els.qvPrice.textContent = "";
-      if(els.qvOldPrice) els.qvOldPrice.textContent = "";
-      if(els.qvRating){ els.qvRating.textContent = ""; els.qvRating.style.display = "none"; }
-      if(els.qvBadge){ els.qvBadge.textContent = ""; els.qvBadge.style.display = "none"; }
-      if(els.qvTags){ els.qvTags.innerHTML = ""; els.qvTags.style.display = "none"; }
-    }catch(e){}
-  }
-
   // Header title
   if(els.imgViewerName) els.imgViewerName.textContent = viewer.title || "Rasm";
 
@@ -2273,8 +2243,8 @@ async function openMini(kind, productId){
       const meta = document.createElement("div");
       meta.className = "miniMeta";
       meta.innerHTML = `
-        <div class="pill">${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
-        <div class="pill">${svgIcon("chat")} ${st.count} ta sharh</div>
+        <div class="pill"><i class="fa-solid fa-star" aria-hidden="true"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
+        <div class="pill"><i class="fa-solid fa-message" aria-hidden="true"></i> ${st.count} ta sharh</div>
       `;
       els.miniBody.appendChild(meta);
     }catch(e){}
@@ -4493,7 +4463,7 @@ function ensureProfileSocialLinks(){
           <span>Ijtimoiy tarmoqlar</span>
         </div>
         <div class="hint">
-          ${svgIcon("info")}
+          <i class="fa-solid fa-circle-info"></i>
           <span>Rasm + izoh yuboring — topib beramiz</span>
         </div>
       </div>
@@ -4524,7 +4494,7 @@ function ensureProfileSocialLinks(){
         </a>
 
         <a class="sBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
-          <span class="ico">${svgIcon("youtube")}</span>
+          <span class="ico"><i class="fa-brands fa-youtube"></i></span>
           <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
           <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
@@ -4601,7 +4571,7 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
           <a class="socialBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
-            <span class="ico">${svgIcon("youtube")}</span>
+            <span class="ico"><i class="fa-brands fa-youtube"></i></span>
             <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
@@ -4611,7 +4581,7 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
         </div>
-        <div class="mutedTip">${svgIcon("info")}<span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span></div>
+        <div class="mutedTip"><i class="fa-solid fa-circle-info"></i><span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span></div>
       `;
 
       if(balanceCard && balanceCard.parentElement){
@@ -4686,176 +4656,3 @@ document.addEventListener("click", async (e)=>{
     }
   }
 });
-
-
-
-
-// === SWIPE GALLERY VIEWER LOGIC ===
-(function () {
-  function uniq(arr) {
-    const out = [];
-    const seen = new Set();
-    for (const x of arr) {
-      const k = String(x || "").trim();
-      if (!k || seen.has(k)) continue;
-      seen.add(k);
-      out.push(k);
-    }
-    return out;
-  }
-
-  function collectGallery(clickedImg) {
-    // Try to gather multiple images for the same product/card.
-    // 1) If nearest card has multiple .product-image imgs -> use them
-    // 2) Else if clicked image has data-images='["url1","url2"]' -> use them
-    // 3) Fallback to only clicked src
-    const card = clickedImg.closest(".product-card, .product, .card, li, .item") || clickedImg.parentElement;
-    let urls = [];
-    if (card) {
-      urls = Array.from(card.querySelectorAll("img.product-image"))
-        .map(i => i.currentSrc || i.src);
-    }
-
-    const data = clickedImg.getAttribute("data-images");
-    if (data) {
-      try {
-        const arr = JSON.parse(data);
-        if (Array.isArray(arr)) urls = urls.concat(arr);
-      } catch (_) {}
-    }
-
-    urls = uniq(urls);
-    if (!urls.length) urls = [clickedImg.currentSrc || clickedImg.src];
-    return urls;
-  }
-
-  function openViewer(urls, startIndex) {
-    let idx = Math.max(0, Math.min(startIndex || 0, urls.length - 1));
-
-    const viewer = document.createElement("div");
-    viewer.className = "image-viewer";
-    viewer.innerHTML = `
-      <div class="close-btn" aria-label="Close">${svgIcon("x")}</div>
-      ${urls.length > 1 ? `<div class="nav-btn left" aria-label="Prev">${svgIcon("chevL")}</div>
-      <div class="nav-btn right" aria-label="Next">${svgIcon("chevR")}</div>` : ``}
-      <img class="viewer-img" src="${urls[idx]}" alt="preview">
-      ${urls.length > 1 ? `<div class="dots">${urls.map((_, i) => `<span class="dot ${i===idx?'active':''}"></span>`).join("")}</div>` : ``}
-    `;
-
-    const imgEl = viewer.querySelector("img.viewer-img");
-    const closeBtn = viewer.querySelector(".close-btn");
-    const leftBtn = viewer.querySelector(".nav-btn.left");
-    const rightBtn = viewer.querySelector(".nav-btn.right");
-    const dots = viewer.querySelectorAll(".dot");
-
-    function render() {
-      imgEl.src = urls[idx];
-      dots.forEach((d, i) => d.classList.toggle("active", i === idx));
-      // Preload neighbors
-      const p1 = new Image(); p1.src = urls[(idx + 1) % urls.length];
-      const p2 = new Image(); p2.src = urls[(idx - 1 + urls.length) % urls.length];
-    }
-
-    function next() {
-      if (urls.length <= 1) return;
-      idx = (idx + 1) % urls.length;
-      render();
-    }
-    function prev() {
-      if (urls.length <= 1) return;
-      idx = (idx - 1 + urls.length) % urls.length;
-      render();
-    }
-
-    function close() {
-      document.removeEventListener("keydown", onKey);
-      viewer.remove();
-    }
-
-    function onKey(e) {
-      if (e.key === "Escape") close();
-      if (e.key === "ArrowRight") next();
-      if (e.key === "ArrowLeft") prev();
-    }
-
-    // Close on background click
-    viewer.addEventListener("click", close);
-    closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
-
-    if (leftBtn) leftBtn.addEventListener("click", (e) => { e.stopPropagation(); prev(); });
-    if (rightBtn) rightBtn.addEventListener("click", (e) => { e.stopPropagation(); next(); });
-
-    // Touch swipe
-    let sx = 0, sy = 0, dx = 0, dy = 0, active = false;
-    const TH = 50;
-    viewer.addEventListener("touchstart", (e) => {
-      if (!e.touches || e.touches.length !== 1) return;
-      active = true;
-      sx = e.touches[0].clientX;
-      sy = e.touches[0].clientY;
-      dx = dy = 0;
-    }, { passive: true });
-
-    viewer.addEventListener("touchmove", (e) => {
-      if (!active || !e.touches || e.touches.length !== 1) return;
-      dx = e.touches[0].clientX - sx;
-      dy = e.touches[0].clientY - sy;
-    }, { passive: true });
-
-    viewer.addEventListener("touchend", () => {
-      if (!active) return;
-      active = false;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > TH) {
-        // horizontal swipe
-        if (dx < 0) next(); else prev();
-      }
-    });
-
-    document.addEventListener("keydown", onKey);
-    document.body.appendChild(viewer);
-  }
-
-  document.addEventListener("click", function (e) {
-    const img = e.target.closest("img.product-image");
-    if (!img) return;
-
-    // Prevent any existing product modal click handler from taking over (best effort)
-    e.preventDefault();
-    e.stopPropagation();
-
-    const urls = collectGallery(img);
-    const current = img.currentSrc || img.src;
-    const startIndex = Math.max(0, urls.indexOf(current));
-    openViewer(urls, startIndex);
-  }, true); // capture to intercept early
-})();
-
-
-// === ICON ACTION DELEGATION ===
-// Some browsers / dynamic renders may miss per-card listeners; this guarantees actions always work.
-document.addEventListener("click", function(e){
-  const btn = e.target.closest("button.iconPill[data-act][data-pid]");
-  if(!btn) return;
-  const act = btn.getAttribute("data-act");
-  const pid = btn.getAttribute("data-pid");
-  if(!act || !pid) return;
-
-  // Do not let other handlers interfere
-  e.preventDefault();
-  e.stopPropagation();
-
-  const p = (products||[]).find(x=>String(x.id)===String(pid));
-  if(!p){
-    toast("Mahsulot topilmadi.");
-    return;
-  }
-
-  if(act === "cart"){
-    handleAddToCart(p, { openCartAfter:false });
-    return;
-  }
-  if(act === "info" || act === "video" || act === "reviews"){
-    openMini(act, p.id);
-    return;
-  }
-}, true);
