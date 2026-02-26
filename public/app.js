@@ -1184,7 +1184,7 @@ function getDeliveryInfo(p){
 function renderDeliveryBadge(p){
   const d = getDeliveryInfo(p);
   const cls = d.type === "cargo" ? "shipBadge cargo" : "shipBadge stock";
-  const label = d.type === "cargo" ? "🌐🚚" : "🚚";
+  const label = d.type === "cargo" ? "Keltirib beramiz" : "Bizda bor";
   return `<span class="${cls}">${label} (${d.min}–${d.max} kun)</span>`;
 }
 function discountPct(price, oldPrice){
@@ -3161,6 +3161,35 @@ els.imgViewerClose?.addEventListener("click", closeImageViewer);
 els.imgViewerBackdrop?.addEventListener("click", closeImageViewer);
 els.imgPrev?.addEventListener("click", ()=>stepViewer(-1));
 els.imgNext?.addEventListener("click", ()=>stepViewer(+1));
+
+// swipe (mobile) for image viewer
+(() => {
+  const stage = document.querySelector('#imgViewer .qvStage');
+  if(!stage) return;
+  let sx = 0, sy = 0, active = false;
+  const TH = 42;
+  stage.addEventListener('touchstart', (e)=>{
+    if(!viewer.open) return;
+    const t = e.touches && e.touches[0];
+    if(!t) return;
+    active = true;
+    sx = t.clientX;
+    sy = t.clientY;
+  }, {passive:true});
+  stage.addEventListener('touchend', (e)=>{
+    if(!viewer.open || !active) return;
+    active = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if(!t) return;
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if(Math.abs(dx) < TH) return;
+    // ignore mostly-vertical gestures
+    if(Math.abs(dy) > Math.abs(dx) * 0.8) return;
+    if(dx < 0) stepViewer(+1);
+    else stepViewer(-1);
+  }, {passive:true});
+})();
 
 // reviews (viewer)
 els.revSend?.addEventListener("click", async ()=>{
