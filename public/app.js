@@ -1,3 +1,19 @@
+
+// === INLINE SVG ICONS (FA fallback / primary) ===
+function svgIcon(name){
+  const common = 'aria-hidden="true" focusable="false"';
+  switch(name){
+    case "info": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M11 9h2V7h-2v2Zm0 8h2v-6h-2v6Zm1-15C6.93 2 3 5.93 3 11s3.93 9 9 9 9-3.93 9-9-3.93-9-9-9Zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7Z"/></svg>`;
+    case "youtube": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M21.58 7.19a2.75 2.75 0 0 0-1.94-1.95C17.9 4.75 12 4.75 12 4.75s-5.9 0-7.64.49A2.75 2.75 0 0 0 2.42 7.2 28.6 28.6 0 0 0 2 12a28.6 28.6 0 0 0 .42 4.8 2.75 2.75 0 0 0 1.94 1.95c1.74.5 7.64.5 7.64.5s5.9 0 7.64-.5a2.75 2.75 0 0 0 1.94-1.95A28.6 28.6 0 0 0 22 12a28.6 28.6 0 0 0-.42-4.81ZM10 15.5v-7l6 3.5-6 3.5Z"/></svg>`;
+    case "chat": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Zm0 14H5.17L4 17.17V4h16v12Z"/></svg>`;
+    case "star": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27Z"/></svg>`;
+    case "x": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.29 9.17 12 2.88 5.71 4.29 4.29 10.59 10.6l6.29-6.31 1.42 1.42Z"/></svg>`;
+    case "chevL": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>`;
+    case "chevR": return `<svg ${common} viewBox="0 0 24 24"><path fill="currentColor" d="m8.59 16.59 1.41 1.41 6-6-6-6-1.41 1.41L13.17 12z"/></svg>`;
+    default: return '';
+  }
+}
+
 /* OrzuMall: silence noisy console in production */
 try{ if(typeof console!=="undefined"){ console.warn=()=>{}; console.error=()=>{}; } }catch(e){}
 
@@ -562,7 +578,7 @@ function subscribeReviews(productId){
   viewerProductId = productId;
 
   refreshStats(productId, true).then((st)=>{
-    if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+    if(els.revScore) els.revScore.innerHTML = `${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
     if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
   });
 
@@ -590,7 +606,7 @@ function subscribeReviews(productId){
     statsDebounce = setTimeout(async ()=>{
       try{
         const st = await refreshStats(productId, true);
-        if(els.revScore) els.revScore.innerHTML = `<i class="fa-solid fa-star"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
+        if(els.revScore) els.revScore.innerHTML = `${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}`;
         if(els.revCount) els.revCount.textContent = `(${st.count} sharh)`;
       }catch(e){}
     }, 600);
@@ -1270,16 +1286,16 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
         
 
         <div class="pactions">
-          <div class="pratingInline">${(showCount ? `<i class="fa-solid fa-star" aria-hidden="true"></i> ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
+          <div class="pratingInline">${(showCount ? `${svgIcon("star")} ${Number(showAvg).toFixed(1)} <span>(${showCount})</span>` : ``)}</div>
 
           <button class="iconPill" data-act="info" title="Tavsif" aria-label="Tavsif">
-            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            ${svgIcon("info")}
           </button>
           <button class="iconPill" data-act="video" title="Video" aria-label="Video">
-            <i class="fa-brands fa-youtube" aria-hidden="true"></i>
+            ${svgIcon("youtube")}
           </button>
           <button class="iconPill" data-act="reviews" title="Sharh" aria-label="Sharh">
-            <i class="fa-solid fa-message" aria-hidden="true"></i>
+            ${svgIcon("chat")}
           </button>
 
           <button class="iconPill primary" data-act="cart" title="Savatchaga" aria-label="Savatchaga">
@@ -2257,8 +2273,8 @@ async function openMini(kind, productId){
       const meta = document.createElement("div");
       meta.className = "miniMeta";
       meta.innerHTML = `
-        <div class="pill"><i class="fa-solid fa-star" aria-hidden="true"></i> ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
-        <div class="pill"><i class="fa-solid fa-message" aria-hidden="true"></i> ${st.count} ta sharh</div>
+        <div class="pill">${svgIcon("star")} ${st.avg ? st.avg.toFixed(1) : "0.0"}</div>
+        <div class="pill">${svgIcon("chat")} ${st.count} ta sharh</div>
       `;
       els.miniBody.appendChild(meta);
     }catch(e){}
@@ -4477,7 +4493,7 @@ function ensureProfileSocialLinks(){
           <span>Ijtimoiy tarmoqlar</span>
         </div>
         <div class="hint">
-          <i class="fa-solid fa-circle-info"></i>
+          ${svgIcon("info")}
           <span>Rasm + izoh yuboring — topib beramiz</span>
         </div>
       </div>
@@ -4508,7 +4524,7 @@ function ensureProfileSocialLinks(){
         </a>
 
         <a class="sBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
-          <span class="ico"><i class="fa-brands fa-youtube"></i></span>
+          <span class="ico">${svgIcon("youtube")}</span>
           <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
           <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
         </a>
@@ -4585,7 +4601,7 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
           <a class="socialBtn yt" href="https://youtube.com/" target="_blank" rel="noopener">
-            <span class="ico"><i class="fa-brands fa-youtube"></i></span>
+            <span class="ico">${svgIcon("youtube")}</span>
             <span class="txt"><span class="name">YouTube</span><span class="sub">OrzuMall</span></span>
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
@@ -4595,7 +4611,7 @@ window.addEventListener('hashchange', ensureProfileSocialLinks);
             <i class="fa-solid fa-arrow-up-right-from-square ext"></i>
           </a>
         </div>
-        <div class="mutedTip"><i class="fa-solid fa-circle-info"></i><span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span></div>
+        <div class="mutedTip">${svgIcon("info")}<span>Botga mahsulot rasmi + qisqa izoh yuborsangiz, topib beramiz.</span></div>
       `;
 
       if(balanceCard && balanceCard.parentElement){
@@ -4719,9 +4735,9 @@ document.addEventListener("click", async (e)=>{
     const viewer = document.createElement("div");
     viewer.className = "image-viewer";
     viewer.innerHTML = `
-      <div class="close-btn" aria-label="Close"><i class="fas fa-times"></i></div>
-      ${urls.length > 1 ? `<div class="nav-btn left" aria-label="Prev"><i class="fas fa-chevron-left"></i></div>
-      <div class="nav-btn right" aria-label="Next"><i class="fas fa-chevron-right"></i></div>` : ``}
+      <div class="close-btn" aria-label="Close">${svgIcon("x")}</div>
+      ${urls.length > 1 ? `<div class="nav-btn left" aria-label="Prev">${svgIcon("chevL")}</div>
+      <div class="nav-btn right" aria-label="Next">${svgIcon("chevR")}</div>` : ``}
       <img class="viewer-img" src="${urls[idx]}" alt="preview">
       ${urls.length > 1 ? `<div class="dots">${urls.map((_, i) => `<span class="dot ${i===idx?'active':''}"></span>`).join("")}</div>` : ``}
     `;
