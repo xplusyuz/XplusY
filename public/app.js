@@ -1210,6 +1210,79 @@ function discountPct(price, oldPrice){
 
 
 
+/* ========= NATIVE ADS (Product list orasida) =========
+   Ads rasmlari: /ads papkaga joylanadi.
+   Bezovta qilmaslik uchun: har slotda ehtimollik va session limit ishlaydi.
+*/
+const NATIVE_ADS = {
+  enabled: true,
+  every: 8,                 // har nechta mahsulotdan keyin
+  probability: 0.55,        // "bazan bazan" ko'rsatish uchun (0..1)
+  maxPerSession: 2,         // bitta sessiyada maksimum nechta reklama
+  clickHref: ""             // bo'sh qolsin (xohlasangiz /promo.html yoki telegram link)
+};
+const ADS_LIST = [
+  "ads/ad1.webp",
+  "ads/ad2.webp",
+  "ads/ad3.webp",
+  "ads/ad4.webp",
+  "ads/ad5.webp",
+  "ads/ad6.webp"
+];
+let __lastAdSrc = null;
+
+function getSessionAdCount(){
+  try{ return Number(sessionStorage.getItem("om_native_ads_count") || "0") || 0; }catch(e){ return 0; }
+}
+function incSessionAdCount(){
+  try{
+    const n = getSessionAdCount() + 1;
+    sessionStorage.setItem("om_native_ads_count", String(n));
+  }catch(e){}
+}
+function pickRandomAdNoRepeat(){
+  if(!ADS_LIST.length) return "";
+  let src = ADS_LIST[Math.floor(Math.random()*ADS_LIST.length)];
+  if(ADS_LIST.length > 1){
+    let guard = 0;
+    while(src === __lastAdSrc && guard < 8){
+      src = ADS_LIST[Math.floor(Math.random()*ADS_LIST.length)];
+      guard++;
+    }
+  }
+  __lastAdSrc = src;
+  return src;
+}
+function shouldInsertNativeAd(){
+  if(!NATIVE_ADS.enabled) return false;
+  if(getSessionAdCount() >= NATIVE_ADS.maxPerSession) return false;
+  if(Math.random() > NATIVE_ADS.probability) return false;
+  return true;
+}
+function createNativeAdCard(){
+  const ad = document.createElement("div");
+  ad.className = "pcard adCard";
+  const src = pickRandomAdNoRepeat();
+  ad.innerHTML = `
+    <div class="adMedia">
+      <img class="adImg" src="${src}" alt="Reklama" loading="lazy"/>
+      <div class="adBadge">Reklama</div>
+      <div class="adHint">Maxsus takliflar</div>
+    </div>
+  `;
+  ad.addEventListener("click", ()=>{
+    try{ logEvent("ad_view_click", src); }catch(e){}
+    if(NATIVE_ADS.clickHref){
+      window.location.href = NATIVE_ADS.clickHref;
+    }else{
+      // sukut bo'yicha hech qayerga yo'naltirmaymiz — bezovta qilmaydi
+      // istasangiz clickHref qo'ying (masalan: "/promo.html" yoki telegram link)
+    }
+  });
+  return ad;
+}
+
+
 function render(arr){
   els.grid.innerHTML = "";
   if (els.productsCount) {
@@ -1218,7 +1291,8 @@ function render(arr){
   }
   els.empty.hidden = arr.length !== 0;
 
-  for(const p of arr){
+  for(let __i=0; __i<arr.length; __i++){
+    const p = arr[__i];
     const card = document.createElement("div");
     card.className = "pcard";
 
@@ -1360,6 +1434,12 @@ const openQuickView = ()=>{
     });
 
     els.grid.appendChild(card);
+
+    // Native reklama: har N ta mahsulotdan keyin bazan-bazan ko'rsatamiz
+    if(((__i + 1) % NATIVE_ADS.every) === 0 && shouldInsertNativeAd()){
+      els.grid.appendChild(createNativeAdCard());
+      incSessionAdCount();
+    }
 
     // (variant selection is now handled in the modal on Add to Cart)
 
