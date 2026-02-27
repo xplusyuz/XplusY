@@ -428,7 +428,7 @@
 
       <div class="card" id="productsView">
         <div class="card-header">
-          <h3>Barcha mahsulotlar</h3>
+          <h3 id="productsTitle">Barcha mahsulotlar</h3>
           <div class="right-actions">
             <span class="muted" id="syncState">—</span>
             <button class="btn btn-light btn-sm" id="refreshBtn"><i class="fas fa-sync-alt"></i> Yangilash</button>
@@ -1107,7 +1107,13 @@ function nowISO(){ return new Date().toISOString().split("T")[0]; }
       const btn = document.getElementById("refreshBtn");
       try{
         if(btn){ btn.disabled=true; btn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Yangilash'; }
-        const snap = await getDocs(collection(db,"products"));
+        let snap;
+        // Vendor: faqat o'z mahsulotlarini ko'rsin
+        if(state.role === "vendor" && auth.currentUser){
+          snap = await getDocs(query(collection(db,"products"), where("ownerUid","==", auth.currentUser.uid)));
+        }else{
+          snap = await getDocs(collection(db,"products"));
+        }
         const items = snap.docs.map(d=> normalize({ id:d.id, ...d.data() }));
         // deterministic order: newest first if possible
         items.sort((a,b)=>{
@@ -1633,19 +1639,53 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
     }
 
     function genId(){
-      const nums=state.products.map(p=>String(p.id||"").replace(/^om/i,"")).map(s=>parseInt(s,10)).filter(n=>Number.isFinite(n));
+      // Admin mahsulotlari: om001, om002...
+      const nums=state.products
+        .map(p=>String(p.id||"").replace(/^om/i,""))
+        .map(s=>parseInt(s,10))
+        .filter(n=>Number.isFinite(n));
       const last=nums.length?Math.max(...nums):0;
       return "om"+String(last+1).padStart(3,"0");
     }
 
+    // Vendor prefix: aa, ab, ... az, ba, ... zz, aaa, aab...
+    function excelLetters(num){
+      const letters = "abcdefghijklmnopqrstuvwxyz";
+      let n = Math.max(1, Math.floor(Number(num)||1));
+      let s = "";
+      while(n>0){
+        const rem = (n-1) % 26;
+        s = letters[rem] + s;
+        n = Math.floor((n-1)/26);
+      }
+      return s;
+    }
+    function vendorPrefixForEmail(email){
+      const em = normEmail(email);
+      const idx = state.vendorEmails.map(normEmail).indexOf(em);
+      // start from 27 => "aa"
+      return excelLetters((idx>=0?idx:0) + 27);
+    }
+    function genVendorDocId(email){
+      const prefix = vendorPrefixForEmail(email);
+      const rand = Math.random().toString(36).slice(2,6);
+      const t = Date.now().toString(36);
+      return (prefix + t + rand).toLowerCase();
+    }
+
     async function saveProduct(){
       const user=auth.currentUser;
-      if(!isAdmin(user)) return toast("Admin emas: saqlab bo'lmaydi","error");
+      const isA = isAdmin(user);
+      const isV = isVendor(user);
+      if(!isA && !isV) return toast("Ruxsat yo‘q","error");
       const name=($("name").value||"").trim();
       const price=$("price").value;
       if(!name||!price) return toast("Nomi va narx shart","error");
 
-      const id=state.editingId || genId();
+      // ID policy:
+      // - Admin: om###
+      // - Vendor: aa..., ab..., ... based on vendor list order
+      const id=state.editingId || (isA ? genId() : genVendorDocId(user?.email||""));
 
       const tags=($("tagsInput").value||"").split(",").map(s=>s.trim()).filter(Boolean);
 
@@ -1691,6 +1731,19 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       prepayRequired: (document.getElementById('pType')?.value==='cargo'),
 };
 
+      // Marketplace fields
+      if(isV){
+        data.ownerUid = user.uid;
+        data.ownerEmail = normEmail(user.email);
+        // vendor create => pending; vendor edit => keep old status
+        if(!state.editingId){
+          data.status = "pending";
+        }
+      }else if(isA){
+        // admin create => approved by default
+        if(!state.editingId && !data.status) data.status = "approved";
+      }
+
       // clean empty
       Object.keys(data).forEach(k=>{
         const v=data[k];
@@ -1698,6 +1751,13 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       });
 
       try{
+        // Vendor edit protection (UI-level): only own product
+        if(isV && state.editingId){
+          const p0 = state.products.find(x=>x.id===state.editingId);
+          if(p0 && p0.ownerUid && p0.ownerUid !== user.uid){
+            return toast("Faqat o‘zingiz qo‘shgan mahsulotni tahrirlaysiz","error");
+          }
+        }
         await setDoc(doc(db,"products",id), data, { merge:true });
         toast(state.editingId?"Yangilandi":"Yangi mahsulot qo'shildi");
         closeModal("productModal");
@@ -1888,6 +1948,12 @@ $("currency").value=p.currency||"UZS";
           roleChip.textContent = isA ? "Admin" : "Sotuvchi";
           roleChip.className = "pill " + (isA ? "paid" : "pending");
         }
+      }catch(e){}
+
+      // Products title
+      try{
+        const pt = document.getElementById("productsTitle");
+        if(pt) pt.textContent = isA ? "Barcha mahsulotlar" : "Mening mahsulotlarim";
       }catch(e){}
 
       // Vendor bo'lsa: import/json export kabi admin-only tugmalarni yashiramiz
