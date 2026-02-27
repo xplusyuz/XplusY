@@ -1210,17 +1210,18 @@ function discountPct(price, oldPrice){
 
 
 
-/* ========= NATIVE ADS (Product list orasida) =========
-   Ads rasmlari: /ads papkaga joylanadi.
-   Bezovta qilmaslik uchun: har slotda ehtimollik va session limit ishlaydi.
-*/
+/* =========================
+   Native Ads (Product list orasida)
+   - Asabga tegmaydigan: ehtimollik + session limit
+   - Har N ta mahsulotdan keyin 1 ta reklama
+========================= */
 const NATIVE_ADS = {
   enabled: true,
-  every: 2,                 // har nechta mahsulotdan keyin
-  probability: 0.55,        // "bazan bazan" ko'rsatish uchun (0..1)
-  maxPerSession: 2,         // bitta sessiyada maksimum nechta reklama
-  clickHref: ""             // bo'sh qolsin (xohlasangiz /promo.html yoki telegram link)
+  every: 4,           // 6 ta mahsulot bo'lsa ham ko'rinsin
+  probability: 0.65,  // "bazan bazan"
+  maxPerSession: 2,   // bitta sessiyada ko'pi bilan
 };
+
 const ADS_LIST = [
   "ads/ad1.webp",
   "ads/ad2.webp",
@@ -1229,57 +1230,60 @@ const ADS_LIST = [
   "ads/ad5.webp",
   "ads/ad6.webp"
 ];
-let __lastAdSrc = null;
 
-function getSessionAdCount(){
-  try{ return Number(sessionStorage.getItem("om_native_ads_count") || "0") || 0; }catch(e){ return 0; }
+let __lastAd = null;
+function __nativeAdsShown(){
+  return Number(sessionStorage.getItem("nativeAdsShown") || "0") || 0;
 }
-function incSessionAdCount(){
+function __incNativeAdsShown(){
+  const n = __nativeAdsShown() + 1;
+  sessionStorage.setItem("nativeAdsShown", String(n));
+  return n;
+}
+function canShowNativeAd(){
   try{
-    const n = getSessionAdCount() + 1;
-    sessionStorage.setItem("om_native_ads_count", String(n));
-  }catch(e){}
-}
-function pickRandomAdNoRepeat(){
-  if(!ADS_LIST.length) return "";
-  let src = ADS_LIST[Math.floor(Math.random()*ADS_LIST.length)];
-  if(ADS_LIST.length > 1){
-    let guard = 0;
-    while(src === __lastAdSrc && guard < 8){
-      src = ADS_LIST[Math.floor(Math.random()*ADS_LIST.length)];
-      guard++;
-    }
+    if(!NATIVE_ADS.enabled) return false;
+    if(__nativeAdsShown() >= NATIVE_ADS.maxPerSession) return false;
+    if(Math.random() >= NATIVE_ADS.probability) return false;
+    return true;
+  }catch(e){
+    return false;
   }
-  __lastAdSrc = src;
-  return src;
 }
-function shouldInsertNativeAd(){
-  if(!NATIVE_ADS.enabled) return false;
-  if(getSessionAdCount() >= NATIVE_ADS.maxPerSession) return false;
-  if(Math.random() > NATIVE_ADS.probability) return false;
-  return true;
+function pickAdSrc(){
+  try{
+    if(!ADS_LIST.length) return null;
+    let src = ADS_LIST[Math.floor(Math.random() * ADS_LIST.length)];
+    // ketma-ket bir xil chiqmasin
+    if(__lastAd && ADS_LIST.length > 1){
+      let guard = 0;
+      while(src === __lastAd && guard++ < 8){
+        src = ADS_LIST[Math.floor(Math.random() * ADS_LIST.length)];
+      }
+    }
+    __lastAd = src;
+    return src;
+  }catch(e){
+    return null;
+  }
 }
 function createNativeAdCard(){
-  const ad = document.createElement("div");
-  ad.className = "pcard adCard";
-  const src = pickRandomAdNoRepeat();
+  const src = pickAdSrc();
+  if(!src) return null;
 
-  // Faqat to'liq rasm (card bilan bir xil razmerda) + bosganda kattalashadi
-  ad.innerHTML = `
-    <div class="adMedia">
-      <img class="adImg" src="${src}" alt="Reklama" loading="lazy"/>
-    </div>
+  const card = document.createElement("div");
+  card.className = "pcard adCard";
+  card.setAttribute("data-kind", "native-ad");
+  card.innerHTML = `
+    <img class="adImg" src="${src}" alt="Reklama" loading="lazy" />
   `;
 
-  ad.addEventListener("click", ()=>{
-    try{ logEvent("ad_view_click", src); }catch(e){}
-    // Default: rasmni kattalashtirish (popup emas, yengil zoom)
+  card.addEventListener("click", ()=>{
     openImageZoom(src);
   });
 
-  return ad;
+  return card;
 }
-
 
 function render(arr){
   els.grid.innerHTML = "";
@@ -1289,8 +1293,8 @@ function render(arr){
   }
   els.empty.hidden = arr.length !== 0;
 
-  for(let __i=0; __i<arr.length; __i++){
-    const p = arr[__i];
+  let __i = 0;
+  for(const p of arr){
     const card = document.createElement("div");
     card.className = "pcard";
 
@@ -1433,15 +1437,31 @@ const openQuickView = ()=>{
 
     els.grid.appendChild(card);
 
-    // Native reklama: har N ta mahsulotdan keyin bazan-bazan ko'rsatamiz
-    if(((__i + 1) % NATIVE_ADS.every) === 0 && shouldInsertNativeAd()){
-      els.grid.appendChild(createNativeAdCard());
-      incSessionAdCount();
-    }
+// Native banner (reklama): har N ta mahsulotdan keyin (bazan-bazan), session limit bilan
+__i++;
+if((__i % NATIVE_ADS.every) === 0 && canShowNativeAd()){
+  const adCard = createNativeAdCard();
+  if(adCard){
+    els.grid.appendChild(adCard);
+    __incNativeAdsShown();
+  }
+}
 
     // (variant selection is now handled in the modal on Add to Cart)
 
   }
+// Agar mahsulot kam bo'lsa ham (N dan kam) — oxirida 1 ta native reklama (bazan-bazan)
+try{
+  const n = Array.isArray(arr) ? arr.length : 0;
+  if(n > 0 && n < NATIVE_ADS.every && canShowNativeAd()){
+    const adCard = createNativeAdCard();
+    if(adCard){
+      els.grid.appendChild(adCard);
+      __incNativeAdsShown();
+    }
+  }
+}catch(e){}
+
 }
 
 

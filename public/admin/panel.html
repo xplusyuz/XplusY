@@ -982,6 +982,34 @@
       if(o.imagesByColor && typeof o.imagesByColor !== "object") delete o.imagesByColor;
       return o;
     }
+
+    async function fetchProducts(){
+      const btn = document.getElementById("refreshBtn");
+      try{
+        if(btn){ btn.disabled=true; btn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Yangilash'; }
+        const snap = await getDocs(collection(db,"products"));
+        const items = snap.docs.map(d=> normalize({ id:d.id, ...d.data() }));
+        // deterministic order: newest first if possible
+        items.sort((a,b)=>{
+          const ad = a.updatedAt?.seconds ? a.updatedAt.seconds : (a.updatedAt?.toDate? (a.updatedAt.toDate().getTime()/1000): 0);
+          const bd = b.updatedAt?.seconds ? b.updatedAt.seconds : (b.updatedAt?.toDate? (b.updatedAt.toDate().getTime()/1000): 0);
+          if(bd!==ad) return bd-ad;
+          return String(a.id||"").localeCompare(String(b.id||""));
+        });
+        state.products = items;
+        renderTable();
+        renderStats();
+        try{ renderStatsPanels(); }catch(e){}
+        return items;
+      }catch(e){
+        console.error(e);
+        toast("Mahsulotlarni yuklashda xatolik: "+(e.message||e), "error");
+        return [];
+      }finally{
+        if(btn){ btn.disabled=false; btn.innerHTML = '<i class="fas fa-rotate"></i> Yangilash'; }
+      }
+    }
+
     // Fulfillment pill (Mahsulot turi: stock / cargo)
     function renderFulfillmentPill(p){
       try{
