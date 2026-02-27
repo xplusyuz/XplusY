@@ -1216,7 +1216,7 @@ function discountPct(price, oldPrice){
 */
 const NATIVE_ADS = {
   enabled: true,
-  every: 2,                 // har nechta mahsulotdan keyin
+  every: 8,                 // har nechta mahsulotdan keyin
   probability: 0.55,        // "bazan bazan" ko'rsatish uchun (0..1)
   maxPerSession: 2,         // bitta sessiyada maksimum nechta reklama
   clickHref: ""             // bo'sh qolsin (xohlasangiz /promo.html yoki telegram link)
@@ -1263,22 +1263,20 @@ function createNativeAdCard(){
   const ad = document.createElement("div");
   ad.className = "pcard adCard";
   const src = pickRandomAdNoRepeat();
+
+  // Faqat to'liq rasm (card bilan bir xil razmerda) + bosganda kattalashadi
   ad.innerHTML = `
     <div class="adMedia">
       <img class="adImg" src="${src}" alt="Reklama" loading="lazy"/>
-      <div class="adBadge">Reklama</div>
-      <div class="adHint">Maxsus takliflar</div>
     </div>
   `;
+
   ad.addEventListener("click", ()=>{
     try{ logEvent("ad_view_click", src); }catch(e){}
-    if(NATIVE_ADS.clickHref){
-      window.location.href = NATIVE_ADS.clickHref;
-    }else{
-      // sukut bo'yicha hech qayerga yo'naltirmaymiz — bezovta qilmaydi
-      // istasangiz clickHref qo'ying (masalan: "/promo.html" yoki telegram link)
-    }
+    // Default: rasmni kattalashtirish (popup emas, yengil zoom)
+    openImageZoom(src);
   });
+
   return ad;
 }
 
