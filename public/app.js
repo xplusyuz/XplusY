@@ -2460,10 +2460,19 @@ async function openMini(kind, productId){
 }
 
 function closeMini(){
+  // Stop any playing media (YouTube iframe) to prevent audio after close
+  try{
+    const ifr = els?.miniBody ? els.miniBody.querySelector("iframe") : null;
+    if(ifr){
+      ifr.src = "about:blank";
+      ifr.remove();
+    }
+  }catch(e){}
   miniState.open = false;
   cleanupMiniSubs();
   hideOverlay(els.miniModal);
 }
+
 
 window.openMini = openMini;
 window.closeMini = closeMini;
