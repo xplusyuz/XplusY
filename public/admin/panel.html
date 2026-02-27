@@ -314,6 +314,13 @@
     .order-total .v{font-size:1.05rem;font-weight:900;color:var(--primary)}
     .order-open{white-space:nowrap}
 
+
+    /* Topup & Turnover cards */
+    .topup-card .order-status-wrap .v,
+    .turnover-card .order-status-wrap .v{display:flex;align-items:center;justify-content:flex-end}
+    .topup-card .order-card-bottom .btn,
+    .turnover-card .order-card-bottom .btn{border-radius:12px}
+
 </style>
   <script src="../telegram-config.js"></script>
 </head>
@@ -398,7 +405,7 @@
           <div class="form-row" style="margin-bottom:0">
             <div class="form-group" style="min-width:220px">
               <label>Qidiruv</label>
-              <input id="ordersSearch" class="form-control" placeholder="ID / UID / telefon / manzil">
+              <input id="ordersSearch" class="form-control" placeholder="ID / foydalanuvchi ID / telefon / manzil">
             </div>
             <div class="form-group" style="min-width:180px">
               <label>Holat</label>
@@ -476,7 +483,7 @@
           <div class="form-row" style="margin-bottom:0">
             <div class="form-group" style="min-width:240px">
               <label>Qidiruv</label>
-              <input id="topupReqSearch" class="form-control" placeholder="ID / UID / numericId / karta oxiri">
+              <input id="topupReqSearch" class="form-control" placeholder="ID / foydalanuvchi ID / telefon / karta oxiri">
             </div>
             <div class="form-group" style="min-width:180px">
               <label>Holat</label>
@@ -501,7 +508,15 @@
           </div>
         </div>
 
-        <div class="table-container">
+        
+        <div class="orders-grid" id="topupReqCards"></div>
+        <div class="empty-state" id="topupReqEmpty" style="display:none">
+          <i class="fas fa-circle-plus"></i>
+          <h3>So‘rovlar yo‘q</h3>
+          <p>Hozircha balans to‘ldirish so‘rovlari kelmagan.</p>
+        </div>
+
+<div class="table-container">
           <table id="topupReqTable">
             <thead>
               <tr>
@@ -542,7 +557,7 @@
             <div class="stat-card"><div class="stat-icon price"><i class="fas fa-circle-plus"></i></div><div class="stat-info"><h3 id="turnoverTopup">0</h3><p>Balans to‘ldirish (to‘langan) jami</p></div></div>
             <div class="stat-card"><div class="stat-icon total"><i class="fas fa-bag-shopping"></i></div><div class="stat-info"><h3 id="turnoverSales">0</h3><p>Sotuv (to‘langan) jami</p></div></div>
             <div class="stat-card"><div class="stat-icon popular"><i class="fas fa-receipt"></i></div><div class="stat-info"><h3 id="turnoverCount">0</h3><p>Tranzaksiya soni</p></div></div>
-            <div class="stat-card"><div class="stat-icon tags"><i class="fas fa-users"></i></div><div class="stat-info"><h3 id="turnoverUsers">0</h3><p>Unique user</p></div></div>
+            <div class="stat-card"><div class="stat-icon tags"><i class="fas fa-users"></i></div><div class="stat-info"><h3 id="turnoverUsers">0</h3><p>Unikal foydalanuvchi</p></div></div>
           </div>
 
           <div class="form-row" style="margin-bottom:10px">
@@ -578,12 +593,20 @@
             </div>
           </div>
 
+
+          <div class="orders-grid" id="turnoverCards"></div>
+          <div class="empty-state" id="turnoverEmpty" style="display:none">
+            <i class="fas fa-wallet"></i>
+            <h3>Ma’lumot yo‘q</h3>
+            <p>Hisob aylanmasi bo‘yicha hozircha yozuvlar topilmadi.</p>
+          </div>
+
           <div class="table-container">
             <table id="turnoverTable">
               <thead>
                 <tr>
-                  <th>Order ID</th>
-                  <th>UID / ID</th>
+                  <th>Tranzaksiya ID</th>
+                  <th>Foydalanuvchi ID</th>
                   <th>Tur</th>
                   <th>Holat</th>
                   <th>To‘lov</th>
@@ -597,7 +620,7 @@
           </div>
 
           <div class="muted" style="margin-top:10px">
-            * Bu bo2018lim /orders kolleksiyasidan o2018qib, topup va checkout aylanmasini ko2018rsatadi.
+            * Bu bo‘lim /orders va /topup_requests kolleksiyalaridan o‘qib, top-up va sotuv aylanmasini ko‘rsatadi.
           </div>
         </div>
       
@@ -1079,16 +1102,21 @@
         return dbt - da;
       });
 
-      state.turnoverAll = merged;
-
-      const loaded = merged.length;
-      $("turnoverState").textContent = `Loaded: ${loaded}`;
-      renderTurnover();
+      (async()=>{
+        state.turnoverAll = await enrichTurnoverWithUsers(merged);
+        const loaded = (state.turnoverAll||[]).length;
+        $("turnoverState").textContent = `${loaded} ta yuklandi`;
+        renderTurnover();
+      })();
     }
 
     function renderTurnover(){
       const tbody = $("turnoverTbody");
-      if(!tbody) return;
+      const cards = $("turnoverCards");
+      const empty = $("turnoverEmpty");
+      if(tbody) tbody.innerHTML = "";
+      if(cards) cards.innerHTML = "";
+      if(!tbody && !cards) return;
 
       const q = String($("turnoverSearch")?.value||"").trim().toLowerCase();
       const type = String($("turnoverType")?.value||"all");
@@ -1115,7 +1143,10 @@
 
         if(q){
           const hay = [
-            o.id, o.orderId, o.uid, o.numericId, o.userName, o.userPhone, o.provider
+            o.id, o.orderId,
+            o.userPublicId, o.numericId, o.uid,
+            o.userName, o.userPhone,
+            o.provider, o.orderType, o.status
           ].map(x=>String(x||"").toLowerCase()).join(" ");
           if(!hay.includes(q)) return false;
         }
@@ -1141,53 +1172,83 @@
       $("turnoverCount").textContent = String(filtered.length);
       $("turnoverUsers").textContent = String(uids.size);
 
-      // rows
-      tbody.innerHTML = "";
+      if(empty) empty.style.display = filtered.length ? "none" : "block";
+
+      // cards + table
       if(!filtered.length){
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+        if(tbody){
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Hech narsa topilmadi</td></tr>`;
+        }
         return;
       }
 
       for(const o of filtered){
         const ot = String(o.orderType||"checkout").toLowerCase();
         const st = String(o.status||"").toLowerCase();
-        const pill = `<span class="pill ${escapeHtml(st||"pending")}">${escapeHtml(st||"pending")}</span>`;
+        const stLabel = statusUZ(st) || st;
+        const pill = `<span class="badge" style="background:#2E8B5710;color:#2E8B57;border:1px solid #2E8B5730">${escapeHtml(stLabel)}</span>`;
         const when = escapeHtml(formatTS(o.createdAt));
         const sum = Number(o.totalUZS||0).toLocaleString();
+        const userId = escapeHtml(String(o.userPublicId || o.numericId || o.uid || "—"));
+        const phone = escapeHtml(String(o.userPhone || "—"));
+        const prov = providerUZ(String(o.provider||"")) || String(o.provider||"");
+
         const canAct = (o.__src==="topup_requests") && (st==="pending");
         const actions = canAct ? `
           <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn btn-sm btn-success" data-act="approve" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-check"></i></button>
-            <button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(o.orderId||o.id||"")}"><i class="fas fa-times"></i></button>
-          </div>
-        ` : `<span class="muted">—</span>`;
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td><code>${escapeHtml(o.orderId||o.id||"")}</code></td>
-            <td><div class="truncate">${escapeHtml(o.uid||"")} ${o.numericId?`<span class="muted">/ ${escapeHtml(o.numericId)}</span>`:""}</div></td>
-            <td>${escapeHtml(ot==="topup"?"topup":"checkout")}</td>
+            <button class="btn btn-sm btn-success" data-topup-act="approve" data-topup-id="${escapeHtml(String(o.id||o.orderId||''))}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
+            <button class="btn btn-sm btn-danger" data-topup-act="cancel" data-topup-id="${escapeHtml(String(o.id||o.orderId||''))}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
+          </div>` : '—';
+
+        // Cards UI
+        if(cards){
+          const div = document.createElement("div");
+          div.className = "order-card turnover-card";
+          div.innerHTML = `
+            <div class="order-card-top">
+              <div class="order-id">
+                <div class="k">${ot==="topup"?"Top-up":"Buyurtma"}</div>
+                <div class="v"><code>${escapeHtml(String(o.orderId||o.id||''))}</code></div>
+              </div>
+              <div class="order-status-wrap">
+                <div class="k">Holat</div>
+                <div class="v">${pill}</div>
+              </div>
+            </div>
+
+            <div class="order-card-mid">
+              <div class="order-chip"><span class="k">Foydalanuvchi ID</span><span class="v"><span class="mono truncate" title="${userId}">${userId}</span></span></div>
+              <div class="order-chip"><span class="k">Telefon</span><span class="v">${phone}</span></div>
+              <div class="order-chip"><span class="k">To‘lov</span><span class="v">${escapeHtml(String(prov||"—"))}</span></div>
+              <div class="order-chip"><span class="k">Vaqt</span><span class="v">${when}</span></div>
+            </div>
+
+            <div class="order-card-bottom" style="align-items:center">
+              <div class="order-total">
+                <div class="k">Summa</div>
+                <div class="v">${escapeHtml(sum)} <span class="muted">so‘m</span></div>
+              </div>
+              <div>${actions}</div>
+            </div>
+          `;
+          cards.appendChild(div);
+        }
+
+        // Table row
+        if(tbody){
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><code>${escapeHtml(String(o.orderId||o.id||''))}</code></td>
+            <td>${userId}<div class="muted" style="font-size:12px">${phone}</div></td>
+            <td>${escapeHtml(ot==="topup"?"Top-up":"Buyurtma")}</td>
             <td>${pill}</td>
-            <td>${escapeHtml(o.provider||"")}</td>
-            <td><b>${sum}</b> so‘m</td>
+            <td>${escapeHtml(String(prov||"—"))}</td>
+            <td><b>${escapeHtml(sum)}</b> so‘m</td>
             <td>${when}</td>
             <td>${actions}</td>
-          </tr>
-        `);
-      }
-    }
-
-    async function fetchProducts(){
-      try{
-        $("syncState").textContent="Yuklanmoqda...";
-        const snap = await getDocs(query(collection(db,"products"), orderBy("createdAt","desc")));
-      state.products = snap.docs.map(d=>normalize({ id:d.id, ...d.data() }));
-      renderTable();
-      renderStats();
-      $("syncState").textContent="Synced: "+new Date().toLocaleTimeString();
-      }catch(e){
-        console.error(e);
-        $("syncState").textContent="Xato: yuklab bo'lmadi";
-        toast("Firestore o'qishda xato: "+(e?.message||e), "error");
+          `;
+          tbody.appendChild(tr);
+        }
       }
     }
 
@@ -1836,6 +1897,117 @@ function statusUZ(s){
 
     // ===== Orders (Admin) =====
     let ordersUnsub = null;
+    let userInfoCache = new Map(); // uid -> {publicId, phone, name}
+    let userInfoPending = new Map(); // uid -> Promise
+
+    function pickUserPublicId(u, fallbackUid){
+      if(!u) return fallbackUid || "—";
+      return String(u.numericId || u.omId || u.OMId || u.userId || u.publicId || u.id || fallbackUid || "—");
+    }
+    function pickUserPhone(u){
+      if(!u) return "";
+      return String(u.phone || u.phoneNumber || u.tel || u.telefon || u.mobile || "");
+    }
+    function pickUserName(u){
+      if(!u) return "";
+      return String(u.name || u.displayName || u.fullName || "");
+    }
+
+    async function getUserInfoByUid(uid){
+      const id = String(uid||"").trim();
+      if(!id) return null;
+      if(userInfoCache.has(id)) return userInfoCache.get(id);
+      if(userInfoPending.has(id)) return await userInfoPending.get(id);
+      const prom = (async()=>{
+        try{
+          const ref = doc(db, "users", id);
+          const snap = await getDoc(ref);
+          if(!snap.exists()){
+            const info = { publicId:id, phone:"", name:"" };
+            userInfoCache.set(id, info);
+            return info;
+          }
+          const u = snap.data()||{};
+          const info = { publicId: pickUserPublicId(u, id), phone: pickUserPhone(u), name: pickUserName(u) };
+          userInfoCache.set(id, info);
+          return info;
+        }catch(e){
+          console.warn("getUserInfoByUid error", e);
+          const info = { publicId:id, phone:"", name:"" };
+          userInfoCache.set(id, info);
+          return info;
+        }finally{
+          try{ userInfoPending.delete(id);}catch(_e){}
+        }
+      })();
+      userInfoPending.set(id, prom);
+      return await prom;
+    }
+
+    async function enrichOrdersWithUsers(list){
+      if(!db) return list;
+      const arr = Array.isArray(list) ? list : [];
+      const uids = [...new Set(arr.map(o=>String(o.uid||"").trim()).filter(Boolean))];
+      // fetch missing uids with a small concurrency limit
+      const missing = uids.filter(uid=>!userInfoCache.has(uid));
+      const limitN = 10;
+      for(let i=0;i<missing.length;i+=limitN){
+        const batch = missing.slice(i, i+limitN);
+        await Promise.all(batch.map(uid=>getUserInfoByUid(uid)));
+      }
+      return arr.map(o=>{
+        const uid = String(o.uid||"").trim();
+        const info = uid ? userInfoCache.get(uid) : null;
+        return {
+          ...o,
+          userPublicId: info?.publicId || (o.numericId || o.userId || uid || ""),
+          userPhone: o.userPhone || o.phone || info?.phone || "",
+          userName: o.userName || info?.name || ""
+        };
+      });
+    }
+
+    async function enrichTopupReqWithUsers(list){
+      const arr = Array.isArray(list) ? list : [];
+      const uids = [...new Set(arr.map(r=>String(r.uid||"").trim()).filter(Boolean))];
+      const missing = uids.filter(uid=>!userInfoCache.has(uid));
+      const limitN = 10;
+      for(let i=0;i<missing.length;i+=limitN){
+        const batch = missing.slice(i, i+limitN);
+        await Promise.all(batch.map(uid=>getUserInfoByUid(uid)));
+      }
+      return arr.map(r=>{
+        const uid = String(r.uid||"").trim();
+        const info = uid ? userInfoCache.get(uid) : null;
+        return {
+          ...r,
+          userPublicId: r.userPublicId || info?.publicId || (r.numericId || uid || ""),
+          userPhone: r.userPhone || r.phone || info?.phone || "",
+          userName: r.userName || info?.name || ""
+        };
+      });
+    }
+    async function enrichTurnoverWithUsers(list){
+      const arr = Array.isArray(list) ? list : [];
+      const uids = [...new Set(arr.map(o=>String(o.uid||"").trim()).filter(Boolean))];
+      const missing = uids.filter(uid=>!userInfoCache.has(uid));
+      const limitN = 10;
+      for(let i=0;i<missing.length;i+=limitN){
+        const batch = missing.slice(i, i+limitN);
+        await Promise.all(batch.map(uid=>getUserInfoByUid(uid)));
+      }
+      return arr.map(o=>{
+        const uid = String(o.uid||"").trim();
+        const info = uid ? userInfoCache.get(uid) : null;
+        const publicId = o.userPublicId || o.numericId || (info?.publicId || uid || "");
+        const phone = o.userPhone || o.phone || (info?.phone || "");
+        const name = o.userName || (info?.name || "");
+        return { ...o, userPublicId: publicId, numericId: o.numericId || publicId, userPhone: phone, userName: name };
+      });
+    }
+
+
+
     let ordersCache = [];
 
     let ordersById = new Map();
@@ -1877,9 +2049,10 @@ function statusUZ(s){
     function getOrderSearchBlob(o){
       const ship = o.shipping || {};
       const addr = ship.addressText || o.addressText || o.address || "";
-      const phone = o.phone || ship.phone || "";
+      const phone = o.phone || ship.phone || o.userPhone || "";
+      const pub = o.userPublicId || o.numericId || o.userId || "";
       return [
-        o.id, o.uid, o.status, o.provider, o.paymentType, formatProvider(o),
+        o.id, pub, o.uid, o.status, o.provider, o.paymentType, formatProvider(o),
         addr, phone,
         Array.isArray(o.items)? o.items.map(it=>it.name||it.title||it.id).join(" ") : ""
       ].join(" ").toLowerCase();
@@ -1932,13 +2105,13 @@ function statusUZ(s){
 
       const ship = order.shipping || {};
       const addr = ship.addressText || order.addressText || order.address || "—";
-      const phone = ship.phone || order.phone || "—";
+      const phone = ship.phone || order.phone || order.userPhone || "—";
       const lat = ship.lat ?? order.lat ?? ship.latitude ?? null;
       const lng = ship.lng ?? order.lng ?? ship.longitude ?? null;
 
       $("orderKv").innerHTML = [
         kvRow("ID", order.id||""),
-        kvRow("UID", order.uid||"—"),
+        kvRow("Foydalanuvchi ID", order.userPublicId || order.numericId || order.userId || "—"),
         kvRow("Holat", ""),
         kvRow("To‘lov", providerUZ(formatProvider(order))||"—"),
         kvRow("Summa", Number(order.totalUZS||0).toLocaleString()+" so‘m"),
@@ -2047,6 +2220,7 @@ function statusUZ(s){
 
         const oid = escapeHtml(o.id||"");
         const uid = escapeHtml(o.uid||"");
+        const pub = escapeHtml(o.userPublicId || o.numericId || o.userId || o.uid || "");
         const prov = providerUZ(formatProvider(o));
         const created = escapeHtml(formatTS(o.createdAt));
         const total = Number(o.totalUZS||0).toLocaleString();
@@ -2071,7 +2245,7 @@ function statusUZ(s){
             </div>
 
             <div class="order-card-mid">
-              <div class="order-chip"><span class="k">Foydalanuvchi</span><span class="v">${uid?`<span class="mono truncate" title="${uid}">${uid}</span>`:"—"}</span></div>
+              <div class="order-chip"><span class="k">Foydalanuvchi</span><span class="v">${pub?`<span class="mono truncate" title="${pub}">${pub}</span>`:"—"}</span></div>
               <div class="order-chip"><span class="k">To‘lov</span><span class="v">${escapeHtml(prov||"—")}</span></div>
               <div class="order-chip"><span class="k">Tovarlar</span><span class="v">${itemsCount} ta</span></div>
               <div class="order-chip"><span class="k">Vaqt</span><span class="v">${created}</span></div>
@@ -2095,7 +2269,7 @@ function statusUZ(s){
           tr.dataset.oid = o.id || "";
           tr.innerHTML = `
             <td><code>${oid}</code></td>
-            <td style="max-width:220px"><div class="truncate">${uid}</div></td>
+            <td style="max-width:220px"><div class="truncate">${pub}</div></td>
             <td>
               <select class="statusSel" data-oid="${oid}" data-uid="${uid}" style="min-width:150px">
                 ${["pending","pending_payment","paid","delivered","cancelled"].map(s=>`<option value="${s}" ${String(o.status||"pending")==s?"selected":""}>${statusUZ(s)}</option>`).join("")}
@@ -2212,8 +2386,11 @@ function statusUZ(s){
       $("ordersState").textContent = "Yuklanmoqda...";
       const qy = query(collection(db, "orders"), orderBy("createdAt", "desc"), limit(200));
       ordersUnsub = onSnapshot(qy, (snap)=>{
-        ordersCache = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        applyOrdersFilters();
+        const raw = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        (async()=>{
+          ordersCache = await enrichOrdersWithUsers(raw);
+          applyOrdersFilters();
+        })();
       }, (err)=>{
         console.warn("orders admin subscribe error", err);
         $("ordersState").textContent = "Xatolik (index / rules)";
@@ -2291,35 +2468,90 @@ function topupBadge(status){
 
 function renderTopupReq(list){
   const tb = $("topupReqTbody");
-  if(!tb) return;
-  tb.innerHTML = "";
-  $("topupReqState").textContent = list.length ? `${list.length} ta` : "—";
-  for(const r of list.slice(0,300)){
-    const tr = document.createElement('tr');
+  const cards = $("topupReqCards");
+  const empty = $("topupReqEmpty");
+  if(tb) tb.innerHTML = "";
+  if(cards) cards.innerHTML = "";
+
+  const arr = Array.isArray(list) ? list : [];
+  $("topupReqState").textContent = arr.length ? `${arr.length} ta so‘rov` : "—";
+  if(empty) empty.style.display = arr.length ? "none" : "block";
+
+  for(const r of arr.slice(0,300)){
     const id = String(r.id||'');
-    const user = String(r.numericId || r.uid || '');
-    const amt = Number(r.amountUZS||0).toLocaleString() + " so‘m";
+    const userId = String(r.userPublicId || r.numericId || r.uid || '—');
+    const phone = String(r.userPhone || r.phone || '—');
+    const amtNum = Number(r.amountUZS||0);
+    const amt = amtNum.toLocaleString() + " so‘m";
     const card = String(r.payerCardMasked || (r.payerCardLast4 ? ('**** '+r.payerCardLast4) : '—'));
-    const receipt = r.receiptUrl ? `<a href="${escapeHtml(r.receiptUrl)}" target="_blank" rel="noopener">Ochish</a>` : '—';
+    const receiptLink = r.receiptUrl ? r.receiptUrl : "";
     const time = topupTimeStr(r.createdAt);
-    let act = '—';
-    if(String(r.status||'pending')==='pending'){
-      act = `
-        <button class="btn btn-sm btn-success" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
-        <button class="btn btn-sm btn-danger" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
+    const badge = topupStatusBadge(r.status);
+
+    // Cards UI
+    if(cards){
+      const div = document.createElement("div");
+      div.className = "order-card topup-card";
+      div.dataset.topupId = id;
+      div.innerHTML = `
+        <div class="order-card-top">
+          <div class="order-id">
+            <div class="k">So‘rov</div>
+            <div class="v"><code>${escapeHtml(id)}</code></div>
+          </div>
+          <div class="order-status-wrap">
+            <div class="k">Holat</div>
+            <div class="v">${badge}</div>
+          </div>
+        </div>
+
+        <div class="order-card-mid">
+          <div class="order-chip"><span class="k">Foydalanuvchi ID</span><span class="v"><span class="mono truncate" title="${escapeHtml(userId)}">${escapeHtml(userId)}</span></span></div>
+          <div class="order-chip"><span class="k">Telefon</span><span class="v">${escapeHtml(phone)}</span></div>
+          <div class="order-chip"><span class="k">Karta</span><span class="v">${escapeHtml(card)}</span></div>
+          <div class="order-chip"><span class="k">Vaqt</span><span class="v">${escapeHtml(time)}</span></div>
+        </div>
+
+        <div class="order-card-bottom" style="align-items:center">
+          <div class="order-total">
+            <div class="k">Summa</div>
+            <div class="v">${escapeHtml(amt)}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${receiptLink ? `<a class="btn btn-light btn-sm" href="${escapeHtml(receiptLink)}" target="_blank" rel="noopener"><i class="fas fa-receipt"></i> Chek</a>` : `<span class="muted">Chek yo‘q</span>`}
+            ${String(r.status||'pending')==='pending' ? `
+              <button class="btn btn-success btn-sm" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
+              <button class="btn btn-danger btn-sm" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
+            ` : ``}
+          </div>
+        </div>
       `;
+      cards.appendChild(div);
     }
-    tr.innerHTML = `
-      <td><code>${escapeHtml(id)}</code></td>
-      <td>${escapeHtml(user)}</td>
-      <td><b>${escapeHtml(amt)}</b></td>
-      <td>${escapeHtml(card)}</td>
-      <td>${topupBadge(r.status)}</td>
-      <td>${receipt}</td>
-      <td>${escapeHtml(time)}</td>
-      <td>${act}</td>
-    `;
-    tb.appendChild(tr);
+
+    // Legacy table
+    if(tb){
+      const tr = document.createElement('tr');
+      const receipt = receiptLink ? `<a href="${escapeHtml(receiptLink)}" target="_blank" rel="noopener">Ochish</a>` : '—';
+      let act = '—';
+      if(String(r.status||'pending')==='pending'){
+        act = `
+          <button class="btn btn-sm btn-success" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
+          <button class="btn btn-sm btn-danger" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
+        `;
+      }
+      tr.innerHTML = `
+        <td><code>${escapeHtml(id)}</code></td>
+        <td>${escapeHtml(userId)}<div class="muted" style="font-size:12px">${escapeHtml(phone)}</div></td>
+        <td><b>${escapeHtml(amt)}</b></td>
+        <td>${escapeHtml(card)}</td>
+        <td>${badge}</td>
+        <td>${receipt}</td>
+        <td>${escapeHtml(time)}</td>
+        <td>${act}</td>
+      `;
+      tb.appendChild(tr);
+    }
   }
 }
 
@@ -2334,7 +2566,7 @@ function applyTopupReqFilters(){
   const out = (topupReqCache||[]).filter(r=>{
     if(st && String(r.status||'') !== st) return false;
     if(q){
-      const hay = `${r.id||''} ${r.uid||''} ${r.numericId||''} ${r.payerCardLast4||''}`.toLowerCase();
+      const hay = `${r.id||''} ${r.userPublicId||''} ${r.numericId||''} ${r.userPhone||''} ${r.phone||''} ${r.payerCardLast4||''}`.toLowerCase();
       if(!hay.includes(q)) return false;
     }
     if(from || to){
@@ -2355,8 +2587,11 @@ function subscribeTopupReq(){
   $('topupReqState').textContent = 'Yuklanmoqda...';
   const qy = query(collection(db,'topup_requests'), orderBy('createdAt','desc'), limit(200));
   topupReqUnsub = onSnapshot(qy, (snap)=>{
-    topupReqCache = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-    applyTopupReqFilters();
+    const raw = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    (async()=>{
+      topupReqCache = await enrichTopupReqWithUsers(raw);
+      applyTopupReqFilters();
+    })();
   }, (err)=>{
     console.warn('topup_requests subscribe error', err);
     $('topupReqState').textContent = 'Xatolik (rules/index)';
