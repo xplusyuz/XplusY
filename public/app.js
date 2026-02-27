@@ -1218,8 +1218,8 @@ function discountPct(price, oldPrice){
 const NATIVE_ADS = {
   enabled: true,
   every: 4,           // 6 ta mahsulot bo'lsa ham ko'rinsin
-  probability: 0.65,  // "bazan bazan"
-  maxPerSession: 2,   // bitta sessiyada ko'pi bilan
+  probability: 1.0,   // doim chiqadi
+  maxPerSession: 9999, // cheklov yo‘q (deyarli)
 };
 
 const ADS_LIST = [
