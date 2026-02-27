@@ -122,7 +122,7 @@
       </div>
       <div>
         <h1>OrzuMall Boshqaruv paneli</h1>
-        <p>Foydalanish yopiq. Faqat <b>sohibjonmath@gmail.com</b> gmail bilan kirish mumkin.</p>
+        <p>Foydalanish yopiq. Faqat <b>admin</b> yoki <b>sotuvchi (vendor)</b> gmail ro‘yxatida bo‘lganlar kira oladi.</p>
       </div>
     </div>
 
@@ -138,69 +138,121 @@
   </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-    const ADMIN_EMAIL = "sohibjonmath@gmail.com";
-    // Firebase config (hardcoded) — loop bo‘lmasligi uchun panel bilan 1 xil
-    const cfg = {
-  "apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-  "authDomain": "xplusy-760fa.firebaseapp.com",
-  "databaseURL": "https://xplusy-760fa-default-rtdb.firebaseio.com",
-  "projectId": "xplusy-760fa",
-  "storageBucket": "xplusy-760fa.firebasestorage.app",
-  "messagingSenderId": "992512966017",
-  "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80",
-  "measurementId": "G-459PLJ7P7L"
-};
-    const app = initializeApp(cfg);
-    const auth = getAuth(app);
+  const DEFAULT_ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
 
-    setPersistence(auth, browserLocalPersistence).catch(()=>{});
+  // Firebase config (hardcoded) — panel bilan bir xil
+  const cfg = {
+    "apiKey": "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+    "authDomain": "xplusy-760fa.firebaseapp.com",
+    "databaseURL": "https://xplusy-760fa-default-rtdb.firebaseio.com",
+    "projectId": "xplusy-760fa",
+    "storageBucket": "xplusy-760fa.firebasestorage.app",
+    "messagingSenderId": "992512966017",
+    "appId": "1:992512966017:web:5e919dbc9b8d8abcb43c80",
+    "measurementId": "G-459PLJ7P7L"
+  };
 
-    const btn = document.getElementById("btn");
-    const err = document.getElementById("err");
+  const app = initializeApp(cfg);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
 
-    function showError(msg) {
-      err.style.display = "block";
-      err.textContent = msg;
-    }
+  setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
-    onAuthStateChanged(auth, async (user)=>{
-      if (user && user.email && user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
-        location.replace("./panel.html");
-      }
-      if (user && (!user.email || user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase())) {
-        try { await signOut(auth); } catch(e){}
-      }
+  const btn = document.getElementById("btn");
+  const err = document.getElementById("err");
+
+  function normEmail(e){ return String(e||"").toLowerCase().trim(); }
+  function uniqEmails(arr){
+    const out=[]; const seen=new Set();
+    (arr||[]).forEach(x=>{
+      const v=normEmail(x);
+      if(v && !seen.has(v)){ seen.add(v); out.push(v); }
     });
+    return out;
+  }
 
-    btn.addEventListener("click", async () => {
-      err.style.display = "none";
-      btn.disabled = true;
-      btn.textContent = "Kutilmoqda...";
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
-        const res = await signInWithPopup(auth, provider);
+  function showError(msg) {
+    err.style.display = "block";
+    err.textContent = msg;
+  }
 
-        if (!res?.user?.email || res.user.email.toLowerCase().trim() !== ADMIN_EMAIL.toLowerCase()) {
-          await signOut(auth);
-          showError("Ruxsat yo‘q. Faqat admin gmail ishlaydi.");
-          btn.disabled = false;
-          btn.textContent = "Google orqali kirish";
-          return;
-        }
+  async function loadAllowLists(){
+    let admins = [...DEFAULT_ADMIN_EMAILS];
+    let vendors = [];
+    try{
+      const aSnap = await getDoc(doc(db,"configs","admins"));
+      if(aSnap.exists()) admins = uniqEmails([ ...admins, ...(aSnap.data().emails||[]) ]);
+    }catch(e){ /* ignore */ }
 
+    try{
+      const vSnap = await getDoc(doc(db,"configs","vendors"));
+      if(vSnap.exists()) vendors = uniqEmails(vSnap.data().emails||[]);
+    }catch(e){ /* ignore */ }
+
+    return { admins: uniqEmails(admins), vendors };
+  }
+
+  async function decideAndGo(user){
+    const email = normEmail(user?.email);
+    if(!email) return { ok:false, msg:"Email topilmadi. Google hisobingizni tekshiring." };
+
+    const { admins, vendors } = await loadAllowLists();
+    if(admins.includes(email) || vendors.includes(email)){
+      return { ok:true };
+    }
+    return { ok:false, msg:"Ruxsat yo‘q. Gmail admin yoki sotuvchi ro‘yxatida topilmadi." };
+  }
+
+  onAuthStateChanged(auth, async (user)=>{
+    if(!user) return;
+    try{
+      const r = await decideAndGo(user);
+      if(r.ok){
         location.replace("./panel.html");
-      } catch (e) {
-        console.error(e);
-        showError("Kirishda xatolik: " + (e?.message || e));
+        return;
+      }
+      await signOut(auth);
+      showError(r.msg);
+    }catch(e){
+      try{ await signOut(auth); }catch(_){}
+      showError("Tekshiruvda xatolik: " + (e?.message || e));
+    }
+  });
+
+  btn.addEventListener("click", async () => {
+    err.style.display = "none";
+    btn.disabled = true;
+    btn.textContent = "Kutilmoqda...";
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const res = await signInWithPopup(auth, provider);
+
+      const r = await decideAndGo(res.user);
+      if(!r.ok){
+        await signOut(auth);
+        showError(r.msg);
         btn.disabled = false;
         btn.textContent = "Google orqali kirish";
+        return;
       }
-    });
-  </script>
+
+      location.replace("./panel.html");
+    } catch (e) {
+      console.error(e);
+      showError("Kirishda xatolik: " + (e?.message || e));
+      btn.disabled = false;
+      btn.textContent = "Google orqali kirish";
+    }
+  });
+</script>
 </body>
 </html>
