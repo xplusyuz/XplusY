@@ -678,8 +678,20 @@
           <div class="form-row"><div class="form-group">
             <label>Admin email ro'yxati (vergul bilan)</label>
             <input id="adminEmailsInput" class="form-control" placeholder="sohibjonmath@gmail.com, ..." />
-            <small class="muted">Bu front-end tekshiruv. Asosiy himoya Firestore rules'da.</small>
+            <small class="muted">Adminlar to'liq boshqaruvga ega. Bu ro'yxat Firestore: <code>configs/admins</code> hujjatiga saqlanadi.</small>
           </div></div>
+
+          <div style="height:10px"></div>
+
+          <div class="form-row"><div class="form-group">
+            <label>Sotuvchi (marketplace) gmail ro'yxati (vergul bilan)</label>
+            <input id="vendorEmailsInput" class="form-control" placeholder="seller1@gmail.com, seller2@gmail.com, ..." />
+            <small class="muted">
+              Sotuvchi faqat o'zi qo'shgan mahsulotlarni ko'radi/qo'shadi. Yangi mahsulotlar <b>Kutilmoqda</b> holatida turadi va do'konda faqat admin <b>Tasdiqlagan</b>idan keyin ko'rinadi.
+              (Firestore: <code>configs/vendors</code>)
+            </small>
+          </div></div>
+
           <button class="btn btn-primary" id="saveSettingsBtn"><i class="fas fa-save"></i> Saqlash</button>
         </div>
       </div>
@@ -942,7 +954,11 @@
     const state = {
       products: [],
       editingId: null,
-};
+      user: null,
+      role: "guest", // admin | vendor
+      adminEmails: [...DEFAULT_ADMIN_EMAILS],
+      vendorEmails: [],
+    };
     // ---- Storage upload helper (no functions needed) ----
     async function uploadImageFile(file, folder="uploads"){
       if(!file) throw new Error("Fayl topilmadi");
@@ -955,10 +971,76 @@
     }
     
 
-    function isAdmin(user){
-      return !!user?.email && user.email.toLowerCase().trim() === "sohibjonmath@gmail.com".toLowerCase();
+    function normEmail(e){ return String(e||"").toLowerCase().trim(); }
+    function uniqEmails(arr){
+      const out = [];
+      const seen = new Set();
+      (arr||[]).forEach(x=>{
+        const v = normEmail(x);
+        if(v && !seen.has(v)){ seen.add(v); out.push(v); }
+      });
+      return out;
     }
-    function nowISO(){ return new Date().toISOString().split("T")[0]; }
+    function isAdmin(user){
+      const em = normEmail(user?.email);
+      return !!em && state.adminEmails.includes(em);
+    }
+    function isVendor(user){
+      const em = normEmail(user?.email);
+      return !!em && state.vendorEmails.includes(em);
+    }
+    
+    async function loadAccessLists(){
+      // admins: configs/admins { emails: [] }
+      // vendors: configs/vendors { emails: [] }
+      try{
+        const aSnap = await getDoc(doc(db,"configs","admins"));
+        const a = aSnap.exists() ? (aSnap.data().emails||[]) : [];
+        const localA = (()=>{ try{ return JSON.parse(localStorage.getItem("ADMIN_EMAILS")||"[]"); }catch(e){ return []; } })();
+        state.adminEmails = uniqEmails([...(DEFAULT_ADMIN_EMAILS||[]), ...a, ...localA]);
+      }catch(e){
+        state.adminEmails = uniqEmails([...(DEFAULT_ADMIN_EMAILS||[])]);
+      }
+      try{
+        const vSnap = await getDoc(doc(db,"configs","vendors"));
+        const v = vSnap.exists() ? (vSnap.data().emails||[]) : [];
+        state.vendorEmails = uniqEmails(v);
+      }catch(e){
+        state.vendorEmails = [];
+      }
+
+      // Fill inputs if exists
+      try{
+        const aIn = document.getElementById("adminEmailsInput");
+        if(aIn) aIn.value = state.adminEmails.join(", ");
+        const vIn = document.getElementById("vendorEmailsInput");
+        if(vIn) vIn.value = state.vendorEmails.join(", ");
+      }catch(e){}
+    }
+
+    async function saveAccessLists(){
+      // Only admin can save
+      if(!isAdmin(auth.currentUser)) return toast("Faqat admin saqlay oladi","error");
+
+      const aRaw = (document.getElementById("adminEmailsInput")?.value || "");
+      const vRaw = (document.getElementById("vendorEmailsInput")?.value || "");
+      const admins = uniqEmails(aRaw.split(",").map(s=>s.trim()).filter(Boolean));
+      const vendors = uniqEmails(vRaw.split(",").map(s=>s.trim()).filter(Boolean));
+
+      try{
+        await setDoc(doc(db,"configs","admins"), { emails: admins, updatedAt: serverTimestamp() }, { merge:true });
+        await setDoc(doc(db,"configs","vendors"), { emails: vendors, updatedAt: serverTimestamp() }, { merge:true });
+        try{ localStorage.setItem("ADMIN_EMAILS", JSON.stringify(admins)); }catch(e){}
+        state.adminEmails = admins;
+        state.vendorEmails = vendors;
+        toast("Sozlamalar saqlandi");
+      }catch(e){
+        console.error(e);
+        toast("Saqlashda xatolik: "+(e.message||e), "error");
+      }
+    }
+
+function nowISO(){ return new Date().toISOString().split("T")[0]; }
     function formatPrice(n){
       const v = Number(n||0);
       return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g," ") + " so‘m";
@@ -1318,6 +1400,14 @@
       }
     }
 
+    
+    function productStatusPill(p){
+      const s = String(p?.status||"approved").toLowerCase();
+      if(s==="pending" || s==="kutilmoqda") return `<span class="pill pending">Kutilmoqda</span>`;
+      if(s==="rejected" || s==="rad" || s==="cancelled" || s==="canceled") return `<span class="pill cancelled">Rad etilgan</span>`;
+      return `<span class="pill paid">Tasdiqlandi</span>`;
+    }
+
     function renderTable(list=null){
       const data = list || state.products;
       const body = $("productsTableBody");
@@ -1342,7 +1432,7 @@
         const cls = popular>=80?"success":popular>=60?"warning":"danger";
         tr.innerHTML = `
           <td><span class="product-id">${esc(p.id)}</span></td>
-          <td><div class="product-name" title="${esc(p.name||"")}">${esc(p.name||"")}</div>${p.subtitle?`<div style="font-size:.85rem;color:var(--gray);margin-top:5px">${esc(p.subtitle)}</div>`:""}</td>
+          <td><div class="product-name" title="${esc(p.name||"")}">${esc(p.name||"")}</div>${p.subtitle?`<div style="font-size:.85rem;color:var(--gray);margin-top:5px">${esc(p.subtitle)}</div>`:""}<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">${productStatusPill(p)}<span class="tag" title="Sotilganlar soni"><i class="fas fa-bag-shopping"></i> ${Number(p.soldCount||0)} ta</span>${(state.role==="admin" && p.ownerEmail)?`<span class="tag" style="background:rgba(114,9,183,.10)"><i class="fas fa-user"></i> ${esc(p.ownerEmail)}</span>`:""}</div></td>
           <td class="price-cell">${formatPrice(p.price)} ${old}<div style="font-size:.85rem;color:var(--gray)">${esc(p.currency||"UZS")}</div></td>
           <td>${renderFulfillmentPill(p)}</td>
           <td><div class="tags-container">${tags}</div></td>
@@ -1358,15 +1448,17 @@
           </td>
           <td>
             <div class="actions">
-              <button class="btn btn-light btn-sm edit-btn" data-id="${esc(p.id)}"><i class="fas fa-edit"></i></button>
-              <button class="btn btn-light btn-sm del-btn" data-id="${esc(p.id)}"><i class="fas fa-trash"></i></button>
-            </div>
+${(state.role==="admin" && String(p.status||"approved").toLowerCase()!=="approved")?`<button class="btn btn-primary btn-sm approve-btn" data-id="${esc(p.id)}"><i class="fas fa-check"></i></button><button class="btn btn-light btn-sm reject-btn" data-id="${esc(p.id)}" title="Rad etish"><i class="fas fa-xmark"></i></button>`:""}<button class="btn btn-light btn-sm edit-btn" data-id="${esc(p.id)}"><i class="fas fa-edit"></i></button>
+${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light btn-sm del-btn" data-id="${esc(p.id)}"><i class="fas fa-trash"></i></button>`:""}
+</div>
           </td>
         `;
         body.appendChild(tr);
       });
       document.querySelectorAll(".edit-btn").forEach(b=>b.addEventListener("click",()=>openEdit(b.dataset.id)));
       document.querySelectorAll(".del-btn").forEach(b=>b.addEventListener("click",()=>removeProduct(b.dataset.id)));
+      document.querySelectorAll(".approve-btn").forEach(b=>b.addEventListener("click",(e)=>{e.stopPropagation(); updateProductStatus(b.dataset.id,"approved");}));
+      document.querySelectorAll(".reject-btn").forEach(b=>b.addEventListener("click",(e)=>{e.stopPropagation(); updateProductStatus(b.dataset.id,"rejected");}));
     }
 
     function renderStats(){
@@ -1652,6 +1744,19 @@ $("currency").value=p.currency||"UZS";
       openModal("productModal");
     }
 
+
+    async function updateProductStatus(id, status){
+      if(state.role!=="admin") return toast("Faqat admin holatni o'zgartira oladi","error");
+      try{
+        await updateDoc(doc(db,"products",id), { status: status, updatedAt: serverTimestamp() });
+        toast(status==="approved" ? "Tasdiqlandi" : "Rad etildi");
+        await fetchProducts();
+      }catch(e){
+        console.error(e);
+        toast("Xatolik: "+(e.message||e), "error");
+      }
+    }
+
     async function removeProduct(id){
       const user=auth.currentUser;
       if(!isAdmin(user)) return toast("Admin emas: o'chirib bo'lmaydi","error");
@@ -1761,6 +1866,39 @@ $("currency").value=p.currency||"UZS";
       else toast("Admin ");
     }
 
+
+    function applyRoleUI(){
+      const isA = state.role === "admin";
+      // Sidebar nav items
+      const hideForVendor = ["orders","topups","turnover","settings"]; // vendorga kerak bo'lmaganlar
+      document.querySelectorAll(".nav-link[data-view]").forEach(a=>{
+        const v = a.dataset.view;
+        if(!isA && hideForVendor.includes(v)){
+          a.style.display = "none";
+        }else{
+          a.style.display = "";
+        }
+      });
+
+      // Header title and buttons
+      try{
+        const roleChip = document.getElementById("roleChip");
+        if(roleChip){
+          roleChip.textContent = isA ? "Admin" : "Sotuvchi";
+          roleChip.className = "pill " + (isA ? "paid" : "pending");
+        }
+      }catch(e){}
+
+      // Vendor bo'lsa: import/json export kabi admin-only tugmalarni yashiramiz
+      try{
+        const importBtn = document.getElementById("importBtn");
+        if(importBtn) importBtn.style.display = isA ? "" : "none";
+        const exportBtn = document.getElementById("exportJsonBtn");
+        if(exportBtn) exportBtn.style.display = isA ? "" : "none";
+      }catch(e){}
+    }
+
+
     async function login(){
       try{ await signInWithPopup(auth, provider); }
       catch(e){ toast("Kirishda xatolik: "+e.message,"error"); }
@@ -1846,25 +1984,37 @@ if(e.target===$("jsonModal")) closeModal("jsonModal");
     let __bound = false;
 
     onAuthStateChanged(auth, async (user)=>{
-  // FULL SECURE GUARD
+  // GUARD (admin yoki sotuvchi)
   if(!user){
     document.body.innerHTML = "";
     location.replace("./login.html");
     return;
   }
-  if(!isAdmin(user)){
+
+  state.user = user;
+
+  // access lists
+  await loadAccessLists();
+
+  if(isAdmin(user)){
+    state.role = "admin";
+  }else if(isVendor(user)){
+    state.role = "vendor";
+  }else{
     try{ await signOut(auth); }catch(e){}
     document.body.innerHTML = "";
-    alert("Ruxsat yo‘q! Faqat admin gmail.");
+    alert("Ruxsat yo‘q! Siz admin ham, sotuvchi (vendor) ham emassiz.");
     location.replace("./login.html");
     return;
   }
 
-  // admin verified
   renderUser(user);
+
+  // Vendor bo‘lsa: admin-only bo‘limlarni yashiramiz
+  applyRoleUI();
+
   document.body.style.display = "block";
 
-  // Bind UI events once (buttons, nav, modals)
   if(!__bound){
     __bound = true;
     bind();
@@ -1872,8 +2022,10 @@ if(e.target===$("jsonModal")) closeModal("jsonModal");
     setView("products");
   }
 
-  // Load admin data only AFTER verification
   await fetchProducts();
+  try{ await fetchTopups?.(); }catch(e){}
+  try{ await fetchTurnover?.(); }catch(e){}
+  try{ await renderStatsPanels?.(); }catch(e){}
 });
 
     // (Fix) DOMContentLoaded event name was misspelled before.
