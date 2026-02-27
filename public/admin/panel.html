@@ -358,6 +358,23 @@
   border-color:rgba(51,65,85,.2);
 }
 
+
+/* ===== Card background by status (Buyurtma/Top-up/Hisob aylanmasi) ===== */
+.order-card.card-status-pending{ background:#ffffff; }
+.order-card.card-status-approved{
+  background: rgba(22,163,74,.08);
+  border: 1px solid rgba(22,163,74,.18);
+}
+.order-card.card-status-cancelled{
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.18);
+}
+.order-card.card-status-approved:hover,
+.order-card.card-status-cancelled:hover{
+  transform: translateY(-4px);
+}
+
+
 </style>
   <script src="../telegram-config.js"></script>
 </head>
@@ -1234,7 +1251,7 @@
         const ot = String(o.orderType||"checkout").toLowerCase();
         const st = String(o.status||"").toLowerCase();
         const stLabel = statusUZ(st) || st;
-        const pill = `<span class="badge" style="background:#2E8B5710;color:#2E8B57;border:1px solid #2E8B5730">${escapeHtml(stLabel)}</span>`;
+        const pill = `<span class="status-pill status-${statusClass3(st)}">${escapeHtml(stLabel)}</span>`;
         const when = escapeHtml(formatTS(o.createdAt));
         const sum = Number(o.totalUZS||0).toLocaleString();
         const userId = escapeHtml(String(o.userPublicId || o.numericId || o.uid || "—"));
@@ -1251,7 +1268,7 @@
         // Cards UI
         if(cards){
           const div = document.createElement("div");
-          div.className = "order-card turnover-card";
+          div.className = "order-card turnover-card card-status-"+statusClass3(o.status);
           div.innerHTML = `
             <div class="order-card-top">
               <div class="order-id">
@@ -1865,6 +1882,14 @@ if(e.target===$("jsonModal")) closeModal("jsonModal");
     });
   
     function escapeHtml(s){return String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+function statusClass3(s){
+  const st = String(s||"").toLowerCase();
+  if(st==="approved" || st==="paid" || st==="delivered" || st==="success") return "approved";
+  if(st==="cancelled" || st==="canceled" || st==="rejected" || st==="failed") return "cancelled";
+  // pending/payment/waiting/cash
+  return "pending";
+}
+
 function statusUZ(s){
   const st = String(s||"").toLowerCase();
   const map = {
@@ -2276,7 +2301,7 @@ function statusUZ(s){
         // Cards UI
         if(cards){
           const card = document.createElement("div");
-          card.className = "order-card";
+          card.className = "order-card card-status-"+statusClass3(o.status);
           card.dataset.oid = o.id || "";
           card.innerHTML = `
             <div class="order-card-top">
@@ -2514,7 +2539,7 @@ function renderTopupReq(list){
     // Cards UI
     if(cards){
       const div = document.createElement("div");
-      div.className = "order-card topup-card";
+      div.className = "order-card topup-card card-status-"+statusClass3(r.status);
       div.dataset.topupId = id;
       div.innerHTML = `
         <div class="order-card-top">
