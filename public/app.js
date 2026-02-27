@@ -1216,7 +1216,7 @@ function discountPct(price, oldPrice){
 */
 const NATIVE_ADS = {
   enabled: true,
-  every: 8,                 // har nechta mahsulotdan keyin
+  every: 2,                 // har nechta mahsulotdan keyin
   probability: 0.55,        // "bazan bazan" ko'rsatish uchun (0..1)
   maxPerSession: 2,         // bitta sessiyada maksimum nechta reklama
   clickHref: ""             // bo'sh qolsin (xohlasangiz /promo.html yoki telegram link)
