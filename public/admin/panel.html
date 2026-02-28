@@ -1688,15 +1688,31 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       return Object.keys(obj).length?obj:undefined;
     }
 
-    function genId(){
-      // Admin mahsulotlari: om001, om002...
-      const nums=state.products
-        .map(p=>String(p.id||"").replace(/^om/i,""))
-        .map(s=>parseInt(s,10))
+    
+    function parseSeqForPrefix(prefix){
+      const rx = new RegExp("^" + prefix + "(\d+)$","i");
+      const nums = state.products
+        .map(p=>String(p.id||"").trim())
+        .map(id=>{
+          const m = id.match(rx);
+          return m ? parseInt(m[1],10) : NaN;
+        })
         .filter(n=>Number.isFinite(n));
-      const last=nums.length?Math.max(...nums):0;
-      return "om"+String(last+1).padStart(3,"0");
+      return nums.length ? Math.max(...nums) : 0;
     }
+
+    function genSeqId(prefix){
+      const last = parseSeqForPrefix(prefix);
+      const next = last + 1;
+      // 001, 002, ... 999, 1000, ...
+      return (prefix + String(next).padStart(3,"0")).toLowerCase();
+    }
+
+    function genAdminId(){
+      // Admin mahsulotlari: aa001, aa002, ...
+      return genSeqId("aa");
+    }
+
 
     // Vendor prefix: aa, ab, ... az, ba, ... zz, aaa, aab...
     function excelLetters(num){
@@ -1713,14 +1729,13 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
     function vendorPrefixForEmail(email){
       const em = normEmail(email);
       const idx = state.vendorEmails.map(normEmail).indexOf(em);
-      // start from 27 => "aa"
-      return excelLetters((idx>=0?idx:0) + 27);
+      // start from 28 => "ab" ("aa" reserved for admin)
+      return excelLetters((idx>=0?idx:0) + 28);
     }
-    function genVendorDocId(email){
+    function genVendorId(email){
+      // Vendor mahsulotlari: ab001, ab002, ... (vendorlar ro'yxati tartibi bo'yicha)
       const prefix = vendorPrefixForEmail(email);
-      const rand = Math.random().toString(36).slice(2,6);
-      const t = Date.now().toString(36);
-      return (prefix + t + rand).toLowerCase();
+      return genSeqId(prefix);
     }
 
     async function saveProduct(){
@@ -1735,7 +1750,7 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       // ID policy:
       // - Admin: om###
       // - Vendor: aa..., ab..., ... based on vendor list order
-      const id=state.editingId || (isA ? genId() : genVendorDocId(user?.email||""));
+      const id=state.editingId || (isA ? genAdminId() : genVendorId(user?.email||""));
 
       const tags=($("tagsInput").value||"").split(",").map(s=>s.trim()).filter(Boolean);
 
@@ -1945,7 +1960,7 @@ $("currency").value=p.currency||"UZS";
         for(let i=0;i<items.length;i+=350){
           const batch=writeBatch(db);
           items.slice(i,i+350).forEach(p=>{
-            const id=p.id || genId();
+            const id=p.id || genAdminId();
             const data={...p, updatedAt: serverTimestamp()};
             delete data.id;
             batch.set(doc(db,"products",id), data, { merge:true });
