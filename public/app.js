@@ -106,6 +106,7 @@ import {
   count,
   addDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { generateShortOrderId } from "./utils/shortOrderId.js";
 
 import {
   ref as sRef,
@@ -2913,7 +2914,7 @@ async function createOrderFromCheckout(){
     if(rb) rb.checked = true;
     payType = "balance";
   }
-  const orderId = String(Date.now()); // digits-only
+  const orderId = await generateShortOrderId(db); // short digits-only
   const amountTiyin = Math.round(built.totalUZS * 100);
 
   // Shipping/profile snapshot (viloyat/tuman/pochta) for order + Telegram
@@ -3801,8 +3802,7 @@ async function payWithBalance(built, shipping){
   if(!currentUser) throw new Error('no_user');
   const total = Number(built.totalUZS||0);
   const uid = currentUser.uid;
-  const orderId = String(Date.now());
-
+  const orderId = await generateShortOrderId(db);
   await runTransaction(db, async (t)=>{
     const uref = doc(db,'users',uid);
     const us = await t.get(uref);
@@ -3851,7 +3851,7 @@ async function shareOrderTelegram(){
     note.textContent = hasPrepay ? "⚠️ Keltirib berish mahsulotlari uchun oldindan to‘lov: BALANS." : "";
   }
 
-  const orderId = String(Date.now());
+  const orderId = await generateShortOrderId(db);
   try{
     if(currentUser){
       await createOrderDoc({
