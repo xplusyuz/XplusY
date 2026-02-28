@@ -962,14 +962,28 @@
     // ---- Storage upload helper (no functions needed) ----
     async function uploadImageFile(file, folder="uploads"){
       if(!file) throw new Error("Fayl topilmadi");
+      const u = auth.currentUser;
+      // Professional paths:
+      // - temp uploads: products/temp/{uid}/...
+      // - product images: products/items/{productId}/...
+      let finalFolder = String(folder||"uploads").replace(/\/+/g,'/').replace(/\/$/,'');
+      if(finalFolder === "products/temp" || finalFolder.startsWith("products/temp/")){
+        if(!u) throw new Error("Rasm yuklash uchun avval kirish qiling");
+        // ensure exactly: products/temp/{uid}
+        finalFolder = `products/temp/${u.uid}`;
+      } else if(finalFolder.startsWith("products/") && !finalFolder.startsWith("products/items/") && !finalFolder.startsWith("products/temp/")){
+        // old format -> move under items
+        const rest = finalFolder.slice("products/".length);
+        if(rest) finalFolder = `products/items/${rest}`;
+      }
+
       const safeName = (file.name||"image").replace(/[^a-zA-Z0-9._-]+/g,"_");
-      const path = `${folder}/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+      const path = `${finalFolder}/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
       const r = sRef(storage, path);
       await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
       const url = await getDownloadURL(r);
       return url;
     }
-    
 
     function normEmail(e){ return String(e||"").toLowerCase().trim(); }
     function uniqEmails(arr){
