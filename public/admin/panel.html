@@ -692,6 +692,16 @@
             </small>
           </div></div>
 
+          <div class="form-row"><div class="form-group">
+            <label>Sotuvchi UID ro'yxati (vergul bilan)</label>
+            <input id="vendorUidsInput" class="form-control" placeholder="TgYTWp7iLThPXKtPoLWxLPKqyE2, ..." />
+            <div class="muted" style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+              <span><b>Hozirgi foydalanuvchi UID:</b> <code id="currentUidBox">-</code></span>
+              <button type="button" class="btn btn-light btn-sm" id="copyUidBtn"><i class="fas fa-copy"></i> UID nusxa olish</button>
+              <span class="muted">UID seller/marketpleys kirgan akkauntdan olinadi (Storage uchun tavsiya).</span>
+            </div>
+          </div></div>
+
           <button class="btn btn-primary" id="saveSettingsBtn"><i class="fas fa-save"></i> Saqlash</button>
         </div>
       </div>
@@ -958,6 +968,8 @@
       role: "guest", // admin | vendor
       adminEmails: [...DEFAULT_ADMIN_EMAILS],
       vendorEmails: [],
+      vendorUids: [],
+      vendorUids: [],
     };
     // ---- Storage upload helper (no functions needed) ----
     async function uploadImageFile(file, folder="uploads"){
@@ -995,18 +1007,32 @@
       });
       return out;
     }
+
+    function uniqIds(arr){
+      const out=[];
+      const seen=new Set();
+      (arr||[]).forEach(x=>{
+        const v=(String(x||"").trim());
+        if(!v) return;
+        // Firebase UID usually 28 chars but allow 10+ safe chars
+        if(!/^[A-Za-z0-9_-]{10,}$/.test(v)) return;
+        if(!seen.has(v)){ seen.add(v); out.push(v); }
+      });
+      return out;
+    }
     function isAdmin(user){
       const em = normEmail(user?.email);
       return !!em && state.adminEmails.includes(em);
     }
     function isVendor(user){
       const em = normEmail(user?.email);
-      return !!em && state.vendorEmails.includes(em);
+      const uid = user?.uid || "";
+      return ((!!em && state.vendorEmails.includes(em)) || (!!uid && (state.vendorUids||[]).includes(uid)));
     }
     
     async function loadAccessLists(){
       // admins: configs/admins { emails: [] }
-      // vendors: configs/vendors { emails: [] }
+      // vendors: configs/vendors { emails: [], uids: [] }
       try{
         const aSnap = await getDoc(doc(db,"configs","admins"));
         const a = aSnap.exists() ? (aSnap.data().emails||[]) : [];
@@ -1017,8 +1043,11 @@
       }
       try{
         const vSnap = await getDoc(doc(db,"configs","vendors"));
-        const v = vSnap.exists() ? (vSnap.data().emails||[]) : [];
+        const vData = vSnap.exists() ? (vSnap.data()||{}) : {};
+        const v = (vData.emails||[]);
+        const u = (vData.uids||[]);
         state.vendorEmails = uniqEmails(v);
+        state.vendorUids = uniqIds(u);
       }catch(e){
         state.vendorEmails = [];
       }
@@ -1029,6 +1058,10 @@
         if(aIn) aIn.value = state.adminEmails.join(", ");
         const vIn = document.getElementById("vendorEmailsInput");
         if(vIn) vIn.value = state.vendorEmails.join(", ");
+        const uIn = document.getElementById("vendorUidsInput");
+        if(uIn) uIn.value = (state.vendorUids||[]).join(", ");
+        const cUid = document.getElementById("currentUidBox");
+        if(cUid) cUid.textContent = (auth.currentUser?.uid || "-");
       }catch(e){}
     }
 
@@ -1038,15 +1071,18 @@
 
       const aRaw = (document.getElementById("adminEmailsInput")?.value || "");
       const vRaw = (document.getElementById("vendorEmailsInput")?.value || "");
+      const uRaw = (document.getElementById("vendorUidsInput")?.value || "");
       const admins = uniqEmails(aRaw.split(",").map(s=>s.trim()).filter(Boolean));
       const vendors = uniqEmails(vRaw.split(",").map(s=>s.trim()).filter(Boolean));
+      const vendorUids = uniqIds(uRaw.split(",").map(s=>s.trim()).filter(Boolean));
 
       try{
         await setDoc(doc(db,"configs","admins"), { emails: admins, updatedAt: serverTimestamp() }, { merge:true });
-        await setDoc(doc(db,"configs","vendors"), { emails: vendors, updatedAt: serverTimestamp() }, { merge:true });
+        await setDoc(doc(db,"configs","vendors"), { emails: vendors, uids: vendorUids, updatedAt: serverTimestamp() }, { merge:true });
         try{ localStorage.setItem("ADMIN_EMAILS", JSON.stringify(admins)); }catch(e){}
         state.adminEmails = admins;
         state.vendorEmails = vendors;
+        state.vendorUids = vendorUids;
         toast("Sozlamalar saqlandi");
       }catch(e){
         console.error(e);
@@ -2073,6 +2109,10 @@ if(e.target===$("jsonModal")) closeModal("jsonModal");
   }
 
   state.user = user;
+  try{
+    const cUid = document.getElementById("currentUidBox");
+    if(cUid) cUid.textContent = (user?.uid || "-");
+  }catch(e){}
 
   // access lists
   await loadAccessLists();
@@ -3005,6 +3045,13 @@ document.addEventListener('click', async (e)=>{
     });
 
 
+
+  try{ document.getElementById("copyUidBtn")?.addEventListener("click", async ()=>{
+        const uid = auth.currentUser?.uid;
+        if(!uid) return toast("UID topilmadi","error");
+        try{ await navigator.clipboard.writeText(uid); toast("UID nusxa olindi"); }
+        catch(e){ console.warn(e); toast("Nusxa olishni brauzer blokladi","error"); }
+      }); }catch(e){}
 
   try{ document.getElementById("saveSettingsBtn")?.addEventListener("click", saveAccessLists); }catch(e){}
 </script>
