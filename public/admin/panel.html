@@ -375,6 +375,14 @@
 }
 
 
+
+    .modal-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .modal-actions{display:flex;align-items:center;gap:8px}
+    .modal-actions .btn{white-space:nowrap}
+    @media (max-width: 520px){
+      .modal-actions{flex-wrap:wrap;justify-content:flex-end}
+    }
+
 </style>
   <script src="../telegram-config.js"></script>
 </head>
@@ -714,7 +722,11 @@
     <div class="modal-content wide">
       <div class="modal-header">
         <h3><i class="fas fa-receipt"></i> Buyurtma tafsiloti</h3>
-        <button class="btn btn-light btn-sm" id="closeOrderModalBtn"><i class="fas fa-times"></i></button>
+        <div class="modal-actions">
+          <button class="btn btn-light btn-sm" id="printReceipt80Btn" title="80mm chek"><i class="fas fa-print"></i> Chek</button>
+          <button class="btn btn-light btn-sm" id="printStickerA6Btn" title="A6 stiker"><i class="fas fa-tag"></i> Stiker</button>
+          <button class="btn btn-light btn-sm" id="closeOrderModalBtn" title="Yopish"><i class="fas fa-times"></i></button>
+        </div>
       </div>
       <div class="modal-body">
         <div class="grid2">
@@ -2464,6 +2476,7 @@ function statusUZ(s){
     function openOrderModal(order){
       if(!order) return;
       openModal("orderModal");
+      window.__OM_CURRENT_ORDER = order;
 
       const ship = order.shipping || {};
       const addr = ship.addressText || order.addressText || order.address || "—";
@@ -3058,6 +3071,174 @@ document.addEventListener('click', async (e)=>{
     ["closeOrderModalBtn","closeOrderModalBtn2"].forEach(id=>{
       $(id)?.addEventListener("click", ()=> closeModal("orderModal"));
     });
+
+
+
+    // === Chek / Stiker (print) ===
+    function normMoney(n){
+      const x = Number(n||0);
+      return x.toLocaleString('uz-UZ') + " so‘m";
+    }
+    function safe(v){ return (v===undefined||v===null) ? "" : String(v); }
+
+    function buildReceiptHTML(order, mode){
+      const isA6 = mode === "a6";
+      const ship = order.shipping || {};
+      const addr = ship.addressText || order.addressText || order.address || "—";
+      const phone = ship.phone || order.phone || order.userPhone || "—";
+      const customer = order.customerName || order.fullName || order.name || order.userName || "—";
+      const provider = providerUZ(formatProvider(order)) || "—";
+      const status = safe(order.status||"pending");
+      const created = formatTS(order.createdAt);
+      const publicId = order.userPublicId || order.numericId || order.userId || "—";
+
+      const items = Array.isArray(order.items) ? order.items : [];
+      const rows = items.map(it=>{
+        const title = safe(it.title || it.name || it.productTitle || "Mahsulot");
+        const qty = Number(it.qty || it.quantity || 1);
+        const price = Number(it.priceUZS || it.price || it.unitPriceUZS || 0);
+        const line = qty * price;
+        return { title, qty, price, line };
+      });
+
+      const subtotal = rows.reduce((a,b)=>a+b.line,0);
+      const delivery = Number(order.deliveryUZS || order.shippingUZS || order.deliveryFeeUZS || 0);
+      const discount = Number(order.discountUZS || 0);
+      const total = Number(order.totalUZS || (subtotal + delivery - discount));
+
+      const orderId = safe(order.id||"");
+      const qrData = encodeURIComponent("OrzuMall Order: " + orderId);
+
+      const socials = [
+        { label:"Web", value:"xplusy.netlify.app" },
+        { label:"Telegram", value:"@OrzuMallUZ_bot" },
+        { label:"Instagram", value:"@orzu.mall" }
+      ];
+
+      const css = `
+        :root{ --ink:#111; --muted:#666; --line:#e5e7eb; --brand:#2E8B57; }
+        *{ box-sizing:border-box; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+        body{ margin:0; padding:${isA6? "10mm":"6mm"}; color:var(--ink); }
+        .paper{ width:${isA6? "105mm":"80mm"}; margin:0 auto; }
+        .top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .logo{
+          font-weight:900; letter-spacing:.5px; font-size:${isA6? "20px":"18px"};
+          color:var(--brand);
+        }
+        .tag{ font-size:12px; color:var(--muted); }
+        .hr{ height:1px; background:var(--line); margin:10px 0; }
+        .kv{ display:grid; grid-template-columns: 1fr 1fr; gap:6px 10px; font-size:12px; }
+        .kv .k{ color:var(--muted); }
+        .kv .v{ text-align:right; font-weight:600; }
+        .items{ width:100%; border-collapse:collapse; font-size:12px; }
+        .items th{ text-align:left; color:var(--muted); font-weight:700; padding:6px 0; border-bottom:1px solid var(--line); }
+        .items td{ padding:6px 0; border-bottom:1px dashed var(--line); vertical-align:top; }
+        .items td.r{ text-align:right; white-space:nowrap; }
+        .sum{ font-size:12px; }
+        .sum .row{ display:flex; justify-content:space-between; padding:4px 0; }
+        .sum .row.total{ font-size:14px; font-weight:900; }
+        .badge{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:10px; font-size:12px; }
+        .footer{ margin-top:10px; display:flex; align-items:flex-end; justify-content:space-between; gap:10px; }
+        .social{ font-size:11px; color:var(--muted); line-height:1.35; }
+        .qr{ width:${isA6? "120px":"105px"}; height:${isA6? "120px":"105px"}; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+        .qr img{ width:100%; height:100%; object-fit:cover; display:block; }
+        .note{ margin-top:8px; font-size:11px; color:var(--muted); }
+        @media print{
+          body{ padding:0; }
+          .paper{ margin:0; }
+        }
+      `;
+
+      const itemsHtml = rows.map(r=>`
+        <tr>
+          <td>
+            <div style="font-weight:800">${escapeHtml(r.title)}</div>
+            <div style="color:#666;font-size:11px">${r.qty} × ${normMoney(r.price)}</div>
+          </td>
+          <td class="r" style="font-weight:900">${normMoney(r.line)}</td>
+        </tr>
+      `).join("");
+
+      const socialsHtml = socials.map(s=>`${escapeHtml(s.label)}: <b>${escapeHtml(s.value)}</b>`).join("<br>");
+
+      return `<!doctype html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chek ${orderId}</title>
+<style>${css}</style></head>
+<body>
+  <div class="paper">
+    <div class="top">
+      <div>
+        <div class="logo">OrzuMall</div>
+        <div class="tag">Buyurtma cheki / stiker</div>
+      </div>
+      <div class="badge"><span style="width:8px;height:8px;border-radius:999px;background:var(--brand);display:inline-block"></span> ${escapeHtml(status)}</div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="kv">
+      <div class="k">Buyurtma ID</div><div class="v">${escapeHtml(orderId)}</div>
+      <div class="k">Vaqt</div><div class="v">${escapeHtml(created)}</div>
+      <div class="k">To‘lov</div><div class="v">${escapeHtml(provider)}</div>
+      <div class="k">Foydalanuvchi</div><div class="v">${escapeHtml(publicId)}</div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="kv">
+      <div class="k">Mijoz</div><div class="v">${escapeHtml(customer)}</div>
+      <div class="k">Telefon</div><div class="v">${escapeHtml(phone)}</div>
+      <div class="k">Manzil</div><div class="v">${escapeHtml(addr)}</div>
+    </div>
+
+    <div class="hr"></div>
+
+    <table class="items">
+      <thead><tr><th>Mahsulot</th><th class="r">Jami</th></tr></thead>
+      <tbody>${itemsHtml || `<tr><td colspan="2" style="color:#666">Mahsulotlar topilmadi</td></tr>`}</tbody>
+    </table>
+
+    <div class="hr"></div>
+
+    <div class="sum">
+      <div class="row"><span>Mahsulotlar</span><b>${normMoney(subtotal)}</b></div>
+      ${delivery ? `<div class="row"><span>Yetkazib berish</span><b>${normMoney(delivery)}</b></div>` : ``}
+      ${discount ? `<div class="row"><span>Chegirma</span><b>- ${normMoney(discount)}</b></div>` : ``}
+      <div class="row total"><span>JAMI</span><span>${normMoney(total)}</span></div>
+    </div>
+
+    <div class="footer">
+      <div class="social">
+        <div style="font-weight:800;color:#111;margin-bottom:4px">Biz bilan bog‘laning</div>
+        ${socialsHtml}
+        <div class="note">Buyurtma bo‘yicha savol bo‘lsa, ID ni ayting.</div>
+      </div>
+      <div class="qr">
+        <img alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}">
+      </div>
+    </div>
+  </div>
+  <script>
+    // Auto-print after render
+    setTimeout(()=>{ window.focus(); window.print(); }, 200);
+  </script>
+</body></html>`;
+    }
+
+    function printOrder(mode){
+      const order = window.__OM_CURRENT_ORDER;
+      if(!order){ toast("Buyurtma tanlanmadi"); return; }
+      const w = window.open("", "_blank");
+      if(!w){ toast("Pop-up bloklangan"); return; }
+      w.document.open();
+      w.document.write(buildReceiptHTML(order, mode));
+      w.document.close();
+    }
+
+    document.getElementById("printReceipt80Btn")?.addEventListener("click", ()=> printOrder("80"));
+    document.getElementById("printStickerA6Btn")?.addEventListener("click", ()=> printOrder("a6"));
 
 
 
