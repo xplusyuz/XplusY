@@ -392,8 +392,14 @@
       object-fit:cover;
       display:block;
     }
+    .item-thumb-wrap{
+      width:44px;height:44px;border-radius:12px;
+      border:1px solid #e5e7eb;background:#f1f5f9;
+      display:flex;align-items:center;justify-content:center;
+      color:#94a3b8;
+    }
     @media (max-width:520px){
-      .item-thumb{width:40px;height:40px;border-radius:10px}
+      .item-thumb,.item-thumb-wrap{width:40px;height:40px;border-radius:10px}
     }
 
 </style>
@@ -2533,7 +2539,7 @@ function statusUZ(s){
       return `<span class="pill ${escapeHtml(s)}"><i class="fas fa-circle"></i> ${escapeHtml(s)}</span>`;
     }
 
-    function openOrderModal(order){
+    async function openOrderModal(order){
       if(!order) return;
       openModal("orderModal");
       window.__OM_CURRENT_ORDER = order;
@@ -2567,46 +2573,69 @@ function statusUZ(s){
       ].join("");
 
       // items table
-      const items = Array.isArray(order.items) ? order.items : [];
+      const items0 = normalizeOrderItems(order);
+      $("orderItemsWrap").innerHTML = `<div class="mini muted" style="padding:10px">Mahsulotlar yuklanmoqda...</div>`;
+
+      // Agar item ichida rasm bo‘lmasa, productId orqali products’dan olib kelamiz
+      const ids = [...new Set(items0.map(it=>it.productId).filter(Boolean))];
+      const prodMap = new Map();
+      await Promise.all(ids.slice(0,50).map(async(pid)=>{
+        try{
+          const ps = await getDoc(doc(db,"products",pid));
+          if(ps.exists()) prodMap.set(pid, ps.data()||{});
+        }catch(e){}
+      }));
+
+      const items = items0.map(it=>{
+        const p = prodMap.get(it.productId) || {};
+        const img = getItemImageUrl(it) || getItemImageUrl(p) || "";
+        const nm = it.name || (p.name||p.title||p.nomi||"") || it.productId || "";
+        const price = it.priceUZS || Number(p.priceUZS ?? p.price ?? p.narx ?? p.currentPriceUZS ?? 0) || 0;
+        return { ...it, _img: img, _nm: nm, _price: price };
+      });
+
       const t = `
         <div style="overflow:auto;-webkit-overflow-scrolling:touch">
-          <table style="width:100%;border-collapse:collapse;min-width:640px">
+          <table style="width:100%;border-collapse:collapse;min-width:680px">
             <thead style="background:#f8f9fa">
               <tr>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef;width:70px">Rasm</th>
+                <th style="padding:10px;border-bottom:1px solid #e9ecef;width:76px">Rasm</th>
                 <th style="padding:10px;border-bottom:1px solid #e9ecef">Nomi</th>
                 <th style="padding:10px;border-bottom:1px solid #e9ecef">Variant</th>
                 <th style="padding:10px;border-bottom:1px solid #e9ecef">Soni</th>
                 <th style="padding:10px;border-bottom:1px solid #e9ecef">Narx</th>
+                <th style="padding:10px;border-bottom:1px solid #e9ecef">Jami</th>
               </tr>
             </thead>
             <tbody>
-              ${items.map(it=>{
-                const img = getItemImageUrl(it);
-                const nm = it.name||it.title||it.id||"";
-                const variant = [it.color,it.size].filter(Boolean).join(" / ")||"—";
-                const qty = String(it.qty||1);
-                const price = String(it.priceUZS||it.price||"—");
+              ${items.length ? items.map(it=>{
+                const variant = [it.color,it.size].filter(Boolean).join(" / ") || "—";
+                const qty = Number(it.qty||1);
+                const price = Number(it._price||0);
+                const total = qty * price;
+                const img = it._img;
                 return `
                   <tr>
                     <td style="padding:10px;border-bottom:1px solid #f1f5f9">
-                      ${img ? `<img class="item-thumb" src="${escapeAttr(img)}" alt="${escapeAttr(nm)}" loading="lazy" />`
-                           : `<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;color:#94a3b8"><i class="fas fa-image"></i></div>`}
+                      ${img ? `<img class="item-thumb" src="${escapeAttr(img)}" alt="${escapeAttr(it._nm)}" loading="lazy" />`
+                           : `<div class="item-thumb-wrap"><i class="fas fa-image"></i></div>`}
                     </td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(nm)}</b></td>
+                    <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(it._nm)}</b><div class="muted mini">${escapeHtml(it.productId||"")}</div></td>
                     <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(variant)}</td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(qty)}</td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(price)}</td>
+                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(String(qty))}</td>
+                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(price ? price.toLocaleString()+" so‘m" : "—")}</td>
+                    <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(total ? total.toLocaleString()+" so‘m" : "—")}</b></td>
                   </tr>
                 `;
-              }).join("")}
+              }).join("") : `
+                <tr><td colspan="6" style="padding:12px;color:#64748b">Bu buyurtmada mahsulotlar ro‘yxati topilmadi (order.items / cartItems / products). Order doc’ni tekshiring.</td></tr>
+              `}
             </tbody>
           </table>
         </div>
       `;
       $("orderItemsWrap").innerHTML = t;
-
-      // map
+// map
       const mapCard = $("mapCard");
       const note = $("mapNote");
       if(lat && lng && window.L){
