@@ -3931,7 +3931,7 @@ function safeJSONParse(s){
 
 async function loadRegionData(){
   try{
-    const res = await fetch("./region.json?v=1", { cache: "no-store" });
+    const resp = await fetch("./region.json?v=1", { cache: "no-store" });
     if(!res.ok) throw new Error("region.json fetch failed");
     return await res.json();
   }catch(e){
