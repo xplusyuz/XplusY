@@ -2934,7 +2934,7 @@ async function createOrderFromCheckout(){
     if(rb) rb.checked = true;
     payType = "balance";
   }
-  const orderId = await generateShortOrderId(db); // short digits-only
+  const orderId = null; // server will allocate unique short id
   const amountTiyin = Math.round(built.totalUZS * 100);
 
   // Shipping/profile snapshot (viloyat/tuman/pochta) for order + Telegram
@@ -2988,7 +2988,26 @@ async function createOrderFromCheckout(){
         throw new Error(out?.error || "balance_pay_failed");
       }
     } else {
-      await createOrderDoc(payload);
+      // Cash checkout: create order via Netlify Function (avoids Firestore permission issues)
+      const token = await currentUser.getIdToken();
+      const resp = await fetch("/.netlify/functions/createOrderCash", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          items: payload.items,
+          totalUZS: payload.totalUZS,
+          shipping: payload.shipping || null
+        })
+      });
+      const out = await resp.json().catch(()=>({}));
+      if(!resp.ok || !out.ok || !out.orderId){
+        throw new Error(out?.error || "cash_order_failed");
+      }
+      payload.orderId = String(out.orderId);
+      try{ tgNotifyOrderCreated(payload.orderId); }catch(_e){}
     }
 
     removePurchasedFromCart(built.sel);
