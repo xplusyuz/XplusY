@@ -790,6 +790,18 @@
             <div class="form-row">
               <div class="form-group"><label>Valyuta</label><input id="currency" class="form-control" value="UZS"></div>
             </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Mahsulot turi (Original / OEM / Nusxa)</label>
+                <select id="productType" class="form-control">
+                  <option value="">Tanlanmagan</option>
+                  <option value="original">Original</option>
+                  <option value="oem">OEM</option>
+                  <option value="replica">Nusxa</option>
+                </select>
+                <small class="hint"><i class="fas fa-certificate"></i> Bu maydon mijozga mahsulot turini aniq ko‘rsatadi.</small>
+              </div>
+            </div>
             <div class="form-row"><div class="form-group"><label>Tavsif</label><textarea id="description" class="form-control" rows="3"></textarea></div></div>
           
             <div class="form-row">
@@ -1199,6 +1211,15 @@ function nowISO(){ return new Date().toISOString().split("T")[0]; }
     }
 
     // Fulfillment pill (Mahsulot turi: stock / cargo)
+    function renderProductTypePill(p){
+      const t = String(p?.productType||"").toLowerCase();
+      if(!t) return ``;
+      if(t==="original") return `<span class="tag" style="background:rgba(34,197,94,.10);color:var(--success)" title="Original"><i class="fas fa-circle-check"></i> Original</span>`;
+      if(t==="oem") return `<span class="tag" style="background:rgba(59,130,246,.10);color:var(--primary)" title="OEM"><i class="fas fa-industry"></i> OEM</span>`;
+      if(t==="replica" || t==="copy" || t==="nusxa") return `<span class="tag" style="background:rgba(239,68,68,.10);color:var(--danger)" title="Nusxa"><i class="fas fa-clone"></i> Nusxa</span>`;
+      return `<span class="tag" title="Mahsulot turi">${esc(t)}</span>`;
+    }
+
     function renderFulfillmentPill(p){
       try{
         const t = String(p?.pType || p?.fulfillment || p?.fulfillmentType || p?.deliveryType || "stock").toLowerCase();
@@ -1500,7 +1521,7 @@ function nowISO(){ return new Date().toISOString().split("T")[0]; }
         const cls = popular>=80?"success":popular>=60?"warning":"danger";
         tr.innerHTML = `
           <td><span class="product-id">${esc(p.id)}</span></td>
-          <td><div class="product-name" title="${esc(p.name||"")}">${esc(p.name||"")}</div>${p.subtitle?`<div style="font-size:.85rem;color:var(--gray);margin-top:5px">${esc(p.subtitle)}</div>`:""}<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">${productStatusPill(p)}<span class="tag" title="Sotilganlar soni"><i class="fas fa-bag-shopping"></i> ${Number(p.soldCount||0)} ta</span>${(state.role==="admin" && p.ownerEmail)?`<span class="tag" style="background:rgba(114,9,183,.10)"><i class="fas fa-user"></i> ${esc(p.ownerEmail)}</span>`:""}</div></td>
+          <td><div class="product-name" title="${esc(p.name||"")}">${esc(p.name||"")}</div>${p.subtitle?`<div style="font-size:.85rem;color:var(--gray);margin-top:5px">${esc(p.subtitle)}</div>`:""}<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">${productStatusPill(p)}${renderProductTypePill(p)}<span class="tag" title="Sotilganlar soni"><i class="fas fa-bag-shopping"></i> ${Number(p.soldCount||0)} ta</span>${(state.role==="admin" && p.ownerEmail)?`<span class="tag" style="background:rgba(114,9,183,.10)"><i class="fas fa-user"></i> ${esc(p.ownerEmail)}</span>`:""}</div></td>
           <td class="price-cell">${formatPrice(p.price)} ${old}<div style="font-size:.85rem;color:var(--gray)">${esc(p.currency||"UZS")}</div></td>
           <td>${renderFulfillmentPill(p)}</td>
           <td><div class="tags-container">${tags}</div></td>
@@ -1578,6 +1599,7 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       $("variantsContainer").innerHTML='<p class="form-text">Variant narx qo\'yilsa ishlaydi.</p>';
       addColor(); addSize(); addImage();
       $("imagesByColorInput").value="";
+      if(document.getElementById("productType")) document.getElementById("productType").value="";
       if(document.getElementById("pType")) document.getElementById("pType").value="stock";
       if(document.getElementById("pMinDays")) document.getElementById("pMinDays").value="";
       if(document.getElementById("pMaxDays")) document.getElementById("pMaxDays").value="";
@@ -1796,6 +1818,7 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
         oldPrice:Number($("oldPrice").value||0),
         popularScore:Number($("popularScore").value||0),
         currency:$("currency").value||"UZS",
+        productType: (document.getElementById("productType")?.value || ""),
 
         createdAt:$("createdAt").value||nowISO(),
         tags, colors, sizes, images, variants,
@@ -1858,6 +1881,7 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       $("description").value=p.description||"";
       $("youtubeUrl").value=p.youtubeUrl||p.videoUrl||"";
 $("currency").value=p.currency||"UZS";
+      if(document.getElementById("productType")) document.getElementById("productType").value = (p.productType||"");
       $("tagsInput").value=(p.tags||[]).join(", ");
       updateTagsPreview();
 
@@ -2832,11 +2856,20 @@ function renderTopupReq(list){
     const userId = String(r.userPublicId || r.numericId || r.uid || '—');
     const phone = String(r.userPhone || r.phone || '—');
     const amtNum = Number(r.amountUZS||0);
+    const finalNum = Number((r.finalAmountUZS ?? r.finalAmount ?? amtNum) || 0);
+    const pctDelta = Number((r.percentDelta ?? r.percentAdded ?? r.percent) || 0);
     const amt = amtNum.toLocaleString() + " so‘m";
+    const finalAmt = (Number.isFinite(finalNum) && finalNum>0 ? finalNum : amtNum).toLocaleString() + " so‘m";
     const card = String(r.payerCardMasked || (r.payerCardLast4 ? ('**** '+r.payerCardLast4) : '—'));
     const receiptLink = r.receiptUrl ? r.receiptUrl : "";
     const time = topupTimeStr(r.createdAt);
     const badge = topupBadge(r.status);
+
+    const finalLine = (Number.isFinite(finalNum) && finalNum>0 && finalNum!==amtNum)
+      ? ('<div class=\"muted\" style=\"font-size:12px;margin-top:2px\">Yakuniy: <b>' + escapeHtml(finalAmt) + '</b>'
+          + (pctDelta ? (' <span class=\"muted\">(' + (pctDelta>0?'+':'') + pctDelta + '%)</span>') : '')
+          + '</div>')
+      : '';
 
     // Cards UI
     if(cards){
@@ -2864,8 +2897,9 @@ function renderTopupReq(list){
 
         <div class="order-card-bottom" style="align-items:center">
           <div class="order-total">
-            <div class="k">Summa</div>
+            <div class="k">Asosiy</div>
             <div class="v">${escapeHtml(amt)}</div>
+            ${finalLine}
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             ${receiptLink ? `<a class="btn btn-light btn-sm" href="${escapeHtml(receiptLink)}" target="_blank" rel="noopener"><i class="fas fa-receipt"></i> Chek</a>` : `<span class="muted">Chek yo‘q</span>`}
@@ -2878,6 +2912,12 @@ function renderTopupReq(list){
       `;
       cards.appendChild(div);
     }
+
+    const finalLineTable = (Number.isFinite(finalNum) && finalNum>0 && finalNum!==amtNum)
+      ? ('<div class=\"muted\" style=\"font-size:12px\">Yakuniy: <b>' + escapeHtml(finalAmt) + '</b>'
+          + (pctDelta ? (' (' + (pctDelta>0?'+':'') + pctDelta + '%)') : '')
+          + '</div>')
+      : '';
 
     // Legacy table
     if(tb){
@@ -2893,7 +2933,7 @@ function renderTopupReq(list){
       tr.innerHTML = `
         <td><code>${escapeHtml(id)}</code></td>
         <td>${escapeHtml(userId)}<div class="muted" style="font-size:12px">${escapeHtml(phone)}</div></td>
-        <td><b>${escapeHtml(amt)}</b></td>
+        <td><b>${escapeHtml(amt)}</b>${finalLineTable}</td>
         <td>${escapeHtml(card)}</td>
         <td>${badge}</td>
         <td>${receipt}</td>
@@ -2949,19 +2989,164 @@ function subscribeTopupReq(){
 }
 
 async function approveTopup(id){
-  const note = prompt('Tasdiqlash izohi (majburiy emas)') || '';
   const reqRef = doc(db,'topup_requests', id);
 
-  // Resolve uid OUTSIDE transaction (queries not allowed inside tx)
+  // Fetch request (queries not allowed inside tx)
   const snap = await getDoc(reqRef);
   if(!snap.exists()) throw new Error('not_found');
   const r0 = snap.data() || {};
   const status0 = String(r0.status || 'pending').toLowerCase();
   if(status0 === 'approved' || status0 === 'rejected' || status0 === 'cancelled') throw new Error('already_done');
 
-  const amt = Number(r0.amountUZS ?? r0.amount ?? 0);
-  if(!Number.isFinite(amt) || amt <= 0) throw new Error('bad_amount');
+  const baseAmt = Number(r0.amountUZS ?? r0.amount ?? 0);
+  if(!Number.isFinite(baseAmt) || baseAmt <= 0) throw new Error('bad_amount');
 
+  // --- Admin edit dialog (manual OR +/- percent) ---
+  const decision = await new Promise((resolve, reject)=>{
+    const baseLabel = (Number(baseAmt)||0).toLocaleString() + " so‘m";
+    const currentFinal = Number(r0.finalAmountUZS ?? baseAmt);
+    const currentPercent = Number(r0.percentDelta ?? r0.percentAdded ?? 0) || 0;
+    const currentNote = String(r0.adminNote || "");
+
+    const html = `
+      <div class="grid2">
+        <div class="mini-card">
+          <div class="mini-title">Asosiy summa</div>
+          <div style="font-weight:900;font-size:20px">${escapeHtml(baseLabel)}</div>
+          <div class="muted" style="margin-top:6px">Bu summa foydalanuvchi tomonidan kiritilgan. Siz yakuniy summani tasdiqlashdan oldin tahrirlashingiz mumkin.</div>
+        </div>
+
+        <div class="mini-card">
+          <div class="mini-title">Yakuniy summa (tasdiqlanadi)</div>
+          <div style="font-weight:900;font-size:20px" id="topupFinalPreview">${escapeHtml((Number(currentFinal)||0).toLocaleString())} so‘m</div>
+          <div class="muted" style="margin-top:6px">Yakuniy summa balansga qo‘shiladi.</div>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="mini-card">
+        <div class="mini-title">Tahrirlash usuli</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+          <label class="pill" style="background:#eef2ff;color:#1d4ed8;cursor:pointer">
+            <input type="radio" name="topupMode" value="percent" style="margin-right:8px" checked>
+            Foiz qo‘shish/ayirish
+          </label>
+          <label class="pill" style="background:#f1f5f9;color:#0f172a;cursor:pointer">
+            <input type="radio" name="topupMode" value="manual" style="margin-right:8px">
+            Summani qo‘lda kiritish
+          </label>
+        </div>
+
+        <div class="form-row" style="margin-top:14px">
+          <div class="form-group" style="min-width:220px">
+            <label>Foiz (− bo‘lishi ham mumkin)</label>
+            <input id="topupPercent" class="form-control" type="number" step="0.01" value="${escapeHtml(String(currentPercent))}" placeholder="Masalan: -3 yoki 5">
+            <div class="form-text">Misol: <b>-3</b> kiritsangiz 3% kamayadi, <b>5</b> kiritsangiz 5% qo‘shiladi.</div>
+          </div>
+
+          <div class="form-group" style="min-width:220px">
+            <label>Qo‘lda yakuniy summa</label>
+            <input id="topupManualFinal" class="form-control" type="number" step="1" value="" placeholder="Masalan: 105000">
+            <div class="form-text">Faqat “Summani qo‘lda kiritish” tanlansa ishlaydi.</div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="min-width:260px">
+            <label>Izoh (ixtiyoriy)</label>
+            <input id="topupAdminNote" class="form-control" value="${escapeHtml(currentNote)}" placeholder="Masalan: 3% komissiya / bonus">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+          <button class="btn btn-light" id="topupCancelBtn"><i class="fas fa-times"></i> Bekor qilish</button>
+          <button class="btn btn-light" id="topupSaveOnlyBtn" title="Tasdiqlamasdan saqlash"><i class="fas fa-floppy-disk"></i> Saqlash</button>
+          <button class="btn btn-primary" id="topupApproveBtn"><i class="fas fa-check"></i> Tasdiqlash</button>
+        </div>
+      </div>
+    `;
+
+    // mount modal
+    const wrap = document.createElement("div");
+    wrap.style.position="fixed";
+    wrap.style.inset="0";
+    wrap.style.background="rgba(0,0,0,.45)";
+    wrap.style.display="flex";
+    wrap.style.alignItems="center";
+    wrap.style.justifyContent="center";
+    wrap.style.zIndex="9999";
+    wrap.innerHTML = `
+      <div style="width:min(900px,92vw);max-height:88vh;background:#fff;border-radius:16px;box-shadow:0 20px 80px rgba(0,0,0,.25);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(0,0,0,.08)">
+          <div style="font-weight:900">Top-up tasdiqlash (tahrirlash bilan)</div>
+          <button class="btn btn-light btn-sm" data-x><i class="fas fa-times"></i></button>
+        </div>
+        <div style="padding:14px;overflow:auto;max-height:78vh">${html}</div>
+      </div>
+    `;
+    function close(){ wrap.remove(); document.removeEventListener("keydown", onKey); }
+    function onKey(e){ if(e.key==="Escape") { close(); reject(new Error("cancelled")); } }
+    wrap.addEventListener("click",(e)=>{ if(e.target===wrap) { close(); reject(new Error("cancelled")); }});
+    wrap.querySelector("[data-x]")?.addEventListener("click", ()=>{ close(); reject(new Error("cancelled")); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(wrap);
+
+    const $m = (sel)=>wrap.querySelector(sel);
+
+    const preview = $m("#topupFinalPreview");
+    const percentEl = $m("#topupPercent");
+    const manualEl = $m("#topupManualFinal");
+
+    function getMode(){
+      return ($m('input[name="topupMode"]:checked')?.value || "percent");
+    }
+    function computeFinal(){
+      const mode = getMode();
+      let percent = Number(percentEl.value || 0);
+      if(!Number.isFinite(percent)) percent = 0;
+
+      if(mode === "manual"){
+        const mf = Number(manualEl.value || 0);
+        if(!Number.isFinite(mf) || mf <= 0) return { ok:false, final:0, percentDelta: null, mode };
+        return { ok:true, final: Math.round(mf), percentDelta: null, mode };
+      }else{
+        // percent mode
+        // clamp to avoid crazy values
+        if(percent > 200) percent = 200;
+        if(percent < -200) percent = -200;
+        const final = Math.round(baseAmt + (baseAmt * percent / 100));
+        if(!Number.isFinite(final) || final <= 0) return { ok:false, final:0, percentDelta: percent, mode };
+        return { ok:true, final, percentDelta: percent, mode };
+      }
+    }
+    function updatePreview(){
+      const r = computeFinal();
+      preview.textContent = r.ok ? (Number(r.final).toLocaleString() + " so‘m") : "—";
+    }
+    ["input","change"].forEach(ev=>{
+      percentEl.addEventListener(ev, updatePreview);
+      manualEl.addEventListener(ev, updatePreview);
+      wrap.querySelectorAll('input[name="topupMode"]').forEach(r=>r.addEventListener(ev, updatePreview));
+    });
+    updatePreview();
+
+    $m("#topupCancelBtn")?.addEventListener("click", ()=>{ close(); reject(new Error("cancelled")); });
+
+    function packDecision(type){
+      const mode = getMode();
+      const calc = computeFinal();
+      if(!calc.ok) { toast("Yakuniy summa noto‘g‘ri", "error"); return; }
+      const note = String($m("#topupAdminNote")?.value || "").trim();
+      close();
+      resolve({ type, mode, baseAmt, finalAmt: calc.final, percentDelta: calc.percentDelta, note });
+    }
+
+    $m("#topupSaveOnlyBtn")?.addEventListener("click", ()=> packDecision("save"));
+    $m("#topupApproveBtn")?.addEventListener("click", ()=> packDecision("approve"));
+  });
+
+  // Resolve uid OUTSIDE transaction (queries not allowed inside tx)
   let uid = r0.uid || null;
 
   // numericId -> users_by_numeric/{numericId} -> {uid}
@@ -2984,6 +3169,22 @@ async function approveTopup(id){
 
   if(!uid) throw new Error('missing_uid');
 
+  // Save-only (no balance change)
+  if(decision.type === "save"){
+    await setDoc(reqRef, {
+      uid: uid, // normalize
+      baseAmountUZS: decision.baseAmt,
+      finalAmountUZS: decision.finalAmt,
+      percentDelta: (decision.mode==="percent" ? (Number(decision.percentDelta)||0) : null),
+      adminNote: decision.note || "",
+      editedAt: serverTimestamp(),
+      editedBy: (auth.currentUser?.email || null),
+      updatedAt: serverTimestamp()
+    }, { merge:true });
+    return;
+  }
+
+  // Approve (transaction + balance change)
   await runTransaction(db, async (tx)=>{
     const rs = await tx.get(reqRef);
     if(!rs.exists()) throw new Error('not_found');
@@ -2998,18 +3199,25 @@ async function approveTopup(id){
     const u = us.data() || {};
     const bal = Number(u.balanceUZS || 0) || 0;
 
-    tx.set(uref, { balanceUZS: bal + amt, updatedAt: serverTimestamp() }, { merge:true });
+    const finalAmt = Number(decision.finalAmt||0);
+    if(!Number.isFinite(finalAmt) || finalAmt <= 0) throw new Error('bad_final_amount');
+
+    tx.set(uref, { balanceUZS: bal + finalAmt, updatedAt: serverTimestamp() }, { merge:true });
 
     tx.set(reqRef, {
       status:'approved',
       uid: uid, // normalize for future reads
-      adminNote: (note||'').trim(),
+      baseAmountUZS: decision.baseAmt,
+      finalAmountUZS: finalAmt,
+      percentDelta: (decision.mode==="percent" ? (Number(decision.percentDelta)||0) : null),
+      adminNote: (decision.note||'').trim(),
       approvedAt: serverTimestamp(),
       approvedBy: (auth.currentUser?.email || null),
       updatedAt: serverTimestamp()
     }, { merge:true });
   });
 }
+
 
 
 async function cancelTopup(id){

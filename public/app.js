@@ -1190,6 +1190,24 @@ function renderDeliveryBadge(p){
   // Use local PNG flags to avoid emoji font issues (UZ/CN text fallback).
   return `<span class="${cls}"><img class="omFlag" src="${flagSrc}" alt="${flagAlt}" loading="lazy"> <span class="omTruck">🚚</span> (${d.min}–${d.max} kun)</span>`;
 }
+
+function getProductType(p){
+  const t = String(p?.productType || p?.authType || "").toLowerCase().trim();
+  if(!t) return "";
+  if(["original","org","brand"].includes(t)) return "original";
+  if(["oem","factory"].includes(t)) return "oem";
+  if(["replica","copy","nusxa","fake"].includes(t)) return "replica";
+  return t;
+}
+function renderProductTypeBadge(p){
+  const t = getProductType(p);
+  if(!t) return "";
+  if(t==="original") return `<span class="authBadge original" title="Original"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Original</span>`;
+  if(t==="oem") return `<span class="authBadge oem" title="OEM"><i class="fa-solid fa-industry" aria-hidden="true"></i> OEM</span>`;
+  if(t==="replica") return `<span class="authBadge replica" title="Nusxa"><i class="fa-solid fa-copy" aria-hidden="true"></i> Nusxa</span>`;
+  return `<span class="authBadge other" title="Mahsulot turi"><i class="fa-solid fa-tag" aria-hidden="true"></i> ${escapeHtml(t)}</span>`;
+}
+
 function discountPct(price, oldPrice){
   const p = Number(price||0), o = Number(oldPrice||0);
   if(!o || o <= p) return 0;
@@ -1321,6 +1339,7 @@ for(const b of adminBadges.slice(0,3)){
 // Prepay badge moved to cart (not shown on cards)
 
 const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlParts.join("")}</div>` : "";
+const authHTML = renderProductTypeBadge(p);
 
     const st = getStats(p.id);
     const showAvg = st.count ? st.avg : 0;
@@ -1342,7 +1361,7 @@ const badgeHTML = badgeHtmlParts.length ? `<div class="pbadgeStack">${badgeHtmlP
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        <div class="pship">${renderDeliveryBadge(p)}</div>
+        <div class="pship">${renderDeliveryBadge(p)}${authHTML?` ${authHTML}`:""}</div>
 
         
 
