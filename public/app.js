@@ -3028,26 +3028,32 @@ async function loadProductsPage(){
   try{
     const colRef = collection(db, "products");
 
+		// IMPORTANT: Public catalog must only query documents that the user can read.
+		// If a query could include even 1 unreadable doc (e.g., status != "approved"),
+		// Firestore rejects the *entire* query with permission-denied.
+		// So we always filter to approved here.
+		const approvedOnly = where("status", "==", "approved");
+
     // Query modes (avoid composite indexes by default).
     // Primary: updatedAt desc (most docs already have updatedAt).
     const modes = [
       {
         name: "updatedAt",
         build: (after)=> after
-          ? query(colRef, orderBy("updatedAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
-          : query(colRef, orderBy("updatedAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+					? query(colRef, approvedOnly, orderBy("updatedAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+					: query(colRef, approvedOnly, orderBy("updatedAt","desc"), limit(PRODUCTS_PAGE_SIZE))
       },
       {
         name: "createdAt",
         build: (after)=> after
-          ? query(colRef, orderBy("createdAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
-          : query(colRef, orderBy("createdAt","desc"), limit(PRODUCTS_PAGE_SIZE))
+					? query(colRef, approvedOnly, orderBy("createdAt","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+					: query(colRef, approvedOnly, orderBy("createdAt","desc"), limit(PRODUCTS_PAGE_SIZE))
       },
       {
         name: "popularScore",
         build: (after)=> after
-          ? query(colRef, orderBy("popularScore","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
-          : query(colRef, orderBy("popularScore","desc"), limit(PRODUCTS_PAGE_SIZE))
+					? query(colRef, approvedOnly, orderBy("popularScore","desc"), startAfter(after), limit(PRODUCTS_PAGE_SIZE))
+					: query(colRef, approvedOnly, orderBy("popularScore","desc"), limit(PRODUCTS_PAGE_SIZE))
       },
     ];
 
