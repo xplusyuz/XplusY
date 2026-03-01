@@ -1349,6 +1349,7 @@ const authHTML = renderProductTypeBadge(p);
       <div class="pmedia">
         <img class="pimg" src="${currentImg || ""}" alt="${escapeHtml(p.name || "product")}" loading="lazy"/>
         ${badgeHTML}
+        ${authHTML?`<div class="authOnImg">${authHTML}</div>`:""}
         <button class="favBtn ${isFav ? "active" : ""}" title="Sevimli">${isFav ? "♥" : "♡"}</button>
       </div>
 
@@ -1361,7 +1362,7 @@ const authHTML = renderProductTypeBadge(p);
         <div class="pinstall" style="display:none"></div>
 
         <div class="pname clamp2">${escapeHtml(p.name || "Nomsiz")}</div>
-        <div class="pship">${renderDeliveryBadge(p)}${authHTML?` ${authHTML}`:""}</div>
+        <div class="pship">${renderDeliveryBadge(p)}</div>
 
         
 
