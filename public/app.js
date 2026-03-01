@@ -2998,6 +2998,7 @@ async function createOrderFromCheckout(){
   }catch(e){
     console.warn("checkout order create failed", e);
     toast("Buyurtma yaratilmadi. Qayta urinib ko‘ring.");
+    return; // IMPORTANT: don't show success message on failure
   }
 
   toast("Buyurtmangiz qabul qilindi");
