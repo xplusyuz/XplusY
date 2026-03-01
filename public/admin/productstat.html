@@ -66,6 +66,55 @@
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:min(560px,calc(100% - 24px));background:#111827;color:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 18px 60px rgba(0,0,0,.35);display:none;z-index:1000}
     .toast .t{font-weight:1000} .toast .d{opacity:.9;font-size:.9rem;margin-top:3px}
     @media (min-width:980px){.side{display:flex;flex-direction:column}.main{padding:18px 18px 26px}.stats{grid-template-columns:repeat(4,minmax(0,1fr))}.formGrid{grid-template-columns:1fr 1fr}.backdrop{align-items:center}}
+  
+    /* Product cards */
+    .cards{
+      display:grid;
+      gap:12px;
+      padding:12px;
+      grid-template-columns: 1fr;
+    }
+    .pCard{
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      overflow:hidden;
+      box-shadow:0 12px 30px rgba(2,6,23,.06);
+      display:grid;
+      grid-template-columns: 92px 1fr;
+      gap:10px;
+      padding:10px;
+      align-items:center;
+    }
+    .pImg{
+      width:92px;height:92px;border-radius:16px;
+      background:#f1f5f9;
+      overflow:hidden;
+      border:1px solid #e2e8f0;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .pImg img{width:100%;height:100%;object-fit:cover;display:block}
+    .pBody{min-width:0}
+    .pTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .pName{font-weight:1000; line-height:1.2; font-size:.98rem; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .pSub{margin-top:4px; display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+    .pMeta{font-size:.78rem;color:var(--muted)}
+    .pRight{display:grid; gap:6px; justify-items:end}
+    .pPrice{font-weight:1100}
+    .pActions{margin-top:10px; display:flex; gap:8px; flex-wrap:wrap}
+    .pActions .btn{flex:0 0 auto}
+    .pSell{display:flex; gap:8px; align-items:center}
+    .pSell input{width:90px}
+    .divider{height:1px;background:var(--line);margin-top:10px}
+    @media (min-width: 620px){
+      .cards{grid-template-columns: repeat(2, minmax(0,1fr));}
+      .pCard{grid-template-columns: 110px 1fr;}
+      .pImg{width:110px;height:110px}
+    }
+    @media (min-width: 980px){
+      .cards{grid-template-columns: repeat(3, minmax(0,1fr));}
+    }
+
   </style>
 </head>
 <body>
@@ -120,23 +169,7 @@
           <div class="left"><span class="tag">Inventory products ichida</span></div>
         </div>
 
-        <div class="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="min-width:92px">ID</th>
-                <th style="min-width:240px">Mahsulot</th>
-                <th style="min-width:120px">Narx (UZS)</th>
-                <th style="min-width:140px">Qoldiq</th>
-                <th style="min-width:120px">Kam bo‘lsa</th>
-                <th style="min-width:140px">Sotilgan</th>
-                <th style="min-width:170px">Sotuv summasi</th>
-                <th style="min-width:260px">Harakat</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
-        </div>
+        <div class="cards" id="cards"></div>
       </section>
 
       <section class="card" id="sales" style="margin-top:12px">
@@ -235,7 +268,7 @@
     const provider = new GoogleAuthProvider();
 
     const $ = (s)=>document.querySelector(s);
-    const rowsEl = $("#rows");
+    const cardsEl = $("#cards");
     const reportRowsEl = $("#reportRows");
     const qEl = $("#q");
     const roleBadge = $("#roleBadge");
@@ -314,6 +347,19 @@
 
     function getName(p){ return (p?.name||p?.title||p?.nomi||p?.productName||"Nomsiz"); }
     function getProductPriceUZS(p){ return Number(p?.priceUZS ?? p?.price ?? p?.narx ?? p?.currentPriceUZS ?? 0); }
+    function getImageUrl(p){
+      // eng ko‘p uchraydigan maydonlar: images[], imageUrl, image, photo, thumbnail, gallery[]
+      const tryStr = (v)=> (typeof v==="string" && v.trim()) ? v.trim() : "";
+      const tryArr0 = (a)=> (Array.isArray(a) && a.length) ? tryStr(a[0]) : "";
+      let u = "";
+      u = tryArr0(p?.images) || tryArr0(p?.imgs) || tryArr0(p?.gallery) || tryArr0(p?.photos);
+      u = u || tryStr(p?.imageUrl) || tryStr(p?.image) || tryStr(p?.photo) || tryStr(p?.thumbnail) || tryStr(p?.thumb) || tryStr(p?.coverUrl);
+      // ba'zan product.images[0].url ko‘rinishida bo‘ladi
+      if(!u && Array.isArray(p?.images) && p.images[0] && typeof p.images[0]==="object"){
+        u = tryStr(p.images[0].url) || tryStr(p.images[0].src);
+      }
+      return u;
+    }
     function inv(p){
       const i=p?.inventory||{};
       return { stock:Number(i.stock??0), lowThreshold:Number(i.lowThreshold??0), soldCount:Number(i.soldCount??0), soldSumUZS:Number(i.soldSumUZS??0), unitPriceUZS:Number(i.unitPriceUZS??0), note:String(i.note??"") };
@@ -347,7 +393,7 @@
         const p=x.data||{};
         const i=inv(p);
         const unit = i.unitPriceUZS>0 ? i.unitPriceUZS : getProductPriceUZS(p);
-        return { id:x.id, p, name:getName(p), unitPriceUZS:Number(unit||0), stock:i.stock, lowThreshold:i.lowThreshold, soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, note:i.note, assignedSellerUids:assigned(p), updatedAt:p?.updatedAt };
+        return { id:x.id, p, imgUrl:getImageUrl(p), name:getName(p), unitPriceUZS:Number(unit||0), stock:i.stock, lowThreshold:i.lowThreshold, soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, note:i.note, assignedSellerUids:assigned(p), updatedAt:p?.updatedAt };
       }).filter(x=>{
         if(!isAdmin && !x.assignedSellerUids.includes(me.uid)) return false;
         if(qt) return String(x.id).toLowerCase().includes(qt) || String(x.name).toLowerCase().includes(qt);
@@ -371,25 +417,51 @@
       $("#lowPill").textContent=`Kam qoldi: ${fmt(low)}`; $("#zeroPill").textContent=`Tugagan: ${fmt(zero)}`; $("#okPill").textContent=`Yetarli: ${fmt(ok)}`;
       $("#lowPill").className="pill warn"; $("#zeroPill").className="pill bad"; $("#okPill").className="pill ok";
 
-      rowsEl.innerHTML = view.map(x=>{
+      
+      cardsEl.innerHTML = view.map(x=>{
         const stateClass = x.stock<=0 ? "bad" : (x.stock<=x.lowThreshold ? "warn" : "ok");
         const stateText = x.stock<=0 ? "Tugagan" : (x.stock<=x.lowThreshold ? "Kam qoldi" : "Yetarli");
-        return `<tr>
-          <td><span class="idtag">${escapeHtml(x.id)}</span></td>
-          <td><div class="rowTitle">${escapeHtml(x.name)}</div><div class="mini muted">${isAdmin?("Sotuvchi: "+(x.assignedSellerUids.length?x.assignedSellerUids.length+" ta":"yo‘q")):"Biriktirilgan mahsulot"}</div></td>
-          <td class="money">${fmt(x.unitPriceUZS)} <span class="muted mini">so‘m</span></td>
-          <td><span class="pill ${stateClass}">${fmt(x.stock)} • ${stateText}</span></td>
-          <td>${fmt(x.lowThreshold)}</td>
-          <td>${fmt(x.soldCount)}</td>
-          <td class="money">${fmt(x.soldSumUZS)} <span class="muted mini">so‘m</span></td>
-          <td><div class="qtyBox">
-            ${isAdmin ? `<button class="btn btn-ghost btn-sm" data-act="edit" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-pen-to-square"></i> Tahrirlash</button>`
-                     : `<input data-act="qty" data-id="${escapeAttr(x.id)}" type="number" min="1" step="1" value="1" />
-                        <button class="btn btn-primary btn-sm" data-act="sell" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-check"></i> Sotildi</button>`}
-            <button class="btn btn-ghost btn-sm" data-act="details" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-circle-info"></i></button>
-          </div></td>
-        </tr>`;
+        const img = (x.imgUrl || "");
+        const sellerInfo = isAdmin ? ("Sotuvchi: "+(x.assignedSellerUids.length? x.assignedSellerUids.length+" ta":"yo‘q")) : "Biriktirilgan mahsulot";
+        return `
+          <div class="pCard">
+            <div class="pImg">
+              ${img ? `<img src="${escapeAttr(img)}" alt="${escapeAttr(x.name)}" loading="lazy" />`
+                    : `<i class="fa-solid fa-image" style="color:#94a3b8;font-size:1.2rem"></i>`}
+            </div>
+            <div class="pBody">
+              <div class="pTop">
+                <div style="min-width:0">
+                  <div class="pName" title="${escapeAttr(x.name)}">${escapeHtml(x.name)}</div>
+                  <div class="pSub">
+                    <span class="idtag">${escapeHtml(x.id)}</span>
+                    <span class="pill ${stateClass}">${fmt(x.stock)} • ${stateText}</span>
+                  </div>
+                  <div class="pMeta">${escapeHtml(sellerInfo)}</div>
+                </div>
+                <div class="pRight">
+                  <div class="pPrice">${fmt(x.unitPriceUZS)} <span class="muted mini">so‘m</span></div>
+                  <div class="mini muted">Sotilgan: <b>${fmt(x.soldCount)}</b></div>
+                  <div class="mini muted">Tushum: <b>${fmt(x.soldSumUZS)}</b> so‘m</div>
+                </div>
+              </div>
+
+              <div class="pActions">
+                ${isAdmin ? `
+                  <button class="btn btn-ghost btn-sm" data-act="edit" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-pen-to-square"></i> Tahrirlash</button>
+                ` : `
+                  <div class="pSell">
+                    <input data-act="qty" data-id="${escapeAttr(x.id)}" type="number" min="1" step="1" value="1" />
+                    <button class="btn btn-primary btn-sm" data-act="sell" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-check"></i> Sotildi</button>
+                  </div>
+                `}
+                <button class="btn btn-ghost btn-sm" data-act="details" data-id="${escapeAttr(x.id)}"><i class="fa-solid fa-circle-info"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
       }).join("");
+
 
       reportRowsEl.innerHTML = view.map(x=>`<tr>
         <td><span class="idtag">${escapeHtml(x.id)}</span></td>
