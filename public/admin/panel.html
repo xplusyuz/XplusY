@@ -1735,16 +1735,35 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       return nums.length ? Math.max(...nums) : 0;
     }
 
-    function genSeqId(prefix){
-      const last = parseSeqForPrefix(prefix);
-      const next = last + 1;
-      // 001, 002, ... 999, 1000, ...
-      return (prefix + String(next).padStart(3,"0")).toLowerCase();
+    async function genSeqId(prefix){
+      // PRO: global counter via Firestore transaction (no overwrite, concurrency-safe)
+      const counterRef = doc(db, "meta", "counters");
+      const pfx = String(prefix||"").toLowerCase();
+
+      return await runTransaction(db, async (tx) => {
+        const cs = await tx.get(counterRef);
+        const data = cs.exists() ? (cs.data()||{}) : {};
+        let cur = Number(data[pfx] || 0);
+        let next = cur;
+
+        // ensure unique even if old docs exist
+        for(let guard=0; guard<50; guard++){
+          next = next + 1;
+          const cand = (pfx + String(next).padStart(3,"0")).toLowerCase();
+          const candRef = doc(db, "products", cand);
+          const ps = await tx.get(candRef);
+          if(!ps.exists()){
+            tx.set(counterRef, { [pfx]: next }, { merge:true });
+            return cand;
+          }
+        }
+        throw new Error("ID generator: urinishlar tugadi (50).");
+      });
     }
 
-    function genAdminId(){
+    async function genAdminId(){
       // Admin mahsulotlari: aa001, aa002, ...
-      return genSeqId("aa");
+      return await genSeqId("aa");
     }
 
 
@@ -1766,10 +1785,10 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       // start from 28 => "ab" ("aa" reserved for admin)
       return excelLetters((idx>=0?idx:0) + 28);
     }
-    function genVendorId(email){
+    async function genVendorId(email){
       // Vendor mahsulotlari: ab001, ab002, ... (vendorlar ro'yxati tartibi bo'yicha)
       const prefix = vendorPrefixForEmail(email);
-      return genSeqId(prefix);
+      return await genSeqId(prefix);
     }
 
     async function saveProduct(){
@@ -1784,9 +1803,13 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
       // ID policy:
       // - Admin: om###
       // - Vendor: aa..., ab..., ... based on vendor list order
-      const id=state.editingId || (isA ? genAdminId() : genVendorId(user?.email||""));
-
-      const tags=($("tagsInput").value||"").split(",").map(s=>s.trim()).filter(Boolean);
+      let id = state.editingId;
+      if(!id){
+        id = isA ? await genAdminId() : await genVendorId(user?.email||"");
+      }
+      // keep form in sync (read-only display)
+      if($("productId")) $("productId").value = id;
+const tags=($("tagsInput").value||"").split(",").map(s=>s.trim()).filter(Boolean);
 
       const colors=[...document.querySelectorAll("#colorsContainer .list-item")].map(li=>{
         const ins=li.querySelectorAll("input");
@@ -1858,7 +1881,7 @@ ${(state.role==="admin" || state.role==="vendor")?`<button class="btn btn-light 
             return toast("Faqat o‘zingiz qo‘shgan mahsulotni tahrirlaysiz","error");
           }
         }
-        await addDoc(collection(db, "products"), data, { merge:true });
+        await setDoc(doc(db,"products",id), data, { merge:true });
         toast(state.editingId?"Yangilandi":"Yangi mahsulot qo'shildi");
         closeModal("productModal");
         resetForm();
