@@ -2543,6 +2543,19 @@ function statusUZ(s){
       if(!order) return;
       openModal("orderModal");
       window.__OM_CURRENT_ORDER = order;
+      // PRO: ro‘yxatdagi order obyektida items bo‘lmasligi mumkin.
+      // Shuning uchun batafsil ochilganda orders/{id} dan to‘liq hujjatni qayta o‘qiymiz.
+      try{
+        const oid = order.id || order.orderId || order.docId || order._id || "";
+        if(oid){
+          const fullSnap = await getDoc(doc(db,"orders", String(oid)));
+          if(fullSnap.exists()){
+            order = { ...order, ...fullSnap.data(), id: String(oid) };
+            window.__OM_CURRENT_ORDER = order;
+          }
+        }
+      }catch(e){ /* ignore */ }
+
 
       const ship = order.shipping || {};
       const addr = ship.addressText || order.addressText || order.address || "—";
@@ -2574,6 +2587,13 @@ function statusUZ(s){
 
       // items table
       const items0 = normalizeOrderItems(order);
+      if(!items0.length){
+        const keys = Object.keys(order||{}).slice(0,40).join(", ");
+        $("orderItemsWrap").innerHTML = `<div class="mini muted" style="padding:10px">
+          Mahsulotlar topilmadi. (order fieldlar: <b>${escapeHtml(keys)}</b>)
+        </div>`;
+      }
+
       $("orderItemsWrap").innerHTML = `<div class="mini muted" style="padding:10px">Mahsulotlar yuklanmoqda...</div>`;
 
       // Agar item ichida rasm bo‘lmasa, productId orqali products’dan olib kelamiz
