@@ -1,11 +1,4 @@
-
-    function normalizeOrderItems(order){
-      // Orders ichida items turli nomlarda bo'lishi mumkin
-      const pick = (v)=>{
-        if(Array.isArray(v)) return v;
-        if(v && typeof v==="object") return Object.values(v);
-        return [];
-      };
+;
       if(!order) return [];
       return (
         pick(order.items).length ? pick(order.items) :
@@ -960,7 +953,23 @@
   <div class="toast" id="toast"><i class="fas fa-check-circle"></i><span id="toastMessage">OK</span></div>
 
   <script type="module">
-    // Firebase konfiguratsiyasi
+    
+    // === PRO: order items normalization (various schemas) ===
+    function normalizeOrderItems(order){
+      const pick = (v)=>{
+        if(Array.isArray(v)) return v;
+        if(v && typeof v==="object") return Object.values(v);
+        return [];
+      };
+      if(!order) return [];
+      const keys = ["items","cartItems","products","cart","lines","orderItems"];
+      for(const k of keys){
+        const arr = pick(order[k]);
+        if(arr.length) return arr;
+      }
+      return [];
+    }
+// Firebase konfiguratsiyasi
     const DEFAULT_ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
     let FIREBASE_CONFIG = null;
     window.FIREBASE_CONFIG = null;
@@ -3419,7 +3428,7 @@ document.addEventListener('click', async (e)=>{
       const created = formatTS(order.createdAt);
       const publicId = order.userPublicId || order.numericId || order.userId || "—";
 
-      const items = Array.isArray(order.items) ? order.items : [];
+      const items = normalizeOrderItems(order);
       const rows = items.map(it=>{
         const title = safe(it.title || it.name || it.productTitle || "Mahsulot");
         const qty = Number(it.qty || it.quantity || 1);
