@@ -2242,6 +2242,31 @@ if(e.target===$("jsonModal")) closeModal("jsonModal");
     });
   
     function escapeHtml(s){return String(s??"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+
+/** Order items: safe image resolver (backward compatible) */
+function getItemImageUrl(item){
+  try{
+    if(!item) return "";
+    // Direct fields
+    const direct = item.image || item.imageUrl || item.img || item.photo;
+    if(direct && typeof direct === "string") return direct;
+
+    // images array
+    if(Array.isArray(item.images) && item.images.length) return String(item.images[0]||"");
+
+    // imagesByColor object { color: [url,...] }
+    if(item.imagesByColor && typeof item.imagesByColor === "object"){
+      const keys = Object.keys(item.imagesByColor);
+      if(keys.length){
+        const v = item.imagesByColor[keys[0]];
+        if(Array.isArray(v) && v.length) return String(v[0]||"");
+        if(typeof v === "string") return v;
+      }
+    }
+  }catch(e){}
+  return "";
+}
+
 function statusClass3(s){
   const st = String(s||"").toLowerCase();
   if(st==="approved" || st==="paid" || st==="delivered" || st==="success") return "approved";
@@ -2580,13 +2605,7 @@ function statusUZ(s){
           return String(v||"");
         }catch(_e){ return ""; }
       };
-      const getItemImage = (it)=>{
-        const direct =
-          it.image || it.imageUrl || it.img || it.photo ||
-          (Array.isArray(it.images) ? it.images[0] : "") ||
-          (it.imagesByColor ? firstInObj(it.imagesByColor) : "");
-        return String(direct||"");
-      };
+      const getItemImage = (it)=>{ return getItemImageUrl(it) || ""; };
       const getItemTitle = (it)=>{
         return String(it.title || it.name || it.productTitle || it.productName || it.id || it.productId || "");
       };
