@@ -1,16 +1,3 @@
-;
-      if(!order) return [];
-      return (
-        pick(order.items).length ? pick(order.items) :
-        pick(order.cartItems).length ? pick(order.cartItems) :
-        pick(order.products).length ? pick(order.products) :
-        pick(order.cart).length ? pick(order.cart) :
-        pick(order.lines).length ? pick(order.lines) :
-        pick(order.orderItems).length ? pick(order.orderItems) :
-        []
-      );
-    }
-
 <!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -327,6 +314,18 @@
     .order-total .v{font-size:1.05rem;font-weight:900;color:var(--primary)}
     .order-open{white-space:nowrap}
 
+/* Order items (detail) */
+.order-items-grid{display:flex;flex-direction:column;gap:10px}
+.order-item-card{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid #e9ecef;border-radius:14px;background:#fff}
+.order-item-img{width:72px;height:72px;border-radius:12px;object-fit:cover;background:#f1f5f9;border:1px solid #eef2f7;flex:0 0 auto}
+.order-item-info{flex:1;min-width:0}
+.order-item-title{font-weight:900;font-size:0.98rem;line-height:1.2;margin:0;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.order-item-meta{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px}
+.order-item-pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;background:#f8fafc;border:1px solid #eef2f7;font-size:0.86rem;color:#334155}
+.order-item-pill b{font-weight:900;color:#0f172a}
+
+
+
 
     /* Topup & Turnover cards */
     .topup-card .order-status-wrap .v,
@@ -394,25 +393,6 @@
     .modal-actions .btn{white-space:nowrap}
     @media (max-width: 520px){
       .modal-actions{flex-wrap:wrap;justify-content:flex-end}
-    }
-
-
-    /* Order items images */
-    .item-thumb{
-      width:44px;height:44px;border-radius:12px;
-      border:1px solid #e5e7eb;
-      background:#f1f5f9;
-      object-fit:cover;
-      display:block;
-    }
-    .item-thumb-wrap{
-      width:44px;height:44px;border-radius:12px;
-      border:1px solid #e5e7eb;background:#f1f5f9;
-      display:flex;align-items:center;justify-content:center;
-      color:#94a3b8;
-    }
-    @media (max-width:520px){
-      .item-thumb,.item-thumb-wrap{width:40px;height:40px;border-radius:10px}
     }
 
 </style>
@@ -953,23 +933,7 @@
   <div class="toast" id="toast"><i class="fas fa-check-circle"></i><span id="toastMessage">OK</span></div>
 
   <script type="module">
-    
-    // === PRO: order items normalization (various schemas) ===
-    function normalizeOrderItems(order){
-      const pick = (v)=>{
-        if(Array.isArray(v)) return v;
-        if(v && typeof v==="object") return Object.values(v);
-        return [];
-      };
-      if(!order) return [];
-      const keys = ["items","cartItems","products","cart","lines","orderItems"];
-      for(const k of keys){
-        const arr = pick(order[k]);
-        if(arr.length) return arr;
-      }
-      return [];
-    }
-// Firebase konfiguratsiyasi
+    // Firebase konfiguratsiyasi
     const DEFAULT_ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
     let FIREBASE_CONFIG = null;
     window.FIREBASE_CONFIG = null;
@@ -2572,19 +2536,6 @@ function statusUZ(s){
       if(!order) return;
       openModal("orderModal");
       window.__OM_CURRENT_ORDER = order;
-      // PRO: ro‘yxatdagi order obyektida items bo‘lmasligi mumkin.
-      // Shuning uchun batafsil ochilganda orders/{id} dan to‘liq hujjatni qayta o‘qiymiz.
-      try{
-        const oid = order.id || order.orderId || order.docId || order._id || "";
-        if(oid){
-          const fullSnap = await getDoc(doc(db,"orders", String(oid)));
-          if(fullSnap.exists()){
-            order = { ...order, ...fullSnap.data(), id: String(oid) };
-            window.__OM_CURRENT_ORDER = order;
-          }
-        }
-      }catch(e){ /* ignore */ }
-
 
       const ship = order.shipping || {};
       const addr = ship.addressText || order.addressText || order.address || "—";
@@ -2614,76 +2565,113 @@ function statusUZ(s){
         kvRow("Koordinata", (lat && lng) ? `${lat}, ${lng}` : "—")
       ].join("");
 
-      // items table
-      const items0 = normalizeOrderItems(order);
-      if(!items0.length){
-        const keys = Object.keys(order||{}).slice(0,40).join(", ");
-        $("orderItemsWrap").innerHTML = `<div class="mini muted" style="padding:10px">
-          Mahsulotlar topilmadi. (order fieldlar: <b>${escapeHtml(keys)}</b>)
-        </div>`;
-      }
+      // items (cards with image)
+      const rawItems = Array.isArray(order.items) ? order.items : [];
+      const wrap = $("orderItemsWrap");
+      if(!wrap){ return; }
 
-      $("orderItemsWrap").innerHTML = `<div class="mini muted" style="padding:10px">Mahsulotlar yuklanmoqda...</div>`;
-
-      // Agar item ichida rasm bo‘lmasa, productId orqali products’dan olib kelamiz
-      const ids = [...new Set(items0.map(it=>it.productId).filter(Boolean))];
-      const prodMap = new Map();
-      await Promise.all(ids.slice(0,50).map(async(pid)=>{
+      // Helpers
+      const firstInObj = (obj)=>{
         try{
-          const ps = await getDoc(doc(db,"products",pid));
-          if(ps.exists()) prodMap.set(pid, ps.data()||{});
-        }catch(e){}
-      }));
+          if(!obj || typeof obj!=="object") return "";
+          const k = Object.keys(obj)[0];
+          const v = obj[k];
+          if(Array.isArray(v)) return String(v[0]||"");
+          return String(v||"");
+        }catch(_e){ return ""; }
+      };
+      const getItemImage = (it)=>{
+        const direct =
+          it.image || it.imageUrl || it.img || it.photo ||
+          (Array.isArray(it.images) ? it.images[0] : "") ||
+          (it.imagesByColor ? firstInObj(it.imagesByColor) : "");
+        return String(direct||"");
+      };
+      const getItemTitle = (it)=>{
+        return String(it.title || it.name || it.productTitle || it.productName || it.id || it.productId || "");
+      };
+      const getItemQty = (it)=>{
+        return Number(it.qty ?? it.quantity ?? it.count ?? 1) || 1;
+      };
+      const getItemPrice = (it)=>{
+        const p = it.priceUZS ?? it.price ?? it.unitPrice ?? 0;
+        const n = Number(p);
+        return isFinite(n) ? n : 0;
+      };
+      const getVariant = (it)=>{
+        return [it.color, it.size, it.variant].filter(Boolean).join(" / ") || "—";
+      };
+      const getPid = (it)=>{
+        return String(it.productId || it.pid || it.id || it.product || "");
+      };
 
-      const items = items0.map(it=>{
-        const p = prodMap.get(it.productId) || {};
-        const img = getItemImageUrl(it) || getItemImageUrl(p) || "";
-        const nm = it.name || (p.name||p.title||p.nomi||"") || it.productId || "";
-        const price = it.priceUZS || Number(p.priceUZS ?? p.price ?? p.narx ?? p.currentPriceUZS ?? 0) || 0;
-        return { ...it, _img: img, _nm: nm, _price: price };
-      });
+      // Render skeleton first
+      wrap.innerHTML = `<div class="order-items-grid" id="orderItemsGrid"></div>`;
+      const grid = $("orderItemsGrid");
+      if(!grid){ return; }
 
-      const t = `
-        <div style="overflow:auto;-webkit-overflow-scrolling:touch">
-          <table style="width:100%;border-collapse:collapse;min-width:680px">
-            <thead style="background:#f8f9fa">
-              <tr>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef;width:76px">Rasm</th>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef">Nomi</th>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef">Variant</th>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef">Soni</th>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef">Narx</th>
-                <th style="padding:10px;border-bottom:1px solid #e9ecef">Jami</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.length ? items.map(it=>{
-                const variant = [it.color,it.size].filter(Boolean).join(" / ") || "—";
-                const qty = Number(it.qty||1);
-                const price = Number(it._price||0);
-                const total = qty * price;
-                const img = it._img;
-                return `
-                  <tr>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">
-                      ${img ? `<img class="item-thumb" src="${escapeAttr(img)}" alt="${escapeAttr(it._nm)}" loading="lazy" />`
-                           : `<div class="item-thumb-wrap"><i class="fas fa-image"></i></div>`}
-                    </td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(it._nm)}</b><div class="muted mini">${escapeHtml(it.productId||"")}</div></td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(variant)}</td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(String(qty))}</td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9">${escapeHtml(price ? price.toLocaleString()+" so‘m" : "—")}</td>
-                    <td style="padding:10px;border-bottom:1px solid #f1f5f9"><b>${escapeHtml(total ? total.toLocaleString()+" so‘m" : "—")}</b></td>
-                  </tr>
-                `;
-              }).join("") : `
-                <tr><td colspan="6" style="padding:12px;color:#64748b">Bu buyurtmada mahsulotlar ro‘yxati topilmadi (order.items / cartItems / products). Order doc’ni tekshiring.</td></tr>
-              `}
-            </tbody>
-          </table>
-        </div>
-      `;
-      $("orderItemsWrap").innerHTML = t;
+      const placeholders = rawItems.map((it, idx)=>{
+        const title = escapeHtml(getItemTitle(it) || "Mahsulot");
+        const qty = getItemQty(it);
+        const price = getItemPrice(it);
+        const variant = escapeHtml(getVariant(it));
+        const img = getItemImage(it);
+
+        return `
+          <div class="order-item-card" data-idx="${idx}">
+            <img class="order-item-img" src="${img ? escapeHtml(img) : 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect width='100%25' height='100%25' fill='%23f1f5f9'/%3E%3Cpath d='M30 78l18-18 14 14 10-10 18 18H30z' fill='%2394a3b8'/%3E%3Ccircle cx='46' cy='44' r='8' fill='%2394a3b8'/%3E%3C/svg%3E'}" alt="">
+            <div class="order-item-info">
+              <p class="order-item-title">${title}</p>
+              <div class="order-item-meta">
+                <span class="order-item-pill">Variant: <b>${variant}</b></span>
+                <span class="order-item-pill">Soni: <b>${escapeHtml(String(qty))}</b></span>
+                <span class="order-item-pill">Narx: <b>${escapeHtml(price ? price.toLocaleString() : "—")}</b> so‘m</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      grid.innerHTML = placeholders || `<div class="muted">Mahsulotlar mavjud emas</div>`;
+
+      // Hydrate missing title/image from products (for old orders)
+      try{
+        if(db && rawItems.length){
+          const tasks = rawItems.map(async (it, idx)=>{
+            const needImg = !getItemImage(it);
+            const needTitle = !getItemTitle(it);
+            if(!needImg && !needTitle) return;
+
+            const pid = getPid(it);
+            if(!pid) return;
+
+            const ps = await getDoc(doc(db,"products",pid));
+            if(!ps.exists()) return;
+            const pd = ps.data() || {};
+
+            const title = needTitle ? String(pd.title || pd.name || "") : "";
+            const img = needImg ? String(
+              (Array.isArray(pd.images) ? pd.images[0] : "") ||
+              (pd.imagesByColor ? firstInObj(pd.imagesByColor) : "") ||
+              pd.image || pd.imageUrl || ""
+            ) : "";
+
+            const card = grid.querySelector(`.order-item-card[data-idx="${idx}"]`);
+            if(!card) return;
+
+            if(title){
+              const el = card.querySelector(".order-item-title");
+              if(el) el.textContent = title;
+            }
+            if(img){
+              const im = card.querySelector(".order-item-img");
+              if(im) im.src = img;
+            }
+          });
+
+          await Promise.allSettled(tasks);
+        }
+      }catch(_e){}
 // map
       const mapCard = $("mapCard");
       const note = $("mapNote");
@@ -3428,7 +3416,7 @@ document.addEventListener('click', async (e)=>{
       const created = formatTS(order.createdAt);
       const publicId = order.userPublicId || order.numericId || order.userId || "—";
 
-      const items = normalizeOrderItems(order);
+      const items = Array.isArray(order.items) ? order.items : [];
       const rows = items.map(it=>{
         const title = safe(it.title || it.name || it.productTitle || "Mahsulot");
         const qty = Number(it.qty || it.quantity || 1);
