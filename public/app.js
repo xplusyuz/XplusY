@@ -1245,9 +1245,7 @@ const ADS_LIST = [
   "ads/ad1.webp",
   "ads/ad2.webp",
   "ads/ad3.webp",
-  "ads/ad4.webp",
-  "ads/ad5.webp",
-  "ads/ad6.webp"
+  "ads/ad4.webp"
 ];
 
 let __lastAd = null;
