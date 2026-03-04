@@ -3104,6 +3104,9 @@ function renderTopupReq(list){
               <button class="btn btn-success btn-sm" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
               <button class="btn btn-danger btn-sm" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
             ` : ``}
+            ${String(r.status||'pending')==='approved' ? `
+              <button class="btn btn-warning btn-sm" data-topup-act="revert" data-topup-id="${escapeHtml(id)}" title="Tasdiqni bekor qilish (balansdan yechiladi)"><i class="fas fa-rotate-left"></i></button>
+            ` : ``}
             <button class="btn btn-danger btn-sm" data-topup-act="delete" data-topup-id="${escapeHtml(id)}" title="O‘chirish"><i class="fas fa-trash"></i></button>
           </div>
         </div>
@@ -3122,6 +3125,11 @@ function renderTopupReq(list){
       const tr = document.createElement('tr');
       const receipt = receiptLink ? `<a href="${escapeHtml(receiptLink)}" target="_blank" rel="noopener">Ochish</a>` : '—';
       let act = '—';
+      if(String(r.status||'pending')==='approved'){
+        act = `
+          <button class="btn btn-sm btn-warning" data-topup-act="revert" data-topup-id="${escapeHtml(id)}" title="Tasdiqni bekor qilish (balansdan yechiladi)"><i class="fas fa-rotate-left"></i></button>
+        `;
+      }
       if(String(r.status||'pending')==='pending'){
         act = `
           <button class="btn btn-sm btn-light" data-topup-act="edit" data-topup-id="${escapeHtml(id)}" title="Summani tahrirlash / bonus"><i class="fas fa-pen"></i></button>
@@ -3530,6 +3538,47 @@ async function deleteTopupHard(id){
   await deleteDoc(doc(db,"topup_requests", id));
 }
 
+
+async function revertTopup(id){
+  if(!db) return;
+  if(!confirm("Tasdiqlangan top-upni BEKOR qilamizmi? Balansdan yechiladi va so‘rov 'bekor qilindi' bo‘ladi.")) return;
+
+  // Safety: transaction to keep balance consistent
+  await runTransaction(db, async (tx)=>{
+    const reqRef = doc(db,"topup_requests", id);
+    const reqSnap = await tx.get(reqRef);
+    if(!reqSnap.exists()) throw new Error("not_found");
+    const r = reqSnap.data()||{};
+    const st = String(r.status||"pending");
+    if(st !== "approved") throw new Error("not_approved");
+    const uid = r.uid || r.userUid || r.userId;
+    if(!uid) throw new Error("no_uid");
+
+    const amt = Number((r.finalAmountUZS ?? r.finalAmount ?? r.amountUZS) || 0);
+    if(!amt || !isFinite(amt)) throw new Error("bad_amount");
+
+    const userRef = doc(db,"users", uid);
+    const userSnap = await tx.get(userRef);
+    if(!userSnap.exists()) throw new Error("user_missing");
+    const u = userSnap.data()||{};
+    const bal = Number(u.balanceUZS||0);
+    const next = bal - amt;
+
+    // Prevent negative; if negative, set to 0 and record delta
+    tx.update(userRef, { balanceUZS: Math.max(0, next), updatedAt: serverTimestamp() });
+
+    tx.update(reqRef, {
+      status: "cancelled",
+      revertedAt: serverTimestamp(),
+      revertedBy: (me?.email || me?.uid || "admin"),
+      revertedAmountUZS: amt
+    });
+  });
+
+  toast("Bekor qilindi");
+  subscribeTopupReq();
+}
+
 // Topup UI hooks
 $("topupReqRefresh")?.addEventListener('click', ()=> subscribeTopupReq());
 ['topupReqSearch','topupReqStatus','topupReqFrom','topupReqTo'].forEach(id=>{
@@ -3572,6 +3621,7 @@ document.addEventListener('click', async (e)=>{
     if(act==='approve') await approveTopup(id);
     if(act==='edit') await approveTopup(id);
     if(act==='cancel') await cancelTopup(id);
+    if(act==='revert') await revertTopup(id);
     if(act==='delete') await deleteTopupHard(id);
     toast('OK');
   }catch(err){
