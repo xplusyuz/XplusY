@@ -223,7 +223,14 @@
       .stats{grid-template-columns: repeat(4, minmax(0,1fr));}
       .cards{grid-template-columns: repeat(3, minmax(0,1fr));}
     }
-  </style>
+  
+.stockFilter{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:#fff}
+.stockInp{width:78px;border:1px solid var(--border);border-radius:10px;padding:8px 10px;outline:none}
+.pillChip{cursor:pointer;user-select:none}
+.pillChip.active{box-shadow:0 0 0 3px rgba(46,139,87,.15)}
+.pillChip.off{opacity:.35}
+
+</style>
 </head>
 <body>
   <div class="wrap">
@@ -238,6 +245,13 @@
         <div class="search">
           <i class="fa-solid fa-magnifying-glass" style="color:var(--muted)"></i>
           <input id="q" placeholder="Mahsulot qidirish: nom yoki ID..." autocomplete="off" />
+        </div>
+
+        <div class="stockFilter" title="Qolgan soni bo‘yicha filtr">
+          <span class="mini muted" style="margin-right:6px">Qoldiq:</span>
+          <input id="stockMin" class="stockInp" type="number" min="0" step="1" placeholder="min" />
+          <span class="mini muted">—</span>
+          <input id="stockMax" class="stockInp" type="number" min="0" step="1" placeholder="max" />
         </div>
         <button class="btn btn-ghost" id="btnRefresh"><i class="fa-solid fa-rotate"></i> Yangilash</button>
         <button class="btn btn-danger" id="btnLogout"><i class="fa-solid fa-right-from-bracket"></i> Chiqish</button>
@@ -276,9 +290,9 @@
           <span class="tag">“Qaytarildi” — stock ortadi</span>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <span class="pill warn" id="lowPill">Kam: 0</span>
-          <span class="pill bad" id="zeroPill">Tugagan: 0</span>
-          <span class="pill ok" id="okPill">Yetarli: 0</span>
+          <span class="pill warn pillChip" id="lowPill" data-status="low" role="button" tabindex="0" title="Kamlarni filter qilish">Kam: 0</span>
+          <span class="pill bad pillChip" id="zeroPill" data-status="zero" role="button" tabindex="0" title="Tugaganlarni filter qilish">Tugagan: 0</span>
+          <span class="pill ok pillChip" id="okPill" data-status="ok" role="button" tabindex="0" title="Yetarlilarni filter qilish">Yetarli: 0</span>
         </div>
       </div>
 
@@ -345,6 +359,37 @@
     const btnLogout = $("#btnLogout");
     const btnExport = $("#btnExport");
     const btnClearFilter = $("#btnClearFilter");
+
+    const stockMinEl = $("#stockMin");
+    const stockMaxEl = $("#stockMax");
+    const chipLow = $("#lowPill");
+    const chipZero = $("#zeroPill");
+    const chipOk = $("#okPill");
+
+    // Chip filter state (multi-select). Default: hammasi yoqilgan.
+    const chipState = { low:true, zero:true, ok:true };
+
+    function updateChipsUI(){
+      const set = (el, on)=>{
+        if(!el) return;
+        el.classList.toggle("active", !!on);
+        el.classList.toggle("off", !on);
+      };
+      set(chipLow, chipState.low);
+      set(chipZero, chipState.zero);
+      set(chipOk, chipState.ok);
+    }
+
+    function toggleChip(key){
+      chipState[key] = !chipState[key];
+      // Agar hammasi o‘chiq bo‘lib qolsa — avtomatik hammasini yoqamiz (user adashmasin)
+      if(!chipState.low && !chipState.zero && !chipState.ok){
+        chipState.low = chipState.zero = chipState.ok = true;
+      }
+      updateChipsUI();
+      render();
+    }
+
     const roleBadge = $("#roleBadge");
     const whoTag = $("#whoTag");
 
@@ -501,7 +546,25 @@
         })
         .filter(x=>{
           if(!isAdmin && !x.assignedSellerUids.includes(me.uid)) return false;
-          if(qt) return x.id.toLowerCase().includes(qt) || x.name.toLowerCase().includes(qt);
+
+          // Search (nom yoki ID)
+          if(qt){
+            const ok = x.id.toLowerCase().includes(qt) || x.name.toLowerCase().includes(qt);
+            if(!ok) return false;
+          }
+
+          // Chip filter (Kam / Tugagan / Yetarli)
+          const rank = stateRank(x); // 0=tugagan,1=kam,2=yetarli
+          if(rank===0 && !chipState.zero) return false;
+          if(rank===1 && !chipState.low) return false;
+          if(rank===2 && !chipState.ok) return false;
+
+          // Qoldiq (min/max) filter
+          const minV = stockMinEl && stockMinEl.value!=="" ? Number(stockMinEl.value) : null;
+          const maxV = stockMaxEl && stockMaxEl.value!=="" ? Number(stockMaxEl.value) : null;
+          if(minV!==null && isFinite(minV) && x.stock < minV) return false;
+          if(maxV!==null && isFinite(maxV) && x.stock > maxV) return false;
+
           return true;
         })
         .sort((a,b)=>{
@@ -618,7 +681,21 @@
     btnRefresh.onclick = ()=>{ render(); showToast("Yangilandi","Ko‘rinish qayta chizildi"); };
     qEl.addEventListener("input", ()=>render());
 
-    btnClearFilter.onclick = ()=>{ filterProductId=""; setTab("history"); render(); };
+    // Chips: click & Enter
+    for(const el of [chipLow, chipZero, chipOk]){
+      if(!el) continue;
+      el.addEventListener("click", ()=> toggleChip(el.dataset.status));
+      el.addEventListener("keydown", (e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggleChip(el.dataset.status); }});
+    }
+    updateChipsUI();
+
+    // Stock min/max filter
+    const onStock = ()=> render();
+    if(stockMinEl) stockMinEl.addEventListener("input", onStock);
+    if(stockMaxEl) stockMaxEl.addEventListener("input", onStock);
+
+
+    btnClearFilter.onclick = ()=>{ filterProductId=""; setTab("history"); if(stockMinEl) stockMinEl.value=""; if(stockMaxEl) stockMaxEl.value=""; chipState.low=chipState.zero=chipState.ok=true; updateChipsUI(); render(); };
 
     btnExport.onclick = ()=>{
       const evView = events.filter(ev => !filterProductId || ev.productId===filterProductId);
