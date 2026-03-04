@@ -243,7 +243,7 @@
         <i class="fa-solid fa-bag-shopping" style="color:var(--primary);font-size:1.2rem"></i>
         <h1>Sotuv</h1>
         <span class="badge" id="roleBadge">—</span>
-        <button class="badge gbtn" id="btnGoogleLogin" type="button" title="Google orqali kirish"><i class="fa-brands fa-google"></i> Google kirish</button>
+        <button class="badge gbtn" id="btnAdminLogin" type="button" title="Login/parol orqali kirish"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
       </div>
       <div class="actions">
         <div class="search">
@@ -323,6 +323,33 @@
     <div class="d" id="tDesc">—</div>
   </div>
 
+  <!-- Login modal (Google avto yo'q) -->
+  <div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(6px);z-index:999;">
+    <div style="min-height:100%;display:flex;align-items:center;justify-content:center;padding:18px;">
+      <div class="card" style="width:min(520px, 100%);padding:14px 14px 12px;border-radius:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="font-weight:1100;font-size:1.05rem;"><i class="fa-solid fa-lock" style="color:var(--primary)"></i> Kirish</div>
+          <button class="btn btn-ghost btn-sm" id="loginClose" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="muted" style="margin-top:8px;font-size:.92rem;">Sotuv bo‘limiga kirish uchun login/parol kiriting.</div>
+        <div style="display:grid;gap:10px;margin-top:12px;">
+          <div>
+            <div class="mini muted" style="margin-bottom:6px;font-weight:900;">Login</div>
+            <input id="loginUser" class="stockInp" style="width:100%;padding:12px 12px;border-radius:14px;" placeholder="admin" autocomplete="username" />
+          </div>
+          <div>
+            <div class="mini muted" style="margin-bottom:6px;font-weight:900;">Parol</div>
+            <input id="loginPass" class="stockInp" style="width:100%;padding:12px 12px;border-radius:14px;" placeholder="Math@1999" type="password" autocomplete="current-password" />
+          </div>
+          <button class="btn btn-primary" id="btnDoLogin" type="button"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
+          <div class="mini muted" style="line-height:1.35;">
+            Eslatma: "admin" login avtomatik <b>sohibjonmath@gmail.com</b> emailiga tenglashtiriladi.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     const ADMIN_EMAILS = ["sohibjonmath@gmail.com"];
     let FIREBASE_CONFIG = null;
@@ -346,14 +373,13 @@
       query, where, orderBy, limit, onSnapshot, serverTimestamp, runTransaction
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
     import {
-      GoogleAuthProvider, browserLocalPersistence, getAuth, onAuthStateChanged,
-      setPersistence, signInWithPopup, signOut
+      browserLocalPersistence, getAuth, onAuthStateChanged,
+      setPersistence, signInWithEmailAndPassword, signOut
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
     const app = initializeApp(FIREBASE_CONFIG);
     const db = getFirestore(app);
     const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
 
     const $ = (s)=>document.querySelector(s);
     const qEl = $("#q");
@@ -363,7 +389,13 @@
     const btnLogout = $("#btnLogout");
     const btnExport = $("#btnExport");
     const btnClearFilter = $("#btnClearFilter");
-    const btnGoogleLogin = $("#btnGoogleLogin");
+    const btnAdminLogin = $("#btnAdminLogin");
+
+    const loginModal = $("#loginModal");
+    const loginClose = $("#loginClose");
+    const loginUser = $("#loginUser");
+    const loginPass = $("#loginPass");
+    const btnDoLogin = $("#btnDoLogin");
 
     const stockMinEl = $("#stockMin");
     const stockMaxEl = $("#stockMax");
@@ -476,38 +508,63 @@
 
           me = { uid:user.uid, email:user.email||"", displayName:user.displayName||"Foydalanuvchi", role };
           isAdmin = isAdmin || (role==="admin");
-          if(btnGoogleLogin) btnGoogleLogin.style.display="none";
+          if(btnAdminLogin) btnAdminLogin.style.display="none";
           resolve(me);
         });
       });
     }
 
-    
-    async function loginWithGoogle(){
+    function openLogin(){
+      if(!loginModal) return;
+      loginModal.style.display = "block";
+      if(loginUser && !loginUser.value) loginUser.value = "admin";
+      if(loginPass && !loginPass.value) loginPass.value = "Math@1999";
+      setTimeout(()=>{ try{ loginUser?.focus(); }catch(e){} }, 30);
+    }
+    function closeLogin(){
+      if(loginModal) loginModal.style.display = "none";
+    }
+
+    async function doLogin(){
       try{
+        const u = (loginUser?.value || "").trim();
+        const p = (loginPass?.value || "").trim();
+        if(!u || !p){ showToast("Xato", "Login va parolni kiriting"); return; }
+
+        const email = (u.toLowerCase()==="admin") ? "sohibjonmath@gmail.com" : u;
+
         await setPersistence(auth, browserLocalPersistence);
-        await signInWithPopup(auth, provider);
-        showToast("Kirdingiz");
-        // refresh data
+        await signInWithEmailAndPassword(auth, email, p);
+        closeLogin();
+        showToast("Kirdingiz", "Tizimga muvaffaqiyatli kirdingiz");
         await boot();
       }catch(e){
         console.error(e);
-        showToast("Kirish bekor qilindi");
+        const msg = (e?.code==="auth/invalid-credential" || e?.code==="auth/wrong-password")
+          ? "Login yoki parol xato"
+          : (e?.message || "Kirishda xatolik");
+        showToast("Kirish bo‘lmadi", msg, 3500);
       }
     }
 
-async function requireLogin(){
+    if(btnAdminLogin) btnAdminLogin.onclick = openLogin;
+    if(loginClose) loginClose.onclick = closeLogin;
+    if(loginModal) loginModal.addEventListener("click", (e)=>{ if(e.target===loginModal) closeLogin(); });
+    if(btnDoLogin) btnDoLogin.onclick = doLogin;
+    document.addEventListener("keydown", (e)=>{
+      if(e.key==="Escape") closeLogin();
+      if(e.key==="Enter" && loginModal && loginModal.style.display==="block") doLogin();
+    });
+
+    async function requireLogin(){
       const user = await ensureAuth();
       if(user){
-        if(btnGoogleLogin) btnGoogleLogin.style.display = "none";
+        if(btnAdminLogin) btnAdminLogin.style.display = "none";
         return user;
       }
-      // Not logged in: show Google login button (no forced popup)
-      if(btnGoogleLogin){
-        btnGoogleLogin.style.display = "";
-        btnGoogleLogin.onclick = ()=> loginWithGoogle();
-      }
-      showToast("Kirish kerak", "Davom etish uchun Google orqali kiring");
+      if(btnAdminLogin) btnAdminLogin.style.display = "";
+      showToast("Kirish kerak", "Davom etish uchun login/parol bilan kiring");
+      openLogin();
       return null;
     }
 
