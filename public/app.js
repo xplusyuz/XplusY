@@ -3629,24 +3629,6 @@ async function watchUserDoc(uid){
     unsubUserDoc = onSnapshot(uref, (snap)=>{
       const u = snap.exists() ? (snap.data()||{}) : {};
       profileCache = u;
-      // keep profile page in sync (even if initial syncUser failed)
-      try{
-        if(document.getElementById('view-profile')?.classList.contains('active')){
-          const fullName = (u.name || [u.firstName,u.lastName].filter(Boolean).join(' ') || '').trim();
-          const num = (u.numericId!=null ? String(u.numericId) : '');
-          const nameEl = document.getElementById('profileName');
-          const idEl = document.getElementById('profileNumericId');
-          if(nameEl && fullName) nameEl.textContent = fullName;
-          if(idEl && num) idEl.textContent = 'ID: OM' + num;
-          // inputs: fill only if empty to avoid overwriting edits
-          if(els.pfFirstName && !els.pfFirstName.value) els.pfFirstName.value = u.firstName || (fullName.split(' ')[0]||'');
-          if(els.pfLastName && !els.pfLastName.value) els.pfLastName.value = u.lastName || (fullName.split(' ').slice(1).join(' ')||'');
-          if(els.pfPhone && !els.pfPhone.value) els.pfPhone.value = (u.phone||'');
-          if(els.pfRegion && !els.pfRegion.value) els.pfRegion.value = (u.region||'');
-          if(els.pfDistrict && !els.pfDistrict.value) els.pfDistrict.value = (u.district||'');
-          if(els.pfPost && !els.pfPost.value) els.pfPost.value = (u.post||'');
-        }
-      }catch(e){}
       // ensure balance exists
       const bal = Number(u.balanceUZS||0) || 0;
       setBalanceUI(bal);
@@ -3968,8 +3950,8 @@ function safeJSONParse(s){
 async function loadRegionData(){
   try{
     const resp = await fetch("./region.json?v=1", { cache: "no-store" });
-    if(!res.ok) throw new Error("region.json fetch failed");
-    return await res.json();
+    if(!resp.ok) throw new Error("region.json fetch failed");
+    return await resp.json();
   }catch(e){
     console.warn("region.json load error", e);
     return { regions: [] };
@@ -4221,9 +4203,21 @@ async function syncUser(user){
     }
 
     if(els.pfRegion){
-      els.pfRegion.value = saved?.region || u.region || "";
-      populateDistricts(saved?.region || u.region || "", saved?.district || u.district || "");
-      if(els.pfPost) els.pfPost.value = saved?.post || u.post || "";
+      const rg = saved?.region || u.region || "";
+      const ds = saved?.district || u.district || "";
+      let ps = (saved?.post || u.post || "");
+      els.pfRegion.value = rg;
+      populateDistricts(rg, ds);
+
+      // post may be like "160306 (Ko‘kumbo‘y)" — normalize to digits if needed
+      if(ps && els.pfPost){
+        const direct = ps;
+        els.pfPost.value = direct;
+        if(!els.pfPost.value){
+          const digits = String(ps).replace(/[^0-9]/g,"");
+          if(digits) els.pfPost.value = digits;
+        }
+      }
     }
 
     // start in view mode; editing only via ✏️
