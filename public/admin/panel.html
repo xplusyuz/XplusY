@@ -322,6 +322,9 @@
 .order-item-title{font-weight:900;font-size:0.98rem;line-height:1.2;margin:0;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .order-item-meta{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px}
 .order-item-pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;background:#f8fafc;border:1px solid #eef2f7;font-size:0.86rem;color:#334155}
+.order-item-pill-copy{cursor:pointer;user-select:none;}
+.order-item-pill-copy:hover{filter:brightness(0.95);}
+
 .order-item-pill b{font-weight:900;color:#0f172a}
 
 
@@ -2634,6 +2637,9 @@ function statusUZ(s){
         const qty = getItemQty(it);
         const price = getItemPrice(it);
         const variant = escapeHtml(getVariant(it));
+        const pidRaw = getPid(it) || "—";
+        const pid = escapeHtml(pidRaw);
+
         const img = getItemImage(it);
 
         return `
@@ -2642,6 +2648,7 @@ function statusUZ(s){
             <div class="order-item-info">
               <p class="order-item-title">${title}</p>
               <div class="order-item-meta">
+                <span class="order-item-pill order-item-pill-copy" title="ID nusxalash" data-copy="${pid}">ID: <b>${pid}</b></span>
                 <span class="order-item-pill">Variant: <b>${variant}</b></span>
                 <span class="order-item-pill">Soni: <b>${escapeHtml(String(qty))}</b></span>
                 <span class="order-item-pill">Narx: <b>${escapeHtml(price ? price.toLocaleString() : "—")}</b> so‘m</span>
@@ -2652,6 +2659,22 @@ function statusUZ(s){
       }).join("");
 
       grid.innerHTML = placeholders || `<div class="muted">Mahsulotlar mavjud emas</div>`;
+      // Click-to-copy for product ID
+      try{
+        grid.onclick = (ev)=>{
+          const pill = ev.target?.closest?.(".order-item-pill-copy");
+          if(!pill) return;
+          const v = pill.getAttribute("data-copy") || "";
+          if(!v) return;
+          navigator.clipboard?.writeText(v).then(()=>{
+            pill.classList.add("copied");
+            const old = pill.innerHTML;
+            pill.innerHTML = `✅ Nusxalandi: <b>${escapeHtml(v)}</b>`;
+            setTimeout(()=>{ pill.innerHTML = old; pill.classList.remove("copied"); }, 900);
+          }).catch(()=>{});
+        };
+      }catch(e){}
+
 
       // Hydrate missing title/image from products (for old orders)
       try{
