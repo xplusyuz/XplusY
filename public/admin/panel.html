@@ -513,6 +513,7 @@
           </div>
           <div class="right-actions" style="justify-content:flex-end;margin-top:10px">
             <button class="btn btn-light btn-sm" id="ordersClear"><i class="fas fa-eraser"></i> Tozalash</button>
+            <button class="btn btn-danger btn-sm" id="ordersBulkDelete" title="Sana oralig‘idagi buyurtmalarni o‘chirish"><i class="fas fa-trash"></i> Ko‘p o‘chirish</button>
           </div>
         </div>
 
@@ -581,6 +582,7 @@
             </div>
             <div class="form-group" style="margin:0;display:flex;align-items:flex-end;justify-content:flex-end">
               <button class="btn btn-light btn-sm" id="topupReqClear"><i class="fas fa-eraser"></i> Tozalash</button>
+              <button class="btn btn-danger btn-sm" id="topupBulkDelete" title="Sana oralig‘idagi top-up so‘rovlarini o‘chirish"><i class="fas fa-trash"></i> Ko‘p o‘chirish</button>
             </div>
           </div>
         </div>
@@ -2813,7 +2815,7 @@ function statusUZ(s){
                 <div class="k">Summa</div>
                 <div class="v">${total} <span class="muted">so‘m</span></div>
               </div>
-              <button class="btn btn-light btn-sm order-open" type="button"><i class="fas fa-eye"></i> Batafsil</button>
+              <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-light btn-sm order-open" type="button"><i class="fas fa-eye"></i> Batafsil</button><button class="btn btn-danger btn-sm order-del" type="button" title="O‘chirish"><i class="fas fa-trash"></i></button></div>
             </div>
           `;
           cards.appendChild(card);
@@ -2954,6 +2956,21 @@ function statusUZ(s){
       applyOrdersFilters();
     });
 
+    $("ordersBulkDelete")?.addEventListener("click", async ()=>{
+      const fromV = $("ordersFrom")?.value;
+      const toV = $("ordersTo")?.value;
+      if(!fromV || !toV){ toast("Sana oralig‘ini tanlang"); return; }
+      if(!confirm("Tanlangan sana oralig‘idagi BUYURTMALAR o‘chiriladi. Davom etamizmi?")) return;
+      try{
+        const n = await bulkDeleteOrders(fromV, toV);
+        toast(n ? (n+" ta o‘chirildi") : "Hech narsa topilmadi");
+        await subscribeOrdersAdmin(true);
+      }catch(err){
+        console.warn("bulk delete orders failed", err);
+        toast("Xatolik");
+      }
+    });
+
     // Row click => detail modal
     $("ordersTbody")?.addEventListener("click", (e)=>{
       const t = e.target;
@@ -2966,17 +2983,38 @@ function statusUZ(s){
     });
 
     // Card click => detail modal
-    $("ordersCards")?.addEventListener("click", (e)=>{
+    $("ordersCards")?.addEventListener("click", async (e)=>{
       const t = e.target;
       if(!t) return;
       if(t && (t.tagName==="SELECT" || t.closest("select"))) return;
-      const btn = t.closest(".order-open");
+
       const card = t.closest(".order-card");
       const oid = card?.dataset?.oid;
       if(!oid) return;
-      const o = ordersById.get(oid);
-      openOrderModal(o);
+
+      const delBtn = t.closest(".order-del");
+      if(delBtn){
+        if(!confirm("Buyurtmani butunlay o‘chirilsinmi? (Qaytmaydi)")) return;
+        delBtn.disabled = true;
+        try{
+          await deleteOrderHard(oid);
+          toast("O‘chirildi");
+        }catch(err){
+          console.warn("delete order failed", err);
+          toast("Xatolik");
+        }finally{
+          delBtn.disabled = false;
+        }
+        return;
+      }
+
+      const btn = t.closest(".order-open");
+      if(btn){
+        const o = ordersById.get(oid);
+        openOrderModal(o);
+      }
     });
+
 
 
 
@@ -3066,6 +3104,7 @@ function renderTopupReq(list){
               <button class="btn btn-success btn-sm" data-topup-act="approve" data-topup-id="${escapeHtml(id)}" title="Tasdiqlash"><i class="fas fa-check"></i></button>
               <button class="btn btn-danger btn-sm" data-topup-act="cancel" data-topup-id="${escapeHtml(id)}" title="Bekor qilish"><i class="fas fa-xmark"></i></button>
             ` : ``}
+            <button class="btn btn-danger btn-sm" data-topup-act="delete" data-topup-id="${escapeHtml(id)}" title="O‘chirish"><i class="fas fa-trash"></i></button>
           </div>
         </div>
       `;
@@ -3416,6 +3455,81 @@ async function cancelTopup(id){
 }
 
 
+
+/* ================= DELETE HELPERS (ADMIN) ================= */
+function parseDateRangeToMillis(fromStr, toStr){
+  // fromStr/toStr: yyyy-mm-dd
+  let from = fromStr ? new Date(fromStr+"T00:00:00") : null;
+  let to = toStr ? new Date(toStr+"T23:59:59") : null;
+  const fromMs = from ? from.getTime() : null;
+  const toMs = to ? to.getTime() : null;
+  return { fromMs, toMs };
+}
+
+async function deleteOrderHard(orderId){
+  if(!db) throw new Error("no_db");
+  // 1) delete main order
+  await deleteDoc(doc(db,"orders", orderId));
+  // 2) try to delete mirrored user order (if we can resolve uid from cache)
+  try{
+    const o = ordersById.get(orderId);
+    const uid = o?.uid || o?.userId || o?.userUid || null;
+    if(uid){
+      await deleteDoc(doc(db,"users", uid, "orders", orderId));
+    }
+  }catch(_e){}
+}
+
+async function bulkDeleteCollectionByCreatedAt(colName, fromStr, toStr, extraWhereStatus){
+  if(!db) throw new Error("no_db");
+  const { fromMs, toMs } = parseDateRangeToMillis(fromStr, toStr);
+  if(!fromMs || !toMs) throw new Error("bad_range");
+  if(fromMs > toMs) throw new Error("bad_range");
+
+  let qy = query(collection(db, colName), where("createdAt", ">=", new Date(fromMs)), where("createdAt", "<=", new Date(toMs)));
+  if(extraWhereStatus){
+    qy = query(collection(db, colName),
+      where("createdAt", ">=", new Date(fromMs)),
+      where("createdAt", "<=", new Date(toMs)),
+      where("status", "==", extraWhereStatus)
+    );
+  }
+
+  const snap = await getDocs(qy);
+  if(snap.empty) return 0;
+
+  const docs = snap.docs;
+  let deleted = 0;
+
+  // batch delete in chunks (<=450)
+  for(let i=0;i<docs.length;i+=450){
+    const b = writeBatch(db);
+    for(const d of docs.slice(i,i+450)){
+      b.delete(d.ref);
+    }
+    await b.commit();
+    deleted += Math.min(450, docs.length - i);
+  }
+  return deleted;
+}
+
+async function bulkDeleteOrders(fromStr, toStr){
+  // Orders can be large; we only delete from /orders (and try to delete mirrored per user is skipped in bulk to save reads)
+  const n = await bulkDeleteCollectionByCreatedAt("orders", fromStr, toStr, null);
+  return n;
+}
+
+async function bulkDeleteTopups(fromStr, toStr){
+  const n = await bulkDeleteCollectionByCreatedAt("topup_requests", fromStr, toStr, null);
+  return n;
+}
+
+
+async function deleteTopupHard(id){
+  if(!confirm("Top-up so‘rovini butunlay o‘chirilsinmi? (Qaytmaydi)")) return;
+  await deleteDoc(doc(db,"topup_requests", id));
+}
+
 // Topup UI hooks
 $("topupReqRefresh")?.addEventListener('click', ()=> subscribeTopupReq());
 ['topupReqSearch','topupReqStatus','topupReqFrom','topupReqTo'].forEach(id=>{
@@ -3432,6 +3546,21 @@ $("topupReqClear")?.addEventListener('click', ()=>{
   applyTopupReqFilters();
 });
 
+$("topupBulkDelete")?.addEventListener('click', async ()=>{
+  const fromV = $("topupReqFrom")?.value;
+  const toV = $("topupReqTo")?.value;
+  if(!fromV || !toV){ toast("Sana oralig‘ini tanlang"); return; }
+  if(!confirm("Tanlangan sana oralig‘idagi TOP-UP so‘rovlari o‘chiriladi. Davom etamizmi?")) return;
+  try{
+    const n = await bulkDeleteTopups(fromV, toV);
+    toast(n ? (n+" ta o‘chirildi") : "Hech narsa topilmadi");
+    subscribeTopupReq();
+  }catch(err){
+    console.warn("bulk delete topup failed", err);
+    toast("Xatolik");
+  }
+});
+
 document.addEventListener('click', async (e)=>{
   const btn = e.target?.closest?.('button[data-topup-act]');
   if(!btn) return;
@@ -3443,6 +3572,7 @@ document.addEventListener('click', async (e)=>{
     if(act==='approve') await approveTopup(id);
     if(act==='edit') await approveTopup(id);
     if(act==='cancel') await cancelTopup(id);
+    if(act==='delete') await deleteTopupHard(id);
     toast('OK');
   }catch(err){
     console.warn('topup action failed', err);
