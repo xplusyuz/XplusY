@@ -3247,7 +3247,7 @@ async function approveTopup(id){
     `;
     function close(){ wrap.remove(); document.removeEventListener("keydown", onKey); }
     function onKey(e){ if(e.key==="Escape") { close(); reject(new Error("cancelled")); } }
-    wrap.addEventListener("click",(e)=>{ if(e.target===wrap) { close(); reject(new Error("cancelled")); }});
+    wrap.addEventListener("click",(e)=>{ /* backdrop click: ignore */ });
     wrap.querySelector("[data-x]")?.addEventListener("click", ()=>{ close(); reject(new Error("cancelled")); });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(wrap);
@@ -3257,6 +3257,14 @@ async function approveTopup(id){
     const preview = $m("#topupFinalPreview");
     const percentEl = $m("#topupPercent");
     const manualEl = $m("#topupManualFinal");
+
+    const modePercent = $m('input[name="topupMode"][value="percent"]');
+    const modeManual  = $m('input[name="topupMode"][value="manual"]');
+
+    function setMode(v){
+      if(v==="manual" && modeManual) modeManual.checked = true;
+      if(v==="percent" && modePercent) modePercent.checked = true;
+    }
 
     function getMode(){
       return ($m('input[name="topupMode"]:checked')?.value || "percent");
@@ -3285,8 +3293,16 @@ async function approveTopup(id){
       preview.textContent = r.ok ? (Number(r.final).toLocaleString() + " so‘m") : "—";
     }
     ["input","change"].forEach(ev=>{
-      percentEl.addEventListener(ev, updatePreview);
-      manualEl.addEventListener(ev, updatePreview);
+      percentEl.addEventListener(ev, ()=>{
+        // percent kiritilsa — percent mode
+        setMode("percent");
+        updatePreview();
+      });
+      manualEl.addEventListener(ev, ()=>{
+        // qo‘lda summa kiritilsa — manual mode
+        if(String(manualEl.value||"").trim()!=="") setMode("manual");
+        updatePreview();
+      });
       wrap.querySelectorAll('input[name="topupMode"]').forEach(r=>r.addEventListener(ev, updatePreview));
     });
     updatePreview();
@@ -3430,7 +3446,7 @@ document.addEventListener('click', async (e)=>{
     toast('OK');
   }catch(err){
     console.warn('topup action failed', err);
-    toast('Xatolik');
+    toast(err?.message==='cancelled' ? 'Bekor qilindi' : 'Xatolik');
   }finally{
     btn.disabled = false;
   }
