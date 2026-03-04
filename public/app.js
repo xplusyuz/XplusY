@@ -3629,6 +3629,24 @@ async function watchUserDoc(uid){
     unsubUserDoc = onSnapshot(uref, (snap)=>{
       const u = snap.exists() ? (snap.data()||{}) : {};
       profileCache = u;
+      // keep profile page in sync (even if initial syncUser failed)
+      try{
+        if(document.getElementById('view-profile')?.classList.contains('active')){
+          const fullName = (u.name || [u.firstName,u.lastName].filter(Boolean).join(' ') || '').trim();
+          const num = (u.numericId!=null ? String(u.numericId) : '');
+          const nameEl = document.getElementById('profileName');
+          const idEl = document.getElementById('profileNumericId');
+          if(nameEl && fullName) nameEl.textContent = fullName;
+          if(idEl && num) idEl.textContent = 'ID: OM' + num;
+          // inputs: fill only if empty to avoid overwriting edits
+          if(els.pfFirstName && !els.pfFirstName.value) els.pfFirstName.value = u.firstName || (fullName.split(' ')[0]||'');
+          if(els.pfLastName && !els.pfLastName.value) els.pfLastName.value = u.lastName || (fullName.split(' ').slice(1).join(' ')||'');
+          if(els.pfPhone && !els.pfPhone.value) els.pfPhone.value = (u.phone||'');
+          if(els.pfRegion && !els.pfRegion.value) els.pfRegion.value = (u.region||'');
+          if(els.pfDistrict && !els.pfDistrict.value) els.pfDistrict.value = (u.district||'');
+          if(els.pfPost && !els.pfPost.value) els.pfPost.value = (u.post||'');
+        }
+      }catch(e){}
       // ensure balance exists
       const bal = Number(u.balanceUZS||0) || 0;
       setBalanceUI(bal);
