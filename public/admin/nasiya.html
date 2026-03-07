@@ -76,10 +76,7 @@
       <div class="hero-top">
         <div>
           <h2>Nasiya CRM</h2>
-          <p>Firebase bilan ulangan. Tahrirlash, to‘lovni belgilash va muddati kelganlarni yuqorida ko‘rsatadi.</p>
-        </div>
-        <button id="logoutBtn" class="btn btn-logout" type="button">Chiqish</button>
-      </div>
+          <p>Firebase bilan ulangan. Nasiya qilingan sana, to‘lash muddati va to‘lov holatini boshqaradi.</p>  </div>
       <div class="top-note">Eslatma: birinchi ishda pastdagi <b>firebaseConfig</b> ichiga o‘zingizning Firebase ma’lumotlaringizni qo‘ying.</div>
       <div class="stats">
         <div class="stat"><div class="num" id="sTotal">0</div><div class="label">Jami</div></div>
@@ -103,10 +100,10 @@
         </div>
         <div class="field"><label class="label">Jami summa</label><input id="amount" type="number" min="0" placeholder="Masalan: 1200000"></div>
         <div class="grid grid-2">
-          <div class="field"><label class="label">1-muddat</label><input id="date1" type="date" required></div>
-          <div class="field"><label class="label">2-muddat</label><input id="date2" type="date" required></div>
-        </div>
-        <div class="field"><label class="label">Izoh</label><textarea id="note" placeholder="Mahsulot yoki qo‘shimcha ma’lumot"></textarea></div>
+          <div class="field"><label class="label">Nasiya qilingan sana</label><<div class="grid grid-2">
+          <div class="field"><label class="label">Nasiya qilingan sana</label><input id="date1" type="date" required></div>
+          <div class="field"><label class="label">To‘lash muddati</label><input id="date2" type="date" required></div>
+        </div>holder="Mahsulot yoki qo‘shimcha ma’lumot"></textarea></div>
         <div class="grid grid-2">
           <button id="saveBtn" class="btn btn-primary" type="submit">Saqlash</button>
           <button id="cancelEditBtn" class="btn btn-secondary hidden" type="button">Tahrirlashni bekor qilish</button>
@@ -215,19 +212,15 @@
     function formatDate(v){ if(!v) return '-'; return new Date(v + 'T00:00:00').toLocaleDateString('uz-UZ'); }
     function formatAmount(v){ const n = Number(v || 0); return n ? n.toLocaleString('uz-UZ') + ' so‘m' : '-'; }
     function normalizePhone(v){ return String(v || '').replace(/[^\d+]/g,'').trim(); }
-    function unpaidDates(item){ const arr=[]; if(!item.paid1 && item.date1) arr.push(item.date1); if(!item.paid2 && item.date2) arr.push(item.date2); return arr; }
-    function getDueStatus(item){
+    function unpaidDates(item){ const arr=[]; if(!item.paid2 && item.date2) arr.push(item.function unpaidDates(item){ const arr=[]; if(!item.paid2 && item.date2) arr.push(item.date2); return arr; }al';
+function getDueStatus(item){
       const today = todayStr();
-      const dates = unpaidDates(item);
-      if (!dates.length) return 'done';
-      if (dates.some(d => d < today)) return 'overdue';
-      if (dates.some(d => d === today)) return 'today';
+      if (item.paid2) return 'done';
+      if (!item.date2) return 'normal';
+      if (item.date2 < today) return 'overdue';
+      if (item.date2 === today) return 'today';
       return 'normal';
-    }
-    function getStatusText(item){
-      const s = getDueStatus(item);
-      if (s === 'overdue') return 'Kechikkan';
-      if (s === 'today') return 'Bugun';
+    }';
       if (s === 'done') return 'Yakunlangan';
       return 'Kutilmoqda';
     }
@@ -278,35 +271,27 @@
       if (editingId === id) clearForm();
     }
     function editItem(id){ const item = allItems.find(x => x.id === id); if (item) fillForm(item); }
-    async function togglePaid(id, num){
+    async function togglePaid(id){
       const item = allItems.find(x => x.id === id); if (!item) return;
-      const patch = num === 1 ? { paid1: !item.paid1, updatedAt: serverTimestamp() } : { paid2: !item.paid2, updatedAt: serverTimestamp() };
+      const patch = { paid2: !item.paid2, updatedAt: sasync function togglePaid(id){
+      const item = allItems.find(x => x.id === id); if (!item) return;
+      const patch = { paid2: !item.paid2, updatedAt: serverTimestamp() };
       await updateDoc(doc(db, 'apps', APP_ID, 'customers', id), patch);
-    }
-    async function saveItem(obj){
-      if (editingId) {
-        const prev = allItems.find(x => x.id === editingId);
-        await updateDoc(doc(db, 'apps', APP_ID, 'customers', editingId), {
-          ...obj,
-          paid1: prev?.paid1 ?? false,
-          paid2: prev?.paid2 ?? false,
+    } prev?.paid2 ?? false,
           updatedAt: serverTimestamp()
         });
       } else {
         await addDoc(customersCol, {
           ...obj,
-          paid1: false,
           paid2: false,
           createdAt: serverTimestamp(),
-          createdAtMillis: Date.now(),
-          updatedAt: serverTimestamp()
-        });
+          creapaid2: prev?.paid2 ?? false,     });
       }
       clearForm();
     }
     function buildCard(item){
       const status = getDueStatus(item);
-      const badgeClass = status === 'overdue' ? 'overdue' : status === 'today' ? 'today' : status === 'done' ? 'done' : 'normal';
+      const badgeClpaid2: false,' : status === 'today' ? 'today' : status === 'done' ? 'done' : 'normal';
       return `
         <div class="item ${status}">
           <div class="top">
@@ -322,28 +307,18 @@
             <div class="row"><div class="key">Izoh:</div><div class="value">${escapeHtml(item.note || '-')}</div></div>
           </div>
           <div class="paybox">
-            <div class="pay ${item.paid1 ? 'done' : ''}">
-              <div class="ptitle">1-to‘lov</div>
-              <div class="pdate">Muddat: ${formatDate(item.date1)}</div>
-              <button class="btn ${item.paid1 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}',1)">${item.paid1 ? 'Bekor qilish' : 'To‘landi'}</button>
-            </div>
             <div class="pay ${item.paid2 ? 'done' : ''}">
-              <div class="ptitle">2-to‘lov</div>
-              <div class="pdate">Muddat: ${formatDate(item.date2)}</div>
-              <button class="btn ${item.paid2 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}',2)">${item.paid2 ? 'Bekor qilish' : 'To‘landi'}</button>
+              <div class="ptitle">To‘lov holati</div>
+              <div class="pdate">Nasiya sana: ${formatDate(item.date1)}</div>
+              <div class="pdate">To‘lash muddati: ${formatDate(item.date2)}</div<div class="paybox">
+            <div class="pay ${item.paid2 ? 'done' : ''}">
+              <div class="ptitle">To‘lov holati</div>
+              <div class="pdate">Nasiya sana: ${formatDate(item.date1)}</div>
+              <div class="pdate">To‘lash muddati: ${formatDate(item.date2)}</div>
+              <button class="btn ${item.paid2 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}')">${item.paid2 ? 'Bekor qilish' : 'To‘landi'}</button>
             </div>
           </div>
-          <div class="actions">
-            <button class="btn btn-edit" onclick="window.editItem('${item.id}')">Tahrirlash</button>
-            <button class="btn btn-danger" onclick="window.removeItem('${item.id}')">O‘chirish</button>
-          </div>
-        </div>`;
-    }
-    function buildGroup(title, items){ if (!items.length) return ''; return `<div class="group-title"><div class="left">${title}</div><div class="count">${items.length} ta</div></div>${items.map(buildCard).join('')}`; }
-    function render(){
-      let data = [...allItems];
-      stats(data);
-      const q = search.value.trim().toLowerCase();
+          <div class="actions">).toLowerCase();
       data = data.filter(item => `${item.ism} ${item.familiya} ${item.phone1} ${item.phone2} ${item.note} ${item.amount}`.toLowerCase().includes(q));
       if (currentFilter === 'due') data = data.filter(item => ['today','overdue'].includes(getDueStatus(item)));
       if (currentFilter === 'done') data = data.filter(item => getDueStatus(item) === 'done');
@@ -398,7 +373,7 @@
       const date1 = document.getElementById('date1').value;
       const date2 = document.getElementById('date2').value;
       const note = document.getElementById('note').value.trim();
-      if (!ism || !familiya || !phone1 || !date1 || !date2) { alert('Majburiy maydonlarni to‘ldiring.'); return; }
+      if (!ism || !familiya || !phone1 || !date
       await saveItem({ ism, familiya, phone1, phone2, amount, date1, date2, note });
     });
 
@@ -407,9 +382,8 @@
     fAll.addEventListener('click', () => { currentFilter = 'all'; activate(fAll); render(); });
     fDue.addEventListener('click', () => { currentFilter = 'due'; activate(fDue); render(); });
     fDone.addEventListener('click', () => { currentFilter = 'done'; activate(fDone); render(); });
-    changePasswordBtn.addEventListener('click', async () => {
-      const value = newPassword.value.trim();
-      if (!value) return alert('Yangi parol kiriting.');
+    changePasswordBtn.addEventListener('clickif (!ism || !familiya || !phone1 || !date1 || !date2) { alert('Majburiy maydonlarni to‘ldiring.'); return; }
+      if (date2 < date1) { alert('To‘lash muddati nasiya qilingan sanadan oldin bo‘lishi mumkin emas.'); return; }iriting.');
       if (value.length < 3) return alert('Parol kamida 3 ta belgi bo‘lsin.');
       await setDoc(passwordDocRef, { value, updatedAt: serverTimestamp() }, { merge: true });
       newPassword.value = '';
