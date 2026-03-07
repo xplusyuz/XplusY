@@ -1,21 +1,18 @@
-(function(){
-  const ua = navigator.userAgent || '';
-  const path = location.pathname;
+(() => {
+  const state = {
+    deferredPrompt: null,
+    topbarShown: false,
+    dismissed: sessionStorage.getItem('om_pwa_hide') === '1'
+  };
+
+  const ua = navigator.userAgent || "";
   const isTelegram = /Telegram|Tg\//i.test(ua) || document.referrer.includes('t.me');
-  const isAndroid = /Android/i.test(ua);
-  const isIOS = /iPhone|iPad|iPod/i.test(ua);
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const state = { deferredPrompt: null, installing: false };
+  const isAndroid = /Android/i.test(ua);
+  const currentUrl = new URL(location.href);
+  const installEntry = `${location.origin}/install`;
 
-  function $(id){ return document.getElementById(id); }
-  function onInstallPage(){ return path.endsWith('/install.html') || path === '/install'; }
-  function currentInstallUrl(){ return location.origin + '/install.html'; }
-  function chromeIntentUrl(){
-    const current = new URL(currentInstallUrl());
-    return `intent://${current.host}${current.pathname}${current.search}${current.hash}#Intent;scheme=https;package=com.android.chrome;end`;
-  }
-
-  function cleanupLegacyCaches(){
+  function cleanupLegacyCaches() {
     const run = async () => {
       try {
         if ('serviceWorker' in navigator) {
@@ -32,173 +29,222 @@
     else setTimeout(run, 250);
   }
 
-  function setStatus(mode, title, text){
-    const dot = $('installDot');
-    const titleEl = $('installStatusTitle');
-    const textEl = $('installStatusText');
-    if (dot){
-      dot.classList.remove('run','done');
-      if (mode === 'run') dot.classList.add('run');
-      if (mode === 'done') dot.classList.add('done');
-    }
-    if (titleEl) titleEl.textContent = title;
-    if (textEl) textEl.textContent = text;
-  }
-
-  function recommendedBrowserName(){
-    if (isIOS) return 'Safari';
-    if (isAndroid) return 'Chrome';
-    return 'asosiy brauzer';
-  }
-
-  function fallbackInstruction(){
-    if (isIOS) return 'Safari’da Share → “Add to Home Screen” ni bosing.';
-    if (isTelegram && isAndroid) return '“Brauzerda ochish” tugmasi Chrome’ni ochishga urinadi. Ishlamasa linkni nusxa olib Chrome’da oching.';
-    if (isTelegram) return `${recommendedBrowserName()} da ochib, keyin o‘rnatishni davom ettiring.`;
-    return 'Brauzer menyusidan “Install app” yoki “Add to Home Screen” ni tanlang.';
-  }
-
-  function updateBrowserButton(){
-    const btn = $('openBrowserBtn');
-    const text = $('installLinkText');
-    const url = currentInstallUrl();
-    if (text) text.textContent = url;
-    if (!btn) return;
-
-    btn.setAttribute('href', url);
-    btn.setAttribute('target', '_blank');
-    btn.setAttribute('rel', 'noopener');
-    btn.textContent = isTelegram && isAndroid ? 'Chrome’da ochish' : (isIOS ? 'Safari’da ochish' : 'Brauzerda ochish');
-
-    if (isTelegram && isAndroid) {
-      btn.setAttribute('href', chromeIntentUrl());
-      btn.removeAttribute('target');
-    }
-  }
-
-  function updateText(){
-    const fallback = $('fallbackText');
-    const installBtn = $('installNowBtn');
-    const browserBtn = $('openBrowserBtn');
-    if (fallback) fallback.textContent = fallbackInstruction();
-
-    if (isStandalone && onInstallPage()) {
-      location.replace('/');
-      return;
-    }
-
-    if (state.deferredPrompt) {
-      setStatus('', 'Tayyor', 'Qurilmangiz o‘rnatishni qo‘llab-quvvatlaydi. Tugmani bossangiz install oynasi chiqadi.');
-      if (installBtn) installBtn.textContent = 'Hozir o‘rnatish';
-    } else {
-      setStatus('', 'Yo‘riqnoma tayyor', fallbackInstruction());
-      if (installBtn) installBtn.textContent = isIOS ? 'Safari yo‘riqnomasi' : 'O‘rnatish yo‘riqnomasi';
-    }
-
-    if (browserBtn) {
-      browserBtn.style.display = (isTelegram || !state.deferredPrompt) ? '' : 'none';
-    }
-  }
-
-  async function copyLink(){
-    const url = currentInstallUrl();
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        return true;
+  function addStyles() {
+    if (document.getElementById('om-pwa-style')) return;
+    const style = document.createElement('style');
+    style.id = 'om-pwa-style';
+    style.textContent = `
+      .omPwaTop{position:fixed;top:12px;left:12px;right:12px;z-index:9999;display:none}
+      .omPwaTop.show{display:block}
+      .omPwaTopCard{
+        max-width:980px;margin:0 auto;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);
+        border:1px solid rgba(15,23,42,.08);border-radius:22px;box-shadow:0 16px 42px rgba(15,23,42,.16);
+        padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center
       }
-    } catch(_) {}
-    return false;
+      .omPwaIcon{width:48px;height:48px;border-radius:16px;overflow:hidden;background:#eef8f2;box-shadow:0 8px 18px rgba(46,139,87,.12)}
+      .omPwaIcon img{width:100%;height:100%;object-fit:cover}
+      .omPwaText b{display:block;font-size:16px;color:#0f172a;margin-bottom:3px}
+      .omPwaText span{display:block;font-size:13px;line-height:1.4;color:#64748b}
+      .omPwaActs{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+      .omPwaBtn{
+        appearance:none;border:0;border-radius:14px;padding:11px 13px;font-weight:800;font-size:14px;cursor:pointer;
+        display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none
+      }
+      .omPwaBtn.primary{background:linear-gradient(180deg,#2E8B57,#246c46);color:#fff;box-shadow:0 12px 28px rgba(46,139,87,.24)}
+      .omPwaBtn.secondary{background:#fff;color:#0f172a;border:1px solid rgba(15,23,42,.08)}
+      .omPwaBtn.ghost{background:#f8fafc;color:#475569;border:1px solid rgba(15,23,42,.06)}
+      .omPwaToast{
+        position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+        z-index:10000;background:#0f172a;color:#fff;padding:12px 14px;border-radius:14px;box-shadow:0 12px 28px rgba(0,0,0,.28);
+        transition:.22s ease;font-size:14px;max-width:min(92vw,520px);text-align:center
+      }
+      .omPwaToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+      @media (max-width:720px){
+        .omPwaTopCard{grid-template-columns:1fr;gap:10px;padding:12px}
+        .omPwaIcon{display:none}
+        .omPwaActs{justify-content:stretch}
+        .omPwaActs .omPwaBtn{flex:1 1 auto}
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  async function openInBrowser(ev){
-    const url = currentInstallUrl();
-    if (isTelegram && isAndroid) {
-      // let the anchor navigate to intent://chrome
-      setTimeout(async () => {
-        const ok = await copyLink();
-        if (document.visibilityState === 'visible') {
-          setStatus('', 'Chrome ochilmadi', ok ? 'Link nusxalandi. Chrome’ga kirib paste qiling.' : 'Linkni bosib ushlab nusxa oling va Chrome’da oching.');
-        }
-      }, 1200);
-      return;
+  function toast(msg) {
+    let el = document.getElementById('om-pwa-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'om-pwa-toast';
+      el.className = 'omPwaToast';
+      document.body.appendChild(el);
     }
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2600);
+  }
 
-    if (isIOS) {
-      setStatus('', 'Safari tavsiya etiladi', 'Pastdagi linkni Safari’da ochib, keyin Share → Add to Home Screen ni bosing.');
-      return;
-    }
+  function canShowBanner() {
+    const p = currentUrl.pathname;
+    return !isStandalone && !state.dismissed && !/\/admin\//.test(p) && !/\/install(\.html)?$/.test(p);
+  }
 
+  function installSupported() { return !!state.deferredPrompt; }
+
+  function buildTopbar() {
+    if (document.getElementById('om-pwa-top')) return;
+    addStyles();
+    const wrap = document.createElement('div');
+    wrap.className = 'omPwaTop';
+    wrap.id = 'om-pwa-top';
+    wrap.innerHTML = `
+      <div class="omPwaTopCard">
+        <div class="omPwaIcon"><img src="/pwa-192.png" alt="OrzuMall"></div>
+        <div class="omPwaText">
+          <b>OrzuMall ilovasini o‘rnating</b>
+          <span id="omPwaDesc">Telefoningizga tez ochiladigan ilova sifatida qo‘shiladi.</span>
+        </div>
+        <div class="omPwaActs">
+          <button type="button" class="omPwaBtn secondary" id="omPwaBrowserTop">🌐 Browserda ochish</button>
+          <button type="button" class="omPwaBtn primary" id="omPwaInstallTop">📲 O‘rnatish</button>
+          <button type="button" class="omPwaBtn ghost" id="omPwaCloseTop">✕</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+
+    document.getElementById('omPwaBrowserTop')?.addEventListener('click', openInBrowser);
+    document.getElementById('omPwaInstallTop')?.addEventListener('click', async () => {
+      const ok = await triggerInstall();
+      if (!ok) {
+        if (isTelegram) toast("Avval Browserda ochish tugmasini bosing, keyin o‘sha yerda yana O‘rnatish ni bosing.");
+        else toast("Brauzer menyusidan Add to Home Screen ham ishlaydi.");
+      }
+    });
+    document.getElementById('omPwaCloseTop')?.addEventListener('click', () => {
+      sessionStorage.setItem('om_pwa_hide', '1');
+      state.dismissed = true;
+      hideTopbar();
+    });
+    updateButtons();
+  }
+
+  function showTopbar() {
+    if (!canShowBanner()) return;
+    buildTopbar();
+    document.getElementById('om-pwa-top')?.classList.add('show');
+    state.topbarShown = true;
+  }
+
+  function hideTopbar() {
+    document.getElementById('om-pwa-top')?.classList.remove('show');
+  }
+
+  async function triggerInstall() {
+    if (!state.deferredPrompt) return false;
     try {
-      window.open(url, '_blank', 'noopener');
-      setTimeout(async () => {
-        if (document.visibilityState === 'visible') {
-          const ok = await copyLink();
-          setStatus('', 'Yangi oynada oching', ok ? 'Link nusxalandi. Asosiy brauzeringizga o‘tib paste qiling.' : 'Linkni qo‘lda nusxa olib brauzerga qo‘ying.');
-        }
-      }, 900);
-    } catch (_) {
-      const ok = await copyLink();
-      setStatus('', 'Qo‘lda oching', ok ? 'Link nusxalandi. Chrome yoki Safari’da paste qiling.' : 'Linkni nusxa olib brauzerga qo‘ying.');
-    }
-    if (ev) ev.preventDefault();
-  }
-
-  function showInstructions(){
-    alert(fallbackInstruction());
-  }
-
-  async function triggerInstall(){
-    if (state.installing) return;
-    if (!state.deferredPrompt) {
-      showInstructions();
-      return;
-    }
-
-    state.installing = true;
-    setStatus('run', 'Yuklanmoqda', 'O‘rnatish oynasi tayyorlanmoqda...');
-
-    try {
-      await new Promise(r => setTimeout(r, 300));
-      setStatus('run', 'O‘rnatilmoqda', 'Qurilma oynasida tasdiqlang.');
       state.deferredPrompt.prompt();
       const choice = await state.deferredPrompt.userChoice;
-      if (choice && choice.outcome === 'accepted') {
-        setStatus('done', 'Tayyor', 'Ilova o‘rnatildi. Bosh sahifaga o‘tilmoqda...');
-      } else {
-        setStatus('', 'Bekor qilindi', fallbackInstruction());
-      }
+      if (choice && choice.outcome === 'accepted') toast("O‘rnatilmoqda...");
+      return !!choice && choice.outcome === 'accepted';
     } catch (_) {
-      setStatus('', 'Muammo chiqdi', fallbackInstruction());
+      return false;
     } finally {
       state.deferredPrompt = null;
-      state.installing = false;
-      updateText();
+      updateButtons();
     }
   }
+
+  function updateButtons() {
+    const desc = document.getElementById('omPwaDesc');
+    const installBtn = document.getElementById('omPwaInstallTop');
+    const browserBtn = document.getElementById('omPwaBrowserTop');
+    if (desc) {
+      desc.textContent = installSupported()
+        ? "Bir bosishda install oynasi chiqadi."
+        : (isTelegram
+            ? "Telegram ichida bo‘lsangiz avval Browserda oching, keyin o‘rnating."
+            : "Install chiqmasa brauzer menyusidan Add to Home Screen ni tanlang.");
+    }
+    if (installBtn) installBtn.textContent = installSupported() ? "📲 O‘rnatish" : "📲 O‘rnatish";
+    if (browserBtn) browserBtn.style.display = isTelegram ? "" : "none";
+  }
+
+  function openInBrowser() {
+    const target = `${installEntry}?src=browser`;
+    if (isAndroid) {
+      const clean = target.replace(/^https?:\/\//, '');
+      location.href = `intent://${clean}#Intent;scheme=https;package=com.android.chrome;end`;
+      setTimeout(() => toast("Agar ochilmasa, linkni nusxalab Chrome’da qo‘ying."), 900);
+      return;
+    }
+    try {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      setTimeout(() => toast("Yangi brauzer oynasida install tugmasini bosing."), 300);
+    } catch (_) {
+      location.href = target;
+    }
+  }
+
+  async function copyInstallLink() {
+    try {
+      await navigator.clipboard.writeText(installEntry);
+      toast("Install link nusxalandi.");
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  window.OrzuMallPWA = { triggerInstall, openInBrowser, copyInstallLink, installSupported: () => installSupported() };
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     state.deferredPrompt = e;
-    updateText();
+    updateButtons();
+    if (canShowBanner()) setTimeout(showTopbar, 250);
   });
 
   window.addEventListener('appinstalled', () => {
     state.deferredPrompt = null;
-    setStatus('done', 'Tayyor', 'Ilova o‘rnatildi. Bosh sahifaga o‘tilmoqda...');
-    setTimeout(() => {
-      if (onInstallPage()) location.replace('/');
-    }, 700);
+    hideTopbar();
+    updateButtons();
+    toast("Ilova o‘rnatildi.");
+    if (/\/install(\.html)?$/.test(currentUrl.pathname)) {
+      setTimeout(() => location.replace('/'), 700);
+    }
   });
 
   document.addEventListener('DOMContentLoaded', () => {
     cleanupLegacyCaches();
-    updateBrowserButton();
-    if ($('installNowBtn')) $('installNowBtn').addEventListener('click', triggerInstall);
-    if ($('openBrowserBtn')) $('openBrowserBtn').addEventListener('click', openInBrowser);
-    updateText();
-    if (!state.deferredPrompt && isTelegram) {
-      setStatus('', 'Tashqi brauzer tavsiya etiladi', `${recommendedBrowserName()} da ochsangiz install yaxshiroq ishlaydi.`);
+    buildTopbar();
+    if (canShowBanner()) setTimeout(showTopbar, 700);
+    updateButtons();
+
+    const openBtns = ['openBrowserBtn'];
+    openBtns.forEach(id => document.getElementById(id)?.addEventListener('click', openInBrowser));
+
+    const installBtns = ['installNowBtn'];
+    installBtns.forEach(id => document.getElementById(id)?.addEventListener('click', async () => {
+      const ok = await triggerInstall();
+      if (!ok) {
+        if (isTelegram) toast("Avval Browserda ochish tugmasini bosing.");
+        else toast("Install chiqmasa brauzer menyusidan Add to Home Screen ni tanlang.");
+      }
+    }));
+
+    const copyBtns = ['copyLinkBtn'];
+    copyBtns.forEach(id => document.getElementById(id)?.addEventListener('click', async () => {
+      const ok = await copyInstallLink();
+      if (!ok) toast(installEntry);
+    }));
+
+    const onInstallPage = /\/install(\.html)?$/.test(currentUrl.pathname);
+    if (isStandalone && onInstallPage) {
+      location.replace('/');
+      return;
+    }
+    if (onInstallPage && isTelegram) {
+      toast("Avval Browserda ochish, keyin O‘rnatish.");
     }
   });
 })();
