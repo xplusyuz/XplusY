@@ -1,5 +1,5 @@
 (() => {
-  const state = { deferredPrompt: null, shown: false };
+  const state = { deferredPrompt: null, shown: false, progressRunning: false };
   const ua = navigator.userAgent || "";
   const isTelegram = /Telegram|Tg\//i.test(ua) || document.referrer.includes('t.me');
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -11,6 +11,9 @@
     const hash = currentUrl.hash || '';
     return `intent://${location.host}/${path}${query}${hash}#Intent;scheme=https;package=com.android.chrome;end`;
   })();
+
+  function qs(id){ return document.getElementById(id); }
+
   function cleanupLegacyCaches(){
     const run = async () => {
       try {
@@ -27,6 +30,59 @@
     if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 1200 });
     else setTimeout(run, 250);
   }
+
+  function paintProgress(percent, label){
+    const bar = qs('installBar');
+    const pct = qs('installPercent');
+    const text = qs('installStatusText');
+    const pill = qs('installStatusPill');
+    if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    if (pct) pct.textContent = `${Math.round(percent)}%`;
+    if (text && label) text.textContent = label;
+    if (pill && label) pill.textContent = label;
+  }
+
+  function markStep(id, cls){
+    const el = qs(id);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (cls) el.classList.add(cls);
+  }
+
+  function resetProgress(){
+    state.progressRunning = false;
+    paintProgress(0, 'Tayyor');
+    markStep('stepDownload', '');
+    markStep('stepInstall', '');
+    markStep('stepDone', '');
+  }
+
+  async function runProgress(){
+    if (state.progressRunning) return;
+    state.progressRunning = true;
+    markStep('stepDownload', 'active');
+    paintProgress(12, 'Yuklanmoqda');
+    await wait(260);
+    paintProgress(28, 'Yuklanmoqda');
+    await wait(320);
+    paintProgress(46, 'Yuklanmoqda');
+    await wait(280);
+    markStep('stepDownload', 'done');
+    markStep('stepInstall', 'active');
+    paintProgress(64, 'O‘rnatilmoqda');
+    await wait(350);
+    paintProgress(82, state.deferredPrompt ? 'O‘rnatilmoqda' : (isTelegram ? 'Brauzer orqali davom eting' : 'Menyu orqali qo‘shing'));
+  }
+
+  function finishProgress(installed){
+    markStep('stepInstall', installed ? 'done' : '');
+    markStep('stepDone', installed ? 'done' : '');
+    paintProgress(installed ? 100 : 82, installed ? 'Tayyor' : 'Brauzer orqali davom eting');
+    if (!installed) state.progressRunning = false;
+  }
+
+  function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
   function buildModal(){
     if (document.getElementById('om-pwa-modal')) return;
     const style = document.createElement('style');
@@ -34,7 +90,7 @@
     document.head.appendChild(style);
     const wrap = document.createElement('div');
     wrap.className = 'omPwaBackdrop'; wrap.id = 'om-pwa-modal';
-    wrap.innerHTML = `<div class="omPwaCard" role="dialog" aria-modal="true" aria-labelledby="omPwaTitle"><div class="omPwaHead"><div class="omPwaIcon"><img src="/pwa-192.png" alt="OrzuMall"></div><div><h3 id="omPwaTitle">OrzuMall ilovasini o‘rnating</h3><p>Telegram uchun maxsus install oynasi va tezkor PWA o‘rnatish.</p></div><button type="button" class="omPwaClose" id="omPwaCloseBtn" aria-label="Yopish">×</button></div><div class="omPwaBody"><div class="omPwaBadges"><span class="omPwaBadge">Cache ushlanmaydi</span><span class="omPwaBadge">Service worker yo‘q</span><span class="omPwaBadge">Yangilanish tez</span></div><div class="omPwaInfo"><b>Qanday o‘rnatiladi?</b><ul><li>“Hozir o‘rnatish” tugmasini bosing.</li><li>Agar Telegram ichida install chiqmasa, Chrome’da oching.</li><li>Keyin ilova bosh ekranga qo‘shiladi.</li></ul></div><div class="omPwaActions"><button type="button" class="omPwaBtn primary" id="omPwaInstallBtn">📲 Hozir o‘rnatish</button><button type="button" class="omPwaBtn secondary" id="omPwaBrowserBtn">🔓 Chrome’da ochish</button></div><div class="omPwaSub" id="omPwaSub"></div></div></div>`;
+    wrap.innerHTML = `<div class="omPwaCard" role="dialog" aria-modal="true" aria-labelledby="omPwaTitle"><div class="omPwaHead"><div class="omPwaIcon"><img src="/pwa-192.png" alt="OrzuMall"></div><div><h3 id="omPwaTitle">OrzuMall ilovasini o‘rnating</h3><p>Play Marketga o‘xshash jarayon va tezkor PWA o‘rnatish.</p></div><button type="button" class="omPwaClose" id="omPwaCloseBtn" aria-label="Yopish">×</button></div><div class="omPwaBody"><div class="omPwaBadges"><span class="omPwaBadge">Cache ushlanmaydi</span><span class="omPwaBadge">Service worker yo‘q</span><span class="omPwaBadge">Yangilanish tez</span></div><div class="omPwaInfo"><b>Qanday o‘rnatiladi?</b><ul><li>“O‘rnatish” tugmasini bosing.</li><li>Sahifadagi yuklanmoqda va o‘rnatilmoqda holatlari ko‘rinadi.</li><li>Agar Telegram ichida install chiqmasa, Chrome’da oching.</li></ul></div><div class="omPwaActions"><button type="button" class="omPwaBtn primary" id="omPwaInstallBtn">O‘rnatish</button><button type="button" class="omPwaBtn secondary" id="omPwaBrowserBtn">Chrome’da ochish</button></div><div class="omPwaSub" id="omPwaSub"></div></div></div>`;
     document.body.appendChild(wrap);
     wrap.addEventListener('click', (e) => { if (e.target === wrap) closeModal(); });
     document.getElementById('omPwaCloseBtn')?.addEventListener('click', closeModal);
@@ -42,40 +98,67 @@
     document.getElementById('omPwaBrowserBtn')?.addEventListener('click', openInBrowser);
     updateButtons();
   }
+
   function installSupported(){ return !!state.deferredPrompt; }
+
   async function triggerInstall(){
-    if (!state.deferredPrompt) { showModal(); return false; }
-    try { state.deferredPrompt.prompt(); await state.deferredPrompt.userChoice; }
-    catch (_) { return false; }
-    finally { state.deferredPrompt = null; updateButtons(); closeModal(); }
+    await runProgress();
+    if (!state.deferredPrompt) {
+      finishProgress(false);
+      showModal();
+      return false;
+    }
+    try {
+      state.deferredPrompt.prompt();
+      await state.deferredPrompt.userChoice;
+    } catch (_) {
+      finishProgress(false);
+      return false;
+    } finally {
+      state.deferredPrompt = null;
+      updateButtons();
+      closeModal();
+    }
     return true;
   }
+
   function updateButtons(){
     const installBtn = document.getElementById('omPwaInstallBtn');
     const browserBtn = document.getElementById('omPwaBrowserBtn');
     const sub = document.getElementById('omPwaSub');
     const pageInstall = document.getElementById('installNowBtn');
     const pageChrome = document.getElementById('openChromeBtn');
-    const text = installSupported() ? 'Bir bosishda install oynasi chiqadi.' : (isTelegram ? 'Telegram brauzerida install chiqmasa, Chrome’da oching.' : 'Brauzer menyusidan “Add to Home Screen” ham ishlaydi.');
+    const text = installSupported() ? 'Bir bosishda qurilma install oynasi chiqadi.' : (isTelegram ? 'Telegram ichida chiqmasa, Chrome’da oching.' : 'Brauzer menyusidan “Add to Home Screen” orqali qo‘shing.');
     if (sub) sub.textContent = text;
-    if (installBtn) installBtn.textContent = installSupported() ? '📲 Hozir o‘rnatish' : '📲 O‘rnatish yo‘riqnomasi';
+    if (installBtn) installBtn.textContent = installSupported() ? 'O‘rnatish' : 'Yo‘riqnoma';
     if (browserBtn) browserBtn.style.display = (isTelegram || !installSupported()) ? '' : 'none';
-    if (pageInstall) { pageInstall.textContent = installSupported() ? '📲 Hozir o‘rnatish' : '📲 O‘rnatish yo‘riqnomasi'; pageInstall.onclick = () => triggerInstall(); }
+    if (pageInstall) { pageInstall.textContent = installSupported() ? 'O‘rnatish' : 'Yo‘riqnoma'; pageInstall.onclick = () => triggerInstall(); }
     if (pageChrome) { pageChrome.onclick = (e) => { e.preventDefault(); openInBrowser(); }; pageChrome.style.display = (isTelegram || !installSupported()) ? '' : 'none'; }
   }
+
   function showModal(){ buildModal(); document.getElementById('om-pwa-modal')?.classList.add('show'); state.shown = true; }
   function closeModal(){ document.getElementById('om-pwa-modal')?.classList.remove('show'); }
   function openInBrowser(){ if (isAndroid) location.href = chromeIntentUrl; else window.open(location.href, '_blank', 'noopener'); }
+
   window.OrzuMallPWA = { triggerInstall, showModal, openInBrowser, isTelegram };
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); state.deferredPrompt = e; updateButtons(); if (isTelegram || currentUrl.pathname.endsWith('/install.html') || currentUrl.searchParams.get('install') === '1') setTimeout(showModal, 280); });
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    state.deferredPrompt = e;
+    updateButtons();
+    if (isTelegram || currentUrl.pathname.endsWith('/install.html') || currentUrl.searchParams.get('install') === '1') setTimeout(showModal, 280);
+  });
+
   window.addEventListener('appinstalled', () => {
     state.deferredPrompt = null;
     closeModal();
     updateButtons();
+    finishProgress(true);
     if (currentUrl.pathname.endsWith('/install.html') || currentUrl.pathname === '/install') {
       setTimeout(() => location.replace('/'), 700);
     }
   });
+
   document.addEventListener('DOMContentLoaded', () => {
     cleanupLegacyCaches();
     buildModal();
@@ -84,6 +167,7 @@
       location.replace('/');
       return;
     }
+    resetProgress();
     if (!isStandalone && (isTelegram || onInstallPage || currentUrl.searchParams.get('install') === '1')) setTimeout(showModal, 550);
     updateButtons();
   });

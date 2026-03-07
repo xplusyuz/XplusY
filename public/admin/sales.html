@@ -243,7 +243,7 @@
         <i class="fa-solid fa-bag-shopping" style="color:var(--primary);font-size:1.2rem"></i>
         <h1>Sotuv</h1>
         <span class="badge" id="roleBadge">—</span>
-        <button class="badge gbtn" id="btnAdminLogin" type="button" title="Login/parol orqali kirish"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
+        <a class="badge gbtn" href="./nasiya.html" title="Nasiya sahifasiga o‘tish" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;"><i class="fa-solid fa-credit-card"></i> Nasiya</a><button class="badge gbtn" id="btnAdminLogin" type="button" title="Nasiya bilan bir xil parol orqali kirish"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
       </div>
       <div class="actions">
         <div class="search">
@@ -323,27 +323,24 @@
     <div class="d" id="tDesc">—</div>
   </div>
 
-  <!-- Login modal (Google avto yo'q) -->
+  <!-- Login modal (Nasiya bilan umumiy parol) -->
   <div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(6px);z-index:999;">
     <div style="min-height:100%;display:flex;align-items:center;justify-content:center;padding:18px;">
       <div class="card" style="width:min(520px, 100%);padding:14px 14px 12px;border-radius:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-          <div style="font-weight:1100;font-size:1.05rem;"><i class="fa-solid fa-lock" style="color:var(--primary)"></i> Kirish</div>
+          <div style="font-weight:1100;font-size:1.05rem;"><i class="fa-solid fa-lock" style="color:var(--primary)"></i> Umumiy kirish</div>
           <button class="btn btn-ghost btn-sm" id="loginClose" type="button"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <div class="muted" style="margin-top:8px;font-size:.92rem;">Sotuv bo‘limiga kirish uchun login/parol kiriting.</div>
+        <div class="muted" style="margin-top:8px;font-size:.92rem;">Sotuv va Nasiya sahifalari endi bitta parol bilan ochiladi.</div>
         <div style="display:grid;gap:10px;margin-top:12px;">
           <div>
-            <div class="mini muted" style="margin-bottom:6px;font-weight:900;">Login</div>
-            <input id="loginUser" class="stockInp" style="width:100%;padding:12px 12px;border-radius:14px;" placeholder="admin" autocomplete="username" />
-          </div>
-          <div>
             <div class="mini muted" style="margin-bottom:6px;font-weight:900;">Parol</div>
-            <input id="loginPass" class="stockInp" style="width:100%;padding:12px 12px;border-radius:14px;" placeholder="Math@1999" type="password" autocomplete="current-password" />
+            <input id="loginPass" class="stockInp" style="width:100%;padding:12px 12px;border-radius:14px;" placeholder="Nasiya sahifasidagi parol" type="password" autocomplete="current-password" />
           </div>
           <button class="btn btn-primary" id="btnDoLogin" type="button"><i class="fa-solid fa-right-to-bracket"></i> Kirish</button>
+          <a class="btn btn-ghost" href="./nasiya.html" style="text-decoration:none;justify-content:center;"><i class="fa-solid fa-credit-card"></i> Nasiya sahifasiga o‘tish</a>
           <div class="mini muted" style="line-height:1.35;">
-            Eslatma: "admin" login avtomatik <b>admin@orzumall.uz</b> emailiga tenglashtiriladi.
+            Kiritilgan parol avval Nasiya sahifasidagi umumiy parol bilan tekshiriladi, so‘ng Sotuv tizimi ichki ravishda ochiladi.
           </div>
         </div>
       </div>
@@ -380,6 +377,21 @@
     const app = initializeApp(FIREBASE_CONFIG);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const NASIYA_CONFIG = {
+      apiKey: "AIzaSyA4DTqMsu8Wmsm7zjktnT5FyLlX1eG0qIc",
+      authDomain: "orzumall-cc4b1.firebaseapp.com",
+      projectId: "orzumall-cc4b1",
+      storageBucket: "orzumall-cc4b1.firebasestorage.app",
+      messagingSenderId: "151841710136",
+      appId: "1:151841710136:web:84af2597f1f097c5eeb3cc",
+      measurementId: "G-FFN26SDTMS"
+    };
+    const nasiyaApp = initializeApp(NASIYA_CONFIG, "nasiyaSharedAuth");
+    const nasiyaDb = getFirestore(nasiyaApp);
+    const SHARED_AUTH_KEY = "orzumall_shared_admin_auth";
+    const NASIYA_PASSWORD_REF = doc(nasiyaDb, "apps", "nasiya_crm_single_store", "settings", "app_password");
+    const SALES_SERVICE_EMAIL = "admin@orzumall.uz";
+    const SALES_SERVICE_PASSWORD = "Math@1999";
 
     const $ = (s)=>document.querySelector(s);
     const qEl = $("#q");
@@ -393,7 +405,6 @@
 
     const loginModal = $("#loginModal");
     const loginClose = $("#loginClose");
-    const loginUser = $("#loginUser");
     const loginPass = $("#loginPass");
     const btnDoLogin = $("#btnDoLogin");
 
@@ -489,37 +500,40 @@
     let me = null;
     let isAdmin = false;
 
-    async function ensureAuth(){
+    function hasSharedAccess(){
+      return !!localStorage.getItem(SHARED_AUTH_KEY);
+    }
+    function setSharedAccess(on){
+      if(on) localStorage.setItem(SHARED_AUTH_KEY, JSON.stringify({ ok:true, at: Date.now(), source:"sales" }));
+      else localStorage.removeItem(SHARED_AUTH_KEY);
+    }
+    async function getNasiyaPassword(){
+      const snap = await getDoc(NASIYA_PASSWORD_REF);
+      return snap.exists() ? String(snap.data()?.value || "1234") : "1234";
+    }
+    async function signInSalesService(){
       await setPersistence(auth, browserLocalPersistence);
-      return new Promise((resolve)=>{
-        onAuthStateChanged(auth, async(user)=>{
-          if(!user){ resolve(null); return; }
-          const email = (user.email||"").toLowerCase();
-          let role = "seller";
-          isAdmin = ADMIN_EMAILS.map(x=>x.toLowerCase()).includes(email);
-
-          if(!isAdmin){
-            try{
-              const uref = doc(db, "users", user.uid);
-              const usnap = await getDoc(uref);
-              if(usnap.exists() && usnap.data().role) role = String(usnap.data().role);
-            }catch(e){}
-          } else role = "admin";
-
-          me = { uid:user.uid, email:user.email||"", displayName:user.displayName||"Foydalanuvchi", role };
-          isAdmin = isAdmin || (role==="admin");
-          if(btnAdminLogin) btnAdminLogin.style.display="none";
-          resolve(me);
-        });
-      });
+      try{
+        const current = auth.currentUser;
+        if(current && (current.email || "").toLowerCase() === SALES_SERVICE_EMAIL) return current;
+      }catch(e){}
+      const cred = await signInWithEmailAndPassword(auth, SALES_SERVICE_EMAIL, SALES_SERVICE_PASSWORD);
+      return cred.user;
+    }
+    async function ensureAuth(){
+      if(!hasSharedAccess()) return null;
+      const user = await signInSalesService();
+      const email = (user?.email || SALES_SERVICE_EMAIL).toLowerCase();
+      me = { uid:user?.uid || "shared-admin", email, displayName:"Admin", role:"admin" };
+      isAdmin = true;
+      if(btnAdminLogin) btnAdminLogin.style.display="none";
+      return me;
     }
 
     function openLogin(){
       if(!loginModal) return;
       loginModal.style.display = "block";
-      if(loginUser && !loginUser.value) loginUser.value = "admin";
-      if(loginPass && !loginPass.value) loginPass.value = "Math@1999";
-      setTimeout(()=>{ try{ loginUser?.focus(); }catch(e){} }, 30);
+      setTimeout(()=>{ try{ loginPass?.focus(); }catch(e){} }, 30);
     }
     function closeLogin(){
       if(loginModal) loginModal.style.display = "none";
@@ -527,23 +541,21 @@
 
     async function doLogin(){
       try{
-        const u = (loginUser?.value || "").trim();
         const p = (loginPass?.value || "").trim();
-        if(!u || !p){ showToast("Xato", "Login va parolni kiriting"); return; }
-
-        const email = (u.toLowerCase()==="admin") ? "admin@orzumall.uz" : u;
-
-        await setPersistence(auth, browserLocalPersistence);
-        await signInWithEmailAndPassword(auth, email, p);
+        if(!p){ showToast("Xato", "Parolni kiriting"); return; }
+        const currentPassword = await getNasiyaPassword();
+        if(p !== currentPassword){
+          showToast("Kirish bo‘lmadi", "Parol Nasiya sahifasidagi parolga mos emas", 3200);
+          return;
+        }
+        await signInSalesService();
+        setSharedAccess(true);
         closeLogin();
-        showToast("Kirdingiz", "Tizimga muvaffaqiyatli kirdingiz");
+        showToast("Kirdingiz", "Nasiya bilan umumiy kirish muvaffaqiyatli ishladi");
         await boot();
       }catch(e){
         console.error(e);
-        const msg = (e?.code==="auth/invalid-credential" || e?.code==="auth/wrong-password")
-          ? "Login yoki parol xato"
-          : (e?.message || "Kirishda xatolik");
-        showToast("Kirish bo‘lmadi", msg, 3500);
+        showToast("Kirish bo‘lmadi", e?.message || "Ichki tizimga ulanishda xato", 3500);
       }
     }
 
@@ -563,7 +575,7 @@
         return user;
       }
       if(btnAdminLogin) btnAdminLogin.style.display = "";
-      showToast("Kirish kerak", "Davom etish uchun login/parol bilan kiring");
+      showToast("Kirish kerak", "Davom etish uchun Nasiya bilan bir xil parolni kiriting");
       openLogin();
       return null;
     }
@@ -576,7 +588,7 @@
       whoTag.textContent = `${me.displayName} • ${isAdmin ? "Admin" : "Sotuvchi"}`;
     }
 
-    btnLogout.onclick = async ()=>{ await signOut(auth); location.reload(); };
+    btnLogout.onclick = async ()=>{ setSharedAccess(false); try{ await signOut(auth); }catch(e){} location.reload(); };
 
     /* Tabs */
     function setTab(which){
