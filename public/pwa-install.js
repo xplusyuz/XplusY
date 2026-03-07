@@ -68,6 +68,23 @@
   function openInBrowser(){ if (isAndroid) location.href = chromeIntentUrl; else window.open(location.href, '_blank', 'noopener'); }
   window.OrzuMallPWA = { triggerInstall, showModal, openInBrowser, isTelegram };
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); state.deferredPrompt = e; updateButtons(); if (isTelegram || currentUrl.pathname.endsWith('/install.html') || currentUrl.searchParams.get('install') === '1') setTimeout(showModal, 280); });
-  window.addEventListener('appinstalled', () => { state.deferredPrompt = null; closeModal(); updateButtons(); });
-  document.addEventListener('DOMContentLoaded', () => { cleanupLegacyCaches(); buildModal(); if (!isStandalone && (isTelegram || currentUrl.pathname.endsWith('/install.html') || currentUrl.searchParams.get('install') === '1')) setTimeout(showModal, 550); updateButtons(); });
+  window.addEventListener('appinstalled', () => {
+    state.deferredPrompt = null;
+    closeModal();
+    updateButtons();
+    if (currentUrl.pathname.endsWith('/install.html') || currentUrl.pathname === '/install') {
+      setTimeout(() => location.replace('/'), 700);
+    }
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    cleanupLegacyCaches();
+    buildModal();
+    const onInstallPage = currentUrl.pathname.endsWith('/install.html') || currentUrl.pathname === '/install';
+    if (isStandalone && onInstallPage) {
+      location.replace('/');
+      return;
+    }
+    if (!isStandalone && (isTelegram || onInstallPage || currentUrl.searchParams.get('install') === '1')) setTimeout(showModal, 550);
+    updateButtons();
+  });
 })();
