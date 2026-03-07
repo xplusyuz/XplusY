@@ -45,7 +45,7 @@
     .item.overdue{background:var(--soft-red);border-color:#fecdd3}.item.today{background:var(--soft-yellow);border-color:#fde68a}.item.normal{background:#fff}.item.done{background:var(--soft-green);border-color:#c7ead4}
     .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}.fullname{font-size:17px;font-weight:800;line-height:1.25}.amount{margin-top:4px;color:#198754;font-weight:800;font-size:14px}
     .badge{padding:7px 10px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.badge.normal{background:var(--soft-blue);color:#1d4ed8}.badge.today{background:#fff3cd;color:#946200}.badge.overdue{background:#ffe1e5;color:#b42318}.badge.done{background:var(--soft-green);color:#166534}
-    .meta{display:grid;gap:8px}.row{display:flex;gap:8px;flex-wrap:wrap;font-size:14px}.key{min-width:96px;font-weight:700;color:#475569}.value{flex:1;color:#0f172a;word-break:break-word}.phone-link{color:#0d6efd;text-decoration:none;font-weight:700}.phone-link:hover{text-decoration:underline}.days-box{margin-top:10px;padding:10px 12px;border-radius:14px;background:#f8fafc;border:1px solid var(--line);display:grid;gap:6px}.days-line{font-size:13px;color:#334155;font-weight:700}
+    .meta{display:grid;gap:8px}.row{display:flex;gap:8px;flex-wrap:wrap;font-size:14px}.key{min-width:96px;font-weight:700;color:#475569}.value{flex:1;color:#0f172a;word-break:break-word}
     .paybox{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.pay{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}.pay.done{background:var(--soft-green);border-color:#b7e4c7}.pay .ptitle{font-size:13px;font-weight:800;margin-bottom:6px}.pay .pdate{font-size:13px;color:#374151;margin-bottom:8px}
     .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.footer{text-align:center;color:#94a3b8;font-size:12px;padding:4px 0 18px}.small{font-size:12px;color:var(--muted);line-height:1.45}.edit-bar{margin-bottom:10px;border-radius:14px;background:#eff6ff;color:#1d4ed8;padding:10px 12px;font-size:13px;font-weight:700}
     .top-note{margin-top:10px;font-size:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);padding:10px 12px;border-radius:14px;line-height:1.45}
@@ -215,29 +215,6 @@
     function formatDate(v){ if(!v) return '-'; return new Date(v + 'T00:00:00').toLocaleDateString('uz-UZ'); }
     function formatAmount(v){ const n = Number(v || 0); return n ? n.toLocaleString('uz-UZ') + ' so‘m' : '-'; }
     function normalizePhone(v){ return String(v || '').replace(/[^\d+]/g,'').trim(); }
-    function daysBetween(fromDate, toDate){
-      const a = new Date(fromDate + 'T00:00:00');
-      const b = new Date(toDate + 'T00:00:00');
-      return Math.round((b - a) / 86400000);
-    }
-    function getRemainingText(item){
-      if (item.paid2 || !item.date2) return 'To‘lov yopilgan';
-      const diff = daysBetween(todayStr(), item.date2);
-      if (diff > 0) return `${diff} kun qoldi`;
-      if (diff === 0) return `Bugun oxirgi kun`;
-      return `${Math.abs(diff)} kun o‘tib ketdi`;
-    }
-    function getDurationText(item){
-      if (!item.date1 || !item.date2) return '-';
-      const diff = daysBetween(item.date1, item.date2);
-      if (diff < 0) return '-';
-      return `${diff} kunlik nasiya`;
-    }
-    function phoneHtml(value){
-      const phone = normalizePhone(value);
-      if (!phone) return '-';
-      return `<a class="phone-link" href="tel:${phone}">${escapeHtml(value || phone)}</a>`;
-    }
     function unpaidDates(item){ const arr=[]; if(!item.paid2 && item.date2) arr.push(item.date2); return arr; }
     function getDueStatus(item){
       const today = todayStr();
@@ -338,8 +315,8 @@
             <div class="badge ${badgeClass}">${getStatusText(item)}</div>
           </div>
           <div class="meta">
-            <div class="row"><div class="key">Telefon 1:</div><div class="value">${phoneHtml(item.phone1)}</div></div>
-            <div class="row"><div class="key">Telefon 2:</div><div class="value">${phoneHtml(item.phone2)}</div></div>
+            <div class="row"><div class="key">Telefon 1:</div><div class="value">${escapeHtml(item.phone1 || '-')}</div></div>
+            <div class="row"><div class="key">Telefon 2:</div><div class="value">${escapeHtml(item.phone2 || '-')}</div></div>
             <div class="row"><div class="key">Izoh:</div><div class="value">${escapeHtml(item.note || '-')}</div></div>
           </div>
           <div class="paybox">
@@ -347,10 +324,6 @@
               <div class="ptitle">To‘lov holati</div>
               <div class="pdate">Nasiya sana: ${formatDate(item.date1)}</div>
               <div class="pdate">To‘lash muddati: ${formatDate(item.date2)}</div>
-              <div class="days-box">
-                <div class="days-line">${getRemainingText(item)}</div>
-                <div class="days-line">${getDurationText(item)}</div>
-              </div>
               <button class="btn ${item.paid2 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}')">${item.paid2 ? 'Bekor qilish' : 'To‘landi'}</button>
             </div>
           </div>
