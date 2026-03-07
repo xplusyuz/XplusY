@@ -18,45 +18,29 @@
     const style = document.createElement('style');
     style.id = 'om-pwa-mini-style';
     style.textContent = `
-      .omMiniWrap{
-        position:fixed;top:10px;left:10px;right:10px;z-index:9999;display:none;
-      }
+      .omMiniWrap{position:fixed;top:10px;left:10px;right:10px;z-index:9999;display:none}
       .omMiniWrap.show{display:block}
       .omMiniBar{
-        max-width:760px;margin:0 auto;
-        background:rgba(255,255,255,.92);
-        backdrop-filter:blur(12px);
-        border:1px solid rgba(15,23,42,.08);
-        border-radius:16px;
-        box-shadow:0 10px 28px rgba(15,23,42,.12);
-        padding:8px 10px;
-        display:flex;align-items:center;gap:10px;
+        max-width:760px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);
+        border:1px solid rgba(15,23,42,.08);border-radius:16px;box-shadow:0 10px 28px rgba(15,23,42,.12);
+        padding:8px 10px;display:flex;align-items:center;gap:10px
       }
-      .omMiniIcon{
-        width:34px;height:34px;border-radius:10px;flex:0 0 auto;overflow:hidden;
-        background:#eef8f2;
-      }
+      .omMiniIcon{width:34px;height:34px;border-radius:10px;flex:0 0 auto;overflow:hidden;background:#eef8f2}
       .omMiniIcon img{width:100%;height:100%;object-fit:cover}
       .omMiniText{min-width:0;flex:1}
-      .omMiniTitle{
-        font-size:13px;font-weight:800;color:#0f172a;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-      }
-      .omMiniSub{
-        font-size:11px;color:#64748b;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-      }
+      .omMiniTitle{font-size:13px;font-weight:800;color:#0f172a;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .omMiniSub{font-size:11px;color:#64748b;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .omMiniBtns{display:flex;gap:6px;align-items:center;flex:0 0 auto}
       .omMiniBtn{
-        appearance:none;border:0;border-radius:10px;padding:8px 10px;
-        font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap
+        appearance:none;border:0;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap
       }
       .omMiniBtn.primary{background:#2E8B57;color:#fff}
       .omMiniBtn.secondary{background:#fff;color:#0f172a;border:1px solid rgba(15,23,42,.08)}
       .omMiniBtn.close{background:#f8fafc;color:#475569;border:1px solid rgba(15,23,42,.06);padding:8px 8px}
       .omMiniToast{
-        position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(12px);
-        opacity:0;pointer-events:none;transition:.2s ease;z-index:10000;
-        background:#0f172a;color:#fff;padding:10px 12px;border-radius:12px;
-        box-shadow:0 10px 24px rgba(0,0,0,.25);font-size:13px;max-width:min(92vw,440px);text-align:center;
+        position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(12px);opacity:0;pointer-events:none;transition:.2s ease;
+        z-index:10000;background:#0f172a;color:#fff;padding:10px 12px;border-radius:12px;box-shadow:0 10px 24px rgba(0,0,0,.25);
+        font-size:13px;max-width:min(92vw,440px);text-align:center
       }
       .omMiniToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
       @media (max-width:640px){
@@ -81,7 +65,7 @@
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove('show'), 2200);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2300);
   }
 
   function buildBanner() {
@@ -98,7 +82,7 @@
           <div class="omMiniSub" id="omMiniSub">Tez ochiladi va oddiy app kabi ishlaydi.</div>
         </div>
         <div class="omMiniBtns">
-          <button type="button" class="omMiniBtn secondary" id="omMiniBrowser" style="display:none">Browser</button>
+          <button type="button" class="omMiniBtn secondary" id="omMiniBrowser">Browser</button>
           <button type="button" class="omMiniBtn primary" id="omMiniInstall">O‘rnatish</button>
           <button type="button" class="omMiniBtn close" id="omMiniClose">✕</button>
         </div>
@@ -110,7 +94,7 @@
     document.getElementById('omMiniInstall')?.addEventListener('click', async () => {
       const ok = await triggerInstall();
       if (!ok) {
-        if (isTelegram) toast("Avval Browserda oching.");
+        if (isTelegram) toast("Avval Browser tugmasini bosing.");
         else toast("Brauzer menyusidan Add to Home Screen ni tanlang.");
       }
     });
@@ -138,7 +122,7 @@
     if (sub) {
       sub.textContent = state.deferredPrompt
         ? "Bir bosishda install oynasi chiqadi."
-        : (isTelegram ? "Telegram ichida bo‘lsangiz avval browserda oching." : "Add to Home Screen ham ishlaydi.");
+        : (isTelegram ? "Telegram ichida bo‘lsangiz avval Browser ni bosing." : "Add to Home Screen ham ishlaydi.");
     }
     if (browser) browser.style.display = isTelegram ? "" : "none";
   }
@@ -154,7 +138,7 @@
         return true;
       }
       return false;
-    } catch {
+    } catch (_) {
       return false;
     } finally {
       state.deferredPrompt = null;
@@ -164,18 +148,32 @@
 
   function openInBrowser() {
     const target = `${location.origin}/install`;
+    const encoded = encodeURIComponent(target);
+
     if (/Android/i.test(ua)) {
       const clean = target.replace(/^https?:\/\//, '');
-      location.href = `intent://${clean}#Intent;scheme=https;package=com.android.chrome;end`;
-      setTimeout(() => toast("Agar ochilmasa, linkni Chrome’da oching."), 900);
+      const intentChrome = `intent://${clean}#Intent;scheme=https;package=com.android.chrome;end`;
+      try { location.href = intentChrome; } catch (_) {}
+
+      setTimeout(() => {
+        try { location.href = `googlechrome://navigate?url=${encoded}`; } catch (_) {}
+      }, 500);
+
+      setTimeout(() => {
+        toast("Agar ochilmasa, Telegram menyusidan Browserda ochish ni bosing.");
+      }, 1100);
       return;
     }
+
     try {
       window.open(target, '_blank', 'noopener,noreferrer');
-    } catch {
+      setTimeout(() => toast("Yangi oynada install tugmasini bosing."), 300);
+    } catch (_) {
       location.href = target;
     }
   }
+
+  window.OrzuMallPWAMini = { showBanner, hideBanner, triggerInstall, openInBrowser };
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -200,6 +198,4 @@
     updateBanner();
     if (canShowBanner()) setTimeout(showBanner, 700);
   });
-
-  window.OrzuMallPWAMini = { showBanner, hideBanner, triggerInstall };
 })();
