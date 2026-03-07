@@ -9,6 +9,11 @@
 
   function $(id){ return document.getElementById(id); }
   function onInstallPage(){ return path.endsWith('/install.html') || path === '/install'; }
+  function currentInstallUrl(){ return location.origin + '/install.html'; }
+  function chromeIntentUrl(){
+    const current = new URL(currentInstallUrl());
+    return `intent://${current.host}${current.pathname}${current.search}${current.hash}#Intent;scheme=https;package=com.android.chrome;end`;
+  }
 
   function cleanupLegacyCaches(){
     const run = async () => {
@@ -42,14 +47,33 @@
 
   function recommendedBrowserName(){
     if (isIOS) return 'Safari';
-    if (isAndroid) return 'Chrome yoki Edge';
+    if (isAndroid) return 'Chrome';
     return 'asosiy brauzer';
   }
 
   function fallbackInstruction(){
     if (isIOS) return 'Safari’da Share → “Add to Home Screen” ni bosing.';
+    if (isTelegram && isAndroid) return '“Brauzerda ochish” tugmasi Chrome’ni ochishga urinadi. Ishlamasa linkni nusxa olib Chrome’da oching.';
     if (isTelegram) return `${recommendedBrowserName()} da ochib, keyin o‘rnatishni davom ettiring.`;
     return 'Brauzer menyusidan “Install app” yoki “Add to Home Screen” ni tanlang.';
+  }
+
+  function updateBrowserButton(){
+    const btn = $('openBrowserBtn');
+    const text = $('installLinkText');
+    const url = currentInstallUrl();
+    if (text) text.textContent = url;
+    if (!btn) return;
+
+    btn.setAttribute('href', url);
+    btn.setAttribute('target', '_blank');
+    btn.setAttribute('rel', 'noopener');
+    btn.textContent = isTelegram && isAndroid ? 'Chrome’da ochish' : (isIOS ? 'Safari’da ochish' : 'Brauzerda ochish');
+
+    if (isTelegram && isAndroid) {
+      btn.setAttribute('href', chromeIntentUrl());
+      btn.removeAttribute('target');
+    }
   }
 
   function updateText(){
@@ -76,15 +100,48 @@
     }
   }
 
-  function openInBrowser(){
-    const current = new URL(location.href);
-    const cleanPath = current.pathname.replace(/^\//, '') || '';
-    const target = `intent://${location.host}/${cleanPath}${current.search}${current.hash}#Intent;scheme=https;package=com.android.chrome;end`;
-    if (isAndroid && isTelegram) {
-      location.href = target;
+  async function copyLink(){
+    const url = currentInstallUrl();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        return true;
+      }
+    } catch(_) {}
+    return false;
+  }
+
+  async function openInBrowser(ev){
+    const url = currentInstallUrl();
+    if (isTelegram && isAndroid) {
+      // let the anchor navigate to intent://chrome
+      setTimeout(async () => {
+        const ok = await copyLink();
+        if (document.visibilityState === 'visible') {
+          setStatus('', 'Chrome ochilmadi', ok ? 'Link nusxalandi. Chrome’ga kirib paste qiling.' : 'Linkni bosib ushlab nusxa oling va Chrome’da oching.');
+        }
+      }, 1200);
       return;
     }
-    window.open(location.href, '_blank', 'noopener');
+
+    if (isIOS) {
+      setStatus('', 'Safari tavsiya etiladi', 'Pastdagi linkni Safari’da ochib, keyin Share → Add to Home Screen ni bosing.');
+      return;
+    }
+
+    try {
+      window.open(url, '_blank', 'noopener');
+      setTimeout(async () => {
+        if (document.visibilityState === 'visible') {
+          const ok = await copyLink();
+          setStatus('', 'Yangi oynada oching', ok ? 'Link nusxalandi. Asosiy brauzeringizga o‘tib paste qiling.' : 'Linkni qo‘lda nusxa olib brauzerga qo‘ying.');
+        }
+      }, 900);
+    } catch (_) {
+      const ok = await copyLink();
+      setStatus('', 'Qo‘lda oching', ok ? 'Link nusxalandi. Chrome yoki Safari’da paste qiling.' : 'Linkni nusxa olib brauzerga qo‘ying.');
+    }
+    if (ev) ev.preventDefault();
   }
 
   function showInstructions(){
@@ -136,6 +193,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     cleanupLegacyCaches();
+    updateBrowserButton();
     if ($('installNowBtn')) $('installNowBtn').addEventListener('click', triggerInstall);
     if ($('openBrowserBtn')) $('openBrowserBtn').addEventListener('click', openInBrowser);
     updateText();
