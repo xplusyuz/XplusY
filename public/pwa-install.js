@@ -1,142 +1,146 @@
 (() => {
   const state = {
     deferredPrompt: null,
-    topbarShown: false,
-    dismissed: sessionStorage.getItem('om_pwa_hide') === '1'
+    dismissed: localStorage.getItem('om_pwa_banner_closed') === '1'
   };
 
   const ua = navigator.userAgent || "";
   const isTelegram = /Telegram|Tg\//i.test(ua) || document.referrer.includes('t.me');
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const isAndroid = /Android/i.test(ua);
-  const currentUrl = new URL(location.href);
-  const installEntry = `${location.origin}/install`;
+  const currentPath = location.pathname;
 
-  function cleanupLegacyCaches() {
-    const run = async () => {
-      try {
-        if ('serviceWorker' in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map(r => r.unregister()));
-        }
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map(key => caches.delete(key)));
-        }
-      } catch (_) {}
-    };
-    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 1200 });
-    else setTimeout(run, 250);
+  function canShowBanner() {
+    return !isStandalone && !state.dismissed && !/\/install(\.html)?$/.test(currentPath);
   }
 
   function addStyles() {
-    if (document.getElementById('om-pwa-style')) return;
+    if (document.getElementById('om-pwa-mini-style')) return;
     const style = document.createElement('style');
-    style.id = 'om-pwa-style';
+    style.id = 'om-pwa-mini-style';
     style.textContent = `
-      .omPwaTop{position:fixed;top:12px;left:12px;right:12px;z-index:9999;display:none}
-      .omPwaTop.show{display:block}
-      .omPwaTopCard{
-        max-width:980px;margin:0 auto;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);
-        border:1px solid rgba(15,23,42,.08);border-radius:22px;box-shadow:0 16px 42px rgba(15,23,42,.16);
-        padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center
+      .omMiniWrap{
+        position:fixed;top:10px;left:10px;right:10px;z-index:9999;display:none;
       }
-      .omPwaIcon{width:48px;height:48px;border-radius:16px;overflow:hidden;background:#eef8f2;box-shadow:0 8px 18px rgba(46,139,87,.12)}
-      .omPwaIcon img{width:100%;height:100%;object-fit:cover}
-      .omPwaText b{display:block;font-size:16px;color:#0f172a;margin-bottom:3px}
-      .omPwaText span{display:block;font-size:13px;line-height:1.4;color:#64748b}
-      .omPwaActs{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-      .omPwaBtn{
-        appearance:none;border:0;border-radius:14px;padding:11px 13px;font-weight:800;font-size:14px;cursor:pointer;
-        display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none
+      .omMiniWrap.show{display:block}
+      .omMiniBar{
+        max-width:760px;margin:0 auto;
+        background:rgba(255,255,255,.92);
+        backdrop-filter:blur(12px);
+        border:1px solid rgba(15,23,42,.08);
+        border-radius:16px;
+        box-shadow:0 10px 28px rgba(15,23,42,.12);
+        padding:8px 10px;
+        display:flex;align-items:center;gap:10px;
       }
-      .omPwaBtn.primary{background:linear-gradient(180deg,#2E8B57,#246c46);color:#fff;box-shadow:0 12px 28px rgba(46,139,87,.24)}
-      .omPwaBtn.secondary{background:#fff;color:#0f172a;border:1px solid rgba(15,23,42,.08)}
-      .omPwaBtn.ghost{background:#f8fafc;color:#475569;border:1px solid rgba(15,23,42,.06)}
-      .omPwaToast{
-        position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
-        z-index:10000;background:#0f172a;color:#fff;padding:12px 14px;border-radius:14px;box-shadow:0 12px 28px rgba(0,0,0,.28);
-        transition:.22s ease;font-size:14px;max-width:min(92vw,520px);text-align:center
+      .omMiniIcon{
+        width:34px;height:34px;border-radius:10px;flex:0 0 auto;overflow:hidden;
+        background:#eef8f2;
       }
-      .omPwaToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-      @media (max-width:720px){
-        .omPwaTopCard{grid-template-columns:1fr;gap:10px;padding:12px}
-        .omPwaIcon{display:none}
-        .omPwaActs{justify-content:stretch}
-        .omPwaActs .omPwaBtn{flex:1 1 auto}
+      .omMiniIcon img{width:100%;height:100%;object-fit:cover}
+      .omMiniText{min-width:0;flex:1}
+      .omMiniTitle{
+        font-size:13px;font-weight:800;color:#0f172a;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      }
+      .omMiniSub{
+        font-size:11px;color:#64748b;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      }
+      .omMiniBtns{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+      .omMiniBtn{
+        appearance:none;border:0;border-radius:10px;padding:8px 10px;
+        font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap
+      }
+      .omMiniBtn.primary{background:#2E8B57;color:#fff}
+      .omMiniBtn.secondary{background:#fff;color:#0f172a;border:1px solid rgba(15,23,42,.08)}
+      .omMiniBtn.close{background:#f8fafc;color:#475569;border:1px solid rgba(15,23,42,.06);padding:8px 8px}
+      .omMiniToast{
+        position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(12px);
+        opacity:0;pointer-events:none;transition:.2s ease;z-index:10000;
+        background:#0f172a;color:#fff;padding:10px 12px;border-radius:12px;
+        box-shadow:0 10px 24px rgba(0,0,0,.25);font-size:13px;max-width:min(92vw,440px);text-align:center;
+      }
+      .omMiniToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+      @media (max-width:640px){
+        .omMiniWrap{top:8px;left:8px;right:8px}
+        .omMiniBar{padding:8px}
+        .omMiniSub{display:none}
+        .omMiniIcon{display:none}
+        .omMiniBtn{padding:8px 9px;font-size:12px}
       }
     `;
     document.head.appendChild(style);
   }
 
   function toast(msg) {
-    let el = document.getElementById('om-pwa-toast');
+    let el = document.getElementById('om-mini-toast');
     if (!el) {
       el = document.createElement('div');
-      el.id = 'om-pwa-toast';
-      el.className = 'omPwaToast';
+      el.id = 'om-mini-toast';
+      el.className = 'omMiniToast';
       document.body.appendChild(el);
     }
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove('show'), 2600);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2200);
   }
 
-  function canShowBanner() {
-    const p = currentUrl.pathname;
-    return !isStandalone && !state.dismissed && !/\/admin\//.test(p) && !/\/install(\.html)?$/.test(p);
-  }
-
-  function installSupported() { return !!state.deferredPrompt; }
-
-  function buildTopbar() {
-    if (document.getElementById('om-pwa-top')) return;
+  function buildBanner() {
+    if (document.getElementById('om-mini-wrap')) return;
     addStyles();
     const wrap = document.createElement('div');
-    wrap.className = 'omPwaTop';
-    wrap.id = 'om-pwa-top';
+    wrap.className = 'omMiniWrap';
+    wrap.id = 'om-mini-wrap';
     wrap.innerHTML = `
-      <div class="omPwaTopCard">
-        <div class="omPwaIcon"><img src="/pwa-192.png" alt="OrzuMall"></div>
-        <div class="omPwaText">
-          <b>OrzuMall ilovasini o‘rnating</b>
-          <span id="omPwaDesc">Telefoningizga tez ochiladigan ilova sifatida qo‘shiladi.</span>
+      <div class="omMiniBar">
+        <div class="omMiniIcon"><img src="/pwa-192.png" alt="OrzuMall"></div>
+        <div class="omMiniText">
+          <div class="omMiniTitle">OrzuMall ilovasini o‘rnating</div>
+          <div class="omMiniSub" id="omMiniSub">Tez ochiladi va oddiy app kabi ishlaydi.</div>
         </div>
-        <div class="omPwaActs">
-          <button type="button" class="omPwaBtn secondary" id="omPwaBrowserTop">🌐 Browserda ochish</button>
-          <button type="button" class="omPwaBtn primary" id="omPwaInstallTop">📲 O‘rnatish</button>
-          <button type="button" class="omPwaBtn ghost" id="omPwaCloseTop">✕</button>
+        <div class="omMiniBtns">
+          <button type="button" class="omMiniBtn secondary" id="omMiniBrowser" style="display:none">Browser</button>
+          <button type="button" class="omMiniBtn primary" id="omMiniInstall">O‘rnatish</button>
+          <button type="button" class="omMiniBtn close" id="omMiniClose">✕</button>
         </div>
       </div>
     `;
     document.body.appendChild(wrap);
 
-    document.getElementById('omPwaBrowserTop')?.addEventListener('click', openInBrowser);
-    document.getElementById('omPwaInstallTop')?.addEventListener('click', async () => {
+    document.getElementById('omMiniBrowser')?.addEventListener('click', openInBrowser);
+    document.getElementById('omMiniInstall')?.addEventListener('click', async () => {
       const ok = await triggerInstall();
       if (!ok) {
-        if (isTelegram) toast("Avval Browserda ochish tugmasini bosing, keyin o‘sha yerda yana O‘rnatish ni bosing.");
-        else toast("Brauzer menyusidan Add to Home Screen ham ishlaydi.");
+        if (isTelegram) toast("Avval Browserda oching.");
+        else toast("Brauzer menyusidan Add to Home Screen ni tanlang.");
       }
     });
-    document.getElementById('omPwaCloseTop')?.addEventListener('click', () => {
-      sessionStorage.setItem('om_pwa_hide', '1');
+    document.getElementById('omMiniClose')?.addEventListener('click', () => {
+      localStorage.setItem('om_pwa_banner_closed', '1');
       state.dismissed = true;
-      hideTopbar();
+      hideBanner();
     });
-    updateButtons();
+    updateBanner();
   }
 
-  function showTopbar() {
+  function showBanner() {
     if (!canShowBanner()) return;
-    buildTopbar();
-    document.getElementById('om-pwa-top')?.classList.add('show');
-    state.topbarShown = true;
+    buildBanner();
+    document.getElementById('om-mini-wrap')?.classList.add('show');
   }
 
-  function hideTopbar() {
-    document.getElementById('om-pwa-top')?.classList.remove('show');
+  function hideBanner() {
+    document.getElementById('om-mini-wrap')?.classList.remove('show');
+  }
+
+  function updateBanner() {
+    const sub = document.getElementById('omMiniSub');
+    const browser = document.getElementById('omMiniBrowser');
+    if (sub) {
+      sub.textContent = state.deferredPrompt
+        ? "Bir bosishda install oynasi chiqadi."
+        : (isTelegram ? "Telegram ichida bo‘lsangiz avval browserda oching." : "Add to Home Screen ham ishlaydi.");
+    }
+    if (browser) browser.style.display = isTelegram ? "" : "none";
   }
 
   async function triggerInstall() {
@@ -144,107 +148,58 @@
     try {
       state.deferredPrompt.prompt();
       const choice = await state.deferredPrompt.userChoice;
-      if (choice && choice.outcome === 'accepted') toast("O‘rnatilmoqda...");
-      return !!choice && choice.outcome === 'accepted';
-    } catch (_) {
+      if (choice && choice.outcome === 'accepted') {
+        hideBanner();
+        toast("O‘rnatilmoqda...");
+        return true;
+      }
+      return false;
+    } catch {
       return false;
     } finally {
       state.deferredPrompt = null;
-      updateButtons();
+      updateBanner();
     }
-  }
-
-  function updateButtons() {
-    const desc = document.getElementById('omPwaDesc');
-    const installBtn = document.getElementById('omPwaInstallTop');
-    const browserBtn = document.getElementById('omPwaBrowserTop');
-    if (desc) {
-      desc.textContent = installSupported()
-        ? "Bir bosishda install oynasi chiqadi."
-        : (isTelegram
-            ? "Telegram ichida bo‘lsangiz avval Browserda oching, keyin o‘rnating."
-            : "Install chiqmasa brauzer menyusidan Add to Home Screen ni tanlang.");
-    }
-    if (installBtn) installBtn.textContent = installSupported() ? "📲 O‘rnatish" : "📲 O‘rnatish";
-    if (browserBtn) browserBtn.style.display = isTelegram ? "" : "none";
   }
 
   function openInBrowser() {
-    const target = `${installEntry}?src=browser`;
-    if (isAndroid) {
+    const target = `${location.origin}/install`;
+    if (/Android/i.test(ua)) {
       const clean = target.replace(/^https?:\/\//, '');
       location.href = `intent://${clean}#Intent;scheme=https;package=com.android.chrome;end`;
-      setTimeout(() => toast("Agar ochilmasa, linkni nusxalab Chrome’da qo‘ying."), 900);
+      setTimeout(() => toast("Agar ochilmasa, linkni Chrome’da oching."), 900);
       return;
     }
     try {
       window.open(target, '_blank', 'noopener,noreferrer');
-      setTimeout(() => toast("Yangi brauzer oynasida install tugmasini bosing."), 300);
-    } catch (_) {
+    } catch {
       location.href = target;
     }
   }
 
-  async function copyInstallLink() {
-    try {
-      await navigator.clipboard.writeText(installEntry);
-      toast("Install link nusxalandi.");
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  window.OrzuMallPWA = { triggerInstall, openInBrowser, copyInstallLink, installSupported: () => installSupported() };
-
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     state.deferredPrompt = e;
-    updateButtons();
-    if (canShowBanner()) setTimeout(showTopbar, 250);
+    updateBanner();
+    if (canShowBanner()) setTimeout(showBanner, 200);
   });
 
   window.addEventListener('appinstalled', () => {
     state.deferredPrompt = null;
-    hideTopbar();
-    updateButtons();
+    hideBanner();
     toast("Ilova o‘rnatildi.");
-    if (/\/install(\.html)?$/.test(currentUrl.pathname)) {
-      setTimeout(() => location.replace('/'), 700);
-    }
+    updateBanner();
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    cleanupLegacyCaches();
-    buildTopbar();
-    if (canShowBanner()) setTimeout(showTopbar, 700);
-    updateButtons();
-
-    const openBtns = ['openBrowserBtn'];
-    openBtns.forEach(id => document.getElementById(id)?.addEventListener('click', openInBrowser));
-
-    const installBtns = ['installNowBtn'];
-    installBtns.forEach(id => document.getElementById(id)?.addEventListener('click', async () => {
-      const ok = await triggerInstall();
-      if (!ok) {
-        if (isTelegram) toast("Avval Browserda ochish tugmasini bosing.");
-        else toast("Install chiqmasa brauzer menyusidan Add to Home Screen ni tanlang.");
-      }
-    }));
-
-    const copyBtns = ['copyLinkBtn'];
-    copyBtns.forEach(id => document.getElementById(id)?.addEventListener('click', async () => {
-      const ok = await copyInstallLink();
-      if (!ok) toast(installEntry);
-    }));
-
-    const onInstallPage = /\/install(\.html)?$/.test(currentUrl.pathname);
-    if (isStandalone && onInstallPage) {
-      location.replace('/');
+    if (isStandalone) {
+      hideBanner();
       return;
     }
-    if (onInstallPage && isTelegram) {
-      toast("Avval Browserda ochish, keyin O‘rnatish.");
-    }
+    buildBanner();
+    updateBanner();
+    if (canShowBanner()) setTimeout(showBanner, 700);
   });
+
+  window.OrzuMallPWAMini = { showBanner, hideBanner, triggerInstall };
 })();
