@@ -204,14 +204,29 @@
     }
     function formatDate(v){ if(!v) return '-'; return new Date(v + 'T00:00:00').toLocaleDateString('uz-UZ'); }
     function formatAmount(v){ const n = Number(v || 0); return n ? n.toLocaleString('uz-UZ') + ' so‘m' : '-'; }
+    function normalizeAmount(v){ return Number(String(v || 0).replace(/[^\d.]/g,'')) || 0; }
     function normalizePhone(v){ return String(v || '').replace(/[^\d+]/g,'').trim(); }
     function daysBetween(fromDate, toDate){
       const a = new Date(fromDate + 'T00:00:00');
       const b = new Date(toDate + 'T00:00:00');
       return Math.round((b - a) / 86400000);
     }
+    function getPaidAmount(item){
+      const total = normalizeAmount(item.amount);
+      const paid = normalizeAmount(item.paidAmount);
+      if (item.paid2) return total;
+      return Math.min(paid, total);
+    }
+    function getRemainingAmount(item){
+      return Math.max(0, normalizeAmount(item.amount) - getPaidAmount(item));
+    }
+    function getPaymentPercent(item){
+      const total = normalizeAmount(item.amount);
+      if (!total) return 0;
+      return Math.min(100, Math.round((getPaidAmount(item) / total) * 100));
+    }
     function getRemainingText(item){
-      if (item.paid2 || !item.date2) return 'To‘lov yopilgan';
+      if (getRemainingAmount(item) <= 0 || !item.date2) return 'To‘lov yopilgan';
       const diff = daysBetween(todayStr(), item.date2);
       if (diff > 0) return `${diff} kun qoldi`;
       if (diff === 0) return `Bugun oxirgi kun`;
@@ -228,10 +243,10 @@
       if (!phone) return '-';
       return `<a class="phone-link" href="tel:${phone}">${escapeHtml(value || phone)}</a>`;
     }
-    function unpaidDates(item){ const arr=[]; if(!item.paid2 && item.date2) arr.push(item.date2); return arr; }
+    function unpaidDates(item){ const arr=[]; if(getRemainingAmount(item) > 0 && item.date2) arr.push(item.date2); return arr; }
     function getDueStatus(item){
       const today = todayStr();
-      if (item.paid2) return 'done';
+      if (getRemainingAmount(item) <= 0) return 'done';
       if (!item.date2) return 'normal';
       if (item.date2 < today) return 'overdue';
       if (item.date2 === today) return 'today';
@@ -293,8 +308,30 @@
     function editItem(id){ const item = allItems.find(x => x.id === id); if (item) fillForm(item); }
     async function togglePaid(id){
       const item = allItems.find(x => x.id === id); if (!item) return;
-      const patch = { paid2: !item.paid2, updatedAt: serverTimestamp() };
+      const total = normalizeAmount(item.amount);
+      const fullyPaid = getRemainingAmount(item) <= 0;
+      const patch = fullyPaid
+        ? { paid2: false, paidAmount: 0, updatedAt: serverTimestamp() }
+        : { paid2: true, paidAmount: total, updatedAt: serverTimestamp() };
       await updateDoc(doc(db, 'apps', APP_ID, 'customers', id), patch);
+    }
+    async function addPartialPayment(id){
+      const item = allItems.find(x => x.id === id); if (!item) return;
+      const total = normalizeAmount(item.amount);
+      if (!total) return alert('Avval jami summani kiriting.');
+      const remaining = getRemainingAmount(item);
+      if (remaining <= 0) return alert('Bu nasiya to‘liq yopilgan.');
+      const raw = prompt(`Qisman to‘lov summasini kiriting. Qolgan summa: ${remaining.toLocaleString('uz-UZ')} so‘m`);
+      if (raw === null) return;
+      const value = normalizeAmount(raw);
+      if (!value) return alert('To‘g‘ri summa kiriting.');
+      if (value > remaining) return alert('Qisman to‘lov qolgan summadan katta bo‘lishi mumkin emas.');
+      const nextPaid = getPaidAmount(item) + value;
+      await updateDoc(doc(db, 'apps', APP_ID, 'customers', id), {
+        paidAmount: nextPaid,
+        paid2: nextPaid >= total,
+        updatedAt: serverTimestamp()
+      });
     }
     async function saveItem(obj){
       if (editingId) {
@@ -302,12 +339,14 @@
         await updateDoc(doc(db, 'apps', APP_ID, 'customers', editingId), {
           ...obj,
           paid2: prev?.paid2 ?? false,
+          paidAmount: prev?.paidAmount ?? 0,
           updatedAt: serverTimestamp()
         });
       } else {
         await addDoc(customersCol, {
           ...obj,
           paid2: false,
+          paidAmount: 0,
           createdAt: serverTimestamp(),
           createdAtMillis: Date.now(),
           updatedAt: serverTimestamp()
@@ -323,7 +362,7 @@
           <div class="top">
             <div>
               <div class="fullname">${escapeHtml(item.ism)} ${escapeHtml(item.familiya)}</div>
-              <div class="amount">${formatAmount(item.amount)}</div>
+              <div class="amount">${formatAmount(item.amount)} · ${getPaymentPercent(item)}%</div>
             </div>
             <div class="badge ${badgeClass}">${getStatusText(item)}</div>
           </div>
@@ -333,7 +372,7 @@
             <div class="row"><div class="key">Izoh:</div><div class="value">${escapeHtml(item.note || '-')}</div></div>
           </div>
           <div class="paybox">
-            <div class="pay ${item.paid2 ? 'done' : ''}">
+            <div class="pay ${getRemainingAmount(item) <= 0 ? 'done' : ''}">
               <div class="ptitle">To‘lov holati</div>
               <div class="pdate">Nasiya sana: ${formatDate(item.date1)}</div>
               <div class="pdate">To‘lash muddati: ${formatDate(item.date2)}</div>
@@ -341,7 +380,20 @@
                 <div class="days-line">${getRemainingText(item)}</div>
                 <div class="days-line">${getDurationText(item)}</div>
               </div>
-              <button class="btn ${item.paid2 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}')">${item.paid2 ? 'Bekor qilish' : 'To‘landi'}</button>
+              <div class="mini">
+                <div class="mini-box">
+                  <div class="mini-label">To‘langan</div>
+                  <div class="mini-value">${formatAmount(getPaidAmount(item))}</div>
+                </div>
+                <div class="mini-box">
+                  <div class="mini-label">Qolgan</div>
+                  <div class="mini-value">${formatAmount(getRemainingAmount(item))}</div>
+                </div>
+              </div>
+              <div class="pay-actions">
+                <button class="btn btn-secondary" onclick="window.addPartialPayment('${item.id}')">Qisman to‘lash</button>
+                <button class="btn ${getRemainingAmount(item) <= 0 ? 'btn-gray' : 'btn-success'}" onclick="window.togglePaid('${item.id}')">${getRemainingAmount(item) <= 0 ? 'Bekor qilish' : 'To‘liq to‘landi'}</button>
+              </div>
             </div>
           </div>
           <div class="actions">
@@ -424,6 +476,7 @@
     window.removeItem = removeItem;
     window.editItem = editItem;
     window.togglePaid = togglePaid;
+    window.addPartialPayment = addPartialPayment;
     if (isLoggedIn()) showApp(); else showLogin();
   </script>
 </body>
