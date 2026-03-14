@@ -563,6 +563,39 @@
       color: #527a64;
       font-style: italic;
     }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 12px 12px 22px; }
+      .top-bar { gap: 10px; flex-wrap: wrap; }
+      .logo-badge span { font-size: 1rem; }
+      .role-tag { padding: 7px 12px; font-size: 0.78rem; }
+      .search-panel { padding: 14px; }
+      .search-grid { flex-direction: column; }
+      .search-field, .barcode-wrapper { min-width: 100%; }
+      .action-buttons { width: 100%; display: grid; grid-template-columns: 84px 1fr; }
+      .btn-gloss { justify-content: center; padding: 14px 16px; }
+      .cart-header { padding: 18px 16px 10px; }
+      .cart-title h2 { font-size: 1.45rem; }
+      .cart-note { padding: 0 16px; }
+      .cart-items { padding: 8px 12px 12px; max-height: 38vh; }
+      .cart-item-row { grid-template-columns: 56px 1fr auto; border-radius: 28px; padding: 10px 12px; }
+      .cart-item-img { width: 56px; height: 56px; border-radius: 18px; }
+      .summary-box { padding: 16px; }
+      .summary-row { font-size: 0.95rem; }
+      .summary-row.total { font-size: 1.12rem; }
+      .stats-grid { padding: 0 16px 16px; gap: 8px; }
+      .stat-pill { border-radius: 24px; padding: 12px 8px; }
+      .stat-pill .value { font-size: 1.1rem; }
+      .products-panel { padding: 14px; }
+      .browse-item { grid-template-columns: 56px 1fr auto; padding: 10px 12px 10px 10px; border-radius: 28px; }
+      .browse-img { width: 56px; height: 56px; border-radius: 18px; }
+      .add-circle { width: 44px; height: 44px; font-size: 1.2rem; }
+      .modal-modern { width: 100%; border-radius: 28px; }
+      .modal-header { padding: 16px; align-items: flex-start; }
+      #scannerViewport { min-height: 54vh; border-radius: 0 0 24px 24px; }
+      .icon-glossy { width: 42px; height: 42px; font-size: 1.1rem; }
+    }
+
   </style>
 </head>
 <body>
@@ -648,8 +681,16 @@
   <div class="backdrop" id="scanBd">
     <div class="modal-modern">
       <div class="modal-header">
-        <div><span style="font-weight:800;">Kamerani kodga tuting</span><p style="font-size:0.8rem; color:#366e4f;">avtomatik qo‘shiladi</p></div>
-        <button class="icon-glossy" id="scanClose"><i class="fa-solid fa-xmark"></i></button>
+        <div>
+          <span style="font-weight:800;">Kamerani kodga tuting</span>
+          <p style="font-size:0.8rem; color:#366e4f;">Har bir scan avtomatik savatga qo‘shiladi</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-gloss btn-primary-gloss" id="scanDone" type="button">
+            <i class="fa-solid fa-check"></i>Tayyor
+          </button>
+          <button class="icon-glossy" id="scanClose" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
       </div>
       <div id="scannerViewport"></div>
     </div>
@@ -690,6 +731,7 @@
     function showToast(title, desc, ms = 2600) { tTitle.innerText = title; tDesc.innerText = desc || ''; toast.style.display = 'block'; clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => toast.style.display = 'none', ms); }
 
     let me = null, isAdmin = false, products = [], cart = [], scanner = null;
+    let scanActive = false, lastScannedCode = '', lastScannedAt = 0, audioCtx = null;
 
     // yordamchi funksiyalar
     function getName(p) { return p?.name || p?.title || p?.nomi || 'Nomsiz'; }
@@ -701,6 +743,26 @@
     function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
     function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
     function fmt(n) { try { return new Intl.NumberFormat('uz-UZ').format(Number(n || 0)); } catch (e) { return String(n || 0); } }
+
+    function beepOk() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = audioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1046;
+        gain.gain.value = 0.0001;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        const now = ctx.currentTime;
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        osc.stop(now + 0.13);
+      } catch (e) { }
+    }
+
 
     // auth
     async function ensureAuth() {
@@ -778,15 +840,27 @@
 
     async function addByBarcode(code) {
       const c = String(code || '').trim();
-      if (!c) return;
+      if (!c) return false;
       const found = products.find(x => getBarcode(x.data) === c);
-      if (found) { addItem(found, 1); $('#barcodeInput').value = ''; return; }
+      if (found) {
+        addItem(found, 1);
+        $('#barcodeInput').value = '';
+        return true;
+      }
       try {
         const snap = await getDocs(query(collection(db, 'products'), where('barcode', '==', c), limit(1)));
-        if (snap.empty) return showToast('Topilmadi', 'Bu barcode bilan mahsulot yo‘q');
+        if (snap.empty) {
+          showToast('Topilmadi', 'Bu barcode bilan mahsulot yo‘q');
+          return false;
+        }
         addItem({ id: snap.docs[0].id, data: snap.docs[0].data() || {} }, 1);
         $('#barcodeInput').value = '';
-      } catch (e) { console.error(e); showToast('Xato', 'Barcode bo‘yicha topib bo‘lmadi'); }
+        return true;
+      } catch (e) {
+        console.error(e);
+        showToast('Xato', 'Barcode bo‘yicha topib bo‘lmadi');
+        return false;
+      }
     }
 
     function renderCart() {
@@ -851,23 +925,78 @@
 
     // scanner
     async function startScan() {
+      if (scanActive) return;
       if (!window.Html5Qrcode) return showToast('Scanner yuklanmadi', 'Internetni tekshiring');
-      $('#scanBd').style.display = 'flex'; document.body.style.overflow = 'hidden';
+
+      $('#scanBd').style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+
       try {
         scanner = new Html5Qrcode('scannerViewport');
         const cams = await Html5Qrcode.getCameras();
         const cam = (cams || []).find(c => /back|rear|environment/i.test(c.label || '')) || (cams || [])[0];
         if (!cam) throw new Error('Kamera topilmadi');
-        await scanner.start(cam.id, { fps: 10, qrbox: { width: 260, height: 120 }, aspectRatio: 1.7778, experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
-          async (decodedText) => { $('#barcodeInput').value = String(decodedText || '').trim(); await stopScan(); addByBarcode($('#barcodeInput').value); },
-          () => { });
-      } catch (e) { console.error(e); await stopScan(); showToast('Kamera ochilmadi', e?.message || 'Ruxsat berilmagan'); }
+
+        scanActive = true;
+        lastScannedCode = '';
+        lastScannedAt = 0;
+
+        await scanner.start(
+          cam.id,
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 120 },
+            aspectRatio: 1.7778,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+          },
+          async (decodedText) => {
+            const code = String(decodedText || '').trim();
+            if (!code) return;
+
+            const now = Date.now();
+            if (code === lastScannedCode && (now - lastScannedAt) < 1200) return;
+
+            lastScannedCode = code;
+            lastScannedAt = now;
+            $('#barcodeInput').value = code;
+
+            const ok = await addByBarcode(code);
+            if (ok) {
+              beepOk();
+              try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) { }
+              showToast('Qo‘shildi', `Kod: ${code}`);
+            }
+          },
+          () => { }
+        );
+      } catch (e) {
+        console.error(e);
+        await stopScan();
+        showToast('Kamera ochilmadi', e?.message || 'Ruxsat berilmagan');
+      }
     }
+
     async function stopScan() {
-      try { if (scanner) { await scanner.stop().catch(() => { }); await scanner.clear().catch(() => { }); } } catch (e) { }
-      scanner = null; $('#scanBd').style.display = 'none'; document.body.style.overflow = ''; $('#scannerViewport').innerHTML = '';
+      scanActive = false;
+      try {
+        if (scanner) {
+          const state = scanner.getState?.();
+          if (state === 1 || state === 2) {
+            await scanner.stop().catch(() => { });
+          }
+          await scanner.clear().catch(() => { });
+        }
+      } catch (e) { }
+      scanner = null;
+      $('#scanBd').style.display = 'none';
+      document.body.style.overflow = '';
+      $('#scannerViewport').innerHTML = '';
     }
-    $('#btnScan').onclick = startScan; $('#scanClose').onclick = stopScan; $('#scanBd').addEventListener('click', e => { if (e.target === $('#scanBd')) stopScan(); });
+
+    $('#btnScan').onclick = startScan;
+    $('#scanClose').onclick = stopScan;
+    $('#scanDone').onclick = stopScan;
+    $('#scanBd').addEventListener('click', e => { if (e.target === $('#scanBd')) stopScan(); });
 
     // checkout
     $('#btnCheckout').onclick = async () => {
