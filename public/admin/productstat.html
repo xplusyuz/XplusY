@@ -115,7 +115,24 @@
       .cards{grid-template-columns: repeat(3, minmax(0,1fr));}
     }
 
+
+    .quickWrap{padding:12px;border-top:1px solid var(--line);background:linear-gradient(180deg,#fbfffc,#f8fbff)}
+    .quickHead{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .quickTitle{font-weight:1000;font-size:1rem;display:flex;gap:8px;align-items:center}
+    .quickGrid{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+    .quickGrid .field{margin:0}
+    .quickGrid .field.full{grid-column:1/-1}
+    .inlineBtns{display:flex;gap:8px;flex-wrap:wrap}
+    .scanBox{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .camModal video{width:100%;max-height:56vh;border-radius:18px;background:#000}
+    .camHint{font-size:.82rem;color:var(--muted);margin-top:8px}
+    .labelPreview{border:1px dashed var(--line);border-radius:16px;padding:10px;background:#fff;display:grid;gap:8px;justify-items:center}
+    .tiny{font-size:.74rem;color:var(--muted)}
+    .profitBox{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+    .profitTag{padding:6px 10px;border-radius:999px;background:#eff6ff;border:1px solid #dbeafe;color:#1d4ed8;font-weight:900;font-size:.78rem}
+
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -166,7 +183,64 @@
             <span class="pill" id="zeroPill">Tugagan: 0</span>
             <span class="pill ok" id="okPill">Yetarli: 0</span>
           </div>
-          <div class="left"><span class="tag">Inventory products ichida</span></div>
+          <div class="left">
+            <a class="btn btn-ghost btn-sm" href="./kassa.html"><i class="fa-solid fa-cash-register"></i> Kassa</a>
+            <span class="tag">Inventory products ichida</span>
+          </div>
+        </div>
+
+        <div class="quickWrap">
+          <div class="quickHead">
+            <div class="quickTitle"><i class="fa-solid fa-bolt" style="color:var(--primary)"></i> Tez mahsulot qo‘shish</div>
+            <div class="inlineBtns">
+              <button class="btn btn-ghost btn-sm" id="btnScanBarcode"><i class="fa-solid fa-camera"></i> Kamera bilan scan</button>
+              <button class="btn btn-ghost btn-sm" id="btnGenBarcode"><i class="fa-solid fa-barcode"></i> Shtrix kod yaratish</button>
+              <button class="btn btn-primary btn-sm" id="btnSaveQuick"><i class="fa-solid fa-plus"></i> Tez saqlash</button>
+            </div>
+          </div>
+          <div class="quickGrid">
+            <div class="field">
+              <label>Shtrix kod</label>
+              <input id="qaBarcode" placeholder="Scan qiling yoki yarating" />
+              <div class="hint">Mavjud kod bo‘lsa scan qiling. Bo‘lmasa avtomatik EAN-13 yaratiladi.</div>
+            </div>
+            <div class="field">
+              <label>Mahsulot nomi</label>
+              <input id="qaName" placeholder="Masalan: AXIS-Y serum" />
+            </div>
+            <div class="field">
+              <label>Sotuv narxi (UZS)</label>
+              <input id="qaPrice" type="number" min="0" step="100" placeholder="Masalan: 180000" />
+            </div>
+            <div class="field">
+              <label>Tannarx / olgan narx (UZS)</label>
+              <input id="qaCost" type="number" min="0" step="100" placeholder="Masalan: 120000" />
+            </div>
+            <div class="field">
+              <label>Ombordagi soni</label>
+              <input id="qaStock" type="number" min="0" step="1" value="1" />
+            </div>
+            <div class="field">
+              <label>Kam qoldi chegarasi</label>
+              <input id="qaLow" type="number" min="0" step="1" value="2" />
+            </div>
+            <div class="field full">
+              <label>Rasm</label>
+              <div class="scanBox">
+                <input id="qaImage" type="file" accept="image/*" capture="environment" />
+                <img id="qaPreview" alt="preview" style="width:78px;height:78px;border-radius:14px;border:1px solid var(--line);object-fit:cover;display:none" />
+                <div class="tiny">Telefon kamerasi bilan tez rasmga olib qo‘ysangiz ham ishlaydi.</div>
+              </div>
+            </div>
+            <div class="field full">
+              <label>Shtrix kod yorlig‘i</label>
+              <div class="labelPreview">
+                <svg id="qaBarcodeSvg"></svg>
+                <div class="tiny" id="qaBarcodeText">Kod hali tayyor emas</div>
+                <button class="btn btn-ghost btn-sm" id="btnPrintLabel" type="button"><i class="fa-solid fa-print"></i> Yorliqni chiqarish</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="cards" id="cards"></div>
@@ -185,6 +259,8 @@
                 <th style="min-width:260px">Mahsulot</th>
                 <th style="min-width:120px">Qoldiq</th>
                 <th style="min-width:120px">Sotilgan</th>
+                <th style="min-width:150px">Barcode</th>
+                <th style="min-width:150px">Tannarx</th>
                 <th style="min-width:180px">Sotuv summasi</th>
                 <th style="min-width:180px">Oxirgi yangilanish</th>
               </tr>
@@ -239,6 +315,20 @@
     </div>
   </div>
 
+
+  <div class="backdrop camModal" id="scanBd">
+    <div class="modal" style="max-width:760px">
+      <div class="modalHeader">
+        <div class="h"><div class="t">Shtrix kod scanner</div><div class="d">Kamera kodni ko‘rsa avtomatik to‘xtaydi</div></div>
+        <button class="btn btn-ghost btn-xs" id="scanClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modalBody">
+        <video id="scanVideo" playsinline autoplay muted></video>
+        <div class="camHint">Chrome / Android’da BarcodeDetector ishlaydi. Ishlamasa qo‘lda kod kiriting.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"><div class="t" id="tTitle">—</div><div class="d" id="tDesc">—</div></div>
 
   <script type="module">
@@ -259,7 +349,7 @@
     }
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-    import { getFirestore, doc, getDoc, updateDoc, getDocs, collection, query, where, onSnapshot, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, updateDoc, getDocs, collection, query, where, onSnapshot, serverTimestamp, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
     import { GoogleAuthProvider, browserLocalPersistence, getAuth, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
     const app = initializeApp(FIREBASE_CONFIG);
@@ -275,6 +365,23 @@
     const btnRefresh = $("#btnRefresh");
     const btnLogout = $("#btnLogout");
     const btnExport = $("#btnExport");
+    const qaBarcode = $("#qaBarcode");
+    const qaName = $("#qaName");
+    const qaPrice = $("#qaPrice");
+    const qaCost = $("#qaCost");
+    const qaStock = $("#qaStock");
+    const qaLow = $("#qaLow");
+    const qaImage = $("#qaImage");
+    const qaPreview = $("#qaPreview");
+    const qaBarcodeSvg = $("#qaBarcodeSvg");
+    const qaBarcodeText = $("#qaBarcodeText");
+    const btnGenBarcode = $("#btnGenBarcode");
+    const btnSaveQuick = $("#btnSaveQuick");
+    const btnScanBarcode = $("#btnScanBarcode");
+    const btnPrintLabel = $("#btnPrintLabel");
+    const scanBd = $("#scanBd");
+    const scanVideo = $("#scanVideo");
+    const scanClose = $("#scanClose");
 
     const bd = $("#bd");
     const mClose = $("#mClose");
@@ -365,6 +472,65 @@
       return { stock:Number(i.stock??0), lowThreshold:Number(i.lowThreshold??0), soldCount:Number(i.soldCount??0), soldSumUZS:Number(i.soldSumUZS??0), unitPriceUZS:Number(i.unitPriceUZS??0), note:String(i.note??"") };
     }
     function assigned(p){ return Array.isArray(p?.assignedSellerUids)? p.assignedSellerUids:[]; }
+    function getBarcode(p){ return String(p?.barcode || p?.barcodeValue || p?.ean13 || p?.sku || "").trim(); }
+    function getCost(p){ return Number(p?.inventory?.costPriceUZS ?? p?.costPriceUZS ?? p?.cost ?? 0); }
+    function ean13Check(base12){
+      const s=String(base12).replace(/\D/g,"").slice(0,12).padStart(12,'0');
+      let sum=0; for(let i=0;i<12;i++){ sum += Number(s[i]) * (i%2===0?1:3); }
+      return String((10-(sum%10))%10);
+    }
+    function makeEan13(){
+      const base = String(Date.now()).slice(-9) + String(Math.floor(Math.random()*900)).padStart(3,'0');
+      const b12 = base.slice(0,12);
+      return b12 + ean13Check(b12);
+    }
+    function renderBarcodeLabel(code, name=''){
+      const v=String(code||'').trim();
+      if(!v || !window.JsBarcode){ qaBarcodeSvg.innerHTML=''; qaBarcodeText.textContent='Kod hali tayyor emas'; return; }
+      try{
+        JsBarcode(qaBarcodeSvg, v, {format:(/^\d{13}$/.test(v)?'EAN13':'CODE128'), displayValue:true, margin:8, height:52, width:2, fontSize:15});
+        qaBarcodeText.textContent = `${name||'Mahsulot'} • ${v}`;
+      }catch(err){ qaBarcodeSvg.innerHTML=''; qaBarcodeText.textContent='Barcode chizib bo‘lmadi'; }
+    }
+    async function fileToDataUrl(file){
+      return new Promise((resolve,reject)=>{
+        const fr=new FileReader(); fr.onload=()=>{
+          const img=new Image();
+          img.onload=()=>{
+            const mx=600; const scale=Math.min(1, mx/Math.max(img.width,img.height));
+            const c=document.createElement('canvas'); c.width=Math.max(1, Math.round(img.width*scale)); c.height=Math.max(1, Math.round(img.height*scale));
+            const cx=c.getContext('2d'); cx.drawImage(img,0,0,c.width,c.height);
+            resolve(c.toDataURL('image/jpeg',0.82));
+          };
+          img.onerror=reject; img.src=fr.result;
+        }; fr.onerror=reject; fr.readAsDataURL(file);
+      });
+    }
+    let scanStream=null, scanTimer=null;
+    async function startBarcodeScan(){
+      if(!(window.BarcodeDetector && navigator.mediaDevices?.getUserMedia)){ showToast('Qurilma qo‘llamadi','Bu brauzerda kamera scanner ishlamadi. Kodni qo‘lda kiriting.'); return; }
+      const formats = await BarcodeDetector.getSupportedFormats().catch(()=>[]);
+      const want = ['ean_13','ean_8','code_128','upc_a','upc_e'];
+      const use = want.filter(x=>formats.includes(x));
+      const detector = new BarcodeDetector({formats: use.length?use:undefined});
+      scanBd.style.display='flex';
+      scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+      scanVideo.srcObject = scanStream;
+      scanTimer = setInterval(async()=>{
+        try{
+          const out = await detector.detect(scanVideo);
+          if(out?.length){
+            const val = out[0].rawValue || '';
+            if(val){ qaBarcode.value=val; renderBarcodeLabel(val, qaName.value.trim()); stopBarcodeScan(); showToast('Topildi', `Kod: ${val}`); }
+          }
+        }catch(e){}
+      }, 550);
+    }
+    function stopBarcodeScan(){
+      if(scanTimer){ clearInterval(scanTimer); scanTimer=null; }
+      if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+      scanVideo.srcObject=null; scanBd.style.display='none';
+    }
 
     async function loadSellersList(){
       mSellers.innerHTML="";
@@ -393,10 +559,10 @@
         const p=x.data||{};
         const i=inv(p);
         const unit = i.unitPriceUZS>0 ? i.unitPriceUZS : getProductPriceUZS(p);
-        return { id:x.id, p, imgUrl:getImageUrl(p), name:getName(p), unitPriceUZS:Number(unit||0), stock:i.stock, lowThreshold:i.lowThreshold, soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, note:i.note, assignedSellerUids:assigned(p), updatedAt:p?.updatedAt };
+        return { id:x.id, p, imgUrl:getImageUrl(p), name:getName(p), barcode:getBarcode(p), costPriceUZS:getCost(p), unitPriceUZS:Number(unit||0), stock:i.stock, lowThreshold:i.lowThreshold, soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, note:i.note, assignedSellerUids:assigned(p), updatedAt:p?.updatedAt };
       }).filter(x=>{
         if(!isAdmin && !x.assignedSellerUids.includes(me.uid)) return false;
-        if(qt) return String(x.id).toLowerCase().includes(qt) || String(x.name).toLowerCase().includes(qt);
+        if(qt) return String(x.id).toLowerCase().includes(qt) || String(x.name).toLowerCase().includes(qt) || String(x.barcode||" ").toLowerCase().includes(qt);
         return true;
       }).sort((a,b)=>{
         const aRank = a.stock<=0?0:(a.stock<=a.lowThreshold?1:2);
@@ -437,12 +603,13 @@
                     <span class="idtag">${escapeHtml(x.id)}</span>
                     <span class="pill ${stateClass}">${fmt(x.stock)} • ${stateText}</span>
                   </div>
-                  <div class="pMeta">${escapeHtml(sellerInfo)}</div>
+                  <div class="pMeta">${escapeHtml(sellerInfo)}${x.barcode ? ` • Kod: ${escapeHtml(x.barcode)}` : ""}</div>
                 </div>
                 <div class="pRight">
                   <div class="pPrice">${fmt(x.unitPriceUZS)} <span class="muted mini">so‘m</span></div>
                   <div class="mini muted">Sotilgan: <b>${fmt(x.soldCount)}</b></div>
                   <div class="mini muted">Tushum: <b>${fmt(x.soldSumUZS)}</b> so‘m</div>
+                  <div class="profitBox"><span class="profitTag">Tannarx: ${fmt(x.costPriceUZS)} so‘m</span><span class="profitTag">Foyda/dona: ${fmt(Math.max(0, x.unitPriceUZS - x.costPriceUZS))} so‘m</span></div>
                 </div>
               </div>
 
@@ -468,6 +635,8 @@
         <td><div class="rowTitle">${escapeHtml(x.name)}</div><div class="mini muted">${escapeHtml(x.note||"")}</div></td>
         <td>${fmt(x.stock)}</td>
         <td>${fmt(x.soldCount)}</td>
+        <td class="mini">${escapeHtml(x.barcode||"—")}</td>
+        <td class="money">${fmt(x.costPriceUZS)} <span class="muted mini">so‘m</span></td>
         <td class="money">${fmt(x.soldSumUZS)} <span class="muted mini">so‘m</span></td>
         <td class="mini muted">${x.updatedAt?.toDate ? x.updatedAt.toDate().toLocaleString("uz-UZ") : "—"}</td>
       </tr>`).join("");
@@ -487,7 +656,7 @@
     btnExport.onclick=()=>{
       const view = products.map(x=>{
         const p=x.data||{}, i=inv(p), unit=(i.unitPriceUZS>0?i.unitPriceUZS:getProductPriceUZS(p));
-        return { id:x.id, name:getName(p), stock:i.stock, lowThreshold:i.lowThreshold, unitPriceUZS:Number(unit||0), soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, assignedSellerUids:(assigned(p).join("|")) };
+        return { id:x.id, name:getName(p), barcode:getBarcode(p), stock:i.stock, lowThreshold:i.lowThreshold, costPriceUZS:getCost(p), unitPriceUZS:Number(unit||0), soldCount:i.soldCount, soldSumUZS:i.soldSumUZS, assignedSellerUids:(assigned(p).join("|")) };
       }).filter(r=> isAdmin ? true : (String(r.assignedSellerUids||"").split("|").includes(me.uid)));
       const head=Object.keys(view[0]||{});
       const csv=[head.join(","), ...view.map(r=>head.map(k=>String(r[k]??"").replace(/"/g,'""')).map(v=>`"${v}"`).join(","))].join("\n");
@@ -503,7 +672,7 @@
       const item=products.find(x=>x.id===id); if(!item){ showToast("Xato","Mahsulot topilmadi"); return; }
       const p=item.data||{}, i=inv(p), name=getName(p);
 
-      if(act==="details") showToast(name, `Qoldiq: ${fmt(i.stock)} | Sotilgan: ${fmt(i.soldCount)} | Sotuv: ${fmt(i.soldSumUZS)} so‘m`);
+      if(act==="details") showToast(name, `Kod: ${getBarcode(p)||"—"} | Qoldiq: ${fmt(i.stock)} | Sotilgan: ${fmt(i.soldCount)} | Sotuv: ${fmt(i.soldSumUZS)} so‘m`);
 
       if(act==="edit"){
         if(!isAdmin){ showToast("Ruxsat yo‘q","Faqat admin tahrirlay oladi"); return; }
@@ -560,10 +729,60 @@
       }
     });
 
+
+    qaBarcode?.addEventListener('input', ()=>renderBarcodeLabel(qaBarcode.value, qaName.value.trim()));
+    qaName?.addEventListener('input', ()=>renderBarcodeLabel(qaBarcode.value, qaName.value.trim()));
+    qaImage?.addEventListener('change', async()=>{
+      const f=qaImage.files?.[0]; if(!f) return;
+      try{ const url=await fileToDataUrl(f); qaPreview.src=url; qaPreview.style.display='block'; qaPreview.dataset.url=url; }
+      catch(err){ console.error(err); showToast('Rasm xato', 'Rasmni o‘qib bo‘lmadi'); }
+    });
+    btnGenBarcode?.addEventListener('click', ()=>{ const code=makeEan13(); qaBarcode.value=code; renderBarcodeLabel(code, qaName.value.trim()); showToast('Yaratildi', `Yangi kod: ${code}`); });
+    btnScanBarcode?.addEventListener('click', ()=>startBarcodeScan().catch(err=>{ console.error(err); stopBarcodeScan(); showToast('Kamera xato', err?.message||'Scanner ishga tushmadi'); }));
+    scanClose?.addEventListener('click', stopBarcodeScan);
+    scanBd?.addEventListener('click', (e)=>{ if(e.target===scanBd) stopBarcodeScan(); });
+    btnPrintLabel?.addEventListener('click', ()=>{
+      const code=qaBarcode.value.trim(); if(!code){ showToast('Kod yo‘q','Avval shtrix kod yarating'); return; }
+      const name=(qaName.value||'Mahsulot').trim(); const svg=qaBarcodeSvg.outerHTML;
+      const w=window.open('', '_blank', 'width=420,height=320');
+      w.document.write(`<!doctype html><html><head><title>Barcode label</title><style>body{font-family:Arial;padding:18px;text-align:center} .nm{font-weight:700;margin-bottom:8px}</style></head><body><div class="nm">${name}</div>${svg}<div>${code}</div><script>window.onload=()=>window.print()<\/script></body></html>`);
+      w.document.close();
+    });
+    btnSaveQuick?.addEventListener('click', async()=>{
+      if(!isAdmin){ showToast('Ruxsat yo‘q','Tez qo‘shish faqat admin uchun'); return; }
+      const name=(qaName.value||'').trim();
+      const barcode=(qaBarcode.value||'').replace(/\s+/g,'');
+      const price=Math.max(0, Math.floor(Number(qaPrice.value||0)));
+      const cost=Math.max(0, Math.floor(Number(qaCost.value||0)));
+      const stock=Math.max(0, Math.floor(Number(qaStock.value||0)));
+      const low=Math.max(0, Math.floor(Number(qaLow.value||0)));
+      if(!name) return showToast('Nom kerak','Mahsulot nomini kiriting');
+      if(!barcode) return showToast('Kod kerak','Shtrix kodni scan qiling yoki yarating');
+      if(!price) return showToast('Narx kerak','Sotuv narxini kiriting');
+      const existing = products.find(x=>getBarcode(x.data||{})===barcode);
+      if(existing) return showToast('Takror kod', `Bu barcode allaqachon ${existing.id} ga biriktirilgan`);
+      const pid = `om${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`.toLowerCase();
+      const imageUrl = qaPreview.dataset.url || '';
+      const payload = {
+        name, price, currency:'UZS', status:'approved', quickCreated:true, barcode, barcodeType:/^\d{13}$/.test(barcode)?'EAN13':'CODE128',
+        costPriceUZS: cost,
+        createdAt: new Date().toISOString(), updatedAt: serverTimestamp(),
+        images: imageUrl ? [imageUrl] : [],
+        inventory:{ stock, lowThreshold:low, unitPriceUZS:price, costPriceUZS:cost, soldCount:0, soldSumUZS:0, note:'Tez qo‘shildi: productstat' },
+        assignedSellerUids: []
+      };
+      try{
+        await setDoc(doc(db, PRODUCTS, pid), payload, {merge:true});
+        showToast('Saqlandi', `Yangi mahsulot qo‘shildi: ${pid}`);
+        qaName.value=''; qaPrice.value=''; qaCost.value=''; qaStock.value='1'; qaLow.value='2'; qaImage.value=''; qaPreview.removeAttribute('src'); qaPreview.style.display='none'; qaPreview.dataset.url='';
+        const next=makeEan13(); qaBarcode.value=next; renderBarcodeLabel(next, '');
+      }catch(err){ console.error(err); showToast('Xato', err?.message||'Saqlab bo‘lmadi'); }
+    });
+
     (async()=>{
       const u=await requireLogin(); if(!u) return;
       if(!isAdmin && me.role!=="seller"){ showToast("Ruxsat yo‘q","Bu sahifa faqat Admin va Sotuvchilar uchun"); return; }
-      paintUser(); listen(); showToast("Tayyor","Ombor tizimi products orqali ishga tushdi");
+      paintUser(); listen(); const seed=makeEan13(); qaBarcode.value=seed; renderBarcodeLabel(seed, ""); showToast("Tayyor","Ombor tizimi products orqali ishga tushdi");
     })();
   </script>
 </body>
