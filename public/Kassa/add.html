@@ -33,6 +33,10 @@
     .small{font-size:13px;color:var(--muted)}
     .scanner{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
     .badge{display:inline-block;border-radius:999px;padding:5px 10px;font-size:12px;background:#ebf6ef;color:var(--brand);font-weight:800}
+    .preview-wrap{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start;margin-top:10px}
+    .preview-box{width:120px;height:120px;border-radius:22px;border:1px dashed var(--line);background:#f7fbf8;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-size:13px;text-align:center;padding:10px}
+    .preview-box img{width:100%;height:100%;object-fit:cover}
+    .hint{font-size:12px;color:var(--muted);margin-top:6px}
     @media (max-width:820px){.grid,.row,.row3,.scanner{grid-template-columns:1fr}.wrap{padding:12px}.card{border-radius:22px}}
   </style>
 </head>
@@ -81,6 +85,18 @@
           </div>
         </div>
 
+        <label for="imageUrl">Mahsulot rasmi (ixtiyoriy)</label>
+        <input id="imageUrl" placeholder="Rasm URL manzili: https://..." />
+        <div class="hint">Rasm qo‘ymasangiz ham mahsulot saqlanadi. Hozircha eng qulay usul — rasm linkini qo‘yish.</div>
+
+        <div class="preview-wrap">
+          <div class="preview-box" id="imagePreview">Rasm ko‘rinishi</div>
+          <div>
+            <button class="ghost" type="button" id="btnPreviewImage">Rasmni ko‘rish</button>
+            <div class="hint">Kassada shu rasm kartada va savatda ko‘rinadi.</div>
+          </div>
+        </div>
+
         <div class="actions">
           <button class="primary" id="btnSave">Saqlash / yangilash</button>
           <button class="ghost" id="btnFind">Barcode bo‘yicha topish</button>
@@ -117,8 +133,8 @@
     const $ = (s)=>document.querySelector(s);
     const fmt = (n)=> new Intl.NumberFormat('uz-UZ').format(Number(n||0));
 
-    const barcode = $('#barcode'), nameEl = $('#name'), costEl = $('#cost'), priceEl = $('#price'), qtyEl = $('#qty');
-    const statusEl = $('#status'), listEl = $('#list');
+    const barcode = $('#barcode'), nameEl = $('#name'), costEl = $('#cost'), priceEl = $('#price'), qtyEl = $('#qty'), imageUrlEl = $('#imageUrl');
+    const statusEl = $('#status'), listEl = $('#list'), imagePreviewEl = $('#imagePreview');
 
     function setStatus(text, isError=false){
       statusEl.textContent = text;
@@ -127,9 +143,15 @@
       statusEl.style.color = isError ? '#a33c3c' : '#4f6e61';
     }
 
+    function renderImagePreview(url=''){
+      const safe = String(url || '').trim();
+      if(!safe){ imagePreviewEl.innerHTML = 'Rasm ko‘rinishi'; return; }
+      imagePreviewEl.innerHTML = `<img src="${safe.replace(/"/g,'&quot;')}" alt="preview">`;
+    }
+
     function resetForm(keepBarcode=false){
       if(!keepBarcode) barcode.value='';
-      nameEl.value=''; costEl.value=''; priceEl.value=''; qtyEl.value='1';
+      nameEl.value=''; costEl.value=''; priceEl.value=''; qtyEl.value='1'; imageUrlEl.value=''; renderImagePreview('');
       barcode.focus();
     }
 
@@ -149,7 +171,7 @@
         <div class="item">
           <div>
             <div class="name">${x.name || 'Nomsiz'} <span class="badge">${x.barcode || '—'}</span></div>
-            <div class="meta">Tannarx: ${fmt(x.costUZS)} so‘m · Narx: ${fmt(x.priceUZS)} so‘m · Soni: ${fmt(x.stock)}</div>
+            <div class="meta">Tannarx: ${fmt(x.costUZS)} so‘m · Narx: ${fmt(x.priceUZS)} so‘m · Soni: ${fmt(x.stock)}${x.imageUrl ? ' · Rasm bor' : ''}</div>
           </div>
           <button class="ghost" data-fill="${x.barcode || ''}">Tanlash</button>
         </div>`).join('') || `<div class="small">Hali mahsulot yo‘q</div>`;
@@ -169,6 +191,8 @@
         costEl.value = item.costUZS ?? '';
         priceEl.value = item.priceUZS ?? '';
         qtyEl.value = item.stock ?? 0;
+        imageUrlEl.value = item.imageUrl || item.image || (Array.isArray(item.images) ? (item.images[0] || '') : '') || '';
+        renderImagePreview(imageUrlEl.value);
         setStatus('Mahsulot topildi va formaga yuklandi.');
       } catch(e){
         setStatus('Topishda xato: ' + e.message, true);
@@ -181,6 +205,7 @@
       const cost = Number(costEl.value || 0);
       const price = Number(priceEl.value || 0);
       const stock = Number(qtyEl.value || 0);
+      const imageUrl = imageUrlEl.value.trim();
       if(!code) return setStatus('Shtrix kod kiritilmagan', true);
       if(!name) return setStatus('Mahsulot nomini kiriting', true);
       if(price < 0 || cost < 0 || stock < 0) return setStatus('Manfiy qiymat bo‘lishi mumkin emas', true);
@@ -198,6 +223,9 @@
           costUZS: cost,
           priceUZS: price,
           stock,
+          imageUrl: imageUrl || old?.imageUrl || '',
+          image: imageUrl || old?.image || '',
+          images: imageUrl ? [imageUrl] : (old?.images || []),
           inventory: {
             stock,
             soldCount: old?.inventory?.soldCount || 0,
@@ -232,8 +260,10 @@
     $('#btnFind').onclick = fillFormFromBarcode;
     $('#btnReset').onclick = ()=>{ resetForm(); setStatus('Forma tozalandi.'); };
     $('#btnFocus').onclick = ()=> barcode.focus();
+    $('#btnPreviewImage').onclick = ()=> renderImagePreview(imageUrlEl.value);
+    imageUrlEl.addEventListener('input', ()=> renderImagePreview(imageUrlEl.value));
     barcode.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); fillFormFromBarcode(); } });
-    window.addEventListener('load', async ()=>{ barcode.focus(); await loadRecent(); });
+    window.addEventListener('load', async ()=>{ barcode.focus(); renderImagePreview(''); await loadRecent(); });
   </script>
 </body>
 </html>
