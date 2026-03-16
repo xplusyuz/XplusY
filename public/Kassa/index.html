@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrzuMall · Kassa</title>
+  <style>
+    :root{
+      --bg:#eef4f1; --card:#ffffff; --line:#d6e5dd; --text:#173b2a; --muted:#5e7b6d;
+      --brand:#1f7a4d; --brand2:#2e8b57; --shadow:0 18px 40px rgba(20,60,40,.10);
+    }
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#eef5f2,#e7eef3);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:18px}
+    .top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+    .brand{font-size:28px;font-weight:800;color:var(--brand)}
+    .small{font-size:13px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}
+    .card{background:rgba(255,255,255,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.7);border-radius:28px;box-shadow:var(--shadow);padding:18px}
+    .title{font-size:24px;font-weight:800;margin:0 0 6px}.sub{color:var(--muted);margin:0 0 16px}
+    .scanbar{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end}
+    label{display:block;font-size:14px;font-weight:700;margin:10px 0 8px}
+    input,textarea{width:100%;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:#fff;font-size:15px;outline:none}
+    input:focus,textarea:focus{border-color:var(--brand2);box-shadow:0 0 0 3px rgba(46,139,87,.12)}
+    button{border:0;border-radius:16px;padding:14px 18px;font-weight:800;cursor:pointer}
+    .primary{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}
+    .ghost{background:#fff;border:1px solid var(--line);color:var(--text)}
+    .list{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto}
+    .item{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px 14px}
+    .name{font-weight:800;font-size:16px}.meta{font-size:13px;color:var(--muted);margin-top:4px}
+    .qty{display:flex;align-items:center;gap:8px}.qbtn{width:38px;height:38px;border-radius:12px;padding:0}
+    .summary{display:flex;flex-direction:column;gap:10px;background:#fbfffc;border:1px solid var(--line);border-radius:22px;padding:16px;margin-top:12px}
+    .line{display:flex;justify-content:space-between;gap:12px;font-weight:700}.line.total{font-size:24px;color:var(--brand);padding-top:10px;border-top:1px dashed #bfd5c8}
+    .status{margin-top:12px;padding:12px 14px;border-radius:14px;background:#f6fbf8;border:1px solid #dcebe3;color:#4f6e61}
+    .empty{color:var(--muted);text-align:center;padding:26px 10px}
+    .note{margin-top:10px}
+    .badge{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#ebf6ef;color:var(--brand);font-weight:800}
+    @media (max-width:900px){.grid,.scanbar{grid-template-columns:1fr}.wrap{padding:12px}.card{border-radius:22px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="brand">OrzuMall · Kassa</div>
+        <div class="small">Savdo bo‘limi. Tannarx bu sahifada ko‘rinmaydi.</div>
+      </div>
+      <div class="small">Kolleksiyalar: <strong>products</strong>, <strong>sales</strong></div>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h1 class="title">Savdo boshla</h1>
+        <p class="sub">POS skaner kodni o‘qiganda mahsulot savatga qo‘shiladi. Skaner bo‘lmasa qo‘lda ham yozish mumkin.</p>
+
+        <div class="scanbar">
+          <div>
+            <label for="barcode">Shtrix kod</label>
+            <input id="barcode" placeholder="Skaner o‘qiydi yoki qo‘lda kiriting" autocomplete="off" />
+          </div>
+          <button class="ghost" id="btnFocus">Fokus</button>
+          <button class="primary" id="btnAdd">Qo‘shish</button>
+        </div>
+
+        <div class="note">
+          <label for="saleNote">Chek izohi</label>
+          <textarea id="saleNote" rows="3" placeholder="Masalan: naqd, mijoz ismi, izoh..."></textarea>
+        </div>
+
+        <div class="status" id="status">Tayyor. Barcode maydoni aktiv.</div>
+
+        <div class="summary">
+          <div class="line"><span>Turlar</span><span id="kindCount">0</span></div>
+          <div class="line"><span>Jami dona</span><span id="qtyCount">0</span></div>
+          <div class="line total"><span>To‘lov</span><span id="totalSum">0 so‘m</span></div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="ghost" id="btnClear">Savatni tozalash</button>
+          <button class="primary" id="btnCheckout">Sotuvni yakunlash</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="title" style="font-size:22px">Savat</h2>
+        <p class="sub">Bu yerda faqat mahsulot nomi, sotuv narxi va soni ko‘rinadi.</p>
+        <div class="list" id="cart"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { addDoc, collection, doc, getDoc, getDocs, getFirestore, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyADOv69HBuAJkaYs2Ukgab-VgqkJIv1Cro",
+      authDomain: "orzumall.firebaseapp.com",
+      projectId: "orzumall",
+      storageBucket: "orzumall.firebasestorage.app",
+      messagingSenderId: "873732887270",
+      appId: "1:873732887270:web:15b73dbb37f4fdabe8a127",
+      measurementId: "G-2LEH8YWPLF"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const $ = (s)=>document.querySelector(s);
+    const fmt = (n)=> new Intl.NumberFormat('uz-UZ').format(Number(n||0));
+    const cart = [];
+    let scannerBuffer = '';
+    let scannerTimer = null;
+
+    function beep(){
+      try{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 1000; gain.gain.value = 0.0001;
+        osc.start();
+        const now = ctx.currentTime;
+        gain.gain.exponentialRampToValueAtTime(0.06, now+0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now+0.12);
+        osc.stop(now+0.13);
+      }catch(e){}
+    }
+
+    function setStatus(text, isError=false){
+      const el = $('#status');
+      el.textContent = text;
+      el.style.background = isError ? '#fff3f3' : '#f6fbf8';
+      el.style.borderColor = isError ? '#efcaca' : '#dcebe3';
+      el.style.color = isError ? '#a33c3c' : '#4f6e61';
+    }
+
+    async function findByBarcode(code){
+      const q = query(collection(db,'products'), where('barcode','==', String(code).trim()), limit(1));
+      const snap = await getDocs(q);
+      return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    }
+
+    function renderCart(){
+      const wrap = $('#cart');
+      if(!cart.length){
+        wrap.innerHTML = '<div class="empty">Savat bo‘sh</div>';
+      } else {
+        wrap.innerHTML = cart.map((x,i)=>`
+          <div class="item">
+            <div>
+              <div class="name">${x.name} <span class="badge">${x.barcode}</span></div>
+              <div class="meta">${fmt(x.priceUZS)} so‘m × ${x.qty}</div>
+            </div>
+            <div class="qty">
+              <button class="ghost qbtn" data-act="minus" data-i="${i}">−</button>
+              <strong>${x.qty}</strong>
+              <button class="ghost qbtn" data-act="plus" data-i="${i}">+</button>
+            </div>
+          </div>`).join('');
+      }
+      const kinds = cart.length;
+      const qty = cart.reduce((s,x)=>s+x.qty,0);
+      const total = cart.reduce((s,x)=>s+x.qty*x.priceUZS,0);
+      $('#kindCount').textContent = kinds;
+      $('#qtyCount').textContent = qty;
+      $('#totalSum').textContent = fmt(total) + ' so‘m';
+    }
+
+    async function addByBarcode(code){
+      const clean = String(code||'').trim();
+      if(!clean) return;
+      try {
+        const item = await findByBarcode(clean);
+        if(!item) return setStatus('Mahsulot topilmadi: ' + clean, true);
+        const stock = Number(item.stock ?? item.inventory?.stock ?? 0);
+        const priceUZS = Number(item.priceUZS ?? item.inventory?.unitPriceUZS ?? 0);
+        if(stock <= 0) return setStatus('Omborda qolmagan', true);
+        const exists = cart.find(x => x.id === item.id);
+        if(exists){
+          if(exists.qty + 1 > stock) return setStatus('Qoldiq yetarli emas', true);
+          exists.qty += 1;
+        } else {
+          cart.unshift({
+            id: item.id,
+            barcode: item.barcode || clean,
+            name: item.name || 'Nomsiz',
+            priceUZS,
+            costUZS: Number(item.costUZS ?? item.inventory?.costUZS ?? 0),
+            stock,
+            qty: 1
+          });
+        }
+        renderCart();
+        $('#barcode').value='';
+        $('#barcode').focus();
+        beep();
+        setStatus('Savatga qo‘shildi: ' + (item.name || clean));
+      } catch(e){
+        console.error(e);
+        setStatus('Qo‘shishda xato: ' + e.message, true);
+      }
+    }
+
+    async function checkout(){
+      if(!cart.length) return setStatus('Savat bo‘sh', true);
+      try {
+        const saleNote = $('#saleNote').value.trim();
+        const totalUZS = cart.reduce((s,x)=>s+x.qty*x.priceUZS,0);
+        const costTotalUZS = cart.reduce((s,x)=>s+x.qty*x.costUZS,0);
+        const profitUZS = totalUZS - costTotalUZS;
+
+        await runTransaction(db, async (tx) => {
+          for (const row of cart) {
+            const ref = doc(db,'products',row.id);
+            const snap = await tx.get(ref);
+            if(!snap.exists()) throw new Error(row.name + ' topilmadi');
+            const data = snap.data() || {};
+            const inventory = data.inventory || {};
+            const currentStock = Number(data.stock ?? inventory.stock ?? 0);
+            const soldCount = Number(inventory.soldCount || 0);
+            const soldSumUZS = Number(inventory.soldSumUZS || 0);
+            if(currentStock < row.qty) throw new Error(row.name + ' uchun qoldiq yetmaydi');
+            tx.update(ref, {
+              stock: currentStock - row.qty,
+              inventory: {
+                stock: currentStock - row.qty,
+                soldCount: soldCount + row.qty,
+                soldSumUZS: soldSumUZS + row.qty * row.priceUZS,
+                unitPriceUZS: Number(data.priceUZS ?? inventory.unitPriceUZS ?? row.priceUZS),
+                costUZS: Number(data.costUZS ?? inventory.costUZS ?? row.costUZS),
+                lowThreshold: Number(inventory.lowThreshold || 3),
+                note: String(inventory.note || '')
+              },
+              updatedAt: serverTimestamp()
+            });
+          }
+
+          const saleRef = doc(collection(db,'sales'));
+          tx.set(saleRef, {
+            note: saleNote,
+            createdAt: serverTimestamp(),
+            source: 'kassa-html',
+            totalUZS,
+            costTotalUZS,
+            profitUZS,
+            items: cart.map(x => ({
+              productId: x.id,
+              barcode: x.barcode,
+              name: x.name,
+              qty: x.qty,
+              sellPriceUZS: x.priceUZS,
+              costUZS: x.costUZS,
+              lineTotalUZS: x.qty * x.priceUZS,
+              lineProfitUZS: x.qty * (x.priceUZS - x.costUZS)
+            }))
+          });
+        });
+
+        cart.length = 0;
+        renderCart();
+        $('#saleNote').value='';
+        $('#barcode').focus();
+        setStatus('Sotuv yakunlandi');
+      } catch(e){
+        console.error(e);
+        setStatus('Xato: ' + e.message, true);
+      }
+    }
+
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('[data-act]');
+      if(!btn) return;
+      const i = Number(btn.dataset.i);
+      const row = cart[i];
+      if(!row) return;
+      if(btn.dataset.act === 'minus'){
+        row.qty -= 1;
+        if(row.qty <= 0) cart.splice(i,1);
+      }
+      if(btn.dataset.act === 'plus'){
+        if(row.qty + 1 > row.stock) return setStatus('Qoldiq yetarli emas', true);
+        row.qty += 1;
+      }
+      renderCart();
+      $('#barcode').focus();
+    });
+
+    $('#btnAdd').onclick = ()=> addByBarcode($('#barcode').value);
+    $('#btnFocus').onclick = ()=> $('#barcode').focus();
+    $('#btnClear').onclick = ()=> { cart.length = 0; renderCart(); setStatus('Savat tozalandi'); $('#barcode').focus(); };
+    $('#btnCheckout').onclick = checkout;
+    $('#barcode').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addByBarcode($('#barcode').value); } });
+
+    // POS scanner buffer: input fokus yo'qolsa ham ishlaydi
+    document.addEventListener('keydown', (e)=>{
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      const inTypingField = ['input','textarea'].includes(tag);
+      if (inTypingField && document.activeElement !== $('#barcode')) return;
+      if (e.key === 'Enter') {
+        if (scannerBuffer.length >= 4) {
+          addByBarcode(scannerBuffer);
+          scannerBuffer = '';
+          clearTimeout(scannerTimer);
+        }
+        return;
+      }
+      if (/^[0-9A-Za-z\-_.]$/.test(e.key)) {
+        scannerBuffer += e.key;
+        clearTimeout(scannerTimer);
+        scannerTimer = setTimeout(()=> scannerBuffer = '', 120);
+      }
+    });
+
+    window.addEventListener('load', ()=> $('#barcode').focus());
+  </script>
+</body>
+</html>
