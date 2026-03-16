@@ -165,9 +165,25 @@
       $('#totalSum').textContent = fmt(total) + ' so‘m';
     }
 
+    function isDuplicateBarcode(code){
+      const clean = String(code || '').trim();
+      const now = Date.now();
+      if (clean && clean === lastAcceptedBarcode && (now - lastAcceptedAt) < 1200) return true;
+      lastAcceptedBarcode = clean;
+      lastAcceptedAt = now;
+      return false;
+    }
+
     async function addByBarcode(code){
       const clean = String(code||'').trim();
       if(!clean) return;
+      if (addLock) return;
+      if (isDuplicateBarcode(clean)) {
+        $('#barcode').value='';
+        $('#barcode').focus();
+        return;
+      }
+      addLock = true;
       try {
         const item = await findByBarcode(clean);
         if(!item) return setStatus('Mahsulot topilmadi: ' + clean, true);
@@ -197,6 +213,8 @@
       } catch(e){
         console.error(e);
         setStatus('Qo‘shishda xato: ' + e.message, true);
+      } finally {
+        setTimeout(() => { addLock = false; }, 180);
       }
     }
 
@@ -288,14 +306,22 @@
     $('#btnFocus').onclick = ()=> $('#barcode').focus();
     $('#btnClear').onclick = ()=> { cart.length = 0; renderCart(); setStatus('Savat tozalandi'); $('#barcode').focus(); };
     $('#btnCheckout').onclick = checkout;
-    $('#barcode').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); addByBarcode($('#barcode').value); } });
+    $('#barcode').addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        e.stopPropagation();
+        addByBarcode($('#barcode').value);
+      }
+    });
 
     // POS scanner buffer: input fokus yo'qolsa ham ishlaydi
     document.addEventListener('keydown', (e)=>{
-      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      const active = document.activeElement;
+      const tag = (active?.tagName || '').toLowerCase();
       const inTypingField = ['input','textarea'].includes(tag);
-      if (inTypingField && document.activeElement !== $('#barcode')) return;
+      if (inTypingField && active !== $('#barcode')) return;
       if (e.key === 'Enter') {
+        if (active === $('#barcode')) return;
         if (scannerBuffer.length >= 4) {
           addByBarcode(scannerBuffer);
           scannerBuffer = '';
