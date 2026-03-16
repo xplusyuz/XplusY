@@ -177,6 +177,37 @@
       gap: 8px;
     }
 
+    .scan-status {
+      min-width: 100%;
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid #c7e0d4;
+      color: #24553b;
+      font-size: 0.88rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .scan-status::before {
+      content: "●";
+      color: #2e8b57;
+      font-size: 0.9rem;
+    }
+
+    .scan-status.warn::before { color: #d97706; }
+    .scan-status.error::before { color: #b91c1c; }
+
+    .btn-disabled-soft,
+    .btn-gloss[disabled] {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
     .btn-gloss {
       border: none;
       background: white;
@@ -621,8 +652,9 @@
           <input id="searchInput" placeholder="Mahsulot nomi, ID" />
         </div>
         <div class="barcode-wrapper">
-          <input id="barcodeInput" placeholder="Shtrix kod" />
+          <input id="barcodeInput" placeholder="Shtrix kod" autocomplete="off" inputmode="numeric" />
         </div>
+        <div class="scan-status" id="scanStatus">POS skanerga tayyor</div>
         <div class="action-buttons">
           <button class="btn-gloss" id="btnScan"><i class="fa-solid fa-camera"></i></button>
           <button class="btn-gloss btn-primary-gloss" id="btnAddBarcode"><i class="fa-solid fa-plus"></i>Qo‘shish</button>
@@ -731,6 +763,7 @@
 
     let me = null, isAdmin = false, products = [], cart = [], scanner = null;
     let scanActive = false, lastScannedCode = '', lastScannedAt = 0, audioCtx = null;
+    let rapidScanBuffer = '', rapidScanStartedAt = 0, rapidScanTimer = null, cameraAvailable = null;
 
     // yordamchi funksiyalar
     function getName(p) { return p?.name || p?.title || p?.nomi || 'Nomsiz'; }
@@ -742,6 +775,118 @@
     function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
     function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
     function fmt(n) { try { return new Intl.NumberFormat('uz-UZ').format(Number(n || 0)); } catch (e) { return String(n || 0); } }
+
+    function keepBarcodeFocus(select = false) {
+      const el = $('#barcodeInput');
+      if (!el) return;
+      const ae = document.activeElement;
+      const typingElsewhere = ae && (ae.id === 'saleNote' || ae.id === 'searchInput');
+      if (typingElsewhere) return;
+      requestAnimationFrame(() => {
+        try {
+          el.focus({ preventScroll: true });
+          if (select) el.select();
+        } catch (e) {
+          try { el.focus(); } catch (_) { }
+        }
+      });
+    }
+
+    function setScanStatus(text, kind = 'ok') {
+      const el = $('#scanStatus');
+      if (!el) return;
+      el.classList.remove('warn', 'error');
+      if (kind === 'warn') el.classList.add('warn');
+      if (kind === 'error') el.classList.add('error');
+      el.textContent = text;
+    }
+
+    async function detectCameraSupport() {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) {
+          cameraAvailable = false;
+        } else {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          cameraAvailable = devices.some(d => d.kind === 'videoinput');
+        }
+      } catch (e) {
+        cameraAvailable = false;
+      }
+      const btn = $('#btnScan');
+      if (btn && !cameraAvailable) {
+        btn.disabled = true;
+        btn.classList.add('btn-disabled-soft');
+        btn.title = 'Bu qurilmada kamera topilmadi';
+        btn.innerHTML = '<i class="fa-solid fa-barcode"></i>';
+        setScanStatus('Kamera yo‘q — POS skaner rejimi faol', 'warn');
+      } else {
+        setScanStatus('POS skanerga tayyor', 'ok');
+      }
+    }
+
+    async function submitBarcodeValue(raw, source = 'scanner') {
+      const code = String(raw || '').trim();
+      if (!code) return false;
+      $('#barcodeInput').value = code;
+      const ok = await addByBarcode(code);
+      if (ok) {
+        beepOk();
+        try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) { }
+        setScanStatus(`Skan qabul qilindi: ${code}`, 'ok');
+        keepBarcodeFocus(true);
+      } else {
+        setScanStatus(`Kod topilmadi: ${code}`, 'error');
+        keepBarcodeFocus(true);
+      }
+      return ok;
+    }
+
+    function handleRapidScannerKeydown(e) {
+      if (scanActive) return;
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      const active = document.activeElement;
+      const tag = (active?.tagName || '').toUpperCase();
+      const typingAllowed = active && (active.id === 'barcodeInput' || active.id === 'saleNote' || active.id === 'searchInput' || tag === 'INPUT' || tag === 'TEXTAREA');
+      if (active && (active.id === 'saleNote' || active.id === 'searchInput')) return;
+
+      const key = e.key || '';
+      const now = Date.now();
+
+      if (key === 'F8') {
+        e.preventDefault();
+        keepBarcodeFocus(true);
+        setScanStatus('Shtrix kod maydoni aktiv', 'ok');
+        return;
+      }
+
+      if (key === 'Enter') {
+        if (rapidScanBuffer && (now - rapidScanStartedAt) < 1500) {
+          const code = rapidScanBuffer;
+          rapidScanBuffer = '';
+          clearTimeout(rapidScanTimer);
+          e.preventDefault();
+          submitBarcodeValue(code, 'hid');
+        }
+        return;
+      }
+
+      if (key.length !== 1) return;
+      if (!/[0-9A-Za-z\-_.]/.test(key)) return;
+
+      if (!rapidScanBuffer || (now - rapidScanStartedAt) > 120) {
+        rapidScanBuffer = key;
+        rapidScanStartedAt = now;
+      } else {
+        rapidScanBuffer += key;
+      }
+
+      clearTimeout(rapidScanTimer);
+      rapidScanTimer = setTimeout(() => { rapidScanBuffer = ''; }, 180);
+
+      if (!typingAllowed || active?.id !== 'barcodeInput') {
+        $('#barcodeInput').value = rapidScanBuffer;
+      }
+    }
 
     function beepOk() {
       try {
@@ -834,6 +979,7 @@
         cart.unshift(row);
       }
       renderCart();
+      keepBarcodeFocus(true);
       showToast('Qo‘shildi', getName(p));
     }
 
@@ -850,6 +996,7 @@
         const snap = await getDocs(query(collection(db, 'products'), where('barcode', '==', c), limit(1)));
         if (snap.empty) {
           showToast('Topilmadi', 'Bu barcode bilan mahsulot yo‘q');
+          keepBarcodeFocus(true);
           return false;
         }
         addItem({ id: snap.docs[0].id, data: snap.docs[0].data() || {} }, 1);
@@ -858,6 +1005,7 @@
       } catch (e) {
         console.error(e);
         showToast('Xato', 'Barcode bo‘yicha topib bo‘lmadi');
+        keepBarcodeFocus(true);
         return false;
       }
     }
@@ -910,16 +1058,18 @@
         cart[i].qty++;
       }
       renderCart();
+      keepBarcodeFocus();
     });
 
     $('#searchInput').addEventListener('input', renderBrowse);
-    $('#btnAddBarcode').onclick = () => addByBarcode($('#barcodeInput').value);
-    $('#barcodeInput').addEventListener('keydown', e => { if (e.key === 'Enter') addByBarcode($('#barcodeInput').value); });
-    $('#btnClearCart').onclick = () => { cart = []; renderCart(); };
+    $('#btnAddBarcode').onclick = () => submitBarcodeValue($('#barcodeInput').value, 'manual');
+    $('#barcodeInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitBarcodeValue($('#barcodeInput').value, 'manual'); } });
+    $('#btnClearCart').onclick = () => { cart = []; renderCart(); setScanStatus('Savat tozalandi — POS skanerga tayyor', 'ok'); keepBarcodeFocus(true); };
 
     // scanner
     async function startScan() {
       if (scanActive) return;
+      if (!cameraAvailable) return showToast('Kamera yo‘q', 'PC uchun POS skaner rejimidan foydalaning');
       if (!window.Html5Qrcode) return showToast('Scanner yuklanmadi', 'Internetni tekshiring');
 
       $('#scanBd').style.display = 'flex';
@@ -958,6 +1108,7 @@
             if (ok) {
               beepOk();
               try { if (navigator.vibrate) navigator.vibrate(70); } catch (e) { }
+              setScanStatus(`Kamera orqali o‘qildi: ${code}`, 'ok');
               showToast('Qo‘shildi', `Kod: ${code}`);
             }
           },
@@ -985,6 +1136,7 @@
       $('#scanBd').style.display = 'none';
       document.body.style.overflow = '';
       $('#scannerViewport').innerHTML = '';
+      keepBarcodeFocus(true);
     }
 
     $('#btnScan').onclick = startScan;
@@ -1027,9 +1179,14 @@
           tx.set(doc(collection(db, 'sales')), { items, totalUZS, costTotalUZS, profitUZS, cashierUid: me.uid, cashierEmail: me.email, note: $('#saleNote').value.trim().slice(0, 300), source: 'kassa_mobile_first', createdAt: serverTimestamp() });
         });
         showToast('Savdo yakunlandi', `${fmt(totalUZS)} so‘mlik savdo yozildi`);
-        cart = []; $('#saleNote').value = ''; renderCart(); loadProducts();
+        setScanStatus('Savdo saqlandi — keyingi mahsulotni skaner qiling', 'ok');
+        cart = []; $('#saleNote').value = ''; renderCart(); loadProducts(); keepBarcodeFocus(true);
       } catch (err) { console.error(err); showToast('Xato', err?.message || 'Savdoni yakunlab bo‘lmadi'); } finally { $('#btnCheckout').disabled = false; }
     };
+
+    document.addEventListener('keydown', handleRapidScannerKeydown, true);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) keepBarcodeFocus(); });
+    window.addEventListener('load', () => keepBarcodeFocus(true));
 
     (async () => {
       const u = await requireLogin();
@@ -1037,8 +1194,10 @@
       $('#roleBadge').innerText = isAdmin ? 'ADMIN' : 'SOTUVCHI';
       $('#roleBadge').style.background = isAdmin ? '#e2f0ff' : '#ffefd9';
       $('#roleBadge').style.color = isAdmin ? '#1d4ed8' : '#b45b0c';
+      await detectCameraSupport();
       await loadProducts();
       renderCart();
+      keepBarcodeFocus(true);
     })();
   </script>
 </body>
