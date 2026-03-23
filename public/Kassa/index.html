@@ -344,7 +344,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-  import { collection, addDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+  import { collection, addDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, where, doc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyADOv69HBuAJkaYs2Ukgab-VgqkJIv1Cro",
@@ -362,6 +362,7 @@
   const formatNumber = n => new Intl.NumberFormat('uz-UZ').format(Number(n)||0);
   const escapeHtml = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const getImg = p => p?.imageUrl || p?.image || (Array.isArray(p?.images) ? p.images[0] : '') || '';
+  const getProductTitle = p => p?.name || p?.title || p?.code || p?.barcode || 'nomsiz';
 
   let cart = [];
   let barcodeBuffer = '';
@@ -398,9 +399,19 @@
   }
 
   async function fetchProduct(bc) {
-    const q = query(collection(db,'products'), where('barcode','==', String(bc).trim()), limit(1));
-    const snap = await getDocs(q);
-    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    const clean = String(bc).trim().toLowerCase();
+
+    const directRef = doc(db, 'products', clean);
+    const directSnap = await getDoc(directRef);
+    if (directSnap.exists()) return { id: directSnap.id, ...directSnap.data() };
+
+    const qBarcode = query(collection(db,'products'), where('barcode','==', clean), limit(1));
+    const snapBarcode = await getDocs(qBarcode);
+    if (!snapBarcode.empty) return { id: snapBarcode.docs[0].id, ...snapBarcode.docs[0].data() };
+
+    const qCode = query(collection(db,'products'), where('code','==', clean), limit(1));
+    const snapCode = await getDocs(qCode);
+    return snapCode.empty ? null : { id: snapCode.docs[0].id, ...snapCode.docs[0].data() };
   }
 
   function cartTotal() {
@@ -418,7 +429,7 @@
         return `<div class="cart-item">
           <div class="thumb-lux" ${img ? `data-img="${escapeHtml(img)}"` : ''}>${img ? `<img src="${escapeHtml(img)}" alt="">` : '🖼️'}</div>
           <div>
-            <div class="item-title">${escapeHtml(item.name)}</div>
+            <div class="item-title">${escapeHtml(item.name || item.code || item.barcode)}</div>
             <div class="badge-container">
               <span class="badge-modern">🔖 ${escapeHtml(item.barcode)}</span>
               <span class="badge-modern">💰 ${formatNumber(item.priceUZS)} so‘m</span>
@@ -463,7 +474,7 @@
       const prod = await fetchProduct(clean);
       if (!prod) { setStatus('❌ topilmadi: ' + clean, true); return; }
       const stock = Number(prod.stock ?? prod.inventory?.stock ?? 0);
-      const price = Number(prod.priceUZS ?? prod.inventory?.unitPriceUZS ?? 0);
+      const price = Number(prod.priceUZS ?? prod.inventory?.unitPriceUZS ?? prod.price ?? 0);
       if (stock <= 0) { setStatus('❌ omborda yo‘q', true); return; }
       const exist = cart.find(p => p.id === prod.id);
       if (exist) {
@@ -472,8 +483,9 @@
       } else {
         cart.unshift({
           id: prod.id,
-          barcode: prod.barcode || clean,
-          name: prod.name || 'nomsiz',
+          barcode: prod.barcode || prod.code || prod.id || clean,
+          code: prod.code || prod.id || clean,
+          name: getProductTitle(prod),
           priceUZS: price,
           costUZS: Number(prod.costUZS ?? prod.inventory?.costUZS ?? 0),
           imageUrl: getImg(prod),
@@ -486,7 +498,7 @@
       $('#barcode').focus();
       audioBeep();
       if (navigator.vibrate) navigator.vibrate(30);
-      setStatus('✅ qo‘shildi: ' + (prod.name || clean));
+      setStatus('✅ qo‘shildi: ' + getProductTitle(prod));
     } catch (e) {
       setStatus('xato: ' + e.message, true);
     } finally {
@@ -540,6 +552,69 @@
     $('#nasiyaModal').classList.remove('open');
   }
 
+  async function checkoutSale() {
+    if (!cart.length) return setStatus('Savat bo‘sh', true);
+
+    const saleItems = cart.map(i => ({
+      productId: i.id,
+      code: i.code || i.barcode || i.id,
+      barcode: i.barcode || i.code || i.id,
+      name: i.name || i.code || i.barcode || i.id,
+      qty: i.qty,
+      priceUZS: Number(i.priceUZS || 0),
+      costUZS: Number(i.costUZS || 0),
+      imageUrl: i.imageUrl || '',
+      lineTotalUZS: Number(i.qty || 0) * Number(i.priceUZS || 0)
+    }));
+
+    const totalUZS = saleItems.reduce((s, i) => s + i.lineTotalUZS, 0);
+    const totalCostUZS = saleItems.reduce((s, i) => s + (i.qty * i.costUZS), 0);
+    const profitUZS = totalUZS - totalCostUZS;
+    const saleNote = $('#saleNote').value.trim();
+
+    try {
+      await runTransaction(db, async (tx) => {
+        for (const item of cart) {
+          const ref = doc(db, 'products', item.id);
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new Error(`${item.code || item.barcode || item.id} topilmadi`);
+          const d = snap.data() || {};
+          const stock = Number(d.stock ?? d.inventory?.stock ?? 0);
+          if (stock < item.qty) throw new Error(`${item.code || item.barcode || item.id} uchun qoldiq yetmaydi`);
+          tx.update(ref, {
+            stock: stock - item.qty,
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        const saleRef = doc(collection(db, 'sales'));
+        tx.set(saleRef, {
+          type: 'cash',
+          status: 'completed',
+          totalUZS,
+          totalCostUZS,
+          profitUZS,
+          itemKinds: saleItems.length,
+          itemQty: saleItems.reduce((s, i) => s + i.qty, 0),
+          items: saleItems,
+          note: saleNote,
+          createdAt: serverTimestamp()
+        });
+      });
+
+      cart = [];
+      renderCart();
+      $('#saleNote').value = '';
+      $('#barcode').value = '';
+      $('#barcode').focus();
+      audioBeep();
+      setStatus('✅ Sotuv yakunlandi va stock yangilandi');
+      await loadDueCredits();
+    } catch (e) {
+      setStatus('Sotuvni yakunlab bo‘lmadi: ' + e.message, true);
+    }
+  }
+
   async function saveNasiya() {
     const firstName = $('#nasiyaIsm').value.trim();
     const lastName = $('#nasiyaFam').value.trim();
@@ -572,6 +647,7 @@
         productId: i.id,
         name: i.name,
         barcode: i.barcode,
+        code: i.code || i.barcode || i.id,
         qty: i.qty,
         priceUZS: i.priceUZS,
         costUZS: i.costUZS || 0,
@@ -602,7 +678,7 @@
   $('#btnAdd').onclick = () => addByBarcode($('#barcode').value);
   $('#btnFocus').onclick = () => $('#barcode').focus();
   $('#btnClear').onclick = () => { cart = []; renderCart(); setStatus('Savat tozalandi'); $('#barcode').focus(); };
-  $('#btnCheckout').onclick = () => alert('Bu versiyada naqd checkout demo holatda qoldi. Xohlasangiz keyingi bosqichda Firebase transaction bilan to‘liq ulab beraman.');
+  $('#btnCheckout').onclick = checkoutSale;
   $('#btnNasiya').onclick = openNasiyaModal;
   $('#closeNasiya').onclick = closeNasiyaModal;
   $('#saveNasiya').onclick = saveNasiya;
