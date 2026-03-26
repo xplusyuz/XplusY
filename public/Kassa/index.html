@@ -1002,7 +1002,52 @@
   document.getElementById('savePaymentBtn').onclick = savePaymentTransaction;
   document.getElementById('fillRemainingBtn').onclick = () => { if(selectedCreditId) { let cr = creditsArray.find(c=>c.id===selectedCreditId); if(cr) document.getElementById('paymentAmount').value = (cr.totalUZS||0)-(cr.paidUZS||0); } };
   document.getElementById('closeReceiptModal').onclick = () => document.getElementById('receiptModal').classList.remove('open');
-  document.getElementById('printReceiptBtn').onclick = () => { let w = window.open('','_blank'); w.document.write(`<html><head><title>Chek</title></head><body>${document.getElementById('receiptContent').innerHTML}</body></html>`); w.print(); };
+  document.getElementById('printReceiptBtn').onclick = () => {
+    const receiptHtml = document.getElementById('receiptContent').innerHTML;
+    const printHtml = `<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <title>Chek</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; color: #111; }
+    * { box-sizing: border-box; }
+    hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
+  </style>
+</head>
+<body>${receiptHtml}</body>
+</html>`;
+
+    const frame = document.createElement('iframe');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '0';
+    frame.style.height = '0';
+    frame.style.border = '0';
+    document.body.appendChild(frame);
+
+    const doc = frame.contentWindow.document;
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+
+    const doPrint = () => {
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } finally {
+        setTimeout(() => frame.remove(), 1000);
+      }
+    };
+
+    if (doc.readyState === 'complete') {
+      setTimeout(doPrint, 150);
+    } else {
+      frame.onload = () => setTimeout(doPrint, 150);
+      setTimeout(doPrint, 500);
+    }
+  };
   document.getElementById('searchCredit').addEventListener('input', () => renderCreditsUI());
   
   document.getElementById('applyGlobalDiscountBtn').onclick = () => {
