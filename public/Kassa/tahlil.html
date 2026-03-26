@@ -555,38 +555,6 @@
       cursor: pointer;
     }
 
-    .copy-code {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 12px;
-      border: 1px dashed var(--brand);
-      background: rgba(31, 139, 87, 0.08);
-      color: var(--brand-dark);
-      font-weight: 700;
-      cursor: pointer;
-      user-select: all;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-
-    .copy-code:hover {
-      background: rgba(31, 139, 87, 0.16);
-      transform: translateY(-1px);
-    }
-
-    .copy-code.copied {
-      background: rgba(46, 204, 113, 0.15);
-      border-color: var(--success);
-      color: var(--brand-dark);
-    }
-
-    .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      letter-spacing: 0.3px;
-    }
-
     @media (max-width: 1200px) {
       .kpi-premium { grid-template-columns: repeat(2, 1fr); }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -599,7 +567,47 @@
       .stats-grid { grid-template-columns: 1fr; }
       .stats-controls { flex-direction: column; align-items: stretch; }
     }
-  </style>
+  
+/* ===== Pagination ===== */
+.pager{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding-top:14px;
+  margin-top:14px;
+  border-top:1px solid rgba(46,139,87,.12);
+}
+.pager-left,.pager-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pager-info{
+  background:#f7fbf8;
+  border:1px solid rgba(46,139,87,.14);
+  color:#234;
+  border-radius:12px;
+  padding:8px 12px;
+  font-weight:700;
+}
+.pager-btn{
+  border:none;
+  border-radius:12px;
+  padding:9px 13px;
+  font-weight:800;
+  cursor:pointer;
+  color:#fff;
+  background:linear-gradient(135deg,var(--brand),var(--brand-dark));
+  box-shadow:0 8px 20px rgba(46,139,87,.18);
+}
+.pager-btn:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+@media (max-width:768px){
+  .pager{flex-direction:column;align-items:stretch}
+  .pager-left,.pager-right{justify-content:center}
+}
+</style>
 </head>
 <body>
 <div class="app">
@@ -692,10 +700,11 @@
     <div class="section-title"><i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> Kam qolgan mahsulotlar <span class="live-badge" id="lowStockCount" style="margin-left: auto;">0 ta</span></div>
     <div class="table-wrapper">
       <table id="lowStockTable">
-        <thead><tr><th>Kod / Barcode</th><th>Tannarx</th><th>Sotuv narxi</th><th>Qoldiq</th><th>Chegara</th><th>Holat</th><th>Amal</th></tr></thead>
+        <thead><tr><th>Rasm</th><th>Mahsulot</th><th>Barcode</th><th>Qoldiq</th><th>Chegara</th><th>Holat</th><th>Amal</th></tr></thead>
         <tbody id="lowStockTbody"><tr><td colspan="7">Yuklanmoqda...</td></tr></tbody>
       </table>
     </div>
+    <div id="lowStockPager" class="pager"></div>
   </div>
 
   <!-- Products Analysis -->
@@ -703,10 +712,11 @@
     <div class="section-title"><i class="fas fa-boxes"></i> Mahsulotlar tahlili <span class="live-badge" id="productCount" style="margin-left: auto;">0 ta</span></div>
     <div class="table-wrapper">
       <table id="productsTable">
-        <thead><tr><th>Kod / Barcode</th><th>Tannarx</th><th>Sotuv narxi</th><th>Qoldiq</th><th>Sotilgan</th><th>Aylanma</th><th>Foyda</th><th>Holat</th></tr></thead>
+        <thead><tr><th>Rasm</th><th>Mahsulot</th><th>Qoldiq</th><th>Sotilgan</th><th>Aylanma</th><th>Foyda</th><th>Holat</th></tr></thead>
         <tbody id="productsTbody"><tr><td colspan="7">Yuklanmoqda...</td></tr></tbody>
       </table>
     </div>
+    <div id="productsPager" class="pager"></div>
   </div>
 
   <!-- Credits Journal -->
@@ -747,6 +757,46 @@
   const fmtNumber = (val) => new Intl.NumberFormat('uz-UZ').format(val || 0);
   const parseDate = (d) => d?.toDate ? d.toDate() : (d ? new Date(d) : null);
   const escapeHtml = (s) => String(s || '').replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[m]);
+
+  const pagers = {
+    lowStock: { page: 1, pageSize: 10 },
+    products: { page: 1, pageSize: 10 }
+  };
+
+  function paginateRows(rows, state){
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+    if(state.page > totalPages) state.page = totalPages;
+    const start = (state.page - 1) * state.pageSize;
+    const end = Math.min(start + state.pageSize, total);
+    return {
+      total,
+      totalPages,
+      start,
+      end,
+      rows: rows.slice(start, end)
+    };
+  }
+
+  function renderPager(containerId, key, meta){
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    if(meta.total <= pagers[key].pageSize){
+      el.innerHTML = '';
+      return;
+    }
+    el.innerHTML = `
+      <div class="pager-left">
+        <div class="pager-info">${meta.total} tadan ${meta.start + 1}-${meta.end} ko‘rsatilmoqda</div>
+      </div>
+      <div class="pager-right">
+        <button class="pager-btn" data-pager="${key}:prev" ${pagers[key].page <= 1 ? 'disabled' : ''}>← Oldingi</button>
+        <div class="pager-info">${pagers[key].page}/${meta.totalPages}-sahifa</div>
+        <button class="pager-btn" data-pager="${key}:next" ${pagers[key].page >= meta.totalPages ? 'disabled' : ''}>Keyingi →</button>
+      </div>
+    `;
+  }
+
 
   async function loadAllData() {
     const [prodSnap, salesSnap, creditsSnap] = await Promise.all([
@@ -909,22 +959,14 @@
     }).sort((a,b) => (a.inventory?.stock ?? a.stock ?? 0) - (b.inventory?.stock ?? b.stock ?? 0));
     
     document.getElementById("lowStockCount").innerHTML = `${lowStockProducts.length} ta`;
-    document.getElementById("lowStockTbody").innerHTML = lowStockProducts.map(p => {
+    const lowStockRows = lowStockProducts.map(p => {
       const stock = p.inventory?.stock ?? p.stock ?? 0;
       const currentThreshold = p.lowThreshold ?? p.inventory?.lowThreshold ?? 5;
-      const codeValue = p.barcode || p.code || p.id || '-';
-      const costUZS = p.costUZS ?? p.inventory?.costUZS ?? 0;
-      const sellUZS = p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0;
-      return `<tr>
-        <td><button type="button" class="copy-code mono" data-copy="${escapeHtml(codeValue)}" title="Nusxa olish"><i class="fas fa-copy"></i> ${escapeHtml(codeValue)}</button></td>
-        <td>${fmtMoney(costUZS)}</td>
-        <td>${fmtMoney(sellUZS)}</td>
-        <td><span class="status-badge badge-danger">${fmtNumber(stock)}</span></td>
-        <td><input type="number" class="threshold-input" id="thresh_${p.id}" value="${currentThreshold}" step="1"></td>
-        <td>${stock <= 0 ? '<span class="status-badge badge-danger">Tugagan</span>' : '<span class="status-badge badge-warning">Kam</span>'}</td>
-        <td><button class="btn-save" data-id="${p.id}">Saqlash</button></td>
-      </tr>`;
-    }).join('');
+      return `<tr><td><img src="${p.imageUrl || ''}" onerror="this.src='https://placehold.co/60x60?text=OM'" style="width:44px;height:44px;border-radius:12px;object-fit:cover;"></td><td><strong>${escapeHtml(p.name)}</strong></td><td>${escapeHtml(p.barcode || '-')}</td><td><span class="status-badge badge-danger">${fmtNumber(stock)}</span></td><td><input type="number" class="threshold-input" id="thresh_${p.id}" value="${currentThreshold}" step="1"></td><td>${stock <= 0 ? '<span class="status-badge badge-danger">Tugagan</span>' : '<span class="status-badge badge-warning">Kam</span>'}</td><td><button class="btn-save" data-id="${p.id}">Saqlash</button></td></tr>`;
+    });
+    const lowMeta = paginateRows(lowStockRows, pagers.lowStock);
+    document.getElementById("lowStockTbody").innerHTML = lowMeta.rows.join('');
+    renderPager("lowStockPager", "lowStock", lowMeta);
     
     document.querySelectorAll('.btn-save').forEach(btn => {
       btn.onclick = async () => {
@@ -934,26 +976,17 @@
       };
     });
     
-    document.getElementById("productsTbody").innerHTML = products.slice(0,30).map(p => {
+    const productRows = products.map(p => {
       const stock = p.inventory?.stock ?? p.stock ?? 0;
-      const stats = productStats.get(p.id) || productStats.get(p.barcode) || productStats.get(p.code) || { qty: 0, revenue: 0, cost: 0 };
+      const stats = productStats.get(p.id) || productStats.get(p.barcode) || { qty: 0, revenue: 0, cost: 0 };
       const profit = stats.revenue - stats.cost;
       const status = stock <= 0 ? 'Tugagan' : (stock <= (p.lowThreshold ?? 5) ? 'Kam' : 'Yetarli');
       const statusClass = stock <= 0 ? 'badge-danger' : (stock <= (p.lowThreshold ?? 5) ? 'badge-warning' : 'badge-success');
-      const codeValue = p.barcode || p.code || p.id || '-';
-      const costUZS = p.costUZS ?? p.inventory?.costUZS ?? 0;
-      const sellUZS = p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0;
-      return `<tr>
-        <td><button type="button" class="copy-code mono" data-copy="${escapeHtml(codeValue)}" title="Nusxa olish"><i class="fas fa-copy"></i> ${escapeHtml(codeValue)}</button></td>
-        <td>${fmtMoney(costUZS)}</td>
-        <td>${fmtMoney(sellUZS)}</td>
-        <td>${fmtNumber(stock)}</td>
-        <td><strong>${fmtNumber(stats.qty)}</strong> dona</td>
-        <td>${fmtMoney(stats.revenue)}</td>
-        <td class="badge-success">${fmtMoney(profit)}</td>
-        <td><span class="status-badge ${statusClass}">${status}</span></td>
-      </tr>`;
-    }).join('');
+      return `<tr><td><img src="${p.imageUrl || ''}" onerror="this.src='https://placehold.co/60x60?text=OM'" style="width:44px;height:44px;border-radius:12px;object-fit:cover;"></td><td><strong>${escapeHtml(p.name)}</strong><br><small>${escapeHtml(p.code || '')}</small></td><td>${fmtNumber(stock)}</td><td><strong>${fmtNumber(stats.qty)}</strong> dona</td><td>${fmtMoney(stats.revenue)}</td><td class="badge-success">${fmtMoney(profit)}</td><td><span class="status-badge ${statusClass}">${status}</span></td></tr>`;
+    });
+    const productMeta = paginateRows(productRows, pagers.products);
+    document.getElementById("productsTbody").innerHTML = productMeta.rows.join('');
+    renderPager("productsPager", "products", productMeta);
     
     document.getElementById("creditsTbody").innerHTML = credits.slice(0,30).map(c => {
       const remaining = (c.totalUZS || 0) - (c.paidUZS || 0);
@@ -1006,37 +1039,6 @@
   document.getElementById("groupBy").onchange = () => applyStats();
   document.getElementById("darkModeToggle").onclick = () => document.body.classList.toggle("dark");
   document.getElementById("refreshBtn").onclick = () => loadAllData();
-
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.copy-code');
-    if (!btn) return;
-    const textToCopy = btn.getAttribute('data-copy') || btn.textContent.trim();
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(textToCopy);
-      } else {
-        const temp = document.createElement('textarea');
-        temp.value = textToCopy;
-        temp.style.position = 'fixed';
-        temp.style.opacity = '0';
-        document.body.appendChild(temp);
-        temp.focus();
-        temp.select();
-        document.execCommand('copy');
-        temp.remove();
-      }
-      const oldHtml = btn.innerHTML;
-      btn.classList.add('copied');
-      btn.innerHTML = '<i class="fas fa-check"></i> Nusxalandi';
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        btn.innerHTML = oldHtml;
-      }, 1200);
-    } catch (err) {
-      console.error('Copy error:', err);
-      alert('Nusxa olishda xatolik yuz berdi');
-    }
-  });
   
   const end = new Date();
   const start = new Date(); start.setDate(start.getDate() - 30);
