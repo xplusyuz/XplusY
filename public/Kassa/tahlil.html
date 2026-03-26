@@ -110,6 +110,7 @@
     </div>
     <div class="header-actions">
       <div class="pill">Kolleksiyalar: products, sales, credits</div>
+      <div class="pill" id="liveBadge">Live: ulanmoqda...</div>
       <div class="pill" id="updatedAt">—</div>
       <button class="btn-ghost" id="btnReload">Qayta yuklash</button>
     </div>
@@ -138,6 +139,9 @@
         <div class="field"><label for="groupBy">Grafik bo‘linishi</label>
           <select id="groupBy"><option value="day">Kun</option><option value="week">Hafta</option><option value="month">Oy</option></select>
         </div>
+      </div>
+      <div class="field">
+        <label><input type="checkbox" id="autoLive" checked style="width:auto;margin-right:8px"> Live yangilanish yoqilgan</label>
       </div>
       <div class="row2">
         <button class="btn btn-green" id="btnRefresh">Tahlilni yangilash</button>
@@ -183,6 +187,16 @@
         <div class="card section"><div class="section-head"><div><h2>Top mahsulotlar</h2><p>Dona va foyda bo‘yicha liderlar</p></div></div><div class="cards-grid" id="topProductsByQty"><div class="small">Ma’lumot yo‘q</div></div></div>
         <div class="card section"><div class="section-head"><div><h2>Eng foydali</h2><p>Sof foyda bo‘yicha liderlar</p></div></div><div class="cards-grid" id="bestProfitBox"><div class="small">Ma’lumot yo‘q</div></div></div>
         <div class="card section"><div class="section-head"><div><h2>Nasiya holati</h2><p>Yaqinlashgan va ochiq qarzdorlar</p></div></div><div class="cards-grid" id="creditStatusBox"><div class="small">Ma’lumot yo‘q</div></div></div>
+      </section>
+
+      <section class="card section">
+        <div class="section-head"><div><h2>Auto reorder tavsiya</h2><p>Kam qolgan va tez tugashi kutilayotgan mahsulotlar bo‘yicha tavsiya buyurtma miqdori</p></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Mahsulot</th><th>Kod</th><th>Qoldiq</th><th>Kunlik sotuv</th><th>Taxminiy tugash</th><th>Tavsiya buyurtma</th><th>Sabab</th></tr></thead>
+            <tbody id="reorderTbody"><tr><td colspan="7" class="small">Ma’lumot yo‘q</td></tr></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card section">
@@ -237,7 +251,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, collection, getDocs, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyADOv69HBuAJkaYs2Ukgab-VgqkJIv1Cro",
@@ -278,6 +292,8 @@ const getUnitCost = p => Number(p.costUZS ?? getInventory(p).costUZS ?? p.cost ?
 const getLowThreshold = p => Number(getInventory(p).lowThreshold ?? p.lowThreshold ?? 5);
 const getName = p => p.name || p.title || p.nomi || 'Nomsiz';
 const getBarcode = p => String(p.barcode || p.barcodeText || '').trim();
+const getCode = p => String(p.code || p.productCode || p.shortCode || '').trim();
+const getIdentityCode = p => getCode(p) || getBarcode(p) || String(p.id || '').trim();
 const getImage = p => {
   if(typeof p.imageUrl === "string" && p.imageUrl.trim()) return p.imageUrl.trim();
   if(typeof p.image === "string" && p.image.trim()) return p.image.trim();
@@ -302,6 +318,28 @@ function imageHtml(src, alt){
 function miniImageHtml(src, alt){
   if(!src) return '<div class="thumb-fallback">OM</div>';
   return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" data-fullimg="${escapeHtml(src)}">`;
+}
+
+let unsubscribers = [];
+function clearLive(){ unsubscribers.forEach(fn => { try{ fn(); }catch(e){} }); unsubscribers = []; }
+function refreshLiveBadge(mode, extra=''){ $("liveBadge").textContent = `Live: ${mode}${extra ? ' • ' + extra : ''}`; }
+function subscribeLive(){
+  clearLive();
+  if(!$("autoLive")?.checked){ refreshLiveBadge('o‘chiq'); return; }
+  refreshLiveBadge('yoqilgan');
+  let first = { products:false, sales:false, credits:false };
+  unsubscribers.push(onSnapshot(query(collection(db, "products")), snap => {
+    products = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    first.products = true; if(first.products && first.sales && first.credits) { $("updatedAt").textContent = "Yangilandi: " + new Date().toLocaleString("uz-UZ"); analyze(); }
+  }, err => { console.error(err); refreshLiveBadge('xato','products'); }));
+  unsubscribers.push(onSnapshot(query(collection(db, "sales"), orderBy("createdAt", "desc")), snap => {
+    sales = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    first.sales = true; if(first.products && first.sales && first.credits) { $("updatedAt").textContent = "Yangilandi: " + new Date().toLocaleString("uz-UZ"); analyze(); }
+  }, err => { console.error(err); refreshLiveBadge('xato','sales'); }));
+  unsubscribers.push(onSnapshot(query(collection(db, "credits"), orderBy("dueDate", "asc")), snap => {
+    credits = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    first.credits = true; if(first.products && first.sales && first.credits) { $("updatedAt").textContent = "Yangilandi: " + new Date().toLocaleString("uz-UZ"); analyze(); }
+  }, err => { console.error(err); refreshLiveBadge('xato','credits'); }));
 }
 
 async function loadData(){
@@ -396,7 +434,7 @@ function productCard(row, badgeHtml){
       <div class="thumb">${imageHtml(row.imageUrl || "", row.name)}</div>
       <div class="product-main">
         <div class="product-name">${escapeHtml(row.name)}</div>
-        <div class="product-meta">${escapeHtml(row.barcode || "Barcode yo‘q")}</div>
+        <div class="product-meta">${escapeHtml(row.code || row.barcode || "Kod yo‘q")}</div>
       </div>
       <div class="product-badge-col">${badgeHtml}</div>
     </div>
@@ -435,8 +473,8 @@ function analyze(){
       const b = buckets.get(key); b.revenue += s.__total; b.cost += s.__cost; b.profit += s.__profit;
     }
     s.items.forEach(it => {
-      const pid = it.productId || it.id || it.barcode || it.name;
-      if(!agg.has(pid)) agg.set(pid, { productId:it.productId||"", name:it.name||"Nomsiz", barcode:it.barcode||"", qty:0, revenue:0, cost:0, profit:0 });
+      const pid = it.productId || it.id || it.code || it.barcode || it.name;
+      if(!agg.has(pid)) agg.set(pid, { productId:it.productId||"", name:it.name||"Nomsiz", barcode:it.barcode||"", code:it.code||it.productCode||"", qty:0, revenue:0, cost:0, profit:0 });
       const row = agg.get(pid);
       const q = Number(it.qty || 0);
       const rev = Number(it.lineTotalUZS ?? (Number(it.sellPriceUZS||0) * q));
@@ -449,10 +487,19 @@ function analyze(){
   const daysInRange = (!range.start || !range.end) ? 30 : Math.max(1, Math.round((endOfDay(range.end)-startOfDay(range.start))/86400000)+1);
 
   const productRows = products.map(p => {
-    const matched = [...agg.values()].find(x => (x.productId && x.productId === p.id) || (x.barcode && x.barcode === getBarcode(p)) || x.name === getName(p)) || { qty:0, revenue:0, cost:0, profit:0 };
+    const matched = [...agg.values()].find(x =>
+      (x.productId && x.productId === p.id) ||
+      (x.code && x.code === getCode(p)) ||
+      (x.barcode && x.barcode === getBarcode(p)) ||
+      (x.barcode && x.barcode === getCode(p)) ||
+      (x.code && x.code === getBarcode(p)) ||
+      x.name === getName(p)
+    ) || { qty:0, revenue:0, cost:0, profit:0 };
     const avgDailySold = matched.qty / daysInRange;
     const daysLeft = avgDailySold > 0 ? getStock(p) / avgDailySold : null;
-    return { id:p.id, name:getName(p), barcode:getBarcode(p), imageUrl:getImage(p), stock:getStock(p), lowThreshold:getLowThreshold(p) || lowThresholdDefault, inventoryCost:getStock(p) * getUnitCost(p), soldQty:matched.qty || 0, revenue:matched.revenue || 0, cost:matched.cost || 0, profit:matched.profit || 0, avgDailySold, daysLeft };
+    const reorderQty = Math.max(0, Math.ceil(((avgDailySold || 0) * 14) - getStock(p)));
+    const reorderReason = getStock(p) <= 0 ? 'Tugagan' : (getStock(p) <= (getLowThreshold(p) || lowThresholdDefault) ? 'Kam qoldiq' : (daysLeft !== null && daysLeft <= 7 ? 'Tez tugaydi' : 'Kuzatuv'));
+    return { id:p.id, name:getName(p), barcode:getBarcode(p), code:getCode(p), identityCode:getIdentityCode(p), imageUrl:getImage(p), stock:getStock(p), lowThreshold:getLowThreshold(p) || lowThresholdDefault, inventoryCost:getStock(p) * getUnitCost(p), soldQty:matched.qty || 0, revenue:matched.revenue || 0, cost:matched.cost || 0, profit:matched.profit || 0, avgDailySold, daysLeft, reorderQty, reorderReason };
   });
 
   const lowStockRows = productRows.filter(p => p.stock <= (p.lowThreshold || lowThresholdDefault)).sort((a,b)=>a.stock-b.stock);
@@ -479,6 +526,7 @@ function analyze(){
     totalRevenue,totalCost,totalProfit,salesCount,itemsSold,inventoryValue,totalCreditOpen,totalCreditOverdue,
     avgCheck:salesCount ? totalRevenue/salesCount : 0,
     productRows, lowStockRows, topProductsByQty, bestProfitProducts, dueSoonCredits, overdueCredits,
+    reorderRows: productRows.filter(p => p.stock <= (p.lowThreshold || lowThresholdDefault) || (p.daysLeft !== null && p.daysLeft <= 7)).sort((a,b)=>(b.reorderQty||0)-(a.reorderQty||0)).slice(0,30),
     trendBuckets:[...buckets.entries()].sort((a,b)=>String(a[0]).localeCompare(String(b[0]))),
     filteredSales, openCredits,
     monthCompare:{curSummary, prevSummary, revenuePct:pctChange(curSummary.revenue, prevSummary.revenue), profitPct:pctChange(curSummary.profit, prevSummary.profit), qtyPct:pctChange(curSummary.qty, prevSummary.qty)}
@@ -518,7 +566,7 @@ function renderAnalysis(){
 
   $("productTbody").innerHTML = a.productRows.length ? a.productRows.sort((x,y)=>y.profit-x.profit).map(r => `
     <tr>
-      <td><div class="mini-product"><div class="mini-thumb">${miniImageHtml(r.imageUrl || "", r.name)}</div><div><strong>${escapeHtml(r.name)}</strong><div class="muted">${escapeHtml(r.barcode || "Barcode yo‘q")}</div></div></div></td>
+      <td><div class="mini-product"><div class="mini-thumb">${miniImageHtml(r.imageUrl || "", r.name)}</div><div><strong>${escapeHtml(r.name)}</strong><div class="muted">${escapeHtml(r.code || r.barcode || "Kod yo‘q")}</div></div></div></td>
       <td>${fmt(r.stock)}</td>
       <td>${r.stock<=0?'<span class="tag tag-red">Tugagan</span>':r.stock<=(r.lowThreshold||5)?'<span class="tag tag-gold">Kam</span>':'<span class="tag tag-green">Yaxshi</span>'}</td>
       <td>${fmtMoney(r.inventoryCost)}</td>
@@ -529,6 +577,18 @@ function renderAnalysis(){
       <td>${r.daysLeft===null?'—':r.daysLeft.toFixed(1)+' kun'}</td>
     </tr>
   `).join("") : `<tr><td colspan="9" class="small">Ma’lumot yo‘q</td></tr>`;
+
+  $("reorderTbody").innerHTML = a.reorderRows.length ? a.reorderRows.map(r => `
+    <tr>
+      <td><div class="mini-product"><div class="mini-thumb">${miniImageHtml(r.imageUrl || "", r.name)}</div><div><strong>${escapeHtml(r.name)}</strong></div></div></td>
+      <td>${escapeHtml(r.code || r.barcode || r.id || '—')}</td>
+      <td>${fmt(r.stock)}</td>
+      <td>${r.avgDailySold ? r.avgDailySold.toFixed(2) : '0.00'}</td>
+      <td>${r.daysLeft===null?'—':r.daysLeft.toFixed(1)+' kun'}</td>
+      <td>${fmt(r.reorderQty || 0)}</td>
+      <td>${escapeHtml(r.reorderReason || 'Kuzatuv')}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="7" class="small">Tavsiya yo‘q</td></tr>`;
 
   $("creditsTbody").innerHTML = credits.length ? credits.map(c => `
     <tr>
@@ -612,7 +672,8 @@ function buildReceiptHtml(s){
   const sale = normalizeSale(s);
   const itemsHtml = sale.items.map((it,idx) => {
     const q = Number(it.qty || 0), price = Number(it.sellPriceUZS || 0), total = Number(it.lineTotalUZS ?? (q * price));
-    return `<tr><td>${idx+1}</td><td>${escapeHtml(it.name || "Nomsiz")}</td><td class="right">${fmt(q)}</td><td class="right">${fmtMoney(price)}</td><td class="right">${fmtMoney(total)}</td></tr>`;
+    const code = it.code || it.productCode || it.barcode || '';
+    return `<tr><td>${idx+1}</td><td>${escapeHtml(it.name || "Nomsiz")}${code ? `<div class="small mono">${escapeHtml(code)}</div>` : ''}</td><td class="right">${fmt(q)}</td><td class="right">${fmtMoney(price)}</td><td class="right">${fmtMoney(total)}</td></tr>`;
   }).join("");
   return `
     <h4>OrzuMall чек</h4>
@@ -693,9 +754,10 @@ $("btnCloseReceipt").addEventListener("click", () => $("receiptBd").style.displa
 $("receiptBd").addEventListener("click", e => { if(e.target === $("receiptBd")) $("receiptBd").style.display = "none"; });
 $("btnPrintReceipt").addEventListener("click", printReceipt);
 $("imageBd").addEventListener("click", e => { if(e.target === $("imageBd") || e.target.classList.contains("image-viewer")) $("imageBd").style.display = "none"; });
+$("autoLive").addEventListener("change", () => { if($("autoLive").checked) subscribeLive(); else clearLive(), refreshLiveBadge('o‘chiq'); });
 
 applyPresetRange();
-loadData().then(analyze).catch(e => {
+loadData().then(() => { analyze(); subscribeLive(); }).catch(e => {
   console.error(e);
   setStatus("Xato: " + (e?.message || "Firestore’dan o‘qib bo‘lmadi"));
 });
