@@ -708,35 +708,70 @@
     productCode.focus();
   }
 
-  // Print funksiyasi (grid)
+  // TO'G'RILANGAN PRINT FUNKSIYASI
   function openPrintWindow(labelsArray) {
     if (!labelsArray.length) {
       alert('Hech qanday sticker tanlanmagan!');
       return;
     }
+
     const html = `
       <!DOCTYPE html>
-      <html>
+      <html lang="uz">
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>OrzuMall Stickerlar</title>
         <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          @page { size: 30mm 20mm; margin: 0; }
-          body { background: white; width: 30mm; }
-          .label {
-            width: 30mm; height: 20mm; padding: 1.2mm 0.9mm;
-            display: flex; flex-direction: column;
-            page-break-after: always;
-            font-family: Arial, sans-serif;
+          @page { 
+            size: 30mm 20mm; 
+            margin: 0;
           }
-          .name { font-size: 2.6mm; font-weight: 900; text-align: center; white-space: nowrap; overflow: hidden; }
-          svg { width: 100%; height: 8mm; margin: 0.5mm 0; }
-          .info { display: flex; justify-content: space-between; font-size: 2.2mm; font-weight: 700; }
+          body { 
+            background: white; 
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+          }
+          .label {
+            width: 30mm;
+            height: 20mm;
+            padding: 1.2mm 0.9mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            page-break-after: always;
+            overflow: hidden;
+            box-sizing: border-box;
+            background: white;
+          }
+          .name {
+            font-size: 2.6mm;
+            font-weight: 900;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          svg {
+            width: 100%;
+            height: 8mm;
+            margin: 0.5mm 0;
+            display: block;
+          }
+          .info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 2.2mm;
+            font-weight: 700;
+            gap: 1mm;
+          }
           @media screen {
-            body { background: #eef; padding: 8px; width: auto; }
-            .label { border: 1px solid #aaa; margin-bottom: 4px; }
+            body { background: #eef2f0; padding: 8px; width: auto; }
+            .label { border: 1px solid #aaa; margin-bottom: 4px; background: white; }
           }
         </style>
       </head>
@@ -744,21 +779,66 @@
         ${labelsArray.map(item => `
           <div class="label">
             <div class="name">OrzuMall</div>
-            <svg class="barcode-print" data-code="${item.code}"></svg>
-            <div class="info"><span>${item.code}</span><span>${fmtNumber(item.price)}</span></div>
+            <svg class="barcode-print" data-code="${String(item.code || '').replace(/"/g, '&quot;')}"></svg>
+            <div class="info">
+              <span>${item.code}</span>
+              <span>${new Intl.NumberFormat('uz-UZ').format(Math.round(item.price || 0))}</span>
+            </div>
           </div>
         `).join('')}
         <script>
-          function fmtNumber(n){ return new Intl.NumberFormat('uz-UZ').format(Math.round(n||0)); }
-          document.querySelectorAll('.barcode-print').forEach(svg => {
-            JsBarcode(svg, svg.dataset.code, { format:'CODE128', displayValue:false, margin:0, height:24, width:0.85 });
-          });
-          setTimeout(() => window.print(), 250);
+          function buildBarcodes() {
+            const barcodes = document.querySelectorAll('.barcode-print');
+            barcodes.forEach(svg => {
+              try {
+                JsBarcode(svg, svg.dataset.code, {
+                  format: 'CODE128',
+                  displayValue: false,
+                  margin: 0,
+                  height: 24,
+                  width: 0.85
+                });
+              } catch(e) {
+                console.error('Barcode error:', e);
+              }
+            });
+          }
+
+          function startPrint() {
+            buildBarcodes();
+            setTimeout(function() {
+              try {
+                window.focus();
+                window.print();
+              } catch(e) {
+                console.log('Print error:', e);
+                alert('Chop etishda xatolik yuz berdi');
+              }
+            }, 500);
+          }
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startPrint);
+          } else {
+            startPrint();
+          }
+
+          window.onafterprint = function() {
+            setTimeout(function() { 
+              window.close(); 
+            }, 300);
+          };
         <\/script>
       </body>
       </html>
     `;
-    const win = window.open('', '_blank', 'width=500,height=700');
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Brauzer yangi oynani blokladi. Popupga ruxsat bering.');
+      return;
+    }
+    win.document.open();
     win.document.write(html);
     win.document.close();
   }
@@ -766,7 +846,14 @@
   function printSingle() {
     const code = productCode.value.trim();
     const price = Number(salePrice.value);
-    if (!code) return setFormStatus('Kod kiritilmagan', true);
+    if (!code) {
+      setFormStatus('Kod kiritilmagan', true);
+      return;
+    }
+    if (!price || price <= 0) {
+      setFormStatus('Narx kiritilmagan yoki noto\'g\'ri', true);
+      return;
+    }
     openPrintWindow([{ code, price }]);
   }
 
@@ -778,12 +865,20 @@
         const product = allProducts.find(p => p.id === id);
         if (product) {
           const qty = Number(document.querySelector(`.print-qty[data-id="${id}"]`)?.value || 0);
-          for (let i = 0; i < qty; i++) {
-            labels.push({ code: product.code, price: product.priceUZS });
+          if (qty > 0) {
+            for (let i = 0; i < qty; i++) {
+              labels.push({ code: product.code, price: product.priceUZS });
+            }
           }
         }
       }
     });
+    
+    if (labels.length === 0) {
+      alert('Iltimos, kamida bitta mahsulotni tanlang va miqdorini kiriting!');
+      return;
+    }
+    
     openPrintWindow(labels);
   }
 
@@ -834,6 +929,7 @@
 
   productCode.addEventListener('input', updateSinglePreview);
   salePrice.addEventListener('input', updateSinglePreview);
+  
   window.addEventListener('load', async () => {
     await loadProducts();
     updateSinglePreview();
