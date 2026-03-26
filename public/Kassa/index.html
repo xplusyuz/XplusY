@@ -292,6 +292,20 @@
       .stats-row { grid-template-columns: 1fr 1fr; }
       .cart-item { grid-template-columns: 1fr; }
     }
+  
+    @media print {
+      body * { visibility: hidden !important; }
+      #receiptContent, #receiptContent * { visibility: visible !important; }
+      #receiptContent {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        background: white !important;
+        padding: 12px !important;
+        border-radius: 0 !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1003,50 +1017,67 @@
   document.getElementById('fillRemainingBtn').onclick = () => { if(selectedCreditId) { let cr = creditsArray.find(c=>c.id===selectedCreditId); if(cr) document.getElementById('paymentAmount').value = (cr.totalUZS||0)-(cr.paidUZS||0); } };
   document.getElementById('closeReceiptModal').onclick = () => document.getElementById('receiptModal').classList.remove('open');
   document.getElementById('printReceiptBtn').onclick = () => {
-    const receiptHtml = document.getElementById('receiptContent').innerHTML;
-    const printHtml = `<!DOCTYPE html>
+    const receiptEl = document.getElementById('receiptContent');
+    if (!receiptEl || !receiptEl.innerHTML.trim()) {
+      alert("Chek topilmadi");
+      return;
+    }
+
+    const receiptHtml = receiptEl.innerHTML;
+    const printWin = window.open('', '_blank', 'width=420,height=800');
+
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(`<!DOCTYPE html>
 <html lang="uz">
 <head>
-  <meta charset="UTF-8">
-  <title>Chek</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 16px; color: #111; }
-    * { box-sizing: border-box; }
-    hr { border: none; border-top: 1px dashed #999; margin: 10px 0; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Chek</title>
+<style>
+body{
+  font-family: Arial, sans-serif;
+  padding: 12px;
+  margin: 0;
+  color: #111;
+  background: #fff;
+}
+#print-root{
+  max-width: 320px;
+  margin: 0 auto;
+}
+hr{
+  border: none;
+  border-top: 1px dashed #999;
+  margin: 8px 0;
+}
+@media print{
+  body{ padding: 0; }
+  #print-root{ max-width: 100%; }
+}
+</style>
 </head>
-<body>${receiptHtml}</body>
-</html>`;
-
-    const frame = document.createElement('iframe');
-    frame.style.position = 'fixed';
-    frame.style.right = '0';
-    frame.style.bottom = '0';
-    frame.style.width = '0';
-    frame.style.height = '0';
-    frame.style.border = '0';
-    document.body.appendChild(frame);
-
-    const doc = frame.contentWindow.document;
-    doc.open();
-    doc.write(printHtml);
-    doc.close();
-
-    const doPrint = () => {
-      try {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-      } finally {
-        setTimeout(() => frame.remove(), 1000);
-      }
-    };
-
-    if (doc.readyState === 'complete') {
-      setTimeout(doPrint, 150);
-    } else {
-      frame.onload = () => setTimeout(doPrint, 150);
-      setTimeout(doPrint, 500);
+<body>
+<div id="print-root">${receiptHtml}</div>
+<script>
+window.onload = function(){
+  setTimeout(function(){
+    window.focus();
+    window.print();
+  }, 250);
+};
+window.onafterprint = function(){ window.close(); };
+<\/script>
+</body>
+</html>`);
+      printWin.document.close();
+      return;
     }
+
+    const originalTitle = document.title;
+    document.title = 'Chek';
+    window.print();
+    document.title = originalTitle;
   };
   document.getElementById('searchCredit').addEventListener('input', () => renderCreditsUI());
   
