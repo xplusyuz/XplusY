@@ -252,6 +252,40 @@
       gap: 4px;
       margin-left: 8px;
     }
+    .customer-quick-grid {
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+    .top-customer-list {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin-top:10px;
+    }
+    .top-customer-item {
+      background: rgba(255,255,245,0.9);
+      border-radius: 22px;
+      padding: 14px;
+      border: 1px solid #dceddf;
+    }
+    .mini-muted {
+      color:#5a7b6b;
+      font-size:12px;
+      margin-top:4px;
+    }
+    .mini-amount {
+      font-size:18px;
+      font-weight:800;
+      color:#0f5a38;
+    }
+    .mini-btn {
+      padding:8px 12px;
+      border-radius:18px;
+      font-size:12px;
+      margin-top:10px;
+    }
     @media (max-width: 1000px) {
       .dashboard { grid-template-columns: 1fr; }
       .toolbar-grid { grid-template-columns: 1fr; }
@@ -290,6 +324,10 @@
         <button class="btn-primary" id="addProductBtn">➕ Qo‘shish</button>
         <button id="focusBtn" class="btn-secondary">🎯 Fokus</button>
         <button id="discountManagerBtn" class="btn-secondary">⏱️ Chegirma markazi</button>
+      </div>
+      <div class="customer-quick-grid">
+        <input type="text" id="customerQuickName" placeholder="Mijoz ismi (ixtiyoriy)">
+        <input type="text" id="customerQuickPhone" placeholder="Telefon (ixtiyoriy)">
       </div>
       <textarea id="saleNote" rows="2" placeholder="Chek izohi (mijoz, to‘lov turi...)"></textarea>
       
@@ -332,6 +370,14 @@
         </div>
       </div>
       <div id="creditsContainer" class="credits-list"><div class="empty">Yuklanmoqda...</div></div>
+
+      <div style="margin: 24px 0 12px 0;">
+        <div class="flex-between">
+          <h2 style="font-size: 24px; font-weight:800;">⭐ Faol mijozlar</h2>
+          <div class="live-badge" id="topCustomersBadge">0 ta</div>
+        </div>
+      </div>
+      <div id="topCustomersContainer" class="top-customer-list"><div class="empty">Mijozlar hali aniqlanmadi</div></div>
 
       <div style="margin: 24px 0 12px 0;">
         <h2 style="font-size: 24px; font-weight:800;">📅 Bugungi sotuvlar</h2>
@@ -449,8 +495,78 @@
   let globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
   let creditsArray = [];
   let todaySalesArray = [];
+  let allSalesArray = [];
   let selectedCreditId = null;
   let currentReceiptData = null;
+
+  const normalizePhone = (v) => String(v || '').replace(/\D/g, '');
+  function buildCustomerMap() {
+    const map = new Map();
+
+    function put(name, phone, amount, kind) {
+      const cleanPhone = normalizePhone(phone);
+      const cleanName = String(name || '').trim();
+      const key = cleanPhone || cleanName.toLowerCase();
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { name: cleanName || 'Mijoz', phone: phone || '—', count: 0, total: 0, kinds: new Set() });
+      const row = map.get(key);
+      if (cleanName && (!row.name || row.name === 'Mijoz')) row.name = cleanName;
+      if (phone) row.phone = phone;
+      row.count += 1;
+      row.total += Number(amount || 0);
+      if (kind) row.kinds.add(kind);
+    }
+
+    allSalesArray.forEach(s => {
+      if (String(s.type || '') === 'credit_payment') return;
+      put(s.customerName || s.fullName, s.customerPhone || s.phone1, s.totalUZS || 0, 'sale');
+    });
+
+    creditsArray.forEach(c => {
+      put(c.fullName || [c.firstName, c.lastName].filter(Boolean).join(' '), c.phone1, c.totalUZS || 0, 'credit');
+    });
+
+    return [...map.values()].sort((a,b) => (b.count - a.count) || (b.total - a.total)).slice(0, 8);
+  }
+
+  function fillQuickCustomer(name, phone) {
+    document.getElementById('customerQuickName').value = name || '';
+    document.getElementById('customerQuickPhone').value = phone || '';
+    const search = document.getElementById('searchCredit');
+    if (search && phone) search.value = phone;
+    renderCreditsUI();
+  }
+
+  function prefillNasiyaFromQuick() {
+    const quickName = document.getElementById('customerQuickName').value.trim();
+    const quickPhone = document.getElementById('customerQuickPhone').value.trim();
+    if (quickName) {
+      const parts = quickName.split(/\s+/);
+      if (!document.getElementById('creditFirstName').value.trim()) document.getElementById('creditFirstName').value = parts.shift() || '';
+      if (!document.getElementById('creditLastName').value.trim()) document.getElementById('creditLastName').value = parts.join(' ');
+    }
+    if (quickPhone && !document.getElementById('creditPhone1').value.trim()) document.getElementById('creditPhone1').value = quickPhone;
+  }
+
+  function renderTopCustomersUI() {
+    const list = buildCustomerMap();
+    document.getElementById('topCustomersBadge').innerText = `${list.length} ta`;
+    const container = document.getElementById('topCustomersContainer');
+    if (!list.length) {
+      container.innerHTML = '<div class="empty">Mijozlar hali aniqlanmadi</div>';
+      return;
+    }
+    container.innerHTML = list.map((c, idx) => `
+      <div class="top-customer-item">
+        <div class="flex-between">
+          <div><b>${idx + 1}. ${escapeHtml(c.name || 'Mijoz')}</b><div class="mini-muted">📞 ${escapeHtml(c.phone || '—')}</div></div>
+          <div class="mini-amount">${fmt(c.total)} so‘m</div>
+        </div>
+        <div class="mini-muted">${c.count} ta xarid / nasiya</div>
+        <button class="btn-secondary mini-btn quick-customer-btn" data-name="${escapeHtml(c.name || '')}" data-phone="${escapeHtml(c.phone || '')}">Tanlash</button>
+      </div>
+    `).join('');
+  }
 
   function isDiscountActive(discount) {
     if (!discount || discount.type === 'none' || discount.value <= 0) return false;
@@ -664,6 +780,9 @@
       html += `<div style="display:flex; justify-content:space-between;"><span>Qolgan qarz:</span><span>${fmt(remaining)} so‘m</span></div>`;
       html += `<div style="display:flex; justify-content:space-between;"><span>Muddat:</span><span>${saleData.dueDate || '—'}</span></div>`;
     }
+    if(saleData.customerName || saleData.customerPhone || saleData.fullName) {
+      html += `<div><small>Mijoz: ${escapeHtml(saleData.customerName || saleData.fullName || 'Mijoz')}${saleData.customerPhone || saleData.phone1 ? ' · ' + escapeHtml(saleData.customerPhone || saleData.phone1) : ''}</small></div>`;
+    }
     if(saleData.note) html += `<div><small>Izoh: ${escapeHtml(saleData.note)}</small></div>`;
     html += `<hr><p style="font-size:12px;">Rahmat! Xaridingiz uchun tashakkur.</p></div>`;
     document.getElementById('receiptContent').innerHTML = html;
@@ -675,6 +794,8 @@
     if(!cart.length) return alert("Savat bo‘sh");
     const totals = recalcTotals();
     const salePaymentMethod = document.getElementById('salePaymentMethod').value || 'cash';
+    const customerName = document.getElementById('customerQuickName').value.trim();
+    const customerPhone = document.getElementById('customerQuickPhone').value.trim();
     const saleItems = cart.map(item => ({
       productId: item.id,
       name: item.name,
@@ -699,10 +820,11 @@
         const saleRef = await addDoc(collection(db,'sales'), {
           type: 'sale', paymentMethod: salePaymentMethod, totalUZS: totals.final, subtotalUZS: totals.subtotal,
           totalDiscountUZS: totals.totalDisc, items: saleItems,
+          customerName, customerPhone,
           note: document.getElementById('saleNote').value,
           createdAt: serverTimestamp(), receiptNumber: 'CHK-'+Date.now()
         });
-        const saleData = { id: saleRef.id, type: 'sale', paymentMethod: salePaymentMethod, totalUZS: totals.final, subtotalUZS: totals.subtotal, totalDiscountUZS: totals.totalDisc, items: saleItems, note: document.getElementById('saleNote').value, createdAt: new Date() };
+        const saleData = { id: saleRef.id, type: 'sale', paymentMethod: salePaymentMethod, totalUZS: totals.final, subtotalUZS: totals.subtotal, totalDiscountUZS: totals.totalDisc, items: saleItems, note: document.getElementById('saleNote').value, createdAt: new Date(), customerName, customerPhone };
         showReceipt(saleData, 'sale');
       });
       cart = []; globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
@@ -718,6 +840,7 @@
     const firstName = document.getElementById('creditFirstName').value.trim();
     const lastName = document.getElementById('creditLastName').value.trim();
     const phone1 = document.getElementById('creditPhone1').value.trim();
+    const fullName = `${firstName} ${lastName}`.trim();
     if(!firstName || !lastName || !phone1) return alert("Ism, familiya va telefon majburiy");
     const totals = recalcTotals();
     const dueDate = document.getElementById('creditDueDate').value || today();
@@ -740,14 +863,15 @@
           }
         }
         const creditRef = await addDoc(collection(db,'credits'), {
-          firstName, lastName, fullName: `${firstName} ${lastName}`, phone1, phone2: document.getElementById('creditPhone2').value,
+          firstName, lastName, fullName, phone1, phone2: document.getElementById('creditPhone2').value,
           givenDate, dueDate, note: document.getElementById('creditNote').value, totalUZS: totals.final,
           paidUZS: 0, remainingUZS: totals.final, status: 'open', items: saleItems,
           createdAt: serverTimestamp(), payments: []
         });
-        const creditData = { id: creditRef.id, fullName: `${firstName} ${lastName}`, paymentMethod: 'credit', totalUZS: totals.final, items: saleItems, dueDate, note: document.getElementById('creditNote').value };
+        const creditData = { id: creditRef.id, fullName, phone1, paymentMethod: 'credit', totalUZS: totals.final, items: saleItems, dueDate, note: document.getElementById('creditNote').value };
         showReceipt(creditData, 'credit');
       });
+      fillQuickCustomer(fullName, phone1);
       cart = []; globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
       renderCartUI();
       document.getElementById('creditFirstName').value = '';
@@ -762,6 +886,7 @@
     const snap = await getDocs(query(collection(db,'credits'), orderBy('dueDate','asc')));
     creditsArray = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderCreditsUI();
+    renderTopCustomersUI();
   }
 
   function renderCreditsUI() {
@@ -785,11 +910,13 @@
   }
 
   async function loadTodaySales() {
-    const snap = await getDocs(query(collection(db,'sales'), orderBy('createdAt','desc'), limit(80)));
-    todaySalesArray = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => {
+    const snap = await getDocs(query(collection(db,'sales'), orderBy('createdAt','desc'), limit(500)));
+    allSalesArray = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    todaySalesArray = allSalesArray.filter(s => {
       let d = s.createdAt?.toDate?.() || new Date(s.createdAt);
       return d.toDateString() === new Date().toDateString();
     });
+    renderTopCustomersUI();
     const container = document.getElementById('todaySalesContainer');
     if(!todaySalesArray.length) { container.innerHTML = '<div class="empty">Bugun sotuv yo‘q</div>'; return; }
     container.innerHTML = todaySalesArray.map(s => `
@@ -864,7 +991,7 @@
   document.getElementById('addProductBtn').onclick = () => addToCartByCode(document.getElementById('barcodeInput').value);
   document.getElementById('focusBtn').onclick = () => document.getElementById('barcodeInput').focus();
   document.getElementById('cashSaleBtn').onclick = cashSale;
-  document.getElementById('nasiyaOpenBtn').onclick = () => document.getElementById('nasiyaModal').classList.add('open');
+  document.getElementById('nasiyaOpenBtn').onclick = () => { prefillNasiyaFromQuick(); document.getElementById('nasiyaModal').classList.add('open'); };
   document.getElementById('clearCartBtn').onclick = () => { cart = []; globalDiscount = {type:'none',value:0}; renderCartUI(); };
   document.getElementById('discountManagerBtn').onclick = () => document.getElementById('discountModal').classList.add('open');
   document.getElementById('closeDiscountModal').onclick = () => document.getElementById('discountModal').classList.remove('open');
@@ -918,6 +1045,7 @@
     if(e.target.closest('.payment-open-btn')) openPaymentModal(e.target.closest('.payment-open-btn').dataset.id);
     if(e.target.closest('.receipt-credit-btn')) { let cid = e.target.closest('.receipt-credit-btn').dataset.id; let cr = creditsArray.find(c=>c.id===cid); if(cr) showReceipt(cr, 'credit'); }
     if(e.target.closest('.receipt-sale-btn')) { let sid = e.target.closest('.receipt-sale-btn').dataset.id; let sale = todaySalesArray.find(s=>s.id===sid); if(sale) showReceipt(sale, 'sale'); }
+    if(e.target.closest('.quick-customer-btn')) { const btn = e.target.closest('.quick-customer-btn'); fillQuickCustomer(btn.dataset.name || '', btn.dataset.phone || ''); }
     if(e.target.closest('[data-img]')) { let src = e.target.closest('[data-img]').dataset.img; if(src) { document.getElementById('fullImage').src=src; document.getElementById('imageModal').classList.add('open'); } }
   });
   document.getElementById('closeImageModal').onclick = () => document.getElementById('imageModal').classList.remove('open');

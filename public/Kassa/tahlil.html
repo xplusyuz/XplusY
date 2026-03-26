@@ -756,6 +756,22 @@
     </div>
   </div>
 
+
+  <div class="top-products">
+    <div class="product-rank-card">
+      <h3><i class="fas fa-users" style="color: #8e44ad;"></i> Eng faol mijozlar</h3>
+      <div class="rank-list" id="topCustomersList"></div>
+    </div>
+    <div class="product-rank-card">
+      <h3><i class="fas fa-user-check" style="color: #16a085;"></i> Mijozlar bo‘yicha qisqa statistika</h3>
+      <div class="rank-list">
+        <div class="rank-item"><div class="rank-number">1</div><div class="rank-info"><div class="rank-name">Noyob mijozlar</div><div class="rank-stats">Tanlangan davr bo‘yicha</div></div><div class="rank-value" id="uniqueCustomersCount">0</div></div>
+        <div class="rank-item"><div class="rank-number">2</div><div class="rank-info"><div class="rank-name">Qaytib kelgan mijozlar</div><div class="rank-stats">2 va undan ko‘p xarid</div></div><div class="rank-value" id="repeatCustomersCount">0</div></div>
+        <div class="rank-item"><div class="rank-number">3</div><div class="rank-info"><div class="rank-name">Eng katta mijoz summasi</div><div class="rank-stats">1 ta mijoz bo‘yicha</div></div><div class="rank-value" id="bestCustomerTotal">0 so‘m</div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Low Stock Section -->
   <div class="section-card">
     <div class="section-title"><i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> Kam qolgan mahsulotlar <span class="live-badge" id="lowStockCount" style="margin-left: auto;">0 ta</span></div>
@@ -825,6 +841,7 @@
     if (['xolis'].includes(x)) return 'xolis';
     return 'other';
   };
+  const normalizePhone = (v) => String(v || '').replace(/\D/g, '');
   const pageState = {
     lowStock: 1,
     products: 1
@@ -910,6 +927,53 @@
     });
   }
 
+  function getFilteredCredits() {
+    let filtered = [...credits];
+    if (currentStats.startDate) {
+      const start = new Date(currentStats.startDate); start.setHours(0,0,0,0);
+      filtered = filtered.filter(c => {
+        const baseDate = c.givenDate ? new Date(c.givenDate) : parseDate(c.createdAt);
+        return baseDate && baseDate >= start;
+      });
+    }
+    if (currentStats.endDate) {
+      const end = new Date(currentStats.endDate); end.setHours(23,59,59,999);
+      filtered = filtered.filter(c => {
+        const baseDate = c.givenDate ? new Date(c.givenDate) : parseDate(c.createdAt);
+        return baseDate && baseDate <= end;
+      });
+    }
+    return filtered;
+  }
+
+  function getCustomerStats(filteredSales, filteredCredits) {
+    const map = new Map();
+    function put(name, phone, amount, source) {
+      const cleanPhone = normalizePhone(phone);
+      const cleanName = String(name || '').trim();
+      const key = cleanPhone || cleanName.toLowerCase();
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { name: cleanName || 'Mijoz', phone: phone || '—', count: 0, total: 0, creditCount: 0, saleCount: 0 });
+      const row = map.get(key);
+      if (cleanName && (!row.name || row.name === 'Mijoz')) row.name = cleanName;
+      if (phone) row.phone = phone;
+      row.count += 1;
+      row.total += Number(amount || 0);
+      if (source === 'credit') row.creditCount += 1;
+      else row.saleCount += 1;
+    }
+
+    filteredSales.forEach(s => {
+      if (String(s.type || '') === 'credit_payment') return;
+      put(s.customerName || s.fullName, s.customerPhone || s.phone1, s.totalUZS || 0, 'sale');
+    });
+    filteredCredits.forEach(c => {
+      put(c.fullName || [c.firstName, c.lastName].filter(Boolean).join(' '), c.phone1, c.totalUZS || 0, 'credit');
+    });
+
+    return [...map.values()].sort((a,b) => (b.count - a.count) || (b.total - a.total));
+  }
+
   function getGroupKey(date, groupBy) {
     const d = new Date(date);
     if (groupBy === 'day') return d.toISOString().slice(0,10);
@@ -948,6 +1012,7 @@
 
   function renderAll() {
     const filteredSales = getFilteredSales();
+    const filteredCredits = getFilteredCredits();
     const prevSales = getPreviousPeriodSales();
     const productStats = getProductSalesStats(filteredSales);
     const today = new Date().toISOString().slice(0,10);
@@ -1035,6 +1100,22 @@
       const profit = p.revenue - p.cost;
       return `<div class="rank-item"><div class="rank-number">${idx+1}</div><div class="rank-info"><div class="rank-name">${escapeHtml(p.name)}</div><div class="rank-stats">Foyda: ${fmtMoney(profit)}</div></div><div class="rank-value">${fmtMoney(p.revenue)}</div></div>`;
     }).join('') || '<div style="padding: 20px; text-align: center;">Maʼlumot yo‘q</div>';
+
+    const customerStats = getCustomerStats(filteredSales, filteredCredits);
+    const topCustomers = customerStats.slice(0, 8);
+    document.getElementById("topCustomersList").innerHTML = topCustomers.map((c, idx) => `
+      <div class="rank-item">
+        <div class="rank-number">${idx+1}</div>
+        <div class="rank-info">
+          <div class="rank-name">${escapeHtml(c.name)}</div>
+          <div class="rank-stats">${escapeHtml(c.phone || '—')} · ${fmtNumber(c.count)} ta xarid/nasiya</div>
+        </div>
+        <div class="rank-value">${fmtMoney(c.total)}</div>
+      </div>
+    `).join('') || '<div style="padding: 20px; text-align: center;">Maʼlumot yo‘q</div>';
+    document.getElementById("uniqueCustomersCount").innerHTML = fmtNumber(customerStats.length);
+    document.getElementById("repeatCustomersCount").innerHTML = fmtNumber(customerStats.filter(c => c.count >= 2).length);
+    document.getElementById("bestCustomerTotal").innerHTML = fmtMoney(topCustomers[0]?.total || 0);
     
     const totalCreditOpen = credits.filter(c => c.status !== 'closed').reduce((s, c) => s + ((c.totalUZS || 0) - (c.paidUZS || 0)), 0);
     const inventoryValue = products.reduce((sum, p) => sum + ((p.inventory?.stock ?? p.stock ?? 0) * (p.costUZS ?? p.inventory?.costUZS ?? 0)), 0);
