@@ -307,7 +307,12 @@
       </div>
       <div class="action-buttons">
         <button id="clearCartBtn" class="btn-secondary">🗑️ Savatni tozalash</button>
-        <button id="cashSaleBtn" class="btn-primary">💵 Naqd sotuv</button>
+        <select id="salePaymentMethod" class="btn-secondary" style="min-width:180px; background:#f5fbf7;">
+          <option value="cash">💵 Naqd</option>
+          <option value="card">💳 Karta</option>
+          <option value="xolis">🧾 Xolis</option>
+        </select>
+        <button id="cashSaleBtn" class="btn-primary">✅ Sotuvni yakunlash</button>
         <button id="nasiyaOpenBtn" class="btn-danger">📄 Nasiya</button>
       </div>
     </div>
@@ -397,7 +402,7 @@
       <div id="paymentCreditInfo" class="stat-block"></div>
       <div class="grid-2" style="margin-top:16px">
         <input type="number" id="paymentAmount" placeholder="To‘lov summasi"><input type="date" id="paymentDate">
-        <select id="paymentMethod"><option value="cash">Naqd</option><option value="card">Karta</option></select>
+        <select id="paymentMethod"><option value="cash">Naqd</option><option value="card">Karta</option><option value="xolis">Xolis</option></select>
         <input type="date" id="paymentNewDueDate" placeholder="Yangi muddat">
       </div>
       <label><input type="checkbox" id="fullCloseCheckbox"> To‘liq yopish</label>
@@ -438,6 +443,7 @@
   const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(Math.round(n || 0));
   const today = () => new Date().toISOString().slice(0,10);
   const nowDate = () => new Date();
+  const paymentTypeLabel = (v) => ({ cash: 'Naqd', card: 'Karta', xolis: 'Xolis', credit: 'Nasiya', credit_payment: 'Nasiya toʻlovi' }[v] || v || '—');
   
   let cart = [];
   let globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
@@ -650,6 +656,7 @@
     html += `<hr><div style="display:flex; justify-content:space-between;"><strong>Subtotal:</strong><span>${fmt(subtotal)} so‘m</span></div>`;
     if(discount > 0) html += `<div style="display:flex; justify-content:space-between; color:#b45f1b;"><strong>Chegirma:</strong><span>-${fmt(discount)} so‘m</span></div>`;
     html += `<div style="display:flex; justify-content:space-between; font-size:20px; margin-top:10px;"><strong>JAMI:</strong><strong>${fmt(total)} so‘m</strong></div>`;
+    if(saleData.paymentMethod) html += `<div style="display:flex; justify-content:space-between;"><span>Toʻlov turi:</span><span>${paymentTypeLabel(saleData.paymentMethod)}</span></div>`;
     if(type === 'credit') {
       const paid = saleData.paidUZS || 0;
       const remaining = (saleData.totalUZS || 0) - paid;
@@ -667,8 +674,15 @@
   async function cashSale() {
     if(!cart.length) return alert("Savat bo‘sh");
     const totals = recalcTotals();
+    const salePaymentMethod = document.getElementById('salePaymentMethod').value || 'cash';
     const saleItems = cart.map(item => ({
-      name: item.name, qty: item.qty, priceUZS: item.priceUZS,
+      productId: item.id,
+      name: item.name,
+      qty: item.qty,
+      priceUZS: item.priceUZS,
+      sellPriceUZS: item.priceUZS,
+      costUZS: Number(item.costUZS || 0),
+      lineTotalUZS: calcItemBase(item) - calcItemDisc(calcItemBase(item), item.discount),
       finalLineUZS: calcItemBase(item) - calcItemDisc(calcItemBase(item), item.discount)
     }));
     try {
@@ -683,12 +697,12 @@
           }
         }
         const saleRef = await addDoc(collection(db,'sales'), {
-          type: 'cash', totalUZS: totals.final, subtotalUZS: totals.subtotal,
+          type: 'sale', paymentMethod: salePaymentMethod, totalUZS: totals.final, subtotalUZS: totals.subtotal,
           totalDiscountUZS: totals.totalDisc, items: saleItems,
           note: document.getElementById('saleNote').value,
           createdAt: serverTimestamp(), receiptNumber: 'CHK-'+Date.now()
         });
-        const saleData = { id: saleRef.id, totalUZS: totals.final, subtotalUZS: totals.subtotal, totalDiscountUZS: totals.totalDisc, items: saleItems, note: document.getElementById('saleNote').value, createdAt: new Date() };
+        const saleData = { id: saleRef.id, type: 'sale', paymentMethod: salePaymentMethod, totalUZS: totals.final, subtotalUZS: totals.subtotal, totalDiscountUZS: totals.totalDisc, items: saleItems, note: document.getElementById('saleNote').value, createdAt: new Date() };
         showReceipt(saleData, 'sale');
       });
       cart = []; globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
@@ -710,6 +724,8 @@
     const givenDate = document.getElementById('creditGivenDate').value || today();
     const saleItems = cart.map(item => ({
       productId: item.id, name: item.name, qty: item.qty, priceUZS: item.priceUZS,
+      sellPriceUZS: item.priceUZS, costUZS: Number(item.costUZS || 0),
+      lineTotalUZS: calcItemBase(item) - calcItemDisc(calcItemBase(item), item.discount),
       finalLineUZS: calcItemBase(item) - calcItemDisc(calcItemBase(item), item.discount)
     }));
     try {
@@ -729,7 +745,7 @@
           paidUZS: 0, remainingUZS: totals.final, status: 'open', items: saleItems,
           createdAt: serverTimestamp(), payments: []
         });
-        const creditData = { id: creditRef.id, fullName: `${firstName} ${lastName}`, totalUZS: totals.final, items: saleItems, dueDate, note: document.getElementById('creditNote').value };
+        const creditData = { id: creditRef.id, fullName: `${firstName} ${lastName}`, paymentMethod: 'credit', totalUZS: totals.final, items: saleItems, dueDate, note: document.getElementById('creditNote').value };
         showReceipt(creditData, 'credit');
       });
       cart = []; globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
@@ -778,8 +794,8 @@
     if(!todaySalesArray.length) { container.innerHTML = '<div class="empty">Bugun sotuv yo‘q</div>'; return; }
     container.innerHTML = todaySalesArray.map(s => `
       <div class="sale-item">
-        <div class="flex-between"><b>${s.type === 'credit' ? 'Nasiya' : 'Naqd'}</b><span>${fmt(s.totalUZS)} so‘m</span></div>
-        <div>${s.fullName || 'Mijoz'}</div>
+        <div class="flex-between"><b>${s.type === 'credit_payment' ? 'Nasiya toʻlovi' : (s.type === 'credit' ? 'Nasiya' : 'Sotuv')}</b><span>${fmt(s.totalUZS)} so‘m</span></div>
+        <div>${s.fullName || 'Mijoz'} · <span class="pill">${paymentTypeLabel(s.paymentMethod)}</span></div>
         <button class="btn-secondary receipt-sale-btn" data-id="${s.id}">🧾 Chek</button>
       </div>
     `).join('');
@@ -793,6 +809,9 @@
     document.getElementById('paymentCreditInfo').innerHTML = `<b>${credit.fullName}</b> | Qoldiq: ${fmt(remaining)} so‘m`;
     document.getElementById('paymentAmount').value = '';
     document.getElementById('paymentDate').value = today();
+    document.getElementById('paymentMethod').value = 'cash';
+    document.getElementById('paymentNote').value = '';
+    document.getElementById('fullCloseCheckbox').checked = false;
     document.getElementById('paymentNewDueDate').value = credit.dueDate || today();
     document.getElementById('paymentModal').classList.add('open');
   }
@@ -806,6 +825,9 @@
     const remainingNow = (credit.totalUZS||0) - (credit.paidUZS||0);
     if(fullClose) amount = remainingNow;
     if(amount <= 0 && !fullClose && !document.getElementById('paymentNewDueDate').value) return alert("To‘lov summasi yoki yangi muddat kiriting");
+    const paymentMethod = document.getElementById('paymentMethod').value;
+    const paymentDate = document.getElementById('paymentDate').value || today();
+    const paymentNote = document.getElementById('paymentNote').value;
     const newPaid = (credit.paidUZS||0) + amount;
     const newRemaining = (credit.totalUZS||0) - newPaid;
     const status = newRemaining <= 0 ? 'closed' : (newPaid > 0 ? 'partial' : 'open');
@@ -813,8 +835,23 @@
     try {
       await updateDoc(doc(db,'credits', selectedCreditId), {
         paidUZS: newPaid, remainingUZS: newRemaining, status, dueDate: newDue,
-        payments: [...(credit.payments||[]), { amount, date: today(), method: document.getElementById('paymentMethod').value, note: document.getElementById('paymentNote').value }]
+        payments: [...(credit.payments||[]), { amount, date: paymentDate, method: paymentMethod, note: paymentNote }]
       });
+      if (amount > 0) {
+        await addDoc(collection(db,'sales'), {
+          type: 'credit_payment',
+          paymentMethod,
+          totalUZS: amount,
+          subtotalUZS: amount,
+          totalDiscountUZS: 0,
+          fullName: credit.fullName,
+          creditId: selectedCreditId,
+          items: [],
+          note: paymentNote || `Nasiya toʻlovi · ${credit.fullName}`,
+          createdAt: serverTimestamp(),
+          receiptNumber: 'PMT-'+Date.now()
+        });
+      }
       alert("To‘lov saqlandi");
       document.getElementById('closePaymentModal').click();
       loadCredits(); loadTodaySales();

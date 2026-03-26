@@ -722,6 +722,28 @@
     <canvas id="salesChart" height="320"></canvas>
   </div>
 
+
+
+  <!-- Payment Methods Summary -->
+  <div class="top-products">
+    <div class="product-rank-card">
+      <h3><i class="fas fa-money-bill-wave" style="color: #1f8b57;"></i> Toʻlov turlari bo‘yicha tushum</h3>
+      <div class="rank-list">
+        <div class="rank-item"><div class="rank-number">1</div><div class="rank-info"><div class="rank-name">Naqd</div><div class="rank-stats" id="cashSalesCount">0 ta</div></div><div class="rank-value" id="cashSalesTotal">0 so‘m</div></div>
+        <div class="rank-item"><div class="rank-number">2</div><div class="rank-info"><div class="rank-name">Karta</div><div class="rank-stats" id="cardSalesCount">0 ta</div></div><div class="rank-value" id="cardSalesTotal">0 so‘m</div></div>
+        <div class="rank-item"><div class="rank-number">3</div><div class="rank-info"><div class="rank-name">Xolis</div><div class="rank-stats" id="xolisSalesCount">0 ta</div></div><div class="rank-value" id="xolisSalesTotal">0 so‘m</div></div>
+      </div>
+    </div>
+    <div class="product-rank-card">
+      <h3><i class="fas fa-file-invoice-dollar" style="color: #f39c12;"></i> Nasiya toʻlovlari bo‘yicha tushum</h3>
+      <div class="rank-list">
+        <div class="rank-item"><div class="rank-number">1</div><div class="rank-info"><div class="rank-name">Naqd</div><div class="rank-stats" id="creditCashCount">0 ta</div></div><div class="rank-value" id="creditCashTotal">0 so‘m</div></div>
+        <div class="rank-item"><div class="rank-number">2</div><div class="rank-info"><div class="rank-name">Karta</div><div class="rank-stats" id="creditCardCount">0 ta</div></div><div class="rank-value" id="creditCardTotal">0 so‘m</div></div>
+        <div class="rank-item"><div class="rank-number">3</div><div class="rank-info"><div class="rank-name">Xolis</div><div class="rank-stats" id="creditXolisCount">0 ta</div></div><div class="rank-value" id="creditXolisTotal">0 so‘m</div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Top Products -->
   <div class="top-products">
     <div class="product-rank-card">
@@ -796,6 +818,13 @@
   const fmtNumber = (val) => new Intl.NumberFormat('uz-UZ').format(val || 0);
   const parseDate = (d) => d?.toDate ? d.toDate() : (d ? new Date(d) : null);
   const escapeHtml = (s) => String(s || '').replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[m]);
+  const normalizePaymentMethod = (v) => {
+    const x = String(v || '').toLowerCase();
+    if (['cash','naqd'].includes(x)) return 'cash';
+    if (['card','karta'].includes(x)) return 'card';
+    if (['xolis'].includes(x)) return 'xolis';
+    return 'other';
+  };
   const pageState = {
     lowStock: 1,
     products: 1
@@ -936,6 +965,18 @@
     const itemsGrowth = prevItems ? ((totalItems - prevItems) / prevItems) * 100 : (totalItems ? 100 : 0);
     const prevAvg = prevSales.length ? prevRevenue / prevSales.length : 0;
     const avgGrowth = prevAvg ? ((avgCheck - prevAvg) / prevAvg) * 100 : (avgCheck ? 100 : 0);
+
+    const paymentSummary = {
+      sale: { cash: { total: 0, count: 0 }, card: { total: 0, count: 0 }, xolis: { total: 0, count: 0 } },
+      credit_payment: { cash: { total: 0, count: 0 }, card: { total: 0, count: 0 }, xolis: { total: 0, count: 0 } }
+    };
+    filteredSales.forEach(s => {
+      const kind = s.type === 'credit_payment' ? 'credit_payment' : 'sale';
+      const method = normalizePaymentMethod(s.paymentMethod || s.method);
+      if (!paymentSummary[kind][method]) return;
+      paymentSummary[kind][method].total += Number(s.totalUZS || 0);
+      paymentSummary[kind][method].count += 1;
+    });
     
     const dailyMap = new Map();
     filteredSales.forEach(s => {
@@ -951,6 +992,18 @@
     document.getElementById("trendSales").innerHTML = `<i class="fas ${revenueGrowth >= 0 ? 'fa-arrow-up trend-up' : 'fa-arrow-down trend-down'}"></i> <span>${revenueGrowth >= 0 ? '+' : ''}${revenueGrowth.toFixed(1)}%</span>`;
     document.getElementById("trendItems").innerHTML = `<i class="fas ${itemsGrowth >= 0 ? 'fa-arrow-up trend-up' : 'fa-arrow-down trend-down'}"></i> <span>${itemsGrowth >= 0 ? '+' : ''}${itemsGrowth.toFixed(1)}%</span>`;
     document.getElementById("trendAvg").innerHTML = `<i class="fas ${avgGrowth >= 0 ? 'fa-arrow-up trend-up' : 'fa-arrow-down trend-down'}"></i> <span>${avgGrowth >= 0 ? '+' : ''}${avgGrowth.toFixed(1)}%</span>`;
+    document.getElementById("cashSalesTotal").innerHTML = fmtMoney(paymentSummary.sale.cash.total);
+    document.getElementById("cardSalesTotal").innerHTML = fmtMoney(paymentSummary.sale.card.total);
+    document.getElementById("xolisSalesTotal").innerHTML = fmtMoney(paymentSummary.sale.xolis.total);
+    document.getElementById("cashSalesCount").innerHTML = `${fmtNumber(paymentSummary.sale.cash.count)} ta`;
+    document.getElementById("cardSalesCount").innerHTML = `${fmtNumber(paymentSummary.sale.card.count)} ta`;
+    document.getElementById("xolisSalesCount").innerHTML = `${fmtNumber(paymentSummary.sale.xolis.count)} ta`;
+    document.getElementById("creditCashTotal").innerHTML = fmtMoney(paymentSummary.credit_payment.cash.total);
+    document.getElementById("creditCardTotal").innerHTML = fmtMoney(paymentSummary.credit_payment.card.total);
+    document.getElementById("creditXolisTotal").innerHTML = fmtMoney(paymentSummary.credit_payment.xolis.total);
+    document.getElementById("creditCashCount").innerHTML = `${fmtNumber(paymentSummary.credit_payment.cash.count)} ta`;
+    document.getElementById("creditCardCount").innerHTML = `${fmtNumber(paymentSummary.credit_payment.card.count)} ta`;
+    document.getElementById("creditXolisCount").innerHTML = `${fmtNumber(paymentSummary.credit_payment.xolis.count)} ta`;
     
     const groupedData = new Map();
     filteredSales.forEach(s => {
@@ -1025,6 +1078,8 @@
       };
     });
     
+    document.getElementById("productCount").innerHTML = `${products.length} ta`;
+    document.getElementById("creditCount").innerHTML = `${credits.length} ta`;
     const productsPaged = paginate(products, pageState.products);
     pageState.products = productsPaged.page;
     document.getElementById("productsTbody").innerHTML = productsPaged.items.map(p => {
