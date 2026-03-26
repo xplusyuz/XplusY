@@ -351,7 +351,7 @@
             <input type="datetime-local" id="globalDiscEnd" placeholder="Tugash">
           </div>
           <button id="applyGlobalDiscountBtn" class="btn-primary">Umumiy aksiyani qo‘llash</button>
-          <button id="clearGlobalDiscountBtn" class="btn-secondary">Tozalash</button>
+          <button id="clearGlobalDiscountBtn" class="btn-secondary">Muddatidan oldin bekor qilish</button>
         </div>
         <div>
           <h4>⚡ TEZKOR AKSIYALAR</h4>
@@ -452,6 +452,15 @@
     const nowMs = Date.now();
     const start = new Date(discount.startTime).getTime();
     const end = new Date(discount.endTime).getTime();
+
+    if (nowMs > end) {
+      discount.type = 'none';
+      discount.value = 0;
+      discount.startTime = null;
+      discount.endTime = null;
+      return false;
+    }
+
     return nowMs >= start && nowMs <= end;
   }
 
@@ -542,6 +551,7 @@
           <input type="datetime-local" class="item-disc-end" data-idx="${idx}" value="${item.discount?.endTime ? new Date(item.discount.endTime).toISOString().slice(0,16) : ''}" placeholder="Tugash">
         </div>
         <button class="btn-primary apply-item-discount" data-idx="${idx}" style="margin-top:10px; width:100%">✅ Mahsulotga chegirma qo‘llash</button>
+        <button class="btn-danger cancel-item-discount" data-idx="${idx}" style="margin-top:8px; width:100%">❌ Chegirmani bekor qilish</button>
       </div>
     `).join('');
     
@@ -560,6 +570,23 @@
             endTime: end ? new Date(end).toISOString() : null
           };
           renderCartUI();
+          alert("✅ Mahsulot chegirmasi saqlandi");
+        }
+      };
+    });
+
+    document.querySelectorAll('.cancel-item-discount').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.idx);
+        if (cart[idx]) {
+          cart[idx].discount = {
+            type: 'none',
+            value: 0,
+            startTime: null,
+            endTime: null
+          };
+          renderCartUI();
+          alert("❌ Mahsulot chegirmasi bekor qilindi");
         }
       };
     });
@@ -825,7 +852,7 @@
     };
     renderCartUI();
   };
-  document.getElementById('clearGlobalDiscountBtn').onclick = () => { globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null }; renderCartUI(); };
+  document.getElementById('clearGlobalDiscountBtn').onclick = () => { globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null }; renderCartUI(); alert("⛔ Chegirma muddatidan oldin bekor qilindi!"); };
   
   // TEZKOR AKSIYALAR - ISHLAYDI!
   document.querySelectorAll('.quickGlobal').forEach(btn => {
