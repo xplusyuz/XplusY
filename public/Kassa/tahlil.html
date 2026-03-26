@@ -555,6 +555,38 @@
       cursor: pointer;
     }
 
+    .copy-code {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      border: 1px dashed var(--brand);
+      background: rgba(31, 139, 87, 0.08);
+      color: var(--brand-dark);
+      font-weight: 700;
+      cursor: pointer;
+      user-select: all;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .copy-code:hover {
+      background: rgba(31, 139, 87, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .copy-code.copied {
+      background: rgba(46, 204, 113, 0.15);
+      border-color: var(--success);
+      color: var(--brand-dark);
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      letter-spacing: 0.3px;
+    }
+
     @media (max-width: 1200px) {
       .kpi-premium { grid-template-columns: repeat(2, 1fr); }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -660,7 +692,7 @@
     <div class="section-title"><i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> Kam qolgan mahsulotlar <span class="live-badge" id="lowStockCount" style="margin-left: auto;">0 ta</span></div>
     <div class="table-wrapper">
       <table id="lowStockTable">
-        <thead><tr><th>Rasm</th><th>Mahsulot</th><th>Barcode</th><th>Qoldiq</th><th>Chegara</th><th>Holat</th><th>Amal</th></tr></thead>
+        <thead><tr><th>Kod / Barcode</th><th>Tannarx</th><th>Sotuv narxi</th><th>Qoldiq</th><th>Chegara</th><th>Holat</th><th>Amal</th></tr></thead>
         <tbody id="lowStockTbody"><tr><td colspan="7">Yuklanmoqda...</td></tr></tbody>
       </table>
     </div>
@@ -671,7 +703,7 @@
     <div class="section-title"><i class="fas fa-boxes"></i> Mahsulotlar tahlili <span class="live-badge" id="productCount" style="margin-left: auto;">0 ta</span></div>
     <div class="table-wrapper">
       <table id="productsTable">
-        <thead><tr><th>Rasm</th><th>Mahsulot</th><th>Qoldiq</th><th>Sotilgan</th><th>Aylanma</th><th>Foyda</th><th>Holat</th></tr></thead>
+        <thead><tr><th>Kod / Barcode</th><th>Tannarx</th><th>Sotuv narxi</th><th>Qoldiq</th><th>Sotilgan</th><th>Aylanma</th><th>Foyda</th><th>Holat</th></tr></thead>
         <tbody id="productsTbody"><tr><td colspan="7">Yuklanmoqda...</td></tr></tbody>
       </table>
     </div>
@@ -880,7 +912,18 @@
     document.getElementById("lowStockTbody").innerHTML = lowStockProducts.map(p => {
       const stock = p.inventory?.stock ?? p.stock ?? 0;
       const currentThreshold = p.lowThreshold ?? p.inventory?.lowThreshold ?? 5;
-      return `<tr><td><img src="${p.imageUrl || ''}" onerror="this.src='https://placehold.co/60x60?text=OM'" style="width:44px;height:44px;border-radius:12px;object-fit:cover;"></td><td><strong>${escapeHtml(p.name)}</strong></td><td>${escapeHtml(p.barcode || '-')}</td><td><span class="status-badge badge-danger">${fmtNumber(stock)}</span></td><td><input type="number" class="threshold-input" id="thresh_${p.id}" value="${currentThreshold}" step="1"></td><td>${stock <= 0 ? '<span class="status-badge badge-danger">Tugagan</span>' : '<span class="status-badge badge-warning">Kam</span>'}</td><td><button class="btn-save" data-id="${p.id}">Saqlash</button></td></tr>`;
+      const codeValue = p.barcode || p.code || p.id || '-';
+      const costUZS = p.costUZS ?? p.inventory?.costUZS ?? 0;
+      const sellUZS = p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0;
+      return `<tr>
+        <td><button type="button" class="copy-code mono" data-copy="${escapeHtml(codeValue)}" title="Nusxa olish"><i class="fas fa-copy"></i> ${escapeHtml(codeValue)}</button></td>
+        <td>${fmtMoney(costUZS)}</td>
+        <td>${fmtMoney(sellUZS)}</td>
+        <td><span class="status-badge badge-danger">${fmtNumber(stock)}</span></td>
+        <td><input type="number" class="threshold-input" id="thresh_${p.id}" value="${currentThreshold}" step="1"></td>
+        <td>${stock <= 0 ? '<span class="status-badge badge-danger">Tugagan</span>' : '<span class="status-badge badge-warning">Kam</span>'}</td>
+        <td><button class="btn-save" data-id="${p.id}">Saqlash</button></td>
+      </tr>`;
     }).join('');
     
     document.querySelectorAll('.btn-save').forEach(btn => {
@@ -893,11 +936,23 @@
     
     document.getElementById("productsTbody").innerHTML = products.slice(0,30).map(p => {
       const stock = p.inventory?.stock ?? p.stock ?? 0;
-      const stats = productStats.get(p.id) || productStats.get(p.barcode) || { qty: 0, revenue: 0, cost: 0 };
+      const stats = productStats.get(p.id) || productStats.get(p.barcode) || productStats.get(p.code) || { qty: 0, revenue: 0, cost: 0 };
       const profit = stats.revenue - stats.cost;
       const status = stock <= 0 ? 'Tugagan' : (stock <= (p.lowThreshold ?? 5) ? 'Kam' : 'Yetarli');
       const statusClass = stock <= 0 ? 'badge-danger' : (stock <= (p.lowThreshold ?? 5) ? 'badge-warning' : 'badge-success');
-      return `<tr><td><img src="${p.imageUrl || ''}" onerror="this.src='https://placehold.co/60x60?text=OM'" style="width:44px;height:44px;border-radius:12px;object-fit:cover;"></td><td><strong>${escapeHtml(p.name)}</strong><br><small>${escapeHtml(p.code || '')}</small></td><td>${fmtNumber(stock)}</td><td><strong>${fmtNumber(stats.qty)}</strong> dona</td><td>${fmtMoney(stats.revenue)}</td><td class="badge-success">${fmtMoney(profit)}</td><td><span class="status-badge ${statusClass}">${status}</span></td></tr>`;
+      const codeValue = p.barcode || p.code || p.id || '-';
+      const costUZS = p.costUZS ?? p.inventory?.costUZS ?? 0;
+      const sellUZS = p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0;
+      return `<tr>
+        <td><button type="button" class="copy-code mono" data-copy="${escapeHtml(codeValue)}" title="Nusxa olish"><i class="fas fa-copy"></i> ${escapeHtml(codeValue)}</button></td>
+        <td>${fmtMoney(costUZS)}</td>
+        <td>${fmtMoney(sellUZS)}</td>
+        <td>${fmtNumber(stock)}</td>
+        <td><strong>${fmtNumber(stats.qty)}</strong> dona</td>
+        <td>${fmtMoney(stats.revenue)}</td>
+        <td class="badge-success">${fmtMoney(profit)}</td>
+        <td><span class="status-badge ${statusClass}">${status}</span></td>
+      </tr>`;
     }).join('');
     
     document.getElementById("creditsTbody").innerHTML = credits.slice(0,30).map(c => {
@@ -951,6 +1006,37 @@
   document.getElementById("groupBy").onchange = () => applyStats();
   document.getElementById("darkModeToggle").onclick = () => document.body.classList.toggle("dark");
   document.getElementById("refreshBtn").onclick = () => loadAllData();
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.copy-code');
+    if (!btn) return;
+    const textToCopy = btn.getAttribute('data-copy') || btn.textContent.trim();
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const temp = document.createElement('textarea');
+        temp.value = textToCopy;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        document.execCommand('copy');
+        temp.remove();
+      }
+      const oldHtml = btn.innerHTML;
+      btn.classList.add('copied');
+      btn.innerHTML = '<i class="fas fa-check"></i> Nusxalandi';
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = oldHtml;
+      }, 1200);
+    } catch (err) {
+      console.error('Copy error:', err);
+      alert('Nusxa olishda xatolik yuz berdi');
+    }
+  });
   
   const end = new Date();
   const start = new Date(); start.setDate(start.getDate() - 30);
