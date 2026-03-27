@@ -1856,7 +1856,7 @@ function renderOrders(orders){
         ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
       </div>
       <div class="orderActions">
-        <button class="orderActionBtn" type="button" data-order-receipt="${escapeHtml(String(o.id||''))}">🧾 Chek</button>
+        <button class="orderActionBtn" type="button" data-order-receipt="${escapeHtml(String(o.id || o.orderId || ''))}">🧾 Chek</button>
       </div>
     `;
     els.ordersList.appendChild(row);
@@ -4987,5 +4987,42 @@ document.addEventListener("click", async (e)=>{
     }catch(e2){
       toast && toast("Nusxa olishda xatolik", "error");
     }
+  }
+});
+
+
+/* === Buyurtma cheki tugmalari === */
+document.addEventListener("click", (e)=>{
+  const receiptBtn = e.target && e.target.closest ? e.target.closest("[data-order-receipt]") : null;
+  if(receiptBtn){
+    e.preventDefault();
+    const orderId = receiptBtn.getAttribute("data-order-receipt") || "";
+    openOrderReceipt(orderId);
+    return;
+  }
+
+  const closeBtn = e.target && e.target.closest ? e.target.closest("#orderReceiptClose") : null;
+  if(closeBtn){
+    e.preventDefault();
+    closeOrderReceipt();
+    return;
+  }
+
+  const printBtn = e.target && e.target.closest ? e.target.closest("#orderReceiptPrint") : null;
+  if(printBtn){
+    e.preventDefault();
+    printOrderReceipt();
+    return;
+  }
+
+  const overlay = e.target && e.target.closest ? e.target.closest("#orderReceiptModal") : null;
+  if(overlay && e.target === overlay){
+    closeOrderReceipt();
+  }
+});
+
+document.addEventListener("keydown", (e)=>{
+  if(e.key === "Escape" && els.orderReceiptModal && !els.orderReceiptModal.hidden){
+    closeOrderReceipt();
   }
 });
