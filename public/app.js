@@ -81,6 +81,7 @@ function tgOrderStatusHTML(o){
 
 import { auth, db, storage } from "./firebase-config.js";
 import { CARDPAY } from "./cardpay-config.js";
+import { CLICK_CONFIG } from "./click-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -1768,6 +1769,7 @@ function normalizeMoneyItems({ topups=[] }){
       amountUZS: amt,
       status: st,
       note: (t.adminNote||""),
+      provider: (t.provider||""),
       ts,
       id: t.id || ""
     });
@@ -1793,7 +1795,7 @@ function renderMoneyHistory(items){
     const when = fmtDate(it.ts);
     const st = (it.status||"").toString();
 
-    const title = "Balans to‘ldirish";
+    const title = it.provider === 'click' ? "CLICK orqali balans to‘ldirish" : "Balans to‘ldirish";
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
@@ -3646,6 +3648,45 @@ async function watchUserDoc(uid){
 }catch(e){}
 }
 
+
+async function startClickTopup(prefillAmount){
+  if(!currentUser){ toast("Avval kirish qiling."); return; }
+  if(!CLICK_CONFIG || CLICK_CONFIG.enabled !== true){
+    toast("Click integratsiyasi sozlanmagan.", "error");
+    return;
+  }
+  const amtEl = document.getElementById('topupAmount');
+  const rawAmount = prefillAmount != null ? prefillAmount : Number(String(amtEl?.value||'').replace(/[^0-9]/g,''));
+  const amountUZS = Math.round(Number(rawAmount||0));
+  const minAmount = Number(CLICK_CONFIG.minAmountUZS || 1000) || 1000;
+  if(!amountUZS || amountUZS < minAmount){
+    toast(`Minimal: ${minAmount.toLocaleString('uz-UZ')} so'm`);
+    amtEl?.focus();
+    return;
+  }
+
+  try{
+    const token = await currentUser.getIdToken();
+    const returnUrl = window.location.origin + (CLICK_CONFIG.returnPath || '/index.html#profile');
+    const resp = await fetch('/api/click-start', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ amountUZS, returnUrl })
+    });
+    const out = await resp.json().catch(()=>({}));
+    if(!resp.ok || !out.ok || !out.payment_url){
+      throw new Error(out?.error || 'click_start_failed');
+    }
+    toast("Click sahifasi ochilmoqda...");
+    window.location.href = out.payment_url;
+  }catch(e){
+    toast("Click to'lovini boshlashda xatolik.", 'error');
+  }
+}
+
 // ===== Manual Card Topup (Admin approve) =====
 function openTopupModal(prefillAmount){
   const modal = document.getElementById('topupModal');
@@ -4464,7 +4505,7 @@ document.addEventListener('click', (e)=>{
   const t = e.target;
   if(t && (t.id==='topupBtn' || t.closest('#topupBtn'))){
     e.preventDefault();
-    openTopupModal();
+    startClickTopup();
   }
 });
 
