@@ -318,6 +318,10 @@ const els = {
   ordersToggle: document.getElementById("ordersToggle"),
   ordersBody: document.getElementById("ordersBody"),
   ordersChevron: document.getElementById("ordersChevron"),
+  orderReceiptModal: document.getElementById("orderReceiptModal"),
+  orderReceiptContent: document.getElementById("orderReceiptContent"),
+  orderReceiptClose: document.getElementById("orderReceiptClose"),
+  orderReceiptPrint: document.getElementById("orderReceiptPrint"),
 
   // money history (profile page)
   moneyHistoryToggle: document.getElementById("moneyHistoryToggle"),
@@ -1721,6 +1725,111 @@ function providerLabel(p){
   return m[v] || (v ? v : "");
 }
 
+
+function receiptItemName(it){
+  return String(it?.name || it?.title || it?.productName || "Mahsulot");
+}
+
+function buildOrderReceiptHTML(order){
+  const oid = String(order?.orderId || order?.id || "");
+  const shortId = oid ? oid.slice(-6) : "—";
+  const total = Number(order?.totalUZS || 0) || 0;
+  const created = fmtDate(order?.createdAt) || "—";
+  const status = orderStatusLabel(order?.status || "") || "—";
+  const provider = providerLabel(order?.provider || "") || (order?.provider || "—");
+  const customer = order?.userName || [order?.firstName, order?.lastName].filter(Boolean).join(" ") || "—";
+  const phone = order?.userPhone || order?.shipping?.phone || "—";
+  const addr = order?.shipping?.addressText || [order?.shipping?.region, order?.shipping?.district, order?.shipping?.post, order?.shipping?.address].filter(Boolean).join(' / ') || [order?.region, order?.district, order?.post].filter(Boolean).join(' / ') || "—";
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const itemsHtml = items.length ? items.map((it)=>{
+    const qty = Number(it?.qty || 1) || 1;
+    const price = Number(it?.priceUZS || it?.price || 0) || 0;
+    const line = price * qty;
+    const variant = [it?.color, it?.size].filter(Boolean).join(' / ');
+    return `
+      <div class="orderReceiptItem">
+        <div>
+          <div class="orderReceiptItemName">${escapeHtml(receiptItemName(it))}</div>
+          <div class="orderReceiptItemMeta">${escapeHtml([variant, `${qty} ta`].filter(Boolean).join(' • '))}</div>
+        </div>
+        <div><b>${escapeHtml(moneyUZS(line))}</b></div>
+      </div>`;
+  }).join('') : `<div class="orderReceiptMuted">Mahsulotlar topilmadi.</div>`;
+
+  return `
+    <div class="orderReceiptSheet">
+      <div class="orderReceiptHead">
+        <div>
+          <div class="orderReceiptBrand">OrzuMall</div>
+          <div class="orderReceiptMuted">Buyurtma cheki</div>
+          <div class="orderReceiptStatus"><span class="orderPill ${orderStatusClass(order?.status || '')}">${escapeHtml(status)}</span></div>
+        </div>
+        <div style="text-align:right">
+          <div><b>#${escapeHtml(shortId)}</b></div>
+          <div class="orderReceiptMuted">${escapeHtml(created)}</div>
+        </div>
+      </div>
+
+      <div class="orderReceiptGrid">
+        <div class="orderReceiptBox"><div class="k">Mijoz</div><div class="v">${escapeHtml(customer)}</div></div>
+        <div class="orderReceiptBox"><div class="k">Telefon</div><div class="v">${escapeHtml(phone)}</div></div>
+        <div class="orderReceiptBox"><div class="k">To‘lov turi</div><div class="v">${escapeHtml(provider)}</div></div>
+        <div class="orderReceiptBox"><div class="k">Manzil</div><div class="v">${escapeHtml(addr)}</div></div>
+      </div>
+
+      <div class="orderReceiptItems">${itemsHtml}</div>
+
+      <div class="orderReceiptTotals">
+        <div class="row total"><span>Jami</span><span>${escapeHtml(moneyUZS(total))}</span></div>
+      </div>
+
+      <div class="orderReceiptFooter">Savolingiz bo‘lsa buyurtma ID sini ko‘rsating: ${escapeHtml(oid || shortId)}</div>
+    </div>`;
+}
+
+function openOrderReceipt(orderId){
+  const order = (ordersCache || []).find(o => String(o?.id || o?.orderId || '') === String(orderId || ''));
+  if(!order){ toast("Buyurtma topilmadi.", "error"); return; }
+  if(els.orderReceiptContent) els.orderReceiptContent.innerHTML = buildOrderReceiptHTML(order);
+  if(els.orderReceiptModal){
+    els.orderReceiptModal.hidden = false;
+    try{ els.orderReceiptModal.classList.add('isOpen'); }catch(_){ }
+    try{ document.body.classList.add('modalOpen'); }catch(_){ }
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeOrderReceipt(){
+  if(els.orderReceiptModal){
+    try{ els.orderReceiptModal.classList.remove('isOpen'); }catch(_){ }
+    els.orderReceiptModal.hidden = true;
+  }
+  try{ document.body.classList.remove('modalOpen'); }catch(_){ }
+  document.body.style.overflow = '';
+}
+
+function printOrderReceipt(){
+  const html = els.orderReceiptContent?.innerHTML || '';
+  if(!html.trim()){ toast("Chek topilmadi.", "error"); return; }
+  const w = window.open('', '_blank');
+  if(!w){ toast("Brauzer oynani blokladi.", 'error'); return; }
+  w.document.open();
+  w.document.write(`<!doctype html><html lang="uz"><head><meta charset="utf-8"><title>Buyurtma cheki</title><style>
+    body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:20px;}
+    .orderReceiptSheet{max-width:780px;margin:0 auto;border:1px solid #ddd;border-radius:18px;padding:18px;}
+    .orderReceiptHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;}
+    .orderReceiptBrand{font-size:22px;font-weight:700}.orderReceiptMuted{color:#666;font-size:12px}
+    .orderReceiptGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.orderReceiptBox{border:1px solid #ddd;border-radius:12px;padding:10px 12px}
+    .orderReceiptBox .k{color:#666;font-size:12px;margin-bottom:4px}.orderReceiptBox .v{font-weight:700}
+    .orderReceiptItems{border-top:1px dashed #bbb;border-bottom:1px dashed #bbb;padding:10px 0;display:flex;flex-direction:column;gap:10px}
+    .orderReceiptItem{display:flex;justify-content:space-between;gap:12px}.orderReceiptItemName{font-weight:700}.orderReceiptItemMeta{color:#666;font-size:12px;margin-top:4px}
+    .orderReceiptTotals{margin-top:12px}.orderReceiptTotals .row{display:flex;justify-content:space-between}.orderReceiptTotals .total{font-size:20px;font-weight:700}
+    .orderPill{display:inline-block;border:1px solid #ddd;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
+    @media print{body{padding:0}.orderReceiptSheet{border:none;border-radius:0;padding:0}.orderReceiptGrid{grid-template-columns:1fr 1fr}}
+  </style></head><body>${html}<script>setTimeout(()=>{window.focus();window.print();},150)<\/script></body></html>`);
+  w.document.close();
+}
+
 function renderOrders(orders){
   if(!els.ordersList || !els.ordersEmpty) return;
   const arr = Array.isArray(orders) ? orders : [];
@@ -1745,6 +1854,9 @@ function renderOrders(orders){
         ${status ? `<span class="orderPill ${orderStatusClass(status)}">${escapeHtml(orderStatusLabel(status))}</span>` : ""}
         ${provider ? `<span class="orderPill">${escapeHtml(providerLabel(provider))}</span>` : ""}
         ${when ? `<span class="orderPill">${escapeHtml(when)}</span>` : ""}
+      </div>
+      <div class="orderActions">
+        <button class="orderActionBtn" type="button" data-order-receipt="${escapeHtml(String(o.id||''))}">🧾 Chek</button>
       </div>
     `;
     els.ordersList.appendChild(row);
