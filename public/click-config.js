@@ -5,5 +5,9 @@ export const CLICK_CONFIG = {
   merchantId: "45406",
   merchantUserId: "80786",
   minAmountUZS: 1000,
-  returnPath: "/index.html#profile"
+  returnPath: "/index.html#profile",
+  // /api yo'li ishlamasa direct function ishlatiladi
+  startEndpoint: "/.netlify/functions/click-start",
+  prepareUrl: "https://xplusy.netlify.app/.netlify/functions/click-prepare",
+  completeUrl: "https://xplusy.netlify.app/.netlify/functions/click-complete"
 };

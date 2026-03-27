@@ -3668,7 +3668,8 @@ async function startClickTopup(prefillAmount){
   try{
     const token = await currentUser.getIdToken();
     const returnUrl = window.location.origin + (CLICK_CONFIG.returnPath || '/index.html#profile');
-    const resp = await fetch('/api/click-start', {
+    const clickStartEndpoint = (CLICK_CONFIG && CLICK_CONFIG.startEndpoint) || '/.netlify/functions/click-start';
+    const resp = await fetch(clickStartEndpoint, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
