@@ -167,7 +167,7 @@
     /* KPI Grid Premium */
     .kpi-premium {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 24px;
       margin-bottom: 32px;
     }
@@ -671,7 +671,9 @@
     <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-chart-line"></i></div><div class="kpi-value" id="totalRevenue">0 so‘m</div><div class="kpi-label">Umumiy savdo</div></div>
     <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-coins"></i></div><div class="kpi-value" id="totalProfit">0 so‘m</div><div class="kpi-label">Sof foyda</div></div>
     <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-hand-holding-usd"></i></div><div class="kpi-value" id="totalCredit">0 so‘m</div><div class="kpi-label">Nasiya qoldig‘i</div></div>
-    <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-warehouse"></i></div><div class="kpi-value" id="inventoryValue">0 so‘m</div><div class="kpi-label">Ombor qiymati</div></div>
+    <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-warehouse"></i></div><div class="kpi-value" id="inventoryValue">0 so‘m</div><div class="kpi-label">Ombor tannarx qiymati</div></div>
+    <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-tags"></i></div><div class="kpi-value" id="inventorySellValue">0 so‘m</div><div class="kpi-label">Ombor sotuv qiymati</div></div>
+    <div class="kpi-item"><div class="kpi-icon"><i class="fas fa-sack-dollar"></i></div><div class="kpi-value" id="inventoryPotentialProfit">0 so‘m</div><div class="kpi-label">Potensial foyda</div></div>
   </div>
 
   <!-- Stats Hero Section - Premium Sales Statistics -->
@@ -774,6 +776,17 @@
     </div>
   </div>
 
+  <div class="top-products">
+    <div class="product-rank-card">
+      <h3><i class="fas fa-triangle-exclamation" style="color: #e74c3c;"></i> Zararli mahsulotlar</h3>
+      <div class="rank-list" id="lossProductsList"></div>
+    </div>
+    <div class="product-rank-card">
+      <h3><i class="fas fa-box-open" style="color: #f39c12;"></i> Pul yotib qolgan mahsulotlar</h3>
+      <div class="rank-list" id="deadStockList"></div>
+    </div>
+  </div>
+
   <!-- Low Stock Section -->
   <div class="section-card">
     <div class="section-title"><i class="fas fa-exclamation-triangle" style="color: var(--warning);"></i> Kam qolgan mahsulotlar <span class="live-badge" id="lowStockCount" style="margin-left: auto;">0 ta</span></div>
@@ -792,7 +805,7 @@
     <div class="table-wrapper">
       <table id="productsTable">
         <thead><tr><th>Kod / Barcode</th><th>Tannarx</th><th>Sotuv narxi</th><th>Qoldiq</th><th>Sotilgan</th><th>Aylanma</th><th>Foyda</th><th>Holat</th></tr></thead>
-        <tbody id="productsTbody"><tr><td colspan="7">Yuklanmoqda...</td></tr></tbody>
+        <tbody id="productsTbody"><tr><td colspan="8">Yuklanmoqda...</td></tr></tbody>
       </table>
     </div>
     <div class="pager" id="productsPager"></div>
@@ -1123,12 +1136,87 @@
     document.getElementById("repeatCustomersCount").innerHTML = fmtNumber(customerStats.filter(c => c.count >= 2).length);
     document.getElementById("bestCustomerTotal").innerHTML = fmtMoney(topCustomers[0]?.total || 0);
     
-    const totalCreditOpen = credits.filter(c => c.status !== 'closed').reduce((s, c) => s + ((c.totalUZS || 0) - (c.paidUZS || 0)), 0);
-    const inventoryValue = products.reduce((sum, p) => sum + ((p.inventory?.stock ?? p.stock ?? 0) * (p.costUZS ?? p.inventory?.costUZS ?? 0)), 0);
+    const totalCreditOpen = credits
+      .filter(c => c.status !== 'closed')
+      .reduce((s, c) => s + (Number(c.totalUZS || 0) - Number(c.paidUZS || 0)), 0);
+
+    const inventoryStats = products.reduce((acc, p) => {
+      const stock = Number(p.inventory?.stock ?? p.stock ?? 0);
+      const cost = Number(p.costUZS ?? p.inventory?.costUZS ?? 0);
+      const price = Number(p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0);
+      const soldQty = Number((productStats.get(p.id) || productStats.get(p.barcode) || productStats.get(p.code) || { qty: 0 }).qty || 0);
+      const name = p.name || p.title || p.code || p.barcode || p.id || 'Nomsiz';
+
+      const totalCostValue = stock * cost;
+      const totalSellValue = stock * price;
+      const potentialProfit = totalSellValue - totalCostValue;
+
+      acc.totalCost += totalCostValue;
+      acc.totalSell += totalSellValue;
+      acc.totalProfit += potentialProfit;
+
+      if (stock > 0 && price > 0 && cost > 0 && price < cost) {
+        acc.lossProducts.push({
+          name,
+          stock,
+          cost,
+          price,
+          lossPerItem: cost - price,
+          totalLoss: (cost - price) * stock
+        });
+      }
+
+      if (stock > 0 && soldQty === 0) {
+        acc.deadStock.push({
+          name,
+          stock,
+          invested: totalCostValue
+        });
+      }
+
+      return acc;
+    }, {
+      totalCost: 0,
+      totalSell: 0,
+      totalProfit: 0,
+      lossProducts: [],
+      deadStock: []
+    });
+
     document.getElementById("totalRevenue").innerHTML = fmtMoney(totalRevenue);
     document.getElementById("totalProfit").innerHTML = fmtMoney(totalProfit);
     document.getElementById("totalCredit").innerHTML = fmtMoney(totalCreditOpen);
-    document.getElementById("inventoryValue").innerHTML = fmtMoney(inventoryValue);
+    document.getElementById("inventoryValue").innerHTML = fmtMoney(inventoryStats.totalCost);
+    document.getElementById("inventorySellValue").innerHTML = fmtMoney(inventoryStats.totalSell);
+    document.getElementById("inventoryPotentialProfit").innerHTML = fmtMoney(inventoryStats.totalProfit);
+
+    const lossProducts = inventoryStats.lossProducts
+      .sort((a, b) => b.totalLoss - a.totalLoss)
+      .slice(0, 8);
+    document.getElementById("lossProductsList").innerHTML = lossProducts.map((p, idx) => `
+      <div class="rank-item">
+        <div class="rank-number">${idx + 1}</div>
+        <div class="rank-info">
+          <div class="rank-name">${escapeHtml(p.name)}</div>
+          <div class="rank-stats">Stock: ${fmtNumber(p.stock)} dona · Minus: ${fmtMoney(p.lossPerItem)} / dona</div>
+        </div>
+        <div class="rank-value">-${fmtMoney(p.totalLoss).replace(' so‘m','')} so‘m</div>
+      </div>
+    `).join('') || '<div style="padding: 20px; text-align: center;">Zararli mahsulot yo‘q</div>';
+
+    const deadStock = inventoryStats.deadStock
+      .sort((a, b) => b.invested - a.invested)
+      .slice(0, 8);
+    document.getElementById("deadStockList").innerHTML = deadStock.map((p, idx) => `
+      <div class="rank-item">
+        <div class="rank-number">${idx + 1}</div>
+        <div class="rank-info">
+          <div class="rank-name">${escapeHtml(p.name)}</div>
+          <div class="rank-stats">Sotilmagan stock: ${fmtNumber(p.stock)} dona</div>
+        </div>
+        <div class="rank-value">${fmtMoney(p.invested)}</div>
+      </div>
+    `).join('') || '<div style="padding: 20px; text-align: center;">Pul yotib qolgan mahsulot yo‘q</div>';
     
     const lowStockProducts = products.filter(p => {
       const stock = p.inventory?.stock ?? p.stock ?? 0;
@@ -1173,8 +1261,9 @@
       const stock = p.inventory?.stock ?? p.stock ?? 0;
       const stats = productStats.get(p.id) || productStats.get(p.barcode) || productStats.get(p.code) || { qty: 0, revenue: 0, cost: 0 };
       const profit = stats.revenue - stats.cost;
-      const status = stock <= 0 ? 'Tugagan' : (stock <= (p.lowThreshold ?? 5) ? 'Kam' : 'Yetarli');
-      const statusClass = stock <= 0 ? 'badge-danger' : (stock <= (p.lowThreshold ?? 5) ? 'badge-warning' : 'badge-success');
+      const threshold = Number(p.lowThreshold ?? p.inventory?.lowThreshold ?? 5);
+      const status = stock <= 0 ? 'Tugagan' : (stock <= threshold ? 'Kam' : 'Yetarli');
+      const statusClass = stock <= 0 ? 'badge-danger' : (stock <= threshold ? 'badge-warning' : 'badge-success');
       const codeValue = p.barcode || p.code || p.id || '-';
       const costUZS = p.costUZS ?? p.inventory?.costUZS ?? 0;
       const sellUZS = p.priceUZS ?? p.sellPriceUZS ?? p.inventory?.sellPriceUZS ?? 0;
