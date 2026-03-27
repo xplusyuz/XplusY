@@ -1203,7 +1203,7 @@ function getProductType(p){
 function renderProductTypeBadge(p){
   const t = getProductType(p);
   if(!t) return "";
-  if(t==="original") return `<span class="authBadge original" title="Original"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Original</span>`;
+  if(t==="original") return `<span class="authBadge original" title="Original"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> Asl mahsulot</span>`;
   if(t==="oem") return `<span class="authBadge oem" title="OEM"><i class="fa-solid fa-industry" aria-hidden="true"></i> OEM</span>`;
   if(t==="replica") return `<span class="authBadge replica" title="Nusxa"><i class="fa-solid fa-copy" aria-hidden="true"></i> Nusxa</span>`;
   return `<span class="authBadge other" title="Mahsulot turi"><i class="fa-solid fa-tag" aria-hidden="true"></i> ${escapeHtml(t)}</span>`;
@@ -1795,13 +1795,13 @@ function renderMoneyHistory(items){
     const when = fmtDate(it.ts);
     const st = (it.status||"").toString();
 
-    const title = it.provider === 'click' ? "CLICK orqali balans to‘ldirish" : "Balans to‘ldirish";
+    const title = it.provider === 'click' ? "Click orqali balans to‘ldirish" : "Balans to‘ldirish";
 
     const left = document.createElement("div");
     left.style.minWidth = "0";
     left.innerHTML = `
       <div class="orderId">${title}</div>
-      <div class="orderMeta">${when ? when : ""}${st ? " • "+statusLabel(st, it.kind) : ""}</div>
+      <div class="orderMeta">${when ? `<span class="orderPill">${when}</span>` : ""}${st ? ` <span class="orderPill ${moneyHistoryStatusClass(st)}">${statusLabel(st, it.kind)}</span>` : ""}</div>
       ${it.note ? `<div class="orderMeta" style="margin-top:6px"><b>Izoh:</b> ${escapeHtml(it.note)}</div>` : ""}
     `.trim();
 
@@ -1820,6 +1820,12 @@ function renderMoneyHistory(items){
 
     els.moneyHistoryList.appendChild(row);
   }
+}
+
+
+function moneyHistoryStatusClass(st){
+  const v = (st||"").toString().toLowerCase();
+  return (v === "approved" || v === "success") ? "status-approved" : "status-rejected";
 }
 
 function statusLabel(st, kind){
