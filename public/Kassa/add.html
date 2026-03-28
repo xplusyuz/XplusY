@@ -359,6 +359,23 @@
       border-left-color: #c74a4a;
     }
 
+    .status.warning {
+      background: #fff8e7;
+      border-left-color: #d9a441;
+    }
+
+    .helper-box {
+      margin-top: 18px;
+      padding: 14px 18px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid #d7e7dd;
+      color: #476b59;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
     @media (max-width: 900px) {
       .grid-2col { grid-template-columns: 1fr; }
       .row-3 { grid-template-columns: 1fr; }
@@ -432,6 +449,10 @@
           <button class="btn btn-danger" id="clearFormBtn">🗑️ Tozalash</button>
         </div>
         <div id="formStatus" class="status">✅ Tayyor. Kod format: aa0001</div>
+        <div class="helper-box">
+          ⚡ <b>Keyingi kod</b> endi bazadagi eng katta koddan keyin keladi.
+          <br>🛡️ Tasodifan eski mahsulot ustiga yozib yubormaslik uchun, mavjud kod saqlanayotganda alohida tasdiq so‘raladi.
+        </div>
       </div>
 
       <div class="card">
@@ -505,8 +526,43 @@
   const selectAllCheckbox = document.getElementById('selectAllCheckbox');
 
   let allProducts = []; // { id, code, priceUZS, costUZS, stock }
+  let editingExistingProduct = false;
 
   const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(Math.round(n || 0));
+
+  function parseCodeParts(code) {
+    const match = String(code || '').trim().toLowerCase().match(/^([a-z]{2})(\d{4})$/);
+    if (!match) return null;
+    return { prefix: match[1], number: Number(match[2]) };
+  }
+
+  function compareCodes(a, b) {
+    const pa = parseCodeParts(a);
+    const pb = parseCodeParts(b);
+    if (!pa && !pb) return 0;
+    if (!pa) return -1;
+    if (!pb) return 1;
+    if (pa.prefix !== pb.prefix) return pa.prefix.localeCompare(pb.prefix);
+    return pa.number - pb.number;
+  }
+
+  async function getHighestExistingCode() {
+    const snap = await getDocs(query(collection(db, 'products'), orderBy('code', 'desc'), limit(1)));
+    if (!snap.empty) {
+      const topCode = String(snap.docs[0].data().code || snap.docs[0].id || '').toLowerCase();
+      if (parseCodeParts(topCode)) return topCode;
+    }
+
+    const recentSnap = await getDocs(query(collection(db, 'products'), limit(300)));
+    let maxCode = '';
+    recentSnap.forEach(docSnap => {
+      const code = String(docSnap.data().code || docSnap.id || '').toLowerCase();
+      if (parseCodeParts(code) && (!maxCode || compareCodes(code, maxCode) > 0)) {
+        maxCode = code;
+      }
+    });
+    return maxCode || null;
+  }
 
   // Sticker yaratish funksiyasi
   function renderStickerElement(code, price) {
@@ -548,14 +604,34 @@
   async function getNextCode() {
     const counterRef = doc(db, 'meta', 'barcode_counter');
     return await runTransaction(db, async (tx) => {
-      const snap = await tx.get(counterRef);
+      const counterSnap = await tx.get(counterRef);
       let prefix = 'aa', number = 0;
-      if (snap.exists()) {
-        prefix = snap.data().prefix || 'aa';
-        number = snap.data().number || 0;
+
+      if (counterSnap.exists()) {
+        prefix = counterSnap.data().prefix || 'aa';
+        number = counterSnap.data().number || 0;
       }
+
+      const highestExistingCode = await getHighestExistingCode();
+      if (highestExistingCode) {
+        const parsed = parseCodeParts(highestExistingCode);
+        if (parsed) {
+          const existingPrefix = parsed.prefix;
+          const existingNumber = parsed.number;
+          if (existingPrefix > prefix || (existingPrefix === prefix && existingNumber > number)) {
+            prefix = existingPrefix;
+            number = existingNumber;
+          }
+        }
+      }
+
       const next = nextCodeFrom(prefix, number);
-      tx.set(counterRef, { prefix: next.prefix, number: next.number, updatedAt: serverTimestamp() }, { merge: true });
+      tx.set(counterRef, {
+        prefix: next.prefix,
+        number: next.number,
+        lastCode: next.code,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       return next.code;
     });
   }
@@ -655,21 +731,42 @@
     try {
       const ref = doc(db, 'products', code);
       const existing = await getDoc(ref);
+
+      if (existing.exists() && !editingExistingProduct) {
+        const ok = window.confirm(`${code} kodi bazada bor. Shu mahsulotni yangilamoqchimisiz?\n\nOK = yangilash\nCancel = bekor qilish`);
+        if (!ok) {
+          setFormStatus('⚠️ Mavjud kod tanlandi. Ustiga yozmaslik uchun saqlash bekor qilindi.', false, 'warning');
+          return;
+        }
+      }
+
       await setDoc(ref, {
         code,
         costUZS: cost,
         priceUZS: price,
         stock,
-        createdAt: existing.exists() ? existing.data().createdAt || serverTimestamp() : serverTimestamp(),
+        createdAt: existing.exists() ? (existing.data().createdAt || serverTimestamp()) : serverTimestamp(),
         updatedAt: serverTimestamp()
       }, { merge: true });
-      setFormStatus(`✅ Mahsulot ${code} saqlandi!`);
+
+      editingExistingProduct = false;
+      setFormStatus(`✅ Mahsulot ${code} saqlandi! Keyingisi uchun avtomatik kod olishingiz mumkin.`);
       await loadProducts();
-      productCode.value = '';
+
+      try {
+        const next = await getNextCode();
+        productCode.value = next;
+        setFormStatus(`✅ ${code} saqlandi. Yangi mahsulot uchun kod tayyor: ${next}`);
+      } catch (_) {
+        productCode.value = '';
+      }
+
       costPrice.value = 0;
       salePrice.value = 0;
       stockQty.value = 1;
       updateSinglePreview();
+      productCode.focus();
+      productCode.select();
     } catch (err) {
       setFormStatus('Xato: ' + err.message, true);
     }
@@ -686,19 +783,21 @@
       costPrice.value = data.costUZS || 0;
       salePrice.value = data.priceUZS || 0;
       stockQty.value = data.stock || 0;
-      setFormStatus(`📦 Mahsulot topildi: ${code}`);
+      editingExistingProduct = true;
+      setFormStatus(`📦 Mahsulot topildi: ${code}. Endi saqlasangiz shu mahsulot yangilanadi.`);
       updateSinglePreview();
     } catch (err) {
       setFormStatus('Xatolik: ' + err.message, true);
     }
   }
 
-  function setFormStatus(msg, isError = false) {
+  function setFormStatus(msg, isError = false, type = '') {
     formStatus.innerText = msg;
-    formStatus.className = 'status' + (isError ? ' error' : '');
+    formStatus.className = 'status' + (isError ? ' error' : '') + (type ? ` ${type}` : '');
   }
 
   function clearForm() {
+    editingExistingProduct = false;
     productCode.value = '';
     costPrice.value = 0;
     salePrice.value = 0;
@@ -896,6 +995,7 @@
   document.getElementById('autoCodeBtn').onclick = async () => {
     try {
       const next = await getNextCode();
+      editingExistingProduct = false;
       productCode.value = next;
       updateSinglePreview();
       setFormStatus(`🔖 Yangi kod: ${next}`);
@@ -932,8 +1032,15 @@
   
   window.addEventListener('load', async () => {
     await loadProducts();
+    try {
+      const next = await getNextCode();
+      editingExistingProduct = false;
+      productCode.value = next;
+      setFormStatus(`✅ Tayyor. Keyingi bo‘sh kod: ${next}`);
+    } catch (_) {}
     updateSinglePreview();
     productCode.focus();
+    productCode.select();
   });
 </script>
 </body>
