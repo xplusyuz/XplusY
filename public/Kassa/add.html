@@ -385,30 +385,23 @@
   }
 
   async function getNextCode() {
-    const counterRef = doc(db, 'meta', 'barcode_counter');
-    return await runTransaction(db, async (tx) => {
-      const counterSnap = await tx.get(counterRef);
-      let prefix = 'aa', number = 0;
-      if (counterSnap.exists()) {
-        prefix = counterSnap.data().prefix || 'aa';
-        number = counterSnap.data().number || 0;
-      }
-      const highestExistingCode = await getHighestExistingCode();
-      if (highestExistingCode) {
-        const parsed = parseCodeParts(highestExistingCode);
-        if (parsed) {
-          const existingPrefix = parsed.prefix;
-          const existingNumber = parsed.number;
-          if (existingPrefix > prefix || (existingPrefix === prefix && existingNumber > number)) {
-            prefix = existingPrefix;
-            number = existingNumber;
-          }
-        }
-      }
-      const next = nextCodeFrom(prefix, number);
-      tx.set(counterRef, { prefix: next.prefix, number: next.number, lastCode: next.code, updatedAt: serverTimestamp() }, { merge: true });
-      return next.code;
-    });
+    const highestExistingCode = await getHighestExistingCode();
+    const parsed = parseCodeParts(highestExistingCode || 'aa0000') || { prefix: 'aa', number: 0 };
+    const next = nextCodeFrom(parsed.prefix, parsed.number);
+
+    try {
+      const counterRef = doc(db, 'meta', 'barcode_counter');
+      await setDoc(counterRef, {
+        prefix: next.prefix,
+        number: next.number,
+        lastCode: next.code,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.warn('Counter sync error:', e);
+    }
+
+    return next.code;
   }
 
   function filterByCode(list, keyword) {
