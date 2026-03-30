@@ -25,7 +25,7 @@
     }
 
     .app-container {
-      max-width: 1200px;
+      max-width: 600px;
       margin: 0 auto;
     }
 
@@ -537,12 +537,6 @@
       color: #6e8b7a;
     }
 
-    /* Barcode input highlight */
-    .barcode-focused {
-      border: 2px solid #1b784b;
-      box-shadow: 0 0 0 2px rgba(27, 120, 75, 0.2);
-    }
-
     @media (max-width: 480px) {
       body {
         padding: 8px;
@@ -656,7 +650,7 @@
   </div>
 </div>
 
-<!-- MODALS (qisqartirildi) -->
+<!-- MODALS -->
 <div id="discountModal" class="modal">
   <div class="modal-card">
     <div class="modal-header">
@@ -787,7 +781,6 @@
   let allCustomers = [];
   let selectedCreditId = null;
   let html5QrCode = null;
-  let isBarcodeFocused = true; // Barcode input fokusda ekanligini kuzatish
   
   function isActive(d) { 
     if(!d || d.type==='none' || d.value<=0) return false; 
@@ -796,21 +789,35 @@
     return now >= new Date(d.startTime).getTime() && now <= new Date(d.endTime).getTime(); 
   }
   
-  function calcItemBase(i){ return (i.priceUZS||0)*(i.qty||0); }
-  function calcItemDisc(base, d){ if(!isActive(d)) return 0; return d.type==='percent' ? base*d.value/100 : d.type==='fixed' ? Math.min(base, d.value) : 0; }
+  function calcItemBase(i){ 
+    return (Number(i.priceUZS) || 0) * (Number(i.qty) || 0); 
+  }
+  
+  function calcItemDisc(base, d){ 
+    if(!isActive(d)) return 0; 
+    if(d.type==='percent') return base * (Number(d.value) || 0) / 100;
+    if(d.type==='fixed') return Math.min(base, Number(d.value) || 0);
+    return 0; 
+  }
   
   function recalc(){ 
     let sub = cart.reduce((s,i)=>s+calcItemBase(i),0); 
     let itemDisc = cart.reduce((s,i)=>s+calcItemDisc(calcItemBase(i), i.discount),0); 
     let after = sub - itemDisc; 
     let globalAmt = 0; 
-    if(isActive(globalDiscount)) globalAmt = globalDiscount.type==='percent' ? after*globalDiscount.value/100 : globalDiscount.type==='fixed' ? Math.min(after, globalDiscount.value) : 0; 
+    if(isActive(globalDiscount)) {
+      if(globalDiscount.type==='percent') globalAmt = after * (Number(globalDiscount.value) || 0) / 100;
+      if(globalDiscount.type==='fixed') globalAmt = Math.min(after, Number(globalDiscount.value) || 0);
+    }
     let totalDisc = itemDisc + globalAmt; 
     let final = Math.max(0, sub - totalDisc); 
     return {sub, itemDisc, globalAmt, totalDisc, final}; 
   }
   
-  function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>]/g, m=> m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
+  function escapeHtml(s){ 
+    if(!s) return ''; 
+    return String(s).replace(/[&<>]/g, m=> m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); 
+  }
   
   async function loadAllCustomers() {
     try {
@@ -920,8 +927,8 @@
              (phone && custPhone.includes(phone));
     });
     
-    const totalDebt = customerCredits.reduce((sum, c) => sum + ((c.totalUZS||0) - (c.paidUZS||0)), 0);
-    const activeCredits = customerCredits.filter(c => ((c.totalUZS||0) - (c.paidUZS||0)) > 0).length;
+    const totalDebt = customerCredits.reduce((sum, c) => sum + ((Number(c.totalUZS)||0) - (Number(c.paidUZS)||0)), 0);
+    const activeCredits = customerCredits.filter(c => ((Number(c.totalUZS)||0) - (Number(c.paidUZS)||0)) > 0).length;
     
     if(totalDebt > 0) {
       summaryDiv.innerHTML = `
@@ -952,17 +959,22 @@
     if(!code) return;
     let p = await fetchProduct(code);
     if(!p){ alert("Mahsulot topilmadi: "+code); return; }
-    let stock = Number(p.stock??999), price = Number(p.priceUZS??p.price??0);
+    let stock = Number(p.stock) || 999;
+    let price = Number(p.priceUZS) || Number(p.price) || 0;
     let exist = cart.find(i=>i.id===p.id);
     if(exist){ 
       if(exist.qty+1 > stock){ alert("Qoldiq yetarli emas"); return; } 
       exist.qty++; 
     } else { 
       cart.unshift({
-        id:p.id, name:p.name||p.title, priceUZS:price,
-        imageUrl:p.imageUrl||p.image||'', qty:1, 
-        discount:{type:'none', value:0, startTime:null, endTime:null},
-        stock, costUZS:Number(p.costUZS||0)
+        id: p.id,
+        name: p.name || p.title || 'Noma\'lum',
+        priceUZS: price,
+        imageUrl: p.imageUrl || p.image || '',
+        qty: 1, 
+        discount: {type:'none', value:0, startTime:null, endTime:null},
+        stock: stock,
+        costUZS: Number(p.costUZS) || 0
       }); 
     }
     renderCart();
@@ -977,7 +989,7 @@
       container.innerHTML = cart.map((item,idx)=>`
         <div class="cart-item">
           <div class="product-row">
-            <div class="product-thumb" data-img="${item.imageUrl||''}">${item.imageUrl?`<img src="${item.imageUrl}">`:'🛍️'}</div>
+            <div class="product-thumb" data-img="${escapeHtml(item.imageUrl||'')}">${item.imageUrl?`<img src="${escapeHtml(item.imageUrl)}">`:'🛍️'}</div>
             <div class="product-info">
               <div class="product-name">${escapeHtml(item.name)}</div>
               <div style="font-size:12px; background:#eef3ea; display:inline-block; padding:2px 8px; border-radius:20px; margin-top:4px;">${fmt(item.priceUZS)} so‘m <span class="price-edit-icon" data-price-edit="${idx}" style="margin-left:6px;">✏️</span></div>
@@ -999,7 +1011,7 @@
     } 
     let t = recalc(); 
     document.getElementById('totalKinds').innerText = cart.length; 
-    document.getElementById('totalQty').innerText = cart.reduce((s,i)=>s+(i.qty||0),0); 
+    document.getElementById('totalQty').innerText = cart.reduce((s,i)=>s+(Number(i.qty)||0),0); 
     document.getElementById('totalDiscountAmount').innerText = fmt(t.totalDisc); 
     document.getElementById('subtotalAmount').innerHTML = fmt(t.sub)+" so‘m"; 
     document.getElementById('finalTotalHighlight').innerHTML = fmt(t.final)+" so‘m"; 
@@ -1008,46 +1020,124 @@
   
   async function cashSale(){ 
     if(!cart.length) return alert("Savat bo‘sh"); 
+    
     let t = recalc(); 
     let payMethod = document.getElementById('salePaymentMethod').value; 
     let custName = document.getElementById('customerQuickName').value.trim(); 
     let custPhone = document.getElementById('customerQuickPhone').value.trim(); 
-    let items = cart.map(i=>({
-      productId:i.id, name:i.name, qty:i.qty, priceUZS:i.priceUZS,
-      sellPriceUZS:i.priceUZS, costUZS:Number(i.costUZS||0),
-      lineTotalUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount),
-      finalLineUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount)
-    }));
+    let saleNote = document.getElementById('saleNote').value;
+    
+    let items = cart.map(i => {
+      const baseAmount = calcItemBase(i);
+      const discountAmount = calcItemDisc(baseAmount, i.discount);
+      const finalLineAmount = baseAmount - discountAmount;
+      
+      return {
+        productId: i.id || '',
+        name: i.name || 'Noma\'lum',
+        qty: Number(i.qty) || 0,
+        priceUZS: Number(i.priceUZS) || 0,
+        sellPriceUZS: Number(i.priceUZS) || 0,
+        costUZS: Number(i.costUZS) || 0,
+        lineTotalUZS: baseAmount,
+        finalLineUZS: finalLineAmount
+      };
+    });
+    
+    const saleData = {
+      type: 'sale',
+      paymentMethod: payMethod || 'cash',
+      totalUZS: Number(t.final) || 0,
+      subtotalUZS: Number(t.sub) || 0,
+      totalDiscountUZS: Number(t.totalDisc) || 0,
+      items: items,
+      customerName: custName || '',
+      customerPhone: custPhone || '',
+      note: saleNote || '',
+      createdAt: serverTimestamp(),
+      receiptNumber: 'CHK-' + Date.now()
+    };
+    
     try{ 
       await runTransaction(db, async(tx)=>{ 
         for(let it of cart){ 
           let ref = doc(db, 'products', it.id); 
           let snap = await tx.get(ref); 
           if(snap.exists()){ 
-            let st = Number(snap.data().stock??0); 
+            let st = Number(snap.data().stock) || 0; 
             if(st < it.qty) throw new Error(`${it.name} qoldiq yetmaydi`); 
             tx.update(ref, {stock: st - it.qty}); 
-          } 
+          } else {
+            throw new Error(`${it.name} mahsuloti topilmadi`);
+          }
         } 
-        await addDoc(collection(db, 'sales'), {
-          type:'sale', paymentMethod:payMethod, totalUZS:t.final, subtotalUZS:t.sub,
-          totalDiscountUZS:t.totalDisc, items, customerName:custName, customerPhone:custPhone,
-          note:document.getElementById('saleNote').value, createdAt:serverTimestamp(), receiptNumber:'CHK-'+Date.now()
-        });
-        showReceipt({totalUZS:t.final, items, subtotalUZS:t.sub, totalDiscountUZS:t.totalDisc, paymentMethod:payMethod, customerName:custName, customerPhone:custPhone, createdAt:new Date()}, 'sale');
+        await addDoc(collection(db, 'sales'), saleData);
       });
-      cart = []; globalDiscount = {type:'none', value:0}; renderCart(); loadTodaySales(); loadCredits(); 
-    } catch(e){ alert("Xato: "+e.message); }
+      
+      showReceipt({
+        totalUZS: t.final, 
+        items: items, 
+        subtotalUZS: t.sub, 
+        totalDiscountUZS: t.totalDisc, 
+        paymentMethod: payMethod, 
+        customerName: custName, 
+        customerPhone: custPhone, 
+        createdAt: new Date()
+      }, 'sale');
+      
+      cart = []; 
+      globalDiscount = {type:'none', value:0}; 
+      renderCart(); 
+      loadTodaySales(); 
+      loadCredits();
+      
+      document.getElementById('customerQuickName').value = '';
+      document.getElementById('customerQuickPhone').value = '';
+      document.getElementById('saleNote').value = '';
+      
+      alert("Sotuv muvaffaqiyatli amalga oshirildi!");
+      
+    } catch(e){ 
+      console.error("Sotuv xatosi:", e);
+      alert("Xato: " + e.message); 
+    }
   }
   
   function showReceipt(data, type){ 
     let items = data.items || []; 
-    let total = data.totalUZS || 0; 
-    let html = `<div style="font-family:monospace; text-align:center"><h3>🏪 ORZUMALL</h3><p>${type==='credit' ? 'NASIYA CHEKI' : 'SOTUV CHEKI'}<br>${new Date().toLocaleString()}</p><hr>`; 
-    items.forEach(it => {html += `<div style="display:flex; justify-content:space-between"><span>${escapeHtml(it.name)} x ${it.qty}</span><span>${fmt(it.finalLineUZS || it.priceUZS*it.qty)} so‘m</span></div>`;}); 
-    html += `<hr><div><strong>JAMI: ${fmt(total)} so‘m</strong></div>`; 
-    if(data.customerName) html += `<div class="mini-muted">Mijoz: ${escapeHtml(data.customerName)}</div>`; 
-    html += `<hr><small>Rahmat! Xaridingiz uchun tashakkur.</small></div>`; 
+    let total = Number(data.totalUZS) || 0; 
+    
+    let html = `<div style="font-family:monospace; text-align:center">
+        <h3>🏪 ORZUMALL</h3>
+        <p>${type==='credit' ? 'NASIYA CHEKI' : 'SOTUV CHEKI'}<br>${new Date().toLocaleString()}</p>
+        <hr>`;
+    
+    if(items.length > 0) {
+      items.forEach(it => {
+        const itemName = it.name || 'Noma\'lum';
+        const itemQty = it.qty || 0;
+        const itemTotal = it.finalLineUZS || (Number(it.priceUZS) * itemQty) || 0;
+        html += `<div style="display:flex; justify-content:space-between">
+            <span>${escapeHtml(itemName)} x ${itemQty}</span>
+            <span>${fmt(itemTotal)} so‘m</span>
+          </div>`;
+      });
+    } else {
+      html += `<div>Mahsulotlar mavjud emas</div>`;
+    }
+    
+    html += `<hr>
+        <div><strong>JAMI: ${fmt(total)} so‘m</strong></div>`;
+    
+    if(data.customerName) {
+      html += `<div class="mini-muted">Mijoz: ${escapeHtml(data.customerName)}</div>`;
+    }
+    if(data.paymentMethod) {
+      html += `<div class="mini-muted">To'lov: ${data.paymentMethod === 'cash' ? 'Naqd' : (data.paymentMethod === 'card' ? 'Karta' : 'Xolis')}</div>`;
+    }
+    
+    html += `<hr><small>Rahmat! Xaridingiz uchun tashakkur.</small></div>`;
+    
     document.getElementById('receiptContent').innerHTML = html; 
     document.getElementById('receiptModal').classList.add('open'); 
   }
@@ -1066,7 +1156,7 @@
     let cont = document.getElementById('creditsContainer'); 
     if(!filtered.length){ cont.innerHTML = '<div class="empty">Nasiyalar mavjud emas</div>'; return; } 
     cont.innerHTML = filtered.map(c => { 
-      let rem = Number(c.remainingUZS ?? ((c.totalUZS||0) - (c.paidUZS||0))); 
+      let rem = Number(c.remainingUZS) || (Number(c.totalUZS) - Number(c.paidUZS)) || 0; 
       return `<div class="credit-item"><div class="flex-between"><b>${escapeHtml(c.fullName)}</b><span class="status-chip ${rem<=0 ? 'status-ishonchli' : 'status-ortacha'}">${rem<=0 ? 'Yopilgan' : 'Ochiq'}</span></div><div>📞 ${escapeHtml(c.phone1)} | 📅 ${c.dueDate||'—'}</div><div>Jami: ${fmt(c.totalUZS)} | Qoldiq: ${fmt(rem)}</div><div class="action-buttons"><button class="btn-secondary payment-open-btn" data-id="${c.id}">💵 To‘lov</button><button class="btn-secondary receipt-credit-btn" data-id="${c.id}">🧾 Chek</button></div></div>`; 
     }).join(''); 
   }
@@ -1082,8 +1172,8 @@
   
   function renderTopCustomers(){ 
     let map = []; 
-    allSales.forEach(s => { if(s.type==='credit_payment') return; let name = s.customerName || s.fullName || 'Mijoz'; let phone = s.customerPhone || s.phone1 || ''; map.push({name, phone, sum:Number(s.totalUZS||0)}); }); 
-    creditsArray.forEach(c => { let name = c.fullName || ''; let phone = c.phone1 || ''; map.push({name, phone, sum:Number(c.totalUZS||0)}); }); 
+    allSales.forEach(s => { if(s.type==='credit_payment') return; let name = s.customerName || s.fullName || 'Mijoz'; let phone = s.customerPhone || s.phone1 || ''; map.push({name, phone, sum:Number(s.totalUZS)||0}); }); 
+    creditsArray.forEach(c => { let name = c.fullName || ''; let phone = c.phone1 || ''; map.push({name, phone, sum:Number(c.totalUZS)||0}); }); 
     let agg = {}; 
     map.forEach(m => { let key = m.phone || m.name; if(!key) return; if(!agg[key]) agg[key] = {name:m.name, phone:m.phone, sum:0}; agg[key].sum += m.sum; }); 
     let top = Object.values(agg).sort((a,b)=>b.sum - a.sum).slice(0,6); 
@@ -1100,7 +1190,9 @@
   
   async function saveNasiya(){ 
     if(!cart.length) return alert("Mahsulot qo‘shing"); 
-    let first = document.getElementById('creditFirstName').value.trim(), last = document.getElementById('creditLastName').value.trim(), phone = document.getElementById('creditPhone1').value.trim(); 
+    let first = document.getElementById('creditFirstName').value.trim(); 
+    let last = document.getElementById('creditLastName').value.trim(); 
+    let phone = document.getElementById('creditPhone1').value.trim(); 
     if(!first || !last || !phone) return alert("Ism, familiya va telefon majburiy"); 
     let kind = document.getElementById('creditKind').value; 
     let due = document.getElementById('creditDueDate').value || today(); 
@@ -1108,7 +1200,7 @@
     let total = recalc().final; 
     let items = cart.map(i=>({
       productId:i.id, name:i.name, qty:i.qty, priceUZS:i.priceUZS,
-      sellPriceUZS:i.priceUZS, costUZS:Number(i.costUZS||0),
+      sellPriceUZS:i.priceUZS, costUZS:Number(i.costUZS)||0,
       lineTotalUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount),
       finalLineUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount)
     }));
@@ -1118,15 +1210,17 @@
           let ref = doc(db, 'products', it.id); 
           let snap = await tx.get(ref); 
           if(snap.exists()){ 
-            let st = Number(snap.data().stock??0); 
+            let st = Number(snap.data().stock) || 0; 
             if(st < it.qty) throw new Error(`${it.name} qoldiq yetmaydi`); 
             tx.update(ref, {stock: st - it.qty}); 
           } 
         } 
         await addDoc(collection(db, 'credits'), {
           firstName:first, lastName:last, fullName:`${first} ${last}`, phone1:phone,
-          phone2:document.getElementById('creditPhone2').value, givenDate:given, dueDate:due,
-          note:document.getElementById('creditNote').value, totalUZS:total, paidUZS:0, remainingUZS:total,
+          phone2:document.getElementById('creditPhone2').value || '', 
+          givenDate:given, dueDate:due,
+          note:document.getElementById('creditNote').value || '', 
+          totalUZS:Number(total), paidUZS:0, remainingUZS:Number(total),
           status:'open', items, createdAt:serverTimestamp(), payments:[], creditKind:kind,
           creditKindLabel:kind==='diler' ? 'Diler nasiya' : 'Oddiy nasiya'
         });
@@ -1135,6 +1229,7 @@
       cart = []; globalDiscount = {type:'none', value:0}; renderCart(); 
       document.getElementById('closeNasiyaModalBtn').click(); 
       loadCredits(); loadTodaySales(); 
+      alert("Nasiya muvaffaqiyatli rasmiylashtirildi!");
     } catch(e){ alert("Xato: "+e.message); }
   }
   
@@ -1142,8 +1237,8 @@
     selectedCreditId = id; 
     let cr = creditsArray.find(c => c.id === id); 
     if(!cr) return; 
-    let rem = (cr.totalUZS||0) - (cr.paidUZS||0); 
-    document.getElementById('paymentCreditInfo').innerHTML = `<b>${cr.fullName}</b> | Qoldiq: ${fmt(rem)} so‘m`; 
+    let rem = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); 
+    document.getElementById('paymentCreditInfo').innerHTML = `<b>${escapeHtml(cr.fullName)}</b> | Qoldiq: ${fmt(rem)} so‘m`; 
     document.getElementById('paymentAmount').value = ''; 
     document.getElementById('paymentDate').value = today(); 
     document.getElementById('fullCloseCheckbox').checked = false; 
@@ -1155,13 +1250,13 @@
     if(!selectedCreditId) return; 
     let cr = creditsArray.find(c => c.id === selectedCreditId); 
     if(!cr) return; 
-    let amount = parseFloat(document.getElementById('paymentAmount').value || 0); 
+    let amount = parseFloat(document.getElementById('paymentAmount').value) || 0; 
     let fullClose = document.getElementById('fullCloseCheckbox').checked; 
-    let rem = (cr.totalUZS||0) - (cr.paidUZS||0); 
+    let rem = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); 
     if(fullClose) amount = rem; 
     if(amount <= 0 && !fullClose) return alert("Summa kiriting"); 
-    let newPaid = (cr.paidUZS||0) + amount; 
-    let newRem = (cr.totalUZS||0) - newPaid; 
+    let newPaid = (Number(cr.paidUZS)||0) + amount; 
+    let newRem = (Number(cr.totalUZS)||0) - newPaid; 
     let status = newRem <= 0 ? 'closed' : (newPaid > 0 ? 'partial' : 'open'); 
     let newDue = document.getElementById('paymentNewDueDate').value || cr.dueDate; 
     await updateDoc(doc(db, 'credits', selectedCreditId), {
@@ -1170,11 +1265,16 @@
       dueDate:newDue, payments:[...(cr.payments||[]), {amount, date:document.getElementById('paymentDate').value, method:document.getElementById('paymentMethod').value, note:''}]
     });
     if(amount > 0) await addDoc(collection(db, 'sales'), {
-      type:'credit_payment', paymentMethod:document.getElementById('paymentMethod').value,
-      totalUZS:amount, fullName:cr.fullName, creditId:selectedCreditId, createdAt:serverTimestamp()
+      type:'credit_payment', 
+      paymentMethod:document.getElementById('paymentMethod').value,
+      totalUZS:amount, 
+      fullName:cr.fullName, 
+      creditId:selectedCreditId, 
+      createdAt:serverTimestamp()
     });
     document.getElementById('closePaymentModalBtn').click(); 
     loadCredits(); loadTodaySales(); 
+    alert("To'lov muvaffaqiyatli amalga oshirildi!");
   }
   
   // Camera scanner
@@ -1201,7 +1301,6 @@
   
   const barcodeInput = document.getElementById('barcodeInput');
   
-  // Barcode input eventlari - faqat enter va change da ishlaydi
   if(barcodeInput) {
     barcodeInput.addEventListener('change', (e) => {
       let val = e.target.value.trim();
@@ -1220,23 +1319,11 @@
         } 
       } 
     });
-    
-    // Input fokusga o'tganda vizual effekt
-    barcodeInput.addEventListener('focus', () => {
-      isBarcodeFocused = true;
-      barcodeInput.classList.add('barcode-focused');
-    });
-    
-    barcodeInput.addEventListener('blur', () => {
-      isBarcodeFocused = false;
-      barcodeInput.classList.remove('barcode-focused');
-    });
   }
   
   if(scanBtn) scanBtn.onclick = startScanner;
   if(closeCamBtn) closeCamBtn.onclick = stopScanner;
   
-  // Autocomplete ni sozlash
   setTimeout(() => {
     setupAutocomplete('customerQuickName', 'nameSuggestions', 'name');
     setupAutocomplete('customerQuickPhone', 'phoneSuggestions', 'phone');
@@ -1271,7 +1358,7 @@
   if(savePaymentBtn) savePaymentBtn.onclick = savePayment;
   
   const fillRemainingBtn = document.getElementById('fillRemainingBtn');
-  if(fillRemainingBtn) fillRemainingBtn.onclick = () => { if(selectedCreditId){ let cr = creditsArray.find(c=>c.id===selectedCreditId); if(cr) document.getElementById('paymentAmount').value = (cr.totalUZS||0) - (cr.paidUZS||0); } };
+  if(fillRemainingBtn) fillRemainingBtn.onclick = () => { if(selectedCreditId){ let cr = creditsArray.find(c=>c.id===selectedCreditId); if(cr) document.getElementById('paymentAmount').value = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); } };
   
   const closeReceiptBtn = document.getElementById('closeReceiptModalBtn');
   if(closeReceiptBtn) closeReceiptBtn.onclick = () => document.getElementById('receiptModal').classList.remove('open');
@@ -1290,15 +1377,16 @@
   if(applyGlobalBtn) applyGlobalBtn.onclick = () => {
     globalDiscount = {
       type: document.getElementById('globalDiscType').value,
-      value: parseFloat(document.getElementById('globalDiscValue').value || 0),
+      value: parseFloat(document.getElementById('globalDiscValue').value) || 0,
       startTime: document.getElementById('globalDiscStart').value ? new Date(document.getElementById('globalDiscStart').value).toISOString() : null,
       endTime: document.getElementById('globalDiscEnd').value ? new Date(document.getElementById('globalDiscEnd').value).toISOString() : null
     };
     renderCart();
+    alert("Chegirma qo'llanildi!");
   };
   
   const clearGlobalBtn = document.getElementById('clearGlobalDiscountBtn');
-  if(clearGlobalBtn) clearGlobalBtn.onclick = () => { globalDiscount = {type:'none', value:0}; renderCart(); };
+  if(clearGlobalBtn) clearGlobalBtn.onclick = () => { globalDiscount = {type:'none', value:0}; renderCart(); alert("Chegirma bekor qilindi!"); };
   
   document.querySelectorAll('.quickGlobal').forEach(btn => {
     btn.onclick = () => {
@@ -1310,7 +1398,6 @@
     };
   });
   
-  // Global event listener
   document.addEventListener('click', (e) => {
     if(e.target.closest('.item-remove-btn')){ let idx = e.target.closest('.item-remove-btn').dataset.idx; cart.splice(idx,1); renderCart(); }
     if(e.target.closest('.qty-btn')){ let act = e.target.closest('.qty-btn').dataset.action, idx = e.target.closest('.qty-btn').dataset.idx; if(act==='inc') cart[idx].qty++; else { cart[idx].qty--; if(cart[idx].qty<=0) cart.splice(idx,1); } renderCart(); }
@@ -1320,6 +1407,7 @@
     if(e.target.closest('.receipt-credit-btn')){ let id = e.target.closest('.receipt-credit-btn').dataset.id; let cr = creditsArray.find(c=>c.id===id); if(cr) showReceipt(cr,'credit'); }
     if(e.target.closest('.receipt-sale-btn')){ let sid = e.target.closest('.receipt-sale-btn').dataset.id; let sale = allSales.find(s=>s.id===sid); if(sale) showReceipt(sale,'sale'); }
     if(e.target.closest('.quick-customer-btn')){ let btn = e.target.closest('.quick-customer-btn'); fillQuickCustomer(btn.dataset.name, btn.dataset.phone); }
+    if(e.target.closest('[data-img]')){ let src = e.target.closest('[data-img]').dataset.img; if(src){ document.getElementById('fullImage').src = src; document.getElementById('imageModal').classList.add('open'); } }
   });
   
   const closeImageBtn = document.getElementById('closeImageModalBtn');
@@ -1333,7 +1421,6 @@
     const dueDate = document.getElementById('creditDueDate');
     if(givenDate) givenDate.value = today(); 
     if(dueDate) dueDate.value = today();
-    // Barcode input avto-fokus qilamiz, lekin bu boshqa inputlarni bloklamaydi
     if(barcodeInput) barcodeInput.focus();
   };
 </script>
