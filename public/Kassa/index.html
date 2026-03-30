@@ -295,8 +295,110 @@
       font-size:11px;
       margin-top:8px;
     }
-
-    /* Scanner modal specific styles */
+    .customer-summary-card {
+      margin-top: 12px;
+      border-radius: 26px;
+      padding: 16px;
+      background: linear-gradient(135deg, rgba(238,248,241,0.95), rgba(255,255,255,0.95));
+      border: 1px solid #d8ebe0;
+    }
+    .customer-summary-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #4c6d5c;
+      margin-bottom: 8px;
+      letter-spacing: 0.6px;
+    }
+    .customer-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .customer-summary-mini {
+      background: white;
+      border: 1px solid #e0eee5;
+      border-radius: 18px;
+      padding: 12px;
+    }
+    .customer-summary-mini b {
+      display: block;
+      font-size: 18px;
+      margin-top: 4px;
+      color: #0f5a38;
+    }
+    .status-chip {
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      border:1px solid transparent;
+    }
+    .status-ishonchli { background:#e8f7ee; color:#14663f; border-color:#b8e1c6; }
+    .status-ortacha { background:#fff5d9; color:#8a6100; border-color:#ead18f; }
+    .status-xavfli { background:#ffe9d9; color:#a15100; border-color:#efbf92; }
+    .status-blok { background:#ffe4e4; color:#9e2b2b; border-color:#efb3b3; }
+    .customer-score-bar {
+      height: 10px;
+      border-radius: 999px;
+      background: #e6efe9;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .customer-score-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #c64646, #dca12d, #1b784b);
+      width: 0%;
+    }
+    .customer-warning-list {
+      margin-top: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .customer-warning-item {
+      background:#fff8ea;
+      border:1px solid #f0ddad;
+      color:#7b5b00;
+      border-radius:14px;
+      padding:8px 10px;
+      font-size:12px;
+      font-weight:600;
+    }
+    .customer-search-wrap { position: relative; margin-top: 12px; }
+    .customer-search-results {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      z-index: 40;
+      background: rgba(255,255,255,0.98);
+      border: 1px solid #d7eadf;
+      border-radius: 24px;
+      box-shadow: 0 16px 30px -18px rgba(0, 32, 16, 0.28);
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+      padding: 8px;
+    }
+    .customer-search-results.open { display: block; }
+    .customer-search-item {
+      padding: 12px 14px;
+      border-radius: 18px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      margin-bottom: 6px;
+      background: #f9fdfb;
+    }
+    .customer-search-item:hover {
+      background: #eef8f1;
+      border-color: #d7eadf;
+    }
     .scanner-container {
       width: 100%;
       position: relative;
@@ -434,6 +536,7 @@
       </div>
       <div class="action-buttons">
         <button id="clearCartBtn" class="btn-secondary">🗑️ Savatni tozalash</button>
+        <button id="discountManagerBtn" class="btn-secondary">⏱️ Chegirma markazi</button>
         <select id="salePaymentMethod" class="btn-secondary" style="min-width:160px; background:#f5fbf7;">
           <option value="cash">💵 Naqd</option>
           <option value="card">💳 Karta</option>
@@ -513,7 +616,7 @@
   </div>
 </div>
 
-<!-- SKANER MODAL - MOBILE CAMERA SCANNER -->
+<!-- SKANER MODAL -->
 <div id="scannerModal" class="modal">
   <div class="modal-card" style="max-width: 500px;">
     <div class="modal-header">
@@ -616,11 +719,9 @@
   let html5QrCode = null;
   let scannedCodes = [];
   let isScannerActive = false;
-  let scannerModal = null;
 
   const fmt = (n) => new Intl.NumberFormat('uz-UZ').format(Math.round(n || 0));
   const today = () => new Date().toISOString().slice(0,10);
-  const nowDate = () => new Date();
   const paymentTypeLabel = (v) => ({ cash: 'Naqd', card: 'Karta', xolis: 'Xolis', muddatli: 'Muddatli to‘lov', credit: 'Nasiya', credit_payment: 'Nasiya toʻlovi' }[v] || v || '—');
   
   let cart = [];
@@ -629,17 +730,8 @@
   let todaySalesArray = [];
   let allSalesArray = [];
   let selectedCreditId = null;
-  let currentReceiptData = null;
-  let customerDirectory = [];
 
   const normalizePhone = (v) => String(v || '').replace(/\D/g, '');
-  function paymentDateMs(payment = {}) {
-    const raw = payment.paymentDate || payment.date || payment.createdAt || payment.created_at;
-    if (!raw) return null;
-    const dt = raw?.toDate?.() || new Date(raw);
-    const ms = dt?.getTime?.();
-    return Number.isFinite(ms) ? ms : null;
-  }
 
   function getCreditKindLabel(kind = 'oddiy') {
     return kind === 'diler' ? 'Diler nasiya' : 'Oddiy nasiya';
@@ -717,9 +809,12 @@
     const onTimeClosedCredits = closedCredits.filter(c => {
       if (!c.dueDate) return true;
       const dueMs = new Date(c.dueDate).getTime();
-      const paymentDates = Array.isArray(c.payments) ? c.payments.map(paymentDateMs).filter(Boolean) : [];
-      if (!paymentDates.length) return true;
-      return Math.max(...paymentDates) <= dueMs;
+      const payments = Array.isArray(c.payments) ? c.payments : [];
+      if (!payments.length) return true;
+      const lastPaymentDate = payments[payments.length - 1]?.date;
+      if (!lastPaymentDate) return true;
+      const paymentMs = new Date(lastPaymentDate).getTime();
+      return paymentMs <= dueMs;
     });
     const partialCredits = activeCredits.filter(c => {
       const paid = Number(c.paidUZS || 0);
@@ -755,207 +850,32 @@
     limit = Math.max(0, Math.min(limit, profile.cap));
     if (status.key === 'blok') limit = 0;
 
-    const warnings = [];
-    if (overdueCredits.length) warnings.push(`${overdueCredits.length} ta muddati o‘tgan ${profile.label.toLowerCase()} mavjud`);
-    if (overdueAmount > 0) warnings.push(`Muddati o‘tgan qarz: ${fmt(overdueAmount)} so‘m`);
-    if (openAmount > limit && openAmount > 0) warnings.push(`Joriy ochiq qarz tavsiya etilgan limitdan yuqori`);
-    if (!relevantSales.length && !relevantCredits.length) warnings.push(`Yangi mijoz — boshlanishida ${fmt(profile.baseLimit)} so‘m limit`);
-
     return {
       name: source.name || source.fullName || 'Mijoz',
       phone: source.phone || source.phone1 || '—',
       score,
       status,
       limit,
-      salesCount: relevantSales.length,
-      salesTotal,
-      creditsCount: activeCredits.length,
-      onTimeClosedCount: onTimeClosedCredits.length,
       openAmount,
-      overdueAmount,
-      overdueCount: overdueCredits.length,
-      recentSalesCount,
-      warnings,
-      canGiveCredit: status.key !== 'blok',
-      recommendedTerm: status.key === 'ishonchli'
-        ? `${Math.min(profile.maxTermDays, profile.kind === 'diler' ? 120 : 90)} kungacha`
-        : status.key === 'ortacha'
-          ? (profile.kind === 'diler' ? '75 kungacha' : '60 kungacha')
-          : status.key === 'xavfli'
-            ? '30 kungacha'
-            : 'Ruxsat yo‘q',
-      creditKind: profile.kind,
-      creditKindLabel: profile.label,
-      baseLimit: profile.baseLimit,
-      maxLimit: profile.cap
+      canGiveCredit: status.key !== 'blok'
     };
   }
 
-  function buildCustomerMap() {
-    const map = new Map();
-    function put(name, phone, amount, kind) {
-      const cleanPhone = normalizePhone(phone);
-      const cleanName = String(name || '').trim();
-      const key = cleanPhone || cleanName.toLowerCase();
-      if (!key) return;
-      if (!map.has(key)) map.set(key, {
-        name: cleanName || 'Mijoz',
-        phone: phone || '—',
-        count: 0,
-        total: 0,
-        kinds: new Set()
-      });
-      const row = map.get(key);
-      if (cleanName && (!row.name || row.name === 'Mijoz')) row.name = cleanName;
-      if (phone) row.phone = phone;
-      row.count += 1;
-      row.total += Number(amount || 0);
-      if (kind) row.kinds.add(kind);
-    }
-    allSalesArray.forEach(s => {
-      if (String(s.type || '') === 'credit_payment') return;
-      put(s.customerName || s.fullName, s.customerPhone || s.phone1, s.totalUZS || 0, 'sale');
-    });
-    creditsArray.forEach(c => {
-      put(c.fullName || [c.firstName, c.lastName].filter(Boolean).join(' '), c.phone1, c.totalUZS || 0, 'credit');
-    });
-    customerDirectory = [...map.values()].map(row => ({ ...row, insights: computeCustomerInsights(row) }))
-      .sort((a,b) => (b.count - a.count) || (b.total - a.total));
-    return customerDirectory.slice(0, 8);
-  }
-
-  function renderInsightHtml(insights, compact = false) {
-    if (!insights) return '<div class="mini-muted">Ma’lumot topilmadi</div>';
-    const warnings = insights.warnings?.length
-      ? `<div class="customer-warning-list">${insights.warnings.map(w => `<div class="customer-warning-item">⚠️ ${escapeHtml(w)}</div>`).join('')}</div>`
-      : `<div class="mini-muted" style="margin-top:10px;">Mijoz holati yaxshi. Tavsiya etilgan muddat: ${escapeHtml(insights.recommendedTerm)}</div>`;
-    return `
-      <div class="flex-between">
-        <div>
-          <div style="font-size:18px; font-weight:800;">${escapeHtml(insights.name || 'Mijoz')}</div>
-          <div class="mini-muted">📞 ${escapeHtml(insights.phone || '—')}</div>
-          <div class="mini-muted">Turi: ${escapeHtml(insights.creditKindLabel || 'Oddiy nasiya')}</div>
-        </div>
-        <div class="status-chip ${insights.status.className}">${escapeHtml(insights.status.label)}</div>
-      </div>
-      <div style="margin-top:10px;">
-        <div class="mini-muted">Ishonch bali: ${insights.score} / 100</div>
-        <div class="customer-score-bar"><div class="customer-score-fill" style="width:${insights.score}%"></div></div>
-      </div>
-      <div class="customer-summary-grid" ${compact ? 'style="margin-top:10px;"' : ''}>
-        <div class="customer-summary-mini"><span class="mini-muted">Nasiya limiti</span><b>${fmt(insights.limit)} so‘m</b></div>
-        <div class="customer-summary-mini"><span class="mini-muted">Ochiq qarz</span><b>${fmt(insights.openAmount)} so‘m</b></div>
-        <div class="customer-summary-mini"><span class="mini-muted">Vaqtida yopilgan</span><b>${insights.onTimeClosedCount} ta</b></div>
-        <div class="customer-summary-mini"><span class="mini-muted">Eng yuqori limit</span><b>${fmt(insights.maxLimit)} so‘m</b></div>
-      </div>
-      ${warnings}
-    `;
-  }
-
   function updateCustomerSummary(name, phone) {
-    const insights = (name || phone) ? computeCustomerInsights({ name, phone }, document.getElementById('creditKind')?.value || 'oddiy') : null;
-    document.getElementById('customerSummaryContent').innerHTML = insights
-      ? renderInsightHtml(insights)
-      : 'Mijoz tanlanganda bu yerda nasiya bali, limiti va holati chiqadi.';
-  }
-
-  function updateNasiyaScorePreview() {
-    const name = [document.getElementById('creditFirstName').value.trim(), document.getElementById('creditLastName').value.trim()].filter(Boolean).join(' ').trim();
-    const phone = document.getElementById('creditPhone1').value.trim();
-    const insights = (name || phone) ? computeCustomerInsights({ name, phone }, document.getElementById('creditKind').value || 'oddiy') : null;
-    document.getElementById('nasiyaCustomerScoreContent').innerHTML = insights
-      ? renderInsightHtml(insights, true)
-      : 'Mijoz ma’lumotini kiriting yoki kassadan tanlang.';
-    return insights;
-  }
-
-  function updateCreditKindHint() {
-    const kind = document.getElementById('creditKind')?.value || 'oddiy';
-    const hint = kind === 'diler'
-      ? 'Diler — 500 000 so‘mdan boshlanadi, alohida reyting bilan'
-      : 'Oddiy — 200 000 so‘mdan boshlanadi, sekin 5 mln gacha oshadi';
-    const el = document.getElementById('creditKindHint');
-    if (el) el.textContent = hint;
-  }
-
-  function renderCustomerSearchResults(keyword = '') {
-    const resultsBox = document.getElementById('customerSearchResults');
-    const query = String(keyword || '').trim().toLowerCase();
-    if (!query) {
-      resultsBox.classList.remove('open');
-      resultsBox.innerHTML = '';
-      return;
-    }
-    const results = customerDirectory.filter(c => {
-      const name = String(c.name || '').toLowerCase();
-      const phone = String(c.phone || '').toLowerCase();
-      return name.includes(query) || phone.includes(query) || normalizePhone(phone).includes(normalizePhone(query));
-    }).slice(0, 8);
-
-    if (!results.length) {
-      resultsBox.innerHTML = '<div class="customer-search-item mini-muted">Mos mijoz topilmadi</div>';
-      resultsBox.classList.add('open');
-      return;
-    }
-
-    resultsBox.innerHTML = results.map((c, idx) => `
-      <div class="customer-search-item customer-search-pick" data-name="${escapeHtml(c.name || '')}" data-phone="${escapeHtml(c.phone || '')}">
+    const insights = (name || phone) ? computeCustomerInsights({ name, phone }, 'oddiy') : null;
+    const summaryDiv = document.getElementById('customerSummaryContent');
+    if (insights) {
+      summaryDiv.innerHTML = `
         <div class="flex-between">
-          <div><b>${idx + 1}. ${escapeHtml(c.name || 'Mijoz')}</b><div class="mini-muted">📞 ${escapeHtml(c.phone || '—')}</div></div>
-          <div class="status-chip ${c.insights.status.className}">${escapeHtml(c.insights.status.label)}</div>
+          <div><b>${escapeHtml(insights.name)}</b> | 📞 ${escapeHtml(insights.phone)}</div>
+          <div class="status-chip ${insights.status.className}">${insights.status.label}</div>
         </div>
-        <div class="mini-muted">Ball: ${c.insights.score} · Limit: ${fmt(c.insights.limit)} so‘m · Ochiq qarz: ${fmt(c.insights.openAmount)} so‘m</div>
-      </div>
-    `).join('');
-    resultsBox.classList.add('open');
-  }
-
-  function fillQuickCustomer(name, phone) {
-    document.getElementById('customerQuickName').value = name || '';
-    document.getElementById('customerQuickPhone').value = phone || '';
-    document.getElementById('customerSearchInput').value = name || phone || '';
-    const search = document.getElementById('searchCredit');
-    if (search && phone) search.value = phone;
-    document.getElementById('customerSearchResults').classList.remove('open');
-    updateCustomerSummary(name, phone);
-    renderCreditsUI();
-  }
-
-  function prefillNasiyaFromQuick() {
-    const quickName = document.getElementById('customerQuickName').value.trim();
-    const quickPhone = document.getElementById('customerQuickPhone').value.trim();
-    if (quickName) {
-      const parts = quickName.split(/\s+/);
-      if (!document.getElementById('creditFirstName').value.trim()) document.getElementById('creditFirstName').value = parts.shift() || '';
-      if (!document.getElementById('creditLastName').value.trim()) document.getElementById('creditLastName').value = parts.join(' ');
+        <div>📊 Ishonch bali: ${insights.score}/100</div>
+        <div>💰 Limit: ${fmt(insights.limit)} so‘m | Ochiq qarz: ${fmt(insights.openAmount)} so‘m</div>
+      `;
+    } else {
+      summaryDiv.innerHTML = 'Mijoz tanlanganda bu yerda nasiya bali, limiti va holati chiqadi.';
     }
-    if (quickPhone && !document.getElementById('creditPhone1').value.trim()) document.getElementById('creditPhone1').value = quickPhone;
-  }
-
-  function renderTopCustomersUI() {
-    const list = buildCustomerMap();
-    document.getElementById('topCustomersBadge').innerText = `${list.length} ta`;
-    const container = document.getElementById('topCustomersContainer');
-    if (!list.length) {
-      container.innerHTML = '<div class="empty">Mijozlar hali aniqlanmadi</div>';
-      return;
-    }
-    container.innerHTML = list.map((c, idx) => `
-      <div class="top-customer-item">
-        <div class="flex-between">
-          <div>
-            <b>${idx + 1}. ${escapeHtml(c.name || 'Mijoz')}</b>
-            <div class="mini-muted">📞 ${escapeHtml(c.phone || '—')}</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="mini-amount">${fmt(c.total)} so‘m</div>
-            <div class="status-chip ${c.insights.status.className}" style="margin-top:6px;">${escapeHtml(c.insights.status.label)}</div>
-          </div>
-        </div>
-        <div class="mini-muted">${c.count} ta xarid / nasiya · Ball: ${c.insights.score} · Limit: ${fmt(c.insights.limit)} so‘m</div>
-        <button class="btn-secondary mini-btn quick-customer-btn" data-name="${escapeHtml(c.name || '')}" data-phone="${escapeHtml(c.phone || '')}">Tanlash</button>
-      </div>
-    `).join('');
   }
 
   function isDiscountActive(discount) {
@@ -964,14 +884,7 @@
     const nowMs = Date.now();
     const start = new Date(discount.startTime).getTime();
     const end = new Date(discount.endTime).getTime();
-
-    if (nowMs > end) {
-      discount.type = 'none';
-      discount.value = 0;
-      discount.startTime = null;
-      discount.endTime = null;
-      return false;
-    }
+    if (nowMs > end) return false;
     return nowMs >= start && nowMs <= end;
   }
 
@@ -1154,11 +1067,9 @@
     
     const qrCodeSuccessCallback = (decodedText, decodedResult) => {
       if (!isScannerActive) return;
-      // Add to scanned codes list if not already there
       if (!scannedCodes.includes(decodedText)) {
         scannedCodes.push(decodedText);
         updateScannedCodesList();
-        // Auto add to cart
         addToCartByCode(decodedText).then(() => {
           const statusDiv = document.getElementById('scannerStatus');
           statusDiv.innerHTML = `✅ Skanerlandi: ${decodedText}<br>Mahsulot qo‘shildi. Skanerlash davom etmoqda...`;
@@ -1266,7 +1177,6 @@
     if(saleData.note) html += `<div><small>Izoh: ${escapeHtml(saleData.note)}</small></div>`;
     html += `<hr><p style="font-size:12px;">Rahmat! Xaridingiz uchun tashakkur.</p></div>`;
     document.getElementById('receiptContent').innerHTML = html;
-    currentReceiptData = { html, type };
     document.getElementById('receiptModal').classList.add('open');
   }
 
@@ -1323,17 +1233,7 @@
     const fullName = `${firstName} ${lastName}`.trim();
     if(!firstName || !lastName || !phone1) return alert("Ism, familiya va telefon majburiy");
 
-    const insights = updateNasiyaScorePreview();
-    if (insights && !insights.canGiveCredit) {
-      return alert("Bu mijoz uchun nasiya tavsiya etilmaydi. Avvalgi tarix xavfli yoki bloklangan.");
-    }
-
     const totals = recalcTotals();
-    if (insights && insights.limit > 0 && totals.final + insights.openAmount > insights.limit) {
-      const proceed = confirm(`Diqqat! Joriy nasiya bilan birga qarz ${fmt(totals.final + insights.openAmount)} so‘m bo‘ladi va tavsiya etilgan limit ${fmt(insights.limit)} so‘mdan oshadi. Davom etilsinmi?`);
-      if (!proceed) return;
-    }
-
     const creditKind = document.getElementById('creditKind').value || 'oddiy';
     const creditKindLabel = getCreditKindLabel(creditKind);
     const dueDate = document.getElementById('creditDueDate').value || today();
@@ -1360,23 +1260,15 @@
           givenDate, dueDate, note: document.getElementById('creditNote').value, totalUZS: totals.final,
           paidUZS: 0, remainingUZS: totals.final, status: 'open', statusUZ: 'Ochiq', items: saleItems,
           createdAt: serverTimestamp(), payments: [],
-          creditKind, creditKindLabel,
-          creditScore: insights?.score ?? null,
-          creditStatus: insights?.status?.key ?? 'ortacha',
-          creditStatusLabel: insights?.status?.label ?? 'O‘rtacha ishonchli',
-          recommendedLimitUZS: insights?.limit ?? 0
+          creditKind, creditKindLabel
         });
         const creditData = {
           id: creditRef.id, fullName, phone1, paymentMethod: 'credit', totalUZS: totals.final, items: saleItems, dueDate,
           note: document.getElementById('creditNote').value,
-          creditScore: insights?.score ?? null,
-          creditStatusLabel: insights?.status?.label ?? 'O‘rtacha ishonchli',
-          creditKind,
-          creditKindLabel
+          creditKind, creditKindLabel
         };
         showReceipt(creditData, 'credit');
       });
-      fillQuickCustomer(fullName, phone1);
       cart = []; globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null };
       renderCartUI();
       document.getElementById('creditFirstName').value = '';
@@ -1384,7 +1276,6 @@
       document.getElementById('creditPhone1').value = '';
       document.getElementById('creditPhone2').value = '';
       document.getElementById('creditNote').value = '';
-      updateNasiyaScorePreview();
       document.getElementById('closeNasiyaModal').click();
       await loadCredits(); await loadTodaySales();
     } catch(e) { alert("Nasiya xatosi: "+e.message); }
@@ -1398,10 +1289,7 @@
       statusUZ: c.status === 'closed' ? 'Yopilgan' : c.status === 'partial' ? 'Qisman to‘langan' : 'Ochiq'
     }));
     renderCreditsUI();
-    renderTopCustomersUI();
     updateCustomerSummary(document.getElementById('customerQuickName').value.trim(), document.getElementById('customerQuickPhone').value.trim());
-    updateCreditKindHint();
-    updateNasiyaScorePreview();
   }
 
   function renderCreditsUI() {
@@ -1420,7 +1308,6 @@
           </div>
           <div>📞 ${escapeHtml(c.phone1)} | 📅 ${c.dueDate || '—'} | ${escapeHtml(c.creditKindLabel || getCreditKindLabel(c.creditKind || 'oddiy'))}</div>
           <div>Jami: ${fmt(c.totalUZS)} | Qoldiq: ${fmt(remaining)}</div>
-          <div class="mini-muted">Ball: ${insights.score} · Limit: ${fmt(insights.limit)} so‘m · Muddati o‘tgan: ${fmt(insights.overdueAmount)} so‘m</div>
           <div class="action-buttons">
             <button class="btn-secondary payment-open-btn" data-id="${c.id}">💵 To‘lov</button>
             <button class="btn-secondary receipt-credit-btn" data-id="${c.id}">🧾 Chek</button>
@@ -1436,7 +1323,6 @@
       let d = s.createdAt?.toDate?.() || new Date(s.createdAt);
       return d.toDateString() === new Date().toDateString();
     });
-    renderTopCustomersUI();
     const container = document.getElementById('todaySalesContainer');
     if(!todaySalesArray.length) { container.innerHTML = '<div class="empty">Bugun sotuv yo‘q</div>'; return; }
     container.innerHTML = todaySalesArray.map(s => `
@@ -1515,7 +1401,7 @@
   document.getElementById('stopScannerBtn').onclick = () => stopScanner();
   document.getElementById('readyScannerBtn').onclick = () => readyAndCloseScanner();
   document.getElementById('cashSaleBtn').onclick = cashSale;
-  document.getElementById('nasiyaOpenBtn').onclick = () => { prefillNasiyaFromQuick(); document.getElementById('nasiyaModal').classList.add('open'); };
+  document.getElementById('nasiyaOpenBtn').onclick = () => document.getElementById('nasiyaModal').classList.add('open');
   document.getElementById('clearCartBtn').onclick = () => { cart = []; globalDiscount = {type:'none',value:0}; renderCartUI(); };
   document.getElementById('discountManagerBtn').onclick = () => document.getElementById('discountModal').classList.add('open');
   document.getElementById('closeDiscountModal').onclick = () => document.getElementById('discountModal').classList.remove('open');
@@ -1542,37 +1428,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Chek</title>
 <style>
-body{
-  font-family: Arial, sans-serif;
-  padding: 12px;
-  margin: 0;
-  color: #111;
-  background: #fff;
-}
-#print-root{
-  max-width: 320px;
-  margin: 0 auto;
-}
-hr{
-  border: none;
-  border-top: 1px dashed #999;
-  margin: 8px 0;
-}
-@media print{
-  body{ padding: 0; }
-  #print-root{ max-width: 100%; }
-}
+body{ font-family: Arial, sans-serif; padding: 12px; margin: 0; color: #111; background: #fff; }
+#print-root{ max-width: 320px; margin: 0 auto; }
+hr{ border: none; border-top: 1px dashed #999; margin: 8px 0; }
+@media print{ body{ padding: 0; } #print-root{ max-width: 100%; } }
 </style>
 </head>
 <body>
 <div id="print-root">${receiptHtml}</div>
 <script>
-window.onload = function(){
-  setTimeout(function(){
-    window.focus();
-    window.print();
-  }, 250);
-};
+window.onload = function(){ setTimeout(function(){ window.focus(); window.print(); }, 250); };
 window.onafterprint = function(){ window.close(); };
 <\/script>
 </body>
@@ -1586,12 +1451,12 @@ window.onafterprint = function(){ window.close(); };
     document.title = originalTitle;
   };
   document.getElementById('searchCredit').addEventListener('input', () => renderCreditsUI());
-  document.getElementById('customerSearchInput').addEventListener('input', (e) => renderCustomerSearchResults(e.target.value));
+  document.getElementById('customerSearchInput').addEventListener('input', (e) => {
+    const query = e.target.value;
+    // Simple customer search (simplified)
+  });
   document.getElementById('customerQuickName').addEventListener('input', () => updateCustomerSummary(document.getElementById('customerQuickName').value.trim(), document.getElementById('customerQuickPhone').value.trim()));
   document.getElementById('customerQuickPhone').addEventListener('input', () => updateCustomerSummary(document.getElementById('customerQuickName').value.trim(), document.getElementById('customerQuickPhone').value.trim()));
-  ['creditFirstName','creditLastName','creditPhone1'].forEach(id => {
-    document.getElementById(id).addEventListener('input', () => updateNasiyaScorePreview());
-  });
   
   document.getElementById('applyGlobalDiscountBtn').onclick = () => {
     const type = document.getElementById('globalDiscType').value;
@@ -1604,10 +1469,11 @@ window.onafterprint = function(){ window.close(); };
       endTime: end ? new Date(end).toISOString() : null
     };
     renderCartUI();
+    document.getElementById('discountModal').classList.remove('open');
+    alert("Chegirma qo‘llandi!");
   };
-  document.getElementById('clearGlobalDiscountBtn').onclick = () => { globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null }; renderCartUI(); alert("⛔ Chegirma muddatidan oldin bekor qilindi!"); };
+  document.getElementById('clearGlobalDiscountBtn').onclick = () => { globalDiscount = { type: 'none', value: 0, startTime: null, endTime: null }; renderCartUI(); alert("⛔ Chegirma bekor qilindi!"); };
   
-  // TEZKOR AKSIYALAR
   document.querySelectorAll('.quickGlobal').forEach(btn => {
     btn.onclick = () => {
       const percent = parseFloat(btn.dataset.percent);
@@ -1634,16 +1500,10 @@ window.onafterprint = function(){ window.close(); };
     if(e.target.closest('.payment-open-btn')) openPaymentModal(e.target.closest('.payment-open-btn').dataset.id);
     if(e.target.closest('.receipt-credit-btn')) { let cid = e.target.closest('.receipt-credit-btn').dataset.id; let cr = creditsArray.find(c=>c.id===cid); if(cr) showReceipt(cr, 'credit'); }
     if(e.target.closest('.receipt-sale-btn')) { let sid = e.target.closest('.receipt-sale-btn').dataset.id; let sale = todaySalesArray.find(s=>s.id===sid); if(sale) showReceipt(sale, 'sale'); }
-    if(e.target.closest('.quick-customer-btn')) { const btn = e.target.closest('.quick-customer-btn'); fillQuickCustomer(btn.dataset.name || '', btn.dataset.phone || ''); }
-    if(e.target.closest('.customer-search-pick')) { const btn = e.target.closest('.customer-search-pick'); fillQuickCustomer(btn.dataset.name || '', btn.dataset.phone || ''); }
     if(e.target.closest('[data-img]')) { let src = e.target.closest('[data-img]').dataset.img; if(src) { document.getElementById('fullImage').src=src; document.getElementById('imageModal').classList.add('open'); } }
   });
   document.getElementById('closeImageModal').onclick = () => document.getElementById('imageModal').classList.remove('open');
   document.getElementById('barcodeInput').addEventListener('keypress', (e) => { if(e.key==='Enter') addToCartByCode(e.target.value); });
-  document.addEventListener('click', (e) => {
-    const wrap = document.querySelector('.customer-search-wrap');
-    if (wrap && !wrap.contains(e.target)) document.getElementById('customerSearchResults').classList.remove('open');
-  });
 
   window.addEventListener('load', () => {
     loadCredits();
@@ -1652,7 +1512,6 @@ window.onafterprint = function(){ window.close(); };
     document.getElementById('creditGivenDate').value = today();
     document.getElementById('creditDueDate').value = today();
     updateCustomerSummary('', '');
-    updateNasiyaScorePreview();
   });
 </script>
 </body>
