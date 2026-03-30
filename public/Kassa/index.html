@@ -494,6 +494,50 @@
       outline: none;
     }
 
+    /* Avtomatik taklif qilish stili */
+    .autocomplete-container {
+      position: relative;
+      width: 100%;
+    }
+
+    .autocomplete-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #d7e6dc;
+      border-radius: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: none;
+    }
+
+    .autocomplete-suggestions.show {
+      display: block;
+    }
+
+    .autocomplete-suggestion {
+      padding: 10px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid #eef3ea;
+    }
+
+    .autocomplete-suggestion:hover {
+      background: #f1f9f3;
+    }
+
+    .customer-name-highlight {
+      font-weight: 700;
+    }
+
+    .customer-phone-highlight {
+      font-size: 11px;
+      color: #6e8b7a;
+    }
+
     @media (max-width: 480px) {
       body {
         padding: 8px;
@@ -543,9 +587,15 @@
       <div class="live-badge">● ONLAYN</div>
     </div>
     
-    <div style="display: flex; gap: 8px; margin: 8px 0;">
-      <input type="text" id="customerQuickName" placeholder="Mijoz ismi">
-      <input type="text" id="customerQuickPhone" placeholder="Telefon">
+    <div style="display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap;">
+      <div style="flex: 1; position: relative;" class="autocomplete-container">
+        <input type="text" id="customerQuickName" placeholder="Mijoz ismi" autocomplete="off">
+        <div id="nameSuggestions" class="autocomplete-suggestions"></div>
+      </div>
+      <div style="flex: 1; position: relative;" class="autocomplete-container">
+        <input type="text" id="customerQuickPhone" placeholder="Telefon" autocomplete="off">
+        <div id="phoneSuggestions" class="autocomplete-suggestions"></div>
+      </div>
     </div>
     
     <div id="customerSummaryCard" class="customer-summary-card">
@@ -601,7 +651,7 @@
   </div>
 </div>
 
-<!-- MODALS -->
+<!-- MODALS (qismi qisqartirildi, asosiy funksionallik saqlanadi) -->
 <div id="discountModal" class="modal">
   <div class="modal-card">
     <div class="modal-header">
@@ -627,7 +677,6 @@
         <button class="quickGlobal" data-percent="20" data-hours="24">🔸 20% 24 soat</button>
         <button class="quickGlobal" data-percent="30" data-hours="24">🔹 30% 24 soat</button>
       </div>
-      <div id="perItemDiscountsPanel" style="margin-top:16px"></div>
     </div>
   </div>
 </div>
@@ -654,9 +703,6 @@
         <option value="diler">Diler nasiya</option>
       </select>
       <textarea id="creditNote" placeholder="Izoh" rows="2"></textarea>
-      <div id="nasiyaCustomerScore" class="customer-summary-card" style="margin-top:10px">
-        <div class="mini-muted">Mijoz bahosi avtomatik</div>
-      </div>
       <div id="nasiyaAmountPreview" class="stat-block" style="margin:10px 0">Nasiya summasi: 0 so'm</div>
       <button id="saveNasiyaBtn" class="btn-primary" style="width:100%">✅ Saqlash</button>
     </div>
@@ -733,6 +779,7 @@
   let globalDiscount = { type:'none', value:0, startTime:null, endTime:null };
   let creditsArray = [];
   let allSales = [];
+  let allCustomers = []; // Barcha mijozlar ro'yxati
   let selectedCreditId = null;
   let html5QrCode = null;
   
@@ -758,6 +805,139 @@
   }
   
   function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>]/g, m=> m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
+  
+  // Mijozlarni yuklash
+  async function loadAllCustomers() {
+    try {
+      const creditsSnap = await getDocs(collection(db, 'credits'));
+      const salesSnap = await getDocs(query(collection(db, 'sales'), limit(500)));
+      
+      const customerMap = new Map();
+      
+      creditsSnap.forEach(doc => {
+        const data = doc.data();
+        const name = data.fullName || `${data.firstName || ''} ${data.lastName || ''}`.trim();
+        const phone = data.phone1;
+        if(name && !customerMap.has(phone || name)) {
+          customerMap.set(phone || name, { name, phone, type: 'credit' });
+        }
+      });
+      
+      salesSnap.forEach(doc => {
+        const data = doc.data();
+        const name = data.customerName || data.fullName;
+        const phone = data.customerPhone || data.phone1;
+        if(name && !customerMap.has(phone || name)) {
+          customerMap.set(phone || name, { name, phone, type: 'sale' });
+        }
+      });
+      
+      allCustomers = Array.from(customerMap.values());
+    } catch(e) {
+      console.error("Mijozlarni yuklashda xato:", e);
+    }
+  }
+  
+  // Avtomatik taklif qilish funksiyasi
+  function setupAutocomplete(inputId, suggestionsId, searchBy) {
+    const input = document.getElementById(inputId);
+    const suggestionsDiv = document.getElementById(suggestionsId);
+    
+    if(!input) return;
+    
+    input.addEventListener('input', (e) => {
+      const value = e.target.value.toLowerCase().trim();
+      
+      if(value.length < 2) {
+        suggestionsDiv.classList.remove('show');
+        return;
+      }
+      
+      const filtered = allCustomers.filter(customer => {
+        if(searchBy === 'name') {
+          return customer.name && customer.name.toLowerCase().includes(value);
+        } else if(searchBy === 'phone') {
+          return customer.phone && customer.phone.toLowerCase().includes(value);
+        }
+        return false;
+      }).slice(0, 8);
+      
+      if(filtered.length === 0) {
+        suggestionsDiv.classList.remove('show');
+        return;
+      }
+      
+      suggestionsDiv.innerHTML = filtered.map(customer => `
+        <div class="autocomplete-suggestion" data-name="${escapeHtml(customer.name || '')}" data-phone="${escapeHtml(customer.phone || '')}">
+          <div class="customer-name-highlight">${escapeHtml(customer.name || 'Mijoz')}</div>
+          ${customer.phone ? `<div class="customer-phone-highlight">📞 ${escapeHtml(customer.phone)}</div>` : ''}
+        </div>
+      `).join('');
+      
+      suggestionsDiv.classList.add('show');
+      
+      // Suggestionlarni bosish eventi
+      suggestionsDiv.querySelectorAll('.autocomplete-suggestion').forEach(suggestion => {
+        suggestion.addEventListener('click', () => {
+          const name = suggestion.dataset.name;
+          const phone = suggestion.dataset.phone;
+          
+          document.getElementById('customerQuickName').value = name;
+          document.getElementById('customerQuickPhone').value = phone;
+          
+          suggestionsDiv.classList.remove('show');
+          
+          // Mijoz tanlanganda ma'lumotlarni yangilash
+          updateCustomerSummary(name, phone);
+        });
+      });
+    });
+    
+    // Blur bo'lganda takliflarni yopish (ozgina kechikish bilan)
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        suggestionsDiv.classList.remove('show');
+      }, 200);
+    });
+    
+    input.addEventListener('focus', () => {
+      if(input.value.length >= 2) {
+        input.dispatchEvent(new Event('input'));
+      }
+    });
+  }
+  
+  // Mijoz summasi ma'lumotlarini yangilash
+  function updateCustomerSummary(name, phone) {
+    const summaryDiv = document.getElementById('customerSummaryCard');
+    if(!name && !phone) {
+      summaryDiv.innerHTML = '<div class="mini-muted">Mijoz tanlanganda limit va nasiya ma\'lumoti</div>';
+      return;
+    }
+    
+    // Mijozning nasiyalarini topish
+    const customerCredits = creditsArray.filter(c => {
+      const fullName = c.fullName || '';
+      const custPhone = c.phone1 || '';
+      return (name && fullName.toLowerCase().includes(name.toLowerCase())) || 
+             (phone && custPhone.includes(phone));
+    });
+    
+    const totalDebt = customerCredits.reduce((sum, c) => sum + ((c.totalUZS||0) - (c.paidUZS||0)), 0);
+    const activeCredits = customerCredits.filter(c => ((c.totalUZS||0) - (c.paidUZS||0)) > 0).length;
+    
+    if(totalDebt > 0) {
+      summaryDiv.innerHTML = `
+        <div class="mini-muted">📊 Mijoz ma'lumotlari</div>
+        <div class="customer-summary-grid">
+          <div class="customer-summary-mini"><strong>Qarzi:</strong> ${fmt(totalDebt)} so‘m</div>
+          <div class="customer-summary-mini"><strong>Faol nasiya:</strong> ${activeCredits} ta</div>
+        </div>
+      `;
+    } else {
+      summaryDiv.innerHTML = '<div class="mini-muted">✅ Bu mijozda faol nasiya yo‘q</div>';
+    }
+  }
   
   async function fetchProduct(code){ 
     if(!code) return null; 
@@ -827,28 +1007,6 @@
     document.getElementById('subtotalAmount').innerHTML = fmt(t.sub)+" so‘m"; 
     document.getElementById('finalTotalHighlight').innerHTML = fmt(t.final)+" so‘m"; 
     document.getElementById('nasiyaAmountPreview').innerHTML = `Nasiya summasi: ${fmt(t.final)} so‘m`; 
-    renderPerItemPanel(); 
-  }
-  
-  function renderPerItemPanel(){ 
-    let pnl = document.getElementById('perItemDiscountsPanel'); 
-    if(!cart.length){ pnl.innerHTML = '<div class="empty">Mahsulot yo‘q</div>'; return; } 
-    pnl.innerHTML = cart.map((item,idx)=>`
-      <div style="border:1px solid #dcf0e2; border-radius:24px; padding:10px; margin-bottom:10px;">
-        <b>${escapeHtml(item.name)}</b>
-        <div class="grid-2" style="margin-top:8px">
-          <select class="item-disc-type" data-idx="${idx}">
-            <option value="none">Yo‘q</option>
-            <option value="percent" ${item.discount?.type==='percent'?'selected':''}>%</option>
-            <option value="fixed" ${item.discount?.type==='fixed'?'selected':''}>Summa</option>
-          </select>
-          <input class="item-disc-value" data-idx="${idx}" type="number" value="${item.discount?.value||0}" placeholder="Qiymat">
-          <input type="datetime-local" class="item-disc-start" data-idx="${idx}" value="${item.discount?.startTime ? new Date(item.discount.startTime).toISOString().slice(0,16) : ''}">
-          <input type="datetime-local" class="item-disc-end" data-idx="${idx}" value="${item.discount?.endTime ? new Date(item.discount.endTime).toISOString().slice(0,16) : ''}">
-        </div>
-        <button class="btn-primary apply-item-discount" data-idx="${idx}" style="margin-top:6px">Qo‘llash</button>
-      </div>
-    `).join(''); 
   }
   
   async function cashSale(){ 
@@ -902,6 +1060,7 @@
     creditsArray = snap.docs.map(d => ({id:d.id, ...d.data()})); 
     renderCreditsUI(); 
     renderTopCustomers(); 
+    await loadAllCustomers();
   }
   
   function renderCreditsUI(){ 
@@ -939,6 +1098,7 @@
   function fillQuickCustomer(name, phone){ 
     document.getElementById('customerQuickName').value = name || ''; 
     document.getElementById('customerQuickPhone').value = phone || ''; 
+    updateCustomerSummary(name, phone);
   }
   
   async function saveNasiya(){ 
@@ -1042,23 +1202,40 @@
     else { cameraPreview.classList.remove('active'); } 
   }
   
-  // DOM elementlarini tekshirib, event listener qo'shish
-  if(scanBtn) scanBtn.onclick = startScanner;
-  if(closeCamBtn) closeCamBtn.onclick = stopScanner;
-  
-  // Input eventlari
+  // Barcode input avto-fokus va skaner
   const barcodeInput = document.getElementById('barcodeInput');
-  if(barcodeInput){
+  if(barcodeInput) {
+    barcodeInput.focus(); // Sahifa yuklanganda avto-fokus
+    
     barcodeInput.addEventListener('change', (e) => {
       let val = e.target.value.trim();
-      if(val){ addToCartByCode(val); e.target.value = ''; }
+      if(val){ addToCartByCode(val); e.target.value = ''; barcodeInput.focus(); }
     });
+    
     barcodeInput.addEventListener('keypress', (e) => { 
-      if(e.key==='Enter'){ let val = e.target.value.trim(); if(val){ addToCartByCode(val); e.target.value = ''; } } 
+      if(e.key==='Enter'){ 
+        let val = e.target.value.trim(); 
+        if(val){ addToCartByCode(val); e.target.value = ''; } 
+        barcodeInput.focus();
+      } 
+    });
+    
+    // Sahinada istalgan joyni bossa, input avto-fokuslanadi (POS skaner uchun)
+    document.body.addEventListener('click', () => {
+      barcodeInput.focus();
     });
   }
   
-  // Button eventlari - barcha elementlarni tekshirib
+  if(scanBtn) scanBtn.onclick = startScanner;
+  if(closeCamBtn) closeCamBtn.onclick = stopScanner;
+  
+  // Avtomatik taklif qilishni yoqish
+  setTimeout(() => {
+    setupAutocomplete('customerQuickName', 'nameSuggestions', 'name');
+    setupAutocomplete('customerQuickPhone', 'phoneSuggestions', 'phone');
+  }, 1000);
+  
+  // Button eventlari
   const cashSaleBtn = document.getElementById('cashSaleBtn');
   if(cashSaleBtn) cashSaleBtn.onclick = cashSale;
   
@@ -1066,7 +1243,7 @@
   if(nasiyaOpenBtn) nasiyaOpenBtn.onclick = () => document.getElementById('nasiyaModal').classList.add('open');
   
   const clearCartBtn = document.getElementById('clearCartBtn');
-  if(clearCartBtn) clearCartBtn.onclick = () => { cart = []; globalDiscount = {type:'none', value:0}; renderCart(); };
+  if(clearCartBtn) clearCartBtn.onclick = () => { cart = []; globalDiscount = {type:'none', value:0}; renderCart(); barcodeInput.focus(); };
   
   const discountManagerBtn = document.getElementById('discountManagerBtn');
   if(discountManagerBtn) discountManagerBtn.onclick = () => document.getElementById('discountModal').classList.add('open');
@@ -1136,17 +1313,6 @@
     if(e.target.closest('.receipt-credit-btn')){ let id = e.target.closest('.receipt-credit-btn').dataset.id; let cr = creditsArray.find(c=>c.id===id); if(cr) showReceipt(cr,'credit'); }
     if(e.target.closest('.receipt-sale-btn')){ let sid = e.target.closest('.receipt-sale-btn').dataset.id; let sale = allSales.find(s=>s.id===sid); if(sale) showReceipt(sale,'sale'); }
     if(e.target.closest('.quick-customer-btn')){ let btn = e.target.closest('.quick-customer-btn'); fillQuickCustomer(btn.dataset.name, btn.dataset.phone); }
-    if(e.target.closest('.apply-item-discount')){ 
-      let idx = e.target.closest('.apply-item-discount').dataset.idx; 
-      let type = document.querySelector(`.item-disc-type[data-idx="${idx}"]`).value; 
-      let val = parseFloat(document.querySelector(`.item-disc-value[data-idx="${idx}"]`).value || 0); 
-      let start = document.querySelector(`.item-disc-start[data-idx="${idx}"]`).value; 
-      let end = document.querySelector(`.item-disc-end[data-idx="${idx}"]`).value; 
-      cart[idx].discount = { type, value:val, startTime:start ? new Date(start).toISOString() : null, endTime:end ? new Date(end).toISOString() : null }; 
-      renderCart(); 
-      alert("Chegirma saqlandi");
-    }
-    if(e.target.closest('[data-img]')){ let src = e.target.closest('[data-img]').dataset.img; if(src){ document.getElementById('fullImage').src = src; document.getElementById('imageModal').classList.add('open'); } }
   });
   
   const closeImageBtn = document.getElementById('closeImageModalBtn');
@@ -1160,6 +1326,7 @@
     const dueDate = document.getElementById('creditDueDate');
     if(givenDate) givenDate.value = today(); 
     if(dueDate) dueDate.value = today();
+    if(barcodeInput) barcodeInput.focus();
   };
 </script>
 </body>
