@@ -494,7 +494,6 @@
       outline: none;
     }
 
-    /* Avtomatik taklif qilish stili */
     .autocomplete-container {
       position: relative;
       width: 100%;
@@ -536,6 +535,12 @@
     .customer-phone-highlight {
       font-size: 11px;
       color: #6e8b7a;
+    }
+
+    /* Barcode input highlight */
+    .barcode-focused {
+      border: 2px solid #1b784b;
+      box-shadow: 0 0 0 2px rgba(27, 120, 75, 0.2);
     }
 
     @media (max-width: 480px) {
@@ -651,7 +656,7 @@
   </div>
 </div>
 
-<!-- MODALS (qismi qisqartirildi, asosiy funksionallik saqlanadi) -->
+<!-- MODALS (qisqartirildi) -->
 <div id="discountModal" class="modal">
   <div class="modal-card">
     <div class="modal-header">
@@ -779,9 +784,10 @@
   let globalDiscount = { type:'none', value:0, startTime:null, endTime:null };
   let creditsArray = [];
   let allSales = [];
-  let allCustomers = []; // Barcha mijozlar ro'yxati
+  let allCustomers = [];
   let selectedCreditId = null;
   let html5QrCode = null;
+  let isBarcodeFocused = true; // Barcode input fokusda ekanligini kuzatish
   
   function isActive(d) { 
     if(!d || d.type==='none' || d.value<=0) return false; 
@@ -806,12 +812,10 @@
   
   function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>]/g, m=> m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); }
   
-  // Mijozlarni yuklash
   async function loadAllCustomers() {
     try {
       const creditsSnap = await getDocs(collection(db, 'credits'));
       const salesSnap = await getDocs(query(collection(db, 'sales'), limit(500)));
-      
       const customerMap = new Map();
       
       creditsSnap.forEach(doc => {
@@ -838,7 +842,6 @@
     }
   }
   
-  // Avtomatik taklif qilish funksiyasi
   function setupAutocomplete(inputId, suggestionsId, searchBy) {
     const input = document.getElementById(inputId);
     const suggestionsDiv = document.getElementById(suggestionsId);
@@ -876,7 +879,6 @@
       
       suggestionsDiv.classList.add('show');
       
-      // Suggestionlarni bosish eventi
       suggestionsDiv.querySelectorAll('.autocomplete-suggestion').forEach(suggestion => {
         suggestion.addEventListener('click', () => {
           const name = suggestion.dataset.name;
@@ -886,14 +888,11 @@
           document.getElementById('customerQuickPhone').value = phone;
           
           suggestionsDiv.classList.remove('show');
-          
-          // Mijoz tanlanganda ma'lumotlarni yangilash
           updateCustomerSummary(name, phone);
         });
       });
     });
     
-    // Blur bo'lganda takliflarni yopish (ozgina kechikish bilan)
     input.addEventListener('blur', () => {
       setTimeout(() => {
         suggestionsDiv.classList.remove('show');
@@ -907,7 +906,6 @@
     });
   }
   
-  // Mijoz summasi ma'lumotlarini yangilash
   function updateCustomerSummary(name, phone) {
     const summaryDiv = document.getElementById('customerSummaryCard');
     if(!name && !phone) {
@@ -915,7 +913,6 @@
       return;
     }
     
-    // Mijozning nasiyalarini topish
     const customerCredits = creditsArray.filter(c => {
       const fullName = c.fullName || '';
       const custPhone = c.phone1 || '';
@@ -1202,34 +1199,44 @@
     else { cameraPreview.classList.remove('active'); } 
   }
   
-  // Barcode input avto-fokus va skaner
   const barcodeInput = document.getElementById('barcodeInput');
+  
+  // Barcode input eventlari - faqat enter va change da ishlaydi
   if(barcodeInput) {
-    barcodeInput.focus(); // Sahifa yuklanganda avto-fokus
-    
     barcodeInput.addEventListener('change', (e) => {
       let val = e.target.value.trim();
-      if(val){ addToCartByCode(val); e.target.value = ''; barcodeInput.focus(); }
+      if(val){ 
+        addToCartByCode(val); 
+        e.target.value = ''; 
+      }
     });
     
     barcodeInput.addEventListener('keypress', (e) => { 
       if(e.key==='Enter'){ 
         let val = e.target.value.trim(); 
-        if(val){ addToCartByCode(val); e.target.value = ''; } 
-        barcodeInput.focus();
+        if(val){ 
+          addToCartByCode(val); 
+          e.target.value = ''; 
+        } 
       } 
     });
     
-    // Sahinada istalgan joyni bossa, input avto-fokuslanadi (POS skaner uchun)
-    document.body.addEventListener('click', () => {
-      barcodeInput.focus();
+    // Input fokusga o'tganda vizual effekt
+    barcodeInput.addEventListener('focus', () => {
+      isBarcodeFocused = true;
+      barcodeInput.classList.add('barcode-focused');
+    });
+    
+    barcodeInput.addEventListener('blur', () => {
+      isBarcodeFocused = false;
+      barcodeInput.classList.remove('barcode-focused');
     });
   }
   
   if(scanBtn) scanBtn.onclick = startScanner;
   if(closeCamBtn) closeCamBtn.onclick = stopScanner;
   
-  // Avtomatik taklif qilishni yoqish
+  // Autocomplete ni sozlash
   setTimeout(() => {
     setupAutocomplete('customerQuickName', 'nameSuggestions', 'name');
     setupAutocomplete('customerQuickPhone', 'phoneSuggestions', 'phone');
@@ -1243,7 +1250,7 @@
   if(nasiyaOpenBtn) nasiyaOpenBtn.onclick = () => document.getElementById('nasiyaModal').classList.add('open');
   
   const clearCartBtn = document.getElementById('clearCartBtn');
-  if(clearCartBtn) clearCartBtn.onclick = () => { cart = []; globalDiscount = {type:'none', value:0}; renderCart(); barcodeInput.focus(); };
+  if(clearCartBtn) clearCartBtn.onclick = () => { cart = []; globalDiscount = {type:'none', value:0}; renderCart(); };
   
   const discountManagerBtn = document.getElementById('discountManagerBtn');
   if(discountManagerBtn) discountManagerBtn.onclick = () => document.getElementById('discountModal').classList.add('open');
@@ -1326,6 +1333,7 @@
     const dueDate = document.getElementById('creditDueDate');
     if(givenDate) givenDate.value = today(); 
     if(dueDate) dueDate.value = today();
+    // Barcode input avto-fokus qilamiz, lekin bu boshqa inputlarni bloklamaydi
     if(barcodeInput) barcodeInput.focus();
   };
 </script>
