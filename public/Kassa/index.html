@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
-  <title>OrzuMall Pro | Mobil Kassa + Nasiya</title>
+  <title>OrzuMall Pro | Mobil Kassa + Nasiya + Variantlar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
@@ -293,6 +293,16 @@
       font-size: 15px;
     }
 
+    .variant-detail {
+      font-size: 11px;
+      color: #1f6e46;
+      background: #e8f3ec;
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-top: 4px;
+    }
+
     .price-big {
       font-weight: 800;
       font-size: 18px;
@@ -411,6 +421,7 @@
       font-size: 12px;
     }
 
+    /* Modal styles */
     .modal {
       position: fixed;
       inset: 0;
@@ -456,10 +467,50 @@
       padding: 16px;
     }
 
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+    .variant-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .variant-item {
+      background: #f8fbf9;
+      border-radius: 24px;
+      padding: 14px;
+      border: 1px solid #e2efe5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .variant-item:hover {
+      background: #e8f3ec;
+      transform: translateX(4px);
+    }
+
+    .variant-detail {
+      flex: 1;
+    }
+
+    .variant-detail strong {
+      font-size: 16px;
+      display: block;
+    }
+
+    .variant-price {
+      font-weight: 800;
+      color: #1f6e46;
+      font-size: 16px;
+    }
+
+    .variant-stock {
+      font-size: 12px;
+      color: #6e8b7a;
     }
 
     .empty {
@@ -528,13 +579,10 @@
       background: #f1f9f3;
     }
 
-    .customer-name-highlight {
-      font-weight: 700;
-    }
-
-    .customer-phone-highlight {
-      font-size: 11px;
-      color: #6e8b7a;
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
     }
 
     @media (max-width: 480px) {
@@ -560,12 +608,12 @@
       <div class="logo-icon">🛍️</div>
       <div class="logo-text">
         <h1>OrzuMall</h1>
-        <p>Kassa + Nasiya Pro</p>
+        <p>Kassa + Nasiya + Variantlar</p>
       </div>
     </div>
     <div class="badge-group">
       <div class="badge">📱 Skaner</div>
-      <div class="badge">⏱️ Aksiya</div>
+      <div class="badge">🎨 Variantli</div>
     </div>
   </div>
 
@@ -650,7 +698,21 @@
   </div>
 </div>
 
-<!-- MODALS -->
+<!-- Variant tanlash modal -->
+<div id="variantModal" class="modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <span id="variantModalTitle">Mahsulot variantini tanlang</span>
+      <button id="closeVariantModalBtn">✖️</button>
+    </div>
+    <div class="modal-body">
+      <div id="variantListContainer" class="variant-list"></div>
+      <button id="cancelVariantBtn" class="btn-secondary" style="width:100%">Bekor qilish</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS (discount, nasiya, payment, receipt) -->
 <div id="discountModal" class="modal">
   <div class="modal-card">
     <div class="modal-header">
@@ -779,8 +841,10 @@
   let creditsArray = [];
   let allSales = [];
   let allCustomers = [];
+  let allProducts = []; // Mahsulotlar cache
   let selectedCreditId = null;
   let html5QrCode = null;
+  let pendingVariantResolve = null; // Variant tanlash promise uchun
   
   function isActive(d) { 
     if(!d || d.type==='none' || d.value<=0) return false; 
@@ -819,228 +883,271 @@
     return String(s).replace(/[&<>]/g, m=> m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'); 
   }
   
-  async function loadAllCustomers() {
-    try {
-      const creditsSnap = await getDocs(collection(db, 'credits'));
-      const salesSnap = await getDocs(query(collection(db, 'sales'), limit(500)));
-      const customerMap = new Map();
-      
-      creditsSnap.forEach(doc => {
-        const data = doc.data();
-        const name = data.fullName || `${data.firstName || ''} ${data.lastName || ''}`.trim();
-        const phone = data.phone1;
-        if(name && !customerMap.has(phone || name)) {
-          customerMap.set(phone || name, { name, phone, type: 'credit' });
+  // Mahsulotni kod bo'yicha qidirish (variantlarni ham qo'llab-quvvatlaydi)
+  async function fetchProductByCode(code) {
+    if (!code) return null;
+    const cleanCode = code.trim();
+    
+    // 1. To'g'ridan-to'g'ri mahsulotni qidirish
+    const productRef = doc(db, 'products', cleanCode);
+    let productSnap = await getDoc(productRef);
+    
+    if (productSnap.exists()) {
+      const product = { id: productSnap.id, ...productSnap.data() };
+      // Agar variantli mahsulot bo'lsa, variant tanlashni ko'rsat
+      if (product.isVariant && product.variants && product.variants.length > 0) {
+        return await showVariantSelector(product);
+      }
+      return { ...product, isVariant: false };
+    }
+    
+    // 2. Variant shtrixkodi bo'yicha qidirish (masalan: aa0314_qizil)
+    const allProductsSnap = await getDocs(collection(db, 'products'));
+    for (const docSnap of allProductsSnap.docs) {
+      const p = { id: docSnap.id, ...docSnap.data() };
+      if (p.isVariant && p.variants) {
+        const foundVariant = p.variants.find(v => v.barcode === cleanCode);
+        if (foundVariant) {
+          return {
+            ...p,
+            selectedVariant: foundVariant,
+            isVariant: true,
+            variantId: foundVariant.id
+          };
         }
+      }
+    }
+    
+    return null;
+  }
+  
+  // Variant tanlash modalini ko'rsatish
+  function showVariantSelector(product) {
+    return new Promise((resolve) => {
+      pendingVariantResolve = resolve;
+      
+      const modal = document.getElementById('variantModal');
+      const title = document.getElementById('variantModalTitle');
+      const container = document.getElementById('variantListContainer');
+      
+      title.textContent = `${escapeHtml(product.name || product.code)} - Variantni tanlang`;
+      
+      container.innerHTML = product.variants.map((v, idx) => {
+        const variantInfo = [];
+        if (v.color) variantInfo.push(`🎨 ${escapeHtml(v.color)}`);
+        if (v.size) variantInfo.push(`📏 ${escapeHtml(v.size)}`);
+        const infoText = variantInfo.join(' · ') || 'Standart';
+        const stockStatus = v.stock <= 0 ? '<span style="color:#bc4a4a;"> (tugagan)</span>' : ` (${fmt(v.stock)} dona)`;
+        
+        return `
+          <div class="variant-item" data-variant-idx="${idx}">
+            <div class="variant-detail">
+              <strong>${infoText}</strong>
+              <div class="variant-price">${fmt(v.priceUZS)} so‘m${stockStatus}</div>
+              ${v.barcode ? `<div class="variant-stock">Shtrix: ${escapeHtml(v.barcode)}</div>` : ''}
+            </div>
+            <button class="btn-primary select-variant-btn" data-idx="${idx}">✅ Tanlash</button>
+          </div>
+        `;
+      }).join('');
+      
+      modal.classList.add('open');
+      
+      // Tanlash eventlari
+      document.querySelectorAll('.select-variant-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.idx);
+          const selectedVariant = product.variants[idx];
+          modal.classList.remove('open');
+          if (pendingVariantResolve) {
+            pendingVariantResolve({
+              ...product,
+              selectedVariant,
+              isVariant: true,
+              variantId: selectedVariant.id
+            });
+            pendingVariantResolve = null;
+          }
+        };
       });
       
-      salesSnap.forEach(doc => {
-        const data = doc.data();
-        const name = data.customerName || data.fullName;
-        const phone = data.customerPhone || data.phone1;
-        if(name && !customerMap.has(phone || name)) {
-          customerMap.set(phone || name, { name, phone, type: 'sale' });
-        }
+      // Variant item ustiga bosganda ham tanlash
+      document.querySelectorAll('.variant-item').forEach(item => {
+        item.onclick = (e) => {
+          if (e.target.classList.contains('select-variant-btn')) return;
+          const btn = item.querySelector('.select-variant-btn');
+          if (btn) btn.click();
+        };
       });
-      
-      allCustomers = Array.from(customerMap.values());
-    } catch(e) {
-      console.error("Mijozlarni yuklashda xato:", e);
+    });
+  }
+  
+  function closeVariantModal() {
+    document.getElementById('variantModal').classList.remove('open');
+    if (pendingVariantResolve) {
+      pendingVariantResolve(null);
+      pendingVariantResolve = null;
     }
   }
   
-  function setupAutocomplete(inputId, suggestionsId, searchBy) {
-    const input = document.getElementById(inputId);
-    const suggestionsDiv = document.getElementById(suggestionsId);
+  // Savatga qo'shish (variantlarni qo'llab-quvvatlaydi)
+  async function addToCartByCode(code) {
+    if (!code) return;
     
-    if(!input) return;
-    
-    input.addEventListener('input', (e) => {
-      const value = e.target.value.toLowerCase().trim();
-      
-      if(value.length < 2) {
-        suggestionsDiv.classList.remove('show');
-        return;
-      }
-      
-      const filtered = allCustomers.filter(customer => {
-        if(searchBy === 'name') {
-          return customer.name && customer.name.toLowerCase().includes(value);
-        } else if(searchBy === 'phone') {
-          return customer.phone && customer.phone.toLowerCase().includes(value);
-        }
-        return false;
-      }).slice(0, 8);
-      
-      if(filtered.length === 0) {
-        suggestionsDiv.classList.remove('show');
-        return;
-      }
-      
-      suggestionsDiv.innerHTML = filtered.map(customer => `
-        <div class="autocomplete-suggestion" data-name="${escapeHtml(customer.name || '')}" data-phone="${escapeHtml(customer.phone || '')}">
-          <div class="customer-name-highlight">${escapeHtml(customer.name || 'Mijoz')}</div>
-          ${customer.phone ? `<div class="customer-phone-highlight">📞 ${escapeHtml(customer.phone)}</div>` : ''}
-        </div>
-      `).join('');
-      
-      suggestionsDiv.classList.add('show');
-      
-      suggestionsDiv.querySelectorAll('.autocomplete-suggestion').forEach(suggestion => {
-        suggestion.addEventListener('click', () => {
-          const name = suggestion.dataset.name;
-          const phone = suggestion.dataset.phone;
-          
-          document.getElementById('customerQuickName').value = name;
-          document.getElementById('customerQuickPhone').value = phone;
-          
-          suggestionsDiv.classList.remove('show');
-          updateCustomerSummary(name, phone);
-        });
-      });
-    });
-    
-    input.addEventListener('blur', () => {
-      setTimeout(() => {
-        suggestionsDiv.classList.remove('show');
-      }, 200);
-    });
-    
-    input.addEventListener('focus', () => {
-      if(input.value.length >= 2) {
-        input.dispatchEvent(new Event('input'));
-      }
-    });
-  }
-  
-  function updateCustomerSummary(name, phone) {
-    const summaryDiv = document.getElementById('customerSummaryCard');
-    if(!name && !phone) {
-      summaryDiv.innerHTML = '<div class="mini-muted">Mijoz tanlanganda limit va nasiya ma\'lumoti</div>';
+    const productData = await fetchProductByCode(code);
+    if (!productData) {
+      alert("Mahsulot topilmadi: " + code);
       return;
     }
     
-    const customerCredits = creditsArray.filter(c => {
-      const fullName = c.fullName || '';
-      const custPhone = c.phone1 || '';
-      return (name && fullName.toLowerCase().includes(name.toLowerCase())) || 
-             (phone && custPhone.includes(phone));
-    });
-    
-    const totalDebt = customerCredits.reduce((sum, c) => sum + ((Number(c.totalUZS)||0) - (Number(c.paidUZS)||0)), 0);
-    const activeCredits = customerCredits.filter(c => ((Number(c.totalUZS)||0) - (Number(c.paidUZS)||0)) > 0).length;
-    
-    if(totalDebt > 0) {
-      summaryDiv.innerHTML = `
-        <div class="mini-muted">📊 Mijoz ma'lumotlari</div>
-        <div class="customer-summary-grid">
-          <div class="customer-summary-mini"><strong>Qarzi:</strong> ${fmt(totalDebt)} so‘m</div>
-          <div class="customer-summary-mini"><strong>Faol nasiya:</strong> ${activeCredits} ta</div>
-        </div>
-      `;
+    // Variantli mahsulot
+    if (productData.isVariant && productData.selectedVariant) {
+      const variant = productData.selectedVariant;
+      const stock = Number(variant.stock) || 0;
+      if (stock <= 0) {
+        alert("Bu variant tugagan! Iltimos, boshqa variant tanlang.");
+        return;
+      }
+      
+      const variantInfo = [];
+      if (variant.color) variantInfo.push(variant.color);
+      if (variant.size) variantInfo.push(variant.size);
+      const variantSuffix = variantInfo.length ? ` (${variantInfo.join(', ')})` : '';
+      
+      const existingItem = cart.find(item => 
+        item.isVariant && item.variantId === variant.id
+      );
+      
+      if (existingItem) {
+        if (existingItem.qty + 1 > stock) {
+          alert(`Qoldiq yetarli emas! Mavjud: ${stock} dona`);
+          return;
+        }
+        existingItem.qty++;
+      } else {
+        cart.unshift({
+          id: productData.id,
+          variantId: variant.id,
+          name: productData.name + variantSuffix,
+          productName: productData.name,
+          color: variant.color || '',
+          size: variant.size || '',
+          priceUZS: Number(variant.priceUZS) || 0,
+          costUZS: Number(variant.costUZS) || 0,
+          qty: 1,
+          stock: stock,
+          barcode: variant.barcode || code,
+          isVariant: true,
+          discount: { type: 'none', value: 0, startTime: null, endTime: null }
+        });
+      }
     } else {
-      summaryDiv.innerHTML = '<div class="mini-muted">✅ Bu mijozda faol nasiya yo‘q</div>';
+      // Oddiy mahsulot
+      const stock = Number(productData.stock) || 0;
+      if (stock <= 0) {
+        alert("Bu mahsulot tugagan!");
+        return;
+      }
+      
+      const existingItem = cart.find(item => !item.isVariant && item.id === productData.id);
+      if (existingItem) {
+        if (existingItem.qty + 1 > stock) {
+          alert(`Qoldiq yetarli emas! Mavjud: ${stock} dona`);
+          return;
+        }
+        existingItem.qty++;
+      } else {
+        cart.unshift({
+          id: productData.id,
+          name: productData.name || productData.code || 'Nomsiz',
+          priceUZS: Number(productData.priceUZS) || 0,
+          costUZS: Number(productData.costUZS) || 0,
+          qty: 1,
+          stock: stock,
+          barcode: productData.code,
+          isVariant: false,
+          discount: { type: 'none', value: 0, startTime: null, endTime: null }
+        });
+      }
     }
-  }
-  
-  async function fetchProduct(code){ 
-    if(!code) return null; 
-    let clean = code.trim(); 
-    let ref = doc(db, 'products', clean); 
-    let snap = await getDoc(ref); 
-    if(snap.exists()) return {id:snap.id, ...snap.data()}; 
-    let q = query(collection(db, 'products'), where('barcode', '==', clean), limit(1)); 
-    let res = await getDocs(q); 
-    if(!res.empty) return {id:res.docs[0].id, ...res.docs[0].data()}; 
-    return null; 
-  }
-  
-  async function addToCartByCode(code){
-    if(!code) return;
-    let p = await fetchProduct(code);
-    if(!p){ alert("Mahsulot topilmadi: "+code); return; }
-    let stock = Number(p.stock) || 999;
-    let price = Number(p.priceUZS) || Number(p.price) || 0;
-    let exist = cart.find(i=>i.id===p.id);
-    if(exist){ 
-      if(exist.qty+1 > stock){ alert("Qoldiq yetarli emas"); return; } 
-      exist.qty++; 
-    } else { 
-      cart.unshift({
-        id: p.id,
-        name: p.name || p.title || 'Noma\'lum',
-        priceUZS: price,
-        imageUrl: p.imageUrl || p.image || '',
-        qty: 1, 
-        discount: {type:'none', value:0, startTime:null, endTime:null},
-        stock: stock,
-        costUZS: Number(p.costUZS) || 0
-      }); 
-    }
+    
     renderCart();
   }
   
-  function renderCart(){ 
-    let container = document.getElementById('cartContainer');
-    if(!cart.length){ 
-      container.innerHTML = '<div class="empty">Savatcha bo\'sh</div>'; 
-      document.getElementById('cartCountBadge').innerText = '0 ta'; 
-    } else { 
-      container.innerHTML = cart.map((item,idx)=>`
-        <div class="cart-item">
-          <div class="product-row">
-            <div class="product-thumb" data-img="${escapeHtml(item.imageUrl||'')}">${item.imageUrl?`<img src="${escapeHtml(item.imageUrl)}">`:'🛍️'}</div>
-            <div class="product-info">
-              <div class="product-name">${escapeHtml(item.name)}</div>
-              <div style="font-size:12px; background:#eef3ea; display:inline-block; padding:2px 8px; border-radius:20px; margin-top:4px;">${fmt(item.priceUZS)} so‘m <span class="price-edit-icon" data-price-edit="${idx}" style="margin-left:6px;">✏️</span></div>
-              <div class="qty-stepper">
-                <button class="qty-btn" data-action="dec" data-idx="${idx}">−</button>
-                <span>${item.qty}</span>
-                <button class="qty-btn" data-action="inc" data-idx="${idx}">+</button>
+  function renderCart() {
+    const container = document.getElementById('cartContainer');
+    if (!cart.length) {
+      container.innerHTML = '<div class="empty">Savatcha bo\'sh</div>';
+      document.getElementById('cartCountBadge').innerText = '0 ta';
+    } else {
+      container.innerHTML = cart.map((item, idx) => {
+        const variantDetail = [];
+        if (item.color) variantDetail.push(`🎨 ${item.color}`);
+        if (item.size) variantDetail.push(`📏 ${item.size}`);
+        const variantHtml = variantDetail.length ? `<div class="variant-detail">${variantDetail.join(' · ')}</div>` : '';
+        
+        return `
+          <div class="cart-item">
+            <div class="product-row">
+              <div class="product-thumb">🛍️</div>
+              <div class="product-info">
+                <div class="product-name">${escapeHtml(item.name)}</div>
+                ${variantHtml}
+                <div style="font-size:12px; background:#eef3ea; display:inline-block; padding:2px 8px; border-radius:20px; margin-top:4px;">${fmt(item.priceUZS)} so‘m</div>
+                <div class="qty-stepper">
+                  <button class="qty-btn" data-action="dec" data-idx="${idx}">−</button>
+                  <span>${item.qty}</span>
+                  <button class="qty-btn" data-action="inc" data-idx="${idx}">+</button>
+                </div>
               </div>
+              <div class="price-big">${fmt(calcItemBase(item) - calcItemDisc(calcItemBase(item), item.discount))} so‘m</div>
             </div>
-            <div class="price-big">${fmt(calcItemBase(item)-calcItemDisc(calcItemBase(item),item.discount))} so‘m</div>
+            <div class="action-buttons" style="margin-top:6px;">
+              <button class="btn-secondary item-remove-btn" data-idx="${idx}">🗑️ O'chirish</button>
+            </div>
           </div>
-          <div class="action-buttons" style="margin-top:6px;">
-            <button class="btn-secondary item-discount-btn" data-idx="${idx}" style="padding:5px 12px;">⏱️ Chegirma</button>
-            <button class="btn-secondary item-remove-btn" data-idx="${idx}">🗑️</button>
-          </div>
-        </div>
-      `).join(''); 
-      document.getElementById('cartCountBadge').innerText = `${cart.length} ta`; 
-    } 
-    let t = recalc(); 
-    document.getElementById('totalKinds').innerText = cart.length; 
-    document.getElementById('totalQty').innerText = cart.reduce((s,i)=>s+(Number(i.qty)||0),0); 
-    document.getElementById('totalDiscountAmount').innerText = fmt(t.totalDisc); 
-    document.getElementById('subtotalAmount').innerHTML = fmt(t.sub)+" so‘m"; 
-    document.getElementById('finalTotalHighlight').innerHTML = fmt(t.final)+" so‘m"; 
-    document.getElementById('nasiyaAmountPreview').innerHTML = `Nasiya summasi: ${fmt(t.final)} so‘m`; 
+        `;
+      }).join('');
+      document.getElementById('cartCountBadge').innerText = `${cart.length} ta`;
+    }
+    
+    const t = recalc();
+    document.getElementById('totalKinds').innerText = cart.length;
+    document.getElementById('totalQty').innerText = cart.reduce((s,i)=>s+(Number(i.qty)||0),0);
+    document.getElementById('totalDiscountAmount').innerText = fmt(t.totalDisc);
+    document.getElementById('subtotalAmount').innerHTML = fmt(t.sub)+" so‘m";
+    document.getElementById('finalTotalHighlight').innerHTML = fmt(t.final)+" so‘m";
+    document.getElementById('nasiyaAmountPreview').innerHTML = `Nasiya summasi: ${fmt(t.final)} so‘m`;
   }
   
-  async function cashSale(){ 
-    if(!cart.length) return alert("Savat bo‘sh"); 
+  // Sotish (variantlar bo'yicha qoldiqni kamaytirish)
+  async function cashSale() {
+    if (!cart.length) return alert("Savat bo‘sh");
     
-    let t = recalc(); 
-    let payMethod = document.getElementById('salePaymentMethod').value; 
-    let custName = document.getElementById('customerQuickName').value.trim(); 
-    let custPhone = document.getElementById('customerQuickPhone').value.trim(); 
-    let saleNote = document.getElementById('saleNote').value;
+    const t = recalc();
+    const payMethod = document.getElementById('salePaymentMethod').value;
+    const custName = document.getElementById('customerQuickName').value.trim();
+    const custPhone = document.getElementById('customerQuickPhone').value.trim();
+    const saleNote = document.getElementById('saleNote').value;
     
-    let items = cart.map(i => {
-      const baseAmount = calcItemBase(i);
-      const discountAmount = calcItemDisc(baseAmount, i.discount);
+    const items = cart.map(item => {
+      const baseAmount = calcItemBase(item);
+      const discountAmount = calcItemDisc(baseAmount, item.discount);
       const finalLineAmount = baseAmount - discountAmount;
       
       return {
-        productId: i.id || '',
-        name: i.name || 'Noma\'lum',
-        qty: Number(i.qty) || 0,
-        priceUZS: Number(i.priceUZS) || 0,
-        sellPriceUZS: Number(i.priceUZS) || 0,
-        costUZS: Number(i.costUZS) || 0,
+        productId: item.id || '',
+        variantId: item.variantId || null,
+        name: item.name || 'Noma\'lum',
+        color: item.color || '',
+        size: item.size || '',
+        qty: Number(item.qty) || 0,
+        priceUZS: Number(item.priceUZS) || 0,
+        costUZS: Number(item.costUZS) || 0,
         lineTotalUZS: baseAmount,
-        finalLineUZS: finalLineAmount
+        finalLineUZS: finalLineAmount,
+        barcode: item.barcode || ''
       };
     });
     
@@ -1058,37 +1165,54 @@
       receiptNumber: 'CHK-' + Date.now()
     };
     
-    try{ 
-      await runTransaction(db, async(tx)=>{ 
-        for(let it of cart){ 
-          let ref = doc(db, 'products', it.id); 
-          let snap = await tx.get(ref); 
-          if(snap.exists()){ 
-            let st = Number(snap.data().stock) || 0; 
-            if(st < it.qty) throw new Error(`${it.name} qoldiq yetmaydi`); 
-            tx.update(ref, {stock: st - it.qty}); 
-          } else {
-            throw new Error(`${it.name} mahsuloti topilmadi`);
+    try {
+      await runTransaction(db, async (tx) => {
+        for (let item of cart) {
+          const productRef = doc(db, 'products', item.id);
+          const productSnap = await tx.get(productRef);
+          
+          if (!productSnap.exists()) {
+            throw new Error(`${item.name} mahsuloti topilmadi`);
           }
-        } 
+          
+          const productData = productSnap.data();
+          
+          if (item.isVariant && item.variantId) {
+            // Variantli mahsulot — variants arrayini yangilash
+            const updatedVariants = productData.variants.map(v => {
+              if (v.id === item.variantId) {
+                const newStock = (v.stock || 0) - item.qty;
+                if (newStock < 0) throw new Error(`${item.name} qoldiq yetmaydi`);
+                return { ...v, stock: newStock };
+              }
+              return v;
+            });
+            tx.update(productRef, { variants: updatedVariants, updatedAt: serverTimestamp() });
+          } else {
+            // Oddiy mahsulot
+            const currentStock = Number(productData.stock) || 0;
+            if (currentStock < item.qty) throw new Error(`${item.name} qoldiq yetmaydi`);
+            tx.update(productRef, { stock: currentStock - item.qty, updatedAt: serverTimestamp() });
+          }
+        }
         await addDoc(collection(db, 'sales'), saleData);
       });
       
       showReceipt({
-        totalUZS: t.final, 
-        items: items, 
-        subtotalUZS: t.sub, 
-        totalDiscountUZS: t.totalDisc, 
-        paymentMethod: payMethod, 
-        customerName: custName, 
-        customerPhone: custPhone, 
+        totalUZS: t.final,
+        items: items,
+        subtotalUZS: t.sub,
+        totalDiscountUZS: t.totalDisc,
+        paymentMethod: payMethod,
+        customerName: custName,
+        customerPhone: custPhone,
         createdAt: new Date()
       }, 'sale');
       
-      cart = []; 
-      globalDiscount = {type:'none', value:0}; 
-      renderCart(); 
-      loadTodaySales(); 
+      cart = [];
+      globalDiscount = { type: 'none', value: 0 };
+      renderCart();
+      loadTodaySales();
       loadCredits();
       
       document.getElementById('customerQuickName').value = '';
@@ -1097,183 +1221,364 @@
       
       alert("Sotuv muvaffaqiyatli amalga oshirildi!");
       
-    } catch(e){ 
+    } catch (e) {
       console.error("Sotuv xatosi:", e);
-      alert("Xato: " + e.message); 
+      alert("Xato: " + e.message);
     }
   }
   
-  function showReceipt(data, type){ 
-    let items = data.items || []; 
-    let total = Number(data.totalUZS) || 0; 
+  function showReceipt(data, type) {
+    const items = data.items || [];
+    const total = Number(data.totalUZS) || 0;
     
     let html = `<div style="font-family:monospace; text-align:center">
         <h3>🏪 ORZUMALL</h3>
-        <p>${type==='credit' ? 'NASIYA CHEKI' : 'SOTUV CHEKI'}<br>${new Date().toLocaleString()}</p>
+        <p>${type === 'credit' ? 'NASIYA CHEKI' : 'SOTUV CHEKI'}<br>${new Date().toLocaleString()}</p>
         <hr>`;
     
-    if(items.length > 0) {
-      items.forEach(it => {
-        const itemName = it.name || 'Noma\'lum';
-        const itemQty = it.qty || 0;
-        const itemTotal = it.finalLineUZS || (Number(it.priceUZS) * itemQty) || 0;
-        html += `<div style="display:flex; justify-content:space-between">
-            <span>${escapeHtml(itemName)} x ${itemQty}</span>
-            <span>${fmt(itemTotal)} so‘m</span>
-          </div>`;
-      });
-    } else {
-      html += `<div>Mahsulotlar mavjud emas</div>`;
-    }
+    items.forEach(it => {
+      const itemName = it.name || 'Noma\'lum';
+      const itemQty = it.qty || 0;
+      const itemTotal = it.finalLineUZS || (Number(it.priceUZS) * itemQty) || 0;
+      const variantText = it.color || it.size ? ` (${[it.color, it.size].filter(Boolean).join(', ')})` : '';
+      html += `<div style="display:flex; justify-content:space-between">
+          <span>${escapeHtml(itemName)}${escapeHtml(variantText)} x ${itemQty}</span>
+          <span>${fmt(itemTotal)} so‘m</span>
+        </div>`;
+    });
     
     html += `<hr>
         <div><strong>JAMI: ${fmt(total)} so‘m</strong></div>`;
     
-    if(data.customerName) {
+    if (data.customerName) {
       html += `<div class="mini-muted">Mijoz: ${escapeHtml(data.customerName)}</div>`;
     }
-    if(data.paymentMethod) {
-      html += `<div class="mini-muted">To'lov: ${data.paymentMethod === 'cash' ? 'Naqd' : (data.paymentMethod === 'card' ? 'Karta' : 'Xolis')}</div>`;
+    if (data.paymentMethod) {
+      const methodName = data.paymentMethod === 'cash' ? 'Naqd' : (data.paymentMethod === 'card' ? 'Karta' : 'Xolis');
+      html += `<div class="mini-muted">To'lov: ${methodName}</div>`;
     }
     
     html += `<hr><small>Rahmat! Xaridingiz uchun tashakkur.</small></div>`;
     
-    document.getElementById('receiptContent').innerHTML = html; 
-    document.getElementById('receiptModal').classList.add('open'); 
+    document.getElementById('receiptContent').innerHTML = html;
+    document.getElementById('receiptModal').classList.add('open');
   }
   
-  async function loadCredits(){ 
-    let snap = await getDocs(query(collection(db, 'credits'), orderBy('dueDate', 'asc'))); 
-    creditsArray = snap.docs.map(d => ({id:d.id, ...d.data()})); 
-    renderCreditsUI(); 
-    renderTopCustomers(); 
+  async function loadAllProducts() {
+    const snap = await getDocs(collection(db, 'products'));
+    allProducts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
+  
+  async function loadCredits() {
+    const snap = await getDocs(query(collection(db, 'credits'), orderBy('dueDate', 'asc')));
+    creditsArray = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderCreditsUI();
+    renderTopCustomers();
     await loadAllCustomers();
   }
   
-  function renderCreditsUI(){ 
-    let search = document.getElementById('searchCredit').value.toLowerCase(); 
-    let filtered = creditsArray.filter(c => (String(c.fullName||'') + String(c.phone1||'')).toLowerCase().includes(search)); 
-    let cont = document.getElementById('creditsContainer'); 
-    if(!filtered.length){ cont.innerHTML = '<div class="empty">Nasiyalar mavjud emas</div>'; return; } 
-    cont.innerHTML = filtered.map(c => { 
-      let rem = Number(c.remainingUZS) || (Number(c.totalUZS) - Number(c.paidUZS)) || 0; 
-      return `<div class="credit-item"><div class="flex-between"><b>${escapeHtml(c.fullName)}</b><span class="status-chip ${rem<=0 ? 'status-ishonchli' : 'status-ortacha'}">${rem<=0 ? 'Yopilgan' : 'Ochiq'}</span></div><div>📞 ${escapeHtml(c.phone1)} | 📅 ${c.dueDate||'—'}</div><div>Jami: ${fmt(c.totalUZS)} | Qoldiq: ${fmt(rem)}</div><div class="action-buttons"><button class="btn-secondary payment-open-btn" data-id="${c.id}">💵 To‘lov</button><button class="btn-secondary receipt-credit-btn" data-id="${c.id}">🧾 Chek</button></div></div>`; 
-    }).join(''); 
+  function renderCreditsUI() {
+    const search = document.getElementById('searchCredit').value.toLowerCase();
+    const filtered = creditsArray.filter(c => (String(c.fullName || '') + String(c.phone1 || '')).toLowerCase().includes(search));
+    const cont = document.getElementById('creditsContainer');
+    if (!filtered.length) {
+      cont.innerHTML = '<div class="empty">Nasiyalar mavjud emas</div>';
+      return;
+    }
+    cont.innerHTML = filtered.map(c => {
+      const rem = (Number(c.totalUZS) || 0) - (Number(c.paidUZS) || 0);
+      return `<div class="credit-item"><div class="flex-between"><b>${escapeHtml(c.fullName)}</b><span class="status-chip ${rem <= 0 ? 'status-ishonchli' : 'status-ortacha'}">${rem <= 0 ? 'Yopilgan' : 'Ochiq'}</span></div><div>📞 ${escapeHtml(c.phone1)} | 📅 ${c.dueDate || '—'}</div><div>Jami: ${fmt(c.totalUZS)} | Qoldiq: ${fmt(rem)}</div><div class="action-buttons"><button class="btn-secondary payment-open-btn" data-id="${c.id}">💵 To‘lov</button><button class="btn-secondary receipt-credit-btn" data-id="${c.id}">🧾 Chek</button></div></div>`;
+    }).join('');
   }
   
-  async function loadTodaySales(){ 
-    let snap = await getDocs(query(collection(db, 'sales'), orderBy('createdAt', 'desc'), limit(300))); 
-    allSales = snap.docs.map(d => ({id:d.id, ...d.data()})); 
-    let todayArr = allSales.filter(s => { let d = s.createdAt?.toDate?.() || new Date(s.createdAt); return d.toDateString() === new Date().toDateString(); }); 
-    let cont = document.getElementById('todaySalesContainer'); 
-    if(!todayArr.length){ cont.innerHTML = '<div class="empty">Bugun sotuv yo‘q</div>'; return; } 
-    cont.innerHTML = todayArr.map(s => `<div class="sale-item"><div class="flex-between"><b>${s.type==='credit_payment' ? 'Nasiya to‘lovi' : (s.type==='credit' ? 'Nasiya' : 'Sotuv')}</b><span>${fmt(s.totalUZS)} so‘m</span></div><div>${s.fullName || s.customerName || 'Mijoz'}</div><button class="btn-secondary receipt-sale-btn" data-id="${s.id}">🧾 Chek</button></div>`).join(''); 
+  async function loadTodaySales() {
+    const snap = await getDocs(query(collection(db, 'sales'), orderBy('createdAt', 'desc'), limit(300)));
+    allSales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const todayArr = allSales.filter(s => {
+      const d = s.createdAt?.toDate?.() || new Date(s.createdAt);
+      return d.toDateString() === new Date().toDateString();
+    });
+    const cont = document.getElementById('todaySalesContainer');
+    if (!todayArr.length) {
+      cont.innerHTML = '<div class="empty">Bugun sotuv yo‘q</div>';
+      return;
+    }
+    cont.innerHTML = todayArr.map(s => `<div class="sale-item"><div class="flex-between"><b>${s.type === 'credit_payment' ? 'Nasiya to‘lovi' : (s.type === 'credit' ? 'Nasiya' : 'Sotuv')}</b><span>${fmt(s.totalUZS)} so‘m</span></div><div>${s.fullName || s.customerName || 'Mijoz'}</div><button class="btn-secondary receipt-sale-btn" data-id="${s.id}">🧾 Chek</button></div>`).join('');
   }
   
-  function renderTopCustomers(){ 
-    let map = []; 
-    allSales.forEach(s => { if(s.type==='credit_payment') return; let name = s.customerName || s.fullName || 'Mijoz'; let phone = s.customerPhone || s.phone1 || ''; map.push({name, phone, sum:Number(s.totalUZS)||0}); }); 
-    creditsArray.forEach(c => { let name = c.fullName || ''; let phone = c.phone1 || ''; map.push({name, phone, sum:Number(c.totalUZS)||0}); }); 
-    let agg = {}; 
-    map.forEach(m => { let key = m.phone || m.name; if(!key) return; if(!agg[key]) agg[key] = {name:m.name, phone:m.phone, sum:0}; agg[key].sum += m.sum; }); 
-    let top = Object.values(agg).sort((a,b)=>b.sum - a.sum).slice(0,6); 
-    let cont = document.getElementById('topCustomersContainer'); 
-    if(!top.length){ cont.innerHTML = '<div class="empty">Mijozlar topilmadi</div>'; return; } 
-    cont.innerHTML = top.map((c,i) => `<div class="top-customer-item"><div class="flex-between"><div><b>${escapeHtml(c.name||'Mijoz')}</b><div class="mini-muted">📞 ${escapeHtml(c.phone||'—')}</div></div><div class="mini-amount">${fmt(c.sum)} so‘m</div></div><button class="btn-secondary quick-customer-btn" data-name="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone)}" style="margin-top:8px;">Tanlash</button></div>`).join(''); 
+  function renderTopCustomers() {
+    const map = [];
+    allSales.forEach(s => {
+      if (s.type === 'credit_payment') return;
+      const name = s.customerName || s.fullName || 'Mijoz';
+      const phone = s.customerPhone || s.phone1 || '';
+      map.push({ name, phone, sum: Number(s.totalUZS) || 0 });
+    });
+    creditsArray.forEach(c => {
+      const name = c.fullName || '';
+      const phone = c.phone1 || '';
+      map.push({ name, phone, sum: Number(c.totalUZS) || 0 });
+    });
+    const agg = {};
+    map.forEach(m => {
+      const key = m.phone || m.name;
+      if (!key) return;
+      if (!agg[key]) agg[key] = { name: m.name, phone: m.phone, sum: 0 };
+      agg[key].sum += m.sum;
+    });
+    const top = Object.values(agg).sort((a, b) => b.sum - a.sum).slice(0, 6);
+    const cont = document.getElementById('topCustomersContainer');
+    if (!top.length) {
+      cont.innerHTML = '<div class="empty">Mijozlar topilmadi</div>';
+      return;
+    }
+    cont.innerHTML = top.map((c, i) => `<div class="top-customer-item"><div class="flex-between"><div><b>${escapeHtml(c.name || 'Mijoz')}</b><div class="mini-muted">📞 ${escapeHtml(c.phone || '—')}</div></div><div class="mini-amount">${fmt(c.sum)} so‘m</div></div><button class="btn-secondary quick-customer-btn" data-name="${escapeHtml(c.name)}" data-phone="${escapeHtml(c.phone)}" style="margin-top:8px;">Tanlash</button></div>`).join('');
   }
   
-  function fillQuickCustomer(name, phone){ 
-    document.getElementById('customerQuickName').value = name || ''; 
-    document.getElementById('customerQuickPhone').value = phone || ''; 
+  async function loadAllCustomers() {
+    try {
+      const creditsSnap = await getDocs(collection(db, 'credits'));
+      const salesSnap = await getDocs(query(collection(db, 'sales'), limit(500)));
+      const customerMap = new Map();
+      
+      creditsSnap.forEach(doc => {
+        const data = doc.data();
+        const name = data.fullName || `${data.firstName || ''} ${data.lastName || ''}`.trim();
+        const phone = data.phone1;
+        if (name && !customerMap.has(phone || name)) {
+          customerMap.set(phone || name, { name, phone, type: 'credit' });
+        }
+      });
+      
+      salesSnap.forEach(doc => {
+        const data = doc.data();
+        const name = data.customerName || data.fullName;
+        const phone = data.customerPhone || data.phone1;
+        if (name && !customerMap.has(phone || name)) {
+          customerMap.set(phone || name, { name, phone, type: 'sale' });
+        }
+      });
+      
+      allCustomers = Array.from(customerMap.values());
+    } catch (e) {
+      console.error("Mijozlarni yuklashda xato:", e);
+    }
+  }
+  
+  function setupAutocomplete(inputId, suggestionsId, searchBy) {
+    const input = document.getElementById(inputId);
+    const suggestionsDiv = document.getElementById(suggestionsId);
+    if (!input) return;
+    
+    input.addEventListener('input', (e) => {
+      const value = e.target.value.toLowerCase().trim();
+      if (value.length < 2) {
+        suggestionsDiv.classList.remove('show');
+        return;
+      }
+      const filtered = allCustomers.filter(customer => {
+        if (searchBy === 'name') {
+          return customer.name && customer.name.toLowerCase().includes(value);
+        } else if (searchBy === 'phone') {
+          return customer.phone && customer.phone.toLowerCase().includes(value);
+        }
+        return false;
+      }).slice(0, 8);
+      
+      if (filtered.length === 0) {
+        suggestionsDiv.classList.remove('show');
+        return;
+      }
+      
+      suggestionsDiv.innerHTML = filtered.map(customer => `
+        <div class="autocomplete-suggestion" data-name="${escapeHtml(customer.name || '')}" data-phone="${escapeHtml(customer.phone || '')}">
+          <div class="customer-name-highlight">${escapeHtml(customer.name || 'Mijoz')}</div>
+          ${customer.phone ? `<div class="customer-phone-highlight">📞 ${escapeHtml(customer.phone)}</div>` : ''}
+        </div>
+      `).join('');
+      
+      suggestionsDiv.classList.add('show');
+      
+      suggestionsDiv.querySelectorAll('.autocomplete-suggestion').forEach(suggestion => {
+        suggestion.addEventListener('click', () => {
+          const name = suggestion.dataset.name;
+          const phone = suggestion.dataset.phone;
+          document.getElementById('customerQuickName').value = name;
+          document.getElementById('customerQuickPhone').value = phone;
+          suggestionsDiv.classList.remove('show');
+          updateCustomerSummary(name, phone);
+        });
+      });
+    });
+    
+    input.addEventListener('blur', () => {
+      setTimeout(() => suggestionsDiv.classList.remove('show'), 200);
+    });
+  }
+  
+  function updateCustomerSummary(name, phone) {
+    const summaryDiv = document.getElementById('customerSummaryCard');
+    if (!name && !phone) {
+      summaryDiv.innerHTML = '<div class="mini-muted">Mijoz tanlanganda limit va nasiya ma\'lumoti</div>';
+      return;
+    }
+    const customerCredits = creditsArray.filter(c => {
+      const fullName = c.fullName || '';
+      const custPhone = c.phone1 || '';
+      return (name && fullName.toLowerCase().includes(name.toLowerCase())) ||
+             (phone && custPhone.includes(phone));
+    });
+    const totalDebt = customerCredits.reduce((sum, c) => sum + ((Number(c.totalUZS) || 0) - (Number(c.paidUZS) || 0)), 0);
+    const activeCredits = customerCredits.filter(c => ((Number(c.totalUZS) || 0) - (Number(c.paidUZS) || 0)) > 0).length;
+    
+    if (totalDebt > 0) {
+      summaryDiv.innerHTML = `
+        <div class="mini-muted">📊 Mijoz ma'lumotlari</div>
+        <div class="customer-summary-grid">
+          <div class="customer-summary-mini"><strong>Qarzi:</strong> ${fmt(totalDebt)} so‘m</div>
+          <div class="customer-summary-mini"><strong>Faol nasiya:</strong> ${activeCredits} ta</div>
+        </div>
+      `;
+    } else {
+      summaryDiv.innerHTML = '<div class="mini-muted">✅ Bu mijozda faol nasiya yo‘q</div>';
+    }
+  }
+  
+  function fillQuickCustomer(name, phone) {
+    document.getElementById('customerQuickName').value = name || '';
+    document.getElementById('customerQuickPhone').value = phone || '';
     updateCustomerSummary(name, phone);
   }
   
-  async function saveNasiya(){ 
-    if(!cart.length) return alert("Mahsulot qo‘shing"); 
-    let first = document.getElementById('creditFirstName').value.trim(); 
-    let last = document.getElementById('creditLastName').value.trim(); 
-    let phone = document.getElementById('creditPhone1').value.trim(); 
-    if(!first || !last || !phone) return alert("Ism, familiya va telefon majburiy"); 
-    let kind = document.getElementById('creditKind').value; 
-    let due = document.getElementById('creditDueDate').value || today(); 
-    let given = document.getElementById('creditGivenDate').value || today(); 
-    let total = recalc().final; 
-    let items = cart.map(i=>({
-      productId:i.id, name:i.name, qty:i.qty, priceUZS:i.priceUZS,
-      sellPriceUZS:i.priceUZS, costUZS:Number(i.costUZS)||0,
-      lineTotalUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount),
-      finalLineUZS:calcItemBase(i)-calcItemDisc(calcItemBase(i),i.discount)
+  async function saveNasiya() {
+    if (!cart.length) return alert("Mahsulot qo‘shing");
+    const first = document.getElementById('creditFirstName').value.trim();
+    const last = document.getElementById('creditLastName').value.trim();
+    const phone = document.getElementById('creditPhone1').value.trim();
+    if (!first || !last || !phone) return alert("Ism, familiya va telefon majburiy");
+    const kind = document.getElementById('creditKind').value;
+    const due = document.getElementById('creditDueDate').value || today();
+    const given = document.getElementById('creditGivenDate').value || today();
+    const total = recalc().final;
+    const items = cart.map(i => ({
+      productId: i.id,
+      variantId: i.variantId || null,
+      name: i.name,
+      color: i.color || '',
+      size: i.size || '',
+      qty: i.qty,
+      priceUZS: i.priceUZS,
+      costUZS: i.costUZS || 0,
+      lineTotalUZS: calcItemBase(i) - calcItemDisc(calcItemBase(i), i.discount),
+      finalLineUZS: calcItemBase(i) - calcItemDisc(calcItemBase(i), i.discount)
     }));
-    try{ 
-      await runTransaction(db, async(tx)=>{ 
-        for(let it of cart){ 
-          let ref = doc(db, 'products', it.id); 
-          let snap = await tx.get(ref); 
-          if(snap.exists()){ 
-            let st = Number(snap.data().stock) || 0; 
-            if(st < it.qty) throw new Error(`${it.name} qoldiq yetmaydi`); 
-            tx.update(ref, {stock: st - it.qty}); 
-          } 
-        } 
+    
+    try {
+      await runTransaction(db, async (tx) => {
+        for (let item of cart) {
+          const productRef = doc(db, 'products', item.id);
+          const productSnap = await tx.get(productRef);
+          if (!productSnap.exists()) continue;
+          const productData = productSnap.data();
+          
+          if (item.isVariant && item.variantId) {
+            const updatedVariants = productData.variants.map(v => {
+              if (v.id === item.variantId) {
+                const newStock = (v.stock || 0) - item.qty;
+                if (newStock < 0) throw new Error(`${item.name} qoldiq yetmaydi`);
+                return { ...v, stock: newStock };
+              }
+              return v;
+            });
+            tx.update(productRef, { variants: updatedVariants, updatedAt: serverTimestamp() });
+          } else {
+            const currentStock = Number(productData.stock) || 0;
+            if (currentStock < item.qty) throw new Error(`${item.name} qoldiq yetmaydi`);
+            tx.update(productRef, { stock: currentStock - item.qty, updatedAt: serverTimestamp() });
+          }
+        }
+        
         await addDoc(collection(db, 'credits'), {
-          firstName:first, lastName:last, fullName:`${first} ${last}`, phone1:phone,
-          phone2:document.getElementById('creditPhone2').value || '', 
-          givenDate:given, dueDate:due,
-          note:document.getElementById('creditNote').value || '', 
-          totalUZS:Number(total), paidUZS:0, remainingUZS:Number(total),
-          status:'open', items, createdAt:serverTimestamp(), payments:[], creditKind:kind,
-          creditKindLabel:kind==='diler' ? 'Diler nasiya' : 'Oddiy nasiya'
+          firstName: first,
+          lastName: last,
+          fullName: `${first} ${last}`,
+          phone1: phone,
+          phone2: document.getElementById('creditPhone2').value || '',
+          givenDate: given,
+          dueDate: due,
+          note: document.getElementById('creditNote').value || '',
+          totalUZS: Number(total),
+          paidUZS: 0,
+          remainingUZS: Number(total),
+          status: 'open',
+          items,
+          createdAt: serverTimestamp(),
+          payments: [],
+          creditKind: kind,
+          creditKindLabel: kind === 'diler' ? 'Diler nasiya' : 'Oddiy nasiya'
         });
       });
-      fillQuickCustomer(`${first} ${last}`, phone); 
-      cart = []; globalDiscount = {type:'none', value:0}; renderCart(); 
-      document.getElementById('closeNasiyaModalBtn').click(); 
-      loadCredits(); loadTodaySales(); 
+      
+      fillQuickCustomer(`${first} ${last}`, phone);
+      cart = [];
+      globalDiscount = { type: 'none', value: 0 };
+      renderCart();
+      document.getElementById('closeNasiyaModalBtn').click();
+      loadCredits();
+      loadTodaySales();
       alert("Nasiya muvaffaqiyatli rasmiylashtirildi!");
-    } catch(e){ alert("Xato: "+e.message); }
+    } catch (e) {
+      alert("Xato: " + e.message);
+    }
   }
   
-  async function openPaymentModal(id){ 
-    selectedCreditId = id; 
-    let cr = creditsArray.find(c => c.id === id); 
-    if(!cr) return; 
-    let rem = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); 
-    document.getElementById('paymentCreditInfo').innerHTML = `<b>${escapeHtml(cr.fullName)}</b> | Qoldiq: ${fmt(rem)} so‘m`; 
-    document.getElementById('paymentAmount').value = ''; 
-    document.getElementById('paymentDate').value = today(); 
-    document.getElementById('fullCloseCheckbox').checked = false; 
-    document.getElementById('paymentNewDueDate').value = cr.dueDate || today(); 
-    document.getElementById('paymentModal').classList.add('open'); 
+  async function openPaymentModal(id) {
+    selectedCreditId = id;
+    const cr = creditsArray.find(c => c.id === id);
+    if (!cr) return;
+    const rem = (Number(cr.totalUZS) || 0) - (Number(cr.paidUZS) || 0);
+    document.getElementById('paymentCreditInfo').innerHTML = `<b>${escapeHtml(cr.fullName)}</b> | Qoldiq: ${fmt(rem)} so‘m`;
+    document.getElementById('paymentAmount').value = '';
+    document.getElementById('paymentDate').value = today();
+    document.getElementById('fullCloseCheckbox').checked = false;
+    document.getElementById('paymentNewDueDate').value = cr.dueDate || today();
+    document.getElementById('paymentModal').classList.add('open');
   }
   
-  async function savePayment(){ 
-    if(!selectedCreditId) return; 
-    let cr = creditsArray.find(c => c.id === selectedCreditId); 
-    if(!cr) return; 
-    let amount = parseFloat(document.getElementById('paymentAmount').value) || 0; 
-    let fullClose = document.getElementById('fullCloseCheckbox').checked; 
-    let rem = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); 
-    if(fullClose) amount = rem; 
-    if(amount <= 0 && !fullClose) return alert("Summa kiriting"); 
-    let newPaid = (Number(cr.paidUZS)||0) + amount; 
-    let newRem = (Number(cr.totalUZS)||0) - newPaid; 
-    let status = newRem <= 0 ? 'closed' : (newPaid > 0 ? 'partial' : 'open'); 
-    let newDue = document.getElementById('paymentNewDueDate').value || cr.dueDate; 
+  async function savePayment() {
+    if (!selectedCreditId) return;
+    const cr = creditsArray.find(c => c.id === selectedCreditId);
+    if (!cr) return;
+    let amount = parseFloat(document.getElementById('paymentAmount').value) || 0;
+    const fullClose = document.getElementById('fullCloseCheckbox').checked;
+    const rem = (Number(cr.totalUZS) || 0) - (Number(cr.paidUZS) || 0);
+    if (fullClose) amount = rem;
+    if (amount <= 0 && !fullClose) return alert("Summa kiriting");
+    const newPaid = (Number(cr.paidUZS) || 0) + amount;
+    const newRem = (Number(cr.totalUZS) || 0) - newPaid;
+    const status = newRem <= 0 ? 'closed' : (newPaid > 0 ? 'partial' : 'open');
+    const newDue = document.getElementById('paymentNewDueDate').value || cr.dueDate;
     await updateDoc(doc(db, 'credits', selectedCreditId), {
-      paidUZS:newPaid, remainingUZS:newRem, status,
-      statusUZ:status==='closed' ? 'Yopilgan' : (status==='partial' ? 'Qisman' : 'Ochiq'),
-      dueDate:newDue, payments:[...(cr.payments||[]), {amount, date:document.getElementById('paymentDate').value, method:document.getElementById('paymentMethod').value, note:''}]
+      paidUZS: newPaid,
+      remainingUZS: newRem,
+      status,
+      statusUZ: status === 'closed' ? 'Yopilgan' : (status === 'partial' ? 'Qisman' : 'Ochiq'),
+      dueDate: newDue,
+      payments: [...(cr.payments || []), { amount, date: document.getElementById('paymentDate').value, method: document.getElementById('paymentMethod').value, note: '' }]
     });
-    if(amount > 0) await addDoc(collection(db, 'sales'), {
-      type:'credit_payment', 
-      paymentMethod:document.getElementById('paymentMethod').value,
-      totalUZS:amount, 
-      fullName:cr.fullName, 
-      creditId:selectedCreditId, 
-      createdAt:serverTimestamp()
-    });
-    document.getElementById('closePaymentModalBtn').click(); 
-    loadCredits(); loadTodaySales(); 
+    if (amount > 0) {
+      await addDoc(collection(db, 'sales'), {
+        type: 'credit_payment',
+        paymentMethod: document.getElementById('paymentMethod').value,
+        totalUZS: amount,
+        fullName: cr.fullName,
+        creditId: selectedCreditId,
+        createdAt: serverTimestamp()
+      });
+    }
+    document.getElementById('closePaymentModalBtn').click();
+    loadCredits();
+    loadTodaySales();
     alert("To'lov muvaffaqiyatli amalga oshirildi!");
   }
   
@@ -1282,99 +1587,84 @@
   const scanBtn = document.getElementById('scanCameraBtn');
   const closeCamBtn = document.getElementById('closeCameraBtn');
   
-  async function startScanner(){
+  async function startScanner() {
     cameraPreview.classList.add('active');
-    if(html5QrCode) try{ await html5QrCode.stop(); } catch(e){}
+    if (html5QrCode) try { await html5QrCode.stop(); } catch (e) {}
     html5QrCode = new Html5Qrcode("reader");
     try {
       await html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => {
         addToCartByCode(decodedText);
         stopScanner();
       }, (err) => {});
-    } catch(err){ alert("Kamera ishga tushmadi"); stopScanner(); }
+    } catch (err) {
+      alert("Kamera ishga tushmadi");
+      stopScanner();
+    }
   }
   
-  function stopScanner(){ 
-    if(html5QrCode){ html5QrCode.stop().then(()=>{ cameraPreview.classList.remove('active'); }).catch(()=>{}); } 
-    else { cameraPreview.classList.remove('active'); } 
+  function stopScanner() {
+    if (html5QrCode) {
+      html5QrCode.stop().then(() => { cameraPreview.classList.remove('active'); }).catch(() => {});
+    } else {
+      cameraPreview.classList.remove('active');
+    }
   }
   
   const barcodeInput = document.getElementById('barcodeInput');
-  
-  if(barcodeInput) {
+  if (barcodeInput) {
     barcodeInput.addEventListener('change', (e) => {
-      let val = e.target.value.trim();
-      if(val){ 
-        addToCartByCode(val); 
-        e.target.value = ''; 
+      const val = e.target.value.trim();
+      if (val) {
+        addToCartByCode(val);
+        e.target.value = '';
       }
     });
-    
-    barcodeInput.addEventListener('keypress', (e) => { 
-      if(e.key==='Enter'){ 
-        let val = e.target.value.trim(); 
-        if(val){ 
-          addToCartByCode(val); 
-          e.target.value = ''; 
-        } 
-      } 
+    barcodeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const val = e.target.value.trim();
+        if (val) {
+          addToCartByCode(val);
+          e.target.value = '';
+        }
+      }
     });
   }
   
-  if(scanBtn) scanBtn.onclick = startScanner;
-  if(closeCamBtn) closeCamBtn.onclick = stopScanner;
+  if (scanBtn) scanBtn.onclick = startScanner;
+  if (closeCamBtn) closeCamBtn.onclick = stopScanner;
+  
+  // Event listeners
+  document.getElementById('closeVariantModalBtn').onclick = closeVariantModal;
+  document.getElementById('cancelVariantBtn').onclick = closeVariantModal;
   
   setTimeout(() => {
     setupAutocomplete('customerQuickName', 'nameSuggestions', 'name');
     setupAutocomplete('customerQuickPhone', 'phoneSuggestions', 'phone');
   }, 1000);
   
-  // Button eventlari
-  const cashSaleBtn = document.getElementById('cashSaleBtn');
-  if(cashSaleBtn) cashSaleBtn.onclick = cashSale;
-  
-  const nasiyaOpenBtn = document.getElementById('nasiyaOpenBtn');
-  if(nasiyaOpenBtn) nasiyaOpenBtn.onclick = () => document.getElementById('nasiyaModal').classList.add('open');
-  
-  const clearCartBtn = document.getElementById('clearCartBtn');
-  if(clearCartBtn) clearCartBtn.onclick = () => { cart = []; globalDiscount = {type:'none', value:0}; renderCart(); };
-  
-  const discountManagerBtn = document.getElementById('discountManagerBtn');
-  if(discountManagerBtn) discountManagerBtn.onclick = () => document.getElementById('discountModal').classList.add('open');
-  
-  const closeDiscountBtn = document.getElementById('closeDiscountModalBtn');
-  if(closeDiscountBtn) closeDiscountBtn.onclick = () => document.getElementById('discountModal').classList.remove('open');
-  
-  const closeNasiyaBtn = document.getElementById('closeNasiyaModalBtn');
-  if(closeNasiyaBtn) closeNasiyaBtn.onclick = () => document.getElementById('nasiyaModal').classList.remove('open');
-  
-  const saveNasiyaBtn = document.getElementById('saveNasiyaBtn');
-  if(saveNasiyaBtn) saveNasiyaBtn.onclick = saveNasiya;
-  
-  const closePaymentBtn = document.getElementById('closePaymentModalBtn');
-  if(closePaymentBtn) closePaymentBtn.onclick = () => document.getElementById('paymentModal').classList.remove('open');
-  
-  const savePaymentBtn = document.getElementById('savePaymentBtn');
-  if(savePaymentBtn) savePaymentBtn.onclick = savePayment;
-  
-  const fillRemainingBtn = document.getElementById('fillRemainingBtn');
-  if(fillRemainingBtn) fillRemainingBtn.onclick = () => { if(selectedCreditId){ let cr = creditsArray.find(c=>c.id===selectedCreditId); if(cr) document.getElementById('paymentAmount').value = (Number(cr.totalUZS)||0) - (Number(cr.paidUZS)||0); } };
-  
-  const closeReceiptBtn = document.getElementById('closeReceiptModalBtn');
-  if(closeReceiptBtn) closeReceiptBtn.onclick = () => document.getElementById('receiptModal').classList.remove('open');
-  
-  const printReceiptBtn = document.getElementById('printReceiptBtn');
-  if(printReceiptBtn) printReceiptBtn.onclick = () => { 
-    let w = window.open('', '_blank', 'width=400,height=600'); 
-    w.document.write(`<html><head><meta charset="UTF-8"><title>Chek</title></head><body><div style="padding:12px">${document.getElementById('receiptContent').innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();window.close();},200)}<\/script></body></html>`); 
-    w.document.close(); 
+  document.getElementById('cashSaleBtn').onclick = cashSale;
+  document.getElementById('nasiyaOpenBtn').onclick = () => document.getElementById('nasiyaModal').classList.add('open');
+  document.getElementById('clearCartBtn').onclick = () => { cart = []; globalDiscount = { type: 'none', value: 0 }; renderCart(); };
+  document.getElementById('discountManagerBtn').onclick = () => document.getElementById('discountModal').classList.add('open');
+  document.getElementById('closeDiscountModalBtn').onclick = () => document.getElementById('discountModal').classList.remove('open');
+  document.getElementById('closeNasiyaModalBtn').onclick = () => document.getElementById('nasiyaModal').classList.remove('open');
+  document.getElementById('saveNasiyaBtn').onclick = saveNasiya;
+  document.getElementById('closePaymentModalBtn').onclick = () => document.getElementById('paymentModal').classList.remove('open');
+  document.getElementById('savePaymentBtn').onclick = savePayment;
+  document.getElementById('fillRemainingBtn').onclick = () => {
+    if (selectedCreditId) {
+      const cr = creditsArray.find(c => c.id === selectedCreditId);
+      if (cr) document.getElementById('paymentAmount').value = (Number(cr.totalUZS) || 0) - (Number(cr.paidUZS) || 0);
+    }
   };
-  
-  const searchCredit = document.getElementById('searchCredit');
-  if(searchCredit) searchCredit.addEventListener('input', () => renderCreditsUI());
-  
-  const applyGlobalBtn = document.getElementById('applyGlobalDiscountBtn');
-  if(applyGlobalBtn) applyGlobalBtn.onclick = () => {
+  document.getElementById('closeReceiptModalBtn').onclick = () => document.getElementById('receiptModal').classList.remove('open');
+  document.getElementById('printReceiptBtn').onclick = () => {
+    const w = window.open('', '_blank', 'width=400,height=600');
+    w.document.write(`<html><head><meta charset="UTF-8"><title>Chek</title></head><body><div style="padding:12px">${document.getElementById('receiptContent').innerHTML}</div><script>window.onload=()=>{setTimeout(()=>{window.print();window.close();},200)}<\/script></body></html>`);
+    w.document.close();
+  };
+  document.getElementById('searchCredit').addEventListener('input', () => renderCreditsUI());
+  document.getElementById('applyGlobalDiscountBtn').onclick = () => {
     globalDiscount = {
       type: document.getElementById('globalDiscType').value,
       value: parseFloat(document.getElementById('globalDiscValue').value) || 0,
@@ -1384,14 +1674,16 @@
     renderCart();
     alert("Chegirma qo'llanildi!");
   };
-  
-  const clearGlobalBtn = document.getElementById('clearGlobalDiscountBtn');
-  if(clearGlobalBtn) clearGlobalBtn.onclick = () => { globalDiscount = {type:'none', value:0}; renderCart(); alert("Chegirma bekor qilindi!"); };
-  
+  document.getElementById('clearGlobalDiscountBtn').onclick = () => {
+    globalDiscount = { type: 'none', value: 0 };
+    renderCart();
+    alert("Chegirma bekor qilindi!");
+  };
   document.querySelectorAll('.quickGlobal').forEach(btn => {
     btn.onclick = () => {
-      let perc = parseFloat(btn.dataset.percent), hours = parseFloat(btn.dataset.hours), now = new Date(), end = new Date(now.getTime() + hours * 3600000);
-      globalDiscount = { type:'percent', value:perc, startTime:now.toISOString(), endTime:end.toISOString() };
+      const perc = parseFloat(btn.dataset.percent), hours = parseFloat(btn.dataset.hours);
+      const now = new Date(), end = new Date(now.getTime() + hours * 3600000);
+      globalDiscount = { type: 'percent', value: perc, startTime: now.toISOString(), endTime: end.toISOString() };
       renderCart();
       document.getElementById('discountModal').classList.remove('open');
       alert(`${perc}% chegirma ${hours} soatga amal qiladi`);
@@ -1399,29 +1691,50 @@
   });
   
   document.addEventListener('click', (e) => {
-    if(e.target.closest('.item-remove-btn')){ let idx = e.target.closest('.item-remove-btn').dataset.idx; cart.splice(idx,1); renderCart(); }
-    if(e.target.closest('.qty-btn')){ let act = e.target.closest('.qty-btn').dataset.action, idx = e.target.closest('.qty-btn').dataset.idx; if(act==='inc') cart[idx].qty++; else { cart[idx].qty--; if(cart[idx].qty<=0) cart.splice(idx,1); } renderCart(); }
-    if(e.target.closest('.item-discount-btn')) document.getElementById('discountModal').classList.add('open');
-    if(e.target.closest('.price-edit-icon')){ let idx = e.target.closest('.price-edit-icon').dataset.priceEdit; let np = prompt("Yangi narx:", cart[idx].priceUZS); if(np && !isNaN(parseFloat(np))){ cart[idx].priceUZS = parseFloat(np); renderCart(); } }
-    if(e.target.closest('.payment-open-btn')) openPaymentModal(e.target.closest('.payment-open-btn').dataset.id);
-    if(e.target.closest('.receipt-credit-btn')){ let id = e.target.closest('.receipt-credit-btn').dataset.id; let cr = creditsArray.find(c=>c.id===id); if(cr) showReceipt(cr,'credit'); }
-    if(e.target.closest('.receipt-sale-btn')){ let sid = e.target.closest('.receipt-sale-btn').dataset.id; let sale = allSales.find(s=>s.id===sid); if(sale) showReceipt(sale,'sale'); }
-    if(e.target.closest('.quick-customer-btn')){ let btn = e.target.closest('.quick-customer-btn'); fillQuickCustomer(btn.dataset.name, btn.dataset.phone); }
-    if(e.target.closest('[data-img]')){ let src = e.target.closest('[data-img]').dataset.img; if(src){ document.getElementById('fullImage').src = src; document.getElementById('imageModal').classList.add('open'); } }
+    if (e.target.closest('.item-remove-btn')) {
+      const idx = e.target.closest('.item-remove-btn').dataset.idx;
+      cart.splice(idx, 1);
+      renderCart();
+    }
+    if (e.target.closest('.qty-btn')) {
+      const act = e.target.closest('.qty-btn').dataset.action;
+      const idx = e.target.closest('.qty-btn').dataset.idx;
+      if (act === 'inc') cart[idx].qty++;
+      else {
+        cart[idx].qty--;
+        if (cart[idx].qty <= 0) cart.splice(idx, 1);
+      }
+      renderCart();
+    }
+    if (e.target.closest('.payment-open-btn')) openPaymentModal(e.target.closest('.payment-open-btn').dataset.id);
+    if (e.target.closest('.receipt-credit-btn')) {
+      const id = e.target.closest('.receipt-credit-btn').dataset.id;
+      const cr = creditsArray.find(c => c.id === id);
+      if (cr) showReceipt(cr, 'credit');
+    }
+    if (e.target.closest('.receipt-sale-btn')) {
+      const sid = e.target.closest('.receipt-sale-btn').dataset.id;
+      const sale = allSales.find(s => s.id === sid);
+      if (sale) showReceipt(sale, 'sale');
+    }
+    if (e.target.closest('.quick-customer-btn')) {
+      const btn = e.target.closest('.quick-customer-btn');
+      fillQuickCustomer(btn.dataset.name, btn.dataset.phone);
+    }
   });
   
-  const closeImageBtn = document.getElementById('closeImageModalBtn');
-  if(closeImageBtn) closeImageBtn.onclick = () => document.getElementById('imageModal').classList.remove('open');
+  document.getElementById('closeImageModalBtn').onclick = () => document.getElementById('imageModal').classList.remove('open');
   
-  window.onload = () => { 
-    loadCredits(); 
-    loadTodaySales(); 
-    renderCart(); 
+  window.onload = async () => {
+    await loadAllProducts();
+    await loadCredits();
+    await loadTodaySales();
+    renderCart();
     const givenDate = document.getElementById('creditGivenDate');
     const dueDate = document.getElementById('creditDueDate');
-    if(givenDate) givenDate.value = today(); 
-    if(dueDate) dueDate.value = today();
-    if(barcodeInput) barcodeInput.focus();
+    if (givenDate) givenDate.value = today();
+    if (dueDate) dueDate.value = today();
+    if (barcodeInput) barcodeInput.focus();
   };
 </script>
 </body>
