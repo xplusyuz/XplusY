@@ -203,6 +203,7 @@
             padding: 18px;
             box-shadow: 0 8px 25px rgba(0,0,0,0.08);
             transition: transform 0.2s;
+            cursor: pointer;
         }
 
         .debt-card:active {
@@ -392,6 +393,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 100;
         }
 
         .fab:active {
@@ -488,23 +490,6 @@
             grid-template-columns: repeat(3, 1fr);
             gap: 8px;
             margin-bottom: 12px;
-        }
-
-        .image-upload-box {
-            aspect-ratio: 1;
-            border: 2px dashed #e5e7eb;
-            border-radius: 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: border-color 0.2s;
-            background: #f9fafb;
-        }
-
-        .image-upload-box:hover {
-            border-color: #667eea;
         }
 
         .image-preview {
@@ -619,7 +604,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2 id="modalTitle">➕ Yangi nasiya</h2>
-            <button class="close-btn" onclick="closeModal()">✕</button>
+            <button class="close-btn" id="closeModalBtn">✕</button>
         </div>
         
         <form id="debtForm">
@@ -662,7 +647,7 @@
                 <label>📸 Mahsulot rasmlari</label>
                 <div class="product-images" id="imagePreviewContainer"></div>
                 <input type="file" id="imageUpload" accept="image/*" multiple style="display: none;">
-                <button type="button" class="btn btn-outline" onclick="document.getElementById('imageUpload').click()">
+                <button type="button" class="btn btn-outline" id="uploadImageBtn">
                     📸 Rasm yuklash (maksimum 5 ta)
                 </button>
             </div>
@@ -682,7 +667,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h2>📋 Nasiya tafsilotlari</h2>
-            <button class="close-btn" onclick="closeDetailModal()">✕</button>
+            <button class="close-btn" id="closeDetailModalBtn">✕</button>
         </div>
         <div id="detailContent"></div>
     </div>
@@ -705,16 +690,12 @@
         const query = window.firestoreQuery;
         const orderBy = window.firestoreOrderBy;
         const updateDoc = window.firestoreUpdateDoc;
-        const where = window.firestoreWhere;
-        const getDocs = window.firestoreGetDocs;
         const storageRef = window.storageRef;
         const uploadBytes = window.storageUploadBytes;
         const getDownloadURL = window.storageGetDownloadURL;
-        const deleteObject = window.storageDeleteObject;
 
         let currentTab = 'active';
         let currentDebtId = null;
-        let uploadedImages = [];
         let allDebts = [];
 
         // Set default dates
@@ -736,7 +717,12 @@
         // Search
         document.getElementById('searchInput').addEventListener('input', filterAndRender);
 
-        // Image upload
+        // Upload image button
+        document.getElementById('uploadImageBtn').addEventListener('click', function() {
+            document.getElementById('imageUpload').click();
+        });
+
+        // Image upload preview
         document.getElementById('imageUpload').addEventListener('change', async function(e) {
             const files = Array.from(e.target.files).slice(0, 5);
             const container = document.getElementById('imagePreviewContainer');
@@ -754,6 +740,10 @@
             }
         });
 
+        // Close modal buttons
+        document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+        document.getElementById('closeDetailModalBtn').addEventListener('click', closeDetailModal);
+
         // Load debts
         const debtsRef = collection(db, 'debts');
         const q = query(debtsRef, orderBy('createdAt', 'desc'));
@@ -765,6 +755,9 @@
             });
             filterAndRender();
             updateStats();
+        }, (error) => {
+            console.error('Xatolik:', error);
+            document.getElementById('debtList').innerHTML = '<div class="empty-state">❌ Ulanishda xatolik. Firebase qoidalarini tekshiring.</div>';
         });
 
         function filterAndRender() {
@@ -800,7 +793,7 @@
                 const remaining = debt.amount - paidAmount;
 
                 return `
-                    <div class="debt-card" onclick="showDetail('${debt.id}')">
+                    <div class="debt-card" data-id="${debt.id}">
                         <div class="card-header">
                             <div class="debtor-info">
                                 <div class="debtor-avatar">${initials}</div>
@@ -829,23 +822,51 @@
                         
                         ${debt.images?.length ? `
                             <div class="products-preview">
-                                ${debt.images.slice(0, 3).map(img => `<img src="${img}" class="product-thumb" onclick="event.stopPropagation()">`).join('')}
+                                ${debt.images.slice(0, 3).map(img => `<img src="${img}" class="product-thumb">`).join('')}
                                 ${debt.images.length > 3 ? `<div class="product-thumb-placeholder">+${debt.images.length - 3}</div>` : ''}
                             </div>
                         ` : ''}
                         
-                        <div class="card-actions" onclick="event.stopPropagation()">
+                        <div class="card-actions">
                             ${debt.status === 'active' ? `
-                                <button class="btn btn-success" onclick="addPayment('${debt.id}')">💵 To'lov</button>
-                                <button class="btn btn-primary" onclick="editDebt('${debt.id}')">✏️ Tahrirlash</button>
-                                <button class="btn btn-danger" onclick="deleteDebt('${debt.id}')">🗑️</button>
-                            ` : `
-                                <button class="btn btn-outline" onclick="deleteDebt('${debt.id}')">🗑️ O'chirish</button>
-                            `}
+                                <button class="btn btn-success" data-action="payment" data-id="${debt.id}">💵 To'lov</button>
+                                <button class="btn btn-primary" data-action="edit" data-id="${debt.id}">✏️ Tahrirlash</button>
+                            ` : ''}
+                            <button class="btn btn-danger" data-action="delete" data-id="${debt.id}">🗑️ O'chirish</button>
                         </div>
                     </div>
                 `;
             }).join('');
+
+            // Add event listeners
+            container.querySelectorAll('.debt-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    if (!e.target.closest('button')) {
+                        showDetail(card.dataset.id);
+                    }
+                });
+            });
+
+            container.querySelectorAll('[data-action="payment"]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addPayment(btn.dataset.id);
+                });
+            });
+
+            container.querySelectorAll('[data-action="edit"]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    editDebt(btn.dataset.id);
+                });
+            });
+
+            container.querySelectorAll('[data-action="delete"]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteDebt(btn.dataset.id);
+                });
+            });
         }
 
         function updateStats() {
@@ -936,8 +957,7 @@
             currentDebtId = null;
         }
 
-        // Global functions
-        window.showDetail = function(id) {
+        function showDetail(id) {
             const debt = allDebts.find(d => d.id === id);
             if (!debt) return;
             
@@ -970,18 +990,12 @@
                         </div>
                     </div>
                 ` : ''}
-                
-                ${debt.status === 'active' ? `
-                    <button class="btn btn-success" style="width:100%;" onclick="addPayment('${debt.id}'); closeDetailModal();">
-                        💵 To'lov qo'shish
-                    </button>
-                ` : ''}
             `;
             
             document.getElementById('detailModal').classList.add('active');
-        };
+        }
 
-        window.addPayment = async function(id) {
+        async function addPayment(id) {
             const amount = prompt('To\'lov summasini kiriting (so\'m):');
             if (!amount) return;
             
@@ -1003,9 +1017,9 @@
             const status = totalPaid >= debt.amount ? 'paid' : 'active';
             
             await updateDoc(doc(db, 'debts', id), { payments, status });
-        };
+        }
 
-        window.editDebt = function(id) {
+        function editDebt(id) {
             const debt = allDebts.find(d => d.id === id);
             if (!debt) return;
             
@@ -1021,15 +1035,24 @@
             document.getElementById('note').value = debt.note || '';
             
             document.getElementById('debtModal').classList.add('active');
-        };
+        }
 
-        window.deleteDebt = async function(id) {
+        async function deleteDebt(id) {
             if (!confirm('Nasiyani o\'chirishni tasdiqlaysizmi?')) return;
             await deleteDoc(doc(db, 'debts', id));
-        };
+        }
 
         document.getElementById('addDebtBtn').addEventListener('click', () => {
             document.getElementById('debtModal').classList.add('active');
+        });
+
+        // Close modal when clicking outside
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
         });
 
         console.log('✅ Nasiya tizimi ishga tushdi!');
