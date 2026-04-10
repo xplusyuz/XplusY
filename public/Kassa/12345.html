@@ -4,15 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi Pro</title>
-    <!-- Firebase SDK -->
+    <!-- Firestore versiyasi -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, push, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
             authDomain: "xplusy-760fa.firebaseapp.com",
-            databaseURL: "https://xplusy-760fa-default-rtdb.firebaseio.com",
             projectId: "xplusy-760fa",
             storageBucket: "xplusy-760fa.firebasestorage.app",
             messagingSenderId: "992512966017",
@@ -20,19 +19,20 @@
             measurementId: "G-459PLJ7P7L"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+        const db = getFirestore(app);
         
-        // Global o'zgaruvchilarga to'g'ridan-to'g'ri funksiyalarni o'rnatish
         window.db = db;
-        window.dbRef = ref;
-        window.dbPush = push;
-        window.dbSet = set;
-        window.dbOnValue = onValue;
-        window.dbRemove = remove;
+        window.firestoreAddDoc = addDoc;
+        window.firestoreCollection = collection;
+        window.firestoreOnSnapshot = onSnapshot;
+        window.firestoreDeleteDoc = deleteDoc;
+        window.firestoreDoc = doc;
+        window.firestoreQuery = query;
+        window.firestoreOrderBy = orderBy;
+        window.firestoreWriteBatch = writeBatch;
         
-        console.log("✅ Firebase muvaffaqiyatli ulandi!");
+        console.log("✅ Firestore muvaffaqiyatli ulandi!");
     </script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -608,22 +608,24 @@
 </div>
 
 <script>
-    // Firebase tayyor bo'lguncha kutish
-    (function waitForFirebase() {
-        if (window.db && window.dbRef && window.dbOnValue) {
+    (function waitForFirestore() {
+        if (window.db && window.firestoreAddDoc) {
             initApp();
         } else {
-            setTimeout(waitForFirebase, 100);
+            setTimeout(waitForFirestore, 100);
         }
     })();
 
     function initApp() {
         const db = window.db;
-        const ref = window.dbRef;
-        const push = window.dbPush;
-        const set = window.dbSet;
-        const onValue = window.dbOnValue;
-        const remove = window.dbRemove;
+        const addDoc = window.firestoreAddDoc;
+        const collection = window.firestoreCollection;
+        const onSnapshot = window.firestoreOnSnapshot;
+        const deleteDoc = window.firestoreDeleteDoc;
+        const doc = window.firestoreDoc;
+        const query = window.firestoreQuery;
+        const orderBy = window.firestoreOrderBy;
+        const writeBatch = window.firestoreWriteBatch;
 
         // DOM elementlar
         const sohibBal = document.getElementById('sohib-balance');
@@ -654,18 +656,31 @@
             });
         });
 
-        const transactionsRef = ref(db, 'transactions');
+        const transactionsRef = collection(db, 'transactions');
+        const q = query(transactionsRef, orderBy('timestamp', 'desc'));
 
         function formatMoney(v) { 
             return new Intl.NumberFormat('uz-UZ').format(v || 0); 
         }
 
+        // Firestore qoidalari: barchaga ochiq bo'lishi kerak
+        // Firestore console'da: Rules -> quyidagini qo'ying:
+        /*
+        rules_version = '2';
+        service cloud.firestore {
+          match /databases/{database}/documents {
+            match /transactions/{document} {
+              allow read, write: if true;
+            }
+          }
+        }
+        */
+
         function updateUI(transactions) {
             let sC = 0, iC = 0, sG = 0, iG = 0, sCash = 0, iCash = 0;
-            const list = transactions ? Object.entries(transactions) : [];
             
-            list.forEach(([k, t]) => {
-                if (!t) return;
+            transactions.forEach(doc => {
+                const t = doc.data();
                 const amt = Number(t.amount) || 0;
                 if (t.person === 'sohibjon') {
                     if (t.type === 'contribution') sC += amt;
@@ -702,21 +717,14 @@
         }
 
         function renderHistory(transactions) {
-            if (!transactions) {
+            if (transactions.length === 0) {
                 historyList.innerHTML = '<li class="empty-state">Hozircha yozuvlar yo\'q</li>';
                 return;
             }
-            
-            const entries = Object.entries(transactions);
-            if (entries.length === 0) {
-                historyList.innerHTML = '<li class="empty-state">Hozircha yozuvlar yo\'q</li>';
-                return;
-            }
-            
-            entries.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
             
             let html = '';
-            entries.forEach(([key, t]) => {
+            transactions.forEach(doc => {
+                const t = doc.data();
                 const person = t.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
                 let typeTxt = '', icon = '';
                 
@@ -742,38 +750,42 @@
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span class="history-amount">${formatMoney(t.amount)}</span>
-                        <button class="delete-history" data-key="${key}"><i class="fas fa-trash"></i></button>
+                        <button class="delete-history" data-id="${doc.id}"><i class="fas fa-trash"></i></button>
                     </div>
                 </li>`;
             });
             
             historyList.innerHTML = html;
             
-            // Delete event listener
             document.querySelectorAll('.delete-history').forEach(b => {
-                b.addEventListener('click', (e) => {
+                b.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    const key = b.dataset.key;
+                    const id = b.dataset.id;
                     if (confirm('Ushbu yozuv o\'chirilsinmi?')) {
-                        const itemRef = ref(db, `transactions/${key}`);
-                        remove(itemRef).catch(err => alert('Xatolik: ' + err));
+                        try {
+                            await deleteDoc(doc(db, 'transactions', id));
+                            console.log('✅ Yozuv o\'chirildi');
+                        } catch (err) {
+                            alert('Xatolik: ' + err);
+                        }
                     }
                 });
             });
         }
 
         // Real-time listener
-        onValue(transactionsRef, (snapshot) => {
-            const data = snapshot.val();
-            updateUI(data);
-            renderHistory(data);
+        onSnapshot(q, (snapshot) => {
+            const transactions = [];
+            snapshot.forEach(doc => transactions.push(doc));
+            updateUI(transactions);
+            renderHistory(transactions);
         }, (error) => {
-            console.error("Firebase xatosi:", error);
+            console.error("Firestore xatosi:", error);
             historyList.innerHTML = '<li class="empty-state">Ulanishda xatolik</li>';
         });
 
         // Yangi yozuv qo'shish
-        addBtn.addEventListener('click', () => {
+        addBtn.addEventListener('click', async () => {
             const person = selectedPersonInput.value;
             const type = typeSelect.value;
             const amt = Number(amountInput.value);
@@ -784,29 +796,41 @@
             }
             
             const note = noteInput.value.trim();
-            const newRef = push(transactionsRef);
             
-            set(newRef, {
-                person: person,
-                type: type,
-                amount: amt,
-                note: note,
-                timestamp: Date.now()
-            }).then(() => {
+            try {
+                await addDoc(transactionsRef, {
+                    person: person,
+                    type: type,
+                    amount: amt,
+                    note: note,
+                    timestamp: Date.now()
+                });
                 amountInput.value = '';
                 noteInput.value = '';
                 console.log('✅ Yozuv saqlandi');
-            }).catch(err => {
+            } catch (err) {
                 alert('Saqlashda xatolik: ' + err);
-            });
+            }
         });
 
         // Barchasini tozalash
-        clearAllBtn.addEventListener('click', () => {
+        clearAllBtn.addEventListener('click', async () => {
             if (confirm('DIQQAT! Barcha yozuvlar o\'chiriladi. Davom etasizmi?')) {
-                set(transactionsRef, null)
-                    .then(() => console.log('✅ Barcha yozuvlar tozalandi'))
-                    .catch(err => alert('Xatolik: ' + err));
+                try {
+                    const snapshot = await new Promise((resolve) => {
+                        onSnapshot(transactionsRef, resolve, { once: true });
+                    });
+                    
+                    const batch = writeBatch(db);
+                    snapshot.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    
+                    await batch.commit();
+                    console.log('✅ Barcha yozuvlar tozalandi');
+                } catch (err) {
+                    alert('Xatolik: ' + err);
+                }
             }
         });
 
