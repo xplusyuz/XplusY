@@ -2,11 +2,24 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>⚖️ S&I Tarozi Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi</title>
+    
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            deleteDoc, 
+            doc, 
+            query, 
+            orderBy,
+            writeBatch,
+            serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -20,158 +33,766 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         
-        // Global qilish
         window.db = db;
-        window.fs = { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, writeBatch, serverTimestamp };
-        console.log("✅ Firestore ulandi!");
+        window.firestoreAddDoc = addDoc;
+        window.firestoreCollection = collection;
+        window.firestoreOnSnapshot = onSnapshot;
+        window.firestoreDeleteDoc = deleteDoc;
+        window.firestoreDoc = doc;
+        window.firestoreQuery = query;
+        window.firestoreOrderBy = orderBy;
+        window.firestoreWriteBatch = writeBatch;
+        window.firestoreServerTimestamp = serverTimestamp;
+        
+        console.log("✅ Firebase Firestore ulandi!");
     </script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
     <style>
-        /* CSS stillari sizning kodingizdagidek qoladi, faqat muhim joylari: */
-        body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f1f5f9; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; }
-        .glass-card { background: rgba(255,255,255,0.08); border-radius: 20px; padding: 15px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); }
-        .balance-amount { font-size: 1.8rem; font-weight: 800; color: #3b82f6; }
-        .person-selector { display: flex; gap: 10px; margin: 15px 0; }
-        .person-btn { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid #334155; cursor: pointer; text-align: center; background: #1e293b; color: #94a3b8; }
-        .person-btn.active[data-person="sohibjon"] { background: #2563eb; color: white; }
-        .person-btn.active[data-person="ilhomjon"] { background: #16a34a; color: white; }
-        .input-wrapper { background: #1e293b; border-radius: 12px; padding: 10px; margin-bottom: 10px; display: flex; align-items: center; }
-        input, select { background: transparent; border: none; color: white; width: 100%; outline: none; padding-left: 10px; }
-        .primary-btn { width: 100%; padding: 15px; border-radius: 12px; background: #3b82f6; border: none; color: white; font-weight: bold; cursor: pointer; }
-        .history-item { display: flex; justify-content: space-between; background: #1e293b; margin-top: 10px; padding: 10px; border-radius: 10px; font-size: 0.9rem; }
-        .delete-btn { color: #ef4444; cursor: pointer; background: none; border: none; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f172a;
+            min-height: 100vh;
+            padding: 16px 12px 80px;
+            color: #e2e8f0;
+        }
+
+        .app {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            width: 45px;
+            height: 45px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .logo span {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            display: block;
+        }
+
+        .status {
+            background: #1e293b;
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid #334155;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+        }
+
+        /* Balance Cards */
+        .balance-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 18px 14px;
+            border: 1px solid #334155;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .avatar.blue {
+            background: #2563eb;
+        }
+
+        .avatar.green {
+            background: #16a34a;
+        }
+
+        .card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .balance {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .balance-label {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            margin-top: 4px;
+        }
+
+        /* Summary */
+        .summary {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border-radius: 24px;
+            padding: 20px 18px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        .summary-title {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-bottom: 12px;
+        }
+
+        .verdict {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 16px;
+            line-height: 1.3;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #334155;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            opacity: 0.5;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* Add Form */
+        .add-form {
+            background: #1e293b;
+            border-radius: 24px;
+            padding: 20px 18px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        .form-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .person-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .person-btn {
+            flex: 1;
+            background: #0f172a;
+            border: 1.5px solid #334155;
+            border-radius: 40px;
+            padding: 12px;
+            text-align: center;
+            font-weight: 600;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .person-btn.active {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: white;
+        }
+
+        .person-btn.green.active {
+            background: #16a34a;
+            border-color: #16a34a;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            opacity: 0.8;
+        }
+
+        .form-control {
+            width: 100%;
+            background: #0f172a;
+            border: 1.5px solid #334155;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 1rem;
+            color: white;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            border-color: #3b82f6;
+        }
+
+        select.form-control {
+            appearance: none;
+        }
+
+        .btn {
+            background: #2563eb;
+            border: none;
+            border-radius: 40px;
+            padding: 16px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            width: 100%;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 8px;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        /* History */
+        .history {
+            background: #1e293b;
+            border-radius: 24px;
+            padding: 18px 14px;
+            border: 1px solid #334155;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        .history-list {
+            list-style: none;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: #0f172a;
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .history-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .history-badge {
+            display: inline-block;
+            background: #1e293b;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: #94a3b8;
+            width: fit-content;
+        }
+
+        .history-desc {
+            font-size: 0.85rem;
+        }
+
+        .history-time {
+            font-size: 0.65rem;
+            opacity: 0.5;
+        }
+
+        .history-amount {
+            font-weight: 700;
+            font-size: 1rem;
+            color: white;
+        }
+
+        .delete-btn {
+            background: none;
+            border: none;
+            color: #ef4444;
+            font-size: 1.2rem;
+            padding: 6px;
+            cursor: pointer;
+            opacity: 0.6;
+        }
+
+        .delete-btn:active {
+            opacity: 1;
+        }
+
+        .clear-btn {
+            background: transparent;
+            border: 1px solid #ef4444;
+            border-radius: 30px;
+            padding: 10px 18px;
+            color: #ef4444;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 14px;
+            width: 100%;
+        }
+
+        .empty-msg {
+            text-align: center;
+            padding: 30px;
+            opacity: 0.5;
+            font-size: 0.9rem;
+        }
+
+        /* Scrollbar */
+        .history-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-list::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>⚖️ S&I Tarozi</h2>
-    
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div class="glass-card">
-            <div>Sohibjon</div>
-            <div class="balance-amount" id="sohib-balance">0</div>
+<div class="app">
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">⚖️</div>
+            <div>
+                <h1>S&I Tarozi</h1>
+                <span>sheriklik hisobi</span>
+            </div>
         </div>
-        <div class="glass-card">
-            <div>Ilhomjon</div>
-            <div class="balance-amount" id="ilhom-balance">0</div>
+        <div class="status">
+            <span class="status-dot"></span>
+            <span>online</span>
         </div>
     </div>
 
-    <div class="glass-card" style="background: #1e293b;">
-        <div id="verdictText">Hisoblanmoqda...</div>
+    <!-- Balance Cards -->
+    <div class="balance-cards">
+        <div class="card">
+            <div class="card-header">
+                <div class="avatar blue">S</div>
+                <h3>Sohibjon</h3>
+            </div>
+            <div class="balance" id="sohibBalance">0</div>
+            <div class="balance-label">joriy balans</div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="avatar green">I</div>
+                <h3>Ilhomjon</h3>
+            </div>
+            <div class="balance" id="ilhomBalance">0</div>
+            <div class="balance-label">joriy balans</div>
+        </div>
     </div>
 
-    <div class="glass-card">
+    <!-- Summary -->
+    <div class="summary">
+        <div class="summary-title">
+            <span>📊 Umumiy tahlil</span>
+            <span id="updateTime">--:--</span>
+        </div>
+        <div class="verdict" id="verdict">Hisoblanmoqda...</div>
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-label">Sohibjon qo'shgan</span>
+                <span class="stat-value" id="sohibContrib">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Ilhomjon qo'shgan</span>
+                <span class="stat-value" id="ilhomContrib">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Sohibjon olgan</span>
+                <span class="stat-value" id="sohibTaken">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Ilhomjon olgan</span>
+                <span class="stat-value" id="ilhomTaken">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Form -->
+    <div class="add-form">
+        <div class="form-title">
+            <span>➕</span> Yangi yozuv qo'shish
+        </div>
+
         <div class="person-selector">
-            <div class="person-btn active" data-person="sohibjon">Sohibjon</div>
-            <div class="person-btn" data-person="ilhomjon">Ilhomjon</div>
+            <div class="person-btn active" data-person="sohibjon">👤 Sohibjon</div>
+            <div class="person-btn green" data-person="ilhomjon">👤 Ilhomjon</div>
         </div>
-        
-        <div class="input-wrapper">
-            <select id="type">
-                <option value="plus">💰 Pul qo'shdi</option>
-                <option value="minus">🛒 Mahsulot/Naqd oldi</option>
+
+        <div class="form-group">
+            <label>Amal turi</label>
+            <select class="form-control" id="typeSelect">
+                <option value="contribution">💰 Mahsulotga qo'shgan pul</option>
+                <option value="goodsTaken">🛒 Olgan mahsuloti</option>
+                <option value="cashTaken">💵 Kassadan olgan naqd</option>
             </select>
         </div>
 
-        <div class="input-wrapper">
-            <input type="number" id="amount" placeholder="Miqdor (so'm)">
+        <div class="form-group">
+            <label>Miqdor (so'm)</label>
+            <input type="number" class="form-control" id="amountInput" placeholder="50000" value="10000" min="1000" step="1000">
         </div>
 
-        <div class="input-wrapper">
-            <input type="text" id="note" placeholder="Izoh (masalan: Go'sht uchun)">
+        <div class="form-group">
+            <label>Izoh (ixtiyoriy)</label>
+            <input type="text" class="form-control" id="noteInput" placeholder="non, go'sht...">
         </div>
 
-        <button class="primary-btn" id="saveBtn">Saqlash</button>
+        <button class="btn" id="saveBtn">💾 Saqlash</button>
     </div>
 
-    <div id="historyList"></div>
+    <!-- History -->
+    <div class="history">
+        <div class="history-header">
+            <span>📋 So'nggi amallar</span>
+            <span>⬇️</span>
+        </div>
+        <ul class="history-list" id="historyList">
+            <li class="empty-msg">Yuklanmoqda...</li>
+        </ul>
+        <button class="clear-btn" id="clearAllBtn">🗑️ Barcha yozuvlarni tozalash</button>
+    </div>
 </div>
 
 <script>
-    const checkFS = setInterval(() => {
-        if (window.db) {
-            clearInterval(checkFS);
-            startApp();
+    (function() {
+        // Firebase tayyor bo'lguncha kutish
+        if (!window.db) {
+            setTimeout(arguments.callee, 100);
+            return;
         }
-    }, 100);
 
-    function startApp() {
-        const { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, serverTimestamp } = window.fs;
         const db = window.db;
+        const addDoc = window.firestoreAddDoc;
+        const collection = window.firestoreCollection;
+        const onSnapshot = window.firestoreOnSnapshot;
+        const deleteDoc = window.firestoreDeleteDoc;
+        const doc = window.firestoreDoc;
+        const query = window.firestoreQuery;
+        const orderBy = window.firestoreOrderBy;
+        const writeBatch = window.firestoreWriteBatch;
+        const serverTimestamp = window.firestoreServerTimestamp;
+
+        // DOM Elements
+        const sohibBalance = document.getElementById('sohibBalance');
+        const ilhomBalance = document.getElementById('ilhomBalance');
+        const sohibContrib = document.getElementById('sohibContrib');
+        const ilhomContrib = document.getElementById('ilhomContrib');
+        const sohibTaken = document.getElementById('sohibTaken');
+        const ilhomTaken = document.getElementById('ilhomTaken');
+        const verdict = document.getElementById('verdict');
+        const updateTime = document.getElementById('updateTime');
+        const historyList = document.getElementById('historyList');
+
+        // Form Elements
+        const personBtns = document.querySelectorAll('.person-btn');
+        const typeSelect = document.getElementById('typeSelect');
+        const amountInput = document.getElementById('amountInput');
+        const noteInput = document.getElementById('noteInput');
+        const saveBtn = document.getElementById('saveBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
 
         let selectedPerson = 'sohibjon';
-        document.querySelectorAll('.person-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.person-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                selectedPerson = btn.dataset.person;
+
+        // Person selector
+        personBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                personBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                selectedPerson = this.dataset.person;
             });
         });
 
-        const transRef = collection(db, 'transactions');
-        const q = query(transRef, orderBy('timestamp', 'desc'));
+        // Format money
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('uz-UZ').format(amount || 0);
+        }
 
-        onSnapshot(q, (snap) => {
-            let sBal = 0, iBal = 0;
+        // Update UI with data
+        function updateUI(transactions) {
+            let sohibContribTotal = 0;
+            let ilhomContribTotal = 0;
+            let sohibGoodsTotal = 0;
+            let ilhomGoodsTotal = 0;
+            let sohibCashTotal = 0;
+            let ilhomCashTotal = 0;
+
+            transactions.forEach(item => {
+                const data = item.data();
+                const amount = data.amount || 0;
+
+                if (data.person === 'sohibjon') {
+                    if (data.type === 'contribution') sohibContribTotal += amount;
+                    else if (data.type === 'goodsTaken') sohibGoodsTotal += amount;
+                    else if (data.type === 'cashTaken') sohibCashTotal += amount;
+                } else if (data.person === 'ilhomjon') {
+                    if (data.type === 'contribution') ilhomContribTotal += amount;
+                    else if (data.type === 'goodsTaken') ilhomGoodsTotal += amount;
+                    else if (data.type === 'cashTaken') ilhomCashTotal += amount;
+                }
+            });
+
+            const sohibTakenTotal = sohibGoodsTotal + sohibCashTotal;
+            const ilhomTakenTotal = ilhomGoodsTotal + ilhomCashTotal;
+            const sohibBal = sohibContribTotal - sohibTakenTotal;
+            const ilhomBal = ilhomContribTotal - ilhomTakenTotal;
+
+            // Update DOM
+            sohibBalance.textContent = formatMoney(sohibBal);
+            ilhomBalance.textContent = formatMoney(ilhomBal);
+            sohibContrib.textContent = formatMoney(sohibContribTotal);
+            ilhomContrib.textContent = formatMoney(ilhomContribTotal);
+            sohibTaken.textContent = formatMoney(sohibTakenTotal);
+            ilhomTaken.textContent = formatMoney(ilhomTakenTotal);
+
+            // Verdict
+            const diff = sohibBal - ilhomBal;
+            if (Math.abs(diff) < 1) {
+                verdict.textContent = '🤝 Hisob toza. Hech kim qarzdor emas.';
+            } else if (diff > 0) {
+                verdict.textContent = `🔵 Ilhomjon Sohibjonga ${formatMoney(diff)} so'm qarzdor`;
+            } else {
+                verdict.textContent = `🟢 Sohibjon Ilhomjonga ${formatMoney(-diff)} so'm qarzdor`;
+            }
+
+            // Update time
+            const now = new Date();
+            updateTime.textContent = now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Render history
+        function renderHistory(transactions) {
+            if (transactions.length === 0) {
+                historyList.innerHTML = '<li class="empty-msg">Hozircha yozuvlar yo\'q</li>';
+                return;
+            }
+
             let html = '';
-
-            snap.forEach(d => {
-                const t = d.data();
-                const amt = Number(t.amount);
+            
+            transactions.forEach(item => {
+                const data = item.data();
+                const personName = data.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
                 
-                if (t.person === 'sohibjon') {
-                    t.type === 'plus' ? sBal += amt : sBal -= amt;
+                let typeText = '';
+                let icon = '';
+                if (data.type === 'contribution') {
+                    typeText = 'Qo\'shgan pul';
+                    icon = '💰';
+                } else if (data.type === 'goodsTaken') {
+                    typeText = 'Olgan mahsulot';
+                    icon = '🛒';
                 } else {
-                    t.type === 'plus' ? iBal += amt : iBal -= amt;
+                    typeText = 'Olgan naqd';
+                    icon = '💵';
                 }
 
+                const note = data.note ? ` · ${data.note}` : '';
+                const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) : '';
+
                 html += `
-                    <div class="history-item">
-                        <div>
-                            <b>${t.person === 'sohibjon' ? 'S' : 'I'}</b> | ${t.type === 'plus' ? '+' : '-'}${amt.toLocaleString()} <br>
-                            <small>${t.note || ''}</small>
+                    <li class="history-item">
+                        <div class="history-info">
+                            <span class="history-badge">${icon} ${typeText}</span>
+                            <span class="history-desc">${personName}${note}</span>
+                            <span class="history-time">${time}</span>
                         </div>
-                        <button class="delete-btn" onclick="deleteTrans('${d.id}')">❌</button>
-                    </div>`;
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="history-amount">${formatMoney(data.amount)}</span>
+                            <button class="delete-btn" data-id="${item.id}">🗑️</button>
+                        </div>
+                    </li>
+                `;
             });
 
-            document.getElementById('sohib-balance').innerText = sBal.toLocaleString();
-            document.getElementById('ilhom-balance').innerText = iBal.toLocaleString();
-            document.getElementById('historyList').innerHTML = html;
+            historyList.innerHTML = html;
 
-            const diff = sBal - iBal;
-            const verdict = document.getElementById('verdictText');
-            if (diff > 0) verdict.innerHTML = `🟢 Ilhomjon <b>${diff.toLocaleString()}</b> qarzdor`;
-            else if (diff < 0) verdict.innerHTML = `🔵 Sohibjon <b>${Math.abs(diff).toLocaleString()}</b> qarzdor`;
-            else verdict.innerHTML = "🤝 Hisob teng";
+            // Add delete listeners
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.stopPropagation();
+                    const id = this.dataset.id;
+                    if (confirm('Ushbu yozuv o\'chirilsinmi?')) {
+                        try {
+                            await deleteDoc(doc(db, 'transactions', id));
+                        } catch (error) {
+                            alert('Xatolik: ' + error.message);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Real-time listener
+        const transactionsRef = collection(db, 'transactions');
+        const q = query(transactionsRef, orderBy('timestamp', 'desc'));
+
+        onSnapshot(q, (snapshot) => {
+            const transactions = [];
+            snapshot.forEach(doc => {
+                transactions.push(doc);
+            });
+            updateUI(transactions);
+            renderHistory(transactions);
+        }, (error) => {
+            console.error('Xatolik:', error);
+            historyList.innerHTML = '<li class="empty-msg">Ulanishda xatolik</li>';
         });
 
-        document.getElementById('saveBtn').onclick = async () => {
-            const amt = document.getElementById('amount').value;
-            const note = document.getElementById('note').value;
-            const type = document.getElementById('type').value;
+        // Save new transaction
+        saveBtn.addEventListener('click', async function() {
+            const type = typeSelect.value;
+            const amount = parseFloat(amountInput.value);
+            const note = noteInput.value.trim();
 
-            if (!amt) return alert("Miqdorni kiriting!");
+            if (!amount || amount <= 0) {
+                alert('Iltimos, to\'g\'ri miqdor kiriting');
+                return;
+            }
 
-            await addDoc(transRef, {
-                person: selectedPerson,
-                amount: Number(amt),
-                type: type,
-                note: note,
-                timestamp: serverTimestamp()
-            });
+            try {
+                await addDoc(transactionsRef, {
+                    person: selectedPerson,
+                    type: type,
+                    amount: amount,
+                    note: note,
+                    timestamp: Date.now()
+                });
 
-            document.getElementById('amount').value = '';
-            document.getElementById('note').value = '';
-        };
+                // Clear form
+                amountInput.value = '10000';
+                noteInput.value = '';
+                
+            } catch (error) {
+                alert('Saqlashda xatolik: ' + error.message);
+            }
+        });
 
-        window.deleteTrans = async (id) => {
-            if (confirm("O'chirilsinmi?")) await deleteDoc(doc(db, 'transactions', id));
-        };
-    }
+        // Clear all transactions
+        clearAllBtn.addEventListener('click', async function() {
+            if (!confirm('DIQQAT! Barcha yozuvlar o\'chiriladi. Davom etasizmi?')) {
+                return;
+            }
+
+            try {
+                // Get all docs
+                const snapshot = await new Promise((resolve, reject) => {
+                    const unsubscribe = onSnapshot(transactionsRef, 
+                        (snap) => {
+                            unsubscribe();
+                            resolve(snap);
+                        },
+                        reject
+                    );
+                });
+
+                // Batch delete
+                const batch = writeBatch(db);
+                snapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                
+                await batch.commit();
+                console.log('Barcha yozuvlar tozalandi');
+                
+            } catch (error) {
+                alert('Xatolik: ' + error.message);
+            }
+        });
+
+        console.log('✅ Ilova ishga tushdi!');
+    })();
 </script>
 </body>
 </html>
