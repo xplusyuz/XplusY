@@ -13,11 +13,8 @@
             collection, 
             addDoc, 
             onSnapshot, 
-            deleteDoc, 
-            doc, 
             query, 
             orderBy,
-            writeBatch,
             serverTimestamp 
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
@@ -37,11 +34,8 @@
         window.firestoreAddDoc = addDoc;
         window.firestoreCollection = collection;
         window.firestoreOnSnapshot = onSnapshot;
-        window.firestoreDeleteDoc = deleteDoc;
-        window.firestoreDoc = doc;
         window.firestoreQuery = query;
         window.firestoreOrderBy = orderBy;
-        window.firestoreWriteBatch = writeBatch;
         window.firestoreServerTimestamp = serverTimestamp;
         
         console.log("✅ Firebase Firestore ulandi!");
@@ -58,7 +52,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: #0f172a;
             min-height: 100vh;
-            padding: 16px 12px 80px;
+            padding: 16px 12px 30px;
             color: #e2e8f0;
         }
 
@@ -120,6 +114,12 @@
             height: 8px;
             background: #10b981;
             border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         /* Balance Cards */
@@ -326,6 +326,7 @@
 
         .btn:active {
             transform: scale(0.98);
+            background: #1d4ed8;
         }
 
         /* History */
@@ -345,7 +346,7 @@
 
         .history-list {
             list-style: none;
-            max-height: 280px;
+            max-height: 350px;
             overflow-y: auto;
         }
 
@@ -392,30 +393,20 @@
             color: white;
         }
 
-        .clear-btn {
-            background: transparent;
-            border: 1px solid #ef4444;
-            border-radius: 30px;
-            padding: 12px 18px;
-            color: #ef4444;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            margin-top: 14px;
-            width: 100%;
-            transition: 0.2s;
-        }
-
-        .clear-btn:active {
-            background: #ef4444;
-            color: white;
-        }
-
         .empty-msg {
             text-align: center;
             padding: 30px;
             opacity: 0.5;
             font-size: 0.9rem;
+        }
+
+        .history-footer {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #334155;
+            text-align: center;
+            font-size: 0.75rem;
+            opacity: 0.5;
         }
 
         /* Scrollbar */
@@ -535,7 +526,9 @@
         <ul class="history-list" id="historyList">
             <li class="empty-msg">Yuklanmoqda...</li>
         </ul>
-        <button class="clear-btn" id="clearAllBtn">🗑️ Barcha yozuvlarni tozalash</button>
+        <div class="history-footer">
+            <span>Barcha yozuvlar saqlanadi</span>
+        </div>
     </div>
 </div>
 
@@ -553,7 +546,6 @@
         const onSnapshot = window.firestoreOnSnapshot;
         const query = window.firestoreQuery;
         const orderBy = window.firestoreOrderBy;
-        const writeBatch = window.firestoreWriteBatch;
 
         // DOM Elements
         const sohibBalance = document.getElementById('sohibBalance');
@@ -572,7 +564,6 @@
         const amountInput = document.getElementById('amountInput');
         const noteInput = document.getElementById('noteInput');
         const saveBtn = document.getElementById('saveBtn');
-        const clearAllBtn = document.getElementById('clearAllBtn');
 
         let selectedPerson = 'sohibjon';
 
@@ -642,7 +633,7 @@
             updateTime.textContent = now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
         }
 
-        // Render history (o'chirish tugmasisiz)
+        // Render history
         function renderHistory(transactions) {
             if (transactions.length === 0) {
                 historyList.innerHTML = '<li class="empty-msg">Hozircha yozuvlar yo\'q</li>';
@@ -651,7 +642,10 @@
 
             let html = '';
             
-            transactions.forEach(item => {
+            // Eng so'nggi 20 ta yozuvni ko'rsatish
+            const recentTransactions = transactions.slice(0, 20);
+            
+            recentTransactions.forEach(item => {
                 const data = item.data();
                 const personName = data.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
                 
@@ -728,40 +722,14 @@
                 amountInput.value = '10000';
                 noteInput.value = '';
                 
+                // Success feedback
+                saveBtn.textContent = '✅ Saqlandi!';
+                setTimeout(() => {
+                    saveBtn.textContent = '💾 Saqlash';
+                }, 1000);
+                
             } catch (error) {
                 alert('Saqlashda xatolik: ' + error.message);
-            }
-        });
-
-        // Clear all transactions
-        clearAllBtn.addEventListener('click', async function() {
-            if (!confirm('DIQQAT! Barcha yozuvlar o\'chiriladi. Bu amalni qaytarib bo\'lmaydi. Davom etasizmi?')) {
-                return;
-            }
-
-            try {
-                // Get all docs
-                const snapshot = await new Promise((resolve, reject) => {
-                    const unsubscribe = onSnapshot(transactionsRef, 
-                        (snap) => {
-                            unsubscribe();
-                            resolve(snap);
-                        },
-                        reject
-                    );
-                });
-
-                // Batch delete
-                const batch = writeBatch(db);
-                snapshot.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
-                
-                await batch.commit();
-                console.log('✅ Barcha yozuvlar tozalandi');
-                
-            } catch (error) {
-                alert('Xatolik: ' + error.message);
             }
         });
 
