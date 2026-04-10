@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>📋 Nasiya Tizimi | Qarzdorlar ro'yxati</title>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            onSnapshot, 
+            deleteDoc, 
+            doc, 
+            query, 
+            orderBy,
+            updateDoc,
+            where,
+            getDocs
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { 
+            getStorage, 
+            ref, 
+            uploadBytes, 
+            getDownloadURL,
+            deleteObject 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+            authDomain: "xplusy-760fa.firebaseapp.com",
+            projectId: "xplusy-760fa",
+            storageBucket: "xplusy-760fa.firebasestorage.app",
+            messagingSenderId: "992512966017",
+            appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        
+        window.db = db;
+        window.storage = storage;
+        window.firestoreAddDoc = addDoc;
+        window.firestoreCollection = collection;
+        window.firestoreOnSnapshot = onSnapshot;
+        window.firestoreDeleteDoc = deleteDoc;
+        window.firestoreDoc = doc;
+        window.firestoreQuery = query;
+        window.firestoreOrderBy = orderBy;
+        window.firestoreUpdateDoc = updateDoc;
+        window.firestoreWhere = where;
+        window.firestoreGetDocs = getDocs;
+        window.storageRef = ref;
+        window.storageUploadBytes = uploadBytes;
+        window.storageGetDownloadURL = getDownloadURL;
+        window.storageDeleteObject = deleteObject;
+        
+        console.log("✅ Firebase va Storage ulandi!");
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 16px 12px 80px;
+            color: #1f2937;
+        }
+
+        .app {
+            max-width: 520px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-radius: 24px;
+            padding: 20px 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+        }
+
+        .logo h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .logo span {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            display: block;
+        }
+
+        .stats-badge {
+            background: #f3f4f6;
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: #f9fafb;
+            border-radius: 16px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-bottom: 4px;
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            flex: 1;
+            background: rgba(255,255,255,0.9);
+            border: none;
+            border-radius: 20px;
+            padding: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+        }
+
+        /* Debt Cards */
+        .debt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .debt-card {
+            background: white;
+            border-radius: 24px;
+            padding: 18px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+
+        .debt-card:active {
+            transform: scale(0.99);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .debtor-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .debtor-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .debtor-details h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .debtor-details p {
+            font-size: 0.8rem;
+            opacity: 0.6;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .status-paid {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .status-overdue {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .debt-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .debt-dates {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 12px;
+            font-size: 0.8rem;
+        }
+
+        .date-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            opacity: 0.7;
+        }
+
+        .products-preview {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .product-thumb {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: #f3f4f6;
+            object-fit: cover;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .product-thumb-placeholder {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #e0e7ff, #f3e8ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .phones {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+        }
+
+        .phone-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #f3f4f6;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #e5e7eb;
+            color: #6b7280;
+        }
+
+        /* Add Button */
+        .fab {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fab:active {
+            transform: scale(0.95);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 32px;
+            padding: 24px 20px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            background: #f3f4f6;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 16px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+            background: white;
+        }
+
+        .form-control:focus {
+            border-color: #667eea;
+        }
+
+        .phone-input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .product-images {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .image-upload-box {
+            aspect-ratio: 1;
+            border: 2px dashed #e5e7eb;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            background: #f9fafb;
+        }
+
+        .image-upload-box:hover {
+            border-color: #667eea;
+        }
+
+        .image-preview {
+            aspect-ratio: 1;
+            border-radius: 16px;
+            object-fit: cover;
+            background: #f3f4f6;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            background: white;
+            border-radius: 24px;
+            opacity: 0.7;
+        }
+
+        /* Search */
+        .search-box {
+            margin-bottom: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 14px 18px;
+            border: none;
+            border-radius: 20px;
+            background: white;
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        /* Detail Modal */
+        .detail-section {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 16px;
+        }
+
+        .detail-title {
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #374151;
+        }
+
+        .payment-history {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .payment-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Header -->
+    <div class="header">
+        <div class="header-top">
+            <div class="logo">
+                <div class="logo-icon">📋</div>
+                <div>
+                    <h1>Nasiya</h1>
+                    <span>qarzdorlar hisobi</span>
+                </div>
+            </div>
+            <div class="stats-badge">
+                <span>📊</span>
+                <span id="activeDebtsCount">0</span>
+            </div>
+        </div>
+        <div class="stats-summary">
+            <div class="stat-box">
+                <div class="stat-label">Jami nasiya</div>
+                <div class="stat-number" id="totalDebt">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">To'langan</div>
+                <div class="stat-number" id="totalPaid">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-box">
+        <input type="text" class="search-input" id="searchInput" placeholder="🔍 Ism yoki telefon bo'yicha qidirish...">
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" data-tab="active">🔄 Faol nasiyalar</button>
+        <button class="tab" data-tab="paid">✅ To'langan</button>
+        <button class="tab" data-tab="all">📋 Barchasi</button>
+    </div>
+
+    <!-- Debt List -->
+    <div class="debt-list" id="debtList">
+        <div class="empty-state">Yuklanmoqda...</div>
+    </div>
+</div>
+
+<!-- FAB Button -->
+<button class="fab" id="addDebtBtn">➕</button>
+
+<!-- Add/Edit Debt Modal -->
+<div class="modal" id="debtModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">➕ Yangi nasiya</h2>
+            <button class="close-btn" onclick="closeModal()">✕</button>
+        </div>
+        
+        <form id="debtForm">
+            <div class="form-group">
+                <label>👤 Ism Familiya *</label>
+                <input type="text" class="form-control" id="fullName" placeholder="Ism Familiya" required>
+            </div>
+
+            <div class="form-group">
+                <label>📞 Telefon raqamlar *</label>
+                <div class="phone-input-group">
+                    <input type="tel" class="form-control" id="phone1" placeholder="Asosiy telefon" required>
+                </div>
+                <div class="phone-input-group">
+                    <input type="tel" class="form-control" id="phone2" placeholder="Qo'shimcha telefon">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>💰 Nasiya summasi *</label>
+                <input type="number" class="form-control" id="amount" placeholder="500000" min="1000" step="1000" required>
+            </div>
+
+            <div class="form-group">
+                <label>📅 Olingan sana *</label>
+                <input type="date" class="form-control" id="takenDate" required>
+            </div>
+
+            <div class="form-group">
+                <label>📅 Qaytarish muddati *</label>
+                <input type="date" class="form-control" id="dueDate" required>
+            </div>
+
+            <div class="form-group">
+                <label>🛒 Olgan mahsulotlari</label>
+                <textarea class="form-control" id="products" placeholder="Non, yog', guruch..." rows="3"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>📸 Mahsulot rasmlari</label>
+                <div class="product-images" id="imagePreviewContainer"></div>
+                <input type="file" id="imageUpload" accept="image/*" multiple style="display: none;">
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('imageUpload').click()">
+                    📸 Rasm yuklash (maksimum 5 ta)
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>📝 Izoh</label>
+                <textarea class="form-control" id="note" placeholder="Qo'shimcha ma'lumot..." rows="2"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%;">💾 Saqlash</button>
+        </form>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal" id="detailModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📋 Nasiya tafsilotlari</h2>
+            <button class="close-btn" onclick="closeDetailModal()">✕</button>
+        </div>
+        <div id="detailContent"></div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        if (!window.db) {
+            setTimeout(arguments.callee, 100);
+            return;
+        }
+
+        const db = window.db;
+        const storage = window.storage;
+        const addDoc = window.firestoreAddDoc;
+        const collection = window.firestoreCollection;
+        const onSnapshot = window.firestoreOnSnapshot;
+        const deleteDoc = window.firestoreDeleteDoc;
+        const doc = window.firestoreDoc;
+        const query = window.firestoreQuery;
+        const orderBy = window.firestoreOrderBy;
+        const updateDoc = window.firestoreUpdateDoc;
+        const where = window.firestoreWhere;
+        const getDocs = window.firestoreGetDocs;
+        const storageRef = window.storageRef;
+        const uploadBytes = window.storageUploadBytes;
+        const getDownloadURL = window.storageGetDownloadURL;
+        const deleteObject = window.storageDeleteObject;
+
+        let currentTab = 'active';
+        let currentDebtId = null;
+        let uploadedImages = [];
+        let allDebts = [];
+
+        // Set default dates
+        const today = new Date().toISOString().split('T')[0];
+        const nextMonth = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+        document.getElementById('takenDate').value = today;
+        document.getElementById('dueDate').value = nextMonth;
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                currentTab = this.dataset.tab;
+                filterAndRender();
+            });
+        });
+
+        // Search
+        document.getElementById('searchInput').addEventListener('input', filterAndRender);
+
+        // Image upload
+        document.getElementById('imageUpload').addEventListener('change', async function(e) {
+            const files = Array.from(e.target.files).slice(0, 5);
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = '';
+            
+            for (const file of files) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'image-preview';
+                    container.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Load debts
+        const debtsRef = collection(db, 'debts');
+        const q = query(debtsRef, orderBy('createdAt', 'desc'));
+
+        onSnapshot(q, (snapshot) => {
+            allDebts = [];
+            snapshot.forEach(doc => {
+                allDebts.push({ id: doc.id, ...doc.data() });
+            });
+            filterAndRender();
+            updateStats();
+        });
+
+        function filterAndRender() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            let filtered = allDebts.filter(debt => {
+                const matchesSearch = debt.fullName?.toLowerCase().includes(searchTerm) ||
+                                    debt.phone1?.includes(searchTerm) ||
+                                    debt.phone2?.includes(searchTerm);
+                
+                if (currentTab === 'active') return matchesSearch && debt.status === 'active';
+                if (currentTab === 'paid') return matchesSearch && debt.status === 'paid';
+                return matchesSearch;
+            });
+
+            renderDebtList(filtered);
+        }
+
+        function renderDebtList(debts) {
+            const container = document.getElementById('debtList');
+            
+            if (debts.length === 0) {
+                container.innerHTML = '<div class="empty-state">📭 Nasiya topilmadi</div>';
+                return;
+            }
+
+            container.innerHTML = debts.map(debt => {
+                const isOverdue = debt.status === 'active' && new Date(debt.dueDate) < new Date();
+                const statusClass = debt.status === 'paid' ? 'status-paid' : (isOverdue ? 'status-overdue' : 'status-active');
+                const statusText = debt.status === 'paid' ? '✅ To\'langan' : (isOverdue ? '⚠️ Muddat o\'tgan' : '🔄 Faol');
+                
+                const initials = debt.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2) || '?';
+                const paidAmount = debt.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+                const remaining = debt.amount - paidAmount;
+
+                return `
+                    <div class="debt-card" onclick="showDetail('${debt.id}')">
+                        <div class="card-header">
+                            <div class="debtor-info">
+                                <div class="debtor-avatar">${initials}</div>
+                                <div class="debtor-details">
+                                    <h3>${debt.fullName || 'Noma\'lum'}</h3>
+                                    <p>${debt.products?.slice(0, 30) || 'Mahsulot ko\'rsatilmagan'}...</p>
+                                </div>
+                            </div>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </div>
+                        
+                        <div class="phones">
+                            ${debt.phone1 ? `<span class="phone-item">📞 ${debt.phone1}</span>` : ''}
+                            ${debt.phone2 ? `<span class="phone-item">📱 ${debt.phone2}</span>` : ''}
+                        </div>
+                        
+                        <div class="debt-amount">
+                            ${formatMoney(remaining)} so'm
+                            ${paidAmount > 0 ? `<span style="font-size:0.9rem; opacity:0.6;"> / ${formatMoney(debt.amount)}</span>` : ''}
+                        </div>
+                        
+                        <div class="debt-dates">
+                            <span class="date-item">📅 Olingan: ${formatDate(debt.takenDate)}</span>
+                            <span class="date-item">⏰ Muddat: ${formatDate(debt.dueDate)}</span>
+                        </div>
+                        
+                        ${debt.images?.length ? `
+                            <div class="products-preview">
+                                ${debt.images.slice(0, 3).map(img => `<img src="${img}" class="product-thumb" onclick="event.stopPropagation()">`).join('')}
+                                ${debt.images.length > 3 ? `<div class="product-thumb-placeholder">+${debt.images.length - 3}</div>` : ''}
+                            </div>
+                        ` : ''}
+                        
+                        <div class="card-actions" onclick="event.stopPropagation()">
+                            ${debt.status === 'active' ? `
+                                <button class="btn btn-success" onclick="addPayment('${debt.id}')">💵 To'lov</button>
+                                <button class="btn btn-primary" onclick="editDebt('${debt.id}')">✏️ Tahrirlash</button>
+                                <button class="btn btn-danger" onclick="deleteDebt('${debt.id}')">🗑️</button>
+                            ` : `
+                                <button class="btn btn-outline" onclick="deleteDebt('${debt.id}')">🗑️ O'chirish</button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStats() {
+            const active = allDebts.filter(d => d.status === 'active');
+            const paid = allDebts.filter(d => d.status === 'paid');
+            const totalDebt = active.reduce((sum, d) => sum + (d.amount - (d.payments?.reduce((s, p) => s + p.amount, 0) || 0)), 0);
+            const totalPaid = paid.reduce((sum, d) => sum + d.amount, 0);
+            
+            document.getElementById('activeDebtsCount').textContent = active.length;
+            document.getElementById('totalDebt').textContent = formatMoney(totalDebt);
+            document.getElementById('totalPaid').textContent = formatMoney(totalPaid);
+        }
+
+        // Add/Edit debt
+        document.getElementById('debtForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                fullName: document.getElementById('fullName').value,
+                phone1: document.getElementById('phone1').value,
+                phone2: document.getElementById('phone2').value,
+                amount: parseFloat(document.getElementById('amount').value),
+                takenDate: document.getElementById('takenDate').value,
+                dueDate: document.getElementById('dueDate').value,
+                products: document.getElementById('products').value,
+                note: document.getElementById('note').value,
+                status: 'active',
+                payments: currentDebtId ? (allDebts.find(d => d.id === currentDebtId)?.payments || []) : [],
+                updatedAt: Date.now()
+            };
+
+            // Upload images
+            const imageFiles = document.getElementById('imageUpload').files;
+            if (imageFiles.length > 0) {
+                formData.images = await uploadImages(Array.from(imageFiles));
+            }
+
+            try {
+                if (currentDebtId) {
+                    await updateDoc(doc(db, 'debts', currentDebtId), formData);
+                } else {
+                    formData.createdAt = Date.now();
+                    await addDoc(debtsRef, formData);
+                }
+                closeModal();
+                resetForm();
+            } catch (error) {
+                alert('Xatolik: ' + error.message);
+            }
+        });
+
+        async function uploadImages(files) {
+            const urls = [];
+            for (const file of files) {
+                const imageRef = storageRef(storage, `debts/${Date.now()}_${file.name}`);
+                await uploadBytes(imageRef, file);
+                const url = await getDownloadURL(imageRef);
+                urls.push(url);
+            }
+            return urls;
+        }
+
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('uz-UZ').format(amount || 0);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        }
+
+        function closeModal() {
+            document.getElementById('debtModal').classList.remove('active');
+            resetForm();
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+
+        function resetForm() {
+            document.getElementById('debtForm').reset();
+            document.getElementById('imagePreviewContainer').innerHTML = '';
+            document.getElementById('modalTitle').textContent = '➕ Yangi nasiya';
+            document.getElementById('takenDate').value = today;
+            document.getElementById('dueDate').value = nextMonth;
+            currentDebtId = null;
+        }
+
+        // Global functions
+        window.showDetail = function(id) {
+            const debt = allDebts.find(d => d.id === id);
+            if (!debt) return;
+            
+            const paidAmount = debt.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+            const remaining = debt.amount - paidAmount;
+            
+            document.getElementById('detailContent').innerHTML = `
+                <div class="detail-section">
+                    <h3 style="margin-bottom:12px;">${debt.fullName}</h3>
+                    <p>📞 ${debt.phone1} ${debt.phone2 ? ' / ' + debt.phone2 : ''}</p>
+                    <p>💰 Jami: ${formatMoney(debt.amount)} so'm</p>
+                    <p>💵 To'langan: ${formatMoney(paidAmount)} so'm</p>
+                    <p>📊 Qoldiq: ${formatMoney(remaining)} so'm</p>
+                    <p>📅 Olingan: ${formatDate(debt.takenDate)}</p>
+                    <p>⏰ Muddat: ${formatDate(debt.dueDate)}</p>
+                    ${debt.products ? `<p>🛒 ${debt.products}</p>` : ''}
+                    ${debt.note ? `<p>📝 ${debt.note}</p>` : ''}
+                </div>
+                
+                ${debt.payments?.length ? `
+                    <div class="detail-section">
+                        <div class="detail-title">💳 To'lovlar tarixi</div>
+                        <div class="payment-history">
+                            ${debt.payments.map(p => `
+                                <div class="payment-item">
+                                    <span>${formatDate(p.date)}</span>
+                                    <span><strong>${formatMoney(p.amount)} so'm</strong></span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                ${debt.status === 'active' ? `
+                    <button class="btn btn-success" style="width:100%;" onclick="addPayment('${debt.id}'); closeDetailModal();">
+                        💵 To'lov qo'shish
+                    </button>
+                ` : ''}
+            `;
+            
+            document.getElementById('detailModal').classList.add('active');
+        };
+
+        window.addPayment = async function(id) {
+            const amount = prompt('To\'lov summasini kiriting (so\'m):');
+            if (!amount) return;
+            
+            const paymentAmount = parseFloat(amount);
+            if (isNaN(paymentAmount) || paymentAmount <= 0) {
+                alert('Noto\'g\'ri summa');
+                return;
+            }
+            
+            const debt = allDebts.find(d => d.id === id);
+            const payments = debt.payments || [];
+            payments.push({
+                amount: paymentAmount,
+                date: new Date().toISOString().split('T')[0],
+                timestamp: Date.now()
+            });
+            
+            const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+            const status = totalPaid >= debt.amount ? 'paid' : 'active';
+            
+            await updateDoc(doc(db, 'debts', id), { payments, status });
+        };
+
+        window.editDebt = function(id) {
+            const debt = allDebts.find(d => d.id === id);
+            if (!debt) return;
+            
+            currentDebtId = id;
+            document.getElementById('modalTitle').textContent = '✏️ Nasiyani tahrirlash';
+            document.getElementById('fullName').value = debt.fullName || '';
+            document.getElementById('phone1').value = debt.phone1 || '';
+            document.getElementById('phone2').value = debt.phone2 || '';
+            document.getElementById('amount').value = debt.amount || '';
+            document.getElementById('takenDate').value = debt.takenDate || '';
+            document.getElementById('dueDate').value = debt.dueDate || '';
+            document.getElementById('products').value = debt.products || '';
+            document.getElementById('note').value = debt.note || '';
+            
+            document.getElementById('debtModal').classList.add('active');
+        };
+
+        window.deleteDebt = async function(id) {
+            if (!confirm('Nasiyani o\'chirishni tasdiqlaysizmi?')) return;
+            await deleteDoc(doc(db, 'debts', id));
+        };
+
+        document.getElementById('addDebtBtn').addEventListener('click', () => {
+            document.getElementById('debtModal').classList.add('active');
+        });
+
+        console.log('✅ Nasiya tizimi ishga tushdi!');
+    })();
+</script>
+</body>
+</html>
