@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
     <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi Pro</title>
-    <!-- Firebase & Font Awesome -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, onValue, push, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -20,15 +20,21 @@
             measurementId: "G-459PLJ7P7L"
         };
 
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        
+        // Global o'zgaruvchilarga to'g'ridan-to'g'ri funksiyalarni o'rnatish
         window.db = db;
-        window.firebaseRef = ref;
-        window.firebasePush = push;
-        window.firebaseSet = set;
-        window.firebaseOnValue = onValue;
-        window.firebaseRemove = remove;
+        window.dbRef = ref;
+        window.dbPush = push;
+        window.dbSet = set;
+        window.dbOnValue = onValue;
+        window.dbRemove = remove;
+        
+        console.log("✅ Firebase muvaffaqiyatli ulandi!");
     </script>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * {
@@ -112,6 +118,12 @@
             background: #10b981;
             border-radius: 50%;
             box-shadow: 0 0 10px #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         /* Kartalar */
@@ -339,7 +351,7 @@
         }
 
         .input-wrapper select option {
-            background: Ishlab chiqarish;
+            background: #1e293b;
             color: white;
         }
 
@@ -458,11 +470,22 @@
             border-radius: 40px;
             color: #cbd5e1;
             font-weight: 500;
+            cursor: pointer;
+        }
+
+        .text-btn:active {
+            background: #1e293b;
         }
 
         /* scroll */
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -554,7 +577,7 @@
             <label>Miqdor (so'm)</label>
             <div class="input-wrapper">
                 <i class="fas fa-money-bill-wave"></i>
-                <input type="number" id="amountInput" placeholder="50000" min="1000" step="1000" value="10000">
+                <input type="number" id="amountInput" placeholder="50000" min="1000" step="1000" value="">
             </div>
         </div>
 
@@ -576,7 +599,7 @@
             <span><i class="fas fa-chevron-down"></i></span>
         </div>
         <ul class="history-list" id="historyList">
-            <li style="text-align: center; opacity:0.5; padding: 20px;">Yuklanmoqda...</li>
+            <li class="empty-state">Yuklanmoqda...</li>
         </ul>
         <div class="footer-actions">
             <button class="text-btn" id="clearAllBtn"><i class="fas fa-trash-alt"></i> Barchasini tozalash</button>
@@ -585,15 +608,24 @@
 </div>
 
 <script>
-    (function(){
-        const db = window.db;
-        const ref = window.firebaseRef;
-        const push = window.firebasePush;
-        const set = window.firebaseSet;
-        const onValue = window.firebaseOnValue;
-        const remove = window.firebaseRemove;
+    // Firebase tayyor bo'lguncha kutish
+    (function waitForFirebase() {
+        if (window.db && window.dbRef && window.dbOnValue) {
+            initApp();
+        } else {
+            setTimeout(waitForFirebase, 100);
+        }
+    })();
 
-        // DOM
+    function initApp() {
+        const db = window.db;
+        const ref = window.dbRef;
+        const push = window.dbPush;
+        const set = window.dbSet;
+        const onValue = window.dbOnValue;
+        const remove = window.dbRemove;
+
+        // DOM elementlar
         const sohibBal = document.getElementById('sohib-balance');
         const ilhomBal = document.getElementById('ilhom-balance');
         const sohibContrib = document.getElementById('sohib-contrib');
@@ -613,6 +645,7 @@
         // Person selector
         const personBtns = document.querySelectorAll('.person-btn');
         const selectedPersonInput = document.getElementById('selectedPerson');
+        
         personBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 personBtns.forEach(b => b.classList.remove('active'));
@@ -623,58 +656,89 @@
 
         const transactionsRef = ref(db, 'transactions');
 
-        function formatMoney(v) { return new Intl.NumberFormat('uz-UZ').format(v||0); }
+        function formatMoney(v) { 
+            return new Intl.NumberFormat('uz-UZ').format(v || 0); 
+        }
 
         function updateUI(transactions) {
-            let sC=0, iC=0, sG=0, iG=0, sCash=0, iCash=0;
+            let sC = 0, iC = 0, sG = 0, iG = 0, sCash = 0, iCash = 0;
             const list = transactions ? Object.entries(transactions) : [];
+            
             list.forEach(([k, t]) => {
-                if(!t) return;
-                const amt = Number(t.amount)||0;
-                if(t.person==='sohibjon'){
-                    if(t.type==='contribution') sC+=amt;
-                    else if(t.type==='goodsTaken') sG+=amt;
-                    else if(t.type==='cashTaken') sCash+=amt;
+                if (!t) return;
+                const amt = Number(t.amount) || 0;
+                if (t.person === 'sohibjon') {
+                    if (t.type === 'contribution') sC += amt;
+                    else if (t.type === 'goodsTaken') sG += amt;
+                    else if (t.type === 'cashTaken') sCash += amt;
                 } else {
-                    if(t.type==='contribution') iC+=amt;
-                    else if(t.type==='goodsTaken') iG+=amt;
-                    else if(t.type==='cashTaken') iCash+=amt;
+                    if (t.type === 'contribution') iC += amt;
+                    else if (t.type === 'goodsTaken') iG += amt;
+                    else if (t.type === 'cashTaken') iCash += amt;
                 }
             });
-            const sBal = sC - (sG+sCash);
-            const iBal = iC - (iG+iCash);
+            
+            const sBal = sC - (sG + sCash);
+            const iBal = iC - (iG + iCash);
+            
             sohibBal.textContent = formatMoney(sBal);
             ilhomBal.textContent = formatMoney(iBal);
             sohibContrib.textContent = formatMoney(sC);
             ilhomContrib.textContent = formatMoney(iC);
-            sohibTaken.textContent = formatMoney(sG+sCash);
-            ilhomTaken.textContent = formatMoney(iG+iCash);
+            sohibTaken.textContent = formatMoney(sG + sCash);
+            ilhomTaken.textContent = formatMoney(iG + iCash);
 
             const diff = sBal - iBal;
-            if (Math.abs(diff)<0.5) verdictText.textContent = '🤝 Hisob toza. Hech kim qarzdor emas.';
-            else if (diff>0) verdictText.textContent = `🔵 Ilhomjon Sohibjonga ${formatMoney(diff)} so'm qarzdor`;
-            else verdictText.textContent = `🟢 Sohibjon Ilhomjonga ${formatMoney(-diff)} so'm qarzdor`;
-            lastUpdated.textContent = new Date().toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'});
+            if (Math.abs(diff) < 0.5) {
+                verdictText.textContent = '🤝 Hisob toza. Hech kim qarzdor emas.';
+            } else if (diff > 0) {
+                verdictText.textContent = `🔵 Ilhomjon Sohibjonga ${formatMoney(diff)} so'm qarzdor`;
+            } else {
+                verdictText.textContent = `🟢 Sohibjon Ilhomjonga ${formatMoney(-diff)} so'm qarzdor`;
+            }
+            
+            const now = new Date();
+            lastUpdated.textContent = now.toLocaleTimeString('uz-UZ', {hour: '2-digit', minute: '2-digit'});
         }
 
         function renderHistory(transactions) {
-            if(!transactions) { historyList.innerHTML = '<li style="text-align:center;opacity:0.5;">Yozuv yo\'q</li>'; return; }
+            if (!transactions) {
+                historyList.innerHTML = '<li class="empty-state">Hozircha yozuvlar yo\'q</li>';
+                return;
+            }
+            
             const entries = Object.entries(transactions);
-            if(entries.length===0) { historyList.innerHTML = '<li style="text-align:center;opacity:0.5;">Yozuv yo\'q</li>'; return; }
-            entries.sort((a,b)=> (b[1].timestamp||0)-(a[1].timestamp||0));
+            if (entries.length === 0) {
+                historyList.innerHTML = '<li class="empty-state">Hozircha yozuvlar yo\'q</li>';
+                return;
+            }
+            
+            entries.sort((a, b) => (b[1].timestamp || 0) - (a[1].timestamp || 0));
+            
             let html = '';
-            entries.forEach(([key, t])=>{
-                const person = t.person==='sohibjon'?'Sohibjon':'Ilhomjon';
-                let typeTxt = ''; let icon='';
-                if(t.type==='contribution') { typeTxt='Qo\'shgan pul'; icon='💰';}
-                else if(t.type==='goodsTaken') { typeTxt='Olgan mahsulot'; icon='🛒';}
-                else { typeTxt='Olgan naqd'; icon='💵';}
+            entries.forEach(([key, t]) => {
+                const person = t.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
+                let typeTxt = '', icon = '';
+                
+                if (t.type === 'contribution') { 
+                    typeTxt = 'Qo\'shgan pul'; 
+                    icon = '💰'; 
+                } else if (t.type === 'goodsTaken') { 
+                    typeTxt = 'Olgan mahsulot'; 
+                    icon = '🛒'; 
+                } else { 
+                    typeTxt = 'Olgan naqd'; 
+                    icon = '💵'; 
+                }
+                
                 const note = t.note ? ` · ${t.note}` : '';
+                const timeStr = t.timestamp ? new Date(t.timestamp).toLocaleTimeString('uz-UZ', {hour: '2-digit', minute: '2-digit'}) : '';
+                
                 html += `<li class="history-item">
                     <div class="history-left">
                         <span class="history-badge">${icon} ${typeTxt}</span>
                         <span class="history-person">${person}${note}</span>
-                        <span style="font-size:0.7rem; opacity:0.5;">${new Date(t.timestamp).toLocaleTimeString()}</span>
+                        <span style="font-size:0.7rem; opacity:0.5;">${timeStr}</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span class="history-amount">${formatMoney(t.amount)}</span>
@@ -682,36 +746,72 @@
                     </div>
                 </li>`;
             });
+            
             historyList.innerHTML = html;
+            
+            // Delete event listener
             document.querySelectorAll('.delete-history').forEach(b => {
                 b.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     const key = b.dataset.key;
-                    if(confirm('O\'chirilsinmi?')) remove(ref(db,`transactions/${key}`));
+                    if (confirm('Ushbu yozuv o\'chirilsinmi?')) {
+                        const itemRef = ref(db, `transactions/${key}`);
+                        remove(itemRef).catch(err => alert('Xatolik: ' + err));
+                    }
                 });
             });
         }
 
-        onValue(transactionsRef, (snap) => {
-            const data = snap.val();
+        // Real-time listener
+        onValue(transactionsRef, (snapshot) => {
+            const data = snapshot.val();
             updateUI(data);
             renderHistory(data);
+        }, (error) => {
+            console.error("Firebase xatosi:", error);
+            historyList.innerHTML = '<li class="empty-state">Ulanishda xatolik</li>';
         });
 
-        addBtn.addEventListener('click', ()=>{
+        // Yangi yozuv qo'shish
+        addBtn.addEventListener('click', () => {
             const person = selectedPersonInput.value;
             const type = typeSelect.value;
             const amt = Number(amountInput.value);
-            if(!amt || amt<=0) { alert("Miqdor kiriting"); return; }
+            
+            if (!amt || amt <= 0) {
+                alert("Iltimos, to'g'ri miqdor kiriting");
+                return;
+            }
+            
             const note = noteInput.value.trim();
             const newRef = push(transactionsRef);
-            set(newRef, { person, type, amount: amt, note, timestamp: Date.now() })
-                .then(()=>{ amountInput.value=''; noteInput.value=''; });
+            
+            set(newRef, {
+                person: person,
+                type: type,
+                amount: amt,
+                note: note,
+                timestamp: Date.now()
+            }).then(() => {
+                amountInput.value = '';
+                noteInput.value = '';
+                console.log('✅ Yozuv saqlandi');
+            }).catch(err => {
+                alert('Saqlashda xatolik: ' + err);
+            });
         });
 
-        clearAllBtn.addEventListener('click', ()=>{
-            if(confirm('Barcha yozuvlar o\'chiriladi!')) set(transactionsRef, null);
+        // Barchasini tozalash
+        clearAllBtn.addEventListener('click', () => {
+            if (confirm('DIQQAT! Barcha yozuvlar o\'chiriladi. Davom etasizmi?')) {
+                set(transactionsRef, null)
+                    .then(() => console.log('✅ Barcha yozuvlar tozalandi'))
+                    .catch(err => alert('Xatolik: ' + err));
+            }
         });
-    })();
+
+        console.log('✅ Ilova muvaffaqiyatli ishga tushdi!');
+    }
 </script>
 </body>
 </html>
