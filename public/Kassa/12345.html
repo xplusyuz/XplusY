@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi</title>
+    <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi (Yangi mantiq)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -428,7 +428,7 @@
             <div class="logo-icon">⚖️</div>
             <div>
                 <h1>S&I Tarozi</h1>
-                <span>sheriklik hisobi</span>
+                <span>sheriklik hisobi (teng bo'linadi)</span>
             </div>
         </div>
         <div class="status">
@@ -445,7 +445,7 @@
                 <h3>Sohibjon</h3>
             </div>
             <div class="balance" id="sohibBalance">0</div>
-            <div class="balance-label">joriy balans</div>
+            <div class="balance-label">sof balans (qo'shgan - olgan)</div>
         </div>
         <div class="card">
             <div class="card-header">
@@ -453,14 +453,14 @@
                 <h3>Ilhomjon</h3>
             </div>
             <div class="balance" id="ilhomBalance">0</div>
-            <div class="balance-label">joriy balans</div>
+            <div class="balance-label">sof balans (qo'shgan - olgan)</div>
         </div>
     </div>
 
     <!-- Summary -->
     <div class="summary">
         <div class="summary-title">
-            <span>📊 Umumiy tahlil</span>
+            <span>📊 Umumiy tahlil (TENGLIK ASOSIDA)</span>
             <span id="updateTime">--:--</span>
         </div>
         <div class="verdict" id="verdict">Hisoblanmoqda...</div>
@@ -498,7 +498,7 @@
         <div class="form-group">
             <label>Amal turi</label>
             <select class="form-control" id="typeSelect">
-                <option value="contribution">💰 Mahsulotga qo'shgan pul</option>
+                <option value="contribution">💰 Mahsulotga qo'shgan pul (teng bo'linadi)</option>
                 <option value="goodsTaken">🛒 Olgan mahsuloti</option>
                 <option value="cashTaken">💵 Kassadan olgan naqd</option>
             </select>
@@ -534,7 +534,6 @@
 
 <script>
     (function() {
-        // Firebase tayyor bo'lguncha kutish
         if (!window.db) {
             setTimeout(arguments.callee, 100);
             return;
@@ -567,7 +566,6 @@
 
         let selectedPerson = 'sohibjon';
 
-        // Person selector
         personBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 personBtns.forEach(b => b.classList.remove('active'));
@@ -576,41 +574,46 @@
             });
         });
 
-        // Format money
         function formatMoney(amount) {
             return new Intl.NumberFormat('uz-UZ').format(amount || 0);
         }
 
-        // Update UI with data
+        // YANGI HISOBLASH MANTIGI:
+        // Qo'shgan pul (contribution) umumiy hisobga tushadi va teng ikkiga bo'linadi.
+        // Ya'ni, Sohibjon 500,000 qo'shsa -> ikkala sherikning "qo'shgan" hisobiga 250,000 dan qo'shiladi.
+        // Bu esa Ilhomjonga avtomatik 250,000 qarz degani.
         function updateUI(transactions) {
             let sohibContribTotal = 0;
             let ilhomContribTotal = 0;
-            let sohibGoodsTotal = 0;
-            let ilhomGoodsTotal = 0;
-            let sohibCashTotal = 0;
-            let ilhomCashTotal = 0;
+            let sohibTakenTotal = 0;
+            let ilhomTakenTotal = 0;
 
             transactions.forEach(item => {
                 const data = item.data();
                 const amount = data.amount || 0;
+                const type = data.type;
+                const person = data.person;
 
-                if (data.person === 'sohibjon') {
-                    if (data.type === 'contribution') sohibContribTotal += amount;
-                    else if (data.type === 'goodsTaken') sohibGoodsTotal += amount;
-                    else if (data.type === 'cashTaken') sohibCashTotal += amount;
-                } else if (data.person === 'ilhomjon') {
-                    if (data.type === 'contribution') ilhomContribTotal += amount;
-                    else if (data.type === 'goodsTaken') ilhomGoodsTotal += amount;
-                    else if (data.type === 'cashTaken') ilhomCashTotal += amount;
+                if (type === 'contribution') {
+                    // Teng ikkiga bo'linadi
+                    const half = amount / 2;
+                    sohibContribTotal += half;
+                    ilhomContribTotal += half;
+                } else {
+                    // Olgan narsalar faqat o'sha kishiga yoziladi
+                    if (person === 'sohibjon') {
+                        if (type === 'goodsTaken' || type === 'cashTaken') sohibTakenTotal += amount;
+                    } else if (person === 'ilhomjon') {
+                        if (type === 'goodsTaken' || type === 'cashTaken') ilhomTakenTotal += amount;
+                    }
                 }
             });
 
-            const sohibTakenTotal = sohibGoodsTotal + sohibCashTotal;
-            const ilhomTakenTotal = ilhomGoodsTotal + ilhomCashTotal;
+            // Sof balanslar
             const sohibBal = sohibContribTotal - sohibTakenTotal;
             const ilhomBal = ilhomContribTotal - ilhomTakenTotal;
 
-            // Update DOM
+            // DOM yangilash
             sohibBalance.textContent = formatMoney(sohibBal);
             ilhomBalance.textContent = formatMoney(ilhomBal);
             sohibContrib.textContent = formatMoney(sohibContribTotal);
@@ -618,9 +621,9 @@
             sohibTaken.textContent = formatMoney(sohibTakenTotal);
             ilhomTaken.textContent = formatMoney(ilhomTakenTotal);
 
-            // Verdict
+            // Qarzdorlik hukmi
             const diff = sohibBal - ilhomBal;
-            if (Math.abs(diff) < 1) {
+            if (Math.abs(diff) < 0.01) {
                 verdict.textContent = '🤝 Hisob toza. Hech kim qarzdor emas.';
             } else if (diff > 0) {
                 verdict.textContent = `🔵 Ilhomjon Sohibjonga ${formatMoney(diff)} so'm qarzdor`;
@@ -628,12 +631,10 @@
                 verdict.textContent = `🟢 Sohibjon Ilhomjonga ${formatMoney(-diff)} so'm qarzdor`;
             }
 
-            // Update time
             const now = new Date();
             updateTime.textContent = now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
         }
 
-        // Render history
         function renderHistory(transactions) {
             if (transactions.length === 0) {
                 historyList.innerHTML = '<li class="empty-msg">Hozircha yozuvlar yo\'q</li>';
@@ -641,25 +642,30 @@
             }
 
             let html = '';
+            const recent = transactions.slice(0, 20);
             
-            // Eng so'nggi 20 ta yozuvni ko'rsatish
-            const recentTransactions = transactions.slice(0, 20);
-            
-            recentTransactions.forEach(item => {
+            recent.forEach(item => {
                 const data = item.data();
                 const personName = data.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
                 
                 let typeText = '';
                 let icon = '';
+                let desc = personName;
+
                 if (data.type === 'contribution') {
-                    typeText = 'Qo\'shgan pul';
                     icon = '💰';
+                    typeText = `Mahsulotga qo'shdi (teng bo'linadi)`;
+                    desc += ` ${formatMoney(data.amount)} so'm`;
                 } else if (data.type === 'goodsTaken') {
-                    typeText = 'Olgan mahsulot';
                     icon = '🛒';
+                    typeText = 'Mahsulot oldi';
                 } else {
-                    typeText = 'Olgan naqd';
                     icon = '💵';
+                    typeText = 'Naqd oldi';
+                }
+
+                if (data.type !== 'contribution') {
+                    desc += ` ${formatMoney(data.amount)} so'm`;
                 }
 
                 const note = data.note ? ` · ${data.note}` : '';
@@ -669,7 +675,7 @@
                     <li class="history-item">
                         <div class="history-info">
                             <span class="history-badge">${icon} ${typeText}</span>
-                            <span class="history-desc">${personName}${note}</span>
+                            <span class="history-desc">${desc}${note}</span>
                             <span class="history-time">${time}</span>
                         </div>
                         <div>
@@ -682,15 +688,12 @@
             historyList.innerHTML = html;
         }
 
-        // Real-time listener
         const transactionsRef = collection(db, 'transactions');
         const q = query(transactionsRef, orderBy('timestamp', 'desc'));
 
         onSnapshot(q, (snapshot) => {
             const transactions = [];
-            snapshot.forEach(doc => {
-                transactions.push(doc);
-            });
+            snapshot.forEach(doc => transactions.push(doc));
             updateUI(transactions);
             renderHistory(transactions);
         }, (error) => {
@@ -698,7 +701,6 @@
             historyList.innerHTML = '<li class="empty-msg">Ulanishda xatolik</li>';
         });
 
-        // Save new transaction
         saveBtn.addEventListener('click', async function() {
             const type = typeSelect.value;
             const amount = parseFloat(amountInput.value);
@@ -718,22 +720,16 @@
                     timestamp: Date.now()
                 });
 
-                // Clear form
                 amountInput.value = '10000';
                 noteInput.value = '';
-                
-                // Success feedback
                 saveBtn.textContent = '✅ Saqlandi!';
-                setTimeout(() => {
-                    saveBtn.textContent = '💾 Saqlash';
-                }, 1000);
-                
+                setTimeout(() => saveBtn.textContent = '💾 Saqlash', 1000);
             } catch (error) {
                 alert('Saqlashda xatolik: ' + error.message);
             }
         });
 
-        console.log('✅ Ilova ishga tushdi!');
+        console.log('✅ Ilova yangi teng bo\'linish mantiqi bilan ishga tushdi!');
     })();
 </script>
 </body>
