@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
-    <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi</title>
+    <title>⚖️ Sohibjon & Ilhomjon | Biznes Tarozi Pro</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -15,7 +15,11 @@
             onSnapshot, 
             query, 
             orderBy,
-            serverTimestamp 
+            serverTimestamp,
+            updateDoc,
+            doc,
+            deleteDoc,
+            where
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -37,9 +41,16 @@
         window.firestoreQuery = query;
         window.firestoreOrderBy = orderBy;
         window.firestoreServerTimestamp = serverTimestamp;
+        window.firestoreUpdateDoc = updateDoc;
+        window.firestoreDoc = doc;
+        window.firestoreDeleteDoc = deleteDoc;
+        window.firestoreWhere = where;
         
-        console.log("✅ Firebase Firestore ulandi!");
+        console.log("✅ Firebase Firestore Pro ulandi!");
     </script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
     <style>
         * {
@@ -98,6 +109,24 @@
             display: block;
         }
 
+        .header-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 30px;
+            padding: 8px 12px;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         .status {
             background: #1e293b;
             padding: 8px 14px;
@@ -120,6 +149,33 @@
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: #1e293b;
+            padding: 6px;
+            border-radius: 40px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: #3b82f6;
+            color: white;
         }
 
         /* Balance Cards */
@@ -231,6 +287,22 @@
             color: white;
         }
 
+        /* Chart Container */
+        .chart-container {
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+        }
+
         /* Add Form */
         .add-form {
             background: #1e293b;
@@ -329,6 +401,23 @@
             background: #1d4ed8;
         }
 
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .filter-select {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 8px 12px;
+            color: #e2e8f0;
+            font-size: 0.8rem;
+        }
+
         /* History */
         .history {
             background: #1e293b;
@@ -344,10 +433,30 @@
             font-weight: 600;
         }
 
+        .history-stats {
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
         .history-list {
             list-style: none;
-            max-height: 350px;
+            max-height: 400px;
             overflow-y: auto;
+        }
+
+        .history-group {
+            margin-bottom: 16px;
+        }
+
+        .group-header {
+            padding: 8px 12px;
+            background: #0f172a;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
         }
 
         .history-item {
@@ -358,12 +467,20 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            background: #1e293b;
+            border: 1px solid #334155;
         }
 
         .history-info {
             display: flex;
             flex-direction: column;
             gap: 4px;
+            flex: 1;
         }
 
         .history-badge {
@@ -393,6 +510,35 @@
             color: white;
         }
 
+        .item-actions {
+            display: none;
+            gap: 4px;
+            margin-left: 8px;
+        }
+
+        .history-item:hover .item-actions {
+            display: flex;
+        }
+
+        .action-btn {
+            background: #1e293b;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 8px;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .action-btn:hover {
+            background: #334155;
+            color: white;
+        }
+
+        .action-btn.delete:hover {
+            background: #dc2626;
+        }
+
         .empty-msg {
             text-align: center;
             padding: 30px;
@@ -407,6 +553,81 @@
             text-align: center;
             font-size: 0.75rem;
             opacity: 0.5;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            border-radius: 24px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid #334155;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-weight: 500;
+            z-index: 2000;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
         }
 
         /* Scrollbar */
@@ -418,6 +639,21 @@
             background: #334155;
             border-radius: 10px;
         }
+
+        /* Loading */
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #334155;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -427,110 +663,212 @@
         <div class="logo">
             <div class="logo-icon">⚖️</div>
             <div>
-                <h1>S&I Tarozi</h1>
+                <h1>S&I Tarozi Pro</h1>
                 <span>sheriklik hisobi</span>
             </div>
         </div>
-        <div class="status">
-            <span class="status-dot"></span>
-            <span>online</span>
-        </div>
-    </div>
-
-    <!-- Balance Cards -->
-    <div class="balance-cards">
-        <div class="card">
-            <div class="card-header">
-                <div class="avatar blue">S</div>
-                <h3>Sohibjon</h3>
-            </div>
-            <div class="balance" id="sohibBalance">0</div>
-            <div class="balance-label">qo'shgan - olgan</div>
-        </div>
-        <div class="card">
-            <div class="card-header">
-                <div class="avatar green">I</div>
-                <h3>Ilhomjon</h3>
-            </div>
-            <div class="balance" id="ilhomBalance">0</div>
-            <div class="balance-label">qo'shgan - olgan</div>
-        </div>
-    </div>
-
-    <!-- Summary -->
-    <div class="summary">
-        <div class="summary-title">
-            <span>📊 Umumiy tahlil</span>
-            <span id="updateTime">--:--</span>
-        </div>
-        <div class="verdict" id="verdict">Hisoblanmoqda...</div>
-        <div class="stats">
-            <div class="stat-item">
-                <span class="stat-label">Sohibjon qo'shgan</span>
-                <span class="stat-value" id="sohibContrib">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Ilhomjon qo'shgan</span>
-                <span class="stat-value" id="ilhomContrib">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Sohibjon olgan</span>
-                <span class="stat-value" id="sohibTaken">0</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Ilhomjon olgan</span>
-                <span class="stat-value" id="ilhomTaken">0</span>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="window.exportData()">📊</button>
+            <div class="status">
+                <span class="status-dot"></span>
+                <span>online</span>
             </div>
         </div>
     </div>
 
-    <!-- Add Form -->
-    <div class="add-form">
-        <div class="form-title">
-            <span>➕</span> Yangi yozuv qo'shish
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab active" data-tab="overview">📈 Umumiy</div>
+        <div class="tab" data-tab="history">📋 Tarix</div>
+        <div class="tab" data-tab="analytics">📊 Tahlil</div>
+    </div>
+
+    <!-- Overview Tab Content -->
+    <div id="overviewTab">
+        <!-- Balance Cards -->
+        <div class="balance-cards">
+            <div class="card">
+                <div class="card-header">
+                    <div class="avatar blue">S</div>
+                    <h3>Sohibjon</h3>
+                </div>
+                <div class="balance" id="sohibBalance">0</div>
+                <div class="balance-label">qo'shgan - olgan</div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="avatar green">I</div>
+                    <h3>Ilhomjon</h3>
+                </div>
+                <div class="balance" id="ilhomBalance">0</div>
+                <div class="balance-label">qo'shgan - olgan</div>
+            </div>
         </div>
 
-        <div class="person-selector">
-            <div class="person-btn active" data-person="sohibjon">👤 Sohibjon</div>
-            <div class="person-btn green" data-person="ilhomjon">👤 Ilhomjon</div>
+        <!-- Summary -->
+        <div class="summary">
+            <div class="summary-title">
+                <span>📊 Umumiy tahlil</span>
+                <span id="updateTime">--:--</span>
+            </div>
+            <div class="verdict" id="verdict">Hisoblanmoqda...</div>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Sohibjon qo'shgan</span>
+                    <span class="stat-value" id="sohibContrib">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Ilhomjon qo'shgan</span>
+                    <span class="stat-value" id="ilhomContrib">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Sohibjon olgan</span>
+                    <span class="stat-value" id="sohibTaken">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Ilhomjon olgan</span>
+                    <span class="stat-value" id="ilhomTaken">0</span>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>Amal turi</label>
-            <select class="form-control" id="typeSelect">
-                <option value="contribution">💰 Mahsulotga qo'shgan pul</option>
-                <option value="goodsTaken">🛒 Olgan mahsuloti</option>
-                <option value="cashTaken">💵 Kassadan olgan naqd</option>
+        <!-- Add Form -->
+        <div class="add-form">
+            <div class="form-title">
+                <span>➕</span> Yangi yozuv qo'shish
+            </div>
+
+            <div class="person-selector">
+                <div class="person-btn active" data-person="sohibjon">👤 Sohibjon</div>
+                <div class="person-btn green" data-person="ilhomjon">👤 Ilhomjon</div>
+            </div>
+
+            <div class="form-group">
+                <label>Amal turi</label>
+                <select class="form-control" id="typeSelect">
+                    <option value="contribution">💰 Mahsulotga qo'shgan pul</option>
+                    <option value="goodsTaken">🛒 Olgan mahsuloti</option>
+                    <option value="cashTaken">💵 Kassadan olgan naqd</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Miqdor (so'm)</label>
+                <input type="number" class="form-control" id="amountInput" placeholder="50000" value="10000" min="1000" step="1000">
+            </div>
+
+            <div class="form-group">
+                <label>Izoh (ixtiyoriy)</label>
+                <input type="text" class="form-control" id="noteInput" placeholder="non, go'sht...">
+            </div>
+
+            <button class="btn" id="saveBtn">💾 Saqlash</button>
+        </div>
+    </div>
+
+    <!-- History Tab Content -->
+    <div id="historyTab" style="display:none;">
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <select class="filter-select" id="filterPerson">
+                <option value="all">👥 Barchasi</option>
+                <option value="sohibjon">👤 Sohibjon</option>
+                <option value="ilhomjon">👤 Ilhomjon</option>
+            </select>
+            <select class="filter-select" id="filterType">
+                <option value="all">📋 Barcha amallar</option>
+                <option value="contribution">💰 Qo'shilgan pullar</option>
+                <option value="goodsTaken">🛒 Olingan mahsulotlar</option>
+                <option value="cashTaken">💵 Olingan naqd pullar</option>
+            </select>
+            <select class="filter-select" id="filterDate">
+                <option value="all">📅 Barcha vaqt</option>
+                <option value="today">Bugun</option>
+                <option value="week">Shu hafta</option>
+                <option value="month">Shu oy</option>
             </select>
         </div>
 
-        <div class="form-group">
-            <label>Miqdor (so'm)</label>
-            <input type="number" class="form-control" id="amountInput" placeholder="50000" value="10000" min="1000" step="1000">
+        <!-- History -->
+        <div class="history">
+            <div class="history-header">
+                <span>📋 Barcha amallar</span>
+                <span class="history-stats" id="historyStats">0 ta yozuv</span>
+            </div>
+            <ul class="history-list" id="historyList">
+                <li class="empty-msg">Yuklanmoqda...</li>
+            </ul>
+            <div class="history-footer">
+                <span id="totalContributions">💰 Jami qo'shilgan: 0</span>
+                <span id="totalTaken">📤 Jami olingan: 0</span>
+            </div>
         </div>
-
-        <div class="form-group">
-            <label>Izoh (ixtiyoriy)</label>
-            <input type="text" class="form-control" id="noteInput" placeholder="non, go'sht...">
-        </div>
-
-        <button class="btn" id="saveBtn">💾 Saqlash</button>
     </div>
 
-    <!-- History -->
-    <div class="history">
-        <div class="history-header">
-            <span>📋 So'nggi amallar</span>
-            <span>⬇️</span>
+    <!-- Analytics Tab Content -->
+    <div id="analyticsTab" style="display:none;">
+        <div class="chart-container">
+            <div class="chart-header">
+                <span>📈 Balans o'zgarishi (oxirgi 7 kun)</span>
+                <span class="loading-spinner" id="chartLoading"></span>
+            </div>
+            <canvas id="balanceChart" width="400" height="200"></canvas>
         </div>
-        <ul class="history-list" id="historyList">
-            <li class="empty-msg">Yuklanmoqda...</li>
-        </ul>
-        <div class="history-footer">
-            <span>Barcha yozuvlar saqlanadi</span>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <span>🥧 Amallar taqsimoti</span>
+            </div>
+            <canvas id="pieChart" width="400" height="200"></canvas>
+        </div>
+
+        <div class="summary">
+            <div class="summary-title">
+                <span>📊 Oylik statistika</span>
+            </div>
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Bu oy qo'shilgan</span>
+                    <span class="stat-value" id="monthlyContrib">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Bu oy olingan</span>
+                    <span class="stat-value" id="monthlyTaken">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">O'rtacha amal</span>
+                    <span class="stat-value" id="avgTransaction">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Eng katta amal</span>
+                    <span class="stat-value" id="maxTransaction">0</span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Edit Modal -->
+<div class="modal" id="editModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="modal-title">✏️ Yozuvni tahrirlash</span>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="form-group">
+            <label>Miqdor</label>
+            <input type="number" class="form-control" id="editAmount">
+        </div>
+        <div class="form-group">
+            <label>Izoh</label>
+            <input type="text" class="form-control" id="editNote">
+        </div>
+        <button class="btn" onclick="saveEdit()">💾 Saqlash</button>
+    </div>
+</div>
+
+<!-- Notification Container -->
+<div id="notificationContainer"></div>
 
 <script>
     (function() {
@@ -546,7 +884,17 @@
         const onSnapshot = window.firestoreOnSnapshot;
         const query = window.firestoreQuery;
         const orderBy = window.firestoreOrderBy;
+        const updateDoc = window.firestoreUpdateDoc;
+        const doc = window.firestoreDoc;
+        const deleteDoc = window.firestoreDeleteDoc;
+        const where = window.firestoreWhere;
 
+        // Global state
+        let currentTransactions = [];
+        let currentEditId = null;
+        let chart = null;
+        let pieChart = null;
+        
         // DOM Elements
         const sohibBalance = document.getElementById('sohibBalance');
         const ilhomBalance = document.getElementById('ilhomBalance');
@@ -557,6 +905,9 @@
         const verdict = document.getElementById('verdict');
         const updateTime = document.getElementById('updateTime');
         const historyList = document.getElementById('historyList');
+        const historyStats = document.getElementById('historyStats');
+        const totalContributions = document.getElementById('totalContributions');
+        const totalTaken = document.getElementById('totalTaken');
 
         // Form Elements
         const personBtns = document.querySelectorAll('.person-btn');
@@ -565,7 +916,29 @@
         const noteInput = document.getElementById('noteInput');
         const saveBtn = document.getElementById('saveBtn');
 
+        // Filter Elements
+        const filterPerson = document.getElementById('filterPerson');
+        const filterType = document.getElementById('filterType');
+        const filterDate = document.getElementById('filterDate');
+
         let selectedPerson = 'sohibjon';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                
+                const tabName = this.dataset.tab;
+                document.getElementById('overviewTab').style.display = tabName === 'overview' ? 'block' : 'none';
+                document.getElementById('historyTab').style.display = tabName === 'history' ? 'block' : 'none';
+                document.getElementById('analyticsTab').style.display = tabName === 'analytics' ? 'block' : 'none';
+                
+                if (tabName === 'analytics') {
+                    updateCharts();
+                }
+            });
+        });
 
         // Person selector
         personBtns.forEach(btn => {
@@ -578,19 +951,155 @@
 
         // Format money
         function formatMoney(amount) {
-            return new Intl.NumberFormat('uz-UZ').format(amount || 0);
+            return new Intl.NumberFormat('uz-UZ').format(Math.round(amount || 0));
+        }
+
+        // Show notification
+        function showNotification(message, type = 'success') {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.style.background = type === 'success' ? '#10b981' : '#dc2626';
+            notification.textContent = message;
+            container.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Close modal
+        window.closeModal = function() {
+            document.getElementById('editModal').classList.remove('active');
+            currentEditId = null;
+        };
+
+        // Edit transaction
+        window.editTransaction = function(id) {
+            const transaction = currentTransactions.find(t => t.id === id);
+            if (!transaction) return;
+            
+            currentEditId = id;
+            const data = transaction.data();
+            document.getElementById('editAmount').value = data.amount;
+            document.getElementById('editNote').value = data.note || '';
+            document.getElementById('editModal').classList.add('active');
+        };
+
+        // Save edit
+        window.saveEdit = async function() {
+            if (!currentEditId) return;
+            
+            const amount = parseFloat(document.getElementById('editAmount').value);
+            const note = document.getElementById('editNote').value.trim();
+            
+            if (!amount || amount <= 0) {
+                showNotification('Noto\'g\'ri miqdor', 'error');
+                return;
+            }
+            
+            try {
+                await updateDoc(doc(db, 'transactions', currentEditId), {
+                    amount: amount,
+                    note: note,
+                    updatedAt: Date.now()
+                });
+                
+                closeModal();
+                showNotification('✅ Yozuv yangilandi');
+            } catch (error) {
+                showNotification('❌ Xatolik: ' + error.message, 'error');
+            }
+        };
+
+        // Delete transaction
+        window.deleteTransaction = async function(id) {
+            if (!confirm('Yozuvni o\'chirishni xohlaysizmi?')) return;
+            
+            try {
+                await deleteDoc(doc(db, 'transactions', id));
+                showNotification('🗑️ Yozuv o\'chirildi');
+            } catch (error) {
+                showNotification('❌ Xatolik: ' + error.message, 'error');
+            }
+        };
+
+        // Export data
+        window.exportData = function() {
+            const data = currentTransactions.map(t => {
+                const d = t.data();
+                return {
+                    sana: new Date(d.timestamp).toLocaleDateString('uz-UZ'),
+                    vaqt: new Date(d.timestamp).toLocaleTimeString('uz-UZ'),
+                    shaxs: d.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon',
+                    amal: d.type === 'contribution' ? 'Qo\'shgan pul' : d.type === 'goodsTaken' ? 'Mahsulot' : 'Naqd pul',
+                    miqdor: d.amount,
+                    izoh: d.note || ''
+                };
+            });
+            
+            const csv = [
+                Object.keys(data[0]).join(','),
+                ...data.map(row => Object.values(row).join(','))
+            ].join('\n');
+            
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `hisobot_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            
+            showNotification('📊 Hisobot yuklab olindi');
+        };
+
+        // Filter transactions
+        function filterTransactions(transactions) {
+            return transactions.filter(t => {
+                const data = t.data();
+                
+                // Person filter
+                if (filterPerson.value !== 'all' && data.person !== filterPerson.value) {
+                    return false;
+                }
+                
+                // Type filter
+                if (filterType.value !== 'all' && data.type !== filterType.value) {
+                    return false;
+                }
+                
+                // Date filter
+                if (filterDate.value !== 'all') {
+                    const date = new Date(data.timestamp);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    
+                    if (filterDate.value === 'today') {
+                        if (date < today) return false;
+                    } else if (filterDate.value === 'week') {
+                        const weekAgo = new Date(today);
+                        weekAgo.setDate(weekAgo.getDate() - 7);
+                        if (date < weekAgo) return false;
+                    } else if (filterDate.value === 'month') {
+                        const monthAgo = new Date(today);
+                        monthAgo.setMonth(monthAgo.getMonth() - 1);
+                        if (date < monthAgo) return false;
+                    }
+                }
+                
+                return true;
+            });
         }
 
         // Update UI with data
         function updateUI(transactions) {
-            let sohibContribTotal = 0;  // Sohibjon qo'shgan pullar
-            let ilhomContribTotal = 0;  // Ilhomjon qo'shgan pullar
-            let sohibTakenTotal = 0;    // Sohibjon olgan mahsulot/naqd
-            let ilhomTakenTotal = 0;    // Ilhomjon olgan mahsulot/naqd
+            currentTransactions = transactions;
             
-            // Qarzlarni hisoblash uchun
-            let ilhomDebtToSohib = 0;   // Ilhomjonning Sohibjonga qarzi
-            let sohibDebtToIlhom = 0;   // Sohibjonning Ilhomjonga qarzi
+            let sohibContribTotal = 0;
+            let ilhomContribTotal = 0;
+            let sohibTakenTotal = 0;
+            let ilhomTakenTotal = 0;
+            let ilhomDebtToSohib = 0;
+            let sohibDebtToIlhom = 0;
 
             transactions.forEach(item => {
                 const data = item.data();
@@ -599,18 +1108,14 @@
                 const person = data.person;
 
                 if (type === 'contribution') {
-                    // Kim pul qo'shgan bo'lsa, uning hisobiga to'liq yoziladi
                     if (person === 'sohibjon') {
                         sohibContribTotal += amount;
-                        // Ilhomjon Sohibjonga shu summaning yarmicha qarzdor bo'ladi
                         ilhomDebtToSohib += amount / 2;
                     } else {
                         ilhomContribTotal += amount;
-                        // Sohibjon Ilhomjonga shu summaning yarmicha qarzdor bo'ladi
                         sohibDebtToIlhom += amount / 2;
                     }
                 } else if (type === 'goodsTaken' || type === 'cashTaken') {
-                    // Olgan narsalar
                     if (person === 'sohibjon') {
                         sohibTakenTotal += amount;
                     } else {
@@ -619,12 +1124,9 @@
                 }
             });
 
-            // Sof balanslar - FAQAT qo'shgan puldan olgan pulni ayiramiz
-            // Qarzlar balansga qo'shilmaydi!
             const sohibBal = sohibContribTotal - sohibTakenTotal;
             const ilhomBal = ilhomContribTotal - ilhomTakenTotal;
 
-            // Update DOM
             sohibBalance.textContent = formatMoney(sohibBal);
             ilhomBalance.textContent = formatMoney(ilhomBal);
             sohibContrib.textContent = formatMoney(sohibContribTotal);
@@ -632,7 +1134,6 @@
             sohibTaken.textContent = formatMoney(sohibTakenTotal);
             ilhomTaken.textContent = formatMoney(ilhomTakenTotal);
 
-            // Verdict - kim kimga qarzdor (qarzlarni solishtiramiz)
             const netDebt = ilhomDebtToSohib - sohibDebtToIlhom;
             
             if (Math.abs(netDebt) < 0.01) {
@@ -643,64 +1144,301 @@
                 verdict.textContent = `🟢 Sohibjon Ilhomjonga ${formatMoney(-netDebt)} so'm qarzdor`;
             }
 
-            // Update time
             const now = new Date();
             updateTime.textContent = now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+
+            // Update history
+            renderHistory(transactions);
+        }
+
+        // Group transactions by date
+        function groupTransactionsByDate(transactions) {
+            const groups = {};
+            
+            transactions.forEach(item => {
+                const data = item.data();
+                const date = new Date(data.timestamp);
+                const dateKey = date.toLocaleDateString('uz-UZ', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                
+                if (!groups[dateKey]) {
+                    groups[dateKey] = [];
+                }
+                groups[dateKey].push(item);
+            });
+            
+            return groups;
         }
 
         // Render history
         function renderHistory(transactions) {
-            if (transactions.length === 0) {
-                historyList.innerHTML = '<li class="empty-msg">Hozircha yozuvlar yo\'q</li>';
+            const filtered = filterTransactions(transactions);
+            
+            if (filtered.length === 0) {
+                historyList.innerHTML = '<li class="empty-msg">Hech qanday yozuv topilmadi</li>';
+                historyStats.textContent = '0 ta yozuv';
+                totalContributions.textContent = '💰 Jami qo\'shilgan: 0';
+                totalTaken.textContent = '📤 Jami olingan: 0';
                 return;
             }
 
+            const groups = groupTransactionsByDate(filtered);
+            
             let html = '';
+            let totalContrib = 0;
+            let totalTake = 0;
             
-            // Eng so'nggi 20 ta yozuvni ko'rsatish
-            const recentTransactions = transactions.slice(0, 20);
-            
-            recentTransactions.forEach(item => {
-                const data = item.data();
-                const personName = data.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
-                const otherName = data.person === 'sohibjon' ? 'Ilhomjon' : 'Sohibjon';
+            Object.entries(groups).forEach(([date, items]) => {
+                let dayContrib = 0;
+                let dayTaken = 0;
                 
-                let typeText = '';
-                let icon = '';
-                let description = '';
+                items.forEach(item => {
+                    const data = item.data();
+                    if (data.type === 'contribution') {
+                        dayContrib += data.amount;
+                    } else {
+                        dayTaken += data.amount;
+                    }
+                });
                 
-                if (data.type === 'contribution') {
-                    typeText = 'Qo\'shgan pul';
-                    icon = '💰';
-                    description = `${personName} ${formatMoney(data.amount)} so'm qo'shdi → ${otherName}ga ${formatMoney(data.amount/2)} so'm qarz`;
-                } else if (data.type === 'goodsTaken') {
-                    typeText = 'Olgan mahsulot';
-                    icon = '🛒';
-                    description = `${personName} mahsulot oldi`;
-                } else {
-                    typeText = 'Olgan naqd';
-                    icon = '💵';
-                    description = `${personName} naqd pul oldi`;
-                }
-
-                const note = data.note ? ` · ${data.note}` : '';
-                const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) : '';
-
+                totalContrib += dayContrib;
+                totalTake += dayTaken;
+                
                 html += `
-                    <li class="history-item">
-                        <div class="history-info">
-                            <span class="history-badge">${icon} ${typeText}</span>
-                            <span class="history-desc">${description}${note}</span>
-                            <span class="history-time">${time}</span>
+                    <div class="history-group">
+                        <div class="group-header">
+                            <span>📅 ${date}</span>
+                            <span>💰 +${formatMoney(dayContrib)}  📤 -${formatMoney(dayTaken)}</span>
                         </div>
-                        <div>
-                            <span class="history-amount">${formatMoney(data.amount)}</span>
-                        </div>
-                    </li>
                 `;
+                
+                items.forEach(item => {
+                    const data = item.data();
+                    const personName = data.person === 'sohibjon' ? 'Sohibjon' : 'Ilhomjon';
+                    const otherName = data.person === 'sohibjon' ? 'Ilhomjon' : 'Sohibjon';
+                    
+                    let typeText = '';
+                    let icon = '';
+                    let description = '';
+                    
+                    if (data.type === 'contribution') {
+                        typeText = 'Qo\'shgan pul';
+                        icon = '💰';
+                        description = `${personName} ${formatMoney(data.amount)} so'm qo'shdi → ${otherName}ga ${formatMoney(data.amount/2)} so'm qarz`;
+                    } else if (data.type === 'goodsTaken') {
+                        typeText = 'Olgan mahsulot';
+                        icon = '🛒';
+                        description = `${personName} mahsulot oldi`;
+                    } else {
+                        typeText = 'Olgan naqd';
+                        icon = '💵';
+                        description = `${personName} naqd pul oldi`;
+                    }
+
+                    const note = data.note ? ` · ${data.note}` : '';
+                    const time = data.timestamp ? new Date(data.timestamp).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) : '';
+                    const isUpdated = data.updatedAt ? ' (tahrirlangan)' : '';
+
+                    html += `
+                        <li class="history-item">
+                            <div class="history-info">
+                                <span class="history-badge">${icon} ${typeText}</span>
+                                <span class="history-desc">${description}${note}${isUpdated}</span>
+                                <span class="history-time">${time}</span>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                <span class="history-amount">${formatMoney(data.amount)}</span>
+                                <div class="item-actions">
+                                    <button class="action-btn" onclick="editTransaction('${item.id}')">✏️</button>
+                                    <button class="action-btn delete" onclick="deleteTransaction('${item.id}')">🗑️</button>
+                                </div>
+                            </div>
+                        </li>
+                    `;
+                });
+                
+                html += '</div>';
             });
 
             historyList.innerHTML = html;
+            historyStats.textContent = `${filtered.length} ta yozuv`;
+            totalContributions.textContent = `💰 Jami qo'shilgan: ${formatMoney(totalContrib)}`;
+            totalTaken.textContent = `📤 Jami olingan: ${formatMoney(totalTake)}`;
+
+            // Update monthly stats
+            updateMonthlyStats(transactions);
+        }
+
+        // Update monthly stats
+        function updateMonthlyStats(transactions) {
+            const now = new Date();
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            
+            let monthlyContrib = 0;
+            let monthlyTaken = 0;
+            let maxAmount = 0;
+            let totalAmount = 0;
+            let count = 0;
+            
+            transactions.forEach(item => {
+                const data = item.data();
+                const date = new Date(data.timestamp);
+                
+                if (date >= monthStart) {
+                    if (data.type === 'contribution') {
+                        monthlyContrib += data.amount;
+                    } else {
+                        monthlyTaken += data.amount;
+                    }
+                }
+                
+                totalAmount += data.amount;
+                count++;
+                if (data.amount > maxAmount) maxAmount = data.amount;
+            });
+            
+            document.getElementById('monthlyContrib').textContent = formatMoney(monthlyContrib);
+            document.getElementById('monthlyTaken').textContent = formatMoney(monthlyTaken);
+            document.getElementById('avgTransaction').textContent = formatMoney(count > 0 ? totalAmount / count : 0);
+            document.getElementById('maxTransaction').textContent = formatMoney(maxAmount);
+        }
+
+        // Update charts
+        function updateCharts() {
+            const ctx = document.getElementById('balanceChart').getContext('2d');
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            
+            // Prepare data for last 7 days
+            const dates = [];
+            const sohibData = [];
+            const ilhomData = [];
+            
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                date.setHours(0, 0, 0, 0);
+                
+                const dateStr = date.toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' });
+                dates.push(dateStr);
+                
+                let sohibBal = 0;
+                let ilhomBal = 0;
+                
+                currentTransactions.forEach(t => {
+                    const data = t.data();
+                    const tDate = new Date(data.timestamp);
+                    tDate.setHours(0, 0, 0, 0);
+                    
+                    if (tDate.getTime() === date.getTime()) {
+                        if (data.type === 'contribution') {
+                            if (data.person === 'sohibjon') sohibBal += data.amount;
+                            else ilhomBal += data.amount;
+                        } else {
+                            if (data.person === 'sohibjon') sohibBal -= data.amount;
+                            else ilhomBal -= data.amount;
+                        }
+                    }
+                });
+                
+                sohibData.push(sohibBal);
+                ilhomData.push(ilhomBal);
+            }
+            
+            // Destroy existing charts
+            if (chart) chart.destroy();
+            if (pieChart) pieChart.destroy();
+            
+            // Create balance chart
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Sohibjon',
+                        data: sohibData,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'Ilhomjon',
+                        data: ilhomData,
+                        borderColor: '#16a34a',
+                        backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e2e8f0'
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: {
+                                color: '#334155'
+                            },
+                            ticks: {
+                                color: '#e2e8f0'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: '#334155'
+                            },
+                            ticks: {
+                                color: '#e2e8f0'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Prepare pie chart data
+            let contribTotal = 0;
+            let goodsTotal = 0;
+            let cashTotal = 0;
+            
+            currentTransactions.forEach(t => {
+                const data = t.data();
+                if (data.type === 'contribution') contribTotal += data.amount;
+                else if (data.type === 'goodsTaken') goodsTotal += data.amount;
+                else cashTotal += data.amount;
+            });
+            
+            // Create pie chart
+            pieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Qo\'shilgan pullar', 'Olingan mahsulotlar', 'Olingan naqd pullar'],
+                    datasets: [{
+                        data: [contribTotal, goodsTotal, cashTotal],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderColor: '#1e293b',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e2e8f0'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            document.getElementById('chartLoading').style.display = 'none';
         }
 
         // Real-time listener
@@ -713,11 +1451,15 @@
                 transactions.push(doc);
             });
             updateUI(transactions);
-            renderHistory(transactions);
         }, (error) => {
             console.error('Xatolik:', error);
             historyList.innerHTML = '<li class="empty-msg">Ulanishda xatolik</li>';
         });
+
+        // Filter listeners
+        filterPerson.addEventListener('change', () => renderHistory(currentTransactions));
+        filterType.addEventListener('change', () => renderHistory(currentTransactions));
+        filterDate.addEventListener('change', () => renderHistory(currentTransactions));
 
         // Save new transaction
         saveBtn.addEventListener('click', async function() {
@@ -726,7 +1468,7 @@
             const note = noteInput.value.trim();
 
             if (!amount || amount <= 0) {
-                alert('Iltimos, to\'g\'ri miqdor kiriting');
+                showNotification('Iltimos, to\'g\'ri miqdor kiriting', 'error');
                 return;
             }
 
@@ -739,22 +1481,22 @@
                     timestamp: Date.now()
                 });
 
-                // Clear form
                 amountInput.value = '10000';
                 noteInput.value = '';
                 
-                // Success feedback
                 saveBtn.textContent = '✅ Saqlandi!';
+                showNotification('✅ Yozuv muvaffaqiyatli qo\'shildi');
+                
                 setTimeout(() => {
                     saveBtn.textContent = '💾 Saqlash';
                 }, 1000);
                 
             } catch (error) {
-                alert('Saqlashda xatolik: ' + error.message);
+                showNotification('❌ Saqlashda xatolik: ' + error.message, 'error');
             }
         });
 
-        console.log('✅ Ilova ishga tushdi!');
+        console.log('✅ Ilova Pro versiyasi ishga tushdi!');
     })();
 </script>
 </body>
