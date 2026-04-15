@@ -72,7 +72,13 @@
             padding: 12px 10px 90px;
             color: #1a1a2e;
             -webkit-tap-highlight-color: transparent;
-            position: relative;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .app {
@@ -386,6 +392,7 @@
             margin-bottom: 12px;
             overflow-x: auto;
             padding: 2px 0;
+            -webkit-overflow-scrolling: touch;
         }
 
         .product-thumb {
@@ -498,23 +505,10 @@
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             position: relative;
+            overscroll-behavior: contain;
         }
 
-        /* Custom scrollbar for modal */
-        .modal-content::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .modal-content::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-        }
-
-        .modal-content::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 4px;
-        }
-
+        /* Modal header sticky */
         .modal-header {
             display: flex;
             align-items: center;
@@ -566,11 +560,48 @@
             background: white;
         }
 
+        textarea.form-control {
+            resize: vertical;
+        }
+
         .image-preview {
             width: 70px;
             height: 70px;
             border-radius: 14px;
             object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        /* Image preview container */
+        .image-preview-container {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 0;
+            -webkit-overflow-scrolling: touch;
+            min-height: 80px;
+        }
+
+        .image-preview-wrapper {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .remove-image-btn {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: #ef4444;
+            color: white;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
         }
 
         /* History Timeline */
@@ -581,6 +612,7 @@
             border-radius: 18px;
             max-height: 300px;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .history-item {
@@ -709,21 +741,14 @@
             max-height: 60vh;
             overflow-y: auto;
             padding-right: 4px;
-        }
-
-        .detail-scroll::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .detail-scroll::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 4px;
+            -webkit-overflow-scrolling: touch;
         }
 
         /* To'lovlar ro'yxati */
         .payments-list {
             max-height: 200px;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .payment-item-detail {
@@ -836,7 +861,7 @@
 
             <div class="form-group">
                 <label>📸 Rasmlar</label>
-                <div class="products-preview" id="imagePreviewContainer"></div>
+                <div class="image-preview-container" id="imagePreviewContainer"></div>
                 <input type="file" id="imageUpload" accept="image/*" multiple style="display: none;">
                 <button type="button" class="view-images-btn" id="uploadImageBtn">
                     📷 Rasm yuklash
@@ -889,7 +914,7 @@
 
             <div class="form-group">
                 <label>📸 Yangi rasmlar</label>
-                <div class="products-preview" id="addMoreImagePreview"></div>
+                <div class="image-preview-container" id="addMoreImagePreview"></div>
                 <input type="file" id="addMoreImageUpload" accept="image/*" multiple style="display: none;">
                 <button type="button" class="view-images-btn" id="addMoreUploadBtn">
                     📷 Rasm yuklash
@@ -936,6 +961,8 @@
         let currentTab = 'active';
         let currentDebtId = null;
         let allDebts = [];
+        let selectedImages = [];
+        let addMoreSelectedImages = [];
 
         const today = new Date().toISOString().split('T')[0];
         const nextMonth = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
@@ -953,8 +980,17 @@
         });
 
         document.getElementById('searchInput').addEventListener('input', filterAndRender);
-        document.getElementById('uploadImageBtn').addEventListener('click', () => document.getElementById('imageUpload').click());
-        document.getElementById('addMoreUploadBtn').addEventListener('click', () => document.getElementById('addMoreImageUpload').click());
+        
+        // Rasm yuklash tugmalari
+        document.getElementById('uploadImageBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('imageUpload').click();
+        });
+        
+        document.getElementById('addMoreUploadBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('addMoreImageUpload').click();
+        });
 
         document.getElementById('quickAddBtn').addEventListener('click', openQuickAdd);
         document.getElementById('quickAddFabBtn').addEventListener('click', openQuickAdd);
@@ -966,28 +1002,67 @@
             document.body.style.overflow = 'hidden';
         }
 
-        // Image preview
+        // Rasm preview - tuzatilgan
         document.getElementById('imageUpload').addEventListener('change', function(e) {
-            previewImages(e.target.files, 'imagePreviewContainer');
+            handleImageSelect(e.target.files, 'imagePreviewContainer', 'selectedImages');
         });
 
         document.getElementById('addMoreImageUpload').addEventListener('change', function(e) {
-            previewImages(e.target.files, 'addMoreImagePreview');
+            handleImageSelect(e.target.files, 'addMoreImagePreview', 'addMoreSelectedImages');
         });
 
-        function previewImages(files, containerId) {
+        function handleImageSelect(files, containerId, storageKey) {
             const container = document.getElementById(containerId);
-            container.innerHTML = '';
-            Array.from(files).slice(0, 5).forEach(file => {
+            const filesArray = Array.from(files).slice(0, 5);
+            
+            filesArray.forEach((file, index) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'image-preview-wrapper';
+                    
                     const img = document.createElement('img');
                     img.src = e.target.result;
                     img.className = 'image-preview';
-                    container.appendChild(img);
+                    
+                    const removeBtn = document.createElement('span');
+                    removeBtn.className = 'remove-image-btn';
+                    removeBtn.innerHTML = '✕';
+                    removeBtn.onclick = (event) => {
+                        event.stopPropagation();
+                        wrapper.remove();
+                        // Tanlangan rasmlar ro'yxatidan o'chirish
+                        if (storageKey === 'selectedImages') {
+                            selectedImages = selectedImages.filter((_, i) => i !== index);
+                        } else {
+                            addMoreSelectedImages = addMoreSelectedImages.filter((_, i) => i !== index);
+                        }
+                    };
+                    
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(removeBtn);
+                    container.appendChild(wrapper);
                 };
                 reader.readAsDataURL(file);
             });
+            
+            // Saqlash uchun fayllarni saqlash
+            if (storageKey === 'selectedImages') {
+                selectedImages = [...selectedImages, ...filesArray];
+            } else {
+                addMoreSelectedImages = [...addMoreSelectedImages, ...filesArray];
+            }
+            
+            // Inputni tozalash (qayta tanlash imkoniyati uchun)
+            e.target.value = '';
+            
+            // Modal scroll refresh
+            setTimeout(() => {
+                const modal = container.closest('.modal-content');
+                if (modal) {
+                    modal.scrollTop = modal.scrollHeight;
+                }
+            }, 100);
         }
 
         window.copyPhone = function(event, phoneNumber) {
@@ -1202,11 +1277,10 @@
                 newProducts = newProducts ? `${newProducts}; ${additionalProducts}` : additionalProducts;
             }
 
-            const imageFiles = document.getElementById('addMoreImageUpload').files;
             let newImages = debt.images || [];
             
-            if (imageFiles.length > 0) {
-                const uploadedUrls = await uploadImages(Array.from(imageFiles));
+            if (addMoreSelectedImages.length > 0) {
+                const uploadedUrls = await uploadImages(addMoreSelectedImages);
                 newImages = [...newImages, ...uploadedUrls];
             }
 
@@ -1252,9 +1326,10 @@
                 updatedAt: Date.now()
             };
 
-            const imageFiles = document.getElementById('imageUpload').files;
-            if (imageFiles.length > 0) {
-                formData.images = await uploadImages(Array.from(imageFiles));
+            if (selectedImages.length > 0) {
+                formData.images = await uploadImages(selectedImages);
+            } else if (currentDebtId) {
+                formData.images = allDebts.find(d => d.id === currentDebtId)?.images || [];
             }
 
             try {
@@ -1326,6 +1401,7 @@
             document.body.style.overflow = '';
             document.getElementById('addMoreForm').reset();
             document.getElementById('addMoreImagePreview').innerHTML = '';
+            addMoreSelectedImages = [];
         }
 
         function resetForm() {
@@ -1335,6 +1411,7 @@
             document.getElementById('takenDate').value = today;
             document.getElementById('dueDate').value = nextMonth;
             currentDebtId = null;
+            selectedImages = [];
         }
 
         function showDetail(id) {
@@ -1455,6 +1532,32 @@
             document.getElementById('products').value = debt.products || '';
             document.getElementById('note').value = debt.note || '';
             
+            // Mavjud rasmlarni ko'rsatish
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = '';
+            if (debt.images) {
+                debt.images.forEach((url, index) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'image-preview-wrapper';
+                    
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.className = 'image-preview';
+                    
+                    const removeBtn = document.createElement('span');
+                    removeBtn.className = 'remove-image-btn';
+                    removeBtn.innerHTML = '✕';
+                    removeBtn.onclick = (event) => {
+                        event.stopPropagation();
+                        wrapper.remove();
+                    };
+                    
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(removeBtn);
+                    container.appendChild(wrapper);
+                });
+            }
+            
             document.getElementById('debtModal').classList.add('active');
             document.body.style.overflow = 'hidden';
         }
@@ -1477,6 +1580,11 @@
                 if (e.target === modal) {
                     modal.classList.remove('active');
                     document.body.style.overflow = '';
+                    if (modal.id === 'debtModal') resetForm();
+                    if (modal.id === 'addMoreModal') {
+                        addMoreSelectedImages = [];
+                        document.getElementById('addMoreImagePreview').innerHTML = '';
+                    }
                 }
             });
         });
@@ -1487,6 +1595,13 @@
                 document.body.style.overflow = '';
             }
         });
+
+        // iOS scroll muammosini tuzatish
+        document.addEventListener('touchmove', function(e) {
+            if (e.target.closest('.modal-content')) {
+                e.stopPropagation();
+            }
+        }, { passive: false });
 
         console.log('✅ Nasiya Pro Max ishga tushdi!');
     })();
