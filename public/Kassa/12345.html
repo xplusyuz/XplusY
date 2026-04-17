@@ -1,196 +1,686 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sheriklik Do'koni - Hisob-Kitob</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 20px 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1, h2 { text-align: center; color: #333; }
-        
-        /* Summary Cards */
-        .summary-container { display: flex; justify-content: space-between; margin-bottom: 30px; gap: 20px; }
-        .card { flex: 1; padding: 20px; border-radius: 8px; text-align: center; color: white; }
-        .card.sohibjon { background-color: #4CAF50; }
-        .card.ilhomjon { background-color: #2196F3; }
-        .card h3 { margin: 0 0 10px 0; font-size: 24px; }
-        .card p { margin: 0; font-size: 20px; font-weight: bold; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sohibjon & Ilhomjon • Hisob Kitob</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <!-- Google Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-        /* Form Styles */
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; color: #555; }
-        select, input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
-        button { width: 100%; padding: 12px; background-color: #ff9800; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
-        button:hover { background-color: #e68a00; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: radial-gradient(circle at 10% 30%, #1a1f2e, #0b0e14);
+      min-height: 100vh;
+      padding: 16px 12px 24px;
+      display: flex;
+      flex-direction: column;
+      color: #fff;
+    }
 
-        /* Table Styles */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #f8f9fa; color: #333; }
-        tr:hover { background-color: #f5f5f5; }
-        .type-add { color: green; font-weight: bold; }
-        .type-take { color: red; font-weight: bold; }
-    </style>
+    /* shisha / glass effect */
+    .glass-card {
+      background: rgba(20, 28, 40, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 32px;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-weight: 700;
+      font-size: 1.9rem;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff8, #e0e7ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+
+    .badge-firebase {
+      background: rgba(255, 165, 0, 0.18);
+      padding: 8px 14px;
+      border-radius: 40px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #ffb347;
+      border: 1px solid rgba(255, 180, 40, 0.25);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .profiles-row {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .profile-card {
+      flex: 1;
+      padding: 18px 12px 16px;
+      border-radius: 28px;
+      background: rgba(12, 20, 30, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.05);
+      transition: transform 0.2s ease;
+      box-shadow: 0 12px 20px -8px #00000055;
+    }
+
+    .profile-avatar {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(145deg, #2a3a55, #1e2a3a);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      border: 2px solid rgba(255,215,100,0.3);
+      box-shadow: 0 6px 12px #00000033;
+      font-size: 28px;
+    }
+
+    .profile-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .profile-balance {
+      font-size: 1.8rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin: 8px 0 4px;
+      background: linear-gradient(135deg, #f0e9b0, #d4af37);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .balance-label {
+      font-size: 0.7rem;
+      opacity: 0.7;
+      letter-spacing: 0.3px;
+      margin-bottom: 12px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      flex: 1;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,215,0,0.15);
+      border-radius: 60px;
+      padding: 10px 0;
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: #eee;
+      backdrop-filter: blur(5px);
+      transition: all 0.15s;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .btn-icon i {
+      font-size: 0.9rem;
+    }
+
+    .btn-icon:active {
+      background: #f0b90b30;
+      transform: scale(0.96);
+      border-color: #f0b90b;
+    }
+
+    .bet-panel {
+      padding: 22px 18px;
+      border-radius: 36px;
+      margin: 18px 0 20px;
+      background: rgba(10, 16, 24, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,215,0,0.15);
+    }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ccd6f0;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .bet-input {
+      flex: 2;
+      background: #0f1a24;
+      border: 1.5px solid #2e4258;
+      border-radius: 60px;
+      padding: 16px 18px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: white;
+      outline: none;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .bet-input:focus {
+      border-color: #f0b90b;
+      box-shadow: 0 0 0 3px #f0b90b33;
+    }
+
+    .bet-action {
+      flex: 1;
+      background: linear-gradient(145deg, #f5c542, #e5a813);
+      border: none;
+      border-radius: 60px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #0a0f16;
+      box-shadow: 0 8px 18px #00000055;
+      cursor: pointer;
+      transition: 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .bet-action:active {
+      background: #ffd966;
+      transform: scale(0.96);
+    }
+
+    .refund-info {
+      background: rgba(10, 30, 20, 0.6);
+      padding: 14px 18px;
+      border-radius: 24px;
+      margin: 12px 0 18px;
+      border-left: 5px solid #2ecc71;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .transactions-list {
+      list-style: none;
+      margin-top: 10px;
+      max-height: 240px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .tx-item {
+      background: rgba(255,255,255,0.02);
+      padding: 14px 16px;
+      border-radius: 24px;
+      margin-bottom: 8px;
+      border: 1px solid #2a3a4a30;
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.9rem;
+    }
+
+    .tx-amount {
+      font-weight: 700;
+    }
+
+    .tx-positive {
+      color: #6fcf97;
+    }
+
+    .tx-negative {
+      color: #f4a2a2;
+    }
+
+    .reset-area {
+      display: flex;
+      justify-content: flex-end;
+      margin: 8px 0 4px;
+    }
+
+    .reset-btn {
+      background: none;
+      border: 1px solid #ff5e7c40;
+      padding: 8px 18px;
+      border-radius: 40px;
+      color: #ffb0bb;
+      font-size: 0.8rem;
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 16px;
+      opacity: 0.5;
+      font-size: 0.7rem;
+    }
+
+    i {
+      color: inherit;
+    }
+
+    /* mobile optimize */
+    input[type="number"]::-webkit-inner-spin-button {
+      opacity: 1;
+      height: 24px;
+    }
+  </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Do'kon Hisob-Kitobi</h1>
-
-    <div class="summary-container">
-        <div class="card sohibjon">
-            <h3>Sohibjon</h3>
-            <p>Balans: <span id="sohibjon-balance">0</span> so'm</p>
-        </div>
-        <div class="card ilhomjon">
-            <h3>Ilhomjon</h3>
-            <p>Balans: <span id="ilhomjon-balance">0</span> so'm</p>
-        </div>
-    </div>
-
-    <h2>Yangi amaliyot kiritish</h2>
-    <form id="transaction-form">
-        <div class="form-group">
-            <label for="partner">Kim?</label>
-            <select id="partner" required>
-                <option value="Sohibjon">Sohibjon</option>
-                <option value="Ilhomjon">Ilhomjon</option>
-            </select>
-        </div>
-        
-        <div class="form-group">
-            <label for="type">Nima qildi?</label>
-            <select id="type" required>
-                <option value="add_money">Yonidan pul qo'shdi</option>
-                <option value="take_money">Kassadan pul oldi</option>
-                <option value="take_product">Do'kondan mahsulot oldi</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="amount">Miqdor (so'mda)</label>
-            <input type="number" id="amount" placeholder="Masalan: 50000" required>
-        </div>
-
-        <div class="form-group">
-            <label for="description">Izoh (ixtiyoriy)</label>
-            <input type="text" id="description" placeholder="Nima uchun olindi/qo'shildi?">
-        </div>
-
-        <button type="submit">Saqlash</button>
-    </form>
-
-    <h2>Amaliyotlar tarixi</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Sana</th>
-                <th>Kim</th>
-                <th>Amaliyot</th>
-                <th>Miqdor</th>
-                <th>Izoh</th>
-            </tr>
-        </thead>
-        <tbody id="history-table">
-            </tbody>
-    </table>
+<div class="app-header">
+  <h1>⚡️X+Y</h1>
+  <div class="badge-firebase">
+    <i class="fas fa-database"></i> Firebase
+  </div>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+<!-- Ikkita alohida profil: Sohibjon va Ilhomjon -->
+<div class="profiles-row">
+  <!-- Sohibjon profili -->
+  <div class="profile-card" id="profile-sohibjon">
+    <div class="profile-avatar" style="background: linear-gradient(145deg, #2a4a6a, #1e3245);">
+      <i class="fas fa-user-astronaut" style="color: #aad0ff;"></i>
+    </div>
+    <div class="profile-name">Sohibjon</div>
+    <div class="profile-balance" id="balance-sohibjon">0</div>
+    <div class="balance-label">so'm • balans</div>
+    <div class="action-buttons">
+      <div class="btn-icon" data-user="sohibjon" data-action="deposit"><i class="fas fa-plus-circle"></i> Qo'shish</div>
+      <div class="btn-icon" data-user="sohibjon" data-action="withdraw"><i class="fas fa-minus-circle"></i> Yechish</div>
+    </div>
+  </div>
 
-    // Siz taqdim etgan Firebase konfiguratsiyasi
+  <!-- Ilhomjon profili -->
+  <div class="profile-card" id="profile-ilhomjon">
+    <div class="profile-avatar" style="background: linear-gradient(145deg, #4a3a6a, #2f2845);">
+      <i class="fas fa-user-ninja" style="color: #d4bfff;"></i>
+    </div>
+    <div class="profile-name">Ilhomjon</div>
+    <div class="profile-balance" id="balance-ilhomjon">0</div>
+    <div class="balance-label">so'm • balans</div>
+    <div class="action-buttons">
+      <div class="btn-icon" data-user="ilhomjon" data-action="deposit"><i class="fas fa-plus-circle"></i> Qo'shish</div>
+      <div class="btn-icon" data-user="ilhomjon" data-action="withdraw"><i class="fas fa-minus-circle"></i> Yechish</div>
+    </div>
+  </div>
+</div>
+
+<!-- DO'KONGA PUL TIKISH (asosiy mexanizm) -->
+<div class="bet-panel glass-card">
+  <div class="section-title">
+    <i class="fas fa-store-alt" style="color: #f7d44a;"></i> Do'konga pul tikish
+  </div>
+
+  <div class="input-group">
+    <input type="number" id="betAmount" class="bet-input" placeholder="Summa, masalan 300000" value="300000" min="1000" step="10000">
+    <button class="bet-action" id="placeBetBtn"><i class="fas fa-hand-holding-usd"></i> Tik</button>
+  </div>
+
+  <!-- Qaytarish summasi ko'rinadi (misol: Sohibjon 300k tiksa, Ilhomjon 150k qaytaradi) -->
+  <div class="refund-info" id="refundPreview">
+    <span><i class="fas fa-undo-alt"></i> Qaytariladigan summa:</span>
+    <span style="font-weight: 800; font-size: 1.3rem;" id="refundAmount">0</span>
+  </div>
+
+  <div style="font-size:0.8rem; opacity:0.7; margin-bottom: 8px;">*Sohibjon tiksa → Ilhomjon yarmini qaytaradi.<br>Ilhomjon tiksa → Sohibjon yarmini qaytaradi.</div>
+
+  <!-- Oxirgi harakatlar -->
+  <div style="display: flex; justify-content: space-between; margin-top: 12px;">
+    <span><i class="far fa-clock"></i> So'nggi tranzaksiyalar</span>
+    <span class="reset-btn" id="resetBalancesBtn"><i class="fas fa-sync-alt"></i> Reset</span>
+  </div>
+
+  <ul class="transactions-list" id="transactionsContainer">
+    <li class="tx-item" style="opacity:0.6;">⏳ Harakatlar shu yerda ko'rinadi</li>
+  </ul>
+</div>
+
+<div class="footer-note">
+  Mobil • 100% responsive • Sohibjon & Ilhomjon
+</div>
+
+<script>
+  (function(){
+    // ---------- FIREBASE CONFIG (siz bergan) ----------
     const firebaseConfig = {
-        apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
-        authDomain: "xplusy-760fa.firebaseapp.com",
-        projectId: "xplusy-760fa",
-        storageBucket: "xplusy-760fa.firebasestorage.app",
-        messagingSenderId: "992512966017",
-        appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80"
+      apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
+      authDomain: "xplusy-760fa.firebaseapp.com",
+      projectId: "xplusy-760fa",
+      storageBucket: "xplusy-760fa.firebasestorage.app",
+      messagingSenderId: "992512966017",
+      appId: "1:992512966017:web:5e919dbc9b8d8abcb43c80"
     };
 
-    // Firebase'ni ishga tushirish
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    // Firebase init
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    const form = document.getElementById('transaction-form');
-    const historyTable = document.getElementById('history-table');
-    const sohibjonBalanceEl = document.getElementById('sohibjon-balance');
-    const ilhomjonBalanceEl = document.getElementById('ilhomjon-balance');
+    // Realtime listener uchun document referens
+    const balancesDoc = db.collection('profiles').doc('balances');
+    const transactionsColl = db.collection('transactions');
 
-    // Formani yuborish (Ma'lumotni saqlash)
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const partner = document.getElementById('partner').value;
-        const type = document.getElementById('type').value;
-        const amount = Number(document.getElementById('amount').value);
-        const description = document.getElementById('description').value;
+    // UI elementlar
+    const balanceSohibjonEl = document.getElementById('balance-sohibjon');
+    const balanceIlhomjonEl = document.getElementById('balance-ilhomjon');
+    const betAmountInput = document.getElementById('betAmount');
+    const placeBetBtn = document.getElementById('placeBetBtn');
+    const refundAmountSpan = document.getElementById('refundAmount');
+    const transactionsContainer = document.getElementById('transactionsContainer');
 
-        try {
-            await addDoc(collection(db, "transactions"), {
-                partner: partner,
-                type: type,
-                amount: amount,
-                description: description,
-                timestamp: serverTimestamp()
-            });
-            form.reset();
-        } catch (error) {
-            console.error("Xatolik yuz berdi: ", error);
-            alert("Ma'lumotni saqlashda xatolik! Internetni tekshiring.");
+    // Qo'shimcha actionlar (deposit/withdraw)
+    const actionButtons = document.querySelectorAll('[data-action]');
+
+    // hozirgi balanslar (realtime dan keladi)
+    let currentBalances = { sohibjon: 0, ilhomjon: 0 };
+
+    // ---------- BALANSLARNI FORMATLASH ----------
+    function formatUZS(value) {
+      return new Intl.NumberFormat('uz-UZ').format(value || 0);
+    }
+
+    // UI yangilash
+    function updateBalancesUI(balances) {
+      balanceSohibjonEl.innerText = formatUZS(balances.sohibjon);
+      balanceIlhomjonEl.innerText = formatUZS(balances.ilhomjon);
+    }
+
+    // Bet input o'zgarganda qaytarish summasini ko'rsatish
+    function updateRefundPreview() {
+      let val = parseInt(betAmountInput.value, 10);
+      if (isNaN(val) || val < 0) val = 0;
+      const half = Math.floor(val / 2);
+      refundAmountSpan.innerText = formatUZS(half);
+    }
+
+    betAmountInput.addEventListener('input', updateRefundPreview);
+    updateRefundPreview();
+
+    // ---------- REALTIME LISTENER (Firestore) ----------
+    function listenToBalances() {
+      balancesDoc.onSnapshot((doc) => {
+        if (doc.exists) {
+          const data = doc.data();
+          currentBalances = {
+            sohibjon: data.sohibjon || 0,
+            ilhomjon: data.ilhomjon || 0
+          };
+        } else {
+          // Agar hujjat yo'q bo'lsa, yaratamiz
+          currentBalances = { sohibjon: 0, ilhomjon: 0 };
+          balancesDoc.set(currentBalances).catch(e => console.warn);
         }
-    });
+        updateBalancesUI(currentBalances);
+      }, (error) => {
+        console.error("Balans tinglashda xato:", error);
+        // offline fallback
+      });
+    }
 
-    // Ma'lumotlarni o'qish va Ekranga chiqarish
-    const q = query(collection(db, "transactions"), orderBy("timestamp", "desc"));
-    
-    onSnapshot(q, (snapshot) => {
-        historyTable.innerHTML = '';
-        let sohibjonBalance = 0;
-        let ilhomjonBalance = 0;
+    // Tranzaksiyalarni tinglash (oxirgi 10 ta)
+    function listenToTransactions() {
+      transactionsColl.orderBy('timestamp', 'desc').limit(12).onSnapshot((snapshot) => {
+        if (snapshot.empty) {
+          transactionsContainer.innerHTML = '<li class="tx-item" style="opacity:0.6;">✨ Hozircha tranzaksiya yo‘q</li>';
+          return;
+        }
+        let html = '';
+        snapshot.forEach(doc => {
+          const tx = doc.data();
+          const type = tx.type;
+          const amount = tx.amount || 0;
+          const from = tx.from;
+          const to = tx.to;
+          const description = tx.description || '';
 
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            
-            // Balansni hisoblash
-            let effect = 0;
-            if (data.type === 'add_money') {
-                effect = data.amount; // Pul qo'shsa balans oshadi
-            } else {
-                effect = -data.amount; // Pul yoki mahsulot olsa balans kamayadi
-            }
+          let icon = '🔄';
+          let amountClass = '';
+          let sign = '';
+          if (type === 'bet') {
+            icon = '🎲';
+            amountClass = 'tx-negative';
+            sign = '-';
+          } else if (type === 'refund') {
+            icon = '💸';
+            amountClass = 'tx-positive';
+            sign = '+';
+          } else if (type === 'deposit') {
+            icon = '📥';
+            amountClass = 'tx-positive';
+            sign = '+';
+          } else if (type === 'withdraw') {
+            icon = '📤';
+            amountClass = 'tx-negative';
+            sign = '-';
+          }
 
-            if (data.partner === 'Sohibjon') sohibjonBalance += effect;
-            if (data.partner === 'Ilhomjon') ilhomjonBalance += effect;
+          let detail = '';
+          if (type === 'bet') detail = `${from || '?'} do'konga tikdi`;
+          else if (type === 'refund') detail = `${to || '?'} qaytardi`;
+          else if (type === 'deposit') detail = `${to || ''} ga qo'shildi`;
+          else if (type === 'withdraw') detail = `${from || ''} dan yechildi`;
 
-            // Jadvalga qator qo'shish
-            const dateStr = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString('uz-UZ') : "Hozirgina";
-            
-            let typeLabel = "";
-            let typeClass = "";
-            if(data.type === 'add_money') { typeLabel = "Pul qo'shdi"; typeClass = "type-add"; }
-            if(data.type === 'take_money') { typeLabel = "Pul oldi"; typeClass = "type-take"; }
-            if(data.type === 'take_product') { typeLabel = "Mahsulot oldi"; typeClass = "type-take"; }
+          const timeStr = tx.timestamp ? new Date(tx.timestamp.toDate()).toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'}) : '';
 
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${dateStr}</td>
-                <td><strong>${data.partner}</strong></td>
-                <td>${typeLabel}</td>
-                <td class="${typeClass}">${data.amount.toLocaleString()}</td>
-                <td>${data.description}</td>
-            `;
-            historyTable.appendChild(tr);
+          html += `<li class="tx-item">
+            <span>${icon} ${detail}</span>
+            <span class="tx-amount ${amountClass}">${sign}${formatUZS(amount)} so'm</span>
+            <span style="font-size:0.7rem; opacity:0.5;">${timeStr}</span>
+          </li>`;
         });
+        transactionsContainer.innerHTML = html;
+      });
+    }
 
-        // Balanslarni ekranga yangilash
-        sohibjonBalanceEl.textContent = sohibjonBalance.toLocaleString();
-        ilhomjonBalanceEl.textContent = ilhomjonBalance.toLocaleString();
+    // ---------- ASOSIY TIKISH FUNKSIYASI (Sohibjon tiksa -> Ilhomjon yarmini qaytaradi) ----------
+    async function placeBet() {
+      let betAmount = parseInt(betAmountInput.value, 10);
+      if (isNaN(betAmount) || betAmount <= 0) {
+        alert("Iltimos, 0 dan katta summa kiriting");
+        return;
+      }
+
+      // Foydalanuvchidan kim tikayotganini so'raymiz (oddiy prompt)
+      const who = prompt("Kim pul tikmoqda? 'sohibjon' yoki 'ilhomjon' deb yozing:", "sohibjon");
+      if (!who) return;
+      const better = who.toLowerCase().trim();
+      if (better !== 'sohibjon' && better !== 'ilhomjon') {
+        alert("Faqat 'sohibjon' yoki 'ilhomjon'");
+        return;
+      }
+
+      // balanslarni o'qish (current)
+      const current = { ...currentBalances };
+      const other = better === 'sohibjon' ? 'ilhomjon' : 'sohibjon';
+
+      // Tikuvchining balansi yetarlimi?
+      if (current[better] < betAmount) {
+        alert(`${better} balansida yetarli mablag‘ yo‘q (${formatUZS(current[better])} so'm)`);
+        return;
+      }
+
+      const refundAmount = Math.floor(betAmount / 2);  // yarmi
+
+      // Yangi balanslar hisobi
+      const newBalances = {
+        sohibjon: current.sohibjon,
+        ilhomjon: current.ilhomjon
+      };
+
+      // 1) Tikish: tikuvchidan betAmount yechiladi
+      newBalances[better] -= betAmount;
+      // 2) Qaytarish: qarshi tomondan refundAmount yechib, tikuvchiga qo'shiladi
+      if (newBalances[other] < refundAmount) {
+        alert(`${other} balansida qaytarish uchun yetarli mablag‘ yo‘q (kerak: ${formatUZS(refundAmount)})`);
+        return;
+      }
+      newBalances[other] -= refundAmount;
+      newBalances[better] += refundAmount;
+
+      // Firestore batch
+      const batch = db.batch();
+
+      // Balansni yangilash
+      batch.set(balancesDoc, newBalances);
+
+      // Tikish tranzaksiyasi
+      const betTxRef = transactionsColl.doc();
+      batch.set(betTxRef, {
+        type: 'bet',
+        amount: betAmount,
+        from: better,
+        to: 'do\'kon',
+        description: `${better} do'konga ${betAmount} so'm tikdi`,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Qaytarish tranzaksiyasi
+      const refundTxRef = transactionsColl.doc();
+      batch.set(refundTxRef, {
+        type: 'refund',
+        amount: refundAmount,
+        from: other,
+        to: better,
+        description: `${other} dan ${better} ga ${refundAmount} so'm qaytarildi`,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      try {
+        await batch.commit();
+        // inputni tozalash shart emas
+      } catch (error) {
+        alert("Xatolik yuz berdi: " + error.message);
+        console.error(error);
+      }
+    }
+
+    // Deposit / Withdraw handler
+    async function handleProfileAction(user, action) {
+      let amountStr = prompt(`${user} uchun ${action === 'deposit' ? 'qo‘shiladigan' : 'yechiladigan'} summani kiriting (so‘m):`, "50000");
+      if (!amountStr) return;
+      const amount = parseInt(amountStr, 10);
+      if (isNaN(amount) || amount <= 0) {
+        alert("Iltimos musbat son kiriting");
+        return;
+      }
+
+      const current = { ...currentBalances };
+      const newBalances = { ...current };
+
+      if (action === 'withdraw') {
+        if (current[user] < amount) {
+          alert(`${user} balansida yetarli mablag' yo'q (${formatUZS(current[user])})`);
+          return;
+        }
+        newBalances[user] -= amount;
+      } else {
+        newBalances[user] += amount;
+      }
+
+      const batch = db.batch();
+      batch.set(balancesDoc, newBalances);
+      const txRef = transactionsColl.doc();
+      batch.set(txRef, {
+        type: action,
+        amount: amount,
+        from: action==='withdraw' ? user : null,
+        to: action==='deposit' ? user : null,
+        description: `${user} ${action==='deposit'?'depozit':'yechib oldi'}`,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      try {
+        await batch.commit();
+      } catch(e) {
+        alert("Xatolik: "+e.message);
+      }
+    }
+
+    // Reset balanslar (nolga)
+    async function resetBalances() {
+      if (!confirm("Sohibjon va Ilhomjon balanslari 0 ga tushirilsinmi?")) return;
+      const batch = db.batch();
+      batch.set(balancesDoc, { sohibjon: 0, ilhomjon: 0 });
+      const txRef = transactionsColl.doc();
+      batch.set(txRef, {
+        type: 'reset',
+        amount: 0,
+        description: 'Balanslar nolga tushirildi',
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await batch.commit();
+    }
+
+    // ---------- EVENT LISTENERS ----------
+    placeBetBtn.addEventListener('click', placeBet);
+
+    actionButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const user = btn.dataset.user;
+        const action = btn.dataset.action;
+        if (user && action) {
+          handleProfileAction(user, action);
+        }
+      });
     });
-</script>
 
+    document.getElementById('resetBalancesBtn').addEventListener('click', resetBalances);
+
+    // Ishga tushirish
+    listenToBalances();
+    listenToTransactions();
+
+    // Qo'shimcha: inputda oldindan ko'rsatilgan 300000 uchun qaytarish miqdori
+    // allaqachon updateRefundPreview ishlaydi
+
+    // Firebase offline xatoliklar uchun ogohlantirish bermaslik
+    window.addEventListener('unhandledrejection', e => {
+      if (e.reason && e.reason.code === 'permission-denied') {
+        alert("Firebase qoidalarini tekshiring. Hozircha demo rejim.");
+      }
+    });
+
+  })();
+</script>
 </body>
 </html>
