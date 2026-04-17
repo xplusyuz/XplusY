@@ -9,13 +9,14 @@
         :root {
             --bg-color: #f8fafc;
             --card-bg: #ffffff;
-            --primary: #0f172a; /* Premium qora/ko'k */
+            --primary: #0f172a; 
             --primary-light: #334155;
-            --accent: #3b82f6; /* Moviy urg'u */
+            --accent: #3b82f6; 
             --text-main: #0f172a;
             --text-muted: #64748b;
             --danger: #ef4444;
             --success: #10b981;
+            --warning: #f59e0b;
             --border: #e2e8f0;
             --radius: 16px;
         }
@@ -40,10 +41,9 @@
             width: 100%;
             max-width: 480px;
             padding: 20px 16px 80px 16px;
-            position: relative;
         }
 
-        /* Navigatsiya (Tablar) */
+        /* Navigatsiya */
         .tabs {
             display: flex;
             background: #e2e8f0;
@@ -56,7 +56,7 @@
             flex: 1;
             text-align: center;
             padding: 10px 0;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-muted);
             border: none;
@@ -81,24 +81,24 @@
             margin-bottom: 24px;
             border: 1px solid var(--border);
             box-shadow: 0 4px 20px rgba(0,0,0,0.02);
-            position: relative;
         }
 
         .category-label {
             font-size: 12px;
             font-weight: 700;
-            color: var(--accent);
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
             display: block;
         }
 
+        /* Sarmoya View */
         .balance-amount {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 700;
             color: var(--text-main);
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             line-height: 1;
         }
 
@@ -109,21 +109,57 @@
             margin-bottom: 20px;
         }
 
-        /* To'lash Tugmasi */
+        /* Kassa/Maxsulot View (Alohida qarzlar) */
+        .personal-debt-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+
+        .debt-info span {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .debt-info strong {
+            font-size: 18px;
+            color: var(--danger);
+        }
+
+        /* Tugmalar */
         .settle-btn {
             background: var(--success);
             color: white;
             border: none;
-            padding: 12px 24px;
+            padding: 14px 24px;
             border-radius: 10px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             width: 100%;
-            display: none; /* Faqat qarz bo'lsa chiqadi */
             transition: opacity 0.2s;
         }
-        .settle-btn:active { opacity: 0.8; }
+        
+        .pay-shop-btn {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .settle-btn:active, .pay-shop-btn:active { opacity: 0.8; }
 
         /* Forma */
         .form-card {
@@ -154,7 +190,6 @@
             background-color: var(--bg-color);
             color: var(--text-main);
             outline: none;
-            transition: border-color 0.2s;
         }
         select:focus, input:focus { border-color: var(--accent); }
 
@@ -168,7 +203,6 @@
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
         }
         .submit-btn:active { background: var(--primary-light); }
 
@@ -196,21 +230,11 @@
             border: 1px solid var(--border);
         }
 
-        .tx-info h4 {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 4px;
-            color: var(--text-main);
-        }
-
-        .tx-info p {
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
+        .tx-info h4 { font-size: 14px; margin-bottom: 4px; }
+        .tx-info p { font-size: 12px; color: var(--text-muted); }
         .tx-amount { font-size: 15px; font-weight: 700; }
-        .tx-sohibjon { color: var(--accent); }
-        .tx-ilhomjon { color: var(--text-main); }
+        .tx-expense { color: var(--danger); }
+        .tx-invest { color: var(--accent); }
         .tx-settlement { color: var(--success); font-size: 13px; }
 
     </style>
@@ -220,16 +244,36 @@
     <div class="app-container">
         
         <div class="tabs">
-            <button class="tab-btn active" data-tab="investment">Do'konga Sarmoya</button>
-            <button class="tab-btn" data-tab="product">Maxsulot Olish</button>
-            <button class="tab-btn" data-tab="cash">Naqd Pul Olish</button>
+            <button class="tab-btn active" data-tab="investment">Sarmoya</button>
+            <button class="tab-btn" data-tab="product">Maxsulot</button>
+            <button class="tab-btn" data-tab="cash">Kassa</button>
         </div>
 
         <div class="balance-card">
             <span class="category-label" id="cat-label">Sarmoya Holati</span>
-            <div class="balance-amount" id="debt-amount">0</div>
-            <div class="balance-status" id="debt-status">Hisoblar teng</div>
-            <button class="settle-btn" id="settle-btn">Qarzni To'lash</button>
+
+            <div id="investment-view">
+                <div class="balance-amount" id="debt-amount">0 UZS</div>
+                <div class="balance-status" id="debt-status">Hisoblar teng</div>
+                <button class="settle-btn" id="settle-btn" style="display: none;">Qarzni To'lash</button>
+            </div>
+
+            <div id="shop-debt-view" style="display: none;">
+                <div class="personal-debt-card">
+                    <div class="debt-info">
+                        <span>Sohibjonning kassaga qarzi</span>
+                        <strong id="sohibjon-debt">0 UZS</strong>
+                    </div>
+                    <button class="pay-shop-btn" id="btn-pay-sohibjon" style="display: none;">Kassaga qaytarish</button>
+                </div>
+                <div class="personal-debt-card">
+                    <div class="debt-info">
+                        <span>Ilhomjonning kassaga qarzi</span>
+                        <strong id="ilhomjon-debt">0 UZS</strong>
+                    </div>
+                    <button class="pay-shop-btn" id="btn-pay-ilhomjon" style="display: none;">Kassaga qaytarish</button>
+                </div>
+            </div>
         </div>
 
         <div class="form-card">
@@ -254,8 +298,7 @@
         </div>
 
         <h3 class="section-title">So'nggi harakatlar</h3>
-        <div class="transaction-list" id="transaction-list">
-            </div>
+        <div class="transaction-list" id="transaction-list"></div>
 
     </div>
 
@@ -275,26 +318,39 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // State
         let currentTab = 'investment';
         let allTransactions = [];
+        
+        // State for Investment
         let currentNetDebt = 0; 
         let currentDebtor = ''; 
         let currentCreditor = '';
 
-        // UI Elements
+        // State for Shop Debt
+        let sDebtToShop = 0;
+        let iDebtToShop = 0;
+
+        // DOM
         const form = document.getElementById('transaction-form');
         const tabBtns = document.querySelectorAll('.tab-btn');
-        const catLabel = document.getElementById('cat-label');
-        const payerLabel = document.getElementById('payer-label');
-        const descLabel = document.getElementById('desc-label');
+        const listEl = document.getElementById('transaction-list');
+        const submitBtn = document.getElementById('submit-btn');
+        
+        // Views
+        const investmentView = document.getElementById('investment-view');
+        const shopDebtView = document.getElementById('shop-debt-view');
+        
+        // Investment Elements
         const debtAmountEl = document.getElementById('debt-amount');
         const debtStatusEl = document.getElementById('debt-status');
         const settleBtn = document.getElementById('settle-btn');
-        const listEl = document.getElementById('transaction-list');
-        const submitBtn = document.getElementById('submit-btn');
+        
+        // Shop Debt Elements
+        const sDebtEl = document.getElementById('sohibjon-debt');
+        const iDebtEl = document.getElementById('ilhomjon-debt');
+        const sPayBtn = document.getElementById('btn-pay-sohibjon');
+        const iPayBtn = document.getElementById('btn-pay-ilhomjon');
 
-        // Tab o'zgarishi
         tabBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 tabBtns.forEach(b => b.classList.remove('active'));
@@ -306,22 +362,31 @@
         });
 
         function updateUIForTab() {
+            const catLabel = document.getElementById('cat-label');
+            const payerLabel = document.getElementById('payer-label');
+            const descLabel = document.getElementById('desc-label');
+
             if(currentTab === 'investment') {
-                catLabel.textContent = "Sarmoya Holati";
-                payerLabel.textContent = "Kim do'konga pul tikdi?";
+                catLabel.textContent = "Do'konga Sarmoya Holati";
+                payerLabel.textContent = "Kim sarmoya kiritdi?";
                 descLabel.textContent = "Nima uchun?";
+                investmentView.style.display = 'block';
+                shopDebtView.style.display = 'none';
             } else if(currentTab === 'product') {
-                catLabel.textContent = "Maxsulot Olish Holati";
-                payerLabel.textContent = "Kim do'kondan maxsulot oldi?";
-                descLabel.textContent = "Qanday maxsulot?";
+                catLabel.textContent = "Kassaga Mahsulot Qarzi (100%)";
+                payerLabel.textContent = "Kim mahsulot oldi?";
+                descLabel.textContent = "Qanday mahsulot?";
+                investmentView.style.display = 'none';
+                shopDebtView.style.display = 'block';
             } else {
-                catLabel.textContent = "Kassa Holati";
-                payerLabel.textContent = "Kim kassadan pul oldi?";
-                descLabel.textContent = "Izoh / Maqsad";
+                catLabel.textContent = "Kassadan Olingan Naqd Pul (100%)";
+                payerLabel.textContent = "Kim naqd pul oldi?";
+                descLabel.textContent = "Maqsad / Izoh";
+                investmentView.style.display = 'none';
+                shopDebtView.style.display = 'block';
             }
         }
 
-        // Ma'lumot qoshish
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             submitBtn.textContent = 'Kutilmoqda...';
@@ -333,7 +398,7 @@
                     amount: parseFloat(document.getElementById('amount').value),
                     description: document.getElementById('description').value,
                     category: currentTab,
-                    type: 'expense',
+                    type: 'action', 
                     timestamp: serverTimestamp()
                 });
                 form.reset();
@@ -345,33 +410,31 @@
             }
         });
 
-        // To'lash funksiyasi
-        settleBtn.addEventListener('click', async () => {
-            if(!currentDebtor || currentNetDebt <= 0) return;
+        // 1. Sarmoya Qarzini to'lash (Sherikka)
+        settleBtn.addEventListener('click', () => payDebt(currentDebtor, currentNetDebt, 'Sheriklik qarzi uzildi ✅'));
+        
+        // 2. Kassaga qarzni qaytarish (100%)
+        sPayBtn.addEventListener('click', () => payDebt('Sohibjon', sDebtToShop, 'Kassaga qarz qaytarildi ✅'));
+        iPayBtn.addEventListener('click', () => payDebt('Ilhomjon', iDebtToShop, 'Kassaga qarz qaytarildi ✅'));
 
-            const confirmMsg = `${currentDebtor} rostdan ham ${currentCreditor}ga qarzdorlikni to'ladimi?`;
-            if(confirm(confirmMsg)) {
-                settleBtn.textContent = 'To`lanmoqda...';
-                settleBtn.disabled = true;
+        async function payDebt(payerName, amount, desc) {
+            if(!amount || amount <= 0) return;
+            if(confirm(`${payerName} rostdan ham ${amount.toLocaleString('uz-UZ')} UZS qarzni to'ladimi?`)) {
                 try {
                     await addDoc(collection(db, "transactions"), {
-                        payer: currentDebtor, // Pulni to'layotgan odam
-                        amount: currentNetDebt,
-                        description: 'Qarzdorlik uzildi ✅',
+                        payer: payerName,
+                        amount: amount,
+                        description: desc,
                         category: currentTab,
                         type: 'settlement',
                         timestamp: serverTimestamp()
                     });
                 } catch (error) {
                     alert("Xatolik: " + error.message);
-                } finally {
-                    settleBtn.textContent = 'Qarzni To\'lash';
-                    settleBtn.disabled = false;
                 }
             }
-        });
+        }
 
-        // Ma'lumotlarni o'qish
         const q = query(collection(db, "transactions"), orderBy("timestamp", "desc"));
         onSnapshot(q, (snapshot) => {
             allTransactions = [];
@@ -380,97 +443,102 @@
         });
 
         function renderData() {
-            // Faqat tanlangan tab ma'lumotlari
             const tabData = allTransactions.filter(t => t.category === currentTab);
-            
-            // Matematika: Sohibjonning Ilhomjondan haqdorligi (netBalance)
-            // Agar musbat bo'lsa Sohibjon haqdor, manfiy bo'lsa Ilhomjon haqdor
-            let netBalance = 0; 
-
             listEl.innerHTML = '';
+            
+            let netBalance = 0; 
+            sDebtToShop = 0;
+            iDebtToShop = 0;
 
             tabData.forEach(data => {
-                // UI chizish
                 const formatSum = new Intl.NumberFormat('uz-UZ').format(data.amount);
-                let html = '';
-
+                
+                // Ro'yxatni chizish
                 if(data.type === 'settlement') {
-                    html = `
+                    listEl.innerHTML += `
                         <div class="transaction-item" style="background:#ecfdf5; border-color:#a7f3d0">
                             <div class="tx-info">
                                 <h4 style="color:#059669">${data.description}</h4>
                                 <p>${data.payer} to'ladi</p>
                             </div>
-                            <div class="tx-amount tx-settlement">${formatSum}</div>
-                        </div>
-                    `;
+                            <div class="tx-amount tx-settlement">${formatSum} UZS</div>
+                        </div>`;
                 } else {
-                    const colorClass = data.payer === 'Sohibjon' ? 'tx-sohibjon' : 'tx-ilhomjon';
-                    html = `
+                    const sign = currentTab === 'investment' ? '+' : '-';
+                    const colorClass = currentTab === 'investment' ? 'tx-invest' : 'tx-expense';
+                    const actionText = currentTab === 'investment' ? 'kiritdi' : 'oldi';
+                    
+                    listEl.innerHTML += `
                         <div class="transaction-item">
                             <div class="tx-info">
                                 <h4>${data.description}</h4>
-                                <p>${data.payer} kiritdi</p>
+                                <p>${data.payer} ${actionText}</p>
                             </div>
-                            <div class="tx-amount ${colorClass}">+ ${formatSum}</div>
-                        </div>
-                    `;
+                            <div class="tx-amount ${colorClass}">${sign} ${formatSum} UZS</div>
+                        </div>`;
                 }
-                listEl.innerHTML += html;
 
-                // Hisob-kitob Mantiqlari
-                const amountHalf = data.amount / 2;
-
-                if (data.type === 'expense') {
-                    if (currentTab === 'investment') {
-                        // Sarmoya: Ko'p tikkan odam haqdor
-                        if (data.payer === 'Sohibjon') netBalance += amountHalf;
-                        if (data.payer === 'Ilhomjon') netBalance -= amountHalf;
-                    } else {
-                        // Maxsulot/Kassa: Ko'p olgan odam qarzdor
-                        if (data.payer === 'Sohibjon') netBalance -= amountHalf;
-                        if (data.payer === 'Ilhomjon') netBalance += amountHalf;
+                // Matematika
+                if (currentTab === 'investment') {
+                    // Sarmoya 50/50 hisobi
+                    const half = data.amount / 2;
+                    if (data.type === 'action') {
+                        if (data.payer === 'Sohibjon') netBalance += half;
+                        if (data.payer === 'Ilhomjon') netBalance -= half;
+                    } else if (data.type === 'settlement') {
+                        if (data.payer === 'Sohibjon') netBalance += data.amount;
+                        if (data.payer === 'Ilhomjon') netBalance -= data.amount;
                     }
-                } else if (data.type === 'settlement') {
-                    // Qarz uzilganda balanceni to'g'irlash
-                    if (data.payer === 'Sohibjon') netBalance += data.amount;
-                    if (data.payer === 'Ilhomjon') netBalance -= data.amount;
+                } else {
+                    // Maxsulot/Kassa 100% qarz hisobi
+                    if (data.type === 'action') {
+                        if (data.payer === 'Sohibjon') sDebtToShop += data.amount;
+                        if (data.payer === 'Ilhomjon') iDebtToShop += data.amount;
+                    } else if (data.type === 'settlement') {
+                        if (data.payer === 'Sohibjon') sDebtToShop -= data.amount;
+                        if (data.payer === 'Ilhomjon') iDebtToShop -= data.amount;
+                    }
                 }
             });
 
-            // Xulosa UI ga chiqarish
-            const formatDebt = new Intl.NumberFormat('uz-UZ').format(Math.abs(netBalance));
-            currentNetDebt = Math.abs(netBalance);
-
-            if (netBalance > 0) {
-                // Sohibjon haqdor
-                debtAmountEl.textContent = `${formatDebt} UZS`;
-                debtStatusEl.textContent = 'Ilhomjon Sohibjonga berishi kerak';
-                debtStatusEl.style.color = 'var(--danger)';
-                currentDebtor = 'Ilhomjon';
-                currentCreditor = 'Sohibjon';
-                settleBtn.style.display = 'block';
-                settleBtn.textContent = `Ilhomjon to'lash: ${formatDebt}`;
-            } else if (netBalance < 0) {
-                // Ilhomjon haqdor
-                debtAmountEl.textContent = `${formatDebt} UZS`;
-                debtStatusEl.textContent = 'Sohibjon Ilhomjonga berishi kerak';
-                debtStatusEl.style.color = 'var(--danger)';
-                currentDebtor = 'Sohibjon';
-                currentCreditor = 'Ilhomjon';
-                settleBtn.style.display = 'block';
-                settleBtn.textContent = `Sohibjon to'lash: ${formatDebt}`;
+            // Oynalarni yangilash
+            if (currentTab === 'investment') {
+                currentNetDebt = Math.abs(netBalance);
+                const formatDebt = new Intl.NumberFormat('uz-UZ').format(currentNetDebt);
+                
+                if (netBalance > 0) {
+                    debtAmountEl.textContent = `${formatDebt} UZS`;
+                    debtStatusEl.textContent = 'Ilhomjon Sohibjonga berishi kerak';
+                    debtStatusEl.style.color = 'var(--danger)';
+                    currentDebtor = 'Ilhomjon';
+                    settleBtn.style.display = 'block';
+                    settleBtn.textContent = `Ilhomjon to'lash: ${formatDebt}`;
+                } else if (netBalance < 0) {
+                    debtAmountEl.textContent = `${formatDebt} UZS`;
+                    debtStatusEl.textContent = 'Sohibjon Ilhomjonga berishi kerak';
+                    debtStatusEl.style.color = 'var(--danger)';
+                    currentDebtor = 'Sohibjon';
+                    settleBtn.style.display = 'block';
+                    settleBtn.textContent = `Sohibjon to'lash: ${formatDebt}`;
+                } else {
+                    debtAmountEl.textContent = `0 UZS`;
+                    debtStatusEl.textContent = 'Sarmoya hisobi teng';
+                    debtStatusEl.style.color = 'var(--success)';
+                    settleBtn.style.display = 'none';
+                }
             } else {
-                // Teng
-                debtAmountEl.textContent = `0 UZS`;
-                debtStatusEl.textContent = 'Hisob-kitoblar teng';
-                debtStatusEl.style.color = 'var(--success)';
-                currentDebtor = '';
-                settleBtn.style.display = 'none';
+                // Shop Debt View (100% qaytarish)
+                sDebtEl.textContent = `${new Intl.NumberFormat('uz-UZ').format(sDebtToShop)} UZS`;
+                iDebtEl.textContent = `${new Intl.NumberFormat('uz-UZ').format(iDebtToShop)} UZS`;
+                
+                sDebtEl.style.color = sDebtToShop > 0 ? 'var(--danger)' : 'var(--success)';
+                iDebtEl.style.color = iDebtToShop > 0 ? 'var(--danger)' : 'var(--success)';
+
+                sPayBtn.style.display = sDebtToShop > 0 ? 'block' : 'none';
+                iPayBtn.style.display = iDebtToShop > 0 ? 'block' : 'none';
             }
         }
 
-        // Dastlabki UI holati
         updateUIForTab();
     </script>
 </body>
