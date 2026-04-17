@@ -16,7 +16,6 @@
             --text-muted: #64748b;
             --danger: #ef4444;
             --success: #10b981;
-            --warning: #f59e0b;
             --border: #e2e8f0;
             --radius: 16px;
         }
@@ -56,7 +55,7 @@
             flex: 1;
             text-align: center;
             padding: 10px 0;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-muted);
             border: none;
@@ -261,17 +260,17 @@
             <div id="shop-debt-view" style="display: none;">
                 <div class="personal-debt-card">
                     <div class="debt-info">
-                        <span>Sohibjonning kassaga qarzi</span>
+                        <span>Sohibjonning qarzi</span>
                         <strong id="sohibjon-debt">0 UZS</strong>
                     </div>
-                    <button class="pay-shop-btn" id="btn-pay-sohibjon" style="display: none;">Kassaga qaytarish</button>
+                    <button class="pay-shop-btn" id="btn-pay-sohibjon" style="display: none;">To'lash</button>
                 </div>
                 <div class="personal-debt-card">
                     <div class="debt-info">
-                        <span>Ilhomjonning kassaga qarzi</span>
+                        <span>Ilhomjonning qarzi</span>
                         <strong id="ilhomjon-debt">0 UZS</strong>
                     </div>
-                    <button class="pay-shop-btn" id="btn-pay-ilhomjon" style="display: none;">Kassaga qaytarish</button>
+                    <button class="pay-shop-btn" id="btn-pay-ilhomjon" style="display: none;">To'lash</button>
                 </div>
             </div>
         </div>
@@ -304,7 +303,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDYwHJou_9GqHZcf8XxtTByC51Z8un8rrM",
@@ -324,7 +323,6 @@
         // State for Investment
         let currentNetDebt = 0; 
         let currentDebtor = ''; 
-        let currentCreditor = '';
 
         // State for Shop Debt
         let sDebtToShop = 0;
@@ -373,13 +371,13 @@
                 investmentView.style.display = 'block';
                 shopDebtView.style.display = 'none';
             } else if(currentTab === 'product') {
-                catLabel.textContent = "Kassaga Mahsulot Qarzi (100%)";
+                catLabel.textContent = "Kassaga Mahsulot Qarzi";
                 payerLabel.textContent = "Kim mahsulot oldi?";
                 descLabel.textContent = "Qanday mahsulot?";
                 investmentView.style.display = 'none';
                 shopDebtView.style.display = 'block';
             } else {
-                catLabel.textContent = "Kassadan Olingan Naqd Pul (100%)";
+                catLabel.textContent = "Kassadan Olingan Naqd Pul";
                 payerLabel.textContent = "Kim naqd pul oldi?";
                 descLabel.textContent = "Maqsad / Izoh";
                 investmentView.style.display = 'none';
@@ -399,7 +397,7 @@
                     description: document.getElementById('description').value,
                     category: currentTab,
                     type: 'action', 
-                    timestamp: serverTimestamp()
+                    timestamp: Date.now() // Vaqt barqaror ishlashi uchun JS funksiyasiga o'zgartirildi
                 });
                 form.reset();
             } catch (error) {
@@ -410,28 +408,47 @@
             }
         });
 
-        // 1. Sarmoya Qarzini to'lash (Sherikka)
-        settleBtn.addEventListener('click', () => payDebt(currentDebtor, currentNetDebt, 'Sheriklik qarzi uzildi ✅'));
+        // 1. Sarmoya qarzini qisman yoki to'liq qaytarish
+        settleBtn.addEventListener('click', () => {
+            let amtStr = prompt(`${currentDebtor}ning jami qarzi: ${currentNetDebt.toLocaleString('uz-UZ')} UZS.\nQancha summa to'lanmoqda?`, currentNetDebt);
+            if(amtStr) processPayment(currentDebtor, amtStr, currentNetDebt, 'Sheriklik qarzi uzildi ✅');
+        });
         
-        // 2. Kassaga qarzni qaytarish (100%)
-        sPayBtn.addEventListener('click', () => payDebt('Sohibjon', sDebtToShop, 'Kassaga qarz qaytarildi ✅'));
-        iPayBtn.addEventListener('click', () => payDebt('Ilhomjon', iDebtToShop, 'Kassaga qarz qaytarildi ✅'));
+        // 2. Kassaga (mahsulot/kassa) qarzni qaytarish
+        sPayBtn.addEventListener('click', () => {
+            let amtStr = prompt(`Sohibjonning jami qarzi: ${sDebtToShop.toLocaleString('uz-UZ')} UZS.\nQancha summa qaytarilmoqda?`, sDebtToShop);
+            if(amtStr) processPayment('Sohibjon', amtStr, sDebtToShop, 'Qarz kassaga qaytarildi ✅');
+        });
+        iPayBtn.addEventListener('click', () => {
+            let amtStr = prompt(`Ilhomjonning jami qarzi: ${iDebtToShop.toLocaleString('uz-UZ')} UZS.\nQancha summa qaytarilmoqda?`, iDebtToShop);
+            if(amtStr) processPayment('Ilhomjon', amtStr, iDebtToShop, 'Qarz kassaga qaytarildi ✅');
+        });
 
-        async function payDebt(payerName, amount, desc) {
-            if(!amount || amount <= 0) return;
-            if(confirm(`${payerName} rostdan ham ${amount.toLocaleString('uz-UZ')} UZS qarzni to'ladimi?`)) {
-                try {
-                    await addDoc(collection(db, "transactions"), {
-                        payer: payerName,
-                        amount: amount,
-                        description: desc,
-                        category: currentTab,
-                        type: 'settlement',
-                        timestamp: serverTimestamp()
-                    });
-                } catch (error) {
-                    alert("Xatolik: " + error.message);
-                }
+        async function processPayment(payerName, amountStr, maxDebt, desc) {
+            let amount = parseFloat(amountStr);
+            
+            // Raqam kiritilmagan yoki manfiy bo'lsa
+            if (isNaN(amount) || amount <= 0) {
+                alert("Iltimos, to'g'ri summa kiriting!");
+                return;
+            }
+            // Kiritilgan summa haqiqiy qarzdan katta bo'lsa
+            if (amount > maxDebt) {
+                alert(`Xatolik: Siz maksimal ${maxDebt.toLocaleString('uz-UZ')} UZS to'lay olasiz! Undan ortiq to'lov qabul qilinmaydi.`);
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, "transactions"), {
+                    payer: payerName,
+                    amount: amount,
+                    description: desc,
+                    category: currentTab,
+                    type: 'settlement',
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                alert("Xatolik: " + error.message);
             }
         }
 
@@ -453,7 +470,6 @@
             tabData.forEach(data => {
                 const formatSum = new Intl.NumberFormat('uz-UZ').format(data.amount);
                 
-                // Ro'yxatni chizish
                 if(data.type === 'settlement') {
                     listEl.innerHTML += `
                         <div class="transaction-item" style="background:#ecfdf5; border-color:#a7f3d0">
@@ -480,7 +496,6 @@
 
                 // Matematika
                 if (currentTab === 'investment') {
-                    // Sarmoya 50/50 hisobi
                     const half = data.amount / 2;
                     if (data.type === 'action') {
                         if (data.payer === 'Sohibjon') netBalance += half;
@@ -490,7 +505,6 @@
                         if (data.payer === 'Ilhomjon') netBalance -= data.amount;
                     }
                 } else {
-                    // Maxsulot/Kassa 100% qarz hisobi
                     if (data.type === 'action') {
                         if (data.payer === 'Sohibjon') sDebtToShop += data.amount;
                         if (data.payer === 'Ilhomjon') iDebtToShop += data.amount;
@@ -512,14 +526,14 @@
                     debtStatusEl.style.color = 'var(--danger)';
                     currentDebtor = 'Ilhomjon';
                     settleBtn.style.display = 'block';
-                    settleBtn.textContent = `Ilhomjon to'lash: ${formatDebt}`;
+                    settleBtn.textContent = `Qarzni To'lash (Ilhomjon)`;
                 } else if (netBalance < 0) {
                     debtAmountEl.textContent = `${formatDebt} UZS`;
                     debtStatusEl.textContent = 'Sohibjon Ilhomjonga berishi kerak';
                     debtStatusEl.style.color = 'var(--danger)';
                     currentDebtor = 'Sohibjon';
                     settleBtn.style.display = 'block';
-                    settleBtn.textContent = `Sohibjon to'lash: ${formatDebt}`;
+                    settleBtn.textContent = `Qarzni To'lash (Sohibjon)`;
                 } else {
                     debtAmountEl.textContent = `0 UZS`;
                     debtStatusEl.textContent = 'Sarmoya hisobi teng';
@@ -527,7 +541,6 @@
                     settleBtn.style.display = 'none';
                 }
             } else {
-                // Shop Debt View (100% qaytarish)
                 sDebtEl.textContent = `${new Intl.NumberFormat('uz-UZ').format(sDebtToShop)} UZS`;
                 iDebtEl.textContent = `${new Intl.NumberFormat('uz-UZ').format(iDebtToShop)} UZS`;
                 
